@@ -787,6 +787,11 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
    "Large wars: operations"); a smaller theatre keeps `war.axes`, `vp_targets` and `war.strike` (step 7). Per
    army orders do not carry a large war: the game's own plan execution does, when the plan is one army-group
    front and one group offensive drawn across the whole enemy country. Write, per operation:
+   A war larger than one army group (five armies of 24, plus the mobile and wing armies) is fought by several
+   operations of the same `war`, one per army group, each with its own front sector and target line; the lint
+   judges the lines' union against the surrender, and the placement, attack ratio and armour over all of them,
+   so the whole forecast army stands on an operation, a hold or the reserve (no lowered `attack_ratio` for want
+   of command slots).
    a. **The line.** `front` {`enemy`, `own_states`}: the border the strike group stands on. `offensive`
       {`axis`, `target_line`}: `target_line` is the enemy states in order from one edge of the country to the
       other (a river line, a rail line, the far border), far enough that the states in and in front of it hold

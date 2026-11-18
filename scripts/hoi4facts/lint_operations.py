@@ -20,6 +20,10 @@ country, the armour in an army of its own, a hold front on every other hostile b
                           lines, leaves an enemy of the operation above its surrender threshold.
   war.operation_support   air.regions miss a strategic region of the target line; no air_plan row flies air
                           superiority (and close air support when asked) over them from the war day.
+Several operations may fight one war (one per army group, each with its own `war` id the same): the lines, the
+surrender, the placement, the attack ratio, the armour and the open borders are judged over all of them, and
+war.operation_refs refuses two operations of a war on one group, an army in two of them, or a hold on a sibling's
+attacking group.
 The war-day rules of lint_war_shape read the operation's placement instead of army_layout for a war that has one:
 war.attack_force (placement against the forecast by template, the attack against the enemy estimate, the armour in
 the mobile formations), war.hold_sector (every other hostile border in a hold with enough divisions a border
@@ -95,6 +99,10 @@ class Ops:
         return None
 
     def war_of(self, o):
+        """The war an operation fights: the war its `war` names, else the first whose targets it attacks."""
+        for w in self.s.wars:
+            if o.get("war") is not None and w.get("id") == o.get("war"):
+                return w
         for w in self.s.wars:
             if set(o.get("enemies") or []) & set(w["targets"]):
                 return w
@@ -309,8 +317,74 @@ class Ops:
                 lint.add("error", "war.operation_timing", where,
                          f"army_group {g.get('id')} forms {_fmt(gd)}, after prepare_from {_fmt(pr)}")
 
-    def line(self, o, w, where):
-        """war.operation_line, and the facts of what the lines take."""
+    def line(self, w, group):
+        """war.operation_line, and the facts of what the lines take: per war, over all its operations (several
+        army groups each draw their own sector; together the lines span the enemy land and take its surrender)."""
+        lint = self.lint
+        day = w["start"]
+        drawn_all = [self.draw(o, w, where) for o, where in group]
+        cut = set()
+        for d in drawn_all:
+            for _, _, ln in d["drawn"]:
+                cut |= set(ln)
+        covered = set(cut)
+        for d in drawn_all:
+            for label, front, ln in d["drawn"]:
+                covered |= d["sweep"](f"{label} line", front, ln, cut)
+        first = set(covered)
+        for (o, where), d in zip(group, drawn_all):
+            for i, ph in enumerate(o.get("phase_lines") or []):
+                if not isinstance(ph, dict):
+                    continue
+                pl = d["check_line"](_ints(ph.get("target_line")), f"phase_lines[{i}] {ph.get('id')}")
+                if ph.get("axis"):
+                    d["check_line"](_ints(ph["axis"])[1:], f"phase_lines[{i}] axis", chain=False)
+                covered |= set(pl)
+                covered |= d["sweep"](f"phase_lines[{i}] {ph.get('id')}", d["gfront"], pl, set(pl))
+        # what the lines take against each enemy's surrender threshold
+        vps = self.vps()
+        ids = [o.get("id") for o, _ in group]
+        facts = [{"id": o.get("id"), "war": w["id"], "date": _fmt(day), "surrender": {}} for o, _ in group]
+        if len(group) > 1:
+            for f in facts:
+                f["with"] = [x for x in ids if x != f["id"]]
+        done = set()
+        for o, where in group:
+            for t in o.get("enemies") or []:
+                if t in done:
+                    continue
+                done.add(t)
+                own = {s for s, ow in self.s.owner0.items() if ow == t}
+                if not sum(vps.get(s, 0) for s in own):
+                    continue
+                try:
+                    sur = derive.surrender(lint.game, t, lint.ctx, lint.start)
+                except Exception:  # noqa: BLE001  (a tag with no history)
+                    continue
+                need, total = sur["vp_needed"], sur["total_vp"]
+                have1 = sum(vps.get(s, 0) for s in own & first)
+                have = sum(vps.get(s, 0) for s in own & covered)
+                row = {"total_vp": total, "vp_needed": need, "first_line": have1, "all_lines": have}
+                for f, (oo, _) in zip(facts, group):
+                    if t in (oo.get("enemies") or []):
+                        f["surrender"][t] = row
+                if have < need:
+                    phases = any(oo.get("phase_lines") for oo, _ in group)
+                    if len(group) > 1:
+                        what = f"the target lines of {', '.join(map(str, ids))}"
+                        verb = "take"
+                    else:
+                        what, verb = "the target line", "takes"
+                    lint.add("error", "war.operation_line", where,
+                             f"{what}{' and the phase lines' if phases else ''} {verb} {have:g} of {t}'s {total:g} "
+                             f"victory points (in and in front of the lines); it capitulates at {need:g}. Carry the "
+                             "line, or a follow-on phase line, deep enough to end the war")
+        self.facts.extend(facts)
+        return facts
+
+    def draw(self, o, w, where):
+        """One operation's drawn fronts and lines, checked; with the sweep and the line check the war applies over
+        the union of its operations' lines."""
         lint, nb = self.lint, self.nb()
         day = w["start"]
         err = lambda m: lint.add("error", "war.operation_line", where, m)  # noqa: E731
@@ -367,11 +441,6 @@ class Ops:
             check_axis(_ints(fo.get("axis")), ffront, f"{f.get('army')}")
             if f.get("role") == "wing":
                 drawn.append((f.get("army"), ffront, fl))
-        cut = set()
-        for _, _, ln in drawn:
-            cut |= set(ln)
-        covered = set(cut)
-
         def sweep(label, front, ln, cut):
             """States in front of a line: the parts of the enemy land, cut by the lines, that touch the front, as
             deep as the line. When such a part reaches deeper than the line and the lines cut nothing off (no
@@ -397,38 +466,7 @@ class Ops:
                 else:
                     got |= {s for s in comp if dist.get(s, 0) <= deep}
             return got
-        for label, front, ln in drawn:
-            covered |= sweep(f"{label} line", front, ln, cut)
-        first = set(covered)
-        for i, ph in enumerate(o.get("phase_lines") or []):
-            if not isinstance(ph, dict):
-                continue
-            pl = check_line(_ints(ph.get("target_line")), f"phase_lines[{i}] {ph.get('id')}")
-            if ph.get("axis"):
-                check_line(_ints(ph["axis"])[1:], f"phase_lines[{i}] axis", chain=False)
-            covered |= set(pl)
-            covered |= sweep(f"phase_lines[{i}] {ph.get('id')}", gfront, pl, set(pl))
-        # what the lines take against each enemy's surrender threshold
-        vps = self.vps()
-        fact = {"id": o.get("id"), "war": w["id"], "date": _fmt(day), "surrender": {}}
-        for t in o.get("enemies") or []:
-            own = {s for s, ow in self.s.owner0.items() if ow == t}
-            if not sum(vps.get(s, 0) for s in own):
-                continue
-            try:
-                sur = derive.surrender(lint.game, t, lint.ctx, lint.start)
-            except Exception:  # noqa: BLE001  (a tag with no history)
-                continue
-            need, total = sur["vp_needed"], sur["total_vp"]
-            have1 = sum(vps.get(s, 0) for s in own & first)
-            have = sum(vps.get(s, 0) for s in own & covered)
-            fact["surrender"][t] = {"total_vp": total, "vp_needed": need, "first_line": have1, "all_lines": have}
-            if have < need:
-                err(f"the target line{' and the phase lines' if o.get('phase_lines') else ''} takes {have:g} of "
-                    f"{t}'s {total:g} victory points (in and in front of the lines); it capitulates at {need:g}. Carry the "
-                    "line, or a follow-on phase line, deep enough to end the war")
-        self.facts.append(fact)
-        return fact
+        return {"drawn": drawn, "gfront": gfront, "sweep": sweep, "check_line": check_line}
 
     def at_war(self, o, w, where):
         day = w["start"]
@@ -439,14 +477,18 @@ class Ops:
                           f"enemies {', '.join(cold)} are not at war with the plan on {_fmt(day)} ({w['id']}): an operation "
                           "attacks only countries its war day brings in (a declaration, a joiner, a guarantor)")
 
-    def force(self, o, w, where, fact):
-        """war.attack_force for a war with an operation: the placement against the forecast and the enemy."""
+    def force(self, w, group, facts):
+        """war.attack_force for a war with operations: the placement of all its operations against the forecast,
+        their attack together against the enemy, the armour in their mobile formations."""
         lint, day = self.lint, w["start"]
+        where = group[0][1] if len(group) == 1 else "operations " + ", ".join(str(o.get("id")) for o, _ in group)
         fc = self.forecast(day)
         fielded = sum(fc.values())
-        attack = [f for f in o.get("formations") or [] if isinstance(f, dict)]
-        holds = [a for h in o.get("holds") or [] for a in h.get("armies") or [] if isinstance(a, dict)]
-        res = [r for r in o.get("reserve") or [] if isinstance(r, dict)]
+        attack, holds, res = [], [], []
+        for o, _ in group:
+            attack += [f for f in o.get("formations") or [] if isinstance(f, dict)]
+            holds += [a for h in o.get("holds") or [] for a in h.get("armies") or [] if isinstance(a, dict)]
+            res += [r for r in o.get("reserve") or [] if isinstance(r, dict)]
         placed = {}
         for f in attack + holds + res:
             for t, n in _divs(f).items():
@@ -459,17 +501,19 @@ class Ops:
         total = sum(placed.values())
         if fielded and total < PLACED_SHARE * fielded:
             problems.append(f"the placement names {total} divisions of the {round(fielded)} the forecast fields: "
-                            "every formation stands on the operation, a hold or the reserve")
+                            "every formation stands on an operation, a hold or the reserve (a war larger than one "
+                            "group's armies is fought by several operations of the same war, one per army group)")
         on = sum(sum(_divs(f).values()) for f in attack)
         need = next((x for x in self.s.needs or [] if x.get("war") == w["id"]), {})
         enemy = (need.get("front") or {}).get("divisions_est") or (need.get("front") or {}).get("divisions") or 0
-        fdw = next((x for x in (lint.plan.get("force_design") or {}).get("wars") or []
-                    if isinstance(x, dict) and x.get("id") == o.get("war")), {})
+        wars_fd = [x for x in (lint.plan.get("force_design") or {}).get("wars") or [] if isinstance(x, dict)]
+        fdw = next((x for x in wars_fd if x.get("id") == group[0][0].get("war")), {})
         from .lint_war_shape import ATTACK_RATIO
         ratio = fdw.get("attack_ratio") if isinstance(fdw.get("attack_ratio"), (int, float)) else ATTACK_RATIO
         if enemy and on < ratio * enemy:
-            problems.append(f"the operation attacks with {on} divisions against about {round(enemy)} enemy divisions "
-                            f"on the front (ratio {ratio:g} wanted: force_design.wars[].attack_ratio)")
+            who = "the operations attack" if len(group) > 1 else "the operation attacks"
+            problems.append(f"{who} with {on} divisions against about {round(enemy)} enemy divisions on the front "
+                            f"(ratio {ratio:g} wanted: force_design.wars[].attack_ratio)")
         mob_fc = sum(n for t, n in fc.items() if fm.is_mobile(self.kind(t)))
         mob_in = sum(n for f in attack if f.get("role") == "mobile" for t, n in _divs(f).items())
         stray = sorted({f.get("army") for f in attack + holds + res if f.get("role") != "mobile"
@@ -480,21 +524,33 @@ class Ops:
         if mob_fc >= 1 and mob_in < PLACED_SHARE * mob_fc:
             problems.append(f"the mobile formations carry {mob_in} of the {round(mob_fc)} armoured and motorised "
                             "divisions the forecast fields")
-        fact.update(attack=on, enemy_est=round(enemy), placed=total, forecast=round(fielded), mobile=mob_in)
+        for (o, _), fact in zip(group, facts):
+            own = sum(sum(_divs(f).values()) for f in o.get("formations") or [] if isinstance(f, dict))
+            fact.update(attack=own, enemy_est=round(enemy), placed=total, forecast=round(fielded), mobile=mob_in)
+            if len(group) > 1:
+                fact["war_attack"] = on
         if problems:
             lint.add("error", "war.attack_force", where, f"{w['id']} ({_fmt(day)}): " + "; ".join(problems))
 
-    def holds(self, o, w, where, fact):
-        """war.hold_sector for a war with an operation."""
-        lint, nb, day = self.lint, self.nb(), w["start"]
+    def holds(self, w, group, facts):
+        """war.hold_sector for a war with operations: every hold checked, the open borders over all of them."""
+        day = w["start"]
         mine = self.s.taken(day)
         hostile = (self.s.hostile(day) | self.s.likely(w)) - self.s.gone(day)
-        attacked = set(o.get("enemies") or [])
-        fronts = set(_ints((o.get("front") or {}).get("own_states")))
-        for f in o.get("formations") or []:
-            fronts |= set(_ints((f.get("front") or {}).get("own_states")))
+        attacked, fronts, cover = set(), set(), {}
+        for o, _ in group:
+            attacked |= set(o.get("enemies") or [])
+            fronts |= set(_ints((o.get("front") or {}).get("own_states")))
+            for f in o.get("formations") or []:
+                fronts |= set(_ints((f.get("front") or {}).get("own_states")))
+        for (o, where), fact in zip(group, facts):
+            self.hold_rows(o, day, where, fact, mine, cover)
+        where = group[0][1] if len(group) == 1 else "operations " + ", ".join(str(o.get("id")) for o, _ in group)
+        self.open_borders(w, where, mine, hostile, attacked, fronts, cover)
+
+    def hold_rows(self, o, day, where, fact, mine, cover):
+        lint = self.lint
         fact["holds"] = []
-        cover = {}
         for h in o.get("holds") or []:
             if not isinstance(h, dict):
                 continue
@@ -521,6 +577,10 @@ class Ops:
                          f"{', '.join(sorted(facing))} = {per:.1f} a province, under {want:g}")
             for s in states:
                 cover.setdefault(s, set()).update(facing)
+
+    def open_borders(self, w, where, mine, hostile, attacked, fronts, cover):
+        nb, day = self.nb(), w["start"]
+        lint = self.lint
         open_ = {}
         for s in mine:
             if s not in self.tl.owned(day):
@@ -574,8 +634,41 @@ class Ops:
                 lint.add("error", "war.operation_support", where,
                          f"no air_plan row flies {mission} over regions {sorted(regions)} by {_fmt(day)}")
 
+    def peers(self, w, group):
+        """Several operations of one war: each its own army group, each army in one place."""
+        if len(group) < 2:
+            return
+        lint = self.lint
+        seen_g, seen_a = {}, {}
+        for o, where in group:
+            g = o.get("group")
+            if g in seen_g:
+                lint.add("error", "war.operation_refs", where,
+                         f"group {g!r} is also the group of {seen_g[g]} in {w['id']}: an army group has one front and "
+                         "one offensive, so each operation of a war has its own group")
+            seen_g.setdefault(g, o.get("id"))
+            rows = [f for f in o.get("formations") or [] if isinstance(f, dict)]
+            rows += [a for h in o.get("holds") or [] if isinstance(h, dict)
+                     for a in h.get("armies") or [] if isinstance(a, dict)]
+            rows += [r for r in o.get("reserve") or [] if isinstance(r, dict)]
+            for f in rows:
+                a = f.get("army")
+                if a in seen_a and seen_a[a] != o.get("id"):
+                    lint.add("error", "war.operation_refs", where,
+                             f"army {a!r} is placed in {seen_a[a]} and {o.get('id')}: an army is in one place on the "
+                             "war day")
+                seen_a.setdefault(a, o.get("id"))
+        mains = {o.get("group"): o.get("id") for o, _ in group}
+        for o, where in group:
+            for h in o.get("holds") or []:
+                if isinstance(h, dict) and h.get("group") in mains and mains[h["group"]] != o.get("id"):
+                    lint.add("error", "war.operation_refs", where,
+                             f"holds {h.get('id')} uses group {h['group']}, the attacking group of "
+                             f"{mains[h['group']]}")
+
     def run(self):
         self.required()
+        wars = {}
         for i, o in enumerate(self.ops):
             where = f"operations[{i}] {o.get('id')}"
             self.refs(o, where)
@@ -587,13 +680,15 @@ class Ops:
                 continue
             self.timing(o, w, where)
             self.at_war(o, w, where)
-            fact = self.line(o, w, where)
-            self.force(o, w, where, fact)
-            self.holds(o, w, where, fact)
             self.support(o, w, where)
+            wars.setdefault(w["id"], (w, []))[1].append((o, where))
+        for w, group in wars.values():
+            self.peers(w, group)
+            facts = self.line(w, group)
+            self.force(w, group, facts)
+            self.holds(w, group, facts)
         if self.facts:
             self.lint.facts.setdefault("force", {})["operations"] = self.facts
-
 
 def check(shape):
     ops = Ops(shape)
