@@ -4,7 +4,8 @@ An operation is one army-group front on the enemy border, one group offensive wh
 country, the armour in an army of its own, a hold front on every other hostile border, and the war-day placement
 (which army holds how many divisions of which template).
 
-  war.operation_required  an offensive war over a land border against more than LARGE_WAR enemy divisions, with
+  war.operation_required  an offensive war over land (at least LAND_SHARE of a target's victory points reached from
+                          our land or a friend's) against more than LARGE_WAR enemy divisions, with
                           more than that in the forecast, and no operation: per-army orders do not carry a war of
                           that size.
   war.operation_refs      an operation names a war, group, army, template or next operation the plan does not
@@ -28,6 +29,7 @@ from . import derive
 from . import force as fm
 
 LARGE_WAR = 30      # divisions: above this a land war is fought as an operation [D input budget, war beds]
+LAND_SHARE = 0.5    # share of a target's victory points reached over land that makes its war a land war [H]
 PREPARE_DAYS = 30   # days of drawn plans before the war day: the planning bonus reached its cap in ~25 days [bed]
 PLACED_SHARE = 0.8  # the placement names at least this share of the forecast army [H]
 HOLD_PER_PROVINCE = 2.0  # divisions a border province of a hold, at least [H; the game's AI held France with 3.75]
@@ -166,9 +168,29 @@ class Ops:
                         break
         return out
 
+    def land_targets(self, w):
+        """Targets of a war fought over land: at least LAND_SHARE of the target's victory points lie on land
+        reached from ours or a friend's on the war day (a colony beside an ally's land does not make the war with
+        its overseas owner a land war)."""
+        day = w["start"]
+        mine = self.s.taken(day)
+        friends = (self.lint.passable_tags() or set()) - set(w["enemy_tags"])
+        ground = mine | {s for s, ow in self.s.owner0.items() if ow in friends}
+        vps, out = self.vps(), []
+        for t in w["targets"]:
+            land = {s for s, ow in self.s.owner0.items() if ow == t and s not in mine}
+            total = sum(vps.get(s, 0) for s in land)
+            if total and sum(vps.get(s, 0) for s in self.reach(ground, land)) >= LAND_SHARE * total:
+                out.append(t)
+        return sorted(out)
+
+    def landed(self, w):
+        """Whether the plan lands in a target's land (an `invasions` entry into one of its states)."""
+        targets = set(w["targets"])
+        return any(self.s.owner0.get(i.get("target_state")) in targets for i in self.lint.list_of("invasions"))
+
     # ------------------------------------------------------------------ rules
     def required(self):
-        nb = self.nb()
         for w in self.s.wars:
             if w["kind"] != "offensive" or "at war at the start" in w["source"] or self.of_war(w):
                 continue
@@ -178,11 +200,7 @@ class Ops:
             enemy = (need.get("front") or {}).get("divisions_est") or (need.get("front") or {}).get("divisions") or 0
             if enemy <= LARGE_WAR or fielded <= LARGE_WAR:
                 continue  # a small theatre: the strike keys carry it
-            mine = self.s.taken(day)
-            friends = (self.lint.passable_tags() or set()) - set(w["enemy_tags"])
-            ground = mine | {s for s, ow in self.s.owner0.items() if ow in friends}
-            touch = sorted(t for t in w["targets"]
-                           if any(self.s.owner0.get(n) == t and n not in mine for s in ground for n in nb.get(s, ())))
+            touch = self.land_targets(w)
             if not touch:
                 continue  # reached by sea: landings (invasions) and the strike keys carry it
             self.lint.add("error", "war.operation_required", f"operations ({w['id']})",

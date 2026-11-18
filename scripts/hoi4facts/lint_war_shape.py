@@ -172,6 +172,8 @@ class Shape:
             pid, eff = self.war_at(w["start"])
             if eff.get("operations") or self.ops.of_war(w):
                 continue
+            if not self.ops.land_targets(w) and self.ops.landed(w):
+                continue  # reached by sea: the landings and their victory-point rows carry it, no land axis exists yet
             ax = eff.get("axes")
             if isinstance(ax, list) and any(_ints(a) for a in ax if isinstance(a, list)):
                 continue
@@ -439,6 +441,13 @@ class Shape:
             pid, eff = self.war_at(day)
             reserve = set(eff.get("reserve") or [])
             targets = set(w["targets"])
+            fdw = next((x for x in (lint.plan.get("force_design") or {}).get("wars") or []
+                        if isinstance(x, dict) and set(x.get("enemies") or []) & targets), {})
+            if isinstance(fdw.get("placement"), list):
+                # a small or sea-reached war states its war day in force_design.wars[].placement (the army layout
+                # holds the opening only): the same checks on those rows
+                self.placement(w, fdw, rows)
+                continue
             attack = [e for e in entries if e.get("role") == "strike" and not e.get("task_of")
                       and (e.get("name_hint") or e.get("id")) not in reserve
                       and any(self.owner0.get(x) in targets for x in _ints(e.get("axis")))]
@@ -447,14 +456,13 @@ class Shape:
             fielded = next((n for d, n, _ in reversed(rows) if d <= day), None)
             need = next((x for x in needs if x.get("war") == w["id"]), {})
             enemy = (need.get("front") or {}).get("divisions_est") or (need.get("front") or {}).get("divisions") or 0
-            fdw = next((x for x in (lint.plan.get("force_design") or {}).get("wars") or []
-                        if isinstance(x, dict) and set(x.get("enemies") or []) & targets), {})
             ratio = fdw.get("attack_ratio") if isinstance(fdw.get("attack_ratio"), (int, float)) else ATTACK_RATIO
             where = f"army_layout ({w['id']})"
             problems = []
             if fielded and placed < PLACED_SHARE * fielded:
                 problems.append(f"the layout in force places {placed} divisions of the {round(fielded)} the forecast "
-                                "fields: add war-day entries (when: a date before the war) with each formation's count")
+                                "fields: state the war day in force_design.wars[].placement (each army with its "
+                                "divisions by template and its role), or as an operation for a large land war")
             if enemy and on_axes < ratio * enemy:
                 problems.append(f"the formations on the war's axes ({', '.join(e.get('name_hint') or e.get('id') for e in attack) or 'none'}) "
                                 f"carry {on_axes} divisions against about {round(enemy)} enemy divisions on the front "
@@ -467,6 +475,47 @@ class Shape:
             if problems:
                 lint.add("error", "war.attack_force", where,
                          f"{w['id']} ({_fmt(day)}): " + "; ".join(problems))
+
+
+    def placement(self, w, fdw, rows):
+        """war.attack_force for a war without an operation that states its war day in force_design.wars[]
+        .placement: the rows against the forecast by template, the attack against the enemy (a war fought over
+        land), the armour among the attackers."""
+        lint, day = self.lint, w["start"]
+        fc = self.ops.forecast(day)
+        fielded = sum(fc.values())
+        entries = [e for e in fdw["placement"] if isinstance(e, dict)]
+        placed, on = {}, 0
+        for e in entries:
+            d = e.get("divisions") if isinstance(e.get("divisions"), dict) else {}
+            for t, n in d.items():
+                if isinstance(n, int):
+                    placed[t] = placed.get(t, 0) + n
+                    on += n if e.get("role") == "attack" else 0
+        problems = []
+        over = sorted(f"{t} {n} of {round(fc.get(t, 0))}" for t, n in placed.items() if n > fc.get(t, 0) + 0.5)
+        if over:
+            problems.append("the placement holds more divisions than the forecast fields on that day: " + ", ".join(over))
+        total = sum(placed.values())
+        if fielded and total < PLACED_SHARE * fielded:
+            problems.append(f"the placement names {total} divisions of the {round(fielded)} the forecast fields")
+        need = next((x for x in getattr(self, "needs", None) or [] if x.get("war") == w["id"]), {})
+        enemy = (need.get("front") or {}).get("divisions_est") or (need.get("front") or {}).get("divisions") or 0
+        ratio = fdw.get("attack_ratio") if isinstance(fdw.get("attack_ratio"), (int, float)) else ATTACK_RATIO
+        if self.ops.land_targets(w) and enemy and on < ratio * enemy:
+            problems.append(f"the attack rows carry {on} divisions against about {round(enemy)} enemy divisions on the "
+                            f"front (ratio {ratio:g} wanted: force_design.wars[].attack_ratio)")
+        stray = sorted({str(e.get("army")) for e in entries if e.get("role") != "attack"
+                        for t in (e.get("divisions") or {}) if fm.is_mobile(self.ops.kind(t))})
+        if stray:
+            problems.append(f"armour or motorised divisions outside the attack ({', '.join(stray)})")
+        names = {e.get("name_hint") for e in self.layout()}
+        ghost = sorted({str(e.get("army")) for e in entries if e.get("army") not in names})
+        if ghost:
+            problems.append(f"armies that are no army_layout formation: {', '.join(ghost)}")
+        if problems:
+            lint.add("error", "war.attack_force", f"force_design.wars {fdw.get('id')}.placement",
+                     f"{w['id']} ({_fmt(day)}): " + "; ".join(problems))
 
 
 def check(ctx):

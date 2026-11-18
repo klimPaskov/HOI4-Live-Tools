@@ -790,6 +790,11 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
    e. **Air and supply.** `air.regions`: the strategic regions of the target line and the axis, with `air_plan`
       rows that fly superiority and close air support over them from the war day; `supply` {`motorization`,
       `floor`}.
+   f. **Wars without an operation** (a small theatre, a war reached by sea) state their war day in
+      `force_design.wars[].placement` [{`army`, `role` attack | hold | garrison, `divisions` {template: count}}]:
+      the rows name the forecast army, the armour is among the attackers, and in a land war the attack carries
+      the ratio. The army layout holds the opening only (its `when` reads `owner:<state>=<TAG>`, never a date).
+      A war reached by sea needs no land axis while an `invasions` entry lands in the target's land.
    Until the executor's operation step is built the key is carried out from the brief: one brief line per
    operation with the draw order (delete old orders, mobile and wing armies first, then the group front and the
    group offensive, then the holds) and the execute. Lint `war.operation_required`, `war.operation_refs`,

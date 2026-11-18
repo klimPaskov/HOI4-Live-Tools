@@ -5481,10 +5481,19 @@ class Lint:
         spec = ((((self.schema or {}).get("properties") or {}).get("invasions") or {}).get("items") or {}).get(
             "properties") or {}
         dflt = (spec.get("prepare_days") or {}).get("default", 14)
-        layout = Counter()
+        # a formation listed again with a `when` is the same army on a later day (a war-day placement), not more
+        # divisions: its size here is what its undated entries hold, else its largest dated entry
+        layout, dated = Counter(), Counter()
         for e in self.list_of("army_layout"):
             if isinstance(e.get("name_hint"), str):
-                layout[e["name_hint"]] += e.get("count", 1) if isinstance(e.get("count"), int) else 1
+                n = e.get("count", 1) if isinstance(e.get("count"), int) else 1
+                if e.get("when") is None:
+                    layout[e["name_hint"]] += n
+                else:
+                    dated[e["name_hint"]] = max(dated[e["name_hint"]], n)
+        for name, n in dated.items():
+            if name not in layout:
+                layout[name] = n
         self.facts["invasion"] = {"prepare_days": prep, "division_cap": cap}
         for i, inv in enumerate(invs):
             where = f"invasions[{i}] {inv.get('id', '')}".strip()
