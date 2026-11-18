@@ -2854,7 +2854,11 @@ fn gather_target(
             .find(|a| text(&a["army"]) == name)
             .map(|a| a["division_count"].as_u64().unwrap_or(0))
     };
-    let room = |name: &str| size(name).is_some_and(|n| n + pool <= max);
+    // an army an operation owns takes no gather (the operation's guard refuses it: it27a, 18 Nov
+    // 2026, 8 divisions stood outside any army for the whole Ethiopian war): a new army forms
+    let room = |name: &str| {
+        !state.op_owned.contains_key(name) && size(name).is_some_and(|n| n + pool <= max)
+    };
     // formations in plan order: (army, states of its region)
     let formations: Vec<(String, HashSet<i64>)> = list(plan, "army_layout")
         .iter()
@@ -10968,6 +10972,16 @@ mod tests {
         let tools = Gathering(RefCell::new(vec![]), true);
         let step = acted(tick(&mut State::default(), &tools, &plan, "l", START).unwrap());
         assert!(step.starts_with("army_gather 3 -> Army 3: true"), "{step}");
+        // an army an operation owns is no target: the next with room is
+        let mut state = State::default();
+        state.op_owned.insert("Army 3".into(), "op_x".into());
+        let roster = Gathering(RefCell::new(vec![]), true)
+            .call("hoi4_armies", &json!({}))
+            .unwrap();
+        assert_eq!(
+            gather_target(&state, &plan, &roster, 3, 24).as_deref(),
+            Some("Army 1")
+        );
         // an older backend without the tool: the state-by-state path is the fallback
         let plan = json!({"armies": {"max": 24, "absorb": "assign"}});
         let tools = Gathering(RefCell::new(vec![]), false);

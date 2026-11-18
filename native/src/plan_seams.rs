@@ -89,6 +89,8 @@ pub(super) struct Memory {
     alarms: Vec<Value>,
     /// cp_spend: why each general / general:trait could not be given a trait last time.
     cp_why: BTreeMap<String, String>,
+    /// cp_spend: how many times in a row each pick was refused with the same answer.
+    cp_same: BTreeMap<String, u32>,
     /// cp_spend: whether the last reading was at war (the first war reading clears the rests).
     cp_war: bool,
 }
@@ -310,6 +312,7 @@ fn cp_spend_step(
             .bad
             .retain(|k, _| !k.starts_with("cpp:") && k != "cps:x");
         state.seams.cp_why.clear();
+        state.seams.cp_same.clear();
     }
     state.seams.cp_war = war;
     if state.skipped(now, "cps", "x") {
@@ -422,6 +425,19 @@ fn cp_spend_step(
                 (true, true) => CP_WAR_REST_DAYS,
                 (false, _) => 30,
             };
+            // the same answer again: the rest doubles each time, so an unchanged refusal is not
+            // re-sent on a fixed beat (it27a, 18 Nov 2026: three generals refused 3-5 times each
+            // with the same locked list at war)
+            let same = state.seams.cp_why.get(&pick) == Some(&why);
+            let repeats = if same {
+                let n = state.seams.cp_same.entry(pick.clone()).or_insert(0);
+                *n = (*n + 1).min(4);
+                *n
+            } else {
+                state.seams.cp_same.remove(&pick);
+                0
+            };
+            let rest = (rest << repeats).min(CP_GENERAL_REST_DAYS.max(rest));
             state.skip(now, "cpp", &pick, rest * DAY);
             state.seams.cp_why.insert(pick.clone(), why.clone());
         }
@@ -1945,6 +1961,32 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(out.contains("false no_enabled_trait"), "{out}");
+        // at war the same refusal again doubles the rest (14 then 28 days), never a fixed beat
+        let pick = out
+            .split("trait for ")
+            .nth(1)
+            .and_then(|r| r.split(": ").next())
+            .unwrap()
+            .to_string();
+        let first = state.bad[&super::super::skip_key("cpp", &pick)];
+        assert_eq!(first - (START + 9 * DAY), CP_WAR_REST_DAYS * DAY);
+        let later = first + 1;
+        state.bad.retain(|k, _| !k.starts_with("cps:"));
+        for g in state.seams.cp_why.clone().keys() {
+            if g != &pick {
+                state
+                    .bad
+                    .insert(super::super::skip_key("cpp", g), later + 365 * DAY);
+            }
+        }
+        state.pcache = None;
+        let again = step(&mut state, &f, &peace, "l", later).unwrap().unwrap();
+        assert!(
+            again.contains(&format!("trait for {pick}: false")),
+            "{again}"
+        );
+        let second = state.bad[&super::super::skip_key("cpp", &pick)];
+        assert_eq!(second - later, 2 * CP_WAR_REST_DAYS * DAY);
 
         // short command power: the rule waits until it has grown (15 - 4 at 0.4 a day)
         let mut f = cp_game(75.0);
