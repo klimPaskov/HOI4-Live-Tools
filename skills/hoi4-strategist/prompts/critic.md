@@ -22,6 +22,13 @@ Inputs:
   is a major finding;
 * `RUN/plan.timelines.md`: the research and focus timelines of the current plan, written by the gates;
 * in round 2: the earlier `RUN/review/critic-*.json` and `RUN/review/answers-*.json`.
+* `RUN/decisions.md` when it exists: the sourced decision table the plan was made from (the playbook, private
+  sources, web research and game files per decision area). Check the plan against it: every row followed
+  (`[D row]` in the entry that carries it, and the entry really does what the row decides) or listed in
+  `_meta.decision_departures` with a game fact or arithmetic that holds when you check it. A row the plan
+  cites but does not implement, or a departure whose reason does not hold, is a finding (major; blocker when the
+  row is a war, the force against an enemy, or the goal's arithmetic). Also check the table itself where the
+  plan relies on it: a row that contradicts the game files is a finding against the table.
 
 Do not read `RUN/agents/` (the strategist's output log). Do not edit the plan files.
 

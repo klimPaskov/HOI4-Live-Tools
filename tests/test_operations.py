@@ -151,6 +151,13 @@ class Poland(unittest.TestCase):
                             "war.operation_line")
         self.assertTrue(any("not a chain" in m for m in found), found)
 
+    def test_the_armour_axis_runs_through_open_ground(self):
+        self.assertEqual(self.errors(self.good, "war.armour_terrain"), [])
+        def forest(op):  # Wilejka (96) is 86% forest: no tank road before the column's last state
+            op["formations"][2]["offensive"] = {"axis": [67, 87, 10], "target_line": [96, 95]}
+        found = self.errors(self.changed(forest), "war.armour_terrain")
+        self.assertTrue(found and "96 (86%)" in found[0], found)
+
     def test_an_enemy_of_the_operation_is_at_war_that_day(self):
         found = self.errors(self.changed(lambda op: op["enemies"].append("LIT")), "war.objective_not_at_war")
         self.assertTrue(any("LIT" in m for m in found), found)

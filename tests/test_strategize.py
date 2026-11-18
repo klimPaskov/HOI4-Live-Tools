@@ -42,6 +42,9 @@ class Fake(strategize.Runner):
         if "--role" in argv:
             role = argv[argv.index("--role") + 1]
             prompt = os.path.basename(argv[argv.index("--prompt") + 1])
+            if role == "researcher" and prompt == "decisions.md" and not getattr(self, "no_table", False):
+                with open(os.path.join(self.run_dir, "decisions.md"), "w") as f:
+                    f.write("| id | area |\n|---|---|\n| D-FOCUS-01 | FOCUS |\n| D-WAR-01 | WAR |\n")
             if role == "strategist" and prompt == "strategist.md":
                 with open(os.path.join(self.run_dir, "plan.json"), "w") as f:
                     json.dump({"focus_path": []}, f)
@@ -89,7 +92,8 @@ class StrategizeTests(unittest.TestCase):
             fake = Fake(d, validate_fails=1, critic_fails=1)
             report = strategize.strategize(args(d), fake)
             self.assertTrue(report["ok"], report.get("failure"))
-            self.assertEqual(roles(fake), [("strategist", "strategist.md"), ("strategist", "fix.md"),
+            self.assertEqual(roles(fake), [("researcher", "decisions.md"), ("strategist", "strategist.md"),
+                                           ("strategist", "fix.md"),
                                            ("critic", "critic.md"), ("strategist", "answer.md"),
                                            ("critic", "critic.md")])
             plan = json.load(open(os.path.join(d, "plan.json")))
@@ -195,6 +199,63 @@ class LintToolGaps(unittest.TestCase):
                 text = f.read()
             self.assertIn("operation_collaboration_government", text)
             self.assertNotIn("- x:", text)
+
+class DecisionTableStepTests(unittest.TestCase):
+    """1c: the sourced decision table before the strategist (any country, private sources optional)."""
+
+    def test_decisions_only_writes_the_table_and_stops(self):
+        with tempfile.TemporaryDirectory() as d:
+            fake = Fake(d, validate_fails=0, critic_fails=0)
+            report = strategize.strategize(args(d, decisions_only=True), fake)
+            self.assertTrue(report["ok"], report.get("failure"))
+            self.assertEqual(roles(fake), [("researcher", "decisions.md")])
+            step = [s for s in report["steps"] if s["step"] == "decisions"][0]
+            self.assertEqual(step["rows"], 2)
+            self.assertFalse(os.path.exists(os.path.join(d, "plan.json")))
+
+    def test_an_existing_table_is_kept(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "decisions.md"), "w") as f:
+                f.write("| D-GOAL-01 | GOAL |\n")
+            fake = Fake(d, validate_fails=0, critic_fails=0)
+            report = strategize.strategize(args(d), fake)
+            self.assertTrue(report["ok"], report.get("failure"))
+            self.assertEqual(roles(fake)[0], ("strategist", "strategist.md"))
+            self.assertIn({"step": "decisions", "kept": True}, report["steps"])
+
+    def test_no_table_blocks_before_the_strategist(self):
+        with tempfile.TemporaryDirectory() as d:
+            fake = Fake(d, validate_fails=0, critic_fails=0)
+            fake.no_table = True
+            report = strategize.strategize(args(d), fake)
+            self.assertFalse(report["ok"])
+            self.assertIn("without RUN/decisions.md", report["failure"])
+            self.assertEqual(roles(fake), [("researcher", "decisions.md")])
+
+    def test_private_sources_are_copied_text_only_and_never_huge(self):
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as src:
+            for name, size in (("NOTES.md", 100), ("land.md", 200), ("guide.pdf", 50),
+                               ("big_guide.md", strategize.SOURCE_MAX_BYTES + 1)):
+                with open(os.path.join(src, name), "w") as f:
+                    f.write("x" * size)
+            fake = Fake(d, validate_fails=0, critic_fails=0)
+            report = strategize.strategize(args(d, decisions_only=True, source=[src]), fake)
+            self.assertTrue(report["ok"], report.get("failure"))
+            self.assertEqual(sorted(os.listdir(os.path.join(d, "sources"))), ["NOTES.md", "land.md"])
+            self.assertEqual([s for s in report["steps"] if s["step"] == "decisions"][0]["sources"], 2)
+
+    def test_resume_from_decisions_keeps_the_dossier(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "dossier"))
+            for name in ("dossier.md", "manifest.json"):
+                with open(os.path.join(d, "dossier", name), "w") as f:
+                    f.write("{}")
+            fake = Fake(d, validate_fails=0, critic_fails=0)
+            report = strategize.strategize(args(d, from_step="decisions"), fake)
+            self.assertTrue(report["ok"], report.get("failure"))
+            self.assertFalse(any("dossier" in c and "build" in c for c in fake.commands))
+            self.assertEqual(roles(fake)[:2], [("researcher", "decisions.md"), ("strategist", "strategist.md")])
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -314,13 +375,14 @@ class Reuse(unittest.TestCase):
                 self.manifest(d)
                 fake = Fake(d, validate_fails=0, critic_fails=0)
                 strategize.strategize(args(d, library=[lib]), fake)
-                self.assertEqual(roles(fake)[0], ("strategist", "strategist.md"), kw)
+                self.assertEqual(roles(fake)[:2], [("researcher", "decisions.md"), ("strategist", "strategist.md")],
+                                 kw)
         with tempfile.TemporaryDirectory() as lib, tempfile.TemporaryDirectory() as d:
             self.library_entry(lib)
             self.manifest(d)
             fake = Fake(d, validate_fails=0, critic_fails=0)
             strategize.strategize(args(d, library=[lib], no_reuse=True), fake)
-            self.assertEqual(roles(fake)[0], ("strategist", "strategist.md"))
+            self.assertEqual(roles(fake)[1], ("strategist", "strategist.md"))
 
     def test_publish_then_reuse(self):
         with tempfile.TemporaryDirectory() as lib, tempfile.TemporaryDirectory() as d, \

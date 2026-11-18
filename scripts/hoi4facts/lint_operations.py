@@ -38,7 +38,10 @@ PREPARE_DAYS = 30   # days of drawn plans before the war day: the planning bonus
 PLACED_SHARE = 0.8  # the placement names at least this share of the forecast army [H]
 HOLD_PER_PROVINCE = 2.0  # divisions a border province of a hold, at least [H; the game's AI held France with 3.75]
 RULES = ("war.operation_required", "war.operation_refs", "war.operation_timing", "war.operation_line",
-         "war.operation_support")
+         "war.operation_support", "war.armour_terrain")
+ROUGH_TERRAIN = ("forest", "marsh", "mountain", "jungle")  # where armour loses its speed and breakthrough
+ROUGH_STATE = 0.85  # a state at least this rough is no tank road (Ardennes, the Pripyat marsh) [H]
+OPEN_AXIS = 0.5     # an armour axis averages at least this share of open ground [H]
 
 
 def _ints(xs):
@@ -79,6 +82,40 @@ class Ops:
         self.facts = []
 
     # ------------------------------------------------------------------ helpers
+    def rough(self, state):
+        """Share of a state's land provinces in forest, marsh, mountain or jungle; None when unknown."""
+        cache = self.__dict__.setdefault("_rough", {})
+        if state not in cache:
+            try:
+                from . import theatre
+                w = self.lint.world
+                provs = (w.states().get(state) or {}).get("provinces") or []
+                shares = theatre.terrain_width(w, provs)["mix"]["shares"] if provs else {}
+                cache[state] = sum(v for k, v in shares.items() if k in ROUGH_TERRAIN) if shares else None
+            except Exception:  # noqa: BLE001  (no world: a tagless or offline lint)
+                cache[state] = None
+        return cache[state]
+
+    def armour_terrain(self, f, where):
+        """A mobile formation's axis runs mostly through open ground: no state on the way (all but the last) is
+        a forest, marsh or mountain belt, and the whole axis averages at least OPEN_AXIS open ground."""
+        fo = f.get("offensive") if isinstance(f.get("offensive"), dict) else {}
+        path = list(dict.fromkeys(_ints(fo.get("axis"))[1:] + _ints(fo.get("target_line"))))
+        known = [(s, self.rough(s)) for s in path]
+        known = [(s, r) for s, r in known if r is not None]
+        if not known:
+            return
+        bad = [f"{s} ({r:.0%})" for s, r in known[:-1] if r >= ROUGH_STATE]
+        if bad:
+            self.lint.add("error", "war.armour_terrain", where,
+                          f"{f.get('army')}: armour axis through rough states {', '.join(bad)} (forest, marsh, "
+                          "mountain or jungle); route the column through open ground and leave the belt to infantry")
+        opened = 1 - sum(r for _, r in known) / len(known)
+        if opened < OPEN_AXIS:
+            self.lint.add("warning", "war.armour_terrain", where,
+                          f"{f.get('army')}: the armour axis averages {opened:.0%} open ground (under "
+                          f"{OPEN_AXIS:.0%}); look for a plains route")
+
     def nb(self):
         if self._nb is None:
             from .lint_conditions import _state_neighbours
@@ -439,6 +476,8 @@ class Ops:
             fo = f.get("offensive") if isinstance(f.get("offensive"), dict) else {}
             fl = check_line(_ints(fo.get("target_line")), f"{f.get('army')} target_line", chain=f.get("role") == "wing")
             check_axis(_ints(fo.get("axis")), ffront, f"{f.get('army')}")
+            if f.get("role") == "mobile":
+                self.armour_terrain(f, where)
             if f.get("role") == "wing":
                 drawn.append((f.get("army"), ffront, fl))
         def sweep(label, front, ln, cut):

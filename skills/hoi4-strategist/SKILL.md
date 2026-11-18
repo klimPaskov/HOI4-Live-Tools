@@ -77,6 +77,12 @@ timed duplicate. `check_calls.py` fails any brief call that duplicates the execu
   before step 5), the tag's entry in `skills/hoi4-campaign-playbook/references/nation-openers.md`, and a
   scenario reference when one exists (`skills/hoi4-campaign-playbook/references/INDEX.md`).
 * Lessons: `skills/hoi4-campaign-playbook/references/lessons.jsonl` (path also in `run_spec.lessons`).
+* The decision table `RUN/decisions.md` when the pipeline's decisions step wrote it (prompt
+  `prompts/decisions.md`, role `researcher`): per decision area what the playbook, the private sources in
+  `RUN/sources/` (optional), web research for the country and the game files say, and the decision with its
+  reason. It is binding: entries cite its rows as `[D <row id>]`; a row the plan does not follow goes in
+  `_meta.decision_departures` with the game fact or arithmetic that forbids it (lint `decisions.coverage`; a
+  lint is never the reason). `strategize.py --decisions-only` writes the table alone.
 
 ## Procedure (each step has a gate; do not start the next step before it passes)
 
@@ -150,7 +156,7 @@ orchestrator's gates write both for the final plan to `RUN/plan.timelines.md`, w
 *Gate:* 0 errors from all four; every remaining warning is in plan.md §11 with a reason.
 
 **8. Critic pass.** Normally `scripts/strategist/strategize.py` runs steps 1-10 in order and starts the
-critic itself (prompts `strategist.md`, `fix.md`, `critic.md`, `answer.md`). Run standalone, start the
+critic itself (prompts `decisions.md`, `strategist.md`, `fix.md`, `critic.md`, `answer.md`). Run standalone, start the
 critic in a fresh context:
 `python3 scripts/strategist/run.py --role critic --run RUN --prompt skills/hoi4-strategist/prompts/critic.md`.
 It writes `RUN/review/critic-1.json`. Answer every finding in `RUN/review/answers-1.json` (fix, or rebut

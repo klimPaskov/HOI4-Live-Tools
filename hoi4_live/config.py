@@ -42,9 +42,11 @@ DEFAULTS = {
     # The critic (sonnet/high, fresh context) is a proposal. OpenAI models are left for the user to set.
     # The planner makes the rolling plan's detail updates while the game runs (docs/ROLLING_PLAN.md): a
     # cheaper, faster model than the strategist; strategy changes escalate to the strategist.
+    # The researcher writes the sourced decision table (RUN/decisions.md) before the strategist: the playbook,
+    # optional private sources, web research for the country and the game files; it may search the web.
     "agents": {
         "provider": "claude",
-        "roles": ["strategist", "critic", "player", "planner"],
+        "roles": ["strategist", "critic", "player", "planner", "researcher"],
         "effort_scale": ["low", "medium", "high", "xhigh", "max"],
         "providers": {
             "claude": {
@@ -55,6 +57,8 @@ DEFAULTS = {
                 "critic": {"model": "sonnet", "effort": "high", "tools": ["Read", "Write", "Glob", "Grep", "Bash"]},
                 "player": {"model": "haiku", "effort": "medium", "tools": ["Read", "Bash", "mcp__hoi4-live"]},
                 "planner": {"model": "haiku", "effort": "medium", "tools": ["Read", "Write"]},
+                "researcher": {"model": "sonnet", "effort": "high",
+                               "tools": ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebSearch", "WebFetch"]},
                 "revision": {"quick_effort": "xhigh", "full_effort": "xhigh"},
             },
             "openai": {
@@ -65,12 +69,15 @@ DEFAULTS = {
                 "critic": {"model": None, "effort": "high"},
                 "player": {"model": None, "effort": "medium"},
                 "planner": {"model": None, "effort": "medium"},
+                "researcher": {"model": None, "effort": "high"},
             },
         },
     },
 }
 
-AGENT_ROLES = ("strategist", "critic", "player", "planner")
+AGENT_ROLES = ("strategist", "critic", "player", "planner", "researcher")
+# A role a user's config.json predates falls back to another role's settings (plus these tools).
+ROLE_FALLBACK = {"researcher": ("strategist", ["WebSearch", "WebFetch"])}
 EFFORT_SCALE = ("low", "medium", "high", "xhigh", "max")
 
 
@@ -106,8 +113,13 @@ def agents_settings(agents, env=None):
         raise ValueError("agents.provider %r has no entry in agents.providers (%s)" % (provider, ", ".join(sorted(providers))))
     pconf = copy.deepcopy(providers[provider])
     roles = {}
-    for role in agents.get("roles") or AGENT_ROLES:
+    for role in dict.fromkeys(list(agents.get("roles") or []) + list(AGENT_ROLES)):
         rconf = dict(pconf.get(role) or {})
+        if not rconf and role in ROLE_FALLBACK:
+            base, extra = ROLE_FALLBACK[role]
+            rconf = dict(pconf.get(base) or {})
+            if rconf.get("tools"):
+                rconf["tools"] = list(rconf["tools"]) + [t for t in extra if t not in rconf["tools"]]
         up = role.upper()
         model = env.get("HOI4_LIVE_AGENT_%s_MODEL" % up) or rconf.get("model")
         rconf["model"] = model or None

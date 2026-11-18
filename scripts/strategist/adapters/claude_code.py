@@ -44,7 +44,7 @@ def scoped_tools(tools, run_dir):
 # Code 2.1.325: the first request carries about 7k tokens instead of about 30k, and every later turn re-reads
 # that start, so a 150-turn strategist call reads about 3M fewer tokens. Auto-memory off also keeps a
 # planning model from writing notes into the user's memory folder, which the run folder rule cannot stop.
-ISOLATED_ROLES = ("strategist", "critic", "planner")  # the player keeps its MCP registration and skills
+ISOLATED_ROLES = ("strategist", "critic", "planner", "researcher")  # the player keeps its MCP registration and skills
 ISOLATION_ENV = {"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1", "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1"}
 BUILTIN_TOOLS = ("Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "Bash", "NotebookEdit", "WebFetch",
                  "WebSearch", "TodoWrite")

@@ -99,6 +99,21 @@
           },
           "x-owner": "text"
         },
+        "decision_departures": {
+          "type": "array",
+          "description": "The restore-or-justify record against the run's sourced decision table (RUN/decisions.md): each table row the plan does not follow, with the game fact or arithmetic that forbids it and what the plan does instead (lint decisions.coverage; a lint is never the reason).",
+          "items": {
+            "type": "object",
+            "properties": {
+              "row": {"type": "string", "pattern": "^D-[A-Z]+-[0-9]{2}[a-z]?$"},
+              "reason": {"type": "string"},
+              "instead": {"type": "string"}
+            },
+            "required": ["row", "reason"],
+            "additionalProperties": false
+          },
+          "x-owner": "text"
+        },
         "lint_summary": {
           "type": [
             "object",

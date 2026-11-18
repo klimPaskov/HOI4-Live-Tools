@@ -37,6 +37,21 @@ class Defaults(unittest.TestCase):
         self.assertEqual(s["revision"], {"quick_effort": "xhigh", "full_effort": "xhigh"})
         self.assertEqual(s["effort_scale"], ["low", "medium", "high", "xhigh", "max"])
 
+    def test_researcher_role_searches_the_web_and_old_configs_fall_back(self):
+        """The decision table step's researcher may search the web; a config written before the role existed
+        (no `researcher` entry, a four-role list) gets the strategist's settings plus the web tools."""
+        r = config.agents_settings(config.DEFAULTS["agents"], env={})["roles"]["researcher"]
+        self.assertEqual((r["model"], r["effort"]), ("sonnet", "high"))
+        self.assertIn("WebSearch", r["tools"])
+        self.assertIn("WebFetch", r["tools"])
+        old = json.loads(json.dumps(config.DEFAULTS["agents"]))
+        old["roles"] = ["strategist", "critic", "player", "planner"]
+        del old["providers"]["claude"]["researcher"]
+        r = config.agents_settings(old, env={})["roles"]["researcher"]
+        self.assertEqual(r["model"], "sonnet")
+        self.assertEqual(r["effort"], "xhigh")
+        self.assertEqual(r["tools"][-2:], ["WebSearch", "WebFetch"])
+
     def test_repo_config_matches_defaults(self):
         with open(os.path.join(ROOT, "config.json"), encoding="utf-8") as f:
             self.assertEqual(json.load(f)["agents"], config.DEFAULTS["agents"])
@@ -161,7 +176,7 @@ class CommandLines(unittest.TestCase):
         """A planning role gets only its own built-in tools, no user MCP servers, skills, CLAUDE.md or
         auto-memory; the player keeps the user's MCP registration; `isolate: false` turns it off."""
         env = {"HOI4_LIVE_AGENT_BINARY": "/bin/claude"}
-        for role in ("strategist", "critic", "planner"):
+        for role in ("strategist", "critic", "planner", "researcher"):
             inv = run.plan(self.args(role), env, OK_PROBE)[-1]
             a = inv.argv
             self.assertIn("--strict-mcp-config", a, role)
@@ -172,6 +187,8 @@ class CommandLines(unittest.TestCase):
         self.assertEqual(a[a.index("--tools") + 1], "Read,Write,Edit,Glob,Grep,Bash")
         a = run.plan(self.args("critic"), env, OK_PROBE)[-1].argv
         self.assertEqual(a[a.index("--tools") + 1], "Read,Write,Glob,Grep,Bash")
+        a = run.plan(self.args("researcher"), env, OK_PROBE)[-1].argv
+        self.assertEqual(a[a.index("--tools") + 1], "Read,Write,Edit,Glob,Grep,Bash,WebSearch,WebFetch")
         player = run.plan(self.args("player"), env, OK_PROBE)[-1]
         self.assertNotIn("--strict-mcp-config", player.argv)
         self.assertNotIn("--tools", player.argv)

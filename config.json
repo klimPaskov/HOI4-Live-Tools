@@ -58,7 +58,7 @@
   },
   "agents": {
     "provider": "claude",
-    "roles": ["strategist", "critic", "player", "planner"],
+    "roles": ["strategist", "critic", "player", "planner", "researcher"],
     "effort_scale": ["low", "medium", "high", "xhigh", "max"],
     "providers": {
       "claude": {
@@ -68,6 +68,7 @@
         "critic": {"model": "sonnet", "effort": "high", "tools": ["Read", "Write", "Glob", "Grep", "Bash"]},
         "player": {"model": "haiku", "effort": "medium", "tools": ["Read", "Bash", "mcp__hoi4-live"]},
         "planner": {"model": "haiku", "effort": "medium", "tools": ["Read", "Write"]},
+        "researcher": {"model": "sonnet", "effort": "high", "tools": ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebSearch", "WebFetch"]},
         "revision": {"quick_effort": "xhigh", "full_effort": "xhigh"}
       },
       "openai": {
@@ -77,7 +78,8 @@
         "strategist": {"model": null, "effort": "high"},
         "critic": {"model": null, "effort": "high"},
         "player": {"model": null, "effort": "medium"},
-        "planner": {"model": null, "effort": "medium"}
+        "planner": {"model": null, "effort": "medium"},
+        "researcher": {"model": null, "effort": "high"}
       }
     }
   }
