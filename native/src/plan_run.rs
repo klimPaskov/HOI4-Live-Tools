@@ -3572,13 +3572,22 @@ fn layout_step(
                 "layout: {parent} is {hint} (all its {parent_size} division(s) fit the role)"
             )));
         }
-        let (ok, why) = state.act(
+        // the layout carving an operation's own army out of another army that operation owns is
+        // the operation's assembly, not another step's order (it27b, 18 Nov 2026: Army 2 was
+        // named North Strike and owned before the layout split it, every detach for Gondar Group,
+        // South Force and the guards was refused and 28 divisions stood in one army)
+        let carve = state.op_owned.contains_key(&parent) && plan_operation::names_army(plan, &hint);
+        let was = state.op_acting;
+        state.op_acting = was || carve;
+        let sent = state.act(
             tools,
             lease,
             "hoi4_army_detach",
             json!({"army": parent, "divisions": pick}),
             "la",
-        )?;
+        );
+        state.op_acting = was;
+        let (ok, why) = sent?;
         if !ok && held_back(&why) {
             // the ledger did not send it: no try was made, so none is counted
             state.skip(now, "layoutentry", &hint, DAY);
@@ -13923,6 +13932,64 @@ mod tests {
             layout_step(&mut state, &tools, &plan, "l", START).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn army_layout_carves_an_operation_army_out_of_an_army_that_operation_owns() {
+        struct L(RefCell<Vec<(String, Value)>>, RefCell<bool>);
+        impl Tools for L {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                let split = *self.1.borrow();
+                Ok(match name {
+                    "hoi4_armies" => {
+                        let mut a =
+                            vec![json!({"army": "Army 1", "main_state": 550, "commander": null})];
+                        if split {
+                            a.push(json!({"army": "Army 2", "main_state": 550, "commander": null}));
+                        }
+                        json!({"armies": a})
+                    }
+                    "hoi4_supply" => json!({"divisions": [
+                        {"army": "Army 1", "id": "d1", "template": "Divisione di Fanteria"},
+                        {"army": "Army 1", "id": "d2", "template": "Camicie Nere"},
+                        {"army": "Army 1", "id": "d3", "template": "Camicie Nere"}]}),
+                    "hoi4_army_detach" => {
+                        *self.1.borrow_mut() = true;
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let layout = json!([
+            {"name_hint": "North Strike", "state": 550, "role": "strike"},
+            {"name_hint": "North Guard", "state": 550, "role": "guard", "templates": ["Camicie Nere"],
+             "count": 2, "guard_states_in_order": [550]}]);
+        // the operation names North Guard: the detach out of its owned North Strike goes out
+        let plan = json!({"army_layout": layout, "operations": [{"id": "op", "formations": [
+            {"army": "North Strike", "role": "mobile"}],
+            "holds": [{"armies": [{"army": "North Guard"}], "states": [550]}]}]});
+        let tools = L(RefCell::new(vec![]), RefCell::new(false));
+        let mut state = State::default();
+        layout_step(&mut state, &tools, &plan, "l", START).unwrap();
+        state.op_owned.insert("Army 1".into(), "op".into());
+        let s2 = layout_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(s2.contains("-> Army 2 (North Guard)"), "{s2}");
+        assert!(!state.op_acting);
+        // a role no operation names is still refused out of an owned army
+        let plan = json!({"army_layout": layout, "operations": [{"id": "op", "formations": [
+            {"army": "North Strike", "role": "mobile"}]}]});
+        let tools = L(RefCell::new(vec![]), RefCell::new(false));
+        let mut state = State::default();
+        layout_step(&mut state, &tools, &plan, "l", START).unwrap();
+        state.op_owned.insert("Army 1".into(), "op".into());
+        let s2 = layout_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(s2.contains("owned_by_operation"), "{s2}");
     }
 
     #[test]
