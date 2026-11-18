@@ -48,6 +48,61 @@ class Rewards(unittest.TestCase):
         self.assertIn(("annex", "AUS"), ev)
 
 
+class _StubLint:
+    """The parts of a Lint that lint_economy.baseline reads: Germany 1936, horizon targets, findings."""
+
+    def __init__(self, horizons):
+        self.tag, self.start, self.facts, self.found = "GER", "1936.1.1", {}, []
+        self.plan = {"goal": {}, "horizons": horizons}
+
+    def list_of(self, key):
+        return [x for x in self.plan.get(key) or [] if isinstance(x, dict)]
+
+    def horizon(self):
+        return [(lint_economy._day(h["until"]), h) for h in self.list_of("horizons")]
+
+    def add(self, severity, rule, where, message):
+        self.found.append((severity, rule, where, message))
+
+
+class _StubTimeline:
+    war_day = lint_economy._day("1939.9.1")
+
+    def army_at(self, day):
+        return 200, None
+
+
+class CivilianSplit(unittest.TestCase):
+    """plan.ai_baseline: the AI is a floor on what the factories make. An earlier switch that meets the AI's
+    military and total factories is the plan's split (a warning), a smaller economy is an error. No game read."""
+
+    def run_baseline(self, civ, mil):
+        lint = _StubLint([{"id": "h1", "until": "1939.9.1", "targets": {"civilian_factories": civ}}])
+        rows = [{"date": "1936.01.01", "civ": 35, "mil": 28}, {"date": "1936.07.01", "civ": 43, "mil": 28},
+                {"date": "1937.03.01", "civ": 51, "mil": 30},
+                {"date": "1938.01.01", "civ": 64, "mil": 34}, {"date": "1938.10.01", "civ": 88, "mil": 46},
+                {"date": "1939.01.01", "civ": 93, "mil": 51},
+                {"date": "1939.09.01", "civ": civ, "mil": mil}]
+        lint_economy.baseline(lint, _StubTimeline(), None, {"rows": rows, "war": "1939.9.1", "switch": "1937.6.1"})
+        return [x for x in lint.found if x[1] == "plan.ai_baseline"], lint.facts["ai_baseline"]
+
+    def test_an_earlier_switch_that_meets_military_and_total_is_a_warning(self):
+        found, facts = self.run_baseline(73, 106)  # against the AI's 104 / 67 on 1939.9.1: 179 against 171
+        self.assertFalse([x for x in found if x[0] == "error"], found)
+        warn = [x for x in found if x[0] == "warning" and x[2] == "split"]
+        self.assertTrue(warn, found)
+        self.assertIn("civilian factories 73", warn[0][3])
+        self.assertTrue(facts["civilian_split"])
+
+    def test_fewer_factories_in_all_stays_an_error(self):
+        found, _ = self.run_baseline(73, 90)  # 163 against 171 in all
+        self.assertTrue([x for x in found if x[0] == "error"], found)
+
+    def test_fewer_military_factories_stays_an_error(self):
+        found, _ = self.run_baseline(73, 50)  # 50 against the AI's 67 (under the forecast slack)
+        self.assertTrue([x for x in found if x[0] == "error"], found)
+
+
 class Baseline(unittest.TestCase):
     def test_the_germany_baseline_is_in_the_repo(self):
         b = lint_economy.load_baseline("GER", "1936.1.1")
