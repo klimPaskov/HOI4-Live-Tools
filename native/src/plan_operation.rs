@@ -598,6 +598,17 @@ pub(super) fn step(
 }
 
 /// Ends the quiet timer: the next call of the step looks at once (after a declaration).
+/// An operation has executed and not yet ended (its armies fight).
+pub(super) fn running(state: &State) -> bool {
+    state.done.keys().any(|k| {
+        k.starts_with("op:")
+            && k.ends_with(":exec")
+            && !state
+                .done
+                .contains_key(&format!("{}:end", &k[..k.len() - 5]))
+    })
+}
+
 pub(super) fn wake(state: &mut State) {
     state.bad.remove(&super::skip_key("opstep", "x"));
     state.op_owned_at = None;

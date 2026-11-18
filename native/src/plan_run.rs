@@ -2516,17 +2516,29 @@ fn war_first_steps(
         // the operations: prepare, execute, advance (plan_operation.rs); the air burst follows in
         // the same tick (o1d: the operation acted in every tick of the first war days and the
         // air step behind it first ran on day 3, every wing still on its peace training)
+        // air burst then runs in every tick of a running operation, not only when the operation
+        // acts (o1i: after the execute tick the air step behind the other steps got no turn and
+        // a 30-second burst set four wings: 0 of 12 fighters flying on day 7)
         |state, tools, plan, lease, now| {
-            let Some(ops) = war_burst(state, tools, plan, lease, now, plan_operation::step)? else {
-                return Ok(None);
-            };
+            let ops = war_burst(state, tools, plan, lease, now, plan_operation::step)?;
             let ok = state.last_ok;
-            let air = war_burst(state, tools, plan, lease, now, air_war_step)?;
-            state.last_ok = ok;
-            Ok(Some(match air {
-                Some(air) => format!("{ops}; {air}"),
-                None => ops,
-            }))
+            let air = if ops.is_some() || plan_operation::running(state) {
+                war_burst(state, tools, plan, lease, now, air_war_step)?
+            } else {
+                None
+            };
+            match (ops, air) {
+                (None, None) => Ok(None),
+                (Some(ops), None) => {
+                    state.last_ok = ok;
+                    Ok(Some(ops))
+                }
+                (None, Some(air)) => Ok(Some(air)),
+                (Some(ops), Some(air)) => {
+                    state.last_ok = ok;
+                    Ok(Some(format!("{ops}; {air}")))
+                }
+            }
         },
         layout_step,
         // The opening pass of the war step: an army without its lines gets its front and its
