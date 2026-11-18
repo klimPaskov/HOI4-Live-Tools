@@ -4893,7 +4893,7 @@ pub(super) fn day0_step(
 }
 
 /// At war with one of `war.enemies` (hoi4_wars through the predicate cache); unknown is no.
-fn at_war(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) -> bool {
+pub(super) fn at_war(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) -> bool {
     let any: Vec<Value> = strings(&plan["war"], "enemies")
         .iter()
         .map(|t| json!(format!("at_war_with:{t}")))

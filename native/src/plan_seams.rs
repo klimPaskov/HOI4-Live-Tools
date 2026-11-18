@@ -89,6 +89,8 @@ pub(super) struct Memory {
     alarms: Vec<Value>,
     /// cp_spend: why each general / general:trait could not be given a trait last time.
     cp_why: BTreeMap<String, String>,
+    /// cp_spend: whether the last reading was at war (the first war reading clears the rests).
+    cp_war: bool,
 }
 
 /// Assigns a unit-leader trait for command power (the trait tree window).
@@ -258,6 +260,8 @@ const CP_WINDOW_REST_DAYS: i64 = 20 * 365;
 /// month and the next one is tried next week.
 /// Game days a general with no free trait slot or no enabled trait is left alone.
 const CP_GENERAL_REST_DAYS: i64 = 180;
+/// The same rest at war: combat earns parent traits and skill within weeks.
+const CP_WAR_REST_DAYS: i64 = 14;
 const CP_PICK_REFUSALS: &[&str] = &[
     "unknown_commander",
     "general_not_listed",
@@ -290,10 +294,25 @@ fn cp_spend_step(
     now: GameHour,
 ) -> Result<Option<String>> {
     let key = "cp_spend";
-    if strings(&plan["manage"], "off").iter().any(|r| r == key) || state.skipped(now, "cps", "x") {
+    if strings(&plan["manage"], "off").iter().any(|r| r == key) {
         return Ok(None);
     }
-    state.skip(now, "cps", "x", 7 * DAY);
+    // At war traits unlock as commanders fight (a parent trait earned in combat opens its
+    // assignable children) and skill grows: command power is looked at daily, and the first
+    // war reading (the tick's cached war read) lifts the peace rests and the weekly wait, so
+    // power held for the war is spent the day it starts.
+    let war = super::plan_manage::at_war(state, tools, plan, now);
+    if war && !state.seams.cp_war {
+        state
+            .bad
+            .retain(|k, _| !k.starts_with("cpp:") && k != "cps:x");
+        state.seams.cp_why.clear();
+    }
+    state.seams.cp_war = war;
+    if state.skipped(now, "cps", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "cps", "x", if war { DAY } else { 7 * DAY });
     let Some(cp) = tools
         .call("hoi4_country_status", &json!({}))
         .ok()
@@ -392,10 +411,13 @@ fn cp_spend_step(
             // A general with nothing to pick (no free slot, every entry locked) stays so until
             // he gains skill: half a year, not a month (g17e: four army generals refused 5-6
             // times each in two game years until the ledger gave them up).
-            let rest = if matches!(code.as_str(), "no_free_trait_slot" | "no_enabled_trait") {
-                CP_GENERAL_REST_DAYS
-            } else {
-                30
+            let rest = match (
+                matches!(code.as_str(), "no_free_trait_slot" | "no_enabled_trait"),
+                war,
+            ) {
+                (true, false) => CP_GENERAL_REST_DAYS,
+                (true, true) => CP_WAR_REST_DAYS,
+                (false, _) => 30,
             };
             state.skip(now, "cpp", &pick, rest * DAY);
             state.seams.cp_why.insert(pick.clone(), why.clone());
@@ -411,6 +433,18 @@ fn cp_spend_step(
     } else {
         format!("no enabled trait for any general: {}", held.join("; "))
     };
+    // In peace a general's traits stay locked until combat earns their parent trait and skill
+    // opens slots, so command power at its cap with every pick refused is not idle: it is held
+    // for the war (the first war day lifts the rests and the rule looks daily). Only a reading
+    // with no general at all, or nothing to buy at war, wakes the player.
+    if !war && !held.is_empty() {
+        note(
+            state,
+            key,
+            format!("command power {cp:.0} of {max:.0} held for the war by rule: nothing can be bought in peace ({why})"),
+        );
+        return Ok(None);
+    }
     note(
         state,
         key,
@@ -1729,9 +1763,11 @@ mod tests {
             TRAIT_TOOL,
             ("no_enabled_trait", "No assignable trait can be picked now"),
         );
-        let plan = json!({});
+        f.replies
+            .insert("hoi4_wars", json!({"wars": {"enemies": ["POL"]}}));
+        let plan = json!({"war": {"enemies": ["POL"]}});
         let mut state = State::default();
-        // both generals are refused, a day apart
+        // at war: both generals are refused, a day apart
         let out = step(&mut state, &f, &plan, "l", START).unwrap().unwrap();
         assert!(
             out.contains("Gerd von Rundstedt: false no_enabled_trait"),
@@ -1752,6 +1788,35 @@ mod tests {
         assert_eq!(alarms.len(), 1);
         assert_eq!(alarms[0]["reason"], json!("cp_spend:nothing_to_buy"));
         assert_eq!(actions(&f).len(), 2);
+
+        // in peace the same refusals hold the power for the war: a note with the amount, no wake
+        let mut f = cp_game(75.0);
+        f.refusing.insert(
+            TRAIT_TOOL,
+            ("no_enabled_trait", "No assignable trait can be picked now"),
+        );
+        let peace = json!({"war": {"enemies": ["POL"]}});
+        let mut state = State::default();
+        step(&mut state, &f, &peace, "l", START).unwrap();
+        step(&mut state, &f, &peace, "l", START + DAY + 1).unwrap();
+        assert_eq!(
+            step(&mut state, &f, &peace, "l", START + 2 * DAY + 2).unwrap(),
+            None
+        );
+        assert!(
+            state.seams.notes["cp_spend"].contains("75 of 80 held for the war by rule"),
+            "{}",
+            state.seams.notes["cp_spend"]
+        );
+        assert!(take_alarms(&mut state).is_empty());
+        // the first war reading lifts the peace rests: the generals are tried again that day
+        f.replies
+            .insert("hoi4_wars", json!({"wars": {"enemies": ["POL"]}}));
+        state.pcache = None;
+        let out = step(&mut state, &f, &peace, "l", START + 9 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("false no_enabled_trait"), "{out}");
 
         // short command power: the rule waits until it has grown (15 - 4 at 0.4 a day)
         let mut f = cp_game(75.0);

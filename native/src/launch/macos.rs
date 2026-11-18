@@ -287,6 +287,24 @@ pub struct MacClock {
     state: Arc<Mutex<Control>>,
     process: Arc<dyn Process + Send + Sync>,
 }
+/// Where the game writes its saves: the run's own user folder for a game this runtime launched
+/// (`-userdir` RUN/userdata), the game's user folder for a game the user started and the runtime
+/// attached to (its `-userdir` argument, else Documents/Paradox Interactive/Hearts of Iron IV).
+fn save_folder(directory: &Path) -> std::path::PathBuf {
+    let own = directory.join("userdata").join("save games");
+    let session = std::fs::read(directory.join("session.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok());
+    let Some(session) = session.filter(|s| s["attached"] == json!(true)) else {
+        return own;
+    };
+    session["game"]["exe"]
+        .as_str()
+        .and_then(modlayer::userdir)
+        .map(|d| d.join("save games"))
+        .filter(|d| d.is_dir())
+        .unwrap_or(own)
+}
 impl MacClock {
     /// Bind to the owned process already opened from the session manifest.
     #[cfg(target_os = "macos")]
@@ -767,7 +785,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_encirclement_candidates","description":"Pockets of enemy-controlled states that taking at most max_gap neck states would cut off: the pocket, the neck, the two pincer arms (own state into neck state), divisions needed and available per arm, value (points, industry, manpower, resources) and a score; sea, impassable states and neutral neighbours count as walls. Pure read; no lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"max_gap":{"type":"integer","minimum":0,"maximum":3},"limit":{"type":"integer","minimum":1,"maximum":20}},"required":["enemy"],"additionalProperties":false}}),
         json!({"name":"hoi4_war_goal_targets","description":"Which enemy-owned states to demand in the peace conference, ranked by points, industry, manpower and resources with tiers (must_take, worth_taking, optional), resource prizes, contiguous blocks, own cores and which states we already occupy. A read, not an action; the conference cost itself is not modelled. No lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["enemy"],"additionalProperties":false}}),
         json!({"name":"hoi4_events","description":"Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed. Each event comes with its full text read from game memory (no screenshot): title, description (markup removed), the leader for leader/operative layouts, and every option text, so the event can be judged from the report alone. option_keys gives, per shown option, the name the event script uses for it (for example my_event.1.b; null when it cannot be told from the event files and the localisation), so a rule or a guide that names an option by its script name finds the right one even when an option is hidden.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
-        json!({"name":"hoi4_event_choose","description":"Choose an option (0-based, in listed order) of the open event on top by clicking it. Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"type":"integer","minimum":0,"maximum":7},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_event_choose","description":"Choose an option (0-based, in listed order) of an open event by clicking it (the list order is not the stacking order: single-option windows over it are acknowledged first; a choice window over it is named in event_covered). Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"type":"integer","minimum":0,"maximum":7},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"countries":{"type":"array","items":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"maxItems":6},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string","maxLength":128},"war_goal":{"type":"string","maxLength":128},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
         railway::tool(),
         json!({"name":"hoi4_army_attack","description":"Front line, offensive line and execute for one army in one call (the same steps as hoi4_army_front, hoi4_army_offensive and hoi4_army_plan execute:true, each verified and journalled as <request_id>:front, :offensive, :execute). Skip a step with front:false (the army already holds a front), offensive:false or execute:false. Stops at the first failing step and says which steps were done.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"front":{"type":"boolean"},"offensive":{"type":"boolean"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
@@ -3714,11 +3732,7 @@ impl MacClock {
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
             self.keys.preflight()?;
-            return ui::save_game(
-                process,
-                &self.keys,
-                &self.directory.join("userdata").join("save games"),
-            );
+            return ui::save_game(process, &self.keys, &save_folder(&self.directory));
         }
         if name == "hoi4_trade" {
             allowed(args, &["resource", "limit", "lease_token"])?;
