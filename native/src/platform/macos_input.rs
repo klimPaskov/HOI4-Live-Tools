@@ -295,12 +295,43 @@ fn drag_sequence(
     kinds: (u32, u32, u32),
     steps: u32,
     step_ms: u64,
+    check: impl FnMut() -> Result<()>,
+    before_down: impl FnMut() -> Result<()>,
+    post: impl FnMut(u32, Point) -> Result<()>,
+    pause: impl FnMut(std::time::Duration),
+) -> Result<()> {
+    drag_path_sequence(
+        &[a, b],
+        kinds,
+        steps,
+        step_ms,
+        check,
+        before_down,
+        post,
+        pause,
+    )
+}
+
+/// A drag through every point of `path` with the button held: down at the first point, `steps`
+/// dragged events along each leg, up at the last point reached.
+#[allow(clippy::too_many_arguments)]
+fn drag_path_sequence(
+    path: &[Point],
+    kinds: (u32, u32, u32),
+    steps: u32,
+    step_ms: u64,
     mut check: impl FnMut() -> Result<()>,
     mut before_down: impl FnMut() -> Result<()>,
     mut post: impl FnMut(u32, Point) -> Result<()>,
     mut pause: impl FnMut(std::time::Duration),
 ) -> Result<()> {
     let (down, dragged, up) = kinds;
+    let Some(&a) = path.first() else {
+        return Err(Error::new(
+            "invalid_arguments",
+            "A drag needs at least one point",
+        ));
+    };
     let settle = std::time::Duration::from_millis(64);
     check()?;
     post(MOUSE_MOVED, a)?;
@@ -318,16 +349,19 @@ fn drag_sequence(
     let mut last = a;
     let result = (|| {
         pause(settle);
-        for step in 1..=steps {
-            check()?;
-            let t = f64::from(step) / f64::from(steps);
-            let point = Point {
-                x: a.x + (b.x - a.x) * t,
-                y: a.y + (b.y - a.y) * t,
-            };
-            post(dragged, point)?;
-            last = point;
-            pause(std::time::Duration::from_millis(step_ms));
+        for leg in path.windows(2) {
+            let (a, b) = (leg[0], leg[1]);
+            for step in 1..=steps {
+                check()?;
+                let t = f64::from(step) / f64::from(steps);
+                let point = Point {
+                    x: a.x + (b.x - a.x) * t,
+                    y: a.y + (b.y - a.y) * t,
+                };
+                post(dragged, point)?;
+                last = point;
+                pause(std::time::Duration::from_millis(step_ms));
+            }
         }
         pause(settle);
         Ok(())
@@ -810,6 +844,45 @@ impl<'p> MacKeys<'p> {
     /// after a fresh front-most check.
     pub fn right_drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
         self.drag_with(game, from, to, true, &|| Ok(()))
+    }
+    /// A right-button drag through every point of `points` (game-logical), one stroke.
+    pub fn right_drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+        self.preflight()?;
+        let content = self.verified_content(game)?;
+        let path = points
+            .iter()
+            .map(|p| client_point(content, p.0, p.1))
+            .collect::<Result<Vec<_>>>()?;
+        let post = |kind: u32, point: Point| -> Result<()> {
+            // SAFETY: a null source is allowed; the event is released after posting.
+            unsafe {
+                let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, RIGHT_BUTTON);
+                if event.is_null() {
+                    return Err(Error::new("input_unavailable", "Mouse event unavailable"));
+                }
+                let ready = if kind == RIGHT_MOUSE_UP {
+                    Ok(())
+                } else {
+                    self.point_preflight(point)
+                };
+                if ready.is_ok() {
+                    CGEventPost(HID_EVENT_TAP, event);
+                }
+                CFRelease(event);
+                ready?;
+            }
+            Ok(())
+        };
+        drag_path_sequence(
+            &path,
+            (RIGHT_MOUSE_DOWN, RIGHT_MOUSE_DRAGGED, RIGHT_MOUSE_UP),
+            16,
+            30,
+            || self.preflight(),
+            || Ok(()),
+            post,
+            std::thread::sleep,
+        )
     }
     fn drag_with(
         &self,
@@ -1821,6 +1894,9 @@ impl GameInput for MacKeys<'_> {
     }
     fn right_drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
         MacKeys::right_drag(self, game, from, to)
+    }
+    fn right_drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+        MacKeys::right_drag_path(self, game, points)
     }
     fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()> {
         MacKeys::scroll(self, game, at, pixels)

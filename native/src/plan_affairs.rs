@@ -1031,9 +1031,48 @@ fn dip_key(item: &Value, action: &str, target: &str) -> String {
 }
 
 fn diplomacy_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
+    diplomacy_items(state, run, false)
+}
+
+/// The plan's war declarations whose condition holds, ahead of everything else: a declaration
+/// rides the war-first block, never a domain's overdue turn (b1a, 18 Nov 2026: Danzig or War was
+/// done and the date had come on 1 September, and the declaration went out on the 13th as an
+/// overdue affairs turn). Nothing but `declare_war` items; their gates, waits and the
+/// done-record are the diplomacy section's own.
+pub fn declare_due_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let run = Run {
+        tools,
+        plan,
+        lease,
+        now,
+    };
+    diplomacy_items(state, &run, true)
+}
+
+fn diplomacy_items(
+    state: &mut State,
+    run: &Run<'_>,
+    declarations_only: bool,
+) -> Result<Option<String>> {
     let (tools, plan, now) = (run.tools, run.plan, run.now);
     let items = list(plan, "diplomacy");
-    if items.is_empty() || state.skipped(now, "mdip", "x") {
+    if items.is_empty() || (!declarations_only && state.skipped(now, "mdip", "x")) {
+        return Ok(None);
+    }
+    if declarations_only && state.skipped(now, "mdecl", "x") {
+        return Ok(None);
+    }
+    if declarations_only
+        && !items
+            .iter()
+            .any(|i| dip_action(text(&i["action"])).as_deref() == Some("declare_war"))
+    {
         return Ok(None);
     }
     let mut waits: Vec<String> = Vec::new();
@@ -1041,6 +1080,9 @@ fn diplomacy_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         let Some(action) = dip_action(text(&item["action"])) else {
             continue;
         };
+        if declarations_only && action != "declare_war" {
+            continue;
+        }
         let target = dip_target(item);
         let key = dip_key(item, &action, &target);
         if state.done.contains_key(&key) {
@@ -1093,7 +1135,10 @@ fn diplomacy_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             return Ok(acted);
         }
     }
-    if !waits.is_empty() {
+    if declarations_only {
+        // checked again in a quarter of a game day (the predicates are reads)
+        state.skip(now, "mdecl", "x", DAY / 4);
+    } else if !waits.is_empty() {
         note(state, "diplomacy", waits.join("; "));
         state.skip(now, "mdip", "x", DAY);
     }
@@ -3367,7 +3412,7 @@ mod tests {
             ("hoi4_designs", json!({"designs": []})),
         ]);
         let plan = json!({"manage": {"off": ["mio_lines"]},
-            
+
             "designs": [{"id": "t1", "kind": "tank", "base": "Panzer III", "name": "Panzer III S", "xp": 0}],
             "production": [{"equipment": "medium_tank_chassis", "factories": 5, "design": "t1"}]});
         let mut state = State::default();
@@ -3805,6 +3850,43 @@ mod tests {
             None
         );
         assert_eq!(actions(&tools).len(), 2);
+    }
+
+    #[test]
+    fn a_due_declaration_goes_out_in_the_war_first_pass_and_nothing_else_does() {
+        let tools = fake(vec![
+            ("hoi4_diplomacy", declare_rows(true)),
+            (
+                "hoi4_war_risk",
+                json!({"country": "POL", "would_join": [], "borders_not_held": []}),
+            ),
+        ]);
+        let plan = json!({"diplomacy": [
+            {"id": "imp", "action": "improve_relations", "target": "ITA"},
+            {"id": "dow", "action": "declare", "target": "POL"}]});
+        let mut state = State::default();
+        let out = declare_due_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("diplomacy declare_war POL: true Verified")
+        );
+        let sent = actions(&tools);
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].1["action"], "declare_war");
+        // done: the pass is quiet from then on (and never improves relations)
+        assert_eq!(
+            declare_due_step(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
+            None
+        );
+        assert_eq!(actions(&tools).len(), 1);
+        // a plan without a declaration reads nothing
+        let quiet =
+            json!({"diplomacy": [{"id": "imp", "action": "improve_relations", "target": "ITA"}]});
+        let mut fresh = State::default();
+        assert_eq!(
+            declare_due_step(&mut fresh, &tools, &quiet, "l", START).unwrap(),
+            None
+        );
     }
 
     #[test]

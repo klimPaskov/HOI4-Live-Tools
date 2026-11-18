@@ -97,7 +97,7 @@ ENTRY_VARS = {
     "decision_rules": (["decisions_step", "decision_forbidden"], ["rule", "r"]),
     "event_rules": (["event_rule_choice"], ["rule"]),
     "designs": (["designs_step", "wanted_switches", "decommission_step"], ["entry", "e"]),
-    "diplomacy": (["diplomacy_step", "justify", "declare", "relation", "widening", "expiry_watch",
+    "diplomacy": (["diplomacy_items", "justify", "declare", "relation", "widening", "expiry_watch",
                    "justify_items", "dip_target"], ["item", "j", "o"]),
     "mio": (["mio_step"], ["entry"]),
     "incoming_proposals": (["incoming_step", "incoming_answer"], ["rule"]),

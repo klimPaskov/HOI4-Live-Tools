@@ -357,6 +357,10 @@ impl GameInput for Watched<'_> {
         self.watch.judge();
         self.inner.right_drag(game, from, to)
     }
+    fn right_drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+        self.watch.judge();
+        self.inner.right_drag_path(game, points)
+    }
     fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()> {
         self.inner.scroll(game, at, pixels)
     }
