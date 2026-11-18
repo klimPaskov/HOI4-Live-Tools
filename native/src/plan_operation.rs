@@ -1033,7 +1033,6 @@ fn assemble(
         };
         // per template: what the army still lacks, and where it stands elsewhere
         let mut moves: Vec<(String, Vec<String>)> = Vec::new();
-        let hold = !near.is_empty();
         // spare per (army, template) of a line formation that names its own divisions
         let mut spare: HashMap<(String, String), i64> = HashMap::new();
         for ((army, t), keep) in &kept {
@@ -1069,7 +1068,9 @@ fn assemble(
                     break;
                 }
                 let army = text(&d["army"]).to_string();
-                if hold && from.is_none() {
+                // never what a line formation keeps of its own `divisions` (a mobile neither:
+                // Italy's North Strike would empty the Gondar Group's Fanteria)
+                if from.is_none() {
                     if let Some(left) = spare.get_mut(&(army.clone(), template.clone())) {
                         if *left <= 0 {
                             continue;
