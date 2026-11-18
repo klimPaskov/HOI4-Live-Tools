@@ -617,19 +617,24 @@ fn a_mobile_formation_gathers_its_templates_from_the_other_armies_but_not_from_a
                 json!({"army": "WestA", "divisions": ["d3", "d4"]})
             ),
             (
-                "hoi4_army_rename".into(),
-                json!({"army": "Army 9", "name": "Schnell"})
-            ),
-            (
                 "hoi4_army_detach".into(),
-                json!({"army": "Mitte", "divisions": ["d1"], "into": "Schnell"})
+                json!({"army": "Mitte", "divisions": ["d1"], "into": "Army 9"})
             ),
         ]
     );
-    // the wing keeps its armour; the assembled army gets its own front
+    // the wing keeps its armour; the formed army gets its own front under the game's name
     assert_eq!(game.divs.borrow()[5].1, "Nord");
     assert!(game
         .orders()
         .iter()
-        .any(|(n, a)| n == "hoi4_army_front" && a["army"] == json!("Schnell")));
+        .any(|(n, a)| n == "hoi4_army_front" && a["army"] == json!("Army 9")));
+    // and is renamed to the formation's name a quarter day later
+    game.calls.borrow_mut().clear();
+    burst(&mut state, &game, &plan, START + DAY / 4 + 1);
+    let renamed = json!({"army": "Army 9", "name": "Schnell"});
+    assert!(game
+        .orders()
+        .iter()
+        .any(|(n, a)| n == "hoi4_army_rename" && *a == renamed));
+    assert_eq!(resolve(&state, "Schnell"), "Schnell");
 }

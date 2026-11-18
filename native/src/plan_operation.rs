@@ -675,6 +675,9 @@ fn one(
     Ok(None)
 }
 
+/// A mobile formation: its army's game name, the plan's name, {template: count}.
+type Mobile = (String, String, Vec<(String, i64)>);
+
 /// The assembly of a `mobile` formation: its `divisions` ({template: count}) are gathered out of
 /// every other army (a wing keeps its own: it fights on a separate border) with hoi4_army_detach,
 /// a source army never emptied; without the army on the map the first detach forms it and the new
@@ -696,7 +699,7 @@ fn assemble(
         .filter(|u| u.role == Role::Wing)
         .map(|u| u.name.as_str())
         .collect();
-    let mobiles: Vec<(String, Vec<(String, i64)>)> = list(op, "formations")
+    let mobiles: Vec<Mobile> = list(op, "formations")
         .iter()
         .filter(|f| text(&f["role"]) == "mobile")
         .filter_map(|f| {
@@ -705,12 +708,37 @@ fn assemble(
                 .iter()
                 .filter_map(|(t, n)| Some((t.clone(), n.as_i64()?)))
                 .collect();
-            Some((resolve(state, text(&f["army"])), want))
+            let hint = text(&f["army"]).to_string();
+            Some((resolve(state, &hint), hint, want))
         })
-        .filter(|(name, want)| !name.is_empty() && !want.is_empty())
+        .filter(|(name, _, want)| !name.is_empty() && !want.is_empty())
         .collect();
     let mobile_names: HashSet<String> = mobiles.iter().map(|m| m.0.clone()).collect();
-    for (name, want) in &mobiles {
+    for (name, hint, want) in &mobiles {
+        // a formed army that kept the game's name: renamed once a day, at most three times; the
+        // operation orders it under the game's name meanwhile (o1e: the name box read empty
+        // right after the detach)
+        if name != hint && army_row(roster, hint).is_none() && army_row(roster, name).is_some() {
+            let rk = key(id, &format!("rename:{hint}"));
+            let n = state.done.get(&rk).copied().unwrap_or(0);
+            if n < 3 && !state.skipped(now, "oprename", hint) {
+                state.done.insert(rk, n + 1);
+                state.skip(now, "oprename", hint, DAY);
+                let line = order(
+                    state,
+                    tools,
+                    lease,
+                    id,
+                    &format!("name {name} {hint}"),
+                    "hoi4_army_rename",
+                    json!({"army": name, "name": hint}),
+                )?;
+                if state.last_ok != Some(false) {
+                    state.layout.insert(hint.clone(), hint.clone());
+                }
+                return Ok(Some(line));
+            }
+        }
         let done = key(id, &format!("asm:{name}"));
         if state.done.contains_key(&done) || state.skipped(now, "opasm", name) {
             continue;
@@ -806,16 +834,12 @@ fn assemble(
                 .map(|a| text(&a["army"]).to_string())
                 .find(|a| !before.contains(a));
             if let Some(new) = new {
-                let renamed = order(
-                    state,
-                    tools,
-                    lease,
-                    id,
-                    &format!("name the new army {new} {name}"),
-                    "hoi4_army_rename",
-                    json!({"army": new, "name": name}),
-                )?;
-                line = format!("{line}; {renamed}");
+                // the formation is this army from now on, whatever the rename does
+                state.layout.insert(hint.clone(), new.clone());
+                state.skip(now, "oprename", hint, DAY / 4);
+                line = format!("{line}; the formation {hint} is {new}");
+            } else {
+                state.skip(now, "opasm", name, DAY / 4);
             }
         }
         return Ok(Some(line));
