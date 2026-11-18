@@ -90,5 +90,22 @@ class Recovery(unittest.TestCase):
         self.assertFalse(out[True])
 
 
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class Guarantor(unittest.TestCase):
+    def test_a_guaranteed_country_brings_its_guarantor(self):
+        game = lint_plan.load_game(GAME_DIR)
+        out = {}
+        for fixed in (False, True):
+            plan = poland(True)
+            plan["diplomacy"][0]["joiners_ok"] = []  # Poland alone: no guarantee at the start
+            plan["diplomacy"].append({"id": "bel", "action": "declare", "target": "BEL", "when": "date >= 1939.10.1",
+                                      "joiners_ok": ["ENG", "FRA"] if fixed else []})
+            found = lint_plan.lint(plan, game)["findings"]
+            out[fixed] = [f["message"] for f in found if f["rule"] == "war.guarantor" and f["severity"] == "error"]
+        # history/countries: ENG and FRA give_guarantee = BEL at the start
+        self.assertTrue(any("ENG guarantees BEL" in m for m in out[False]), out[False])
+        self.assertFalse(any("guarantees BEL" in m for m in out[True]), out[True])
+
+
 if __name__ == "__main__":
     unittest.main()
