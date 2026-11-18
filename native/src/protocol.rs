@@ -1653,7 +1653,15 @@ impl Server {
             "tools/call" => {
                 let name = msg["params"]["name"].as_str().unwrap_or("");
                 let empty = json!({});
-                let args = msg["params"].get("arguments").unwrap_or(&empty);
+                let mut args = msg["params"].get("arguments").unwrap_or(&empty).clone();
+                // the executor's own orders never come this way (they call Server::call): a
+                // land order from outside on an army a running operation owns is refused
+                if let Some(why) = crate::plan_run::operation_guard_outside(name, &mut args) {
+                    let mut v = content(json!({"error": Error::new("owned_by_operation", why)}));
+                    v["isError"] = json!(true);
+                    return Some(json!({"jsonrpc":"2.0","id":id,"result":v}));
+                }
+                let args = &args;
                 Ok(match self.call(name, args, commands) {
                     Ok(v) => content(v),
                     Err(e) => {

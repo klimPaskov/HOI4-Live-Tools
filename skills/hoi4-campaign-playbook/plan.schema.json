@@ -578,6 +578,7 @@
         "boolean"
       ],
       "properties": {
+        "threshold_why": {"type": "string", "minLength": 1, "description": "why power is banked up to `threshold`; without it the threshold counts 0 (power is spent at once on the order's best affordable pick)"},
         "enabled": {
           "type": "boolean",
           "default": true
@@ -1212,6 +1213,7 @@
         "type": "object",
         "required": ["slot", "spirit"],
         "properties": {
+          "when_strict": {"type": "boolean", "description": "true: the dates in `when` are kept as the first day; by default a date is the latest day and an affordable spirit is bought at once"},
           "slot": {"type": "string", "pattern": "^(army|navy|air):[0-5]$", "description": "VIEW:INDEX as hoi4_officer_corps list reads it"},
           "spirit": {"type": "string", "description": "the spirit's name as its window shows it"},
           "cost": {"type": "number", "description": "experience; default by slot place 20, 35, 50"},
@@ -3277,6 +3279,7 @@
       "items": {
         "type": "object",
         "properties": {
+          "stock_guard": {"type": "boolean", "description": "false: the edit goes out even when the stockpile cannot give every fielded division the equipment it adds (default true: the edit waits)"},
           "id": {
             "$ref": "#/definitions/id"
           },

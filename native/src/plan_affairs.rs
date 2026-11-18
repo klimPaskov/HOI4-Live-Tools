@@ -2547,10 +2547,17 @@ fn mio_auto_traits(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     Ok(None)
 }
 
-/// The trait to queue from a listing (`index`, `enabled`, `queue`, `visible`): none while any
-/// entry is queued, else the first enabled visible entry, else the first visible one.
+/// The trait to queue from a listing (`index`, `enabled`, `queue`, `visible`): none while an
+/// enabled entry is queued, else the first enabled visible entry. A queued entry the game shows
+/// disabled (its prerequisite not met) is never unlocked when a point comes, so it holds the
+/// organisation's points idle (g17i, 18 Nov 2026: Mauser read "one queued already" for 344
+/// days under the game's mio_traits alert): another, enabled trait is queued behind it.
 fn auto_trait_pick(entries: &[Value], tried: &dyn Fn(u64) -> bool) -> Option<u64> {
-    if entries.iter().any(|e| !text(&e["queue"]).trim().is_empty()) {
+    if entries.iter().any(|e| {
+        !text(&e["queue"]).trim().is_empty()
+            && e["enabled"].as_bool().unwrap_or(true)
+            && e["owned"] != json!(true)
+    }) {
         return None;
     }
     // Only an enabled, visible trait the organisation does not hold and whose click did not
@@ -4640,6 +4647,11 @@ mod tests {
             None
         );
         assert_eq!(auto_trait_pick(&[], &none), None);
+        // a queued trait the game shows disabled never unlocks: the next enabled one is queued
+        assert_eq!(
+            auto_trait_pick(&[e(0, false, "1", true), e(1, true, "", true)], &none),
+            Some(1)
+        );
         // a held trait, and one whose click came back unqueued, are passed over
         let mut held = e(0, true, "", true);
         held["owned"] = json!(true);

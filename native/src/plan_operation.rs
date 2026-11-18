@@ -110,6 +110,7 @@ pub(super) fn refresh(state: &mut State, tools: &dyn Tools, plan: &Value, now: G
     let ops = list(plan, "operations");
     if ops.is_empty() {
         state.op_owned.clear();
+        publish(&state.op_owned);
         return;
     }
     if state.op_owned_at == Some(now) {
@@ -138,6 +139,7 @@ pub(super) fn refresh(state: &mut State, tools: &dyn Tools, plan: &Value, now: G
         .collect();
     let mut owned: HashMap<String, String> = HashMap::new();
     if active.is_empty() {
+        publish(&owned);
         state.op_owned = owned;
         return;
     }
@@ -149,6 +151,7 @@ pub(super) fn refresh(state: &mut State, tools: &dyn Tools, plan: &Value, now: G
             owned.entry(name).or_insert_with(|| id.clone());
         }
     }
+    publish(&owned);
     state.op_owned = owned;
 }
 
@@ -205,6 +208,36 @@ fn orders<'a>(roster: &'a Value, name: &str) -> &'a [Value] {
     army_row(roster, name)
         .or_else(|| group_row(roster, name))
         .map_or(&[], |r| list(r, "plan"))
+}
+
+/// The owned names as the executor last worked them out, for the server's dispatch of calls
+/// that do not come from the executor (the player's): the executor's own orders pass
+/// `State::act`'s guard, a player's order on an owned army was let through (g17i, 18 Nov 2026:
+/// the brief alone forbade it). Kept with the wall time it was set; a snapshot older than
+/// `OWNED_FRESH` (an executor switched off) refuses nothing.
+static OWNED_NOW: std::sync::Mutex<Option<(std::time::Instant, HashMap<String, String>)>> =
+    std::sync::Mutex::new(None);
+const OWNED_FRESH: std::time::Duration = std::time::Duration::from_secs(600);
+
+fn publish(owned: &HashMap<String, String>) {
+    // unit tests run side by side in one process: only a test that asks for it sets the snapshot
+    if cfg!(test) && !owned.contains_key("__test_publish__") {
+        return;
+    }
+    if let Ok(mut slot) = OWNED_NOW.lock() {
+        *slot = Some((std::time::Instant::now(), owned.clone()));
+    }
+}
+
+/// [`guard`] for a call from outside the executor: Some(refusal) for a land order on an army or
+/// army group a running operation owns (an exercise list loses its owned armies instead).
+pub(crate) fn guard_outside(tool: &str, args: &mut Value) -> Option<String> {
+    let slot = OWNED_NOW.lock().ok()?;
+    let (at, owned) = slot.as_ref()?;
+    if at.elapsed() > OWNED_FRESH {
+        return None;
+    }
+    guard(owned, tool, args)
 }
 
 /// Refuses another step's land order on an owned army or army group (None lets it pass). An
@@ -873,15 +906,19 @@ fn strikes(
     Ok(super::plan_strike::step(state, tools, &p, lease, &me, &fighting, &reserve, now)?.flatten())
 }
 
-/// A formation to assemble: its army's game name, the plan's name, {template: count}, and the
-/// one army it is taken from (a hold part of a wing), else None (every army but the wings).
-type Mobile = (String, String, Vec<(String, i64)>, Option<String>);
+/// A formation to assemble: its army's game name, the plan's name, {template: count}, the one
+/// army it is taken from (a hold part of a wing), else None (every army but the wings), and the
+/// states whose divisions it takes first (a hold's own states).
+type Mobile = (String, String, Vec<(String, i64)>, Option<String>, Vec<i64>);
 
 /// The assembly of a `mobile` formation: its `divisions` ({template: count}) are gathered out of
 /// every other army (a wing keeps its own: it fights on a separate border) with hoi4_army_detach,
 /// a source army never emptied; without the army on the map the first detach forms it and the new
 /// army is renamed to the formation's name. Bed 1 (bp2): the 8 Panzer and 12 motorised divisions
-/// stood one to four in every army, the hold on the French border included.
+/// stood one to four in every army, the hold on the French border included. A hold army with
+/// `divisions` is assembled the same way, its own states' divisions first, and never out of
+/// what a line formation's own `divisions` keep (it26b, 18 Nov 2026: Italy's North Guard and
+/// Jubaland Guard never formed and Jubaland was lost).
 #[allow(clippy::too_many_arguments)]
 fn assemble(
     state: &mut State,
@@ -898,34 +935,54 @@ fn assemble(
         .filter(|u| u.role == Role::Wing)
         .map(|u| u.name.as_str())
         .collect();
-    // a hold army with `from` (a holding part of an attacking wing that has its own land behind
-    // it: o1n, Armee Nord attacked Danzig and lost East Prussia's states 5 and 188) is assembled
-    // out of that one army
-    let hold_parts = list(op, "holds")
-        .iter()
-        .flat_map(|h| list(h, "armies").iter())
-        .filter(|a| !text(&a["from"]).is_empty());
-    let mobiles: Vec<Mobile> = list(op, "formations")
-        .iter()
-        .filter(|f| text(&f["role"]) == "mobile")
-        .chain(hold_parts)
-        .filter_map(|f| {
-            let want: Vec<(String, i64)> = f["divisions"]
+    let want_of = |f: &Value| -> Option<Vec<(String, i64)>> {
+        Some(
+            f["divisions"]
                 .as_object()?
                 .iter()
                 .filter_map(|(t, n)| Some((t.clone(), n.as_i64()?)))
-                .collect();
+                .collect(),
+        )
+    };
+    // a hold army with `from` (a holding part of an attacking wing that has its own land behind
+    // it: o1n, Armee Nord attacked Danzig and lost East Prussia's states 5 and 188) is assembled
+    // out of that one army; a hold army without `from` out of the others, its states first
+    let hold_parts: Vec<(&Value, Vec<i64>)> = list(op, "holds")
+        .iter()
+        .flat_map(|h| {
+            let near: Vec<i64> = list(h, "states").iter().filter_map(Value::as_i64).collect();
+            list(h, "armies").iter().map(move |a| (a, near.clone()))
+        })
+        .collect();
+    let mobiles: Vec<Mobile> = list(op, "formations")
+        .iter()
+        .filter(|f| text(&f["role"]) == "mobile")
+        .map(|f| (f, Vec::new()))
+        .chain(hold_parts)
+        .filter_map(|(f, near)| {
+            let want = want_of(f)?;
             let hint = text(&f["army"]).to_string();
             let from = f["from"]
                 .as_str()
                 .filter(|s| !s.is_empty())
                 .map(|s| resolve(state, s));
-            Some((resolve(state, &hint), hint, want, from))
+            Some((resolve(state, &hint), hint, want, from, near))
         })
-        .filter(|(name, _, want, _)| !name.is_empty() && !want.is_empty())
+        .filter(|(name, _, want, _, _)| !name.is_empty() && !want.is_empty())
         .collect();
+    // what each line formation keeps of its own `divisions` (a hold never takes those)
+    let mut kept: HashMap<(String, String), i64> = HashMap::new();
+    for f in list(op, "formations")
+        .iter()
+        .filter(|f| !matches!(text(&f["role"]), "mobile" | "wing"))
+    {
+        let army = resolve(state, text(&f["army"]));
+        for (t, n) in want_of(f).unwrap_or_default() {
+            *kept.entry((army.clone(), t)).or_insert(0) += n;
+        }
+    }
     let mobile_names: HashSet<String> = mobiles.iter().map(|m| m.0.clone()).collect();
-    for (name, hint, want, from) in &mobiles {
+    for (name, hint, want, from, near) in &mobiles {
         // a formed army that kept the game's name: renamed once a day, at most three times; the
         // operation orders it under the game's name meanwhile (o1e: the name box read empty
         // right after the detach)
@@ -975,26 +1032,51 @@ fn assemble(
         };
         // per template: what the army still lacks, and where it stands elsewhere
         let mut moves: Vec<(String, Vec<String>)> = Vec::new();
+        // spare per (army, template) of a line formation that names its own divisions
+        let mut spare: HashMap<(String, String), i64> = HashMap::new();
+        for ((army, t), keep) in &kept {
+            let n = divisions
+                .iter()
+                .filter(|d| text(&d["army"]) == army && text(&d["template"]) == t)
+                .count() as i64;
+            spare.insert((army.clone(), t.clone()), n - keep);
+        }
         for (template, count) in want {
             let have = divisions
                 .iter()
                 .filter(|d| text(&d["army"]) == name && text(&d["template"]) == template)
                 .count() as i64;
             let mut lack = count - have;
-            for d in divisions.iter().filter(|d| {
-                let army = text(&d["army"]);
-                text(&d["template"]) == template
-                    && !army.is_empty()
-                    && army != name
-                    && match from {
-                        Some(src) => army == src,
-                        None => !wings.contains(army) && !mobile_names.contains(army),
-                    }
-            }) {
+            let mut offered: Vec<&Value> = divisions
+                .iter()
+                .filter(|d| {
+                    let army = text(&d["army"]);
+                    text(&d["template"]) == template
+                        && !army.is_empty()
+                        && army != name
+                        && match from {
+                            Some(src) => army == src,
+                            None => !wings.contains(army) && !mobile_names.contains(army),
+                        }
+                })
+                .collect();
+            // a hold's own states first (a division across the enemy cannot reach it)
+            offered.sort_by_key(|d| !d["state_id"].as_i64().is_some_and(|s| near.contains(&s)));
+            for d in offered {
                 if lack <= 0 {
                     break;
                 }
                 let army = text(&d["army"]).to_string();
+                // never what a line formation keeps of its own `divisions` (a mobile neither:
+                // Italy's North Strike would empty the Gondar Group's Fanteria)
+                if from.is_none() {
+                    if let Some(left) = spare.get_mut(&(army.clone(), template.clone())) {
+                        if *left <= 0 {
+                            continue;
+                        }
+                        *left -= 1;
+                    }
+                }
                 let Some(div) = d["id"].as_str() else {
                     continue;
                 };

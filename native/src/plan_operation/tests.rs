@@ -15,6 +15,8 @@ struct Game {
     refuse_all: RefCell<bool>,
     /// (division id, army, template) as hoi4_supply lists them
     divs: RefCell<Vec<(String, String, String)>>,
+    /// division id -> the state it stands in (hoi4_supply state_id)
+    div_states: RefCell<HashMap<String, i64>>,
     calls: RefCell<Vec<(String, Value)>>,
 }
 
@@ -44,6 +46,7 @@ impl Game {
             refuse_multi: RefCell::new(false),
             refuse_all: RefCell::new(false),
             divs: RefCell::new(vec![]),
+            div_states: RefCell::new(HashMap::new()),
             calls: RefCell::new(vec![]),
         }
     }
@@ -165,7 +168,10 @@ impl Tools for Game {
                     .divs
                     .borrow()
                     .iter()
-                    .map(|(id, a, t)| json!({"id": id, "army": a, "template": t}))
+                    .map(|(id, a, t)| {
+                        json!({"id": id, "army": a, "template": t,
+                               "state_id": self.div_states.borrow().get(id)})
+                    })
                     .collect();
                 return Ok(json!({"divisions": rows}));
             }
@@ -745,4 +751,63 @@ fn a_stopped_attacker_with_no_arrow_on_its_line_executes_its_front() {
         .any(|(_, a)| a["army"] == json!("Army Group 1") && a["execute"] == json!(true)));
     let roster = game.roster.borrow().clone();
     assert!(executing(&roster, "Army Group 1"));
+}
+
+#[test]
+fn a_hold_army_is_assembled_from_its_own_states_first_never_from_a_lines_own_divisions() {
+    let game = Game::new();
+    let d = |id: &str, army: &str, t: &str| (id.to_string(), army.to_string(), t.to_string());
+    *game.divs.borrow_mut() = vec![
+        d("d1", "Mitte", "Inf"),
+        d("d2", "Mitte", "Inf"),
+        d("d3", "Mitte", "Inf"),
+        d("d5", "Other", "Inf"),
+        d("d4", "Other", "Inf"),
+    ];
+    game.div_states.borrow_mut().insert("d4".into(), 42);
+    let mut plan = plan();
+    plan["operations"][0]["formations"][0]["divisions"] = json!({"Inf": 2});
+    plan["operations"][0]["holds"] = json!([{"id": "guard", "facing": ["FRA"],
+        "armies": [{"army": "Guard", "divisions": {"Inf": 2}}], "states": [42]}]);
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let moves: Vec<(String, Value)> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, _)| n == "hoi4_army_detach")
+        .collect();
+    assert_eq!(
+        moves,
+        vec![
+            (
+                "hoi4_army_detach".into(),
+                json!({"army": "Other", "divisions": ["d4"]})
+            ),
+            (
+                "hoi4_army_detach".into(),
+                json!({"army": "Mitte", "divisions": ["d1"], "into": "Army 9"})
+            ),
+        ],
+        "the division in the hold's state first; Mitte gives only what it does not keep"
+    );
+    assert_eq!(resolve(&state, "Guard"), "Army 9");
+}
+
+#[test]
+fn a_player_order_on_an_owned_army_is_refused_outside_the_executor() {
+    let mut owned = HashMap::new();
+    owned.insert("Mitte".to_string(), "op_pol".to_string());
+    owned.insert("__test_publish__".to_string(), "x".to_string());
+    publish(&owned);
+    let mut args = json!({"army": "Mitte", "state_id": 66});
+    let why = guard_outside("hoi4_army_move", &mut args).unwrap_or_default();
+    assert!(why.starts_with("owned_by_operation"), "{why}");
+    let mut free = json!({"army": "Other", "state_id": 66});
+    assert_eq!(guard_outside("hoi4_army_move", &mut free), None);
+    let mut read = json!({});
+    assert_eq!(guard_outside("hoi4_armies", &mut read), None);
+    publish(&HashMap::from([(
+        "__test_publish__".to_string(),
+        "x".to_string(),
+    )]));
 }

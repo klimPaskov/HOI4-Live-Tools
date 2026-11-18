@@ -1816,7 +1816,27 @@ pub(super) fn rename(
     // The box's own buffer, spaces kept; it must hold the army's name before anything is typed,
     // so the first erased character proves the keyboard focus (type_name).
     let text = |r: &Reader<'_>, _: u64| super::navalui::edit_text_raw(r, widget);
-    let shown = read(process, text)?;
+    // An army the game named itself ("Army 3") keeps its edit buffer empty and draws its name
+    // from the box's shown-text object until the box is used (as a fleet founded in game does:
+    // navalui::edit_text). g17i (18 Nov 2026): 26 renames of "Army 1"/"Army 3" refused on the
+    // empty buffer. The buffer fills a moment after the selection or after a click on the box;
+    // nothing is typed until it holds the army's name, so the first erased key still proves
+    // the keyboard focus.
+    let mut shown = wait(process, "army name box filled", |r, i| {
+        Ok(text(r, i)? == army)
+    })
+    .map(|_| army.to_string())
+    .unwrap_or_else(|_| read(process, text).unwrap_or_default());
+    if shown.is_empty()
+        && read(process, |r, i| super::navalui::edit_text(r, i, widget)).unwrap_or_default() == army
+    {
+        keys.click(GAME, point.0, point.1)?;
+        shown = wait(process, "army name box filled", |r, i| {
+            Ok(text(r, i)? == army)
+        })
+        .map(|_| army.to_string())
+        .unwrap_or_else(|_| read(process, text).unwrap_or_default());
+    }
     if shown != army {
         return Err(Error::new(
             "gui_target_unavailable",
@@ -1960,6 +1980,99 @@ pub(super) fn division_row(r: &Reader<'_>, image: u64, id: &str) -> Result<Rect>
         format!("Division {id} has no shown row in the army panel"),
     ))
 }
+
+/// The shown background rectangle of one panel row (None while the row is scrolled away).
+fn row_shown_rect(r: &Reader<'_>, image: u64, row: u64) -> Result<Option<Rect>> {
+    let abi = r.string_abi();
+    for at in ROW_ROOTS {
+        let Ok(p) = r.u64(row + fld(abi, &DIVISION_ROW, at)?) else {
+            continue;
+        };
+        if let Ok(Some(root)) = gui_tree::container(r, p, image) {
+            if gui_tree::visible(r, root)? {
+                if let Some(bg) = super::panelkit::find(r, image, root, "btn_bg", 1)? {
+                    if gui_tree::shown(r, bg)? {
+                        return gui_tree::rect(r, image, bg, GAME).map(Some);
+                    }
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Where the panel must scroll to show division `id`: (index of its row, index of the first
+/// shown row, that row's rectangle as the wheel's point). None when the shown list holds no row
+/// of that division or shows no row at all.
+fn row_scroll_hint(r: &Reader<'_>, image: u64, id: &str) -> Result<Option<(usize, usize, Rect)>> {
+    let abi = r.string_abi();
+    let u = ui(r)?;
+    let Some((t, k)) = id.split_once(':').and_then(|(a, b)| {
+        Some((
+            u32::from_str_radix(a, 16).ok()?,
+            u32::from_str_radix(b, 16).ok()?,
+        ))
+    }) else {
+        return Ok(None);
+    };
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let view = r.u64(r.u64(idler + u.manager)? + fld(abi, &IFACE_MANAGER, ARMIES_VIEW_SLOT)?)?;
+    let row_vt = image + img(abi, ROW_VTABLE)?;
+    let word = fld(abi, &DIVISION_ROW, ROW_TYPE_WORD)?;
+    for list_at in DIVISION_LISTS {
+        let list = r.u64(view + fld(abi, &ARMIES_VIEW, list_at)?)?;
+        if list == 0 || !list_shown(r, list)? {
+            continue;
+        }
+        let (_, data, count) = r.array_header(list + fld(abi, &DIVISION_LIST, LIST_ROWS)?)?;
+        let mut target = None;
+        let mut first_shown: Option<(usize, Rect)> = None;
+        for n in 0..count.min(256) {
+            let row = r.u64(data + n as u64 * 8)?;
+            if r.u64(row)? != row_vt {
+                continue;
+            }
+            if r.i32(row + word)? as u32 == t && r.i32(row + word + 4)? as u32 == k {
+                target = Some(n);
+            }
+            if first_shown.is_none() {
+                if let Some(rect) = row_shown_rect(r, image, row)? {
+                    first_shown = Some((n, rect));
+                }
+            }
+        }
+        if let (Some(n), Some((first, rect))) = (target, first_shown) {
+            return Ok(Some((n, first, rect)));
+        }
+    }
+    Ok(None)
+}
+
+/// The shown row of division `id`, the army panel's list scrolled with the wheel until it is
+/// drawn: a 24-division army shows only its first rows (g17i, 18 Nov 2026: 27 detaches refused
+/// "no shown row in the army panel"). One wheel notch at a time towards the row, each read back.
+fn division_row_scrolled(process: &dyn Process, keys: &dyn GameInput, id: &str) -> Result<Rect> {
+    let mut last = None;
+    for _ in 0..48 {
+        match settled(process, "division row", |r, i| division_row(r, i, id)) {
+            Ok(rect) => return Ok(rect),
+            Err(e) if e.code == "gui_target_unavailable" => last = Some(e),
+            Err(e) => return Err(e),
+        }
+        let Some((want, first, rect)) = read(process, |r, i| row_scroll_hint(r, i, id))? else {
+            break;
+        };
+        let (x, y) = rect.center();
+        keys.scroll(GAME, (x, y), if want > first { -120 } else { 120 })?;
+        std::thread::sleep(std::time::Duration::from_millis(120));
+    }
+    Err(last.unwrap_or_else(|| {
+        Error::new(
+            "gui_target_unavailable",
+            format!("Division {id} has no shown row in the army panel"),
+        )
+    }))
+}
 /// Move the chosen divisions of `army` into `into` (an own army) or, without it, into one
 /// new army, one division at a time with the game's controls: the army's card opens its
 /// division list, a click on a division's row selects that division alone, then the new-army
@@ -1992,7 +2105,7 @@ pub(super) fn detach(
     for id in ids {
         clear_notices(process, keys)?;
         select_army(process, keys, army)?;
-        let row = settled(process, "division row", |r, i| division_row(r, i, id))?;
+        let row = division_row_scrolled(process, keys, id)?;
         let (x, y) = row.center();
         keys.click(GAME, x, y)?;
         wait(process, "division selected", |r, i| {
@@ -2078,7 +2191,7 @@ pub(super) fn disband(
     for id in ids {
         clear_notices(process, keys)?;
         select_army(process, keys, army)?;
-        let row = settled(process, "division row", |r, i| division_row(r, i, id))?;
+        let row = division_row_scrolled(process, keys, id)?;
         let (x, y) = row.center();
         keys.click(GAME, x, y)?;
         wait(process, "division selected", |r, i| {
@@ -4086,7 +4199,7 @@ pub(super) fn move_divisions(
         }
         clear_notices(process, keys)?;
         select_army(process, keys, army)?;
-        let Ok(row) = settled(process, "division row", |r, i| division_row(r, i, id)) else {
+        let Ok(row) = division_row_scrolled(process, keys, id) else {
             refused.push(id);
             continue;
         };
