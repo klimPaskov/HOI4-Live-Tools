@@ -452,6 +452,10 @@ Each war's shape on its first day (lint_war_shape.py):
   war.declaration_gate     a focus gating a declaration that completes less than 14 days before its date, or never
   war.attack_force         on a war day: the layout places under 80% of the forecast army, the formations on the
                            axes carry under attack_ratio (1.0) x the enemy front, or armour is off the axes
+  force.template_floor     the main line template without line artillery (or under the AI's on that date), the armour
+                           without medium tanks or smaller than the AI's (lint_quality.py)
+  force.staff              no officer corps spirits, or a theorist, army chief or high-command seat unnamed or late
+  force.exercise           no army exercise 80 days before the first offensive war
   war.operation_required   a land war against more than 30 enemy divisions with no operation (lint_operations.py)
   war.operation_refs       an operation names a war, group, army, template or next operation the plan lacks; a line
                            army with own orders; a hold on the operation's own group; over the game's command caps
@@ -584,7 +588,7 @@ NEW_RULES |= {"force.bombers", "force.design_cost", "force.decisive", "force.sea
 NEW_RULES |= {"war.axes_missing", "war.objective_not_at_war", "war.hold_sector", "war.mobile_axis",
               "war.recovery_phase", "war.guarantor", "war.declaration_gate", "war.attack_force",
               "war.operation_required", "war.operation_refs", "war.operation_timing", "war.operation_line",
-              "war.operation_support"}  # lint_war_shape.py  # bombers, designed cost, decisive wars
+              "war.operation_support", "force.template_floor", "force.staff", "force.exercise"}  # lint_war_shape.py  # bombers, designed cost, decisive wars
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"

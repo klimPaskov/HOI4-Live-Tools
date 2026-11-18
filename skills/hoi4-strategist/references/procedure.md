@@ -758,6 +758,17 @@ contingency; plan.md §16. Check: rubric row 6.
 Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strategy.md` "Land operations";
 `generic-playbook.md` §4. Facts: `F vp <ENEMY>`, `F route <from> <to> [--avoid-rivers]`,
 `F province <id>`, `F weather <region>`, `F terrain-width <theatre>`.
+00. **Quality before numbers.** A force that matches the AI's division count can deal a fifth of its damage.
+   Per war day (lint `facts.force.quality`, rules `force.template_floor`, `force.staff`, `force.exercise`):
+   the main line template carries line artillery (at least what the game's own AI fields on that date:
+   baselines `templates`) with the artillery line sized to it; the armoured divisions carry the best tank the
+   date allows (medium chassis research, design and line dated back from the war day, at least half the
+   armoured divisions) in a template no smaller than the AI's; close air support at the plan's own
+   `force.air_support` need and of the newest airframe; army, navy and air experience spent on a schedule
+   (templates, `officer_corps` spirits, doctrine: none left idle); every advisor seat named with a pick of the
+   right branch and a date before the first war (theorist, army chief, three high command, designers), no
+   political power idle; every army exercised to Regular (about 80 days, `xp_budget.army` purpose exercise,
+   stopped 30 days before an operation's `prepare_from`), with the exercise attrition counted in production.
 0. **Operation or strikes: decide it first, per war.** A land war against more than about 30 enemy divisions
    (lint `facts.force.needs[].front.divisions_est`) is an **operation** (`operations[]`, `war-operating-loop.md`
    "Large wars: operations"); a smaller theatre keeps `war.axes`, `vp_targets` and `war.strike` (step 7). Per

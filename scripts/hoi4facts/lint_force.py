@@ -113,6 +113,9 @@ def check(lint):
     # the shape of each war on its first day: axes, objectives at war, hold sectors, the mobile arm's axis
     from . import lint_war_shape
     lint_war_shape.check(ctx)
+    # the quality of the force: templates against the AI's, the staff and officer corps, exercises
+    from . import lint_quality
+    lint_quality.check(ctx)
     return lint
 
 
