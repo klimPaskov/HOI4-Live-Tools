@@ -121,7 +121,8 @@
 //!                          At war with a `war.enemies` tag an industrial_complex job is skipped unless
 //!                          `manage.war_civs` is true or the goal deadline is over a year away
 //!   construction_min_idle  idle civilian factories needed first (default 4), unless the queue
-//!                          is shorter than `construction_queue_depth` (default 3 projects)
+//!                          is shorter than `construction_queue_depth` (default 3 projects, and at least
+//!                          one per 15 factories of the pool plus one)
 //!   construction_fallback_any_own_state  true: when every listed state is full, build in other own states
 //!                          (hoi4_states with the player tag); every tick's result names why
 //!                          nothing was queued in `construction`
@@ -4148,9 +4149,17 @@ fn construction_step(
     // Keep the queue `construction_queue_depth` projects deep (default 3) so the factories
     // never wait for the next tick when a project finishes; older servers do not report the
     // queue and fall back to idle factories only.
+    // At least one project per 15 factories the pool holds (a project takes at most 15) and
+    // one more: with three projects 49-65 of 117 civilian factories sat idle in July-August 1939
+    // (g17g2, 18 Nov 2026).
+    let pool = economy["civilian_factories_available_for_projects"]
+        .as_i64()
+        .unwrap_or(0)
+        .max(0);
     let depth = plan["construction_queue_depth"]
         .as_i64()
         .unwrap_or(3)
+        .max((pool + 14) / 15 + 1)
         .clamp(0, 20);
     let in_queue = economy["construction_projects_queued"].as_i64();
     let short = in_queue.map_or(0, |n| (depth - n).max(0));
@@ -9898,6 +9907,38 @@ mod tests {
             Tick::Nothing
         );
         assert!(state.con.digest.clone().unwrap().contains("queue is full"));
+    }
+
+    #[test]
+    fn the_queue_grows_with_the_factory_pool() {
+        // g17g2: 117 civilian factories behind a three-project queue left 49-65 of them idle
+        struct Big(Builder, i64);
+        impl Tools for Big {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_economy" {
+                    return Ok(json!({"factory_trigger_count": {"military": 0},
+                        "civilian_factories_available_for_projects": 117, "civilian_factories_idle": 0,
+                        "construction_projects_queued": self.1, "player": "GER"}));
+                }
+                self.0.call(name, args)
+            }
+        }
+        let plan = json!({"construction": [{"building": "arms_factory", "states": [4]}]});
+        let mut b = Builder::new();
+        b.slots = [(4, 5)].into();
+        let three = Big(b, 3);
+        let mut state = State::default();
+        let step = acted(tick(&mut state, &three, &plan, "l", START).unwrap());
+        assert!(step.starts_with("construct arms_factory 4: true"), "{step}");
+        // 117 factories: 8 projects of 15 and one more
+        let mut b = Builder::new();
+        b.slots = [(4, 5)].into();
+        let nine = Big(b, 9);
+        let mut state = State::default();
+        assert_eq!(
+            tick(&mut state, &nine, &plan, "l", START).unwrap(),
+            Tick::Nothing
+        );
     }
 
     #[test]
