@@ -19,12 +19,16 @@ lint_force.check after the force rules, on the same war list from force.plan_war
   war.mobile_axis         an army_layout strike formation with armour or motorised templates and no axis of its
                           own (none, or the same states as another strike formation): the mobile arm is spread
                           along the infantry's line instead of breaking through on its own sector.
+  war.recovery_phase      a contingency that switches phase during an offensive war on single provinces
+                          (province_controller / province_controlled atoms) instead of a state lost or a share
+                          of land, or whose phase attacks nothing (war.axes [] or no axes over an empty plan
+                          war.axes): one lost border province then holds the whole war.
 """
 from . import derive
 from . import force as fm
 
 HOLD_MIN = 2   # divisions per border state: the executor's war-risk read wants at least 2 (borders_not_held)
-RULES = ("war.axes_missing", "war.objective_not_at_war", "war.hold_sector", "war.mobile_axis")
+RULES = ("war.axes_missing", "war.objective_not_at_war", "war.hold_sector", "war.mobile_axis", "war.recovery_phase")
 
 
 def _fmt(d):
@@ -257,8 +261,53 @@ class Shape:
                          f"({', '.join(map(str, ax))}): the mobile arm needs an axis of its own")
 
 
+    def recovery(self):
+        """war.recovery_phase: a contingency that switches phase while an offensive war runs."""
+        lint = self.lint
+        if not any(w["kind"] == "offensive" for w in self.wars):
+            return
+        phases = {p.get("id"): p for p in lint.list_of("phases") if isinstance(p, dict)}
+        for i, c in enumerate(lint.list_of("contingencies")):
+            if not isinstance(c, dict):
+                continue
+            then = c.get("then") if isinstance(c.get("then"), dict) else {}
+            pid = c.get("phase") or then.get("phase")
+            if not pid:
+                continue
+            where = f"contingencies[{i}] {c.get('id') or ''}".strip()
+            when = c.get("when", c.get("trigger"))
+            single = sorted({a for a in fm._atoms(when) if isinstance(a, str)
+                             and a.split(":")[0] in ("province_controller", "province_controlled")})
+            if single:
+                lint.add("error", "war.recovery_phase", where,
+                         f"switches to {pid} on single provinces ({', '.join(single[:4])}"
+                         f"{', ...' if len(single) > 4 else ''}): one border province lost for a day stops the "
+                         "offensive. Fire on a state lost ({\"not\": \"controls_state:<state>\"}: its controller is no longer "
+                         "ours) or a share of land")
+            ph = phases.get(pid) or {}
+            ov = ((ph.get("overrides") or {}).get("war") if isinstance(ph.get("overrides"), dict) else None) or {}
+            cov = (c.get("overrides") or then.get("overrides") or {})
+            cov = cov.get("war") if isinstance(cov, dict) and isinstance(cov.get("war"), dict) else {}
+            ov = dict(ov, **cov)
+            if ov.get("operations"):
+                continue
+            ax = ov.get("axes")
+            if isinstance(ax, list) and any(_ints(a) for a in ax if isinstance(a, list)):
+                continue
+            base = self.base.get("axes")
+            inherits = ax is None and isinstance(base, list) and any(_ints(a) for a in base if isinstance(a, list))
+            if inherits:
+                continue
+            lint.add("error", "war.recovery_phase", f"phases {pid}",
+                     f"{pid} (entered by {c.get('id') or where}) attacks nothing: "
+                     + ("war.axes []" if ax is not None else "no war.axes and the plan's war.axes are empty")
+                     + ". A recovery phase of an offensive war carries a retake axis (the lost own states first) "
+                       "followed by the attack axes, so the war goes on while the land is retaken")
+
+
 def check(ctx):
     s = Shape(ctx.lint, ctx.tl, ctx.wars)
+    s.recovery()
     s.axes()
     s.objectives()
     s.holds()

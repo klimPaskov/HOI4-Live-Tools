@@ -72,5 +72,23 @@ class Poland(unittest.TestCase):
         self.assertFalse(self.rules(self.good, "war.mobile_axis"))
 
 
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class Recovery(unittest.TestCase):
+    def test_a_recovery_phase_fires_on_a_state_and_keeps_attacking(self):
+        game = lint_plan.load_game(GAME_DIR)
+        out = {}
+        for fixed in (False, True):
+            plan = poland(True)
+            when = {"not": "controls_state:66"} if fixed else "province_controller:6558=POL"
+            war = {"axes": [[66], POLISH_AXIS]} if fixed else {"axes": []}
+            plan["phases"].append({"id": "PC_recover", "overrides": {"war": war}})
+            plan["contingencies"] = [{"id": "c_recover", "when": when, "phase": "PC_recover"}]
+            found = lint_plan.lint(plan, game)["findings"]
+            out[fixed] = [f for f in found if f["rule"] == "war.recovery_phase" and f["severity"] == "error"]
+        self.assertTrue(any("single provinces" in f["message"] for f in out[False]), out[False])
+        self.assertTrue(any("attacks nothing" in f["message"] for f in out[False]), out[False])
+        self.assertFalse(out[True])
+
+
 if __name__ == "__main__":
     unittest.main()
