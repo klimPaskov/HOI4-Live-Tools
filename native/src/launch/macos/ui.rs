@@ -402,6 +402,37 @@ pub(super) fn save_game(
     keys: &dyn GameInput,
     saves: &std::path::Path,
 ) -> Result<serde_json::Value> {
+    let mut tries = 1;
+    loop {
+        match save_game_once(process, keys, saves) {
+            Ok(mut v) => {
+                v["tries"] = serde_json::json!(tries);
+                return Ok(v);
+            }
+            Err(e) if tries < SAVE_TRIES && save_retryable(&e) => {
+                tries += 1;
+                std::thread::sleep(Duration::from_millis(800));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+/// Whole Save sequences tried per call: one sequence failed 5 of 6 times on bp1 and 16 of 17 on
+/// bp2 (window not opened in time, window closed by a click landing on the map), so a caller
+/// that saved once gave up on a segment; every try starts again from a closed menu.
+const SAVE_TRIES: u32 = 4;
+/// A failed sequence that wrote nothing: a menu or window that did not open or closed early.
+fn save_retryable(e: &Error) -> bool {
+    matches!(
+        e.code,
+        "input_readback_failed" | "invalid_gui" | "gui_target_unavailable"
+    ) && !e.message.contains("No save file was written")
+}
+fn save_game_once(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    saves: &std::path::Path,
+) -> Result<serde_json::Value> {
     use crate::platform::game_input::Key;
     let newest = || -> Option<(std::time::SystemTime, String)> {
         std::fs::read_dir(saves)
@@ -920,6 +951,25 @@ pub(super) fn settled<T: PartialEq>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_save_is_tried_again_only_when_the_sequence_wrote_nothing() {
+        assert!(save_retryable(&Error::new(
+            "input_readback_failed",
+            "save window: expected game change not observed"
+        )));
+        assert!(save_retryable(&Error::new(
+            "invalid_gui",
+            "Save window closed"
+        )));
+        assert!(!save_retryable(&Error::new(
+            "input_readback_failed",
+            "No save file was written within 60 s"
+        )));
+        assert!(!save_retryable(&Error::new(
+            "events_open",
+            "Answer the open event(s) first"
+        )));
+    }
     #[test]
     fn blocked_error_names_notice_classes_and_open_events() {
         let e = blocked_error(2, &[0x36805d0, 0x3680170], &["news.288".to_string()]);

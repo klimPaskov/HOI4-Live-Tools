@@ -5381,10 +5381,29 @@ fn air_war_missions(
                 if base.is_some_and(|b| !near.contains(&b)) && operation.is_empty() {
                     continue;
                 }
-                let state_id = air_target(&wars, &operation, base, first);
                 let Some(mission) = war_mission(text(&wing["aircraft_type"])) else {
                     continue;
                 };
+                // an inland wing goes to a front air base first: from its home base the game
+                // sets the mission over no region at all (ab2, 18 Nov 2026: 9 German wings
+                // "Diverged", region 0, while Poland held the air over the operation)
+                if base.is_some_and(|b| !near.contains(&b)) {
+                    let planes = wing["aircraft"].as_i64().unwrap_or(0);
+                    if let Some(to) = front_air_base(&air, &wars, &operation, &fronts, planes) {
+                        let (ok, why) = state.act(
+                            tools,
+                            lease,
+                            "hoi4_air_rebase",
+                            json!({"wing": name, "state_id": to}),
+                            "ar",
+                        )?;
+                        state.skip(now, "airwing", &name, if ok { DAY } else { 7 * DAY });
+                        return Ok(Some(format!(
+                            "air {name} rebases to front state {to} for {mission}: {ok} {why}"
+                        )));
+                    }
+                }
+                let state_id = air_target(&wars, &operation, base, first);
                 let (ok, why) = state.act(
                     tools,
                     lease,
@@ -5403,6 +5422,33 @@ fn air_war_missions(
         state.skip(now, "aircheck", "x", 3 * DAY);
     }
     Ok(None)
+}
+
+/// The own front air base with room for `planes` (`air_bases[].free`): one across the border from
+/// an operation target first, then the most free room.
+fn front_air_base(
+    air: &Value,
+    wars: &Value,
+    operation: &[i64],
+    fronts: &[i64],
+    planes: i64,
+) -> Option<i64> {
+    let facing: HashSet<i64> = list(wars, "borders")
+        .iter()
+        .filter(|b| b["hostile"] == json!(true))
+        .filter(|b| {
+            ints(&b["neighbour_states"])
+                .iter()
+                .any(|t| operation.contains(t))
+        })
+        .flat_map(|b| ints(&b["own_border_states"]))
+        .collect();
+    list(air, "air_bases")
+        .iter()
+        .filter_map(|b| Some((b["state_id"].as_i64()?, b["free"].as_i64().unwrap_or(0))))
+        .filter(|(s, free)| fronts.contains(s) && *free >= planes.max(1))
+        .max_by_key(|(s, free)| (facing.contains(s), *free))
+        .map(|(s, _)| s)
 }
 
 /// Target states of the own executing offensives (armies and army groups, from the battle-plan
@@ -11332,6 +11378,22 @@ mod tests {
             }
         }
         assert_eq!(operation_targets(&Ops), vec![10, 85]);
+        // an inland wing first goes to the front base facing the operation, with room for it
+        let air = json!({"air_bases": [
+            {"state_id": 42, "free": 900}, {"state_id": 66, "free": 200},
+            {"state_id": 67, "free": 50}, {"state_id": 3, "free": 2000}]});
+        assert_eq!(
+            front_air_base(&air, &wars, &[85], &[42, 66, 67], 100),
+            Some(66)
+        );
+        assert_eq!(
+            front_air_base(&air, &wars, &[85], &[42, 66, 67], 300),
+            Some(42)
+        );
+        assert_eq!(
+            front_air_base(&air, &wars, &[85], &[42, 66, 67], 1000),
+            None
+        );
     }
 
     #[test]

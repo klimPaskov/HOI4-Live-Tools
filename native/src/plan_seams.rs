@@ -707,6 +707,11 @@ fn exercise_step(
         state.skip(now, "sex", "x", DAY);
         return Ok(None);
     };
+    // A dated declaration close ahead counts as the war: exercising divisions lose
+    // organisation, and the standing order restarted five armies twelve days before the
+    // declaration on the Poland bed (e1h1, 18 Nov 2026: day 7 61:1,832 against 2,483:15,184
+    // with no exercise).
+    let war_near = declaration_near(plan, now);
     let mut roster: Option<Vec<String>> = None;
     for (id, entry) in entries {
         if state.skipped(now, "ex", &id) {
@@ -714,6 +719,7 @@ fn exercise_step(
         }
         let key = format!("xp_budget.army:{id}");
         let running = state.done.contains_key(&format!("ex:{id}:on"));
+        let at_war = at_war || war_near;
         let (on, done) = if running {
             if !at_war {
                 // A standing order, not a one-off: armies raised after the first start, armies that
@@ -849,6 +855,36 @@ fn mean_fill(read: &Value) -> Option<f64> {
 /// fielded divisions hold their equipment (mean fill >= manage.exercise_fill, default 0.9).
 /// Every 14 game days the armies not exercising are started together; a set of armies the game
 /// refuses (all at the maximum) waits 60 days. At war the rule stops the armies it started.
+/// Days before a dated declaration (`diplomacy[]` action declare, `when` with "date >= ...") in
+/// which no exercise runs, so the divisions start the war at full organisation.
+const EXERCISE_WAR_GAP_DAYS: GameHour = 21;
+fn declaration_near(plan: &Value, now: GameHour) -> bool {
+    fn dates(v: &Value, out: &mut Vec<GameHour>) {
+        match v {
+            Value::String(s) => {
+                if let Some(rest) = s.trim().strip_prefix("date") {
+                    let rest = rest.trim_start().trim_start_matches(">=").trim();
+                    if let Some(h) = crate::plan_predicate::date_hour(rest) {
+                        out.push(h);
+                    }
+                }
+            }
+            Value::Array(a) => a.iter().for_each(|x| dates(x, out)),
+            Value::Object(o) => o.values().for_each(|x| dates(x, out)),
+            _ => {}
+        }
+    }
+    list(plan, "diplomacy")
+        .iter()
+        .filter(|d| text(&d["action"]) == "declare")
+        .any(|d| {
+            let mut at = Vec::new();
+            dates(&d["when"], &mut at);
+            at.into_iter()
+                .max()
+                .is_some_and(|h| now + EXERCISE_WAR_GAP_DAYS * DAY >= h)
+        })
+}
 fn exercise_default_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -1530,6 +1566,21 @@ mod tests {
         assert_eq!(step(&mut state, &f, &off, "l", START).unwrap(), None);
     }
 
+    #[test]
+    fn no_exercise_runs_in_the_three_weeks_before_a_dated_declaration() {
+        let plan = json!({"diplomacy": [
+            {"action": "justify", "target": "CZE", "when": "date >= 1938.1.1"},
+            {"action": "declare", "target": "POL",
+             "when": {"all": ["date >= 1939.9.1", "focus_completed:GER_danzig_or_war"]}}]});
+        let at = |d: &str| crate::plan_predicate::date_hour(d).unwrap();
+        assert!(!declaration_near(&plan, at("1939.8.10")));
+        assert!(declaration_near(&plan, at("1939.8.12")));
+        assert!(declaration_near(&plan, at("1939.8.20")));
+        assert!(!declaration_near(
+            &json!({"diplomacy": [{"action": "declare", "when": "focus_completed:x"}]}),
+            at("1939.8.20")
+        ));
+    }
     #[test]
     fn exercises_start_at_peace_for_the_named_armies_and_stop_when_a_war_starts() {
         let mut f = game();
