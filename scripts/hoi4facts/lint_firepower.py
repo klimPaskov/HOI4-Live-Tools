@@ -254,15 +254,20 @@ def dominance(ctx, land, facts):
     table = []
     by_war = {f["war"]: f for f in facts}
 
-    def judge(where, label, ours, ai, rows_out):
+    def judge(where, label, ours, ai, rows_out, unsure=None):
+        """unsure: why the AI's figure is not a firm read (an upper bound or an estimate): the rule then warns."""
         if ours is None or ai is None or ai <= 0:
             return
         ratio = ours / ai
-        rows_out.append({"what": label, "ours": round(ours, 1), "ai": round(ai, 1), "ratio": round(ratio, 3)})
+        row = {"what": label, "ours": round(ours, 1), "ai": round(ai, 1), "ratio": round(ratio, 3)}
+        if unsure:
+            row["ai_read"] = unsure
+        rows_out.append(row)
         if ratio <= 1.0:
-            lint.add("error", "force.dominance", where,
-                     f"{label}: {ours:.0f} against the game's own AI's {ai:.0f} ({ratio:.0%}): level or under the AI "
-                     f"is a loss; the bar is at least {1 + margin:.0%} of the AI")
+            lint.add("warning" if unsure else "error", "force.dominance", where,
+                     f"{label}: {ours:.0f} against the game's own AI's {ai:.0f} ({ratio:.0%}"
+                     f"{', ' + unsure if unsure else ''}): level or under the AI is a loss; the bar is at least "
+                     f"{1 + margin:.0%} of the AI")
         elif ratio < 1 + margin:
             lint.add("warning", "force.dominance", where,
                      f"{label}: {ours:.0f} against the AI's {ai:.0f} ({ratio:.0%}), under the {1 + margin:.0%} margin")
@@ -288,6 +293,18 @@ def dominance(ctx, land, facts):
             ai = ai_on(rows, day, key)
             if ai is None or not regions:
                 continue
+            unsure = None
+            src = next((r for r in rows if r.get(key) is not None and derive.day(r["date"]) == day), None)
+            if src is None:
+                src = min((r for r in rows if r.get(key) is not None),
+                          key=lambda r: abs((derive.day(r["date"]) or 0) - day), default={})
+            if src.get("air_read") in ("contaminated", "upper_bound"):
+                est = src.get(f"{key}_estimate")
+                if isinstance(est, (int, float)) and src.get(key):
+                    ai = ai * est / src[key]
+                    unsure = f"estimate from an upper-bound read of {src[key]}"
+                else:
+                    unsure = "upper-bound read"
             staged = sum(r.get("count") or 0 for r in lint.list_of("air_plan")
                          if r.get("mission") == mission and r.get("region") in regions
                          and (_date_gate(r.get("when")) or tl.start) <= day)
@@ -311,16 +328,37 @@ def dominance(ctx, land, facts):
     lint.facts.setdefault("force", {})["dominance"] = {"margin": margin, "wars": table}
 
 
+def _ops_of(lint, war_id):
+    """The operations that fight a war (several when the war is fought by several army groups)."""
+    return [o for o in lint.list_of("operations") if o.get("war") == war_id]
+
+
 def _op_of(lint, war_id):
-    return next((o for o in lint.list_of("operations") if o.get("war") == war_id), None)
+    """The war's operations as one: the earliest prepare_from, the fronts, enemies and air regions of all."""
+    ops = _ops_of(lint, war_id)
+    if not ops:
+        return None
+    if len(ops) == 1:
+        return ops[0]
+    regions, enemies, parts = [], [], []
+    for o in ops:
+        regions += [r for r in (o.get("air") or {}).get("regions") or [] if r not in regions]
+        enemies += [t for t in o.get("enemies") or [] if t not in enemies]
+        parts += [{"front": o.get("front")}] + list(o.get("formations") or [])
+    first = ops[0]
+    return {"id": "+".join(str(o.get("id")) for o in ops), "war": war_id, "enemies": enemies,
+            "prepare_from": first.get("prepare_from"), "air": {"regions": regions}, "formations": parts,
+            "_all": ops}
 
 
 def _regular(ctx, w, ops, where):
     lint, tl = ctx.lint, ctx.tl
-    op = _op_of(lint, w["id"])
     stop = None
-    if op is not None and op.get("prepare_from") is not None:
-        stop = fm.predicate_day(lint, tl, op.get("prepare_from"), ctx.wars)
+    for op in _ops_of(lint, w["id"]):
+        if op.get("prepare_from") is not None:
+            d = fm.predicate_day(lint, tl, op.get("prepare_from"), ctx.wars)
+            if d is not None and (stop is None or d < stop):
+                stop = d
     if stop is None:
         stop = w["start"] - PREPARE_STOP_DAYS
     xb = lint.plan.get("xp_budget") if isinstance(lint.plan.get("xp_budget"), dict) else {}
@@ -331,7 +369,7 @@ def _regular(ctx, w, ops, where):
     if not starts or min(starts) > stop - EXERCISE_DAYS:
         lint.add("error", "force.regular", where,
                  f"{w['id']} ({_fmt(w['start'])}): no army exercise runs {EXERCISE_DAYS} days before "
-                 f"{'the operation prepares' if op else 'the war'} ({_fmt(stop)}): the attackers fight Trained "
+                 f"{'the operation prepares' if _ops_of(lint, w['id']) else 'the war'} ({_fmt(stop)}): the attackers fight Trained "
                  "(+0%) where Regular is +25%")
 
 

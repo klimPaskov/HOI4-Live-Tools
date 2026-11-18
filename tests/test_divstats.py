@@ -87,6 +87,8 @@ class Helpers(unittest.TestCase):
         rows = lf.baseline_rows("GER")
         row = next(r for r in rows if r["date"] == "1939.09.01")
         self.assertEqual((row["fighters"], row["cas"]), (2400, 950))
+        self.assertEqual(row["air_read"], "contaminated")
+        self.assertEqual((row["fighters_estimate"], row["cas_estimate"]), (1340, 530))
 
 
 @unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
