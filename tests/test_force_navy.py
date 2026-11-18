@@ -105,6 +105,14 @@ class Britain(unittest.TestCase):
         self.assertFalse(any(f"state {KENT}" in x["message"] for x in req), req)
         self.assertFalse(any(f"state {GIBRALTAR}" in x["message"] for x in req), req)
 
+    def test_an_overseas_enemy_is_defeated_by_landing_on_its_home(self):
+        plan = germany_against_britain()
+        plan["checkpoints"].append({"id": "cp_end", "by": "1945.1.1", "must": ["capitulated:ENG", "capitulated:USA"]})
+        out = lint_plan.lint(plan, self.game)
+        msgs = [x["message"] for x in self.rules(out, "force.sea_required")]
+        self.assertTrue(any("defeats USA" in m for m in msgs), msgs)
+        self.assertFalse(any("defeats ENG" in m for m in msgs), msgs)  # the Kent landing reaches London's island
+
     def test_declared_operations(self):
         ops = {o["id"]: o for o in self.planned["facts"]["force"]["navy"]["operations"]}
         self.assertEqual(ops["sea_lion"]["divisions"], 30)

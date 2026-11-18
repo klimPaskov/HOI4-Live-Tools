@@ -4,8 +4,10 @@ lint holds them to the plan's own arithmetic (start fleet plus dockyard output, 
 goal: every landing, overseas front and sea region the goal needs is carried out with the means it takes.
 
   force.sea_required   (error) the checkpoints take land across the sea (a state our capital cannot reach over land
-                       or straits) and no sea operation or invasion lands on that landmass; or the plan schedules
-                       sea operations (invasions, sea transfers, raids) and force_design has no `sea` entries.
+                       or straits) and no sea operation or invasion lands on that landmass; a country the goal or
+                       checkpoints capitulate, or an offensive force_design war fights, has its capital across the
+                       sea and no landing reaches it; or the plan schedules sea operations (invasions, sea
+                       transfers, raids) and force_design has no `sea` entries.
   force.sea_control    (error) an invasion, sea-control or deny operation whose chosen means do not hold the sea
                        regions on its date against the enemy side's fleet: the message gives what each means takes
                        (surface hull IC and the years at the plan's dockyards, naval strike planes, carrier air,
@@ -131,6 +133,51 @@ def _required(ctx, ops):
                  "our capital, and no sea operation or invasion lands on that land: add a force_design.sea entry "
                  "(kind invasion, from_state, target_state, divisions, the date, the means that win the route) and "
                  "provide its sea control, lift, landing techs and cover by then")
+    # a country the plan capitulates (goal, checkpoints, an offensive force_design war) whose capital lies across
+    # the sea: its home is taken by landing there (the USA, Britain, Australia, Japan for most of the world)
+    for tag, where in _overseas_enemies(ctx):
+        cap = _capital(lint, tag)
+        if cap is None or (states.get(cap) or {}).get("owner") == lint.tag or not nv.across_sea(lint, cap):
+            continue
+        if any(nv.same_land(lint, cap, t) for t in landings) or nv.state_land(lint, cap) & own_lands:
+            continue
+        lint.add("error", "force.sea_required", where,
+                 f"the plan defeats {tag}, whose capital (state {cap}) lies across the sea, and no sea operation or "
+                 "invasion lands on its home: add the landing (force_design.sea kind invasion with its date, "
+                 "divisions and means, an invasions entry) with the sea control, lift, landing techs and cover it "
+                 "takes, and the land campaign after it in force_design.wars")
+
+
+def _capital(lint, tag):
+    cache = lint.__dict__.setdefault("_navy_capitals", {})
+    if tag not in cache:
+        try:
+            cache[tag] = derive.capital_state(lint.game, tag, lint.ctx, lint.start)
+        except Exception:  # noqa: BLE001
+            cache[tag] = None
+    return cache[tag]
+
+
+def _overseas_enemies(ctx):
+    """(tag, where) for every country the plan capitulates or fights offensively: capitulated:TAG in the goal and
+    the checkpoints, the enemies of offensive force_design.wars entries."""
+    lint = ctx.lint
+    out = {}
+    goal = lint.plan.get("goal") if isinstance(lint.plan.get("goal"), dict) else {}
+    sources = [("goal.predicates", goal.get("predicates"))] + [
+        (f"checkpoints {c.get('id')}", c.get("must")) for c in lint.list_of("checkpoints")]
+    for where, pred in sources:
+        for a in fm._atoms(pred):
+            if isinstance(a, str) and a.startswith("capitulated:"):
+                tag = a.split(":", 1)[1].strip()
+                if tag and tag != lint.tag:
+                    out.setdefault(tag, where)
+    for w in (ctx.fd or {}).get("wars") or []:
+        if isinstance(w, dict) and w.get("kind", "offensive") == "offensive":
+            for tag in w.get("enemies") or []:
+                if isinstance(tag, str) and tag != lint.tag:
+                    out.setdefault(tag, f"force_design.wars {w.get('id')}")
+    return sorted(out.items())
 
 
 def _judge(ctx, op, n, met, tools):
