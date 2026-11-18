@@ -455,6 +455,44 @@ fn click_state(state: &State, wars: &Value, u: &Unit) -> Option<i64> {
         .or_else(|| u.line.first().copied())
 }
 
+/// At war: the enemy state across the contact line (hoi4_wars borders) nearest the middle of
+/// `line`; a front clicked there finds the contact line.
+fn contact_state(state: &State, wars: &Value, enemy: &str, line: &[i64]) -> Option<i64> {
+    let theirs: Vec<i64> = list(wars, "borders")
+        .iter()
+        .filter(|b| enemy.is_empty() || text(&b["neighbour_tag"]) == enemy)
+        .flat_map(|b| ints(&b["neighbour_states"]))
+        .collect();
+    let pts: Vec<(f64, f64)> = line
+        .iter()
+        .filter_map(|s| state.centers.get(&(*s as i32)).copied())
+        .collect();
+    if pts.is_empty() {
+        return theirs.first().copied();
+    }
+    let n = pts.len() as f64;
+    let (x, z) = (
+        pts.iter().map(|p| p.0).sum::<f64>() / n,
+        pts.iter().map(|p| p.1).sum::<f64>() / n,
+    );
+    theirs
+        .iter()
+        .filter_map(|s| state.centers.get(&(*s as i32)).map(|p| (*s, *p)))
+        .min_by(|a, b| {
+            let d = |p: (f64, f64)| (p.0 - x).powi(2) + (p.1 - z).powi(2);
+            d(a.1).total_cmp(&d(b.1))
+        })
+        .map(|(s, _)| s)
+        .or_else(|| theirs.first().copied())
+}
+
+fn line_tag(line: &[i64]) -> String {
+    line.iter()
+        .map(i64::to_string)
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
 /// Map centres of the operation's enemies' states (read once per enemy).
 fn learn_centres(state: &mut State, tools: &dyn Tools, tags: &[String]) {
     for tag in tags {
@@ -569,7 +607,7 @@ fn one(
     let (units, group) = units(state, plan, op, roster);
     if executed {
         return advance(
-            state, tools, plan, id, op, &units, roster, &enemies, &at_war, lease, now,
+            state, tools, plan, id, op, &units, roster, wars, &enemies, &at_war, lease, now,
         );
     }
     if let Some(line) = prepare(
@@ -849,7 +887,11 @@ fn reconcile(
     if !has_front(roster, &u.name) {
         // at war the front is clicked at the line to take: the nearest highlighted border there
         // is the contact line, not the pre-war border
-        let at_line = (!peace).then(|| line.first().copied()).flatten();
+        let at_line = if peace {
+            None
+        } else {
+            contact_state(state, wars, &u.enemy, line).or_else(|| line.first().copied())
+        };
         let Some(click) = at_line
             .or_else(|| click_state(state, wars, u))
             .or_else(|| line.first().copied())
@@ -919,22 +961,22 @@ fn reconcile(
     }
     let tries = key(id, &format!("draw:{}:{tag}", u.name));
     let n = state.done.get(&tries).copied().unwrap_or(0);
-    if !peace && n == REDRAWS {
-        // at war the standing front may no longer take a new line (the game split the group
-        // front, e1g1): cleared once, the next calls draw front and line afresh
-        state.done.insert(tries, n + 1);
-        let line = order(
-            state,
-            tools,
-            lease,
-            id,
-            &format!("clear {} (the new line {tag} would not draw)", u.name),
-            "hoi4_army_plan",
-            json!({"army": u.name, "clear_orders": true}),
-        )?;
+    if !peace && line.len() >= 2 && n >= 1 {
+        // at war a stroke across several states does not draw on a group front the game has
+        // split (e1g1, o1b): the line is taken one state at a time, its first state first. The
+        // standing orders are never cleared at war (o1b: a cleared group found no border to
+        // click and stood without orders).
+        state
+            .done
+            .insert(key(id, &format!("one:{}:{tag}", u.name)), line[0]);
+        let line = format!(
+            "operation {id}: the line {tag} does not draw for {}: one state at a time, {} first",
+            u.name, line[0]
+        );
+        state.op_notes.insert(id.to_string(), line.clone());
         return Ok(Some(line));
     }
-    if n > 2 * REDRAWS {
+    if n >= 2 * REDRAWS {
         state.op_notes.insert(
             format!("{id}:{}", u.name),
             format!(
@@ -962,18 +1004,38 @@ fn reconcile(
 
 /// The states of `ids` the player controls.
 fn held(tools: &dyn Tools, me: &str, ids: &[i64]) -> Vec<i64> {
-    if ids.is_empty() || me.is_empty() {
-        return Vec::new();
+    control(tools, me, ids).0
+}
+
+/// The states of `ids` the player controls (the state's controller, or every listed province)
+/// and the provinces of `ids` it controls: the line's progress is counted in provinces (o1b: no
+/// state of Poland's first line was whole in the first two weeks while the front moved).
+fn control(tools: &dyn Tools, me: &str, ids: &[i64]) -> (Vec<i64>, usize) {
+    let mut states = Vec::new();
+    let mut provinces = 0;
+    if me.is_empty() {
+        return (states, provinces);
     }
-    let Ok(read) = tools.call("hoi4_states", &json!({"query": me, "ids": ids})) else {
-        return Vec::new();
-    };
-    list(&read, "states")
-        .iter()
-        .filter(|r| text(&r["controller"]) == me)
-        .filter_map(|r| r["state_id"].as_i64())
-        .filter(|s| ids.contains(s))
-        .collect()
+    for id in ids {
+        let Ok(read) = tools.call("hoi4_states", &json!({"query": id.to_string()})) else {
+            continue;
+        };
+        let Some(row) = list(&read, "states")
+            .iter()
+            .find(|r| r["state_id"].as_i64() == Some(*id))
+        else {
+            continue;
+        };
+        let own: Vec<bool> = list(row, "provinces")
+            .iter()
+            .map(|p| text(&p["controller"]) == me)
+            .collect();
+        provinces += own.iter().filter(|o| **o).count();
+        if text(&row["controller"]) == me || (!own.is_empty() && own.iter().all(|o| *o)) {
+            states.push(*id);
+        }
+    }
+    (states, provinces)
 }
 
 fn player(tools: &dyn Tools, plan: &Value) -> String {
@@ -1067,6 +1129,7 @@ fn advance(
     op: &Value,
     units: &[Unit],
     roster: &Value,
+    wars: &Value,
     enemies: &[String],
     at_war: &[String],
     lease: &str,
@@ -1114,10 +1177,10 @@ fn advance(
     if !state.skipped(now, "opweek", id) {
         state.skip(now, "opweek", id, CHECK_HOURS);
         let me = player(tools, plan);
-        let got = held(tools, &me, &line);
+        let (got, provinces) = control(tools, &me, &line);
         let before = state.done.get(&key(id, "held")).copied().unwrap_or(0);
-        if got.len() as i64 > before {
-            state.done.insert(key(id, "held"), got.len() as i64);
+        if provinces as i64 > before {
+            state.done.insert(key(id, "held"), provinces as i64);
             state.done.insert(key(id, "moved"), now);
         }
         let moved = state.done.get(&key(id, "moved")).copied().unwrap_or(now);
@@ -1206,22 +1269,18 @@ fn advance(
     let op_line = still(&line);
     for u in units.iter().filter(|u| attacker(u)) {
         let own_line_held = u.line.is_empty() || held(tools, &me, &u.line).len() == u.line.len();
-        let wanted: Vec<i64> = if u.role == Role::Group || own_line_held {
+        let mut wanted: Vec<i64> = if u.role == Role::Group || own_line_held {
             op_line.clone()
         } else {
             still(&u.line)
         };
+        // a line that would not draw at war is taken one state at a time
+        let one = key(id, &format!("one:{}:{}", u.name, line_tag(&wanted)));
+        if let Some(first) = state.done.get(&one).copied() {
+            wanted = vec![first];
+        }
         if let Some(line) = reconcile(
-            state,
-            tools,
-            id,
-            u,
-            &wanted,
-            roster,
-            &Value::Null,
-            lease,
-            now,
-            false,
+            state, tools, id, u, &wanted, roster, wars, lease, now, false,
         )? {
             return Ok(Some(line));
         }
@@ -1261,18 +1320,7 @@ fn advance(
     }
     // holds keep their fronts (never executed)
     for u in units.iter().filter(|u| u.role == Role::Hold) {
-        if let Some(line) = reconcile(
-            state,
-            tools,
-            id,
-            u,
-            &[],
-            roster,
-            &Value::Null,
-            lease,
-            now,
-            false,
-        )? {
+        if let Some(line) = reconcile(state, tools, id, u, &[], roster, wars, lease, now, false)? {
             return Ok(Some(line));
         }
     }

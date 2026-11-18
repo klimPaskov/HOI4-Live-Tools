@@ -10,6 +10,7 @@ struct Game {
     roster: RefCell<Value>,
     enemies: RefCell<Vec<&'static str>>,
     held: RefCell<Vec<i64>>,
+    refuse_multi: RefCell<bool>,
     calls: RefCell<Vec<(String, Value)>>,
 }
 
@@ -36,6 +37,7 @@ impl Game {
             roster: RefCell::new(roster),
             enemies: RefCell::new(vec![]),
             held: RefCell::new(vec![]),
+            refuse_multi: RefCell::new(false),
             calls: RefCell::new(vec![]),
         }
     }
@@ -79,6 +81,19 @@ impl Tools for Game {
                                 {"neighbour_tag": "FRA", "neighbour_states": [28]}]}))
             }
             "hoi4_overview" => return Ok(json!({"player": "GER"})),
+            "hoi4_states" if text(&args["query"]).parse::<i64>().is_ok() => {
+                let s: i64 = text(&args["query"]).parse().unwrap();
+                let c = if self.held.borrow().contains(&s) {
+                    "GER"
+                } else {
+                    "POL"
+                };
+                return Ok(json!({"states": [{"state_id": s, "controller": c,
+                    "provinces": [{"controller": c}]}]}));
+            }
+            "hoi4_army_offensive" if args["states"].is_array() && *self.refuse_multi.borrow() => {
+                return Ok(json!({"receipt": {"status": "NotApplied"}}));
+            }
             "hoi4_states" => {
                 let held = self.held.borrow();
                 let rows: Vec<Value> = ints(&args["ids"])
@@ -491,4 +506,41 @@ fn the_capitulation_clears_the_orders_and_starts_the_next_operation() {
         !state.op_owned.contains_key("Mitte"),
         "Poland's armies are free again"
     );
+}
+
+#[test]
+fn a_far_line_that_does_not_draw_at_war_is_taken_one_state_at_a_time() {
+    let game = Game::new();
+    let plan = plan();
+    let mut state = State::default();
+    prepared(&mut state, &game, &plan);
+    *game.enemies.borrow_mut() = vec!["POL"];
+    burst(&mut state, &game, &plan, START + DAY);
+    *game.refuse_multi.borrow_mut() = true;
+    game.calls.borrow_mut().clear();
+    burst(&mut state, &game, &plan, START + 13 * DAY);
+    // the refused stroke rests (the step looks again after its quiet six hours)
+    burst(&mut state, &game, &plan, START + 13 * DAY + 7);
+    let sent = game.orders();
+    // never cleared at war
+    assert!(
+        !sent.iter().any(|(_, a)| a["clear_orders"] == json!(true)),
+        "{sent:?}"
+    );
+    let drawn: Vec<&Value> = sent
+        .iter()
+        .filter(|(n, a)| n == "hoi4_army_offensive" && a["army"] == json!("Army Group 1"))
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(drawn.len(), 2, "{drawn:?}");
+    assert!(drawn[0]["states"].is_array());
+    assert_eq!(*drawn[1], json!({"army": "Army Group 1", "state_id": 93}));
+    let roster = game.roster.borrow().clone();
+    let group = unit(
+        "Army Group 1".into(),
+        Role::Group,
+        &Value::Null,
+        &Value::Null,
+    );
+    assert_eq!(arrow_executing(&roster, &group, &[93]), Some(true));
 }
