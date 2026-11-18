@@ -107,5 +107,36 @@ class Guarantor(unittest.TestCase):
         self.assertFalse(any("guarantees BEL" in m for m in out[True]), out[True])
 
 
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class WarDay(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.game = lint_plan.load_game(GAME_DIR)
+
+    def errors(self, plan, rule):
+        return [f["message"] for f in lint_plan.lint(plan, self.game)["findings"]
+                if f["rule"] == rule and f["severity"] == "error"]
+
+    def test_a_focus_that_gates_the_declaration_finishes_before_it(self):
+        plan = poland(True)
+        timeline = lint_plan.lint(plan, self.game)["facts"]["focus"]["timeline"]
+        last = timeline[-1]
+        end = lint_plan.derive.day(last["end"])
+        late = lint_plan.derive.fmt(lint_plan.derive.date_of(end - 5))
+        early = lint_plan.derive.fmt(lint_plan.derive.date_of(end + 30))
+        for when, bad in ((late, True), (early, False)):
+            plan = poland(True)
+            plan["diplomacy"][0]["when"] = {"all": [f"date >= {when}", f"focus_completed:{last['focus']}"]}
+            found = self.errors(plan, "war.declaration_gate")
+            self.assertEqual(bool(found), bad, (when, found))
+
+    def test_the_armour_stands_on_the_wars_axes(self):
+        plan = poland(True)
+        self.assertFalse([m for m in self.errors(plan, "war.attack_force") if "not on the war's axes" in m])
+        plan["army_layout"][1]["axis"] = [51]  # the panzer army facing France while Poland is attacked
+        found = self.errors(plan, "war.attack_force")
+        self.assertTrue(any("not on the war's axes: Armee Panzer" in m for m in found), found)
+
+
 if __name__ == "__main__":
     unittest.main()

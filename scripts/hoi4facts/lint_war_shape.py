@@ -25,13 +25,23 @@ lint_force.check after the force rules, on the same war list from force.plan_war
                           war.axes): one lost border province then holds the whole war.
   war.guarantor           a declaration on a country another country guarantees at the start (give_guarantee in
                           history/countries) while the plan has no war with the guarantor that day.
+  war.declaration_gate    a focus in a declaration's `when` that the focus timeline completes less than GATE_SLACK
+                          days before the declaration's date (or never): the war starts late.
+  war.attack_force        on an offensive war's first day: the layout in force (entries whose `when` holds by then,
+                          the latest per formation) places less than PLACED_SHARE of the forecast army; the strike
+                          formations on the war's axes carry less than ATTACK_RATIO (or force_design.wars[]
+                          .attack_ratio) x the enemy front estimate; or an armour or motorised formation is not
+                          among them.
 """
 from . import derive
 from . import force as fm
 
+GATE_SLACK = 14     # days a focus that gates a declaration finishes before the declaration's date [H]
+ATTACK_RATIO = 1.0  # divisions on the war's axes per enemy division on the front, unless the war sets attack_ratio [H]
+PLACED_SHARE = 0.8  # the layout in force on a war day places at least this share of the forecast army [H]
 HOLD_MIN = 2   # divisions per border state: the executor's war-risk read wants at least 2 (borders_not_held)
 RULES = ("war.axes_missing", "war.objective_not_at_war", "war.hold_sector", "war.mobile_axis", "war.recovery_phase",
-         "war.guarantor")
+         "war.guarantor", "war.declaration_gate", "war.attack_force")
 
 
 def _fmt(d):
@@ -350,8 +360,114 @@ class Shape:
                        "followed by the attack axes, so the war goes on while the land is retaken")
 
 
+    def declaration_gates(self):
+        """war.declaration_gate: a focus in a declaration's `when` that the focus timeline completes later than
+        GATE_SLACK days before the declaration's own date: the war starts on the focus, not on the plan's day."""
+        lint = self.lint
+        rows = (lint.facts.get("focus") or {}).get("schedule") or (lint.facts.get("focus") or {}).get("timeline") or []
+        end = {}
+        for r in rows:
+            d = r.get("end")
+            d = derive.day(d) if isinstance(d, str) else d
+            if r.get("focus") and d is not None:
+                end[r["focus"]] = d
+        for i, e in enumerate(lint.list_of("diplomacy")):
+            if not isinstance(e, dict) or e.get("action") not in ("declare", "declare_war"):
+                continue
+            atoms = [a for a in fm._atoms(e.get("when")) if isinstance(a, str)]
+            dates = [derive.day(a.split(">=")[1].strip()) for a in atoms
+                     if a.replace(" ", "").startswith("date>=")]
+            dates = [d for d in dates if d is not None]
+            if not dates:
+                continue
+            day = max(dates)
+            for a in atoms:
+                if not (a.startswith("focus_completed:") or a.startswith("focus_done:")):
+                    continue
+                f = a.split(":", 1)[1].strip()
+                done = end.get(f)
+                where = f"diplomacy[{i}] {e.get('id') or e.get('target')}"
+                if done is None and end and day > max(end.values()):
+                    continue  # past the detailed focus timeline: a later horizon schedules it
+                if done is None:
+                    lint.add("error", "war.declaration_gate", where,
+                             f"the declaration on {e.get('target')} waits for {f}, which the focus timeline never "
+                             "completes: the war never starts")
+                elif done > day - GATE_SLACK:
+                    lint.add("error", "war.declaration_gate", where,
+                             f"the declaration on {e.get('target')} is dated {_fmt(day)} but waits for {f}, which the "
+                             f"focus timeline completes {_fmt(done)}: the war starts on the focus, not on the plan's day. "
+                             f"Schedule {f} to finish at least {GATE_SLACK} days before (move it earlier in "
+                             "focus_path, or a shorter route to it)")
+
+    def attack_force(self):
+        """war.attack_force: on an offensive war's first day the layout places the forecast army, the formations
+        on the war's axes carry at least ATTACK_RATIO x the enemy front estimate, and every armour or motorised
+        formation is among them."""
+        lint, needs = self.lint, getattr(self, "needs", None) or []
+        rows = self.tl.forecast()["rows"]
+        prof = {}
+
+        def mobile(e):
+            for t in e.get("templates") or []:
+                if isinstance(t, str):
+                    if t not in prof:
+                        prof[t] = fm.template_profile(lint.game, self.tl.template_units(t))["kind"]
+                    if fm.is_mobile(prof[t]):
+                        return True
+            return False
+        for w in self.wars:
+            if w["kind"] != "offensive" or "at war at the start" in w["source"]:
+                continue
+            day = w["start"]
+            live = {}
+            for e in self.layout():
+                when = e.get("when")
+                d = fm.predicate_day(lint, self.tl, when, self.wars) if when is not None else None
+                if when is not None and (d is None or d > day):
+                    continue
+                key = (e.get("task_of"), e.get("name_hint") or e.get("id"))
+                if key not in live or (d or 0) >= live[key][0]:
+                    live[key] = (d or 0, e)
+            entries = [e for _, e in live.values()]
+            pid, eff = self.war_at(day)
+            reserve = set(eff.get("reserve") or [])
+            targets = set(w["targets"])
+            attack = [e for e in entries if e.get("role") == "strike" and not e.get("task_of")
+                      and (e.get("name_hint") or e.get("id")) not in reserve
+                      and any(self.owner0.get(x) in targets for x in _ints(e.get("axis")))]
+            placed = sum(e["count"] for e in entries if isinstance(e.get("count"), int))
+            on_axes = sum(e["count"] for e in attack if isinstance(e.get("count"), int))
+            fielded = next((n for d, n, _ in reversed(rows) if d <= day), None)
+            need = next((x for x in needs if x.get("war") == w["id"]), {})
+            enemy = (need.get("front") or {}).get("divisions_est") or (need.get("front") or {}).get("divisions") or 0
+            fdw = next((x for x in (lint.plan.get("force_design") or {}).get("wars") or []
+                        if isinstance(x, dict) and set(x.get("enemies") or []) & targets), {})
+            ratio = fdw.get("attack_ratio") if isinstance(fdw.get("attack_ratio"), (int, float)) else ATTACK_RATIO
+            where = f"army_layout ({w['id']})"
+            problems = []
+            if fielded and placed < PLACED_SHARE * fielded:
+                problems.append(f"the layout in force places {placed} divisions of the {round(fielded)} the forecast "
+                                "fields: add war-day entries (when: a date before the war) with each formation's count")
+            if enemy and on_axes < ratio * enemy:
+                problems.append(f"the formations on the war's axes ({', '.join(e.get('name_hint') or e.get('id') for e in attack) or 'none'}) "
+                                f"carry {on_axes} divisions against about {round(enemy)} enemy divisions on the front "
+                                f"(ratio {ratio:g} wanted: force_design.wars[].attack_ratio, default {ATTACK_RATIO:g})")
+            idle = [e.get("name_hint") or e.get("id") for e in entries
+                    if not e.get("task_of") and mobile(e) and e not in attack]
+            if idle:
+                problems.append(f"armour or motorised formations not on the war's axes: {', '.join(idle)} (the mobile "
+                                "arm belongs on the operation's main axis)")
+            if problems:
+                lint.add("error", "war.attack_force", where,
+                         f"{w['id']} ({_fmt(day)}): " + "; ".join(problems))
+
+
 def check(ctx):
     s = Shape(ctx.lint, ctx.tl, ctx.wars)
+    s.needs = ctx.needs
+    s.declaration_gates()
+    s.attack_force()
     s.recovery()
     s.guarantees()
     s.axes()
