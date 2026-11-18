@@ -952,17 +952,23 @@ class Lint:
                     self.add("warning", "research.idle", where,
                              f"a slot left empty {x['days']:g} days banks only {bank:g} of them "
                              f"(BASE_RESEARCH_POINTS_SAVED): the rest is lost research")
-            if idle > RESEARCH_IDLE_SLACK and spare and not named:
+            # a named wait excuses the slot-days it waits (its `days`, else the banked days), not any amount
+            excused = sum(float(x["days"]) if isinstance(x.get("days"), (int, float)) else float(bank or 30)
+                          for x in named)
+            unplanned = max(0.0, capacity - total)
+            covered = unplanned <= excused + RESEARCH_IDLE_SLACK * capacity
+            if idle > RESEARCH_IDLE_SLACK and spare and not covered:
                 how = ("research_fallback is off" if fallback in (False, "priority_only") else
                        "the fallback (%s) fills slots with whatever it finds, which is no plan"
                        % ", ".join(plan.get("research_fallback_prefixes") or ["the whole catalogue"]))
                 self.add("error", "research.idle", "research_path",
                          f"about {idle:.0%} of the {slots} slots' time to {derive.fmt(derive.date_of(end_day))} has "
                          f"nothing planned ({total:.0f} of {capacity} slot-days, research-speed margin included) while "
-                         f"{len(spare)} in-time techs are not listed (e.g. {', '.join(spare[:8])}) and no research_waits "
-                         f"entry names the technology or date a slot is held for; {how}: list the techs that pay most "
-                         f"for the campaign, or name the wait and its reason")
-            elif idle > RESEARCH_IDLE_SLACK and not named:
+                         f"{len(spare)} in-time techs are not listed (e.g. {', '.join(spare[:8])}) and "
+                         + (f"the named waits cover only {excused:.0f} slot-days of the {unplanned:.0f} unplanned"
+                            if named else "no research_waits entry names the technology or date a slot is held for")
+                         + f"; {how}: list the techs that pay most for the campaign, or name the wait and its reason")
+            elif idle > RESEARCH_IDLE_SLACK and not covered:
                 self.add("warning", "research.idle", "research_path",
                          f"about {idle:.0%} of the slot time to {derive.fmt(derive.date_of(end_day))} has nothing planned "
                          f"and no in-time tech is left unlisted: pull the next tier forward where the ahead-of-time cost "
@@ -4769,8 +4775,13 @@ class Lint:
                     break
             # power above what the next buyable pick needs, with nothing bought: idle (a pick that can never
             # be bought saves nothing)
+            # what is held for the named picks that are due (the reserve) is saving, not idle; idle is what lies
+            # above it and could still pay for the cheapest other pick
             nxt = [b["cost"] for b in pending if not b["never"]] + [e["cost"] for e in auto_left]
-            level = min(nxt) if nxt else cheapest
+            level = reserve + (min(nxt) if nxt else cheapest)
+            if auto_left and not off:
+                # below the politics_auto threshold the power is held by that threshold (its own warning above)
+                level = max(level, threshold)
             if balance > level and not got:
                 if not idle_run:
                     idle_from = day

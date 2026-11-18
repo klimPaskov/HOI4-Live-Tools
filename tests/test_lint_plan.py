@@ -311,6 +311,7 @@ class HandPlans(unittest.TestCase):
             ("navy.required", "navy"),
             ("occupation.required", "occupation"),  # Eritrea, Somaliland, Jubaland resist from day one
             ("peace.enemies", "peace"),
+            ("playbook.refs", "production[0]"),  # the hand plan's decisions cite no playbook row
             ("politics.law_gates", "politics[0] war_economy"),  # war support > 0.5 gate, no `when`
             ("politics.pp_budget", "politics"),  # PP above 100 with no planned buy from late August
             # infantry and support lines too small for the start shortfall plus a year of losses at war
@@ -390,6 +391,7 @@ class HandPlans(unittest.TestCase):
             ("manage.thresholds", "manage"),
             ("occupation.required", "occupation"),  # Eritrea, Somaliland, Jubaland are conquered
             ("peace.enemies", "peace"),
+            ("playbook.refs", "production[0]"),  # the hand plan's decisions cite no playbook row
             ("politics.law_gates", "politics[0] partial_economic_mobilisation"),
             ("politics.pp_budget", "politics"),  # PP idle after the one planned law
             ("production.balance", "production"),  # infantry: a few factories against 21 divisions at war
@@ -910,8 +912,28 @@ class CoverageBuildRules(unittest.TestCase):
         self.assertIn("nothing planned", f["message"])
         plan["research_fallback"] = True
         f = self.assertHit(plan, "research.idle", "error", "research_path")
-        self.assertIn("safety net", f["message"])
+        self.assertIn("no plan", f["message"])
         self.assertFalse(self.hits(self.ita, "research.idle", None, "research_path"))
+
+    def test_a_slot_held_for_a_named_tech_is_good_play(self):
+        # a deliberate gap (a bonus about to land, a re-order) is right when the plan names what it waits for;
+        # it excuses the slot-days it waits, not any amount, and a wait past the banked days warns
+        plan = copy.deepcopy(self.ita)
+        facts = lint_plan.lint(plan, self.game)["facts"]["research"]
+        first = plan["research_path"][0]
+        dropped = first["techs"][-1]
+        first["techs"] = first["techs"][:-1]
+        plan["research_priority"] = (plan.get("research_priority") or []) + [dropped]
+        out = lint_plan.lint(plan, self.game)
+        unplanned = out["facts"]["research"]["idle_share"]
+        self.assertGreaterEqual(unplanned, facts["idle_share"])
+        plan["research_waits"] = [{"tech": dropped, "slot": 0, "days": 400, "why": "the focus bonus lands on it"}]
+        self.assertFalse(self.hits(plan, "research.idle", "error", "research_path"))
+        self.assertHit(plan, "research.idle", "warning", "research_waits[0]")  # 400 days bank only 30
+        plan["research_waits"] = [{"tech": "not_a_planned_tech", "why": "x"}]
+        self.assertHit(plan, "research.idle", "error", "research_waits[0]")
+        plan["research_waits"] = [{"tech": dropped}]
+        self.assertHit(plan, "research.idle", "error", "research_waits[0]")  # no reason
 
     def test_any_idle_slot_time_fails_while_in_time_techs_remain(self):
         # a plan that leaves under a quarter of the slot time empty still wastes it when the country has
@@ -1507,6 +1529,14 @@ class TacticsRules(unittest.TestCase):
         plan["politics_auto"]["order"] += [{"category": "government", "slot": k, "ideas": [f"ITA_{k}"], "cost": 50}
                                            for k in range(4, 9)]
         self.assertNoHit(plan, "politics.pp_budget", "error", "nothing bought for")
+        # power held for a named, due pick (the law's 150) is saving, not idle; a threshold above the cheapest
+        # entry with no named target warns: early, the best affordable pick is bought at once
+        self.assertHit(plan, "politics.pp_budget", "warning", "politics_auto.threshold")
+        plan["politics_auto"]["threshold_why"] = "saving for the war economy law"
+        self.assertNoHit(plan, "politics.pp_budget", "warning", "politics_auto.threshold")
+        plan["politics_auto"]["threshold"] = 0
+        del plan["politics_auto"]["threshold_why"]
+        self.assertNoHit(plan, "politics.pp_budget", "warning", "politics_auto.threshold")
         plan["politics_auto"]["enabled"] = False
         self.assertHit(plan, "politics.pp_budget", "error", "politics_auto is off")
         plan = self.plan()
