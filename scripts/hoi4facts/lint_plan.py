@@ -268,6 +268,7 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
                            the axes with no air_plan entry: the default war missions never reach them
   war.strike_choice        (warning) vp_targets name armies and no war.strike is set in war, a phase or a
                            contingency override: the war step runs battle plans without the plan deciding it
+  contingency.stall        a phase only a contingency enters that overrides war.axes with [] and has no exit
   predicates.unreadable    (warning) a goal, fail predicate, checkpoint, phase or contingency that can never
                            hold because it rests on atoms the executor cannot read yet (x-atoms readable:
                            false: var, mission_days, surrender_progress,
@@ -3455,6 +3456,22 @@ class Lint:
                          f"can never hold: {', '.join(names)} cannot be read by the executor yet (always unknown); "
                          f"use a readable atom (x-atoms readable) or an any[] with one")
 
+    def contingency_stall(self):
+        """contingency.stall: a phase that only a contingency enters, overrides war.axes with nothing and
+        has no exit. While its trigger holds no army attacks, so a trigger about ground lost is never
+        undone (i18a, 1936: Italy held from January to November in 'recover Eritrea')."""
+        entered = set()
+        for c in self.list_of("contingencies"):
+            then = c.get("then")
+            entered.add(c.get("phase") or (then.get("phase") if isinstance(then, dict) else then))
+        for j, ph in enumerate(self.list_of("phases")):
+            axes = ((ph.get("overrides") or {}).get("war") or {}).get("axes", None)
+            if ph.get("id") in entered and axes == [] and "exit" not in ph:
+                self.add("error", "contingency.stall", f"phases[{j}]",
+                         f"phase {ph.get('id')} (entered by a contingency) attacks nothing (war.axes []) and has "
+                         f"no exit: while its trigger holds nothing retakes the ground; give it the lost states "
+                         f"as axes or drop the axes override, and an exit")
+
     def production_changes(self):
         """production.replace and designs.decommission: line changes the executor cannot carry out."""
         g = self.game
@@ -5717,7 +5734,7 @@ class Lint:
                      f"disband.keep with a role and a why")
 
     def run(self):
-        steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
+        steps = [self.schema_rules, self.contingency_stall, self.research, self.focus, self.construction, self.production, self.army,
                  self.conquest, self.capitulation_plan, self.win, self.events, self.coverage, self.posture, self.navy, self.navy_shape, self.port_convoys,
                  self.convoy_size, self.xp_unspent, self.hub_cost, self.supply_axis_reach, self.air_bases, self.air_deploy, self.templates, self.laws, self.incoming, self.doctrine_defaults, self.gather, self.call_allies, self.occupation, self.peace, self.manage, self.supply_overdrawn,
                  self.manage_convoys, self.manage_fuel,
