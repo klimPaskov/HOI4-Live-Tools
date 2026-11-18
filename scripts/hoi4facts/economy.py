@@ -18,12 +18,14 @@ day each finishes (construction speed, building-slot factors), the states its ch
 factories and slots in them), consumer goods from the active laws and ideas, the civilian factories its import
 budget sends abroad, at most 15 civilian factories a project, the state's infrastructure, and only states
 outside the construction risk. Civilian factories are queued until the switch date, military ones after it and
-at war; the switch date is chosen by the arithmetic (the month that gives the most military factory-days over the
-plan's horizon, the civilian count at its end breaking ties). Undated picks (politics_auto), decisions' variables and the
+at war; the switch date is the plan's own (the entry date of its first phase whose construction builds military
+factories only) or, when the plan dates none, chosen by the arithmetic (the month that meets the most AI marks,
+then gives the most military factory-days over the plan's horizon, the civilian count at its end breaking ties). Undated picks (politics_auto), decisions' variables and the
 game's own random targets of a focus are not modelled; each forecast lists what it left out.
 Stdlib only, Python 3.9+.
 """
 import math
+import re
 from collections import defaultdict
 
 from . import derive
@@ -673,8 +675,36 @@ def _dyn(lint):
         return {"factor": 0.0, "expected": 0.0}
 
 
+def plan_switch(lint):
+    """The day the plan itself switches from civilian to military factories: the entry date of the first phase
+    entered by a date whose construction override builds arms factories and no civilian factory while the base
+    construction list builds civilian factories (the executor runs the active list, so that phase's date IS the
+    switch). None when the plan dates none (the arithmetic then picks one)."""
+    base = [e.get("building") for e in lint.plan.get("construction") or [] if isinstance(e, dict)]
+    if "industrial_complex" not in base:
+        return None
+    best = None
+    for ph in lint.plan.get("phases") or []:
+        if not isinstance(ph, dict):
+            continue
+        cons = (ph.get("overrides") or {}).get("construction")
+        if not isinstance(cons, list):
+            continue
+        kinds = {e.get("building") for e in cons if isinstance(e, dict)}
+        if "arms_factory" not in kinds or "industrial_complex" in kinds:
+            continue
+        m = re.fullmatch(r"\s*date\s*>=\s*(\d{3,4}\.\d{1,2}\.\d{1,2})\s*", str(ph.get("enter") or ""))
+        if not m:
+            continue
+        d = _day(m.group(1))
+        if d is not None and (best is None or d < best):
+            best = d
+    return best
+
+
 def forecast(lint, tl, until=None, extra=(), marks=(), floors=None):
     """The plan's economy by arithmetic with the best switch date: {"switch", "war", "rows": [...], ...}.
+    A plan that dates its own switch (plan_switch) is forecast on that date. Otherwise
     floors: {day: (civilian, military)} marks a switch should keep (the AI baseline): the switch that meets
     the most of them up to the first war day wins (the marks lint_economy holds as errors), then the most of
     them in all, then the most military factory-days, then the most civilian factories at the end."""
@@ -690,6 +720,9 @@ def forecast(lint, tl, until=None, extra=(), marks=(), floors=None):
     best = None
     cands = list(range(start, last + 1, 30)) + [last]
     floors = {d: v for d, v in (floors or {}).items() if start <= d <= until}
+    dated = plan_switch(lint)
+    if dated is not None and start <= dated <= until:
+        cands = [dated]
     for sw in cands:
         r = simulate(lint, tl, sw, until, events, dyn, sample=floors)
         hit = [d for d, (c, m) in floors.items() if r["rows"][d]["civ"] >= c and r["rows"][d]["mil"] >= m]
@@ -705,7 +738,8 @@ def forecast(lint, tl, until=None, extra=(), marks=(), floors=None):
     auto = lint.plan.get("politics_auto")
     if isinstance(auto, dict) and auto.get("order"):
         left_out.append("politics_auto picks (undated)")
-    return {"switch": _fmt(switch), "war": _fmt(war) if war else None, "until": _fmt(until),
+    return {"switch": _fmt(switch), "switch_from": "plan" if cands == [dated] else "arithmetic",
+            "war": _fmt(war) if war else None, "until": _fmt(until),
             "rows": [r["rows"][d] for d in sorted(r["rows"])], "slot_bound_days": r["slot_bound_days"],
             "first_slot_bound": r["first_slot_bound"], "risk_states": r["risk_states"],
             "trade_civs": lint.plan.get("auto_import", {}).get("budget") if isinstance(lint.plan.get("auto_import"),

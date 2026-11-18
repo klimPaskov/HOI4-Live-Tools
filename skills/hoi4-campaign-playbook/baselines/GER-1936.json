@@ -178,6 +178,12 @@
   },
   {
    "date": "1939.09.01",
+   "fighters": 2400,
+   "cas": 950,
+   "air_read": "contaminated",
+   "fighters_estimate": 1340,
+   "cas_estimate": 530,
+   "air_note": "fighters and close air support as hoi4_air read them in the AI study save aig1 on 1939.09.01 (800 of the CAS generation 1), read before the own-wing filter of PR #274, when allied wings at shared bases were counted: an upper bound. On our own save the same read fell from 43 wings to 24 once only our own were listed, so the estimates are the reads x 24/43 (about 1,300-1,500 fighters, 500-600 CAS) until the AI save is re-read with the fixed tool; the dominance lint judges the estimate and only warns on this row",
    "civilian_factories": 104,
    "military_factories": 67,
    "naval_factories": 10,

@@ -456,6 +456,18 @@ Each war's shape on its first day (lint_war_shape.py):
                            without medium tanks or smaller than the AI's (lint_quality.py)
   force.staff              no officer corps spirits, or a theorist, army chief or high-command seat unnamed or late
   force.exercise           no army exercise 80 days before the first offensive war
+  force.firepower          a war day's main line or armour template with no more soft attack or breakthrough than
+                           the AI's for our country (same techs and equipment) or the enemy's main start template
+                           (divstats.py from the game files; lint_firepower.py)
+  force.regular            no exercise from 80 days before an operation's prepare_from (attackers stay Trained)
+  force.idle_xp            army experience idle on a war day above 100 after the plan's own spends
+  force.idle_pp            political power idle on a war day above 250 by the plan's PP budget
+  force.staff_domain       a navy or air officer in the army chief or a high-command seat before the land wars
+  force.cas_generation     the CAS line builds an older airframe than the one researched by the war day
+  force.air_range          a wing over an operation based in a state touching neither its front nor the enemy
+  force.dominance          a war day's attack quality, air over the operation, military factories or divisions at
+                           or under the AI's (error) or under it plus force_design.dominance_margin (warning); a
+                           baseline date with fewer total or military factories than the AI (error)
   war.operation_required   a land war against more than 30 enemy divisions with no operation (lint_operations.py)
   war.operation_refs       an operation names a war, group, army, template or next operation the plan lacks; a line
                            army with own orders; a hold on the operation's own group; over the game's command caps
@@ -507,6 +519,7 @@ else:
 
 DEFAULT_GAME_DIR = os.path.expanduser("~/Library/Application Support/Steam/steamapps/common/Hearts of Iron IV")
 FRONT_K = 2
+IDLE_JOIN_DAYS = 90  # idle military factories fed to the priority lines join over about this many days [H]
 MAX_STRIKE = 24
 LOW_INFRA = 2
 MAX_RIVERS = 2
@@ -588,7 +601,9 @@ NEW_RULES |= {"force.bombers", "force.design_cost", "force.decisive", "force.sea
 NEW_RULES |= {"war.axes_missing", "war.objective_not_at_war", "war.hold_sector", "war.mobile_axis",
               "war.recovery_phase", "war.guarantor", "war.declaration_gate", "war.attack_force",
               "war.operation_required", "war.operation_refs", "war.operation_timing", "war.operation_line",
-              "war.operation_support", "force.template_floor", "force.staff", "force.exercise"}  # lint_war_shape.py  # bombers, designed cost, decisive wars
+              "war.operation_support", "force.template_floor", "force.staff", "force.exercise", "force.firepower", "force.regular",
+              "force.idle_xp", "force.idle_pp", "force.staff_domain", "force.cas_generation", "force.air_range",
+              "force.dominance"}  # lint_war_shape.py  # bombers, designed cost, decisive wars
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"
@@ -3916,7 +3931,75 @@ class Lint:
                           + fresh * self.efficiency(base, begin, d)) / 100.0
             if ic > 0:
                 out[eq] = ic / cost
+        # the executor's idle-factory feed (plan_manage.rs feed_choice): military factories on no plan line go to
+        # the production_priority lines a few at a time (the line the divisions lack most, else in turn). The
+        # forecast gives them to the active priority lines in turn, as new factories that joined over the last
+        # IDLE_JOIN_DAYS (they come a few at a time as the construction finishes them)
+        idle = self.idle_military(d)
+        if idle > 0:
+            feed = self.priority_lines(planned)
+            if feed:
+                begin = max(start, d - IDLE_JOIN_DAYS)
+                eff = self.efficiency(base, begin, d)
+                fed = {}
+                for i in range(idle):
+                    eq = feed[i % len(feed)]
+                    fed[eq] = fed.get(eq, 0) + 1
+                for eq, n in fed.items():
+                    cost = forcemod.unit_cost(self, eq)[0] or (rows.get(eq) or {}).get("cost")
+                    if cost:
+                        out[eq] = out.get(eq, 0.0) + speed * n * eff / 100.0 / cost
+                self._fed = (d, fed)
         return out
+
+    def priority_lines(self, planned):
+        """The active military lines in production_priority order (an entry is an equipment key or a prefix)."""
+        out = []
+        for pref in self.plan.get("production_priority") or []:
+            if not isinstance(pref, str) or not pref:
+                continue
+            eq = next((k for k in sorted(planned) if k.startswith(pref) and self.factory_pool(k) == "military"
+                       and k not in out), None)
+            if eq:
+                out.append(eq)
+        return out
+
+    def military_on(self, d):
+        """Military factories on day d by the economy forecast (linear between its sample rows); None while it is
+        being computed or when there is none."""
+        if getattr(self, "_mil_busy", False):
+            return None
+        rows = getattr(self, "_mil_rows", None)
+        if rows is None:
+            self._mil_busy = True
+            try:
+                econ = __import__((__package__ or "hoi4facts") + ".lint_economy", fromlist=["forecast_of"])
+                fc = econ.forecast_of(self)
+                rows = sorted((derive.day(r["date"]), r["mil"]) for r in fc.get("rows") or [])
+            except Exception:  # noqa: BLE001 - no forecast: no idle feed
+                rows = []
+            finally:
+                self._mil_busy = False
+            self._mil_rows = rows
+        if not rows or d < rows[0][0]:
+            return None
+        prev = rows[0]
+        for r in rows:
+            if r[0] >= d:
+                if r[0] == prev[0]:
+                    return r[1]
+                return prev[1] + (r[1] - prev[1]) * (d - prev[0]) / (r[0] - prev[0])
+            prev = r
+        return rows[-1][1]
+
+    def idle_military(self, d):
+        """Military factories the forecast has on day d beyond the plan's lines (0 without a forecast)."""
+        if not self.tag or self.world is None or getattr(self, "_no_idle_feed", False):
+            return 0
+        mil = self.military_on(d)
+        if mil is None:
+            return 0
+        return max(0, int(mil) - int(self._on_lines[1]))
 
     def production_balance(self):
         """production.balance: for every equipment family the start divisions need, the planned output
@@ -4628,6 +4711,7 @@ class Lint:
         income = 0.0
         day = start
         idle_run, idle_from, idle_worst = 0, start, (0, start, 0.0)
+        series = self._pp_series = {}
         while day <= end:
             got = False
             for b in list(pending):
@@ -4666,6 +4750,7 @@ class Lint:
                     idle_worst = (idle_run, idle_from, balance)
             else:
                 idle_run = 0
+            series[day] = balance
             day += 1
             gain_today = rates["per_day_focus"] if day <= focus_end else rates["per_day_idle"]
             balance += gain_today

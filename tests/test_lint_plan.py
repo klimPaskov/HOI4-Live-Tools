@@ -1272,6 +1272,7 @@ class TacticsRules(unittest.TestCase):
     def test_line_output_ramps_new_lines(self):
         plan = self.plan(production=[{"equipment": "infantry_equipment_1", "factories": 10},
                                      {"equipment": "artillery_equipment_1", "factories": 2}])
+        plan.pop("production_priority", None)  # no idle-factory feed: the planned factories alone
         lint = lint_plan.Lint(plan, self.game)
         start = derive.day(lint.start)
         day0, later = lint.line_output(start), lint.line_output(start + 180)

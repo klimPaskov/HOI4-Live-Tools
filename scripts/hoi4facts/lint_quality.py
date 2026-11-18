@@ -27,7 +27,8 @@ MEDIUM_SHARE = 0.5   # share of the armoured divisions that carry medium or heav
 SEATS = (("research_production", 5, "theorist"), ("military_staff", 0, "army chief"),
          ("military_staff", 3, "high command"), ("military_staff", 4, "high command"),
          ("military_staff", 5, "high command"))
-RULES = ("force.template_floor", "force.staff", "force.exercise")
+RULES = ("force.template_floor", "force.staff", "force.exercise", "force.firepower", "force.regular", "force.idle_xp",
+         "force.idle_pp", "force.staff_domain", "force.cas_generation", "force.air_range", "force.dominance")
 HEAVY = ("medium_armor", "heavy_armor", "modern_armor", "super_heavy_armor")
 
 
@@ -130,6 +131,8 @@ def check(ctx):
         facts.append(row)
     if facts:
         lint.facts.setdefault("force", {})["quality"] = facts
+    from . import lint_firepower
+    lint_firepower.check(ctx, wars, ops, ai_templates)
     first = min(w["start"] for w in wars)
     # officer corps and the staff seats
     oc = lint.list_of("officer_corps")

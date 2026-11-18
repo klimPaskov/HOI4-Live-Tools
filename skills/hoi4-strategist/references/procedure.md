@@ -759,7 +759,20 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
 `generic-playbook.md` §4. Facts: `F vp <ENEMY>`, `F route <from> <to> [--avoid-rivers]`,
 `F province <id>`, `F weather <region>`, `F terrain-width <theatre>`.
 00. **Quality before numbers.** A force that matches the AI's division count can deal a fifth of its damage.
-   Per war day (lint `facts.force.quality`, rules `force.template_floor`, `force.staff`, `force.exercise`):
+   Per war day (lint `facts.force.quality`, `facts.force.firepower`, `facts.force.dominance`; rules
+   `force.template_floor`, `force.staff`, `force.exercise`, `force.firepower`, `force.regular`, `force.idle_xp`,
+   `force.idle_pp`, `force.staff_domain`, `force.cas_generation`, `force.air_range`, `force.dominance`).
+   The AI's marks are a FLOOR, never the target: level with the AI is a loss. Size every attacking template
+   with the calculator (`python3 scripts/hoi4facts/divstats.py --tag <TAG> --battalions ... --support ...
+   --equipment ...`: soft attack, breakthrough, HP, defence, width from the game files) so its soft attack and
+   breakthrough beat both the AI's template for our country on that date and the enemy's main template by
+   `force_design.dominance_margin` (default 10%): a second line artillery battalion where production allows,
+   one tank battalion more than the AI's, support companies it lacks. Fighters and close air support staged
+   over the operation, military factories and divisions above the AI's by the margin on every war day; no
+   baseline date with fewer total or military factories than the AI. Where the arithmetic cannot give a
+   margin on an axis by the war day, say which axis, the best reachable figure and what it costs elsewhere,
+   and put quality on the attacking formations first. Air wings over an operation are based on states that
+   touch its front or the enemy (inland bases did not reach the border regions in the bed). Then:
    the main line template carries line artillery (at least what the game's own AI fields on that date:
    baselines `templates`) with the artillery line sized to it; the armoured divisions carry the best tank the
    date allows (medium chassis research, design and line dated back from the war day, at least half the
