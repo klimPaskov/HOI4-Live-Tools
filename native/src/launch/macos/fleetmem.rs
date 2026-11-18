@@ -296,6 +296,12 @@ fn manager_class(manager_field: u64) -> xlayout::Class {
         NAVY_MANAGER
     }
 }
+/// The player's country (tag) index, as the per-country tables and the air containers use it.
+pub(super) fn own_tag(r: &Reader<'_>, image: u64) -> Result<i32> {
+    let g = game::layout(r);
+    let gs = r.u64(image + g.gs_global)?;
+    r.i32(gs + g.player_tag)
+}
 /// The own entry of a strategic manager's per-country table: GS tag -> country
 /// index -> pointer (index 1 for the German campaign).
 pub(super) fn own_strategic(

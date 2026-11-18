@@ -30,6 +30,10 @@ const BASE_CAPACITY: u64 = 0x78;
 const BASE_CONTAINERS: u64 = 0x48;
 const CONTAINER_VTABLE: u64 = 0x3519c88;
 const CONTAINER_POOLS: u64 = 0xb8;
+/// i32 country (tag) index of the container's owner: a base holds one container per country
+/// whose wings stand there (an ally's wings at a shared base included). Found live 18 Nov 2026
+/// (bp2 1939, Germany 1 beside Italy 16 at the same bases).
+const CONTAINER_OWNER: u64 = 0xb0;
 const POOL_VTABLE: u64 = 0x34ac6c0;
 const POOL_WINGS: u64 = 0x28;
 pub(super) const WING_VTABLE: u64 = 0x34ac5f8;
@@ -142,6 +146,16 @@ pub(super) fn bases_and_wings(
     image: u64,
     strategic: u64,
 ) -> Result<(Vec<Base>, Vec<Wing>)> {
+    // Only the player's own wings: an unreadable tag (no game state) reads every container.
+    let owner = fleetmem::own_tag(r, image).ok();
+    bases_and_wings_owned(r, image, strategic, owner)
+}
+pub(super) fn bases_and_wings_owned(
+    r: &Reader<'_>,
+    image: u64,
+    strategic: u64,
+    owner: Option<i32>,
+) -> Result<(Vec<Base>, Vec<Wing>)> {
     expect(r, strategic, STRATEGIC_AIR_VTABLE, image, "Strategic air")?;
     let abi = r.string_abi();
     let f = |class: &xlayout::Class, offset: u64| fld(abi, class, offset);
@@ -178,6 +192,11 @@ pub(super) fn bases_and_wings(
         };
         for container in pointers(r, b + f(&BASE, BASE_CONTAINERS)?, 16)? {
             expect(r, container, CONTAINER_VTABLE, image, "Air container")?;
+            if let Some(tag) = owner {
+                if r.i32(container + f(&CONTAINER, CONTAINER_OWNER)?)? != tag {
+                    continue;
+                }
+            }
             for pool in pointers(r, container + f(&CONTAINER, CONTAINER_POOLS)?, 256)? {
                 expect(r, pool, POOL_VTABLE, image, "Air wing pool")?;
                 for w in pointers(r, pool + f(&POOL, POOL_WINGS)?, 512)? {
@@ -398,6 +417,18 @@ mod tests {
         assert_eq!(bases[0].state, Some(64));
         assert_eq!(wings[0].name, "Kampfgeschwader 153");
         assert_eq!(wings[0].equipment, "tac_bomber_equipment_0");
+        // the container belongs to country 7: the player of country 1 owns no wing there
+        mem.i32(container + CONTAINER_OWNER, 7);
+        let own = bases_and_wings_owned(&r, IMAGE, strategic, Some(1)).unwrap();
+        assert_eq!(own.0.len(), 1);
+        assert!(own.1.is_empty());
+        assert_eq!(
+            bases_and_wings_owned(&r, IMAGE, strategic, Some(7))
+                .unwrap()
+                .1
+                .len(),
+            1
+        );
         let mut names = BTreeMap::new();
         names.insert(127, "Sahara Desert".to_string());
         let v = view(&bases, &wings, &names, None);
