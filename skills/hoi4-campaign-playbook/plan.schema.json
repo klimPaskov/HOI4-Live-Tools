@@ -393,15 +393,16 @@
     },
     "research_waits": {
       "type": "array",
-      "x-owner": "planner",
-      "description": "slots deliberately held empty: each names the technology (or date) a slot waits for and why (a focus or decision bonus that lands on it, a tech that opens on a date, a re-order). lint research.idle accepts unplanned slot time only with a named wait; days beyond BASE_RESEARCH_POINTS_SAVED warn. The executor holding a slot for it is a planned step (executor change list, 18 Nov night)",
+      "x-owner": "player",
+      "x-executor-planned": "W2-6",
+      "description": "slots deliberately held empty: each names the technology (or date) a slot waits for and why (a focus or decision bonus that lands on it, a tech that opens on a date, a re-order). lint research.idle accepts unplanned slot time only with a named wait; days beyond BASE_RESEARCH_POINTS_SAVED warn. The executor does not hold the slot yet: a wait is a planning estimate",
       "items": {
         "type": "object",
         "properties": {
-          "tech": {"type": "string"},
-          "date": {"type": "string"},
-          "slot": {"type": "integer"},
-          "days": {"type": "number"},
+          "tech": {"type": "string", "description": "the technology the slot waits for (it must be planned in research_path)"},
+          "date": {"type": "string", "description": "the date the slot waits for, when the wait is for a date (a tech that opens, a bonus that lands)"},
+          "slot": {"type": "integer", "description": "which research slot (0-based) is held"},
+          "days": {"type": "number", "description": "how long the slot is held; beyond BASE_RESEARCH_POINTS_SAVED the lint warns"},
           "why": {"type": "string"}
         },
         "additionalProperties": false

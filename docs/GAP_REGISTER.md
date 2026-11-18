@@ -11,7 +11,7 @@ first of missing from playbook, not executable, not plannable, unvalidated that 
 
 ## Summary
 
-297 capabilities: missing from playbook 0, not executable 87, not plannable 2, unvalidated 113, ok 95.
+298 capabilities: missing from playbook 0, not executable 87, not plannable 3, unvalidated 113, ok 95.
 
 | Domain | missing from playbook | not executable | not plannable | unvalidated | ok | total |
 |---|---:|---:|---:|---:|---:|---:|
@@ -32,7 +32,7 @@ first of missing from playbook, not executable, not plannable, unvalidated that 
 | Production |  | 2 |  | 4 | 4 | 10 |
 | Equipment designers |  | 2 |  | 3 | 3 | 8 |
 | Military-industrial organisations |  | 4 |  | 2 | 2 | 8 |
-| Research |  | 3 | 1 | 2 | 3 | 9 |
+| Research |  | 3 | 2 | 2 | 3 | 10 |
 | Doctrines |  | 3 |  | 5 | 1 | 9 |
 | Special projects |  | 1 |  | 4 | 2 | 7 |
 | Division templates |  | 2 |  | 2 | 5 | 9 |
@@ -315,6 +315,7 @@ first of missing from playbook, not executable, not plannable, unvalidated that 
 | Use faction tech sharing and faction research initiatives (`research.tech_sharing`) | research-doctrines-projects.md#10 Tactics (RE12), research-doctrines-projects.md#8 (c) Tools (No tool yet: faction initiatives) | none | `hoi4_research_extras`; refused: only the sharing membership is read; no tool takes a faction initiative | no | not executable | low: up to 50% on techs allies already have | both. Owner: faction initiative tool and plan key |
 | Start a tech without consuming the matching bonus (1.19.4 shift-right-click) to keep it for later (`research.without_spending_bonus`) | research-doctrines-projects.md#10 Tactics (RE03), research-doctrines-projects.md#8 (c) Tools (No tool yet) | none | none | no | not executable | low: keeps a bonus for the right tech | both. Owner: option on hoi4_research_start and a plan flag |
 | Research a technology whose tile lies left or right of the visible tree area (`research.horizontal_scroll`) | research-doctrines-projects.md#10 Tactics | none | `hoi4_research_start` | no | not plannable | medium: wide trees (air, 1.19.4) put tiles outside the client area; the tool refuses them by name and the executor rests them 180 days | both. Owner: drag or wheel the tree sideways before the click (research.rs) |
+| Hold a research slot empty only for a named technology or date (a focus or decision bonus about to land, a tech that opens on a date, a re-order), at most the banked days (`research.named_waits`) | research-doctrines-projects.md#10 Tactics (RE04), procedure.md#11. Research (items 4, 5) | `research_waits` (planned) | `hoi4_research_start`, `hoi4_research` | no | not plannable | medium: a deliberate gap is good play while it waits for a named bonus or date, but the executor fills every empty slot from the plan or the fallback, so a planned wait is lost | live. Owner: executor: the research step holds the named slot until the tech, the date or the banked days pass |
 | Keep every slot busy to the horizon with a restricted fallback; alarm on an empty slot (`research.slots_never_idle`) | research-doctrines-projects.md#10 Tactics (RE04), procedure.md#11. Research (items 4, 5) | `research_fallback` (executor), `research_fallback_prefixes` (executor), `research_fallback_categories` (executor), `research_fallback_exclude` (executor), `alarms.research_slot_empty` (executor) | `hoi4_research_start`, `hoi4_research_ui` | no | unvalidated | high: an idle slot loses up to 30 days of progress | live. Owner: live: a run with a restricted fallback; the research_slot_empty alarm fires only for a slot nobody fills |
 | Spend limited-use research bonuses on the most expensive matching techs (Tools 3-4, Concentrated) (`research.limited_bonuses`) | research-doctrines-projects.md#10 Tactics (RE02, RE19), research-doctrines-projects.md#8 (a) Automatable standing rules (rule 3), procedure.md#11. Research (item 6) | `research_bonuses` (executor) | `hoi4_research_extras`, `hoi4_research_start` | no | unvalidated | medium: a 100% bonus on a big tech saves weeks of slot time | live. Owner: run a plan with research_bonuses live; check bonus uses fall as planned |
 | Fill research slots from a dated path: industry and construction first, then the war plan's techs (`research.path_by_year`) | research-doctrines-projects.md#3 Research priority tables, research-doctrines-projects.md#4 Dated research checklist, procedure.md#11. Research | `research_path` (executor), `research_path[].techs` (executor), `research_path[].year` (executor), `research_path[].not_before` (executor), `research_priority` (executor) | `hoi4_research_start`, `hoi4_research`, `hoi4_technology_list` | live day log 14 Nov (sk1-sk10: research_start Verified 112) | ok | high: research drives every other domain | none. |

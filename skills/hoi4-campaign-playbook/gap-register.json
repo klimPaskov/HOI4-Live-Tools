@@ -3315,6 +3315,26 @@
    "owner": "live: a run with a restricted fallback; the research_slot_empty alarm fires only for a slot nobody fills"
   },
   {
+   "id": "research.named_waits",
+   "domain": "research",
+   "capability": "Hold a research slot empty only for a named technology or date (a focus or decision bonus about to land, a tech that opens on a date, a re-order), at most the banked days",
+   "playbook": [
+    "research-doctrines-projects.md#10 Tactics (RE04)",
+    "procedure.md#11. Research (items 4, 5)"
+   ],
+   "plan": [
+    "research_waits"
+   ],
+   "tools": [
+    "hoi4_research_start",
+    "hoi4_research"
+   ],
+   "payoff": "medium",
+   "why": "a deliberate gap is good play while it waits for a named bonus or date, but the executor fills every empty slot from the plan or the fallback, so a planned wait is lost",
+   "closing": "live",
+   "owner": "executor: the research step holds the named slot until the tech, the date or the banked days pass"
+  },
+  {
    "id": "research.ahead_of_time",
    "domain": "research",
    "capability": "Avoid ahead-of-time research except fixed-date picks (AT, radio) or with an ahead-of-time bonus",
