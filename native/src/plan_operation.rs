@@ -108,7 +108,7 @@ fn holds(state: &mut State, tools: &dyn Tools, when: &Value, now: GameHour) -> b
 /// and army group to its operation (`State::op_owned`). Reads only.
 pub(super) fn refresh(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
     let ops = list(plan, "operations");
-    if ops.is_empty() {
+    if ops.is_empty() || layout_pending(state, plan, now).is_some() {
         state.op_owned.clear();
         publish(&state.op_owned);
         return;
@@ -179,6 +179,39 @@ fn owned_names(state: &State, plan: &Value, op: &Value, roster: &Value) -> Vec<S
     }
     let _ = plan;
     names
+}
+
+/// Game days the operations wait at most for the army layout to form.
+const LAYOUT_WAIT_DAYS: i64 = 14;
+
+/// The army_layout roles not formed yet (no army bound, not given up), while the operations wait
+/// for them: ownership and the prepare start only once the layout has formed, so the layout and
+/// the operation's assembly never race over the same armies (it27b, 18 Nov 2026: the operation
+/// named and owned Army 2 as North Strike before the layout split it). Dated roles (`when`) and
+/// a plan without land orders are not waited for; after LAYOUT_WAIT_DAYS the operations go on.
+pub(super) fn layout_pending(
+    state: &mut State,
+    plan: &Value,
+    now: GameHour,
+) -> Option<Vec<String>> {
+    if !super::land_orders(plan) {
+        return None;
+    }
+    let pending: Vec<String> = list(plan, "army_layout")
+        .iter()
+        .filter(|e| e["when"].is_null())
+        .map(|e| text(&e["name_hint"]).to_string())
+        .filter(|h| {
+            !h.is_empty()
+                && !state.layout.contains_key(h)
+                && !state.done.contains_key(&format!("layout:impossible:{h}"))
+        })
+        .collect();
+    if pending.is_empty() {
+        return None;
+    }
+    let since = *state.done.entry("op:layoutwait".to_string()).or_insert(now);
+    (now - since < LAYOUT_WAIT_DAYS * DAY).then_some(pending)
 }
 
 /// Whether an operation of the plan names `hint` as one of its formation or hold armies.
@@ -640,6 +673,17 @@ pub(super) fn step(
         return Ok(None);
     }
     refresh(state, tools, plan, now);
+    if let Some(pending) = layout_pending(state, plan, now) {
+        state.op_notes.insert(
+            "layout".to_string(),
+            format!(
+                "operations wait for the army layout to form: {}",
+                pending.join(", ")
+            ),
+        );
+        return Ok(None);
+    }
+    state.op_notes.remove("layout");
     let active: Vec<(String, Value)> = ops
         .iter()
         .enumerate()

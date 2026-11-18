@@ -811,3 +811,27 @@ fn a_player_order_on_an_owned_army_is_refused_outside_the_executor() {
         "x".to_string(),
     )]));
 }
+
+#[test]
+fn the_operations_own_nothing_until_the_army_layout_has_formed() {
+    let game = Game::new();
+    let mut plan = plan();
+    plan["army_layout"] = json!([
+        {"name_hint": "Mitte", "state": 64, "role": "strike"},
+        {"name_hint": "Later", "state": 64, "role": "guard", "when": "owner:64=GER"}]);
+    let mut state = State::default();
+    refresh(&mut state, &game, &plan, START);
+    assert!(state.op_owned.is_empty());
+    assert_eq!(step(&mut state, &game, &plan, "l", START).unwrap(), None);
+    assert!(state.op_notes["layout"].contains("Mitte"));
+    // the role bound (a dated role is not waited for): the operations own their armies
+    state.layout.insert("Mitte".into(), "Mitte".into());
+    refresh(&mut state, &game, &plan, START + 1);
+    assert!(state.op_owned.contains_key("Mitte"));
+    // a layout that never forms holds the operations LAYOUT_WAIT_DAYS at most
+    let mut state = State::default();
+    refresh(&mut state, &game, &plan, START);
+    assert!(state.op_owned.is_empty());
+    refresh(&mut state, &game, &plan, START + LAYOUT_WAIT_DAYS * DAY);
+    assert!(state.op_owned.contains_key("Mitte"));
+}
