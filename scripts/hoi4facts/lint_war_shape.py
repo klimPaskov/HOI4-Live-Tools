@@ -23,12 +23,15 @@ lint_force.check after the force rules, on the same war list from force.plan_war
                           (province_controller / province_controlled atoms) instead of a state lost or a share
                           of land, or whose phase attacks nothing (war.axes [] or no axes over an empty plan
                           war.axes): one lost border province then holds the whole war.
+  war.guarantor           a declaration on a country another country guarantees at the start (give_guarantee in
+                          history/countries) while the plan has no war with the guarantor that day.
 """
 from . import derive
 from . import force as fm
 
 HOLD_MIN = 2   # divisions per border state: the executor's war-risk read wants at least 2 (borders_not_held)
-RULES = ("war.axes_missing", "war.objective_not_at_war", "war.hold_sector", "war.mobile_axis", "war.recovery_phase")
+RULES = ("war.axes_missing", "war.objective_not_at_war", "war.hold_sector", "war.mobile_axis", "war.recovery_phase",
+         "war.guarantor")
 
 
 def _fmt(d):
@@ -89,6 +92,20 @@ class Shape:
     def gone(self, day):
         return {t for t, d in self.caps.items() if d is not None and d < day}
 
+    def guarantors(self, target):
+        """Countries that guarantee `target` at the start (give_guarantee in history/countries, conditions decided
+        for the start date). A guarantee the AI gives or drops later is not read."""
+        if not hasattr(self, "_guar"):
+            self._guar = {}
+            w = self.lint.world
+            for t in self.lint.game.country_tags():
+                try:
+                    for g in w.country(t)["guarantees"]:
+                        self._guar.setdefault(g.get("v"), set()).add(t)
+                except Exception:  # noqa: BLE001  (a tag with no history file)
+                    continue
+        return self._guar.get(target, set()) - {self.lint.tag}
+
     def likely(self, w):
         """Countries expected to join a war: every joiners_ok of the declarations on its first day and the
         phase's war.enemies on that day (guarantors and allies, whether or not they border the target)."""
@@ -97,7 +114,35 @@ class Shape:
             if isinstance(e, dict) and e.get("action") in ("declare", "declare_war") and e.get("target") in w["targets"]:
                 out |= {j for j in e.get("joiners_ok") or [] if isinstance(j, str)}
         out |= {t for t in self.war_at(w["start"])[1].get("enemies") or [] if isinstance(t, str)}
+        for t in w["targets"]:
+            out |= self.guarantors(t)
         return out - {self.lint.tag}
+
+    def guarantees(self):
+        """war.guarantor: a declaration on a country another country guarantees at the start, with the guarantor in
+        none of the plan's wars on that day."""
+        lint = self.lint
+        joiners = set()
+        for e in lint.list_of("diplomacy"):
+            if isinstance(e, dict):
+                joiners |= {j for j in e.get("joiners_ok") or [] if isinstance(j, str)}
+        for w in self.wars:
+            if "at war at the start" in w["source"]:
+                continue
+            day = w["start"]
+            known = self.hostile(day) | set(w["enemy_tags"]) | self.gone(day)
+            known |= {j for e in lint.list_of("diplomacy") if isinstance(e, dict) and e.get("target") in w["targets"]
+                      for j in e.get("joiners_ok") or [] if isinstance(j, str)}
+            known |= {t for t in self.war_at(day)[1].get("enemies") or [] if isinstance(t, str)}
+            for t in w["targets"]:
+                for g in sorted(self.guarantors(t) - known - set(w["targets"])):
+                    later = self.first_war_day(g)
+                    lint.add("error", "war.guarantor", f"war {w['id']}",
+                             f"{w['id']} declares on {t} on {_fmt(day)}, and {g} guarantees {t} at the start "
+                             "(history/countries give_guarantee): the guarantor enters that day, but the plan "
+                             + (f"fights {g} only from {_fmt(later)}" if later else f"has no war with {g}")
+                             + f". Plan {g} into this war (joiners_ok, its force and its border held) or end the "
+                               "guarantee first (unconfirmed offline: whether the guarantee still stands that day)")
 
     def first_war_day(self, tag):
         ds = [w["start"] for w in self.wars if tag in w["enemy_tags"]]
@@ -308,6 +353,7 @@ class Shape:
 def check(ctx):
     s = Shape(ctx.lint, ctx.tl, ctx.wars)
     s.recovery()
+    s.guarantees()
     s.axes()
     s.objectives()
     s.holds()
