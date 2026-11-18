@@ -151,7 +151,9 @@ the player decides strategy:
   default war missions). At war the other domains wait up to three game days for their turn
   (`scheduler.war_max_wait_days`).
 - A failed war order (front, offensive, plan, move, air mission) rests in game time: 12 game
-  hours after its second failure in a row, doubling to 4 days, never wall seconds.
+  hours after its second failure in a row, doubling to 4 days, never wall seconds. A slow
+  failure rests in proportion to the seconds it held the input (16 game hours a second, at most
+  20 days), so one stuck order never takes the input lane; the army's other orders still go.
 - Lines first. An army without its lines gets its front and its offensive line in one step,
   before any rename, commander or disband: planning only grows once the lines stand. In a game
   still paused before the first unpause the executor draws them too, and the feed says

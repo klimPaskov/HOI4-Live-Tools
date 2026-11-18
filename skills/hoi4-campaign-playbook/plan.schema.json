@@ -5471,6 +5471,11 @@
               "type": "number",
               "default": 25
             },
+            "reopen": {
+              "type": "boolean",
+              "default": true,
+              "description": "an army with every objective in reach closed reopens the one it would choose without the closures instead of standing idle (the worn gate still holds back a worn army)"
+            },
             "beside": {
               "type": "number",
               "default": 2.0

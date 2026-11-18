@@ -971,9 +971,9 @@ enum Rest {
 /// input `cost` seconds (see `State::backing_off`).
 fn ledger_rest(war: bool, in_row: u32, cost: u64) -> (GameHour, Rest) {
     let (first, base, cap, per_second, cost_cap, given_up) = if war {
-        (2, 12, 4 * DAY, 4, 3 * DAY, 6 * DAY)
+        (2, 12, 4 * DAY, 16, 20 * DAY, 6 * DAY)
     } else {
-        (3, 10 * DAY, 80 * DAY, 16, 30 * DAY, 60 * DAY)
+        (3, 10 * DAY, 80 * DAY, 32, 60 * DAY, 60 * DAY)
     };
     if in_row >= GIVE_UP_AFTER {
         return (given_up, Rest::GivenUp);
@@ -1233,12 +1233,15 @@ impl State {
     ///
     /// - War orders (an army's front, offensive, plan, move, fall-back, area defence; an air
     ///   mission or rebase): the second failure in a row rests 12 game hours, each further one
-    ///   twice that, at most 4 game days; a try that held the input `cost` seconds rests
-    ///   `cost * 4` game hours (at most 3 game days); given up after GIVE_UP_AFTER failures in
-    ///   a row, the order rests 6 game days, then one more try decides.
+    ///   twice that, at most 4 game days; given up after GIVE_UP_AFTER failures in a row, the
+    ///   order rests 6 game days, then one more try decides.
     /// - Every other order: the third failure in a row rests 10 game days, each further one
-    ///   twice that, at most 80; a costly try rests `cost * 16` game hours (at most 30 days);
-    ///   a given-up order rests 60 game days.
+    ///   twice that, at most 80; a given-up order rests 60 game days.
+    /// - A try that held the input `cost` seconds (COSTLY_FAILURE or more) rests in proportion,
+    ///   so a slow failure cannot take the input lane: `cost * 16` game hours for a war order
+    ///   (at most 20 days; at speed 3 a wall second is about 8 game hours, so the order holds
+    ///   at most a third of the lane while it keeps failing), `cost * 32` for any other (at most
+    ///   60 days). The order's army gets its other orders meanwhile (the ledger is per order).
     ///
     /// While the game clock stands still (a paused setup) a game hour is taken as
     /// 1 / STILL_HOURS_PER_SECOND wall seconds, so a paused game neither spins nor waits forever.
@@ -11902,25 +11905,24 @@ mod tests {
                 .unwrap()
                 .1
         };
-        // a 47 s search that ends in a refusal rests 47 * 16 game hours (about 31 days, at
-        // most 30): in game time, however little wall time passed
+        // a 47 s search that ends in a refusal rests 47 * 32 game hours (about 63 days, at
+        // most 60): in game time, however little wall time passed
         send(&mut state, "hoi4_army_create", START, 0);
         assert_eq!(*tools.0.borrow(), 1);
-        let why = send(&mut state, "hoi4_army_create", START + 29 * DAY, 100_000);
+        let why = send(&mut state, "hoi4_army_create", START + 59 * DAY, 100_000);
         assert_eq!(*tools.0.borrow(), 1);
         assert!(
             why.starts_with("skipped: the last try of this order failed after 47 s on the input; it waits 1 more game days"),
             "{why}"
         );
-        send(&mut state, "hoi4_army_create", START + 30 * DAY, 100_001);
+        send(&mut state, "hoi4_army_create", START + 60 * DAY, 100_001);
         assert_eq!(*tools.0.borrow(), 2);
-        // a war order that held the input 31 s rests 31 * 4 game hours (about 5 days, at most
-        // 3): wb3's pocket fall-back was held ~25 game days by 260 wall seconds
-        state.act_seconds = Some(31);
+        // a war order that held the input 9 s rests 9 * 16 game hours (6 days)
+        state.act_seconds = Some(9);
         send(&mut state, "hoi4_army_move", START, 0);
-        let why = send(&mut state, "hoi4_army_move", START + 2 * DAY, 0);
+        let why = send(&mut state, "hoi4_army_move", START + 5 * DAY, 0);
         assert!(why.ends_with("it waits 1 more game days"), "{why}");
-        send(&mut state, "hoi4_army_move", START + 3 * DAY, 0);
+        send(&mut state, "hoi4_army_move", START + 6 * DAY, 0);
         assert_eq!(*tools.0.borrow(), 4);
         // a quick refusal is not held back before the third failure
         state.act_seconds = Some(1);
