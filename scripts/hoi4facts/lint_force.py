@@ -221,6 +221,13 @@ class Ctx:
                             "(facts.force.needs gives the arithmetic of each war)")
             return
         named = [set(x.get("enemies") or []) | {x.get("id")} for x in self.fd_list("wars")]
+        # every country the goal defeats has its war in the force design, whatever horizon fights it
+        for tag, where in sorted(fm.goal_enemies(self.lint).items()):
+            if not any(tag in n for n in named):
+                self.lint.add("error", "force.required", "force_design.wars",
+                              f"the goal defeats {tag} ({where}) and no force_design.wars entry names it: give that "
+                              "war its start, duration_days, decisive reasons, axes, the land, air and sea force by "
+                              "date and the sea operations that reach it, even when a later horizon fights it")
         for w in self.wars:
             if not any(set(w["targets"]) & n for n in named):
                 self.lint.add("error", "force.required", "force_design.wars",

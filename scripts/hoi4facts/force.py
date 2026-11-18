@@ -394,6 +394,34 @@ def _atoms(pred):
             yield from _atoms(p)
 
 
+_VP_SHARE = re.compile(r"^vp_share:([A-Z][A-Z0-9]{2})\s*(<=?)\s*([0-9.]+)$")
+
+
+def goal_enemies(lint):
+    """{tag: where} for every country the goal or the checkpoints defeat: capitulated:TAG, or vp_share:TAG <= x
+    (its victory points taken down to a share under one half)."""
+    out = {}
+    goal = lint.plan.get("goal") if isinstance(lint.plan.get("goal"), dict) else {}
+    sources = [("goal.predicates", goal.get("predicates"))] + [
+        (f"checkpoints {c.get('id')}", c.get("must")) for c in lint.list_of("checkpoints")]
+    for where, pred in sources:
+        for a in _atoms(pred):
+            if not isinstance(a, str):
+                continue
+            tag = None
+            if a.startswith("capitulated:"):
+                tag = a.split(":", 1)[1].strip()
+            else:
+                m = _VP_SHARE.match(a.replace(" ", ""))
+                if m and float(m.group(3)) < 0.5:
+                    tag = m.group(1)
+            if tag and tag != lint.tag:
+                out.setdefault(tag, where)
+    # a tag that holds no state at the start (a releasable such as Indonesia or Malaya) is fought as its owner
+    owners = {r.get("owner") for r in lint.world.states().values()}
+    return {t: w for t, w in out.items() if t in owners}
+
+
 def capitulation_days(lint):
     """{tag: earliest checkpoint day whose `must` names capitulated:<tag>}."""
     out = {}
