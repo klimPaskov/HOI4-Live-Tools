@@ -175,7 +175,8 @@ Read: `strategy.md` "Force architecture", "Air and naval support"; `templates-eq
    - **Garrison** for occupied land (item 23).
    Then write `force_design`: `wars` [{`id`, `enemies`, `kind`, `axes`, `duration_days`, `decisive`, `tasks`
    phase by phase, `why`}] (every country the goal or the checkpoints defeat has its war here, even one a later
-   horizon fights: lint `force.required`; one whose capital lies across the sea has its landing in `sea`), `sea` (item 21.7), `bomber_why` when no bombers,
+   horizon fights: lint `force.required`; one whose capital lies across the sea has its landing in `sea`; a
+   `vp_share:TAG <= x` goal has vp_targets that take 1 - x of TAG's victory points: lint `conquest.threshold`), `sea` (item 21.7), `bomber_why` when no bombers,
    `land` [{`template`, `role` (breakthrough, exploit, line, assault, mountain, marine, paratrooper,
    garrison, reserve, anti_tank), `count` (divisions fielded by `ready`, start divisions included), `ready`,
    `war`, `phase`, `why`}], `air` [{`kind`, `equipment`, `count` (planes by `ready`), `ready`, `war`,

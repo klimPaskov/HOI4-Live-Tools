@@ -102,7 +102,7 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            executor folds them into tasks of the nearest formation either way
   army.marshal             (warning) two or more formations and no army_group over them (one field marshal per
                            theatre); (info) a group with no marshal: the executor picks the best free field marshal
-  conquest.threshold       vp_targets below the enemy's surrender threshold (base limit plus its
+  conquest.threshold       vp_targets below the enemy's surrender threshold, or below 1 - x of a vp_share:TAG <= x goal (base limit plus its
                            starting surrender_limit modifiers), when the goal is a capitulation; the
                            threshold is the one at war support 50% or more (low war support lowers it, and
                            facts.surrender.war_support gives the lower numbers for earlier checkpoints)
@@ -1760,6 +1760,28 @@ class Lint:
                 self.add("error", "conquest.threshold", "vp_targets",
                          f"targets hold {got:g} of {enemy}'s {s['total_vp']:g} VP; capitulation needs {s['vp_needed']} "
                          f"(limit {s['limit']:g}: base {s['base']:g}, {mods}){low}")
+        # vp_share:TAG <= x in the goal: the targets take at least 1 - x of TAG's own victory points
+        shares = {}
+        for pr in self.goal.get("predicates") or []:
+            for a in _atoms(pr):
+                m = re.match(r"^vp_share:([A-Z][A-Z0-9]{2})\s*<=?\s*([0-9.]+)$", str(a).replace(" ", ""))
+                if m and m.group(1) != self.tag:
+                    x = float(m.group(2))
+                    x = x / 100.0 if x > 1 else x
+                    shares[m.group(1)] = min(shares.get(m.group(1), 1.0), x)
+        if shares:
+            taken = set()
+            for e in targets:
+                taken.update(self.captures(e))
+            for enemy, x in sorted(shares.items()):
+                total = sum(v for p, v in vps.items() if owners.get(pstate.get(p)) == enemy)
+                got = sum(vps.get(p, 0) for p in taken if owners.get(pstate.get(p)) == enemy)
+                need = (1.0 - x) * total
+                if total and got + 1e-6 < need:
+                    self.add("error", "conquest.threshold", "vp_targets",
+                             f"the goal holds {enemy} to vp_share <= {x:g}: the targets must take {need:g} of its "
+                             f"{total:g} victory points and hold {got:g}. Give it a dated target set (routes, the "
+                             "landings that reach it, the force per front), even when a later horizon fights it")
         self.facts["surrender"] = surr
         if surr:
             # rows on another country's state count nothing towards the surrender (owner at the start)
