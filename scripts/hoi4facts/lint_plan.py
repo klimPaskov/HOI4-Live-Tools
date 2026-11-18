@@ -134,7 +134,8 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
   conquest.mandatory       a state the goal must control has no vp target (warning: provinces of a
                            fully-controlled state left out)
   conquest.adjacency       target (or the first province of its path) not next to own land or an
-                           earlier target; path provinces not touching
+                           earlier target, and not on a planned landing's beach (invasions target_province, else
+                           its target_state); path provinces not touching
   conquest.neutral_land    a vp target or path province in the land of a country the plan neither fights nor
                            is allied to at the start (no unit crosses a neutral border); warning when a plan
                            predicate names that country gone, beaten or at war (the leg waits for it)
@@ -1278,12 +1279,30 @@ class Lint:
                 elif b in kinds["factory"] and sid in states:
                     factory_checks(f"construction[{i}]", b, sid, sid in legacy_infra or sid in planned_infra)
 
+    def landing_heads(self):
+        """Provinces a planned landing puts troops on: each invasion's target_province, or every province of its
+        target_state when no province is named. A vp target path may start there."""
+        out = set()
+        states = self.game.states()
+        for inv in self.list_of("invasions"):
+            if not isinstance(inv, dict):
+                continue
+            tp = inv.get("target_province")
+            if isinstance(tp, int) or (isinstance(tp, str) and tp.isdigit()):
+                out.add(int(tp))
+                continue
+            ts = inv.get("target_state")
+            if isinstance(ts, int) or (isinstance(ts, str) and str(ts).isdigit()):
+                out.update(states.get(int(ts), {}).get("provinces", []))
+        return out
+
     def legs(self):
         """[(target index, entry, leg province list or None, problems)] for vp_targets in order."""
         if getattr(self, "_legs", None) is not None:
             return self._legs
         adj = self.adjacency()
         ctl = set(self.start_control())
+        landed = self.landing_heads()
         out = []
         for i, e in enumerate(self.targets()):
             problems = []
@@ -1294,7 +1313,7 @@ class Lint:
                     problems.append(f"path provinces {a} and {c} do not touch")
             anchors = [n for n in adj.get(head, ()) if n in ctl]
             leg = None
-            if head in ctl:
+            if head in ctl or head in landed:  # own land, an earlier target, or a beach a planned landing takes
                 leg = path + [e["province"]]
             elif anchors:
                 graph = self.game.map_graph()

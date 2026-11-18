@@ -113,6 +113,20 @@ class Britain(unittest.TestCase):
         self.assertTrue(any("defeats USA" in m for m in msgs), msgs)
         self.assertFalse(any("defeats ENG" in m for m in msgs), msgs)  # the Kent landing reaches London's island
 
+    def test_a_target_on_the_landing_beach_is_reachable(self):
+        beach = sorted(self.game.states()[KENT]["provinces"])[0]
+        adjacency = {}
+        for landing in (True, False):
+            plan = germany_against_britain()
+            if not landing:
+                plan["invasions"] = []
+            plan["vp_targets"] = list(plan.get("vp_targets") or []) + [
+                {"province": beach, "state": KENT, "by": "1940.12.1", "path": [beach]}]
+            out = lint_plan.lint(plan, self.game)
+            adjacency[landing] = [f for f in self.rules(out, "conquest.adjacency") if str(beach) in f["where"]]
+        self.assertFalse(adjacency[True], adjacency[True])
+        self.assertTrue(adjacency[False])  # no landing: the island is out of reach by land
+
     def test_declared_operations(self):
         ops = {o["id"]: o for o in self.planned["facts"]["force"]["navy"]["operations"]}
         self.assertEqual(ops["sea_lion"]["divisions"], 30)
