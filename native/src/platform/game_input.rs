@@ -225,6 +225,18 @@ pub(crate) trait GameInput: Send + Sync {
             )),
         }
     }
+    /// A left-button drag through every point, button held all the way (a segment front drawn
+    /// along a bending border). Two points are a plain `drag`; a platform without a path drag
+    /// refuses more.
+    fn drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+        match points {
+            [a, b] => self.drag(game, *a, *b),
+            _ => Err(crate::error::Error::new(
+                "capability_unavailable",
+                "This platform's input drags two-point strokes only",
+            )),
+        }
+    }
     /// Wheel scroll at a point; positive `pixels` scrolls content up.
     fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()>;
     /// `count` wheel events in one quick flick (one smooth camera movement in the game).
@@ -320,6 +332,9 @@ macro_rules! delegate_game_input {
             }
             fn right_drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
                 (**self).right_drag_path(game, points)
+            }
+            fn drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+                (**self).drag_path(game, points)
             }
             fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()> {
                 (**self).scroll(game, at, pixels)

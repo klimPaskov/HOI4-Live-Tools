@@ -2522,7 +2522,7 @@ fn war_first_steps(
         |state, tools, plan, lease, now| {
             let ops = war_burst(state, tools, plan, lease, now, plan_operation::step)?;
             let ok = state.last_ok;
-            let air = if ops.is_some() || plan_operation::running(state) {
+            let air = if ops.is_some() || plan_operation::active(state) {
                 war_burst(state, tools, plan, lease, now, air_war_step)?
             } else {
                 None
@@ -5412,8 +5412,15 @@ fn air_war_step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
+    // In peace only for a prepared operation: its wings go to bases in range and take their
+    // missions over its regions before the declaration (in peace the game takes a mission over a
+    // foreign region; o1c-o1n: at war the wings first tried from inland bases out of range, were
+    // rebased late, and none flew over the operation by day 14).
     if !state.war_active {
-        return Ok(None);
+        if !plan_operation::active(state) {
+            return Ok(None);
+        }
+        return air_war_missions(state, tools, plan, lease, now);
     }
     if let Some(line) = plan_manage::air_plan_step(state, tools, plan, lease, now)? {
         return Ok(Some(line));
@@ -5435,24 +5442,59 @@ fn air_war_missions(
 ) -> Result<Option<String>> {
     if plan["air"]["war_missions"] == json!(true) && !state.skipped(now, "aircheck", "x") {
         let wars = tools.call("hoi4_wars", &json!({}))?;
-        // The own states on a border with an enemy, the war's theatre and its guard states:
-        // a wing flies from a base that lies there. A wing based elsewhere (the home country
-        // of a colonial war) is out of range, and the game refuses the mission every time.
-        let fronts: Vec<i64> = list(&wars, "borders")
+        let operation = operation_targets(tools);
+        let at_war = state.war_active
+            || list(&wars, "borders")
+                .iter()
+                .any(|b| b["hostile"] == json!(true));
+        if !at_war && operation.is_empty() {
+            return Ok(None);
+        }
+        // The borders the air works from: at war the hostile ones; in peace (a prepared
+        // operation) the borders facing the operation's targets.
+        let borders: Vec<&Value> = list(&wars, "borders")
             .iter()
-            .filter(|b| b["hostile"] == json!(true))
+            .filter(|b| {
+                if at_war {
+                    b["hostile"] == json!(true)
+                } else {
+                    ints(&b["neighbour_states"])
+                        .iter()
+                        .any(|t| operation.contains(t))
+                }
+            })
+            .collect();
+        let fronts: Vec<i64> = borders
+            .iter()
+            .flat_map(|b| ints(&b["own_border_states"]))
+            .collect();
+        // The own border states facing the operation's targets: with an operation a wing flies
+        // only from a base there. The war's theatre spans the whole country in a war of
+        // neighbours, and a wing on the Rhine counted as near: it tried every Polish region out
+        // of range, one failure at a time, before it was rebased (o1n, 18 Nov 2026: of the wings
+        // that failed over Poznan's region at war, both were still on Westfalen; from Silesia and
+        // East Prussia the same region took fighters and CAS at war at once, airdbg2).
+        let facing: HashSet<i64> = borders
+            .iter()
+            .filter(|b| {
+                ints(&b["neighbour_states"])
+                    .iter()
+                    .any(|t| operation.contains(t))
+            })
             .flat_map(|b| ints(&b["own_border_states"]))
             .collect();
         let mut near: HashSet<i64> = fronts.iter().copied().collect();
-        near.extend(ints(&plan["war"]["theatre"]));
-        near.extend(ints(&plan["war"]["guard_states"]));
-        let operation = operation_targets(tools);
+        if facing.is_empty() {
+            near.extend(ints(&plan["war"]["theatre"]));
+            near.extend(ints(&plan["war"]["guard_states"]));
+        } else {
+            near = facing.clone();
+        }
         // a wing that waits after a failed try is asked again within hours, not in 3 days (o1l:
         // after one try each, every wing waited and the air check slept for 3 days)
         let mut waiting = false;
-        let contact: HashSet<i64> = list(&wars, "borders")
+        let contact: HashSet<i64> = borders
             .iter()
-            .filter(|b| b["hostile"] == json!(true))
             .flat_map(|b| ints(&b["neighbour_states"]))
             .collect();
         if let Some(first) = fronts.first().copied() {
@@ -5494,9 +5536,21 @@ fn air_war_missions(
                 untried.sort_by_key(|t| !contact.contains(t));
                 let far = state.done.contains_key(&format!("airfar:{name}"))
                     || (!operation.is_empty() && untried.is_empty());
+                // already moved to a base facing the operation: a refusal there is not the
+                // range (o2a: fighters just landed at 66 and 763 failed over Danzig, the rebase
+                // to the base they stood at failed and held them 7 days; none flew by day 14):
+                // every region is asked again in a day
+                let moved = state.done.contains_key(&format!("airmoved:{name}"));
+                if far && moved && base.is_some_and(|b| facing.contains(&b)) {
+                    let mine = format!("airtry:{name}:");
+                    state.done.retain(|k, _| !k.starts_with(&mine));
+                    state.done.remove(&format!("airfar:{name}"));
+                    state.skip(now, "airwing", &name, DAY);
+                    continue;
+                }
                 if far || (base.is_some_and(|b| !near.contains(&b)) && !operation.is_empty()) {
                     let planes = wing["aircraft"].as_i64().unwrap_or(0);
-                    if let Some(to) = front_air_base(&air, &wars, &operation, &fronts, planes) {
+                    if let Some(to) = front_air_base(&air, &facing, &fronts, planes) {
                         let (ok, why) = state.act(
                             tools,
                             lease,
@@ -5504,7 +5558,9 @@ fn air_war_missions(
                             json!({"wing": name, "state_id": to}),
                             "ar",
                         )?;
-                        state.skip(now, "airwing", &name, if ok { DAY } else { 7 * DAY });
+                        // the game takes the mission while the wing is still flying to the new
+                        // base (airdbg2, 18 Nov 2026): ask again within hours, not a day later
+                        state.skip(now, "airwing", &name, if ok { DAY / 8 } else { DAY });
                         if ok {
                             state.done.remove(&format!("airfar:{name}"));
                             state.done.insert(format!("airmoved:{name}"), now);
@@ -5516,7 +5572,7 @@ fn air_war_missions(
                         )));
                     }
                 }
-                let state_id = air_target(&wars, &untried, base, first);
+                let state_id = air_target(&borders, &untried, base, first);
                 let (ok, why) = state.act(
                     tools,
                     lease,
@@ -5569,23 +5625,7 @@ fn air_war_missions(
 
 /// The own front air base with room for `planes` (`air_bases[].free`): one across the border from
 /// an operation target first, then the most free room.
-fn front_air_base(
-    air: &Value,
-    wars: &Value,
-    operation: &[i64],
-    fronts: &[i64],
-    planes: i64,
-) -> Option<i64> {
-    let facing: HashSet<i64> = list(wars, "borders")
-        .iter()
-        .filter(|b| b["hostile"] == json!(true))
-        .filter(|b| {
-            ints(&b["neighbour_states"])
-                .iter()
-                .any(|t| operation.contains(t))
-        })
-        .flat_map(|b| ints(&b["own_border_states"]))
-        .collect();
+fn front_air_base(air: &Value, facing: &HashSet<i64>, fronts: &[i64], planes: i64) -> Option<i64> {
     list(air, "air_bases")
         .iter()
         .filter_map(|b| Some((b["state_id"].as_i64()?, b["free"].as_i64().unwrap_or(0))))
@@ -5641,11 +5681,7 @@ fn operation_targets(tools: &dyn Tools) -> Vec<i64> {
 /// The state a war wing based in `base` flies over: an operation target across the border its
 /// base lies on, else the first operation target, else the first enemy state across its border,
 /// else (no enemy states listed) the front state itself.
-fn air_target(wars: &Value, operation: &[i64], base: Option<i64>, first_front: i64) -> i64 {
-    let hostile: Vec<&Value> = list(wars, "borders")
-        .iter()
-        .filter(|b| b["hostile"] == json!(true))
-        .collect();
+fn air_target(hostile: &[&Value], operation: &[i64], base: Option<i64>, first_front: i64) -> i64 {
     let across: Vec<i64> = hostile
         .iter()
         .filter(|b| base.is_some_and(|s| ints(&b["own_border_states"]).contains(&s)))
@@ -5665,7 +5701,7 @@ fn air_target(wars: &Value, operation: &[i64], base: Option<i64>, first_front: i
         .find(|b| ints(&b["own_border_states"]).contains(&first_front))
         .and_then(|b| ints(&b["neighbour_states"]).first().copied());
     match base {
-        Some(b) if ints_any(&hostile, b) => b,
+        Some(b) if ints_any(hostile, b) => b,
         _ => first_enemy.unwrap_or(first_front),
     }
 }
@@ -11522,6 +11558,7 @@ mod tests {
         let wars = json!({"borders": [
             {"neighbour_tag": "FRA", "hostile": true, "own_border_states": [42], "neighbour_states": [28]},
             {"neighbour_tag": "POL", "hostile": true, "own_border_states": [66, 67], "neighbour_states": [86, 85]}]});
+        let wars: Vec<&Value> = wars["borders"].as_array().unwrap().iter().collect();
         // the operation's targets: a Silesian wing flies over the one across its border
         assert_eq!(air_target(&wars, &[10, 85], Some(66), 42), 85);
         // a western wing joins the operation (no target across its own border)
@@ -11544,23 +11581,18 @@ mod tests {
         // executing targets first, a drawn one behind them
         assert_eq!(operation_targets(&Ops), vec![10, 85, 5]);
         // an inland wing first goes to the front base facing the operation, with room for it
+        let facing: HashSet<i64> = [66, 67].into_iter().collect();
         let air = json!({"air_bases": [
             {"state_id": 42, "free": 900}, {"state_id": 66, "free": 200},
             {"state_id": 67, "free": 50}, {"state_id": 3, "free": 2000}]});
-        assert_eq!(
-            front_air_base(&air, &wars, &[85], &[42, 66, 67], 100),
-            Some(66)
-        );
-        assert_eq!(front_air_base(&air, &wars, &[85], &[42, 66, 67], 300), None);
+        assert_eq!(front_air_base(&air, &facing, &[42, 66, 67], 100), Some(66));
+        assert_eq!(front_air_base(&air, &facing, &[42, 66, 67], 300), None);
         // no operation: any front base with room
         assert_eq!(
-            front_air_base(&air, &wars, &[], &[42, 66, 67], 300),
+            front_air_base(&air, &HashSet::new(), &[42, 66, 67], 300),
             Some(42)
         );
-        assert_eq!(
-            front_air_base(&air, &wars, &[85], &[42, 66, 67], 1000),
-            None
-        );
+        assert_eq!(front_air_base(&air, &facing, &[42, 66, 67], 1000), None);
     }
 
     #[test]
@@ -11585,21 +11617,72 @@ mod tests {
             }
         }
         let tools = Far(Default::default());
-        // the theatre spans the whole country: the far base counts as near
+        // the theatre spans the whole country: with an operation only the base facing it counts
+        // (o1n: wings on the Rhine tried every Polish region out of range before a rebase)
         let plan = json!({"air": {"war_missions": true}, "war": {"theatre": [52, 66]}});
-        let mut state = State::default();
+        let mut state = State {
+            war_active: true,
+            ..State::default()
+        };
         let first = air_war_missions(&mut state, &tools, &plan, "l", START)
             .unwrap()
             .unwrap();
-        assert!(
-            first.contains("air_superiority over state 85: false"),
-            "{first}"
-        );
-        let next = air_war_missions(&mut state, &tools, &plan, "l", START + DAY / 4 + 1)
+        assert!(first.contains("rebases to front state 66"), "{first}");
+        assert!(!tools
+            .0
+            .borrow()
+            .iter()
+            .any(|(n, _)| n == "hoi4_air_mission"));
+        assert!(!state.done.contains_key("airfar:JG 136"));
+    }
+
+    #[test]
+    fn a_prepared_operation_sends_its_wings_before_the_war() {
+        // peace: no hostile border; the operation's drawn offensive names 85 across 66
+        struct Peace(std::cell::RefCell<Vec<String>>, std::cell::Cell<i64>);
+        impl Tools for Peace {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push(name.to_string());
+                match name {
+                    "hoi4_wars" => Ok(json!({"borders": [
+                        {"neighbour_tag": "POL", "hostile": false, "own_border_states": [66], "neighbour_states": [85]},
+                        {"neighbour_tag": "FRA", "hostile": false, "own_border_states": [42], "neighbour_states": [28]}]})),
+                    "hoi4_armies" => Ok(json!({"army_groups": [{"plan": [{"offensives": [
+                        {"executing": false, "target": {"states": [85]}}]}]}]})),
+                    "hoi4_air" => Ok(
+                        json!({"air_bases": [{"state_id": 66, "free": 400}, {"state_id": 42, "free": 900}],
+                        "wings": [{"wing": "JG 136", "aircraft_type": "small_plane_airframe_0",
+                            "aircraft": 100, "standing_by": false, "missions": ["training"],
+                            "air_base": {"base_id": 3, "state_id": self.1.get()}}]}),
+                    ),
+                    "hoi4_air_rebase" => {
+                        self.1.set(args["state_id"].as_i64().unwrap());
+                        Ok(json!({"receipt": {"status": "Verified"}}))
+                    }
+                    _ => Ok(json!({"receipt": {"status": "Verified"}})),
+                }
+            }
+        }
+        let tools = Peace(Default::default(), std::cell::Cell::new(52));
+        let plan = json!({"air": {"war_missions": true}});
+        let mut state = State::default();
+        // no operation prepared: nothing in peace
+        assert!(air_war_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .is_none());
+        state.done.insert("op:op_poland:prep".into(), START);
+        let first = air_war_step(&mut state, &tools, &plan, "l", START)
             .unwrap()
             .unwrap();
-        assert!(next.contains("rebases to front state 66"), "{next}");
-        assert!(!state.done.contains_key("airfar:JG 136"));
+        assert!(first.contains("rebases to front state 66"), "{first}");
+        // asked again three hours later, from the facing base, over the operation's region
+        let next = air_war_step(&mut state, &tools, &plan, "l", START + DAY / 8 + 1)
+            .unwrap()
+            .unwrap();
+        assert!(
+            next.contains("air_superiority over state 85: true"),
+            "{next}"
+        );
     }
 
     #[test]
@@ -11641,13 +11724,15 @@ mod tests {
         }
         let tools = Two(Default::default(), std::cell::Cell::new(64));
         let plan = json!({"air": {"war_missions": true}, "war": {"theatre": [64, 66]}});
-        let mut state = State::default();
+        let mut state = State {
+            war_active: true,
+            ..State::default()
+        };
         for i in 0..8 {
             air_war_missions(&mut state, &tools, &plan, "l", START + i * (DAY / 4 + 1)).unwrap();
         }
-        // the contact region first (807); failing there the wing is out of range: it is
-        // rebased to the front base facing the operation, tries the contact region once more,
-        // then flies over Lodz (87) from there
+        // an inland wing is rebased to the base facing the operation first; there the contact
+        // region (807) fails and the wing flies over Lodz (87)
         let calls = tools.0.borrow().clone();
         assert_eq!(calls[0], 807);
         assert!(calls.contains(&87), "{calls:?}");

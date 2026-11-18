@@ -78,6 +78,8 @@ pub(super) struct Wing {
     pub base_id: i32,
     pub base_state: Option<i32>,
     pub transfer_base_id: i32,
+    /// The wing object's address (probes map its fields from it).
+    pub address: u64,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Base {
@@ -138,6 +140,7 @@ fn wing(r: &Reader<'_>, image: u64, address: u64, base: &Base) -> Result<Wing> {
         base_id: base.id,
         base_state: base.state,
         transfer_base_id: r.i32(address + w(WING_TRANSFER_BASE)?)?,
+        address,
     })
 }
 /// Own air bases and the wings stationed at each, from `strategic`.

@@ -61,6 +61,9 @@ enum Role {
     Group,
     Line,
     Mobile,
+    /// a mobile formation with `drive: "strike"`: no battle plan; at war the strike engine
+    /// moves it as one column on its line's victory points (plan_strike.rs)
+    Strike,
     Wing,
     Hold,
 }
@@ -278,6 +281,7 @@ fn units(state: &State, plan: &Value, op: &Value, roster: &Value) -> (Vec<Unit>,
             continue;
         }
         let role = match text(&f["role"]) {
+            "mobile" if text(&f["drive"]) == "strike" => Role::Strike,
             "mobile" => Role::Mobile,
             "wing" => Role::Wing,
             _ => Role::Line,
@@ -597,18 +601,20 @@ pub(super) fn step(
     Ok(None)
 }
 
-/// Ends the quiet timer: the next call of the step looks at once (after a declaration).
-/// An operation has executed and not yet ended (its armies fight).
-pub(super) fn running(state: &State) -> bool {
+/// An operation is under way: prepared (its armies own their lines, in peace too) and not
+/// finished. The air goes over its regions from the prepare on, so the wings already fly there
+/// when the war starts.
+pub(super) fn active(state: &State) -> bool {
     state.done.keys().any(|k| {
         k.starts_with("op:")
-            && k.ends_with(":exec")
+            && k.ends_with(":prep")
             && !state
                 .done
                 .contains_key(&format!("{}:end", &k[..k.len() - 5]))
     })
 }
 
+/// Ends the quiet timer: the next call of the step looks at once (after a declaration).
 pub(super) fn wake(state: &mut State) {
     state.bad.remove(&super::skip_key("opstep", "x"));
     state.op_owned_at = None;
@@ -634,8 +640,13 @@ fn one(
     let executed = state.done.contains_key(&key(id, "exec"));
     let (units, group) = units(state, plan, op, roster);
     if executed {
-        return advance(
+        if let Some(line) = advance(
             state, tools, plan, id, op, &units, roster, wars, &enemies, &at_war, lease, now,
+        )? {
+            return Ok(Some(line));
+        }
+        return strikes(
+            state, tools, plan, op, &units, roster, &enemies, &at_war, lease, now,
         );
     }
     if let Some(line) = prepare(
@@ -684,6 +695,11 @@ fn one(
         .iter()
         .filter(|u| attacker(u) && !offensives(roster, &u.name).is_empty())
         .collect();
+    if let Some(line) = strikes(
+        state, tools, plan, op, &units, roster, &enemies, &at_war, lease, now,
+    )? {
+        return Ok(Some(line));
+    }
     if attackers.iter().all(|u| executing(roster, &u.name)) && !attackers.is_empty() {
         state.done.insert(key(id, "exec"), now);
         state.done.insert(key(id, "line"), 0);
@@ -703,8 +719,98 @@ fn one(
     Ok(None)
 }
 
-/// A mobile formation: its army's game name, the plan's name, {template: count}.
-type Mobile = (String, String, Vec<(String, i64)>);
+/// The operation's strike formations (`drive: "strike"`) at war: the strike engine moves each as
+/// one column, at most `stack` (4) divisions a province, on the victory points of its line's
+/// states in order (then the nearest ones), resting by organisation. A segment front could not
+/// be drawn for the mobile army (the game took the whole 26-province border every time, beds
+/// o1i-o1n and airdbg4-5, 18 Nov 2026), and on the whole border its 15 divisions stood one a
+/// province and took nothing in 14 days. The infantry's executed plan follows behind.
+#[allow(clippy::too_many_arguments)]
+fn strikes(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    op: &Value,
+    units: &[Unit],
+    roster: &Value,
+    enemies: &[String],
+    at_war: &[String],
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let strikers: Vec<&Unit> = units
+        .iter()
+        .filter(|u| u.role == Role::Strike && army_row(roster, &u.name).is_some())
+        .collect();
+    let fighting: HashSet<String> = enemies
+        .iter()
+        .filter(|e| at_war.contains(e))
+        .cloned()
+        .collect();
+    if strikers.is_empty() || fighting.is_empty() {
+        return Ok(None);
+    }
+    // the largest victory point of every enemy state
+    let mut best: HashMap<i64, (i64, f64)> = HashMap::new();
+    let mut tags: Vec<&String> = fighting.iter().collect();
+    tags.sort();
+    for tag in tags {
+        let read = tools.call("hoi4_states", &json!({"query": tag}))?;
+        for row in list(&read, "states") {
+            let Some(sid) = row["state_id"].as_i64() else {
+                continue;
+            };
+            for vp in list(row, "victory_points") {
+                let (Some(p), v) = (
+                    vp["province"].as_i64(),
+                    vp["victory_points"].as_f64().unwrap_or(0.0),
+                ) else {
+                    continue;
+                };
+                if best.get(&sid).is_none_or(|b| v > b.1) {
+                    best.insert(sid, (p, v));
+                }
+            }
+        }
+    }
+    let mut rows: Vec<Value> = Vec::new();
+    let mut knobs = json!({});
+    for u in &strikers {
+        for s in &u.line {
+            if let Some((p, _)) = best.get(s) {
+                rows.push(json!({"army": u.name, "province": p, "path": []}));
+            }
+        }
+        if let Some(f) = list(op, "formations")
+            .iter()
+            .find(|f| resolve(state, text(&f["army"])) == u.name)
+        {
+            if f["strike"].is_object() {
+                knobs = f["strike"].clone();
+            }
+        }
+    }
+    // no posts on covered states: the strike engine would send divisions of the line armies
+    // (which the executed plan carries) to hold own states (o2a: Mitte and Süd)
+    if knobs.get("cover").is_none() {
+        knobs["cover"] = json!(0);
+    }
+    knobs["way"] = json!(true);
+    let mut p = plan.clone();
+    p["war"]["strike"] = knobs;
+    p["vp_targets"] = json!(rows);
+    let reserve: Vec<String> = list(roster, "armies")
+        .iter()
+        .map(|a| text(&a["army"]).to_string())
+        .filter(|n| !strikers.iter().any(|u| &u.name == n))
+        .collect();
+    let me = player(tools, plan);
+    Ok(super::plan_strike::step(state, tools, &p, lease, &me, &fighting, &reserve, now)?.flatten())
+}
+
+/// A formation to assemble: its army's game name, the plan's name, {template: count}, and the
+/// one army it is taken from (a hold part of a wing), else None (every army but the wings).
+type Mobile = (String, String, Vec<(String, i64)>, Option<String>);
 
 /// The assembly of a `mobile` formation: its `divisions` ({template: count}) are gathered out of
 /// every other army (a wing keeps its own: it fights on a separate border) with hoi4_army_detach,
@@ -727,9 +833,17 @@ fn assemble(
         .filter(|u| u.role == Role::Wing)
         .map(|u| u.name.as_str())
         .collect();
+    // a hold army with `from` (a holding part of an attacking wing that has its own land behind
+    // it: o1n, Armee Nord attacked Danzig and lost East Prussia's states 5 and 188) is assembled
+    // out of that one army
+    let hold_parts = list(op, "holds")
+        .iter()
+        .flat_map(|h| list(h, "armies").iter())
+        .filter(|a| !text(&a["from"]).is_empty());
     let mobiles: Vec<Mobile> = list(op, "formations")
         .iter()
         .filter(|f| text(&f["role"]) == "mobile")
+        .chain(hold_parts)
         .filter_map(|f| {
             let want: Vec<(String, i64)> = f["divisions"]
                 .as_object()?
@@ -737,12 +851,16 @@ fn assemble(
                 .filter_map(|(t, n)| Some((t.clone(), n.as_i64()?)))
                 .collect();
             let hint = text(&f["army"]).to_string();
-            Some((resolve(state, &hint), hint, want))
+            let from = f["from"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .map(|s| resolve(state, s));
+            Some((resolve(state, &hint), hint, want, from))
         })
-        .filter(|(name, _, want)| !name.is_empty() && !want.is_empty())
+        .filter(|(name, _, want, _)| !name.is_empty() && !want.is_empty())
         .collect();
     let mobile_names: HashSet<String> = mobiles.iter().map(|m| m.0.clone()).collect();
-    for (name, hint, want) in &mobiles {
+    for (name, hint, want, from) in &mobiles {
         // a formed army that kept the game's name: renamed once a day, at most three times; the
         // operation orders it under the game's name meanwhile (o1e: the name box read empty
         // right after the detach)
@@ -803,8 +921,10 @@ fn assemble(
                 text(&d["template"]) == template
                     && !army.is_empty()
                     && army != name
-                    && !wings.contains(army)
-                    && !mobile_names.contains(army)
+                    && match from {
+                        Some(src) => army == src,
+                        None => !wings.contains(army) && !mobile_names.contains(army),
+                    }
             }) {
                 if lack <= 0 {
                     break;

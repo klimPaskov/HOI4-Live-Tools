@@ -68,7 +68,15 @@ step can order them (marches, layout, exercises, strikes, guards, retakes, merge
 are refused with `owned_by_operation`). It first assembles each `mobile` formation from
 its `divisions` ({template: count}): those templates' divisions are moved out of every other army
 (a wing keeps its own; a source army is never emptied) and a new army is named after the
-formation. In peace it reconciles the wanted orders with the
+formation; a hold army with `from` (a holding part of an attacking wing that has its own land
+behind it, such as East Prussia behind Armee Nord) is assembled out of that one army and holds
+the hold's states. A mobile formation with `drive: "strike"` gets no front or line of its own (the
+game draws a front clicked on a shared border along the whole border and the armour stands one
+division a province): at war the strike engine moves it as one column, at most `strike.stack`
+(4) divisions a province, on the largest victory point of each state of its `offensive.target_line`
+in order, the way from the column when no path is given, resting by organisation; it posts no
+covers. From the prepare on the air goes too: wings rebase to free bases facing the operation and
+take their missions over its regions in peace. In peace it reconciles the wanted orders with the
 read-back on every pass and sends only the difference: exercises stopped, line armies and the
 armies of a hold group cleared of their own orders, mobile and wing fronts and lines, the group
 front and its line, each hold's front; a group line that misses its states is cleared and drawn

@@ -57,6 +57,29 @@ pub(super) fn own_wing(
         .into_iter()
         .find(|w| w.name == name))
 }
+/// Probe only (macprobe `dbg_wing:NAME[:LEN]`): the own wing's address and raw words, for
+/// mapping fields such as the army a wing is attached to.
+pub(super) fn debug_wing(process: &dyn Process, spec: &str) -> Result<Value> {
+    let (name, len) = match spec.rsplit_once(':') {
+        Some((a, n)) if n.parse::<usize>().is_ok() => (a, n.parse::<usize>().unwrap()),
+        _ => (spec, 0xa00),
+    };
+    read(process, |r, i| {
+        let w = own_wing(r, i, name)?
+            .ok_or_else(|| Error::new("wing_unknown", "No own wing with this name"))?;
+        let bytes = r.read(w.address, len.min(0x2000))?;
+        let words: Vec<String> = bytes
+            .chunks(8)
+            .map(|c| {
+                let mut x = [0u8; 8];
+                x[..c.len()].copy_from_slice(c);
+                format!("{:016x}", u64::from_le_bytes(x))
+            })
+            .collect();
+        Ok(json!({"wing": name, "address": format!("{:#x}", w.address),
+            "mission_mask": w.mission_mask, "region_id": w.region_id, "words": words}))
+    })
+}
 fn same(a: &str, b: &str) -> bool {
     a.trim().eq_ignore_ascii_case(b.trim())
 }
@@ -1349,6 +1372,7 @@ mod tests {
     }
     fn wing(name: &str, planes: i32, base_id: i32, state: i32) -> Wing {
         Wing {
+            address: 0,
             name: name.into(),
             unit: "light_plane".into(),
             equipment: "fighter_equipment_0".into(),

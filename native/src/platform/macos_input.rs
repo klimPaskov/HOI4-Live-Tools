@@ -847,6 +847,28 @@ impl<'p> MacKeys<'p> {
     }
     /// A right-button drag through every point of `points` (game-logical), one stroke.
     pub fn right_drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+        self.drag_path_with(game, points, true)
+    }
+    /// A left-button drag through every point of `points` (game-logical), one stroke.
+    pub fn drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+        self.drag_path_with(game, points, false)
+    }
+    fn drag_path_with(&self, game: (u32, u32), points: &[(f64, f64)], right: bool) -> Result<()> {
+        let (down, dragged, up, button) = if right {
+            (
+                RIGHT_MOUSE_DOWN,
+                RIGHT_MOUSE_DRAGGED,
+                RIGHT_MOUSE_UP,
+                RIGHT_BUTTON,
+            )
+        } else {
+            (
+                LEFT_MOUSE_DOWN,
+                LEFT_MOUSE_DRAGGED,
+                LEFT_MOUSE_UP,
+                LEFT_BUTTON,
+            )
+        };
         self.preflight()?;
         let content = self.verified_content(game)?;
         let path = points
@@ -856,11 +878,11 @@ impl<'p> MacKeys<'p> {
         let post = |kind: u32, point: Point| -> Result<()> {
             // SAFETY: a null source is allowed; the event is released after posting.
             unsafe {
-                let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, RIGHT_BUTTON);
+                let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, button);
                 if event.is_null() {
                     return Err(Error::new("input_unavailable", "Mouse event unavailable"));
                 }
-                let ready = if kind == RIGHT_MOUSE_UP {
+                let ready = if kind == up {
                     Ok(())
                 } else {
                     self.point_preflight(point)
@@ -875,7 +897,7 @@ impl<'p> MacKeys<'p> {
         };
         drag_path_sequence(
             &path,
-            (RIGHT_MOUSE_DOWN, RIGHT_MOUSE_DRAGGED, RIGHT_MOUSE_UP),
+            (down, dragged, up),
             16,
             30,
             || self.preflight(),
@@ -1897,6 +1919,9 @@ impl GameInput for MacKeys<'_> {
     }
     fn right_drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
         MacKeys::right_drag_path(self, game, points)
+    }
+    fn drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+        MacKeys::drag_path(self, game, points)
     }
     fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()> {
         MacKeys::scroll(self, game, at, pixels)
