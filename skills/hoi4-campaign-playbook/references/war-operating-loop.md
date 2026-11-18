@@ -227,7 +227,11 @@ the player decides strategy:
   until no army has an order left (`burst_orders` 16, `burst_seconds` 30): a war that opens
   draws every army's lines at once and executes them all in the next tick, and one army's failed
   order never holds the others. The air follows in the same tick (`air_plan` entries, then the
-  default war missions). At war the other domains wait up to three game days for their turn
+  default war missions), and while an operation runs it runs in every tick. A default war mission
+  goes over the operation's regions, the contact line first. A wing that fails over the contact
+  line is out of range and is rebased at once to a front base facing the operation; from there,
+  and over deeper regions, a failed region is not tried again and the next one is. A wing that
+  waits after a failure is asked again within hours. At war the other domains wait up to three game days for their turn
   (`scheduler.war_max_wait_days`).
 - A failed war order (front, offensive, plan, move, air mission) rests in game time: 12 game
   hours after its second failure in a row, doubling to 4 days, never wall seconds. A slow
