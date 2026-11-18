@@ -24,10 +24,9 @@ Germany, Poland and China appear only as worked examples.
 
 ## 2. Division templates (rules of thumb)
 
-- Widths follow terrain: plains/hills/desert 70 (+35 per extra attack direction),
-  forest/jungle 60 (+30), mountain/marsh 50 (+25), urban 80 (+40). Line divisions
-  14-18 wide for mountains and hills, 20 elsewhere; avoid 34-36 and 40+ outside
-  plains.
+- Widths follow terrain: plains, hills and desert 70 (+35 per extra attack
+  direction; hills are as wide as plains), forest/jungle 60 (+30), mountain/marsh 50
+  (+25), urban 80 (+40). Fit is a weak criterion: over-width costs 1% per 1% of the battle width over (cap -33%), so a side 10% over fights at about 99% and 20% over at about 96%; stacking costs 2% per division beyond 5 (3 more per extra attack direction). Choose the width by regimental columns: 18, 24 or 30 (three battalions per column for 3, 4 or 5 columns); 25 for one-direction mountain axes; 35-40 only off one-direction mountain, marsh and forest battles (36 still fills forest at 96%).
 - A non-HQ template takes up to **5 support companies**, one of each type; they
   add no width and do not slow the division. Engineers, recon, artillery, AA and
   AT supports are worth their slots; they change organisation, supply use and
@@ -47,9 +46,10 @@ Germany, Poland and China appear only as worked examples.
    A requirement can be an army-size gate, a political gate or a faction gate: read
    the focus's availability and bypass conditions first, then plan the build.
 2. **Economy first, then convert.** Early civilian factories and construction
-   research pay back; switch new construction to military factories about two to
-   three years before the first planned war (switch date = war date - 2.9 x
-   civilian payback; civilian factories queued in the last 18 months never repay),
+   research pay back; switch new construction to military factories about three
+   years before the equipment is needed (switch date = peak date - 2.9 x civilian
+   payback, the peak date being when military output must peak, not the first war
+   day; civilian factories queued in the last 18 months before it never repay),
    checked against equipment stockpiles and the army size the next focus demands.
 3. **Nothing assignable sits unassigned by accident.** Every free military factory and dockyard has a line,
    every civilian factory a project, every design company a line and a queued trait, the focus slot a focus.

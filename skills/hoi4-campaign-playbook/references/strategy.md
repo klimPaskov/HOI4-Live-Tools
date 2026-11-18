@@ -78,8 +78,9 @@ fuel and supply to sustain fighting. In FAIR keep line armor separate from foot
 infantry/cavalry according to the house rule. In META evaluate hybrid armor by
 actual partial-piercing and loss results, not a promise of invulnerability.
 
-Line divisions 14-18 wide for mountains and hills, 20 elsewhere; avoid 34-36 and
-40+ outside plains. Match terrain width, reinforcement behavior, intended front
+Line divisions 18, 24 or 30 wide by regimental columns, 25 for one-direction
+mountain axes (hills are as wide as plains); 35-40 only off one-direction mountain,
+marsh and forest battles. Match terrain width, reinforcement behavior, intended front
 and equipment. Compare affordable
 formations at equivalent industrial cost; a higher stat card on one enormous
 division does not prove a better army. Specialized marines/mountaineers are for

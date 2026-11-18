@@ -260,8 +260,9 @@ Read: `templates-equipment-production.md` §1 (width, the terrain-mix method), �
 `F oob <TAG>` (start templates), `F tech <id>` (support-company unlocks), `C equipment`.
 1. One template per role and phase: line, assault, mobile, garrison (item 23), mountain or marine where the
    theatre needs it. Width from the axis terrain with the fill table (`templates-equipment-production.md` §1):
-   line divisions 14-18 for mountains and hills, 20 elsewhere; no 34-36 or 40+ outside plains; fill at least
-   0.95 on the main terrain (AR01, L21).
+   line divisions 18, 24 or 30 by regimental columns, 25 for one-direction mountain axes (hills are as wide as
+   plains); 35-40 only off one-direction mountain, marsh and forest battles; fill at least 0.95 on the main
+   terrain (AR01, L21).
 2. Support companies and the 1.19 regimental-support row, each with the reason (the enemy's armour,
    air, terrain). The template tools have no regimental-support argument yet: record the
    regimental row in plan.md and leave it out of the call.

@@ -47,7 +47,7 @@ Fewer than 15 civs on a project is fine; do not wait to collect 15.
 
 ### 1.2 Decision table (when to build what)
 
-Switch date = war date - 2.9 x civilian payback, in practice about 2-3 years before the first war.
+Switch date = peak date - 2.9 x civilian payback, where the peak date is when military output must peak (the decisive phase of the war, not its first day) and the payback is the factory-doubling time under all bonuses (about 800 days). The practical rule agrees: switch about three years before you need the equipment.
 
 | Situation | Build | Why |
 |---|---|---|
@@ -181,7 +181,7 @@ economy laws.
 | Closed Economy | 0 | market-credit bonus -10% | 0 | 0 | at war, fascist or communist, War Economy or higher; no market access |
 
 Free Trade is the cheapest +15% output and +15% construction in peace: take it (or Export Focus) with the first
-150 PP in 1936. The export share is reserved even with no buyer: step down a law when exports starve your own lines.
+150 PP in 1936. Whether an unsold export share is lost is unverified: read the resource panel under Free Trade with an unsold surplus before a plan relies on either answer, and step down a law when exports starve your own lines.
 
 ### 5.3 Conscription laws
 
@@ -383,7 +383,7 @@ No tool yet:
 
 | ID | Tactic | How it works | When | Mode |
 |---|---|---|---|---|
-| EC01 | Civilian-to-military switch date | Switch new construction to military factories about 2-3 years before the war: switch date = war date - 2.9 x civilian payback; civilian factories queued in the last 18 months never repay. Countries at war in 1939 (GER, ENG, POL, ITA) go military very early | Build plan | FAIR |
+| EC01 | Civilian-to-military switch date | Switch new construction to military factories about three years before the equipment is needed: switch date = peak date - 2.9 x civilian payback, the peak date being when military output must peak (the decisive phase, not the first war day) and the payback the factory-doubling time under all bonuses (about 800 days); civilian factories queued in the last 18 months before that peak never repay. Countries whose decisive war is 1939-41 (GER, ITA) go military from day 0 or early 1937 | Build plan | FAIR |
 | EC02 | No civilian factories at war | Once the war runs, new civilian factories pay back in years; the filler becomes military factories, railways and infrastructure on the axis, air bases where the air plan needs room, AA in bombed states, unless the war will outlast a year | War | FAIR |
 | EC03 | Convert, do not build, when slots are full | Civilian to military conversion costs 4000 against 7200 for a new military factory and needs no slot; never convert military to civilian (9000). Conversion cost +30% on Civilian Economy, -20% War Economy, -30% Total Mobilisation | Late war | FAIR |
 | EC04 | Slot techs | Every concentrated or dispersed industry level adds +20% building slots (five levels double a state's slots); count future slots when ranking states | State ranking | FAIR |
@@ -412,3 +412,5 @@ No tool yet:
 | EC27 | Re-set the auto-import budget | The budget is a factory count that shrinks when usable civilian factories fall (consumer-goods rises, spirits, lost states) and never grows back by itself; in peace it may buy from future enemies, handing them the factories | After any change in usable civilian factories | FAIR |
 | EC28 | Split long railways | Each project takes at most 15 civilian factories: when free factories exceed 15 per open project, split a long railway into segments so each gets its own 15 | Railway pushes | FAIR |
 | EC29 | Civilian nuclear reactor | Late game, Gotterdammerung only: the nuclear special project `sp_commercial_nuclear_reactor` (after the nuclear reactor project, needs Construction IV) unlocks `commercial_nuclear_reactor`: 35000 cost, one per state (shares the reactor slot group), -50% factory energy use, +15% construction speed, +15% building slots and +10% resources in its state. Put it in the state with the most factories once energy runs short (EC11; `facts states <TAG> --energy`); before that, coal, the energy keystone and dams are cheaper. Built with `hoi4_construction_add` (placement not yet run live); no plan key asks for it | 1942+ economies short of energy | FAIR |
+| EC30 | Price every choice in factory-days | A civilian factory adds 4 construction a day (5 powered), a military factory 3.5 IC a day (4.5 powered) before efficiency; a civ costs 10 800 construction, a mil 7 200, a dockyard 6 400. Compare a focus, law, advisor or war by the factory-days it buys before the decisive war: +10% construction on 40 building civs is 4 civs; a slot is 10-15 techs from 1936 to 1940; a 2-3 civ focus is 21 600-32 400 construction. Score focuses per day: research slot, then 2+ factories, a war goal on a weak rich neighbour, a big-tech bonus, a debuff of 10% or more removed, percentages, then advisors and units; a 35-day focus counts half a 70-day one. Big countries buy percentages, small ones flat factories and slots | Every focus, law and build choice | FAIR |
+| EC31 | Conquer a minor before an industry focus | Taking a minor neighbour early gives its factories at once, half its field equipment on capitulation and all its stockpile on annexation, and no democracy can guarantee it below 25% world tension; for most countries with a weak neighbour one or two early conquests outgrow an extra industry focus | 1936-38, any country with a weak neighbour | FAIR |

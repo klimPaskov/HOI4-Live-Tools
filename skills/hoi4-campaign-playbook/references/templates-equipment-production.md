@@ -40,7 +40,7 @@ Fill is the share of the combat width used after the over-width and stacking pen
 | 35 | 0.91 | 0.97 | 1.00 | 0.97 | 0.70 | 0.93 | 0.90 |
 | 40 | 0.86 | 0.96 | 0.98 | 0.67 | 0.80 | 1.00 | 1.00 |
 
-Line divisions: **14-18 wide in mountains and hills, 20 elsewhere**. Avoid 34-36 and 40-46 outside plains.
+Hills are as wide as plains (70). Fill is a weak criterion: over-width costs 1% per 1% of the battle width over, so a side 10% over loses about 1% and 20% over about 4%. Line divisions: **18, 24 or 30 by regimental columns, 25 for one-direction mountain axes**; 35-40 only off one-direction mountain, marsh and forest battles.
 
 **Width for one axis** (terrain-mix method):
 1. Count the axis provinces by terrain: `facts.py terrain-width <TAG | state ids | --route A B>`, or
@@ -591,7 +591,7 @@ No tool: PR22 market sales, PR24/PR25/PR40 conversion, PR26 refits, retiring obs
 
 | ID | Tactic | How it works | When | Mode |
 |---|---|---|---|---|
-| AR01 | Width from the fill table | Average fill over all terrains: widths 14, 15, 16, 18 and 20 fill 98-99%; 25: 97%; 30: 96%; 35: 91% (70% attacking a mountain from one side); 40: 86% (67% in forest). Line divisions 14-18 for mountains and hills, 20 elsewhere; avoid 34-36 and 40+ outside plains | Every template | FAIR |
+| AR01 | Width by regimental columns, not fill | Hills are 70 wide like plains, mountain 50. Width fit is a weak criterion: over-width costs 1% per 1% of the battle width over (cap -33%), so a side 10% over fights at about 99% and 20% over at about 96%; stacking costs 2% per division beyond 5 (3 more per extra attack direction). Choose the width by regimental columns: 18, 24 or 30 (three battalions per column for 3, 4 or 5 columns); 25 for one-direction mountain axes; 35-40 only off one-direction mountain, marsh and forest battles (36 still fills forest at 96%) | Every template | FAIR |
 | AR02 | Regimental row | A column of 3 or more battalions gets one regimental slot (5 columns, 5 slots); slot XP is halved. Heavy weapons company by default (keeps org), AA battery under enemy CAS, AT battery against armour, field guns for single-player offence; infantry guns and rockets were cut 75% in 1.19.3; batteries have 0 org and lower division org | Line templates from 1936 | FAIR |
 | AR03 | Division AA all or nothing | The full 75% cut to CAS damage needs about 55 division air attack; token AA does little. Reach 55 with regimental AA batteries or none | Enemy CAS over the front | FAIR |
 | AR04 | Piercing against armour | Unpierced target takes half damage (piercing at 50% of armour: 65%, at 75%: 80%); division armour and piercing = 40% best battalion + 60% average, so one AT battalion lifts piercing. AT battery in every line division facing armour | Enemy armour seen | FAIR |
