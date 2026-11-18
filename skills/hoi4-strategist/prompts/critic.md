@@ -33,7 +33,10 @@ walk the coverage table (plan.md §25) against `skills/hoi4-strategist/reference
 items present; each resolved by an executor key, a player item with an exact call that is also in the
 brief, or "not applicable" with a reason you can confirm with a facts command. A missing or unresolved
 item is a finding (a blocker when it decides the goal, such as an overseas theatre with no convoy plan,
-an enemy with no peace item, or a land war with no templates). For every land war against more than about
+an enemy with no peace item, or a land war with no templates). Compare the plan's main line and armour templates on each war day with the game's own AI's
+(`facts.force.quality`): a template below it, idle experience or political power, an unnamed staff seat or no
+exercise is a major finding under row 6, a blocker when the war's `decisive` reasons rest on division counts.
+For every land war against more than about
 30 enemy divisions read its operation (`operations[]`) against lint `facts.force.operations`: the target line
 and phase lines against the surrender threshold, the placement against the forecast by template, the attack
 against the enemy estimate, the holds per border province; a large war without an operation, or one whose

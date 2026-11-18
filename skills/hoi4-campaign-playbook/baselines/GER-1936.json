@@ -392,5 +392,40 @@
     "molotov"
    ]
   }
+ ],
+ "templates": [
+  {
+   "date": "1939.09.01",
+   "line": [
+    "infantry",
+    "infantry",
+    "infantry",
+    "infantry",
+    "infantry",
+    "infantry",
+    "infantry",
+    "infantry",
+    "infantry",
+    "artillery_brigade",
+    "engineer",
+    "artillery"
+   ],
+   "armour": [
+    "light_armor",
+    "light_armor",
+    "medium_armor",
+    "medium_armor",
+    "motorized",
+    "motorized",
+    "motorized",
+    "motorized",
+    "motorized",
+    "motorized",
+    "engineer",
+    "artillery",
+    "light_tank_recon"
+   ],
+   "note": "the AI's main line and armour templates read in its save on that date (102 and 6 divisions)"
+  }
  ]
 }
