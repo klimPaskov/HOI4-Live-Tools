@@ -311,6 +311,9 @@ mod plan_seams;
 /// Encirclement (find a pocket, close it with two pincers, hold the ring, reduce it, resume).
 #[path = "plan_encircle.rs"]
 mod plan_encircle;
+// Operations: a large land war as drawn and executed battle plans (plan key `operations`).
+#[path = "plan_operation.rs"]
+mod plan_operation;
 
 /// Game time is counted in in-game hours (the `raw` value of the `date` object
 /// that `hoi4_overview` returns). Every skip, cooldown and patience below is a
@@ -619,6 +622,16 @@ pub struct State {
     strategy: Strategy,
     /// this tick's predicate reads (game hour, cache): each read at most once per tick
     pcache: Option<(GameHour, Cache)>,
+    /// Armies and army groups an active operation owns -> the operation (plan_operation.rs).
+    op_owned: HashMap<String, String>,
+    /// The game hour `op_owned` was last worked out.
+    op_owned_at: Option<GameHour>,
+    /// The operation step sends the order (its own armies pass the ownership guard).
+    op_acting: bool,
+    /// an operation order was refused for an open event: the next event pass answers at once
+    op_events_now: bool,
+    /// Each operation's last status line (digest).
+    op_notes: BTreeMap<String, String>,
 }
 
 /// What `run` knows about the persisted memory next to plan.json.
@@ -785,6 +798,11 @@ impl Default for State {
             persist: Persist::default(),
             strategy: Strategy::default(),
             pcache: None,
+            op_owned: HashMap::new(),
+            op_owned_at: None,
+            op_acting: false,
+            op_events_now: false,
+            op_notes: BTreeMap::new(),
         }
     }
 }
@@ -1103,6 +1121,14 @@ impl State {
                 ),
             ));
         }
+        // An army an operation owns takes land orders from that operation only.
+        let mut args = args;
+        if !self.op_acting {
+            if let Some(why) = plan_operation::guard(&self.op_owned, name, &mut args) {
+                self.last_ok = Some(false);
+                return Ok((false, why));
+            }
+        }
         let signature = format!("{name} {args}");
         // Divisions sent out of an overdrawn stack in their own army are not the army's move:
         // they neither wait for its commitment nor count against its budget or commit it.
@@ -1134,7 +1160,6 @@ impl State {
             }
         }
         self.seq += 1;
-        let mut args = args;
         if let Some(object) = args.as_object_mut() {
             object.insert(
                 "request_id".into(),
@@ -1448,8 +1473,13 @@ pub fn tick(
     let concentrated = plan_formations::concentrate(plan);
     let plan = concentrated.as_ref().unwrap_or(plan);
     state.moves.rules = MoveRules::of(plan);
+    // operations own their armies from their prepare on: worked out before any step orders one
+    plan_operation::refresh(state, tools, plan, now);
     // 1. events (they block every other input)
     let events = tools.call("hoi4_events", &json!({}))?;
+    if list(&events, "events").is_empty() {
+        state.op_events_now = false;
+    }
     if events["peace_conference_open"] == json!(true) {
         // the plan's `peace` demands, else the stop (plan_manage.rs)
         return plan_manage::peace(state, tools, plan, lease, now);
@@ -1467,9 +1497,14 @@ pub fn tick(
         let auto = plan["auto_events"] != json!(false);
         let news = key.contains("news") || list(top, "options").len() == 1;
         let waited = now.saturating_sub(first);
-        let patience = plan["wait_events_days"]
-            .as_i64()
-            .map_or(2 * DAY, |days| days.saturating_mul(DAY));
+        // an operation whose orders an open event refused does not wait for the model
+        let patience = if state.op_events_now {
+            0
+        } else {
+            plan["wait_events_days"]
+                .as_i64()
+                .map_or(2 * DAY, |days| days.saturating_mul(DAY))
+        };
         // A choice event is the model's decision unless the plan names an option for it
         // (or it has waited `wait_events_days`, below).
         // `event_rules` come first: an option by its name; an unknown condition waits.
@@ -1501,7 +1536,7 @@ pub fn tick(
         // that it takes option 0, the one the game itself takes when the event times out. Left
         // open it blocked every other step until that timeout (g17a, 17 Nov 2026:
         // denmark_trade_deal.1 and GER_inner_circle.03 open 13 days each).
-        let lapsed = waited > patience && chosen.is_none() && !news;
+        let lapsed = (waited > patience || state.op_events_now) && chosen.is_none() && !news;
         let how = if lapsed {
             format!(
                 "{how} (unanswered {} game days: the game's own timeout choice)",
@@ -1510,7 +1545,7 @@ pub fn tick(
         } else {
             how
         };
-        if auto && (news || chosen.is_some() || waited > patience) {
+        if auto && (news || chosen.is_some() || waited > patience || state.op_events_now) {
             let option = chosen.unwrap_or(0);
             let args = json!({"event": key, "option": option});
             if state
@@ -2455,9 +2490,56 @@ fn war_first_steps(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
+    // A war whose declaration is due starts before any line is redrawn, and an operation that
+    // waits for that war executes in the same tick (e1h1, 18 Nov 2026: the executor declared and
+    // the groups executed a day later).
+    state.last_ok = None;
+    if let Some(declared) = plan_affairs::declare_due_step(state, tools, plan, lease, now)? {
+        if state.last_ok == Some(false) {
+            state.last_ok = None;
+        } else {
+            plan_operation::wake(state);
+            state.pcache = None;
+            let executed = war_burst(state, tools, plan, lease, now, plan_operation::step)?;
+            state.war_active = true;
+            let air = war_burst(state, tools, plan, lease, now, air_war_step)?;
+            state.last_ok = Some(true);
+            let line = [Some(declared), executed, air]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join("; ");
+            return Ok(Some(line));
+        }
+    }
     let steps: [Step; 11] = [
-        // a war whose declaration is due starts before any line is redrawn
-        plan_affairs::declare_due_step,
+        // the operations: prepare, execute, advance (plan_operation.rs); the air burst follows in
+        // the same tick (o1d: the operation acted in every tick of the first war days and the
+        // air step behind it first ran on day 3, every wing still on its peace training)
+        // air burst then runs in every tick of a running operation, not only when the operation
+        // acts (o1i: after the execute tick the air step behind the other steps got no turn and
+        // a 30-second burst set four wings: 0 of 12 fighters flying on day 7)
+        |state, tools, plan, lease, now| {
+            let ops = war_burst(state, tools, plan, lease, now, plan_operation::step)?;
+            let ok = state.last_ok;
+            let air = if ops.is_some() || plan_operation::running(state) {
+                war_burst(state, tools, plan, lease, now, air_war_step)?
+            } else {
+                None
+            };
+            match (ops, air) {
+                (None, None) => Ok(None),
+                (Some(ops), None) => {
+                    state.last_ok = ok;
+                    Ok(Some(ops))
+                }
+                (None, Some(air)) => Ok(Some(air)),
+                (Some(ops), Some(air)) => {
+                    state.last_ok = ok;
+                    Ok(Some(format!("{ops}; {air}")))
+                }
+            }
+        },
         layout_step,
         // The opening pass of the war step: an army without its lines gets its front and its
         // offensive line before any name, commander or disband. Lines cost nothing to hold and
@@ -3152,15 +3234,18 @@ fn layout_step(
     if state.skipped(now, "layout", "all") {
         return Ok(None);
     }
-    let roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
-    let armies = list(&roster, "armies");
-    let present: HashSet<String> = armies
+    let mut roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
+    let all_present: HashSet<String> = list(&roster, "armies")
         .iter()
         .map(|a| text(&a["army"]).to_string())
         .collect();
     state
         .layout
-        .retain(|_, a| a.is_empty() || present.contains(a));
+        .retain(|_, a| a.is_empty() || all_present.contains(a));
+    // an army an operation owns is neither marched nor split by the layout
+    plan_operation::hide_owned(state, &mut roster);
+    let armies = list(&roster, "armies");
+    let present = all_present;
     let taken: HashSet<String> = state.layout.values().cloned().collect();
     // A strike role formed away from its state (form_strike_role) marches there once.
     for e in entries {
@@ -5387,7 +5472,10 @@ fn air_war_missions(
                 // an inland wing goes to a front air base first: from its home base the game
                 // sets the mission over no region at all (ab2, 18 Nov 2026: 9 German wings
                 // "Diverged", region 0, while Poland held the air over the operation)
-                if base.is_some_and(|b| !near.contains(&b)) {
+                // a wing whose mission did not take (out of range: o1c, the He 51s on the Rhine
+                // under a theatre that spans the whole country) goes to the front first
+                let far = state.done.contains_key(&format!("airfar:{name}"));
+                if far || (base.is_some_and(|b| !near.contains(&b)) && !operation.is_empty()) {
                     let planes = wing["aircraft"].as_i64().unwrap_or(0);
                     if let Some(to) = front_air_base(&air, &wars, &operation, &fronts, planes) {
                         let (ok, why) = state.act(
@@ -5398,6 +5486,9 @@ fn air_war_missions(
                             "ar",
                         )?;
                         state.skip(now, "airwing", &name, if ok { DAY } else { 7 * DAY });
+                        if ok {
+                            state.done.remove(&format!("airfar:{name}"));
+                        }
                         return Ok(Some(format!(
                             "air {name} rebases to front state {to} for {mission}: {ok} {why}"
                         )));
@@ -5411,7 +5502,17 @@ fn air_war_missions(
                     json!({"wing": name, "mission": mission, "state_id": state_id}),
                     "am",
                 )?;
-                state.skip(now, "airwing", &name, if ok { 30 * DAY } else { 7 * DAY });
+                if ok {
+                    state.skip(now, "airwing", &name, 30 * DAY);
+                } else {
+                    // a mission the game did not take (read back) sends the wing to a front base
+                    // facing the operation on the next pass; a refusal before input (an open
+                    // event, o1g) only waits
+                    if why.contains("Diverged") || why.contains("NotApplied") {
+                        state.done.insert(format!("airfar:{name}"), now);
+                    }
+                    state.skip(now, "airwing", &name, DAY / 4);
+                }
                 return Ok(Some(format!(
                     "air {name} {mission} over state {state_id}: {ok} {why}"
                 )));
@@ -5446,7 +5547,12 @@ fn front_air_base(
     list(air, "air_bases")
         .iter()
         .filter_map(|b| Some((b["state_id"].as_i64()?, b["free"].as_i64().unwrap_or(0))))
-        .filter(|(s, free)| fronts.contains(s) && *free >= planes.max(1))
+        // with an operation only a base facing it (a base on another front is as far away)
+        .filter(|(s, free)| {
+            fronts.contains(s)
+                && (facing.is_empty() || facing.contains(s))
+                && *free >= planes.max(1)
+        })
         .max_by_key(|(s, free)| (facing.contains(s), *free))
         .map(|(s, _)| s)
 }
@@ -5458,6 +5564,9 @@ fn operation_targets(tools: &dyn Tools) -> Vec<i64> {
         return Vec::new();
     };
     let mut count: Vec<(i64, usize)> = Vec::new();
+    // the executing offensives first; drawn ones count too, behind them (o1g: in the
+    // declaration tick nothing executed yet and the wings went over France for 30 days)
+    let mut drawn: Vec<i64> = Vec::new();
     for row in list(&read, "armies")
         .iter()
         .chain(list(&read, "army_groups").iter())
@@ -5465,6 +5574,7 @@ fn operation_targets(tools: &dyn Tools) -> Vec<i64> {
         for order in list(row, "plan") {
             for off in list(order, "offensives") {
                 if off["executing"] != json!(true) {
+                    drawn.extend(ints(&off["target"]["states"]));
                     continue;
                 }
                 for id in ints(&off["target"]["states"]) {
@@ -5477,7 +5587,13 @@ fn operation_targets(tools: &dyn Tools) -> Vec<i64> {
         }
     }
     count.sort_by_key(|c| std::cmp::Reverse(c.1));
-    count.into_iter().map(|c| c.0).collect()
+    let mut out: Vec<i64> = count.into_iter().map(|c| c.0).collect();
+    for id in drawn {
+        if !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    out
 }
 
 /// The state a war wing based in `base` flies over: an operation target across the border its
@@ -5583,7 +5699,8 @@ fn war_step(
     // The opening pass has work only while an army it may order stands without its lines (a
     // guard holds one, its front; a driven army two): one cheap read decides.
     if lines_only {
-        let roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
+        let mut roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
+        plan_operation::hide_owned(state, &mut roster);
         let waiting = list(&roster, "armies").iter().any(|a| {
             let name = text(&a["army"]);
             let guard_done = state.war_stage.get(&format!("guard:{name}")) == Some(&2);
@@ -5755,7 +5872,9 @@ fn war_step(
             )));
         }
     }
-    let roster = tools.call("hoi4_armies", &json!({}))?;
+    let mut roster = tools.call("hoi4_armies", &json!({}))?;
+    // the armies an operation owns take no order from the war step (strike, guard, retake)
+    plan_operation::hide_owned(state, &mut roster);
     let mut vp_rows: HashMap<i64, Value> = HashMap::new();
     let mut load: HashMap<i32, usize> = HashMap::new();
     for target in state.war_assign.values() {
@@ -8980,6 +9099,9 @@ pub fn run(
     if let Some(military) = plan_military::digest(state) {
         result["military"] = military;
     }
+    if let Some(operations) = plan_operation::digest(state) {
+        result["operations"] = operations;
+    }
     if let Some(affairs) = plan_affairs::digest(state) {
         result["affairs"] = affairs;
     }
@@ -11377,7 +11499,8 @@ mod tests {
                     {"executing": true, "target": {"states": [10]}}]}]}]}))
             }
         }
-        assert_eq!(operation_targets(&Ops), vec![10, 85]);
+        // executing targets first, a drawn one behind them
+        assert_eq!(operation_targets(&Ops), vec![10, 85, 5]);
         // an inland wing first goes to the front base facing the operation, with room for it
         let air = json!({"air_bases": [
             {"state_id": 42, "free": 900}, {"state_id": 66, "free": 200},
@@ -11386,14 +11509,55 @@ mod tests {
             front_air_base(&air, &wars, &[85], &[42, 66, 67], 100),
             Some(66)
         );
+        assert_eq!(front_air_base(&air, &wars, &[85], &[42, 66, 67], 300), None);
+        // no operation: any front base with room
         assert_eq!(
-            front_air_base(&air, &wars, &[85], &[42, 66, 67], 300),
+            front_air_base(&air, &wars, &[], &[42, 66, 67], 300),
             Some(42)
         );
         assert_eq!(
             front_air_base(&air, &wars, &[85], &[42, 66, 67], 1000),
             None
         );
+    }
+
+    #[test]
+    fn a_wing_whose_mission_does_not_take_is_rebased_to_the_front_facing_the_operation() {
+        struct Far(std::cell::RefCell<Vec<(String, Value)>>);
+        impl Tools for Far {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                match name {
+                    "hoi4_wars" => Ok(json!({"borders": [{"neighbour_tag": "POL", "hostile": true,
+                        "own_border_states": [66], "neighbour_states": [85]}]})),
+                    "hoi4_armies" => Ok(json!({"army_groups": [{"plan": [{"offensives": [
+                        {"executing": true, "target": {"states": [85]}}]}]}]})),
+                    "hoi4_air" => Ok(json!({"air_bases": [{"state_id": 66, "free": 400}],
+                        "wings": [{"wing": "JG 136", "aircraft_type": "small_plane_airframe_0",
+                            "aircraft": 100, "standing_by": true,
+                            "air_base": {"base_id": 3, "state_id": 52}}]})),
+                    // the mission does not take from the far base
+                    "hoi4_air_mission" => Ok(json!({"receipt": {"status": "Diverged"}})),
+                    _ => Ok(json!({"receipt": {"status": "Verified"}})),
+                }
+            }
+        }
+        let tools = Far(Default::default());
+        // the theatre spans the whole country: the far base counts as near
+        let plan = json!({"air": {"war_missions": true}, "war": {"theatre": [52, 66]}});
+        let mut state = State::default();
+        let first = air_war_missions(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            first.contains("air_superiority over state 85: false"),
+            "{first}"
+        );
+        let next = air_war_missions(&mut state, &tools, &plan, "l", START + DAY / 4 + 1)
+            .unwrap()
+            .unwrap();
+        assert!(next.contains("rebases to front state 66"), "{next}");
+        assert!(!state.done.contains_key("airfar:JG 136"));
     }
 
     #[test]

@@ -62,6 +62,27 @@ Never: execute a hold; execute a group whose front faces a country the operation
 order; redraw a front or line that reads back correctly; regroup armies or change commanders
 between preparation and capitulation.
 
+**The executor's operation step does all of this** (`native/src/plan_operation.rs`): from
+`prepare_from` it owns every formation and hold army and their army groups, and no other executor
+step can order them (marches, layout, exercises, strikes, guards, retakes, merges out, regrouping
+are refused with `owned_by_operation`). It first assembles each `mobile` formation from
+its `divisions` ({template: count}): those templates' divisions are moved out of every other army
+(a wing keeps its own; a source army is never emptied) and a new army is named after the
+formation. In peace it reconciles the wanted orders with the
+read-back on every pass and sends only the difference: exercises stopped, line armies and the
+armies of a hold group cleared of their own orders, mobile and wing fronts and lines, the group
+front and its line, each hold's front; a group line that misses its states is cleared and drawn
+again at most twice (a mobile or wing line counts as drawn when one of its states is in the
+target: the game lands the stroke where it lands). The declaration and the execute go out in the
+same tick; an attacker that reads not executing is executed again. Every two game days it counts
+the line: all its states held, the next phase line's `when` true, or no state gained for
+`stall_days` (7; progress is counted in provinces) draws the next line (the plan's phase lines, then the one enemy state with the
+most victory points for its distance) and executes it. At war nothing is cleared: a line that
+does not draw is taken one state at a time, and a front is clicked at the enemy state across the
+contact line nearest the line. When every enemy is out of the war it
+clears the attack orders and `on_capitulation.next` starts preparing. The player never orders an
+army of a running operation; a stalled operation is a revision request.
+
 ## 1. Before the war (or on day one)
 
 **The shape that wins a large land war (the game's own AI, read from its battle plans on

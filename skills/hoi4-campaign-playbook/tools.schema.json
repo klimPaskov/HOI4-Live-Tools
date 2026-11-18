@@ -329,7 +329,7 @@
    "source": "--list-tools"
   },
   "hoi4_armies": {
-   "description": "Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids (unassigned_by_state: per state the ids and shared_with, the armies standing in the same provinces and how many of them each shares). Per army `planning` {mean, min, max} is its divisions' planning bonus (0..1, 0.3 = 30%); it grows while the army holds a front or plan and stops at a cap the game computes from generals, technology and the HQ distance (not stored: a value that has stopped rising has reached it). threat:false skips the threat reads. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).",
+   "description": "Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids (unassigned_by_state: per state the ids and shared_with, the armies standing in the same provinces and how many of them each shares). Per army `planning` {mean, min, max} is its divisions' planning bonus (0..1, 0.3 = 30%); it grows while the army holds a front or plan and stops at a cap the game computes from generals, technology and the HQ distance (not stored: a value that has stopped rising has reached it). threat:false skips the threat reads. Per army and per army group `plan` reads every battle-plan order from the game itself (what the battle-plan bar and the map arrows show): kind (front, offensive, fallback, area_defense), id, executing, divisions assigned; for a line its provinces count, its two end provinces, the states along it, the owner's divisions standing on it and the most in one province; per front its offensives with the arrow's states and the target line (provinces, ends, states, i.e. how deep and wide the advance goes); an area defence lists its states. An army inside an army group whose own plan is [] follows the group's orders. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -668,12 +668,17 @@
    "source": "--list-tools"
   },
   "hoi4_army_front": {
-   "description": "Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border. Verified by one more battle-plan order on the army.",
+   "description": "Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border; with from_state (an own state touching state_id) a drag along that stretch of border only, a narrow front for a mobile army. Verified by one more battle-plan order on the army.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "army": {
       "type": "string"
+     },
+     "from_state": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
      },
      "lease_token": {
       "type": "string"
@@ -862,7 +867,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_offensive": {
-   "description": "Draw an offensive line for an own army that already holds a front line, into a target state: army card, offensive-line drawing (X), one right-button drag across the state, parallel to the army's front, so the whole front advances to it. With province_id (a province of the state, e.g. its victory point) the line runs through that province's depth; without it through the middle of the state. Verified by new battle-plan orders on the army; execute the plan afterwards.",
+   "description": "Draw an offensive line for an own army that already holds a front line, into a target state: army card, offensive-line drawing (X), one right-button drag across the state, parallel to the army's front, so the whole front advances to it. With province_id (a province of the state, e.g. its victory point) the line runs through that province's depth; without it through the middle of the state. Verified by new battle-plan orders on the army; the receipt's detail.plan reads the army's orders back from the game (the target line's provinces, ends and states). With states the line runs across several states at once, the way the game's AI draws its offensive (its 1939 Poland line: 22 provinces through eight states, one arrow, the whole army group on it). Execute the plan afterwards.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -885,6 +890,17 @@
       "maximum": 4095,
       "minimum": 1,
       "type": "integer"
+     },
+     "states": {
+      "description": "A deep line across these target states side by side (the phase line: e.g. every state along a river across the enemy country): one bending stroke through the states' centres in the order given (list them side by side from one end of the line to the other, e.g. along a river); state_id is then only the state the camera finds first. No province_id.",
+      "items": {
+       "maximum": 4095,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 12,
+      "minItems": 2,
+      "type": "array"
      }
     },
     "required": [
@@ -904,6 +920,10 @@
     "properties": {
      "army": {
       "type": "string"
+     },
+     "clear_orders": {
+      "description": "true deletes every battle-plan order of the army or army group (the bar's delete button, right click, confirmed); goes alone; verified by no order left",
+      "type": "boolean"
      },
      "execute": {
       "description": "true executes the plan, false stops it; may be left out only when mode is given",
@@ -2159,7 +2179,7 @@
    "source": "--list-tools"
   },
   "hoi4_event_choose": {
-   "description": "Choose an option (0-based, in listed order) of the open event on top by clicking it. Verified when exactly that event window closes.",
+   "description": "Choose an option (0-based, in listed order) of an open event by clicking it (the list order is not the stacking order: single-option windows over it are acknowledged first; a choice window over it is named in event_covered). Verified when exactly that event window closes.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {

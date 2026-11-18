@@ -508,6 +508,7 @@ fn merge_and_lead(
                 .any(|d| d.as_str().is_some_and(|id| sailing.contains(id)));
             if n == 0
                 || ships
+                || state.op_owned.contains_key(&name)
                 || playing.contains(&name)
                 || reserve.contains(&name)
                 || plan_military::invading(state, plan, &name)
