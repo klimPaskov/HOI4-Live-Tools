@@ -435,48 +435,72 @@ pub(super) fn save_game(
             std::thread::sleep(Duration::from_millis(50));
         }
     }
-    let button = settled(process, "save button", |r, i| {
-        let root = menu_root(r, i)?;
-        let b = gui_tree::child(r, i, root, "menu_save_button")?
-            .ok_or_else(|| Error::new("gui_target_unavailable", "Save button not found"))?;
-        gui_tree::rect(r, i, b, (1920, 1080))
-    })?;
-    // These buttons are drawn by a text sprite whose width is the text texture's (864 px for
-    // "Save Game"), so its centre lies outside the button: click near the left edge instead.
-    let near_left =
-        |r: gui_tree::Rect| (f64::from(r.x) + 40.0, f64::from(r.y) + f64::from(r.h) / 2.0);
-    let (x, y) = near_left(button);
-    keys.click((1920, 1080), x, y)?;
-    wait(
-        process,
-        "save window",
-        |r, i| Ok(save_root(r, i)?.is_some()),
-    )?;
-    let confirm = settled(process, "save confirm", |r, i| {
-        let root =
-            save_root(r, i)?.ok_or_else(|| Error::new("invalid_gui", "Save window closed"))?;
-        let b = gui_tree::child(r, i, root, "save")?
-            .ok_or_else(|| Error::new("gui_target_unavailable", "Save confirm button not found"))?;
-        gui_tree::rect(r, i, b, (1920, 1080))
-    })?;
-    let (x, y) = near_left(confirm);
-    keys.click((1920, 1080), x, y)?;
-    // Overwriting a save of the same name asks for confirmation.
-    let _ = accept_command(process, keys);
-    let deadline = Instant::now() + Duration::from_secs(60);
-    let written = loop {
-        if let Some((t, name)) = newest() {
-            if before.is_none_or(|b| t > b) {
-                break name;
+    // Any failure from here closes the game menu again (it was left open on the error path,
+    // and the next action then met a paused game behind a menu).
+    let result = (|| -> Result<String> {
+        let button = settled(process, "save button", |r, i| {
+            let root = menu_root(r, i)?;
+            let b = gui_tree::child(r, i, root, "menu_save_button")?
+                .ok_or_else(|| Error::new("gui_target_unavailable", "Save button not found"))?;
+            gui_tree::rect(r, i, b, (1920, 1080))
+        })?;
+        // These buttons are drawn by a text sprite whose width is the text texture's (864 px for
+        // "Save Game"), so its centre lies outside the button: click near the left edge instead.
+        let near_left =
+            |r: gui_tree::Rect| (f64::from(r.x) + 40.0, f64::from(r.y) + f64::from(r.h) / 2.0);
+        let (x, y) = near_left(button);
+        keys.click((1920, 1080), x, y)?;
+        // One more click when the window does not open (i18a, 18 Nov 2026: the first click on the
+        // Save button opened nothing).
+        if wait(
+            process,
+            "save window",
+            |r, i| Ok(save_root(r, i)?.is_some()),
+        )
+        .is_err()
+        {
+            keys.click((1920, 1080), x, y)?;
+            wait(
+                process,
+                "save window",
+                |r, i| Ok(save_root(r, i)?.is_some()),
+            )?;
+        }
+        let confirm = settled(process, "save confirm", |r, i| {
+            let root =
+                save_root(r, i)?.ok_or_else(|| Error::new("invalid_gui", "Save window closed"))?;
+            let b = gui_tree::child(r, i, root, "save")?.ok_or_else(|| {
+                Error::new("gui_target_unavailable", "Save confirm button not found")
+            })?;
+            gui_tree::rect(r, i, b, (1920, 1080))
+        })?;
+        let (x, y) = near_left(confirm);
+        keys.click((1920, 1080), x, y)?;
+        // Overwriting a save of the same name asks for confirmation.
+        let _ = accept_command(process, keys);
+        let deadline = Instant::now() + Duration::from_secs(60);
+        let written = loop {
+            if let Some((t, name)) = newest() {
+                if before.is_none_or(|b| t > b) {
+                    break name;
+                }
             }
+            if Instant::now() >= deadline {
+                return Err(Error::new(
+                    "input_readback_failed",
+                    "No save file was written within 60 s",
+                ));
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        };
+        Ok(written)
+    })();
+    let written = match result {
+        Ok(w) => w,
+        Err(e) => {
+            let _ = close_menu(process, keys);
+            return Err(e);
         }
-        if Instant::now() >= deadline {
-            return Err(Error::new(
-                "input_readback_failed",
-                "No save file was written within 60 s",
-            ));
-        }
-        std::thread::sleep(Duration::from_millis(500));
     };
     // Let the writer finish, then close the menu.
     std::thread::sleep(Duration::from_secs(3));

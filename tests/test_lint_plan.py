@@ -869,6 +869,16 @@ class CoverageBuildRules(unittest.TestCase):
         plan["manage"]["off"] = ["fuel"]
         self.assertNoHit(plan, "manage.fuel")
 
+    # -------------------------------------------------------------- contingency.stall
+    def test_a_contingency_phase_that_attacks_nothing_and_never_ends_fails(self):
+        plan = copy.deepcopy(self.ita)
+        plan["phases"] = list(plan.get("phases") or []) + [
+            {"id": "PC_retake", "overrides": {"war": {"axes": []}}}]
+        plan["contingencies"] = [{"id": "c_lost", "when": "at_war_with:ETH", "phase": "PC_retake"}]
+        self.assertHit(plan, "contingency.stall", "error", "PC_retake")
+        plan["phases"][-1]["exit"] = "date >= 1936.06.01"
+        self.assertNoHit(plan, "contingency.stall")
+
     # -------------------------------------------------------------- predicates.unreadable
     def test_goal_on_an_always_unknown_atom_warns(self):
         plan = copy.deepcopy(self.ita)
