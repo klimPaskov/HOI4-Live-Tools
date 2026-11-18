@@ -163,7 +163,16 @@ the player decides strategy:
 - A hold phase (`"axes": []`) prepares the attack that follows it (`hold_prepares`, default on):
   the armies draw their lines toward their next target and plan on them, the execute order waits
   for a phase with axes, and a plan still executing on enemy land is stopped. The planning wait
-  therefore runs during the hold, not after it.
+  therefore runs during the hold, not after it. A phase that writes `"posture": "attack"` is an
+  attack phase even with `"axes": []`: each army takes its layout axis, its victory-point row or
+  the nearest target. A phase with no axes and no posture stays a hold; a war phase that means to
+  attack must say one or the other.
+- Before the declaration, `prepare_against` (country tags) in the phase that leads to the war
+  draws every army's front and offensive line on that country in peace and lets them plan; the
+  war's first day then only executes. Without it nothing is drawn in peace and the first lines come
+  days after the declaration, one order per tick.
+- A victory-point row held by a country outside the war waits for its own war: it is passed over,
+  and the army takes its next row or its layout axis.
 - A defender sets `"posture": "defend"`: its hold phases draw no line on enemy land and retake
   nothing (a retake front is an attack). The armies stand on the ground the layout, the guards and
   the defence lines give them and entrench; the attack waits for the phase with axes. The game

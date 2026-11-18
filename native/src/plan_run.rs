@@ -149,7 +149,12 @@
 //!                          send armies at the nearest enemy-held states (own states held by an enemy first):
 //!                          step into the state, draw front and offensive lines, execute the plan.
 //!                          Optional: "axes":[[842,843,271],[835,271]] ordered targets (an army follows the
-//!                          axis whose next enemy-held state is nearest); "theatre":[550,559] own states an
+//!                          axis whose next enemy-held state is nearest; "axes":[] is a hold phase unless
+//!                          "posture":"attack" says the phase attacks, then each army takes its layout
+//!                          axis, its victory-point row or the nearest target); "prepare_against":["POL"]
+//!                          (in peace, until the war on them starts) draws fronts and offensive lines on
+//!                          those countries like a hold phase, so the planning bonus is built and the
+//!                          first day of the war only executes; "theatre":[550,559] own states an
 //!                          army must stand in to be driven (armies in enemy land always are);
 //!                          "stall_days":8 without progress (no new main state and no province
 //!                          taken in the target or the state the army stands in) -> the executing
@@ -5294,9 +5299,29 @@ fn war_step(
             enemies.retain(|t| at_war.contains(t));
         }
     }
+    // Before the declaration (`prepare_against`, at peace with all of them and at war with no
+    // plan enemy): the armies draw their fronts and offensive lines on the country the war will
+    // be declared on, as in a hold phase, and nothing executes. Without it nothing was drawn in
+    // peace and the first front came four days after the declaration, one order per tick, while
+    // Poland walked into Silesia (g17g2, 18 Nov 2026).
+    let pre_war = enemies.is_empty() && !lines_only && {
+        let against = strings(cfg, "prepare_against");
+        let at_war_with_any = wars_read.as_ref().is_some_and(|w| {
+            list(&w["wars"], "enemies").iter().any(|e| {
+                let t = e.as_str().or_else(|| e["tag"].as_str()).unwrap_or("");
+                against.iter().any(|a| a == t)
+            })
+        });
+        if at_war_with_any {
+            false
+        } else {
+            enemies.extend(against);
+            !enemies.is_empty()
+        }
+    };
     // Objective strikes (`war.strike`): once on, the step owns the driven armies and the rest of
     // the war step (battle plans, rests, pocket fall-back, stall answers) does not run.
-    if !lines_only {
+    if !lines_only && !pre_war {
         if let Some(done) =
             plan_strike::step(state, tools, plan, lease, &me, &enemies, &reserve, now)?
         {
@@ -5418,7 +5443,13 @@ fn war_step(
     // attack on enemy land at all: armies only retake own states (shakedown 10 Nov 2026: the
     // strike armies drew fronts and offensives in the hold phase and were pulled across the
     // theatre). A plan without the key keeps the nearest-target rule.
-    let hold_only = cfg["axes"].as_array().is_some_and(|a| a.is_empty());
+    // `posture: "attack"` with no axes is an attack phase, not a hold: each army takes its layout
+    // axis, its victory-point row or the nearest target (g17g2, 18 Nov 2026: the Poland phase had
+    // posture attack and no axes, so not one battle plan was executed in six weeks of war while
+    // Poland held seven German states). Before the declaration the step only prepares.
+    let hold_only = pre_war
+        || (cfg["axes"].as_array().is_some_and(|a| a.is_empty())
+            && cfg["posture"] != json!("attack"));
     // A hold phase still prepares the attack that follows it: the armies draw their front and
     // their offensive line toward their own next target (their victory-point row or their
     // layout axis) and plan on them; only the execute order waits for the phase that attacks.
@@ -6904,10 +6935,18 @@ fn vp_choice(
                 continue;
             };
             let row = plan_route::state_row(tools, vp_rows, st);
-            let held = list(&row, "provinces")
+            let holder = list(&row, "provinces")
                 .iter()
-                .any(|r| r["province"].as_i64() == Some(p) && text(&r["controller"]) == me);
-            if !held {
+                .find(|r| r["province"].as_i64() == Some(p))
+                .map(|r| text(&r["controller"]).to_string())
+                .unwrap_or_default();
+            // A row a country outside the war holds waits for its own war: the armour laid out
+            // for Poland took its first western row (Liege, Belgium neutral) and drew its front
+            // on Wallonia (g17g2, 18 Nov 2026). An unread holder keeps the row.
+            if !holder.is_empty() && holder != me && !enemies.contains(&holder) {
+                continue;
+            }
+            if holder != me {
                 chosen = Some((t, st, p));
                 break;
             }
@@ -10989,6 +11028,46 @@ mod tests {
             }
         }
     }
+    /// The War fake with a validated war list (`at_war`: the countries at war) and, for
+    /// single-state reads, who holds a province: (state, province, controller).
+    struct Validated<'a> {
+        inner: &'a War,
+        at_war: Vec<&'static str>,
+        holders: Vec<(i64, i64, &'static str)>,
+    }
+    impl Tools for Validated<'_> {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            if name == "hoi4_wars" && args.get("enemies").is_none() {
+                let mut v = self.inner.call(name, args)?;
+                v["wars"] = json!({"validated": true, "enemies": self.at_war});
+                return Ok(v);
+            }
+            if name == "hoi4_states" {
+                let id = args["query"].as_str().and_then(|q| q.parse::<i64>().ok());
+                let rows: Vec<Value> = self
+                    .holders
+                    .iter()
+                    .filter(|h| Some(h.0) == id)
+                    .map(|h| {
+                        json!({"state_id": h.0,
+                            "provinces": [{"province": h.1, "controller": h.2}]})
+                    })
+                    .collect();
+                if !rows.is_empty() {
+                    return Ok(json!({ "states": rows }));
+                }
+            }
+            self.inner.call(name, args)
+        }
+    }
+    fn army_orders(w: &War) -> Vec<(String, Value)> {
+        w.calls
+            .borrow()
+            .iter()
+            .filter(|(n, a)| n.starts_with("hoi4_army_") && a.get("request_id").is_some())
+            .cloned()
+            .collect()
+    }
     fn war_plan() -> Value {
         json!({"war": {"enemies": ["FRA"], "cooldown": 40}})
     }
@@ -11861,6 +11940,83 @@ mod tests {
             state.war_assign.get("Army 1"),
             Some(&28),
             "its own axis first"
+        );
+    }
+
+    #[test]
+    fn an_attack_posture_with_no_axes_attacks_and_executes() {
+        // g17g2, 18 Nov 2026: the Poland phase said posture attack with no axes and ran as a hold
+        let w = war(false);
+        let mut state = State::default();
+        let plan = json!({"war": {"enemies": ["FRA"], "axes": [], "posture": "attack",
+            "planning_wait": false}});
+        for day in 0..20 {
+            tick(&mut state, &w, &plan, "l", START + day * DAY).unwrap();
+        }
+        let orders = army_orders(&w);
+        assert!(
+            orders
+                .iter()
+                .any(|(n, a)| n == "hoi4_army_plan" && a["execute"] == json!(true)),
+            "{orders:?}"
+        );
+    }
+
+    #[test]
+    fn before_the_declaration_the_lines_are_drawn_on_the_country_to_be_attacked_and_nothing_executes(
+    ) {
+        // (the army's own target: a victory-point row, as in a hold that prepares)
+        let plan = json!({"war": {"enemies": ["FRA"], "axes": [], "posture": "attack",
+            "prepare_against": ["FRA"], "planning_wait": false},
+            "vp_targets": [{"province": 280, "state": 28, "army": "Army 1"}]});
+        let w = war(false);
+        let peace = Validated {
+            inner: &w,
+            at_war: vec![],
+            holders: vec![],
+        };
+        let mut state = State::default();
+        for day in 0..20 {
+            tick(&mut state, &peace, &plan, "l", START + day * DAY).unwrap();
+        }
+        let names: Vec<String> = army_orders(&w).into_iter().map(|(n, _)| n).collect();
+        assert_eq!(names, ["hoi4_army_front", "hoi4_army_offensive"]);
+        // without `prepare_against` peace is peace: no line at all
+        let mut quiet = plan.clone();
+        quiet["war"]
+            .as_object_mut()
+            .unwrap()
+            .remove("prepare_against");
+        let w = war(false);
+        let peace = Validated {
+            inner: &w,
+            at_war: vec![],
+            holders: vec![],
+        };
+        let mut state = State::default();
+        for day in 0..5 {
+            tick(&mut state, &peace, &quiet, "l", START + day * DAY).unwrap();
+        }
+        assert!(army_orders(&w).is_empty(), "{:?}", w.calls.borrow());
+    }
+
+    #[test]
+    fn a_victory_point_row_a_neutral_holds_waits_for_its_own_war() {
+        // g17g2, 18 Nov 2026: the armour took its Belgian row (Liege) in the Poland war
+        let w = war(false);
+        let tools = Validated {
+            inner: &w,
+            at_war: vec!["FRA"],
+            holders: vec![(34, 340, "BEL"), (28, 280, "FRA")],
+        };
+        let plan = json!({"war": {"enemies": ["FRA"], "axes": []},
+            "vp_targets": [{"province": 340, "state": 34, "army": "Army 1"},
+                {"province": 280, "state": 28, "army": "Army 1"}]});
+        let mut state = State::default();
+        let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            step,
+            Tick::Acted("war front and offensive Army 1 -> state 28: ok".into())
         );
     }
 

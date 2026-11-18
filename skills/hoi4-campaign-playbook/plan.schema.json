@@ -5604,7 +5604,13 @@
           ],
           "default": "attack",
           "x-owner": "executor",
-          "description": "defend: a defender until its counter-attack phase. In a hold phase (axes: []) no army draws a line on enemy land and none retakes a lost own state (a retake is an attack); the armies stand where the layout, the guards and the defence lines put them and entrench; every other theatre army keeps one front on the contact line (the nearest hostile-held state touching own-controlled land, weighed against the divisions already fronting it), drawn again when that state leaves the contact line or the army loses its order. Phases with axes attack as usual"
+          "description": "defend: a defender until its counter-attack phase. In a hold phase (axes: []) no army draws a line on enemy land and none retakes a lost own state (a retake is an attack); the armies stand where the layout, the guards and the defence lines put them and entrench; every other theatre army keeps one front on the contact line (the nearest hostile-held state touching own-controlled land, weighed against the divisions already fronting it), drawn again when that state leaves the contact line or the army loses its order. Phases with axes attack as usual. attack written out in a phase with axes: [] makes it an attack phase, not a hold: each army takes its layout axis, its victory-point row or the nearest target"
+        },
+        "prepare_against": {
+          "type": "array",
+          "items": {"type": "string"},
+          "x-owner": "executor",
+          "description": "country tags a coming war is declared on (set it in the phase before the declaration): at peace with all of them, the armies draw their fronts and offensive lines on them as in a hold phase and plan, nothing executes, so the first day of the war only gives the execute order"
         },
         "defend_per_state": {
           "type": "number",
