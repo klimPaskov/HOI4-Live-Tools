@@ -1003,7 +1003,10 @@ fn ledger_rest(war: bool, in_row: u32, cost: u64) -> (GameHour, Rest) {
         (3, 10 * DAY, 80 * DAY, 32, 60 * DAY, 60 * DAY)
     };
     if in_row >= GIVE_UP_AFTER {
-        return (given_up, Rest::GivenUp);
+        // each further failure of a given-up order doubles its rest (g17i, 18 Nov 2026: one
+        // layout march the game refused was sent 69 times in 20 months, every 6 game days)
+        let more = (in_row - GIVE_UP_AFTER).min(4);
+        return ((given_up << more).min(given_up * 8), Rest::GivenUp);
     }
     let repeated = if in_row >= first {
         (base << (in_row - first).min(4)).min(cap)
@@ -3349,6 +3352,12 @@ fn layout_step(
             state.done.remove(&key);
             continue;
         }
+        // a march the game keeps refusing (no land route: East Prussia behind the corridor in
+        // peace, g17i 18 Nov 2026: 69 refused marches in 20 months) is given up after
+        // LAYOUT_TRIES: the role keeps the army where it stands
+        if state.done.contains_key(&format!("layout:nomarch:{hint}")) {
+            continue;
+        }
         let (ok, why) = state.act(
             tools,
             lease,
@@ -3356,6 +3365,13 @@ fn layout_step(
             json!({"army": army, "state_id": home}),
             "lm",
         )?;
+        if !ok && layout_failed(state, &format!("march:{hint}")) {
+            state.done.insert(format!("layout:nomarch:{hint}"), now);
+            state.done.remove(&key);
+            return Ok(Some(format!(
+                "layout: {army} ({hint}) march to state {home} given up after {LAYOUT_TRIES} refusals ({why}); it stays where it stands"
+            )));
+        }
         state.skip(now, "layoutmove", hint, if ok { 20 * DAY } else { 3 * DAY });
         return Ok(Some(format!(
             "layout: {army} ({hint}) marches to its state {home}: {ok} {why}"
@@ -12461,6 +12477,15 @@ mod tests {
     }
 
     #[test]
+    fn a_given_up_order_rests_twice_as_long_after_each_further_failure() {
+        // g17i: one refused layout march was sent 69 times in 20 months, every 6 game days
+        assert_eq!(ledger_rest(true, GIVE_UP_AFTER, 0).0, 6 * DAY);
+        assert_eq!(ledger_rest(true, GIVE_UP_AFTER + 1, 0).0, 12 * DAY);
+        assert_eq!(ledger_rest(true, GIVE_UP_AFTER + 9, 0).0, 48 * DAY);
+        assert_eq!(ledger_rest(false, GIVE_UP_AFTER + 2, 0).0, 240 * DAY);
+    }
+
+    #[test]
     fn an_order_that_keeps_failing_is_given_up_and_reported_once() {
         struct Refuse(RefCell<usize>);
         impl Tools for Refuse {
@@ -12776,6 +12801,41 @@ mod tests {
         assert_eq!(tools.sent("hoi4_army_detach"), 0);
         assert_eq!(state.layout["J_guard"], "Army 3");
         assert_eq!(state.war_guard.get("Army 3"), Some(&844));
+    }
+
+    #[test]
+    fn a_layout_march_the_game_keeps_refusing_is_given_up() {
+        // g17i (18 Nov 2026): Armee Nord's march to East Prussia was refused 69 times
+        let tools = Lay {
+            calls: RefCell::new(vec![]),
+            armies: RefCell::new(json!({"armies": [
+                {"army": "Army 3", "main_state": 64, "division_count": 21, "commander": null}],
+                "unassigned_by_state": []})),
+            divisions: json!([]),
+            refuse: vec!["hoi4_army_move"],
+        };
+        let plan = json!({"army_layout": [
+            {"name_hint": "Armee Nord", "state": 5, "role": "strike"}]});
+        let mut state = State::default();
+        state.layout.insert("Armee Nord".into(), "Army 3".into());
+        state.done.insert("layoutformed:Armee Nord".into(), START);
+        let mut outs = Vec::new();
+        for day in 0..40 {
+            let now = START + day * 4 * DAY;
+            state.clock = now;
+            if let Some(out) = layout_step(&mut state, &tools, &plan, "l", now).unwrap() {
+                outs.push(out);
+            }
+        }
+        assert!(
+            outs.iter().any(|o| o.contains("march to state 5 given up")),
+            "{outs:?}"
+        );
+        assert_eq!(
+            tools.sent("hoi4_army_move"),
+            LAYOUT_TRIES as usize,
+            "{outs:?}"
+        );
     }
 
     #[test]
