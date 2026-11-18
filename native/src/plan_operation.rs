@@ -1729,6 +1729,30 @@ fn advance(
             }
             return Ok(Some(line));
         }
+        // a stopped attacker with no arrow on its line (the draws gave up or rest) executes
+        // its front rather than stand: it26b (18 Nov 2026) stopped the group to execute a new
+        // arrow that never read back, and the group stood six weeks
+        if arrow.is_none()
+            && at_war.contains(&u.enemy)
+            && has_front(roster, &u.name)
+            && !executing(roster, &u.name)
+            && !state.skipped(now, "opexec", &u.name)
+        {
+            state.skip(now, "opexec", &u.name, DAY / 2);
+            let line = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!(
+                    "{} stands with no arrow on its line: execute its front",
+                    u.name
+                ),
+                "hoi4_army_plan",
+                json!({"army": u.name, "execute": true}),
+            )?;
+            return Ok(Some(line));
+        }
     }
     // holds keep their fronts (never executed)
     for u in units.iter().filter(|u| u.role == Role::Hold) {

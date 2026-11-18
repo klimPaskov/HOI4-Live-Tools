@@ -720,3 +720,29 @@ fn at_war_an_attacker_whose_offensive_never_draws_executes_its_front() {
     );
     assert!(state.done.contains_key("op:op_pol:exec"));
 }
+
+#[test]
+fn a_stopped_attacker_with_no_arrow_on_its_line_executes_its_front() {
+    // it26b (18 Nov 2026): the group was stopped to execute a new arrow that never read back
+    let game = Game::new();
+    let plan = plan();
+    let mut state = State::default();
+    prepared(&mut state, &game, &plan);
+    *game.enemies.borrow_mut() = vec!["POL"];
+    burst(&mut state, &game, &plan, START + DAY);
+    assert!(state.done.contains_key("op:op_pol:exec"));
+    *game.refuse_all.borrow_mut() = true;
+    game.unit("Army Group 1", |r| {
+        r["plan"] = json!([{"kind": "front", "executing": false, "offensives": []}])
+    });
+    game.calls.borrow_mut().clear();
+    for hour in 0..40 {
+        burst(&mut state, &game, &plan, START + 2 * DAY + hour * 7);
+    }
+    assert!(game
+        .orders()
+        .iter()
+        .any(|(_, a)| a["army"] == json!("Army Group 1") && a["execute"] == json!(true)));
+    let roster = game.roster.borrow().clone();
+    assert!(executing(&roster, "Army Group 1"));
+}
