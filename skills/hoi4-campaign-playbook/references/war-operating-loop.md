@@ -77,8 +77,10 @@ division a province): at war the strike engine moves it as one column, at most `
 in order, the way from the column when no path is given, resting by organisation; it posts no
 covers. From the prepare on the air goes too: wings rebase to free bases facing the operation and
 take their missions over its regions in peace. A declaration against an operation's enemy waits
-while that operation's prepare still has a refused front or assembly (at most three game days).
-In peace it reconciles the wanted orders with the
+while that operation's prepare still has a refused front or assembly (at most ten game days,
+counted from the day the declaration itself is due).
+An operation whose enemy is already at war with the player (Italy against Ethiopia) prepares by
+the war rules below from its first tick. In peace it reconciles the wanted orders with the
 read-back on every pass and sends only the difference: exercises stopped, line armies and the
 armies of a hold group cleared of their own orders, mobile and wing fronts and lines, the group
 front and its line, each hold's front; a group line that misses its states is cleared and drawn
@@ -89,7 +91,9 @@ the line: all its states held, the next phase line's `when` true, or no state ga
 `stall_days` (7; progress is counted in provinces) draws the next line (the plan's phase lines, then the one enemy state with the
 most victory points for its distance) and executes it. At war nothing is cleared: a line that
 does not draw is taken one state at a time, and a front is clicked at the enemy state across the
-contact line nearest the line. When every enemy is out of the war it
+contact line nearest the line. An attacker whose offensive never reads back executes its front
+alone (its divisions attack along the line) instead of standing, and the operation counts as
+executed only when no attacker is still drawing. When every enemy is out of the war it
 clears the attack orders and `on_capitulation.next` starts preparing. The player never orders an
 army of a running operation; a stalled operation is a revision request.
 
