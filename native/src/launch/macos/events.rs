@@ -562,15 +562,82 @@ pub(super) fn choose(
     // A notice (a finished focus) can be drawn over the event window.
     let _ = super::ui::dismiss_notices(process, keys);
     let open = settled(process, "event window", open_events)?;
-    let Some(top) = open.last() else {
+    if open.is_empty() {
         return Err(Error::new("invalid_target", "No event window is open"));
-    };
-    if top.id != id {
+    }
+    // The list order is not the screen's stacking order (i18b, 18 Nov 2026: the listed last
+    // event lay under a later one, whose body took its clicks). Any open event may be answered;
+    // only an option of another window on the same spot is refused, since that click could
+    // answer the other event.
+    let Some(at) = open.iter().position(|e| e.id == id) else {
         return Err(Error::new(
             "invalid_target",
-            format!("Answer the event on top first: {}", top.id),
+            format!("Event {id} is not open"),
         ));
+    };
+    let top = &open[at];
+    let result = click_option(process, keys, &open, at, option);
+    match result {
+        Err(e) if e.code == "input_readback_failed" && open.len() > 1 => {
+            // Still open with other windows up: one of them covers it. Windows with a single
+            // option decide nothing; acknowledging them uncovers it, then one more try.
+            let mut cleared = false;
+            for other in open
+                .iter()
+                .rev()
+                .filter(|o| o.event != top.event && o.options.len() == 1)
+            {
+                if !read(process, |r, i| {
+                    Ok(open_events(r, i)?.iter().any(|x| x.event == top.event))
+                })? {
+                    return Ok(());
+                }
+                let now = settled(process, "event window", open_events)?;
+                let Some(j) = now.iter().position(|x| x.event == other.event) else {
+                    continue;
+                };
+                if click_option(process, keys, &now, j, 0).is_ok() {
+                    cleared = true;
+                }
+            }
+            let now = settled(process, "event window", open_events)?;
+            let Some(j) = now.iter().position(|x| x.event == top.event) else {
+                return Ok(());
+            };
+            if cleared {
+                if let Ok(()) = click_option(process, keys, &now, j, option) {
+                    return Ok(());
+                }
+            }
+            let others: Vec<&str> = now
+                .iter()
+                .filter(|x| x.event != top.event)
+                .map(|x| x.id.as_str())
+                .collect();
+            if others.is_empty() {
+                return Err(e);
+            }
+            Err(Error::new(
+                "event_covered",
+                format!(
+                    "Event {id} did not take the click; open over it: {} (answer one of those, then this one)",
+                    others.join(", ")
+                ),
+            ))
+        }
+        other => other,
     }
+}
+
+/// Click option `option` of `open[at]` and wait until exactly that window closes.
+fn click_option(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    open: &[Open],
+    at: usize,
+    option: usize,
+) -> Result<()> {
+    let top = &open[at];
     let centres = match (&top.centres, top.scan) {
         (Some(c), _) => c.clone(),
         (None, Some((centre, half, from))) => {
@@ -609,7 +676,25 @@ pub(super) fn choose(
         .get(option)
         .ok_or_else(|| Error::new("invalid_arguments", "No such event option"))?;
     let event = top.event;
-    let others: Vec<u64> = open[..open.len() - 1].iter().map(|e| e.event).collect();
+    if let Some(clash) = open.iter().filter(|e| e.event != event).find(|e| {
+        e.centres
+            .iter()
+            .flatten()
+            .any(|&(ox, oy)| same_spot((x, y), (ox, oy)))
+    }) {
+        return Err(Error::new(
+            "event_covered",
+            format!(
+                "An option of {} lies on the same spot as this option of {}; answer {} first",
+                clash.id, top.id, clash.id
+            ),
+        ));
+    }
+    let others: Vec<u64> = open
+        .iter()
+        .filter(|e| e.event != event)
+        .map(|e| e.event)
+        .collect();
     let answered = |r: &crate::memory::Reader<'_>, i: u64| {
         let now = open_events(r, i)?;
         if others.iter().any(|o| !now.iter().any(|e| e.event == *o)) {
@@ -636,6 +721,12 @@ pub(super) fn choose(
         }
         Err(e) => Err(e),
     }
+}
+
+/// Two option buttons whose click points this close could be one button on screen (an
+/// option bar is about 350 x 40 px at 1080p).
+fn same_spot(a: (f64, f64), b: (f64, f64)) -> bool {
+    (a.0 - b.0).abs() < 175.0 && (a.1 - b.1).abs() < 24.0
 }
 
 #[cfg(test)]
@@ -674,6 +765,14 @@ mod tests {
             list(&MissingPeace).unwrap_err().code,
             "fixture_missing_peace"
         );
+    }
+
+    #[test]
+    fn cascaded_event_windows_do_not_share_an_option_spot() {
+        // i18b: two plain event windows cascaded 74 px apart; their options are distinct
+        assert!(!same_spot((1043.0, 474.0), (1043.0, 548.0)));
+        assert!(same_spot((1043.0, 474.0), (1050.0, 480.0)));
+        assert!(!same_spot((600.0, 474.0), (1043.0, 474.0)));
     }
 
     #[test]

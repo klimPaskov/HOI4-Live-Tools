@@ -1380,7 +1380,13 @@ pub fn tick(
         // the plan's `peace` demands, else the stop (plan_manage.rs)
         return plan_manage::peace(state, tools, plan, lease, now);
     }
-    if let Some(top) = list(&events, "events").last() {
+    // The list order is not the screen's stacking order (i18b, 18 Nov 2026: a later event drawn
+    // over the listed last one took its clicks, its answer failed, and the failure backoff
+    // then held the whole tick for weeks). Every open event gets its turn, the listed last
+    // first: one whose answer rests after failures, or that waits for the model, gives the
+    // turn to the next. When none can be answered now the tick goes on to the other steps.
+    let mut waiting: Option<(String, bool)> = None;
+    for top in list(&events, "events").iter().rev() {
         let key = text(&top["event"]).to_string();
         let new = !state.seen.contains_key(&key);
         let first = *state.seen.entry(key.clone()).or_insert(now);
@@ -1395,7 +1401,8 @@ pub fn tick(
         // `event_rules` come first: an option by its name; an unknown condition waits.
         let ruled = event_rule_choice(state, tools, plan, &key, top, now);
         if matches!(ruled, Some(None)) {
-            return Ok(Tick::Waiting { event: key, new });
+            waiting.get_or_insert((key, new));
+            continue;
         }
         let (ruled, how) = ruled
             .flatten()
@@ -1431,18 +1438,22 @@ pub fn tick(
         };
         if auto && (news || chosen.is_some() || waited > patience) {
             let option = chosen.unwrap_or(0);
-            let (ok, why) = state.act(
-                tools,
-                lease,
-                "hoi4_event_choose",
-                json!({"event": key, "option": option}),
-                "ev",
-            )?;
+            let args = json!({"event": key, "option": option});
+            if state
+                .backing_off(&format!("hoi4_event_choose {args}"))
+                .is_some()
+            {
+                continue;
+            }
+            let (ok, why) = state.act(tools, lease, "hoi4_event_choose", args, "ev")?;
             return Ok(Tick::Acted(format!(
                 "event {key} option {option}{how}: {ok} {why}"
             )));
         }
-        return Ok(Tick::Waiting { event: key, new });
+        waiting.get_or_insert((key, new));
+    }
+    if let Some((event, new)) = waiting {
+        return Ok(Tick::Waiting { event, new });
     }
     // 1a. day 0, paused before the first unpause: free military factories to the starting lines
     // the plan keeps, before anything else (plan_manage.rs)
@@ -9149,6 +9160,40 @@ mod tests {
             tick(&mut state, &tools, &off, "l", START + 30 * DAY).unwrap(),
             Tick::Waiting { .. }
         ));
+    }
+
+    #[test]
+    fn an_event_whose_answer_rests_gives_the_turn_to_the_other_open_events() {
+        // i18b (18 Nov 2026): the listed last event lay under a later one; its answer failed
+        // three times and the backoff held the whole tick for 13 game days.
+        let events = json!({"events": [
+            {"event": "BBA_italy_missiolinis.13", "options": ["Blood alone"]},
+            {"event": "BBA_italo_ethiopian_war_events.20", "options": ["The struggle continues"]}]});
+        let tools = fake(vec![("hoi4_events", events)]);
+        let mut state = State::default();
+        let resting = format!(
+            "hoi4_event_choose {}",
+            json!({"event": "BBA_italo_ethiopian_war_events.20", "option": 0})
+        );
+        state.failures.insert(resting, vec![START, START, START]);
+        let step = tick(&mut state, &tools, &json!({}), "l", START + 1).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("event BBA_italy_missiolinis.13 option 0")),
+            "{step:?}"
+        );
+        // a choice the model still has gives the turn as well, and it is reported as waiting
+        let events = json!({"events": [
+            {"event": "x.1", "options": ["a", "b"]},
+            {"event": "y.1", "options": ["a", "b"]}]});
+        let tools = fake(vec![("hoi4_events", events)]);
+        let mut state = State::default();
+        assert_eq!(
+            tick(&mut state, &tools, &json!({}), "l", START).unwrap(),
+            Tick::Waiting {
+                event: "y.1".into(),
+                new: true
+            }
+        );
     }
 
     #[test]

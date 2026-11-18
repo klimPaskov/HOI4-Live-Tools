@@ -79,7 +79,7 @@ pub(super) fn userdir_argument(args: &str) -> Option<PathBuf> {
     (!p.is_empty()).then(|| PathBuf::from(p))
 }
 
-fn userdir(exe: &str) -> Option<PathBuf> {
+pub(super) fn userdir(exe: &str) -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("HOI4_USERDIR") {
         return Some(PathBuf::from(d));
     }
