@@ -156,7 +156,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_map_mode` (A): Switch the map mode with the game's own F-key shortcut, as a human checks the map:
 - `hoi4_occupation` (R): Read-only (memory, no input, no pause):
 - `hoi4_occupation_law` (A): Set the DEFAULT occupation law for all occupied territories (the Occupied Territories view's Territory Management law) with ordinary input:
-- `hoi4_officer_corps` (A): Live-verified read (pp18, pp23, 17 Nov 2026):
+- `hoi4_officer_corps` (A): Live-verified read (pp18, pp23, 17 Nov 2026) and pick (fk1, 18 Nov 2026:
 - `hoi4_operation_start` (A): Prepare an intelligence operation against a target with ordinary input, as a player does:
 - `hoi4_operative_assign` (A): Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission:
 - `hoi4_operative_recruit` (A): Recruit an operative into a free slot of the operative bar:

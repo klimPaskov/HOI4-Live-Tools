@@ -253,6 +253,9 @@ fn code(why: &str) -> &str {
     why.split(':').next().unwrap_or("").trim()
 }
 
+/// How long a due declaration waits for its operation's prepare to read back.
+const OP_DECLARE_WAIT: GameHour = 10 * DAY;
+
 /// One section's view of the tick.
 struct Run<'a> {
     tools: &'a dyn Tools,
@@ -262,6 +265,25 @@ struct Run<'a> {
 }
 
 type Section = fn(&mut State, &Run<'_>) -> Result<Option<String>>;
+
+/// The force spends of this module (plan_run.rs `force_first`): the plan's designs.
+pub(super) fn force_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    designs_step(
+        state,
+        &Run {
+            tools,
+            plan,
+            lease,
+            now,
+        },
+    )
+}
 
 /// Everything after plan_manage's step, at most one action: diplomacy, faction, incoming
 /// proposals, trade, designs and line switches, MIOs, intelligence.
@@ -380,12 +402,19 @@ fn designs_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         if let Some(b) = branch.filter(|_| need > 0.0) {
             let read = xp.get_or_insert_with(|| tools.call("hoi4_doctrines", &json!({})).ok());
             // an unreadable XP leaves the check to the tool's own insufficient_experience
-            if let Some(have) = read
+            let have = read
                 .as_ref()
-                .and_then(|d| d["experience"][b]["value"].as_f64())
-            {
-                if have < need {
-                    waits.push(format!("{label}: {b} XP {have} < {need}"));
+                .and_then(|d| d["experience"][b]["value"].as_f64());
+            // the spends the plan's xp_budget lists before this design are paid first
+            let who = item_id(entry).map_or(super::plan_xp::Spender::Unlisted, |id| {
+                super::plan_xp::Spender::Ref(format!("design:{id}"))
+            });
+            let (before, _) = super::plan_xp::ahead(state, tools, plan, b, &who, now);
+            if let Some(have) = have {
+                if have < need + before {
+                    waits.push(format!(
+                        "{label}: {b} XP {have} < {need} + {before:.0} held"
+                    ));
                     blocked.insert(b);
                     continue;
                 }
@@ -1108,20 +1137,27 @@ fn diplomacy_items(
             waits.push(format!("{label}: waiting"));
             continue;
         }
-        // an operation against the target still preparing holds the declaration, at most three
-        // game days from the first time it held it
-        if action == "declare_war" {
-            if let Some(op) = super::plan_operation::unready(state, plan, &target) {
-                let first = *state.done.entry(format!("declwait:{key}")).or_insert(now);
-                if now - first < 3 * DAY {
-                    waits.push(format!("{label}: operation {op} still preparing"));
-                    continue;
-                }
-            }
-        }
         if let Some(why) = gate(state, tools, &item["when"], now) {
             waits.push(format!("{label}: {why}"));
             continue;
+        }
+        // An operation against the target still preparing holds the declaration, at most
+        // OP_DECLARE_WAIT from the day the declaration itself was due. The wait used to count
+        // from the first tick of the prepare, weeks before the declaration's own `when`, so it
+        // had always run out: b1f (18 Nov 2026) declared on the day its focus completed with the
+        // West hold undrawn, and France took four states while no attack executed.
+        if action == "declare_war" {
+            if let Some(op) = super::plan_operation::unready(state, plan, &target) {
+                let first = *state.done.entry(format!("declwait:{key}")).or_insert(now);
+                if now - first < OP_DECLARE_WAIT {
+                    waits.push(format!(
+                        "{label}: operation {op} still preparing ({} of {} days waited)",
+                        (now - first) / DAY,
+                        OP_DECLARE_WAIT / DAY
+                    ));
+                    continue;
+                }
+            }
         }
         if let Some(max) = item["world_tension_max"].as_f64() {
             let wt = json!(format!("world_tension <= {max}"));
