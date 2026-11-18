@@ -439,6 +439,15 @@ module's docstring has the detail:
   force.navy_tools         an operation resting on a lever no tool carries, with no fallback
   force.anti_tank, force.anti_air, force.air_command, force.air_defence, force.air_resources  (warnings)
 
+Each war's shape on its first day (lint_war_shape.py):
+  war.axes_missing         an offensive war whose phase names no war.axes and no operations (posture attack with
+                           axes [] included): every army picks its own target
+  war.objective_not_at_war a vp row dated before its owner's war, an army's first open row on the first day of a
+                           war it fights in, or a phase axis state, in a country not at war then
+  war.hold_sector          a border state facing a joiner, a likely joiner or a carried enemy with fewer than 2
+                           divisions of a named formation outside war.reserve
+  war.mobile_axis          an armour or motorised strike formation with no axis, or another formation's axis
+
 Hand plans: with _meta.source "hand" (or --hand) every coverage-build and tactics error above is reported as
 a warning, so the two hand plans keep 0 errors while their gaps stay visible; the older rules are
 unchanged.
@@ -559,7 +568,8 @@ NEW_RULES |= {"force.required", "force.breakthrough", "force.single_template", "
 NEW_RULES |= {"force.sea_required", "force.sea_control", "force.sea_screens", "force.sea_lift", "force.sea_port",
               "force.sea_patrol", "force.sea_raid", "force.carrier_air", "force.navy_unused", "force.navy_readiness",
               "force.navy_design", "force.navy_tools"}
-NEW_RULES |= {"force.bombers", "force.design_cost", "force.decisive", "force.sea_air_cover"}  # bombers, designed cost, decisive wars
+NEW_RULES |= {"force.bombers", "force.design_cost", "force.decisive", "force.sea_air_cover"}
+NEW_RULES |= {"war.axes_missing", "war.objective_not_at_war", "war.hold_sector", "war.mobile_axis"}  # lint_war_shape.py  # bombers, designed cost, decisive wars
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"
