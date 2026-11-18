@@ -519,6 +519,15 @@ def plan_wars(lint, tl):
                     "start_date": derive.fmt(derive.date_of(day)) if day is not None else None,
                     "targets": targets, "joiners": joiners, "carried": still, "enemy_tags": enemy,
                     "source": x["source"]})
+    # a war the enemy declares by script (an event, war.enemies) that the plan fights to defeat the enemy is an
+    # offensive war: force_design.wars says so, and every offensive check applies (never the other way round)
+    fd = lint.plan.get("force_design") if isinstance(lint.plan.get("force_design"), dict) else {}
+    for war in out:
+        if war["kind"] == "defensive" and any(
+                isinstance(x, dict) and x.get("kind") == "offensive" and set(x.get("enemies") or []) & set(war["targets"])
+                for x in fd.get("wars") or []):
+            war["kind"] = "offensive"
+            war["source"] = list(war["source"]) + ["force_design.wars: fought as an offensive war"]
     for war in out:
         war["axes"], war["theatre"] = _axes_and_theatre(lint, war)
     return out

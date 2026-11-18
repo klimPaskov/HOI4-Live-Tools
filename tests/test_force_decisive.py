@@ -70,6 +70,20 @@ class GoalWars(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class ScriptedWar(unittest.TestCase):
+    def test_a_war_the_enemy_declares_and_the_plan_fights_to_win_is_offensive(self):
+        game = lint_plan.load_game(GAME_DIR)
+        plan = germany_at_war()
+        plan["diplomacy"] = []
+        plan["war"] = dict(plan.get("war") or {}, enemies=["POL"])
+        plan["force_design"] = {"wars": [{"id": "war_pol", "enemies": ["POL"], "kind": "offensive", "axes": 3}]}
+        out = lint_plan.lint(plan, game)
+        war = next(w for w in out["facts"]["force"]["wars"] if "POL" in w["targets"])
+        self.assertEqual(war["kind"], "offensive")
+        self.assertIn("force_design.wars: fought as an offensive war", war["source"])
+
+
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
 class Duration(unittest.TestCase):
     def test_the_label_follows_the_plans_own_timetable(self):
         game = lint_plan.load_game(GAME_DIR)
