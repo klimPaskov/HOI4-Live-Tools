@@ -1003,8 +1003,13 @@ fn prepare(
     ordered.extend(units.iter().filter(|u| u.role == Role::Group));
     ordered.extend(units.iter().filter(|u| u.role == Role::Hold));
     for u in ordered {
-        if let Some(line) = reconcile(state, tools, id, u, &u.line, roster, wars, lease, now, true)?
-        {
+        // a line that would not draw is drawn one state at a time, its first state first
+        let one = key(id, &format!("one:{}:{}", u.name, line_tag(&u.line)));
+        let line = match state.done.get(&one) {
+            Some(first) => vec![*first],
+            None => u.line.clone(),
+        };
+        if let Some(line) = reconcile(state, tools, id, u, &line, roster, wars, lease, now, true)? {
             return Ok(Some(line));
         }
     }
@@ -1113,6 +1118,18 @@ fn reconcile(
     let k = key(id, &format!("redraw:{}:{tag}", u.name));
     let redraws = state.done.get(&k).copied().unwrap_or(0);
     if stale && peace {
+        if redraws >= REDRAWS && line.len() >= 2 {
+            // o1f: the stroke Lodz-Warsaw read back over Gdynia twice; one state at a time
+            state
+                .done
+                .insert(key(id, &format!("one:{}:{tag}", u.name)), line[0]);
+            let line = format!(
+                "operation {id}: the line {tag} of {} misses after {REDRAWS} redraws: one state at a time, {} first",
+                u.name, line[0]
+            );
+            state.op_notes.insert(id.to_string(), line.clone());
+            return Ok(Some(line));
+        }
         if redraws >= REDRAWS {
             state.op_notes.insert(
                 format!("{id}:{}", u.name),

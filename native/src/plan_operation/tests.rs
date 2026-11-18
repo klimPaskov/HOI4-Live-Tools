@@ -296,7 +296,7 @@ fn prepare_reconciles_the_wanted_orders_with_the_read_back() {
 }
 
 #[test]
-fn a_missed_target_line_is_cleared_and_drawn_again_at_most_twice() {
+fn a_missed_target_line_is_drawn_again_twice_then_one_state_at_a_time_twice() {
     let game = Game::new();
     let plan = plan();
     let mut state = State::default();
@@ -306,20 +306,31 @@ fn a_missed_target_line_is_cleared_and_drawn_again_at_most_twice() {
         r["plan"][0]["offensives"] = json!([{"executing": false, "target": {"states": [90]}}])
     });
     let mut clears = 0;
-    for day in 1..8 {
+    let mut drawn = Vec::new();
+    for day in 1..10 {
         burst(&mut state, &game, &plan, START + day * DAY);
         clears += game
             .orders()
             .iter()
             .filter(|(n, a)| n == "hoi4_army_plan" && a["army"] == json!("Army Group 1"))
             .count();
+        drawn.extend(
+            game.orders()
+                .into_iter()
+                .filter(|(n, a)| n == "hoi4_army_offensive" && a["army"] == json!("Army Group 1"))
+                .map(|(_, a)| a),
+        );
         game.calls.borrow_mut().clear();
         game.unit("Army Group 1", |r| {
             r["plan"] = json!([{"kind": "front", "executing": false,
                 "offensives": [{"executing": false, "target": {"states": [90]}}]}])
         });
     }
-    assert_eq!(clears, REDRAWS as usize);
+    assert_eq!(clears, 2 * REDRAWS as usize);
+    assert_eq!(
+        drawn.last(),
+        Some(&json!({"army": "Army Group 1", "state_id": 85}))
+    );
 }
 
 #[test]
