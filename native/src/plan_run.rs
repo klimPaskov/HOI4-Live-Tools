@@ -5482,8 +5482,12 @@ fn air_war_missions(
                 if ok {
                     state.skip(now, "airwing", &name, 30 * DAY);
                 } else {
-                    // the next pass rebases it to a front base facing the operation
-                    state.done.insert(format!("airfar:{name}"), now);
+                    // a mission the game did not take (read back) sends the wing to a front base
+                    // facing the operation on the next pass; a refusal before input (an open
+                    // event, o1g) only waits
+                    if why.contains("Diverged") || why.contains("NotApplied") {
+                        state.done.insert(format!("airfar:{name}"), now);
+                    }
                     state.skip(now, "airwing", &name, DAY / 4);
                 }
                 return Ok(Some(format!(
@@ -5537,6 +5541,9 @@ fn operation_targets(tools: &dyn Tools) -> Vec<i64> {
         return Vec::new();
     };
     let mut count: Vec<(i64, usize)> = Vec::new();
+    // the executing offensives first; drawn ones count too, behind them (o1g: in the
+    // declaration tick nothing executed yet and the wings went over France for 30 days)
+    let mut drawn: Vec<i64> = Vec::new();
     for row in list(&read, "armies")
         .iter()
         .chain(list(&read, "army_groups").iter())
@@ -5544,6 +5551,7 @@ fn operation_targets(tools: &dyn Tools) -> Vec<i64> {
         for order in list(row, "plan") {
             for off in list(order, "offensives") {
                 if off["executing"] != json!(true) {
+                    drawn.extend(ints(&off["target"]["states"]));
                     continue;
                 }
                 for id in ints(&off["target"]["states"]) {
@@ -5556,7 +5564,13 @@ fn operation_targets(tools: &dyn Tools) -> Vec<i64> {
         }
     }
     count.sort_by_key(|c| std::cmp::Reverse(c.1));
-    count.into_iter().map(|c| c.0).collect()
+    let mut out: Vec<i64> = count.into_iter().map(|c| c.0).collect();
+    for id in drawn {
+        if !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    out
 }
 
 /// The state a war wing based in `base` flies over: an operation target across the border its
@@ -11462,7 +11476,8 @@ mod tests {
                     {"executing": true, "target": {"states": [10]}}]}]}]}))
             }
         }
-        assert_eq!(operation_targets(&Ops), vec![10, 85]);
+        // executing targets first, a drawn one behind them
+        assert_eq!(operation_targets(&Ops), vec![10, 85, 5]);
         // an inland wing first goes to the front base facing the operation, with room for it
         let air = json!({"air_bases": [
             {"state_id": 42, "free": 900}, {"state_id": 66, "free": 200},
