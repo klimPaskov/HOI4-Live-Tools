@@ -2499,7 +2499,23 @@ fn mio_auto_traits(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         let Ok(listing) = listing else {
             return Ok(Some(format!("mio {org} trait list: failed")));
         };
-        let entries = list(&listing["observed"], "listed").to_vec();
+        let mut entries = list(&listing["observed"], "listed").to_vec();
+        // the game's mio_traits alert open two weeks with a trait queued: the queued one is not
+        // being unlocked (g17i, 18 Nov 2026: Mauser kept one queued trait under the alert for
+        // 344 days), so another trait is queued beside it
+        let stuck = state
+            .manage
+            .alert_since
+            .get("mio_traits")
+            .is_some_and(|since| now - *since >= 14 * DAY);
+        if stuck {
+            for e in entries.iter_mut() {
+                if !text(&e["queue"]).trim().is_empty() {
+                    e["queue"] = json!("");
+                    e["owned"] = json!(true);
+                }
+            }
+        }
         let tried = |i: u64| state.skipped(now, "miotrait", &format!("{org}#{i}"));
         let Some(index) = auto_trait_pick(&entries, &tried) else {
             note(

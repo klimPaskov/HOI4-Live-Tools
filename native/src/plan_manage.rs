@@ -673,14 +673,14 @@ fn step_reason(state: &State, alert: &str, step: &str) -> String {
         .chain(keys.iter())
         .filter(|k| !k.is_empty())
         .find_map(|key| {
-            // a manage note older than two game days is no reason for an alert open today
+            // a manage note older than a month (the slowest rule cadence) is no reason for an alert open today
             // (g17i, 18 Nov 2026: free_military_factories quoted the day-0 "no free military
             // factory" for 361 days)
             let current = state
                 .manage
                 .notes_at
                 .get(*key)
-                .is_none_or(|at| state.last_hour - *at <= 2 * DAY);
+                .is_none_or(|at| state.last_hour - *at <= 31 * DAY);
             state
                 .manage
                 .notes
@@ -1103,15 +1103,26 @@ fn batch_short(
         return None;
     }
     let stock = stockpile(state, tools, now)?;
+    // the batch draws its equipment while it trains: what the lines make in the first
+    // TRAINING_COVER_DAYS counts with the stock (sk27a, 18 Nov 2026: nothing trained for 16 days
+    // while support equipment stood at 54 of 60 with 2 a day coming)
     needs.into_iter().find_map(|(archetype, per)| {
-        let held = list(&stock, "equipment")
+        let row = list(&stock, "equipment")
             .iter()
-            .find(|r| text(&r["archetype"]) == archetype)?["stockpile"]
-            .as_f64()?;
+            .find(|r| text(&r["archetype"]) == archetype)?;
+        let held = row["stockpile"].as_f64()?;
+        let made = row["produced_per_day"]["units"]
+            .as_f64()
+            .or_else(|| row["produced_per_day"].as_f64())
+            .unwrap_or(0.0)
+            .max(0.0);
         let need = per * count as f64;
-        (held < need).then_some((archetype, held, need))
+        (held + made * TRAINING_COVER_DAYS < need).then_some((archetype, held, need))
     })
 }
+
+/// Game days of line output a training batch may count on besides the stock.
+const TRAINING_COVER_DAYS: f64 = 30.0;
 
 /// The `only_if_stockpile` proxy for one archetype: False while a fielded division lacks it
 /// (the stockpile is drained into reinforcements first), else Unknown (the stockpile itself is
@@ -3307,8 +3318,11 @@ fn air_idle_step(
                 format!("fuel {f:.2} below the training floor {train_floor}")
             }
             Some(_) => {
+                // a wing already training reads region null too: it is not idle (sk27a, 18 Nov
+                // 2026: 17 wings were sent "training" again every 30 days, 4 times each)
                 let pick = idle.iter().copied().filter(usable).find(|w| {
-                    w["air_base"]["state_id"].as_i64().is_some()
+                    !strings(w, "missions").iter().any(|m| m == "training")
+                        && w["air_base"]["state_id"].as_i64().is_some()
                         && w["transfer_to_base_id"].as_i64().is_none()
                 });
                 if let Some(w) = pick {
@@ -8244,6 +8258,30 @@ mod tests {
         assert!(actions(&tools)
             .iter()
             .all(|(n, _)| n == "hoi4_air_wing_create"));
+    }
+
+    #[test]
+    fn a_wing_already_training_is_not_sent_training_again() {
+        let mut read = air_read();
+        for w in read["wings"].as_array_mut().unwrap() {
+            w["missions"] = json!(["training"]);
+        }
+        let tools = fake(vec![
+            ("hoi4_air", read),
+            (
+                "hoi4_resources",
+                json!({"fuel": {"ratio": 0.9, "stock": 90000.0}}),
+            ),
+        ]);
+        let mut state = State::default();
+        let out = air_idle_step(&mut state, &tools, &peace_plan(), "l", START).unwrap();
+        assert!(
+            !out.as_deref()
+                .unwrap_or("")
+                .contains("trains over its base"),
+            "{out:?}"
+        );
+        assert!(actions(&tools).is_empty());
     }
 
     fn peace_plan() -> Value {
