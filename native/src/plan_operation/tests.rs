@@ -30,6 +30,8 @@ impl Game {
         roster["armies"][0]["plan"] =
             json!([{"kind": "front", "executing": false, "offensives": []}]);
         roster["armies"][1]["exercising"] = json!(true);
+        roster["armies"][4]["plan"] =
+            json!([{"kind": "front", "executing": false, "offensives": []}]);
         Game {
             roster: RefCell::new(roster),
             enemies: RefCell::new(vec![]),
@@ -199,6 +201,7 @@ fn prepare_reconciles_the_wanted_orders_with_the_read_back() {
         &names[1..],
         [
             "hoi4_army_plan Mitte",
+            "hoi4_army_plan WestA",
             "hoi4_army_front Panzer",
             "hoi4_army_offensive Panzer",
             "hoi4_army_front Nord",
@@ -210,13 +213,13 @@ fn prepare_reconciles_the_wanted_orders_with_the_read_back() {
     );
     assert_eq!(sent[1].1["clear_orders"], json!(true));
     assert_eq!(
-        sent[2].1["state_id"],
+        sent[3].1["state_id"],
         json!(86),
         "the front clicks the enemy border state"
     );
-    assert_eq!(sent[3].1, json!({"army": "Panzer", "state_id": 10}));
+    assert_eq!(sent[4].1, json!({"army": "Panzer", "state_id": 10}));
     assert_eq!(
-        sent[7].1,
+        sent[8].1,
         json!({"army": "Army Group 1", "state_id": 10, "states": [85, 86, 10, 88]})
     );
     // nothing executes in peace, the hold never
@@ -314,7 +317,16 @@ fn a_stalled_line_draws_the_next_phase_line_and_executes_it() {
     assert_eq!(group[1]["execute"], json!(true));
     let roster = game.roster.borrow().clone();
     assert_eq!(
-        arrow_executing(&roster, "Army Group 1", &[93, 94]),
+        arrow_executing(
+            &roster,
+            &unit(
+                "Army Group 1".into(),
+                Role::Group,
+                &Value::Null,
+                &Value::Null
+            ),
+            &[93, 94]
+        ),
         Some(true)
     );
     assert_eq!(state.done.get("op:op_pol:line"), Some(&1));

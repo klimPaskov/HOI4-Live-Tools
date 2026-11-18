@@ -70,6 +70,9 @@ enum Role {
 struct Unit {
     name: String,
     role: Role,
+    /// the armies of a hold group (cleared of own orders: an army with own orders ignores its
+    /// group's front, o1a: Armee West Mitte stayed on the Polish border)
+    members: Vec<String>,
     enemy: String,
     own_states: Vec<i64>,
     click: Option<i64>,
@@ -314,7 +317,11 @@ fn units(state: &State, plan: &Value, op: &Value, roster: &Value) -> (Vec<Unit>,
         let facing = strings(hold, "facing");
         let front = json!({"enemy": facing.first().cloned().unwrap_or_default(),
                            "own_states": hold["states"], "click_state": hold["click_state"]});
-        out.push(unit(name, Role::Hold, &front, &Value::Null));
+        let mut hold = unit(name, Role::Hold, &front, &Value::Null);
+        if armies.len() > 1 {
+            hold.members = armies;
+        }
+        out.push(hold);
     }
     let _ = plan;
     (out, group)
@@ -332,6 +339,7 @@ fn unit(name: String, role: Role, front: &Value, offensive: &Value) -> Unit {
     Unit {
         name,
         role,
+        members: Vec::new(),
         enemy: text(&front["enemy"]).to_string(),
         own_states: ints(&front["own_states"]),
         click: front["click_state"].as_i64(),
@@ -360,25 +368,29 @@ fn offensives<'a>(roster: &'a Value, name: &str) -> Vec<&'a Value> {
 
 /// Whether an offensive of the unit aims at `line` (its target covers COVER of the line's
 /// states; a one-state line must be in the target).
-fn covers(roster: &Value, name: &str, line: &[i64]) -> bool {
-    if line.is_empty() {
-        return !offensives(roster, name).is_empty();
+fn covers(roster: &Value, u: &Unit, line: &[i64]) -> bool {
+    arrow_executing(roster, u, line).is_some()
+}
+
+/// States of `line` an offensive's target must hold: COVER of the line for the group (its one
+/// country-wide line), one for a mobile or wing army (its stroke lands where the game draws it:
+/// Armee Nord's line through 807-98-97-95 reads back in 97/95/96, e1b3 and o1a).
+fn need(u: &Unit, line: &[i64]) -> usize {
+    if u.role == Role::Group {
+        (line.len() as f64 * COVER).ceil().max(1.0) as usize
+    } else {
+        1
     }
-    offensives(roster, name).iter().any(|off| {
-        let target: HashSet<i64> = ints(&off["target"]["states"]).into_iter().collect();
-        let hit = line.iter().filter(|s| target.contains(s)).count();
-        hit as f64 >= (line.len() as f64 * COVER).ceil().max(1.0)
-    })
 }
 
 /// The executing flag of the unit's offensive that covers `line` (None when none covers it).
-fn arrow_executing(roster: &Value, name: &str, line: &[i64]) -> Option<bool> {
-    let need = (line.len() as f64 * COVER).ceil().max(1.0);
+fn arrow_executing(roster: &Value, u: &Unit, line: &[i64]) -> Option<bool> {
+    let need = need(u, line);
     let mut found = None;
-    for off in offensives(roster, name) {
+    for off in offensives(roster, &u.name) {
         let target: HashSet<i64> = ints(&off["target"]["states"]).into_iter().collect();
         let hit = line.iter().filter(|s| target.contains(s)).count();
-        if line.is_empty() || hit as f64 >= need {
+        if line.is_empty() || hit >= need {
             if off["executing"] == json!(true) {
                 return Some(true);
             }
@@ -642,9 +654,10 @@ fn prepare(
     // exercising divisions lose organisation: an owned army stops before its war
     let training: Vec<String> = units
         .iter()
-        .filter(|u| u.role != Role::Group)
-        .filter(|u| army_row(roster, &u.name).is_some_and(|r| r["exercising"] == json!(true)))
+        .filter(|u| !matches!(u.role, Role::Group | Role::Hold))
         .map(|u| u.name.clone())
+        .chain(units.iter().flat_map(|u| u.members.iter().cloned()))
+        .filter(|a| army_row(roster, a).is_some_and(|r| r["exercising"] == json!(true)))
         .collect();
     if !training.is_empty() && !state.skipped(now, "opex", id) {
         state.skip(now, "opex", id, DAY);
@@ -712,27 +725,60 @@ fn prepare(
     let mut tags: Vec<String> = units.iter().map(|u| u.enemy.clone()).collect();
     tags.push(player(tools, plan));
     learn_centres(state, tools, &tags);
-    // 1. a line army carries no orders of its own (it would ignore the group front): cleared
-    //    once, before the group's front stands
+    // 1. a line army, and an army of a hold group, carries no orders of its own (it would
+    //    ignore its group's front): cleared once; a group front drawn while one still had its
+    //    own orders is cleared too and drawn again with every army on it
+    let mut sets: Vec<(String, Vec<String>)> = Vec::new();
     if let Some(g) = group {
-        if !has_front(roster, g) {
-            for u in units.iter().filter(|u| u.role == Role::Line) {
-                let k = key(id, &format!("clr:{}", u.name));
-                if orders(roster, &u.name).is_empty() || state.done.contains_key(&k) {
-                    continue;
-                }
-                state.done.insert(k, now);
-                let line = order(
-                    state,
-                    tools,
-                    lease,
-                    id,
-                    &format!("clear the own orders of line army {}", u.name),
-                    "hoi4_army_plan",
-                    json!({"army": u.name, "clear_orders": true}),
-                )?;
-                return Ok(Some(line));
+        sets.push((
+            g.to_string(),
+            units
+                .iter()
+                .filter(|u| u.role == Role::Line)
+                .map(|u| u.name.clone())
+                .collect(),
+        ));
+    }
+    for h in units
+        .iter()
+        .filter(|u| u.role == Role::Hold && !u.members.is_empty())
+    {
+        sets.push((h.name.clone(), h.members.clone()));
+    }
+    for (g, members) in sets {
+        for m in members {
+            let k = key(id, &format!("clr:{m}"));
+            if orders(roster, &m).is_empty() || state.done.contains_key(&k) {
+                continue;
             }
+            state.done.insert(k, now);
+            if has_front(roster, &g) {
+                state.done.insert(key(id, &format!("regroup:{g}")), 0);
+            }
+            let line = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("clear the own orders of {m} (it fights on the front of {g})"),
+                "hoi4_army_plan",
+                json!({"army": m, "clear_orders": true}),
+            )?;
+            return Ok(Some(line));
+        }
+        let rk = key(id, &format!("regroup:{g}"));
+        if state.done.get(&rk) == Some(&0) {
+            state.done.insert(rk, 1);
+            let line = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("clear {g} (drawn while an army had own orders): drawn again"),
+                "hoi4_army_plan",
+                json!({"army": g, "clear_orders": true}),
+            )?;
+            return Ok(Some(line));
         }
     }
     // 2-4. mobile and wing armies, then the group, then the holds
@@ -837,7 +883,7 @@ fn reconcile(
     if u.role == Role::Hold || line.is_empty() {
         return Ok(None);
     }
-    if covers(roster, &u.name, line) {
+    if covers(roster, u, line) {
         return Ok(None);
     }
     let tag = line
@@ -1181,7 +1227,7 @@ fn advance(
         }
         // REPAIR: the offensive on the wanted line executes (a new arrow on an executing front
         // starts unexecuted: the plan is stopped and executed again)
-        let arrow = arrow_executing(roster, &u.name, &wanted);
+        let arrow = arrow_executing(roster, u, &wanted);
         if arrow == Some(false) && !state.skipped(now, "opexec", &u.name) {
             state.skip(now, "opexec", &u.name, DAY / 4);
             let rk = key(id, &format!("restart:{}:{k}", u.name));
