@@ -67,6 +67,9 @@ class GoalWars(unittest.TestCase):
         self.assertTrue(any("defeats SOV" in m for m in msgs), msgs)
         self.assertFalse(any("defeats POL" in m or "defeats FRA" in m for m in msgs), msgs)
         self.assertFalse(any("defeats ISR" in m for m in msgs), msgs)  # holds no state at the start
+        # the vp_share goal needs a target set that takes the rest of the country's victory points
+        th = [f["message"] for f in out["findings"] if f["rule"] == "conquest.threshold" and f["severity"] == "error"]
+        self.assertTrue(any("SOV to vp_share <= 0.2" in m for m in th), th)
 
 
 @unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
