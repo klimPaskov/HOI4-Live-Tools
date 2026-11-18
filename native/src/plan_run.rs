@@ -2350,6 +2350,46 @@ fn focus_lane(
                 break;
             }
         }
+        // Rescue: nothing started and no focus runs. The game's own rules are asked about every
+        // open key of the path and the fallback (skip timers aside), and the first one certain to
+        // be available starts: a refused key at the head of the path left the focus idle about 55
+        // game days while later keys could start (g17j2 1937.1-2).
+        if held.is_none() && !state.skipped(now, "focusrescue", "x") {
+            state.skip(now, "focusrescue", "x", DAY);
+            let open: Vec<String> = path
+                .iter()
+                .chain(&fallback)
+                .filter(|f| !completed.contains(*f))
+                .take(32)
+                .cloned()
+                .collect();
+            if !open.is_empty() {
+                if let Ok(reply) = tools.call("hoi4_focus_available", &json!({"focuses": open})) {
+                    let ready: Vec<String> = list(&reply, "focuses")
+                        .iter()
+                        .filter(|r| r["state"] == json!("available"))
+                        .filter_map(|r| r["focus"].as_str().map(str::to_string))
+                        .collect();
+                    if let Some(key) = open.iter().find(|k| ready.contains(k)).cloned() {
+                        state.ledger_forget("hoi4_focus_start", &json!({"focus": key}));
+                        let (ok, why) = state.act(
+                            tools,
+                            lease,
+                            "hoi4_focus_start",
+                            json!({"focus": key}),
+                            "fo",
+                        )?;
+                        if ok {
+                            state.stages.focus_why.remove(&key);
+                            state.stages.focus =
+                                Some((format!("focus: started {key} (rescue)"), false));
+                            return Ok(Some(format!("focus {key} (rescue: the next keys waited)")));
+                        }
+                        state.stages.focus_why.insert(key, why);
+                    }
+                }
+            }
+        }
         if !path.is_empty() || !fallback.is_empty() {
             let left = startable(state, &path).len() + startable(state, &fallback).len();
             let all_done = path.iter().chain(&fallback).all(|f| completed.contains(f));
@@ -16796,14 +16836,15 @@ mod tests {
             tick(&mut state, &tools, &plan, "l", START + day * DAY).unwrap();
         }
         assert!(focus_starts(&tools).is_empty());
-        // The files are asked again every `focus_unavailable` hours, not every tick.
+        // The files are asked again every `focus_unavailable` hours, not every tick (plus the
+        // rescue's one question a game day).
         let asked = reads
             .calls
             .borrow()
             .iter()
             .filter(|c| c.0 == "hoi4_focus_available")
             .count();
-        assert_eq!(asked, 60);
+        assert!((60..=181).contains(&asked), "{asked}");
         let line = state.stages.focus.clone().unwrap();
         assert!(
             line.0.contains("A:unavailable (needs has_war = no)"),
@@ -16878,8 +16919,9 @@ mod tests {
             .iter()
             .filter(|c| c.0 == "hoi4_focus_available")
             .count();
-        // The first tick asks before the look; then once on each of the following four days.
-        assert_eq!(asked, 5);
+        // The first tick asks before the look; then once on each of the following four days
+        // (and the rescue at most once a day).
+        assert!((5..=10).contains(&asked), "{asked}");
     }
 
     #[test]
