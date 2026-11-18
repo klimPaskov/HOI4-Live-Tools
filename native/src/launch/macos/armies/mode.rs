@@ -20,7 +20,7 @@ use super::super::{
     invasion::BATTLE_PLAN_TOOLS,
     journal::Outcome,
     kit,
-    ui::{clear_notices, read},
+    ui::{clear_notices, read, settled, wait},
 };
 use super::{clear_selection, select_army_quick, GAME};
 use crate::{
@@ -142,34 +142,48 @@ pub(in super::super) fn clear_orders(
     army: &str,
 ) -> Result<()> {
     clear_notices(process, keys)?;
-    select_army_quick(process, keys, army)?;
-    let bar = read(process, bar)?.ok_or_else(|| {
-        Error::new(
-            "gui_target_unavailable",
-            "the battle plan bar (battleplantools_window) was not found",
-        )
-    })?;
-    let deadline = Instant::now() + Duration::from_millis(SLIDE_MS);
-    let button = loop {
-        let rect = read(process, |r, i| {
-            Ok(kit::find_deep(r, i, bar, "btn_order_delete", 6)?.and_then(|w| shown_rect(r, i, w)))
+    // The bar's delete-all takes the orders of the selection. Each press selects the army again,
+    // waits until the bar's delete button stands still (the bar slides in: a click on the
+    // rectangle read mid-slide missed it, e1b1 18 Nov 2026, two armies kept their front and
+    // offensive through three presses), presses, and reads the plan back; at most three presses.
+    for _ in 0..3 {
+        select_army_quick(process, keys, army)?;
+        let bar = read(process, bar)?.ok_or_else(|| {
+            Error::new(
+                "gui_target_unavailable",
+                "the battle plan bar (battleplantools_window) was not found",
+            )
         })?;
-        match rect {
-            Some(rect) => break rect,
-            None if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(60)),
-            None => {
+        let deadline = Instant::now() + Duration::from_millis(SLIDE_MS);
+        loop {
+            let shown = read(process, |r, i| {
+                Ok(kit::find_deep(r, i, bar, "btn_order_delete", 6)?.and_then(|w| shown_rect(r, i, w)))
+            })?;
+            if shown.is_some() {
+                break;
+            }
+            if Instant::now() >= deadline {
                 let _ = clear_selection(process, keys);
                 return Err(Error::new(
                     "gui_target_unavailable",
                     "the battle plan bar's delete button (btn_order_delete) is not shown",
                 ));
             }
+            std::thread::sleep(Duration::from_millis(60));
         }
-    };
-    std::thread::sleep(Duration::from_millis(300));
-    let at = button.center();
-    keys.right_click(GAME, at.0, at.1)?;
-    let _ = super::super::ui::accept_command(process, keys);
+        let button = settled(process, "delete button", |r, i| {
+            kit::find_deep(r, i, bar, "btn_order_delete", 6)?
+                .and_then(|w| shown_rect(r, i, w))
+                .ok_or_else(|| Error::new("gui_geometry_unavailable", "delete button not shown"))
+        })?;
+        let at = button.center();
+        keys.right_click(GAME, at.0, at.1)?;
+        let _ = super::super::ui::accept_command(process, keys);
+        let gone = wait(process, "orders deleted", |r, i| Ok(super::plan_nodes(r, i, army)? == 0));
+        if gone.is_ok() {
+            break;
+        }
+    }
     let _ = clear_selection(process, keys);
     Ok(())
 }

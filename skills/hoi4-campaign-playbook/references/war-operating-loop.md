@@ -21,6 +21,21 @@ and follow it every war tick.
 
 ## 1. Before the war (or on day one)
 
+**The shape that wins a large land war (the game's own AI, read from its battle plans on
+1 September 1939, Germany against Poland: capitulation in 49 days at 1:3.1, no state lost).** One
+army group of two armies (47 divisions) holds ONE group front along the whole border (26
+provinces, under 2 divisions a province) and ONE group offensive whose target line runs across
+the whole enemy country (22 provinces through eight states, the river line far behind the
+border), every division of the group on it; the armies themselves hold no orders of their own.
+A second army holds its own short front on a second border with its own deep line. A second
+army group (30 divisions) holds the other enemy's border, not executed. The plans execute on the
+declaration and nothing else is ordered. Read your own plan the same way: `hoi4_armies` `plan`
+per army and group (kind, executing, the line's provinces and states, each offensive's target
+line). An offensive whose target line is one to three provinces in one state is the wrong shape;
+draw it with `hoi4_army_offensive` `states` (the target states side by side, in order along the
+line). An army inside a group keeps any order of its own and then ignores the group's: delete its
+own orders first (`hoi4_army_plan {"clear_orders": true}`, verified by the read-back).
+
 1. `hoi4_wars` : list every border with each enemy; `uncovered_own_border_states` must be empty.
 2. `hoi4_armies` : armies, sizes, generals, where they stand. Every army 12-24 divisions with a
    general (`hoi4_army_commander`; take names from the error list, never guess).
@@ -162,9 +177,9 @@ the player decides strategy:
   still gets them and plans while it recovers; the limits hold back the execute order and moves.
 - The offensive line is drawn across the target state, parallel to the army's front and as wide
   as the state, through the depth of the army's victory-point province (`hoi4_army_offensive`
-  `province_id`; without one, through the middle of the state). The game extends every
-  offensive line to the edges of the enemy land, so a battle plan cannot gather an army on one
-  province: only the depth of the line is a choice. An executing army advances to its line and
+  `province_id`; without one, through the middle of the state). The game keeps the target line
+  where it is drawn (read back: one to three provinces in one state for a one-state stroke), so a
+  deep, wide advance needs the line drawn across several states (`states`). An executing army advances to its line and
   stands there: when the row the line was drawn for is held and the plan's next row lies in the
   same state, the executor draws the line again at the new row's depth (the plan keeps
   executing, no new planning wait). By hand: `hoi4_army_offensive` with the next `province_id`.

@@ -7,7 +7,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 ## Time, plans and events
 
 - `hoi4_daily_governor` (A): Owned Mac background plan preview.
-- `hoi4_event_choose` (A): Choose an option (0-based, in listed order) of the open event on top by clicking it.
+- `hoi4_event_choose` (A): Choose an option (0-based, in listed order) of an open event by clicking it (the list order is not the stacking order:
 - `hoi4_events` (R): Open event windows in order (the last is on top) with their title and option texts.
 - `hoi4_input_lease` (A): Exclusive configured-controller lease for ordinary macOS input.
 - `hoi4_plan` (R): Read or change the standing plan (plan.json in the run directory):
@@ -156,6 +156,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_map_mode` (A): Switch the map mode with the game's own F-key shortcut, as a human checks the map:
 - `hoi4_occupation` (R): Read-only (memory, no input, no pause):
 - `hoi4_occupation_law` (A): Set the DEFAULT occupation law for all occupied territories (the Occupied Territories view's Territory Management law) with ordinary input:
+- `hoi4_officer_corps` (A): Live-verified read (pp18, pp23, 17 Nov 2026):
 - `hoi4_operation_start` (A): Prepare an intelligence operation against a target with ordinary input, as a player does:
 - `hoi4_operative_assign` (A): Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission:
 - `hoi4_operative_recruit` (A): Recruit an operative into a free slot of the operative bar:

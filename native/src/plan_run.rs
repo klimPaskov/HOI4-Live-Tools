@@ -2455,7 +2455,9 @@ fn war_first_steps(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    let steps: [Step; 10] = [
+    let steps: [Step; 11] = [
+        // a war whose declaration is due starts before any line is redrawn
+        plan_affairs::declare_due_step,
         layout_step,
         // The opening pass of the war step: an army without its lines gets its front and its
         // offensive line before any name, commander or disband. Lines cost nothing to hold and
@@ -7340,6 +7342,8 @@ const STRATEGY_EVERY: GameHour = 6;
 struct Strategy {
     /// the active phase and the game hour it began
     phase: Option<(String, GameHour)>,
+    /// the phase a contingency-only phase interrupted: its war block stays in force underneath
+    interrupted: Option<String>,
     /// settled checkpoints: id -> (game hour, met)
     checkpoints: HashMap<String, (GameHour, bool)>,
     /// active contingencies: id -> (game hour, triggered by a missed checkpoint)
@@ -7360,6 +7364,7 @@ impl Strategy {
     fn memory(&self) -> Value {
         json!({"phase": self.phase.as_ref().map(|(p, _)| p),
             "phase_since": self.phase.as_ref().map(|(_, h)| h),
+            "interrupted": self.interrupted,
             "checkpoints": self.checkpoints, "contingencies": self.contingencies,
             "goal": self.goal})
     }
@@ -7369,6 +7374,7 @@ impl Strategy {
         {
             if since <= now && self.phase.is_none() {
                 self.phase = Some((phase.to_string(), since));
+                self.interrupted = saved["interrupted"].as_str().map(str::to_string);
             }
         }
         let pairs = |key: &str| -> Vec<(String, GameHour, bool)> {
@@ -7491,6 +7497,30 @@ fn switch_phase(
         .push(json!({"kind": crate::watch::PHASE_CHANGED, "detail": detail}));
 }
 
+/// Whether at least `n` members of an `any` list hold (a contingency's `min_true`: one lost
+/// border province is not a lost border). Any other predicate is judged as it is. Unknown when
+/// too few hold and enough are unknown to reach `n`.
+fn judge_at_least(state: &mut State, tools: &dyn Tools, when: &Value, n: usize, now: GameHour) -> Truth {
+    let Some(members) = when["any"].as_array() else {
+        return judge(state, tools, when, now);
+    };
+    let (mut yes, mut unknown) = (0, 0);
+    for m in members {
+        match judge(state, tools, m, now) {
+            Truth::True => yes += 1,
+            Truth::Unknown => unknown += 1,
+            Truth::False => {}
+        }
+    }
+    if yes >= n {
+        Truth::True
+    } else if yes + unknown >= n {
+        Truth::Unknown
+    } else {
+        Truth::False
+    }
+}
+
 /// The contingency with this id.
 fn contingency<'p>(plan: &'p Value, id: &str) -> Option<&'p Value> {
     list(plan, "contingencies")
@@ -7535,6 +7565,25 @@ fn activate_contingency(
         .push(json!({"kind": crate::watch::CONTINGENCY_TRIGGERED, "detail": detail}));
     if let Some(phase) = phase {
         if phases.iter().any(|(p, _)| *p == phase) {
+            // a phase only a contingency enters interrupts the phase in force, whose war orders
+            // stay underneath it (i18c, 18 Nov 2026: one Eritrean province lost on the first day
+            // switched Italy to a recovery phase that attacked nothing, from January to May)
+            let from = state.strategy.phase_id();
+            let only = |p: &str| {
+                phases
+                    .iter()
+                    .any(|(id, v)| id == p && v["enter"].is_null() && v["exit"].is_null())
+            };
+            let has_war = |p: &str| {
+                phases
+                    .iter()
+                    .any(|(id, v)| id == p && v["overrides"]["war"].is_object())
+            };
+            if only(&phase) {
+                if let Some(from) = from.filter(|f| *f != phase && has_war(f)) {
+                    state.strategy.interrupted = Some(from);
+                }
+            }
             switch_phase(state, phases, &phase, format!("contingency {id}"), now);
         } else {
             state
@@ -7583,6 +7632,7 @@ fn judge_strategy(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameH
         });
         if !named {
             state.strategy.phase = None;
+            state.strategy.interrupted = None;
             let detail =
                 json!({"phase": p, "reason": "no active contingency names it", "game_hour": now});
             state
@@ -7701,7 +7751,10 @@ fn judge_strategy(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameH
         if when.is_null() {
             continue;
         }
-        let truth = judge(state, tools, when, now);
+        let truth = match then_field(c, "min_true").as_u64().filter(|n| *n > 1) {
+            Some(n) => judge_at_least(state, tools, when, n as usize, now),
+            None => judge(state, tools, when, now),
+        };
         match (truth, state.strategy.contingencies.get(&id).copied()) {
             (Truth::True, None) => {
                 activate_contingency(state, &phases, c, false, "its trigger holds".into(), now)
@@ -7830,10 +7883,26 @@ fn note_setup(state: &mut State, tools: &dyn Tools, actions: usize, failing: Opt
 fn strategy_overrides(state: &State, plan: &Value) -> Option<Value> {
     // (overrides, from a contingency)
     let mut layers: Vec<(&Value, bool)> = Vec::new();
+    let mut kept_war: Option<Value> = None;
     if let Some((phase, _)) = &state.strategy.phase {
         if let Some((_, p)) = phase_list(plan).into_iter().find(|(id, _)| id == phase) {
+            // a phase only a contingency enters keeps the war block of the phase it interrupted
+            // (its own `war` keys, if any, go over it): the attack goes on while the lost land
+            // is retaken
+            if p["enter"].is_null() && p["exit"].is_null() {
+                if let Some(prev) = &state.strategy.interrupted {
+                    if let Some((_, q)) = phase_list(plan).into_iter().find(|(id, _)| id == prev) {
+                        if q["overrides"]["war"].is_object() {
+                            kept_war = Some(json!({"war": q["overrides"]["war"].clone()}));
+                        }
+                    }
+                }
+            }
             layers.push((&p["overrides"], false));
         }
+    }
+    if let Some(kept) = &kept_war {
+        layers.insert(0, (kept, false));
     }
     for c in list(plan, "contingencies") {
         if item_id(c).is_some_and(|id| state.strategy.contingencies.contains_key(&id)) {
@@ -16801,6 +16870,35 @@ mod tests {
             changes.last().unwrap()["detail"]["reason"],
             "contingency core_lost"
         );
+    }
+
+    #[test]
+    fn a_recovery_phase_keeps_the_interrupted_war_and_one_lost_province_is_not_enough() {
+        let plan = json!({"war": {"axes": []},
+            "phases": [
+                {"id": "P2", "enter": "date >= 1936.01.01", "exit": "date >= 1937.01.01",
+                 "overrides": {"war": {"axes": [[841], [842]]}}},
+                {"id": "PC", "overrides": {}}],
+            "contingencies": [{"id": "c01", "min_true": 2, "phase": "PC",
+                "when": {"any": ["at_war_with:FRA", "at_war_with:ENG", "at_war_with:ITA"]}}]});
+        let game = |enemies: Value| {
+            fake(vec![
+                ("hoi4_states", json!({"states": []})),
+                ("hoi4_wars", json!({"wars": {"enemies": enemies}})),
+            ])
+        };
+        let mut state = State::default();
+        let t0 = hour("1936.03.01");
+        // one of three holds: below min_true, the phase in force stays
+        tick(&mut state, &game(json!(["FRA"])), &plan, "l", t0).unwrap();
+        assert_eq!(state.strategy.phase_id().as_deref(), Some("P2"));
+        // two hold: the recovery phase, with P2's war orders still in force underneath
+        tick(&mut state, &game(json!(["FRA", "ENG"])), &plan, "l", t0 + DAY).unwrap();
+        assert_eq!(state.strategy.phase_id().as_deref(), Some("PC"));
+        let merged = strategy_overrides(&state, &plan).expect("P2's war block is kept");
+        assert_eq!(merged["war"]["axes"], json!([[841], [842]]));
+        // restart-safe
+        assert_eq!(state.strategy.memory()["interrupted"], json!("P2"));
     }
 
     #[test]

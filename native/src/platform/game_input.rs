@@ -213,6 +213,18 @@ pub(crate) trait GameInput: Send + Sync {
     fn shift_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point>;
     fn right_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point>;
     fn right_drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()>;
+    /// A right-button drag through every point (one stroke, e.g. a battle-plan line that bends
+    /// along a river). Two points are a plain `right_drag`; a platform without a path drag
+    /// refuses more.
+    fn right_drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+        match points {
+            [a, b] => self.right_drag(game, *a, *b),
+            _ => Err(crate::error::Error::new(
+                "capability_unavailable",
+                "This platform's input draws two-point strokes only",
+            )),
+        }
+    }
     /// Wheel scroll at a point; positive `pixels` scrolls content up.
     fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()>;
     /// `count` wheel events in one quick flick (one smooth camera movement in the game).
@@ -305,6 +317,9 @@ macro_rules! delegate_game_input {
             }
             fn right_drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
                 (**self).right_drag(game, from, to)
+            }
+            fn right_drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+                (**self).right_drag_path(game, points)
             }
             fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()> {
                 (**self).scroll(game, at, pixels)

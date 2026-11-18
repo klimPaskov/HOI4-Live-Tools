@@ -1822,6 +1822,12 @@
               "full"
             ]
           },
+          "min_true": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "with `when` an `any` list: at least this many of its members must hold before the contingency triggers (one lost border province is not a lost border); default 1"
+          },
           "summary": {
             "type": "string",
             "description": "Free text for people and the player; never read by the executor.",

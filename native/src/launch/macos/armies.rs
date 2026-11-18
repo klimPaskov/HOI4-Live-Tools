@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) mod exercise;
+pub(super) mod orders;
 pub(super) mod mode;
 mod select;
 
@@ -630,6 +631,26 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
         }
         let places = division_states(r, image)?;
         let planning = planning(r, image).unwrap_or_default();
+        let provinces = division_provinces(r, image).unwrap_or_default();
+        // divisions per province of each army and army group, for the order read-back
+        let mut per_group: BTreeMap<u64, BTreeMap<i32, usize>> = BTreeMap::new();
+        for (group, ids) in &groups {
+            let parent = r.u64(*group + ui(r)?.army_group)?;
+            for id in ids {
+                if let Some(Some(p)) = provinces.get(id) {
+                    *per_group.entry(*group).or_default().entry(*p).or_default() += 1;
+                    if parent != 0 {
+                        *per_group.entry(parent).or_default().entry(*p).or_default() += 1;
+                    }
+                }
+            }
+        }
+        let plan_of = |group: u64| -> Value {
+            let empty = BTreeMap::new();
+            orders::rows(r, image, group, per_group.get(&group).unwrap_or(&empty))
+                .map(Value::from)
+                .unwrap_or(Value::Null)
+        };
         let armies = groups
             .into_iter()
             .map(|(group, ids)| {
@@ -674,7 +695,7 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                     "defensive_orders":defensive,
                     "plan_executing":executing,"exercising":exercise.map(|e| e.exercising),
                     "exercise_stop_at_max":exercise.map(|e| e.stop_at_max),"planning":planning_of(&planning, &ids),
-                    "division_count":ids.len(),"divisions":ids,
+                    "division_count":ids.len(),"divisions":ids,"plan":plan_of(group),
                     "states":standing,"main_state":main_state,
                     "motorization":(r.i32(group + fld(r.string_abi(), &GROUP, MOTORIZATION)?)? as u32) & 0xff}),
                 )
@@ -688,7 +709,6 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
         }
         // Which armies stand in the same province as an unassigned division: a click or a box on
         // such a stack takes that army's divisions too, so only that army can receive it.
-        let provinces = division_provinces(r, image).unwrap_or_default();
         let mut groups_at: BTreeMap<i32, BTreeSet<u64>> = BTreeMap::new();
         for (id, group) in membership(r, image)? {
             if group != 0 {
@@ -727,7 +747,7 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 } else {
                     Some(r.string_bounded(leader + ui(r)?.leader_name, 128)?)
                 };
-                Ok(json!({"army_group":army_name(r, g)?,"field_marshal":marshal}))
+                Ok(json!({"army_group":army_name(r, g)?,"field_marshal":marshal,"plan":plan_of(g)}))
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(
@@ -2899,6 +2919,12 @@ pub(super) fn plan_nodes(r: &Reader<'_>, image: u64, army: &str) -> Result<usize
     Ok(seen)
 }
 
+/// What is left of `army`'s battle plan, by kind ("front x1, offensive x1"; empty when none).
+pub(super) fn orders_left(r: &Reader<'_>, image: u64, army: &str) -> Result<String> {
+    let group = group_named(r, image, army)?;
+    Ok(orders::summary(&orders::group_orders(r, image, group)?))
+}
+
 /// Draw an offensive line for `army` (which must already hold a front line)
 /// into state `state`: the army card selects the army, X enters offensive-line
 /// drawing, the Find view centres the state and one right-button drag runs
@@ -3038,6 +3064,111 @@ pub(super) fn offensive(
     });
     Err(failed(&tried, None))
 }
+/// Draw one offensive line for `army` across several target states side by side (a deep line
+/// across the enemy country, as the game's own AI draws it: its Poland line of 1 September 1939
+/// runs 22 provinces through eight states): X, then one right-button drag through the states'
+/// whole width at their middle depth, perpendicular to the way from the army (see
+/// `defense_span`). Verified by a new battle-plan order; the receipt reads the line back.
+pub(super) fn offensive_across(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    game_dir: &std::path::Path,
+    army: &str,
+    states: &[i32],
+) -> Result<()> {
+    clear_notices(process, keys)?;
+    if read(process, |r, i| orders(r, i, army))? == 0 {
+        return Err(Error::new(
+            "invalid_target",
+            "This army has no front line; draw one first",
+        ));
+    }
+    let pos = super::mapdata::positions(game_dir)?;
+    let mut centres = Vec::new();
+    for state in states {
+        let pts: Vec<(f64, f64)> = super::mapdata::state_provinces(game_dir, *state)?
+            .iter()
+            .filter_map(|p| pos.get(p).copied())
+            .collect();
+        if let Some(c) = across_centre(&pts) {
+            centres.push(c);
+        }
+    }
+    let Some((a, b)) = farthest_pair(&centres) else {
+        return Err(Error::new(
+            "invalid_target",
+            format!("The states {states:?} give no line to draw (fewer than two map positions)"),
+        ));
+    };
+    let before = read(process, |r, i| plan_nodes(r, i, army))?;
+    let first = states.first().copied().unwrap_or(0);
+    let area = (420.0, 140.0, 1700.0, 880.0);
+    select_for_orders(process, keys, army)?;
+    let framed = super::screenmap::frame_two(process, keys, a, b, area, || find_state(process, keys, first))?;
+    let inside = |p: &(f64, f64)| (area.0..area.2).contains(&p.0) && (area.1..area.3).contains(&p.1);
+    let screen: Option<Vec<(f64, f64)>> = match framed {
+        None => None,
+        Some(_) => read(process, |r, i| {
+            centres
+                .iter()
+                .map(|c| super::screenmap::to_screen(r, i, c.0, c.1))
+                .collect::<Result<Option<Vec<_>>>>()
+        })?
+        .filter(|pts| pts.iter().all(inside)),
+    };
+    let Some(path) = screen else {
+        let _ = keys.press(Key::Escape);
+        return Err(Error::new(
+            "input_geometry_unverified",
+            format!(
+                "The offensive line through states {states:?} does not fit the screen at once; \
+                 give fewer or nearer states"
+            ),
+        ));
+    };
+    select_for_orders(process, keys, army)?;
+    keys.press(Key::letter('x')?)?;
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    keys.right_drag_path(GAME, &path)?;
+    let placed = wait(process, "offensive line placed", |r, i| {
+        Ok(plan_nodes(r, i, army)? > before)
+    });
+    let _ = keys.press(Key::Escape);
+    placed.map_err(|_| {
+        Error::new(
+            "input_readback_failed",
+            format!(
+                "An offensive stroke through states {states:?} ({} screen points from {:?} to \
+                 {:?}) placed no new battle-plan order for {army}",
+                path.len(),
+                path.first(),
+                path.last()
+            ),
+        )
+    })
+}
+/// The centre of a state's province positions (None for none).
+fn across_centre(pts: &[(f64, f64)]) -> Option<(f64, f64)> {
+    (!pts.is_empty()).then(|| {
+        let n = pts.len() as f64;
+        pts.iter().fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n))
+    })
+}
+/// The two points farthest apart (None for fewer than two distinct points).
+pub(super) fn farthest_pair(pts: &[(f64, f64)]) -> Option<((f64, f64), (f64, f64))> {
+    type Pair = ((f64, f64), (f64, f64));
+    let mut best: Option<(f64, Pair)> = None;
+    for (i, a) in pts.iter().enumerate() {
+        for b in &pts[i + 1..] {
+            let d = (a.0 - b.0).powi(2) + (a.1 - b.1).powi(2);
+            if d > 1e-9 && best.is_none_or(|(x, _)| d > x) {
+                best = Some((d, (*a, *b)));
+            }
+        }
+    }
+    best.map(|(_, pair)| pair)
+}
+
 /// One stroke `offensive` tried: its ends on the map (unit positions, x and z) and on the screen
 /// (game pixels) where it got that far, and how it ended.
 struct Stroke {
@@ -4389,6 +4520,14 @@ mod tests {
         );
         let e = offensive_failure(841, None, &[], Some(Error::new("torn_read", "x")));
         assert!(e.message.ends_with("no stroke was drawn)"), "{}", e.message);
+    }
+
+    #[test]
+    fn the_deep_line_is_framed_by_its_two_farthest_state_centres() {
+        let pts = [(0.0, 0.0), (5.0, 1.0), (1.0, 9.0), (2.0, 4.0)];
+        assert_eq!(farthest_pair(&pts), Some(((0.0, 0.0), (1.0, 9.0))));
+        assert_eq!(farthest_pair(&[(1.0, 1.0), (1.0, 1.0)]), None);
+        assert_eq!(across_centre(&[(0.0, 0.0), (2.0, 4.0)]), Some((1.0, 2.0)));
     }
 
     #[test]

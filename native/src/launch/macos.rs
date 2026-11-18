@@ -770,11 +770,11 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_division_templates","description":"Own division template names (for hoi4_train) and how many training lines each has queued. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
         json!({"name":"hoi4_train","description":"Queue `count` divisions of an own template in ONE training queue with ordinary input: the template's Train button creates the queue, its + sets each line to train one division (the game's default is infinite: a line that trains forever), then Add Unit adds the other lines in parallel; the queue gets the own state deploy_state_id as location (a queue without a location never deploys). Each step is verified on the queue in memory (amount, line count).","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"count":{"type":"integer","minimum":1,"maximum":24},"deploy_state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","count","deploy_state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_deploy_locations","description":"Give every training line without a deployment location the own state state_id (Find view, the line's location button, one click on the state). Lines without a location never deploy. Verified by the lines' deployment provinces.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_armies","description":"Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids (unassigned_by_state: per state the ids and shared_with, the armies standing in the same provinces and how many of them each shares). Per army `planning` {mean, min, max} is its divisions' planning bonus (0..1, 0.3 = 30%); it grows while the army holds a front or plan and stops at a cap the game computes from generals, technology and the HQ distance (not stored: a value that has stopped rising has reached it). threat:false skips the threat reads. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).","inputSchema":{"type":"object","properties":{"threat":{"type":"boolean"}},"additionalProperties":false}}),
+        json!({"name":"hoi4_armies","description":"Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids (unassigned_by_state: per state the ids and shared_with, the armies standing in the same provinces and how many of them each shares). Per army `planning` {mean, min, max} is its divisions' planning bonus (0..1, 0.3 = 30%); it grows while the army holds a front or plan and stops at a cap the game computes from generals, technology and the HQ distance (not stored: a value that has stopped rising has reached it). threat:false skips the threat reads. Per army and per army group `plan` reads every battle-plan order from the game itself (what the battle-plan bar and the map arrows show): kind (front, offensive, fallback, area_defense), id, executing, divisions assigned; for a line its provinces count, its two end provinces, the states along it, the owner's divisions standing on it and the most in one province; per front its offensives with the arrow's states and the target line (provinces, ends, states, i.e. how deep and wide the advance goes); an area defence lists its states. An army inside an army group whose own plan is [] follows the group's orders. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).","inputSchema":{"type":"object","properties":{"threat":{"type":"boolean"}},"additionalProperties":false}}),
         json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_move","description":"Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool. With province_id the order goes to that one province (the whole army gathers on it: a strike on one objective); it is sent again while any division neither marches on it nor stands in it. halt:true (no state_id) cancels every march and attack order of the army with the unit panel's halt control (H): the divisions stay where they stand and recover; verified by the divisions no longer marching (hoi4_supply shows each division's heading_province). divisions (with province_id) orders only those divisions of the army, one at a time (each selected from the army's division list, then one right click); the rest keep their orders: a strike sized to what the province feeds, a garrison left behind.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"halt":{"type":"boolean"},"divisions":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":48,"description":"Division ids as hoi4_armies or hoi4_supply list them; needs province_id"},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"One province of the state to move to (an enemy-held province inside an own state, a port); hoi4_states with the state ID lists each province and its controller"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button (execute), and set how its battle plans are carried out (mode). Execute is verified by the card's executing state. mode sets the execution mode on the battle plan bar: careful (no attack on heavily fortified provinces, none that lengthens the front), balanced (the game's default) or rush (every province of the plan is attacked: it lengthens the front and can gather an army in one unsupplied province; it suits a weak or broken enemy line and is a plan decision). The army is selected, the bar's execution button opens the three choices, the wanted one is clicked and verified by the three buttons' frames (detail: frames_before, frames_after); the selection is cleared afterwards. Give execute, mode or both: with both the mode is set first (journalled as <request_id>:mode, returned as mode_receipt) and the execute or stop order follows only when the mode is verified. A failure of the mode step names the bar, the window, the rectangles and the frames it found.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean","description":"true executes the plan, false stops it; may be left out only when mode is given"},"mode":{"type":"string","enum":["careful","balanced","rush"],"description":"execution mode of the army's battle plans; alone it only sets the mode"},"clear_orders":{"type":"boolean","description":"true deletes every battle-plan order of the army or army group (the bar's delete button, right click, confirmed); goes alone; verified by no order left"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_army_offensive","description":"Draw an offensive line for an own army that already holds a front line, into a target state: army card, offensive-line drawing (X), one right-button drag across the state, parallel to the army's front, so the whole front advances to it. With province_id (a province of the state, e.g. its victory point) the line runs through that province's depth; without it through the middle of the state. Verified by new battle-plan orders on the army; execute the plan afterwards.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"The objective inside the state: the line is drawn at its depth from the army"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_offensive","description":"Draw an offensive line for an own army that already holds a front line, into a target state: army card, offensive-line drawing (X), one right-button drag across the state, parallel to the army's front, so the whole front advances to it. With province_id (a province of the state, e.g. its victory point) the line runs through that province's depth; without it through the middle of the state. Verified by new battle-plan orders on the army; the receipt's detail.plan reads the army's orders back from the game (the target line's provinces, ends and states). With states the line runs across several states at once, the way the game's AI draws its offensive (its 1939 Poland line: 22 provinces through eight states, one arrow, the whole army group on it). Execute the plan afterwards.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"The objective inside the state: the line is drawn at its depth from the army"},"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":2,"maxItems":12,"description":"A deep line across these target states side by side (the phase line: e.g. every state along a river across the enemy country): one bending stroke through the states' centres in the order given (list them side by side from one end of the line to the other, e.g. along a river); state_id is then only the state the camera finds first. No province_id."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_fallback","description":"Draw a fallback line for an own army through own states (a defender's line on rivers, mountains or forts behind the front): army card, fallback-line drawing (C), one right-button stroke across the states at their middle depth, perpendicular to the way to the army. Verified by new battle-plan orders on the army. The army moves to the line when its plan is executed (hoi4_army_plan execute): a defender executes it when the front breaks or goes unfed.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":8,"description":"own states the line runs through, side by side"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","states","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_area_defense","description":"Give an own army an area defence order over own states (the army spreads over them and holds what the order covers): army card, area defence (V), one right-click on each state (Find view first). Verified by new battle-plan orders on the army. `settings` (the order window's toggles: victory_points, ports, coastlines, airbases, borders, forts, rail, facility) is not yet built: refused with not_yet_built; the game's defaults apply.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":8},"settings":{"type":"array","items":{"type":"string","enum":["victory_points","ports","coastlines","airbases","borders","forts","rail","facility"]}},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","states","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_exercise","description":"Start or stop army exercises for own armies: the divisions train toward the game's training maximum and the country earns army experience (doctrines, templates and designs are paid with it), at the cost of extra attrition (equipment) and fuel. Start: the army's card selects it and the battle plan bar's exercise button (btn_exercise) is clicked; stop_at_max (default true) Shift+clicks it so each army stops by itself at the maximum. Stop (on:false): the card's stop-training button. Verified per army by its card: training_marker shown while it exercises, icn_exercise_stop_at_max with the stop at the maximum (hoi4_armies reports both as exercising and exercise_stop_at_max). An army already as asked is left alone. A disabled button (no division that can train, all at the maximum) is refused with exercise_unavailable for that army; the receipt's detail lists every army's card state.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string","minLength":1,"maxLength":128},"minItems":1,"maxItems":24},"on":{"type":"boolean"},"stop_at_max":{"type":"boolean","description":"start only: stop each army at the training maximum (default true)"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","on","request_id","lease_token"],"additionalProperties":false}}),
@@ -5723,10 +5723,33 @@ impl MacClock {
                     "army",
                     "state_id",
                     "province_id",
+                    "states",
                     "request_id",
                     "lease_token",
                 ],
             )?;
+            // A deep line across several states side by side (2..12 state ids).
+            let across: Option<Vec<i32>> = match args.get("states") {
+                None => None,
+                Some(v) => Some(
+                    v.as_array()
+                        .filter(|a| (2..=12).contains(&a.len()))
+                        .and_then(|a| {
+                            a.iter()
+                                .map(|x| x.as_i64().filter(|v| (1..4096).contains(v)).map(|v| v as i32))
+                                .collect::<Option<Vec<i32>>>()
+                        })
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", "states must be 2..12 state ids (1..4095)")
+                        })?,
+                ),
+            };
+            if across.is_some() && args.get("province_id").is_some() {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "states draws one line across the states; it takes no province_id",
+                ));
+            }
             // The objective inside the state: the line is drawn through its depth.
             let through =
                 match args.get("province_id") {
@@ -5761,10 +5784,19 @@ impl MacClock {
             if let Some(p) = through {
                 action["province_id"] = json!(p);
             }
+            if let Some(st) = &across {
+                action["states"] = json!(st);
+            }
             let keys = &self.keys;
             let mut settle = || {
                 let now = nodes()?;
-                let detail = json!({"army":army,"plan_orders":now});
+                // the plan read back from the game: the new line's target states and width
+                let plan = ui::read(process, |r, i| {
+                    armies::orders::of_named(r, i, army, &Default::default())
+                })
+                .map(Value::from)
+                .unwrap_or(Value::Null);
+                let detail = json!({"army":army,"plan_orders":now,"plan":plan});
                 Ok(if retry {
                     journal::Outcome::Diverged(detail)
                 } else {
@@ -5773,7 +5805,10 @@ impl MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
-                armies::offensive(process, keys, &game_dir, army, state, through)
+                match &across {
+                    Some(st) => armies::offensive_across(process, keys, &game_dir, army, st),
+                    None => armies::offensive(process, keys, &game_dir, army, state, through),
+                }
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
@@ -6118,7 +6153,9 @@ impl MacClock {
                 let action = json!({"kind":"army_plan","army":army,"clear_orders":true});
                 let mut settle = || {
                     let left = ui::read(process, |r, i| armies::plan_nodes(r, i, army))?;
-                    let detail = json!({"army":army,"orders_left":left});
+                    let left_kinds = ui::read(process, |r, i| armies::orders_left(r, i, army))
+                        .unwrap_or_default();
+                    let detail = json!({"army":army,"orders_left":left,"left":left_kinds});
                     Ok(if left == 0 {
                         journal::Outcome::Reached(detail)
                     } else if retry {
