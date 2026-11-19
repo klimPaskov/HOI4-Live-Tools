@@ -640,11 +640,68 @@ const SURRENDER_NOT_MAPPED: &str =
 const NAVAL_INTEL_NOT_MAPPED: &str =
     "not_mapped: the player's naval intel against the country is not located in memory yet";
 
-fn goal_json(names: &mut Names<'_>, g: &Goal) -> Value {
+fn goal_json(names: &mut Names<'_>, g: &Goal, expiry: &HashMap<String, i64>) -> Value {
     json!({"type":g.kind,"attacker":names.who(g.attacker),"target":names.who(g.target),
         "diplomacy_array_offset":format!("0x{:x}",g.array),
         "role":"unclassified","justification_progress":null,
-        "expires":null,"timers_reason":"offset_not_validated","validated":false})
+        "expires":null,"timers_reason":"offset_not_validated","validated":false,
+        "expire_days":g.kind.as_ref().and_then(|k| expiry.get(k)),
+        "expire_source":"the war goal type's `expire` in common/wargoals (days from its creation; null: none found)"})
+}
+
+/// `expire` (days) of every war goal type in common/wargoals (the install or the mods' merged
+/// view). Danzig or War's `take_state` lasts 60 days while `take_state_focus` lasts 730: a goal
+/// created months before the war day lapses before it (g17j, g17k, 19 Nov 2026).
+fn wargoal_expiry(process: &dyn Process) -> HashMap<String, i64> {
+    let Some(identity) = process.identity() else {
+        return HashMap::new();
+    };
+    let Ok(dir) = super::mapdata::game_dir(&identity.exe) else {
+        return HashMap::new();
+    };
+    let mut out = HashMap::new();
+    let Ok(rd) = std::fs::read_dir(dir.join("common").join("wargoals")) else {
+        return out;
+    };
+    let mut files: Vec<_> = rd.flatten().map(|e| e.path()).collect();
+    files.sort();
+    for f in files {
+        if let Ok(text) = std::fs::read_to_string(&f) {
+            out.extend(parse_wargoal_expiry(&text));
+        }
+    }
+    out
+}
+
+/// `type = { ... expire = N ... }` at the top level of a wargoals file.
+fn parse_wargoal_expiry(text: &str) -> HashMap<String, i64> {
+    let mut out = HashMap::new();
+    let mut depth = 0i32;
+    let mut current: Option<String> = None;
+    for raw in text.lines() {
+        let line = raw.split('#').next().unwrap_or("");
+        let trimmed = line.trim();
+        if depth == 0 {
+            if let Some((name, rest)) = trimmed.split_once('=') {
+                if rest.trim_start().starts_with('{') {
+                    current = Some(name.trim().to_string());
+                }
+            }
+        } else if depth == 1 {
+            if let Some((k, v)) = trimmed.split_once('=') {
+                if k.trim() == "expire" {
+                    if let (Some(c), Ok(n)) = (&current, v.trim().parse::<i64>()) {
+                        out.insert(c.clone(), n);
+                    }
+                }
+            }
+        }
+        depth += line.matches('{').count() as i32 - line.matches('}').count() as i32;
+        if depth <= 0 {
+            depth = 0;
+        }
+    }
+    out
 }
 
 fn wars_value(r: &Reader<'_>, image: u64, w: &World) -> Result<(Value, BTreeSet<String>)> {
@@ -674,7 +731,7 @@ fn wars_value(r: &Reader<'_>, image: u64, w: &World) -> Result<(Value, BTreeSet<
         let related: Vec<Value> = goals
             .iter()
             .filter(|g| g.target == enemy || g.attacker == enemy)
-            .map(|g| goal_json(&mut names, g))
+            .map(|g| goal_json(&mut names, g, &HashMap::new()))
             .collect();
         wars.push(
             json!({"enemy":names.who(enemy),"started":date_json(rel.start),
@@ -737,6 +794,7 @@ fn faction_json(names: &mut Names<'_>, list: &[Faction], me: i32) -> Value {
 
 pub(super) fn state(process: &dyn Process) -> Result<Value> {
     let started = Instant::now();
+    let expiry = wargoal_expiry(process);
     let mut out = read(process, |r, image| {
         let w = world(r, image)?;
         let me = w.player_tag;
@@ -798,7 +856,7 @@ pub(super) fn state(process: &dyn Process) -> Result<Value> {
             .collect();
         let goals: Vec<Value> = goals_of(r, image, w.player_country)?
             .iter()
-            .map(|g| goal_json(&mut names, g))
+            .map(|g| goal_json(&mut names, g, &expiry))
             .collect();
         Ok(json!({
             "source":"native own diplomacy state (memory)",
@@ -1163,6 +1221,15 @@ pub(super) fn countries(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn war_goal_expiry_is_read_per_type() {
+        let text = "take_state = {\n\tthreat = 0.5 # x\n\texpire = 60\n\tallowed = { always = yes }\n}\ntake_state_focus = {\n\texpire = 730\n}\ntopple_government = {\n\tthreat = 1\n}\n";
+        let m = parse_wargoal_expiry(text);
+        assert_eq!(m.get("take_state"), Some(&60));
+        assert_eq!(m.get("take_state_focus"), Some(&730));
+        assert_eq!(m.get("topple_government"), None);
+    }
 
     #[test]
     fn dates_follow_the_no_leap_calendar() {

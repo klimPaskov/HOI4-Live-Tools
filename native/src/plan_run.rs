@@ -1736,8 +1736,15 @@ fn lanes_tick(
     state.sched.war_ran = war_first;
     let lanes = lanes(plan, war_first);
     // `scheduler.war_every_tick`: the war-first block takes every tick it has an order for
-    let war_turn =
-        war_first && (!state.round.war_last || plan["scheduler"]["war_every_tick"] == json!(true));
+    // While an operation executes, the war lane is offered first in every tick (it gives the
+    // tick back at once when nothing is due): pb1 (19 Nov 2026) sent about 25 army orders in 56
+    // war days while every other tick went to a lane and one MIO listing held the input 54 s.
+    // (declared and not yet executed counts: qc8, 19 Nov 2026, the tick after the declaration
+    // went to politics while the attack waited for the events the declaration opened)
+    let op_war =
+        plan_operation::executing_any(state) || (state.war_active && plan_operation::active(state));
+    let war_turn = war_first
+        && (!state.round.war_last || op_war || plan["scheduler"]["war_every_tick"] == json!(true));
     if war_turn {
         if let Some(line) = war_lane(state, tools, plan, lease, now)? {
             state.round.war_last = true;
@@ -1769,6 +1776,10 @@ fn lanes_tick(
         }
         let (name, step) = lanes[state.round.cursor];
         state.round.cursor += 1;
+        // slow GUI lanes that do not decide a running war wait for its end
+        if op_war && WAR_DEFERRED_LANES.contains(&name) {
+            continue;
+        }
         state.sched.turns.insert(name, now);
         state.last_ok = None;
         if let Some(line) = step(state, tools, plan, lease, now)? {
@@ -2465,6 +2476,9 @@ fn lane_of(list: &[Lane], name: &str) -> Lane {
 /// so a rule with work every pass never holds back the rules behind it.
 /// The lanes checked every tick ahead of the pass (see `lanes_tick`).
 const FAST_LANES: [Lane; 2] = [("research", research_lane), ("focus", focus_lane)];
+/// Lanes that wait while an operation executes: slow GUI listings (a design-company trait read
+/// took 54 s of a war's input in pb1) whose work keeps until the war is won.
+const WAR_DEFERRED_LANES: [&str; 4] = ["mio_lines", "mio", "mio_traits", "intelligence"];
 
 fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
     let manage = &plan_manage::LANES;
@@ -2897,9 +2911,32 @@ fn war_first_steps(
         } else {
             plan_operation::wake(state);
             state.pcache = None;
+            // the declaration opens events (germany_mefo_bills.1) that refuse every order: they
+            // are answered at once in the next tick, the attack follows it (qc1, 19 Nov 2026: the
+            // refused execute was retried 20 s = four game days later)
+            let open = tools
+                .call("hoi4_events", &json!({}))
+                .map(|e| !list(&e, "events").is_empty())
+                .unwrap_or(false);
+            if open {
+                state.op_events_now = true;
+                state.war_active = true;
+                state.last_ok = Some(true);
+                return Ok(Some(format!(
+                    "{declared}; events open: answered before the attack is executed"
+                )));
+            }
             let executed = war_burst(state, tools, plan, lease, now, plan_operation::step)?;
             state.war_active = true;
-            let air = war_burst(state, tools, plan, lease, now, air_war_step)?;
+            let air = war_burst_for(
+                state,
+                tools,
+                plan,
+                lease,
+                now,
+                air_war_step,
+                AIR_OPENING_SECONDS,
+            )?;
             state.last_ok = Some(true);
             let line = [Some(declared), executed, air]
                 .into_iter()
@@ -2919,8 +2956,37 @@ fn war_first_steps(
         |state, tools, plan, lease, now| {
             let ops = war_burst(state, tools, plan, lease, now, plan_operation::step)?;
             let ok = state.last_ok;
-            let air = if ops.is_some() || plan_operation::active(state) {
-                war_burst(state, tools, plan, lease, now, air_war_step)?
+            // While an operation runs (prepare and war) the air gets AIR_TICK_SECONDS of each
+            // tick, after the land orders (qb2: full air bursts made the prepare take 30 days): an uncapped air burst (6 missions, 31 s = 6 game days) took every
+            // tick of qb1's first war weeks and the armour got one order a week.
+            // At war the land orders have the tick: the air acts in a tick the operation gave no
+            // order, or once AIR_EVERY hours have passed without an air order (qc1: two air
+            // orders of 5 s each in every tick held the column to one leg every 4-5 game days).
+            // The opening days of a war belong to the air as much as to the land: every wing to
+            // its mission in the first AIR_OPENING days (qc6: fighters 0 of 12 flying on day 14,
+            // 5 on day 21; the bed that kept 1:2.94 had them all on superiority from day 10).
+            let opening =
+                plan_operation::executing_since(state).is_some_and(|at| now - at < AIR_OPENING);
+            let air_due = !plan_operation::executing_any(state)
+                || opening
+                || ops.is_none()
+                || state
+                    .done
+                    .get("op:airtick")
+                    .is_none_or(|at| now - at >= AIR_EVERY);
+            let air = if (ops.is_some() || plan_operation::active(state)) && air_due {
+                let max = if opening {
+                    AIR_OPENING_SECONDS
+                } else if plan_operation::executing_any(state) && ops.is_some() {
+                    1
+                } else {
+                    AIR_TICK_SECONDS
+                };
+                let out = war_burst_for(state, tools, plan, lease, now, air_war_step, max)?;
+                if out.is_some() {
+                    state.done.insert("op:airtick".to_string(), now);
+                }
+                out
             } else {
                 None
             };
@@ -2967,7 +3033,21 @@ fn war_first_steps(
             }
         },
         |state, tools, plan, lease, now| war_burst(state, tools, plan, lease, now, war_step),
-        |state, tools, plan, lease, now| war_burst(state, tools, plan, lease, now, air_war_step),
+        |state, tools, plan, lease, now| {
+            if plan_operation::active(state) {
+                war_burst_for(
+                    state,
+                    tools,
+                    plan,
+                    lease,
+                    now,
+                    air_war_step,
+                    AIR_TICK_SECONDS,
+                )
+            } else {
+                war_burst(state, tools, plan, lease, now, air_war_step)
+            }
+        },
         construction_plan_step,
         armies_step,
     ];
@@ -3019,9 +3099,31 @@ fn war_burst(
     now: GameHour,
     step: Step,
 ) -> Result<Option<String>> {
+    let max_seconds = plan["war"]["burst_seconds"].as_u64().unwrap_or(30);
+    war_burst_for(state, tools, plan, lease, now, step, max_seconds)
+}
+
+/// Seconds of a tick the air burst may hold while an operation runs.
+const AIR_TICK_SECONDS: u64 = 6;
+/// Game hours the air waits at most behind the land orders of an executing operation.
+const AIR_EVERY: GameHour = DAY;
+/// Game hours from the execution of an operation in which the air bursts run uncapped.
+const AIR_OPENING: GameHour = 5 * DAY;
+/// Seconds of a tick the air burst may hold in the opening days of a war.
+const AIR_OPENING_SECONDS: u64 = 30;
+
+/// [`war_burst`] with its own time budget (an order that starts inside it finishes).
+fn war_burst_for(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    step: Step,
+    max_seconds: u64,
+) -> Result<Option<String>> {
     let cfg = &plan["war"];
     let max_orders = cfg["burst_orders"].as_u64().unwrap_or(16).max(1) as usize;
-    let max_seconds = cfg["burst_seconds"].as_u64().unwrap_or(30);
     let began = std::time::Instant::now();
     let mut lines: Vec<String> = Vec::new();
     let mut any_ok = false;

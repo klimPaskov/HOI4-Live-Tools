@@ -28,6 +28,7 @@
 //!               closures: the objective it would choose without them is reopened (the worn
 //!               gate still holds back a worn army)
 //!   worn_gate   0.5: an army under this share of its best organisation opens no new strike
+//!   supply_gate 0 (off): an army whose mean supply percent is under this opens no new strike
 //!               until `rest_days` after its last order (retaking own land does not wait)
 //!   feed        true: outside a strike, a stack its province cannot feed (`floor` 0.35 of
 //!               the divisions' need) sends its most worn divisions to held land near it with
@@ -105,6 +106,10 @@ use crate::error::Result;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
+/// Way cost (plan_strike `way`: 1 a held province, 3 an enemy one) within which a strike army
+/// turns back to retake an own victory point the enemy holds.
+const MAX_RETAKE_COST: i64 = 12;
+
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 enum Mode {
     #[default]
@@ -180,6 +185,7 @@ struct Knobs {
     floor: f64,
     garrison: bool,
     worn_gate: f64,
+    supply_gate: f64,
     stack: usize,
     widen: bool,
     state_weight: f64,
@@ -208,6 +214,7 @@ fn knobs(cfg: &Value) -> Option<Knobs> {
         floor: number("floor", 0.35),
         garrison: k["garrison"] != json!(false),
         worn_gate: number("worn_gate", 0.5),
+        supply_gate: number("supply_gate", 0.0),
         stack: number("stack", 4.0).max(0.0) as usize,
         widen: k["widen"] != json!(false),
         state_weight: number("state_weight", 2.0).max(1.0),
@@ -236,6 +243,12 @@ struct World<'a> {
     enemy_states: HashSet<i64>,
     /// provinces of the player's own states an enemy holds
     lost_own: HashSet<i64>,
+    /// victory points of the player's own states an enemy holds (province, points)
+    lost_own_vp: Vec<(i64, f64)>,
+    /// The army nearest each own victory point the enemy holds: only it turns back to retake it
+    /// (qc3, 19 Nov 2026: all five formations left the Vistula for one Silesian point and Poland
+    /// retook 30 of the 50 points it had lost).
+    retaker: HashMap<i64, String>,
     /// province with own divisions -> (supply it receives, supply its divisions draw)
     supply: HashMap<i64, (f64, f64)>,
     /// victory points that decide their state's control (the largest of a state the enemy
@@ -1035,6 +1048,25 @@ fn choose(
             ));
         }
     }
+    // An own victory point the enemy holds, anywhere in reach (MAX_RETAKE_COST): retaken before
+    // every row, the largest first. g17k (19 Nov 2026): Koenigsberg fell in week one and stood
+    // Polish all war; Poland kept fighting on the German points it held.
+    let mut lost: Vec<(i64, f64)> = world.lost_own_vp.clone();
+    lost.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+    let me = divisions.first().map_or("", |d| d.army.as_str());
+    for (province, _) in lost {
+        if closed.contains(&province) || world.retaker.get(&province).is_some_and(|a| a != me) {
+            continue;
+        }
+        if let Some((cost, leg)) = world.way(&here, province, closed) {
+            if cost <= MAX_RETAKE_COST && !closed.contains(&leg) {
+                return Some(Order::Strike(
+                    leg,
+                    format!("own victory point {province} the enemy holds"),
+                ));
+            }
+        }
+    }
     // The army's first open row, in plan order: its leg is the first province of the path (or
     // the row's province) not yet held. A row is open when its leg is not closed for the army,
     // lies in land the army may enter and touches land already held; a row that is not open
@@ -1178,13 +1210,30 @@ pub(super) fn step(
     now: GameHour,
 ) -> Result<Option<Option<String>>> {
     let cfg = &plan["war"];
-    let Some(knobs) = knobs(cfg) else {
+    let parse = knobs;
+    let Some(knobs) = parse(cfg) else {
         state.strike.active = false;
         return Ok(None);
     };
     if enemies.is_empty() {
         return Ok(None);
     }
+    // per-army overrides: `strike.armies.<army>` replaces those knobs for that army
+    let army_knobs: HashMap<String, Knobs> = cfg["strike"]["armies"]
+        .as_object()
+        .map(|m| {
+            m.iter()
+                .filter_map(|(name, over)| {
+                    let mut merged = cfg["strike"].clone();
+                    merged.as_object_mut()?.remove("armies");
+                    for (k, v) in over.as_object()? {
+                        merged[k] = v.clone();
+                    }
+                    Some((name.clone(), parse(&json!({"strike": merged}))?))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     // Victory points of the enemies and who holds them; states under each side's control.
     let mut vp: BTreeMap<i64, (bool, f64)> = BTreeMap::new();
     let mut enemy_states: HashSet<i64> = HashSet::new();
@@ -1232,11 +1281,19 @@ pub(super) fn step(
     let mine = tools.call("hoi4_states", &json!({"query": me}))?;
     let mut own_states: HashSet<i64> = HashSet::new();
     let mut lost_own: HashSet<i64> = HashSet::new();
+    let mut lost_own_vp: Vec<(i64, f64)> = Vec::new();
     for row in list(&mine, "states") {
         if let Some(id) = row["state_id"].as_i64() {
             all_states.push(id);
             if text(&row["controller"]) == me {
                 own_states.insert(id);
+            }
+            for point in list(row, "victory_points") {
+                if let Some(p) = point["province"].as_i64() {
+                    if enemies.contains(text(&point["controller"])) {
+                        lost_own_vp.push((p, point["victory_points"].as_f64().unwrap_or(0.0)));
+                    }
+                }
             }
             for other in list(row, "provinces_held_by_others") {
                 if enemies.contains(text(&other["controller"])) {
@@ -1339,16 +1396,32 @@ pub(super) fn step(
     let mut stop: Option<String> = None;
     {
         let decisive = decisive(&vp, |p| memory.graph.get(&p).map(|r| r.0), &enemy_states);
-        let world = World {
+        let mut world = World {
             memory: &memory,
             vp,
             own_states,
             enemy_states,
             lost_own,
+            lost_own_vp,
+            retaker: HashMap::new(),
             supply: fed,
             decisive,
             unfed,
         };
+        for (vp, _) in world.lost_own_vp.clone() {
+            let nearest = by_army
+                .iter()
+                .filter_map(|(name, divs)| {
+                    let here: HashSet<i64> = divs.iter().map(|d| d.province).collect();
+                    world
+                        .way(&here, vp, &HashSet::new())
+                        .map(|(c, _)| (c, name.clone()))
+                })
+                .min();
+            if let Some((_, name)) = nearest {
+                world.retaker.insert(vp, name);
+            }
+        }
         // A garrison holds its victory point while that point is at the front and the division
         // stands in it; then it goes back to its army's orders.
         let at: HashMap<&str, i64> = divisions
@@ -1471,6 +1544,7 @@ pub(super) fn step(
             if act.is_some() {
                 break;
             }
+            let knobs = army_knobs.get(name).unwrap_or(&knobs);
             let all = &by_army[name];
             // an army given an order in this tick's war burst waits for the next tick
             if all.len() < 2
@@ -1768,7 +1842,7 @@ pub(super) fn step(
             let mut order = None;
             for _ in 0..4 {
                 let shut: HashSet<i64> = closed.union(&full).copied().collect();
-                let Some(o) = choose(&world, &knobs, &rows(plan, &names), &movers, &shut) else {
+                let Some(o) = choose(&world, knobs, &rows(plan, &names), &movers, &shut) else {
                     break;
                 };
                 if let Order::Strike(p, _) = &o {
@@ -1794,7 +1868,7 @@ pub(super) fn step(
             if order.is_none() && knobs.reopen && closed.iter().any(|p| Some(*p) != turned) {
                 let shut: HashSet<i64> = full.iter().copied().chain(turned).collect();
                 // (the closure ends once the game takes the order)
-                order = choose(&world, &knobs, &rows(plan, &names), &movers, &shut);
+                order = choose(&world, knobs, &rows(plan, &names), &movers, &shut);
             }
             let Some(order) = order else {
                 continue;
@@ -1808,6 +1882,21 @@ pub(super) fn step(
             if next == Mode::Strike
                 && mean < knobs.worn_gate
                 && now - since < knobs.rest_days * DAY
+                && !why.starts_with("own land")
+            {
+                continue;
+            }
+            // Out of supply: no new strike until the supply has come up (supply_gate percent,
+            // 0 = off); retaking own land does not wait.
+            let fed: Vec<f64> = movers
+                .iter()
+                .map(|d| d.supply)
+                .filter(|s| *s >= 0.0)
+                .collect();
+            if next == Mode::Strike
+                && knobs.supply_gate > 0.0
+                && !fed.is_empty()
+                && fed.iter().sum::<f64>() / (fed.len() as f64) < knobs.supply_gate
                 && !why.starts_with("own land")
             {
                 continue;
@@ -2130,6 +2219,8 @@ mod tests {
             own_states: [10].into_iter().collect(),
             enemy_states: [20].into_iter().collect(),
             lost_own: HashSet::new(),
+            lost_own_vp: Vec::new(),
+            retaker: HashMap::new(),
             supply: HashMap::new(),
             decisive: HashSet::new(),
             unfed: HashSet::new(),
@@ -2138,6 +2229,72 @@ mod tests {
         assert_eq!(world.nearest_enemy(&here, &HashSet::new()), Some(3));
         let shut: HashSet<i64> = [3].into_iter().collect();
         assert_eq!(world.nearest_enemy(&here, &shut), None);
+    }
+
+    #[test]
+    fn an_own_victory_point_the_enemy_holds_is_retaken_before_every_row() {
+        // own 1 - 2 - 3 (own victory point, enemy-held) ; 1 - 4 (enemy row victory point)
+        let mut memory = Memory::default();
+        memory.graph.insert(1, (10, vec![2, 4]));
+        memory.graph.insert(2, (10, vec![1, 3]));
+        memory.graph.insert(3, (10, vec![2]));
+        memory.graph.insert(4, (20, vec![1]));
+        let mut vp = BTreeMap::new();
+        vp.insert(4, (false, 25.0));
+        let world = World {
+            memory: &memory,
+            vp,
+            own_states: [10].into_iter().collect(),
+            enemy_states: [20].into_iter().collect(),
+            lost_own: [3].into_iter().collect(),
+            lost_own_vp: vec![(3, 10.0)],
+            retaker: HashMap::new(),
+            supply: HashMap::new(),
+            decisive: HashSet::new(),
+            unfed: HashSet::new(),
+        };
+        let knobs = knobs(&json!({"strike": true})).unwrap();
+        let d = Division {
+            id: "d".into(),
+            army: "A".into(),
+            province: 1,
+            organisation: 1.0,
+            heading: None,
+            supply: 100.0,
+            need: 1.0,
+        };
+        let rows = vec![(4, vec![])];
+        match choose(&world, &knobs, &rows, &[&d, &d], &HashSet::new()) {
+            Some(Order::Strike(p, why)) => {
+                assert_eq!(p, 3, "{why}");
+                assert!(why.contains("own victory point"), "{why}");
+            }
+            _ => panic!("no strike"),
+        }
+        // another army is nearer the point: this one keeps to its row
+        let nearer = World {
+            retaker: [(3, "B".to_string())].into_iter().collect(),
+            lost_own: HashSet::new(),
+            ..world
+        };
+        match choose(&nearer, &knobs, &rows, &[&d, &d], &HashSet::new()) {
+            Some(Order::Strike(p, _)) => assert_eq!(p, 4),
+            _ => panic!("no strike"),
+        }
+        let world = World {
+            retaker: HashMap::new(),
+            ..nearer
+        };
+        // retaken: the row comes next
+        let world = World {
+            lost_own: HashSet::new(),
+            lost_own_vp: Vec::new(),
+            ..world
+        };
+        match choose(&world, &knobs, &rows, &[&d, &d], &HashSet::new()) {
+            Some(Order::Strike(p, _)) => assert_eq!(p, 4),
+            _ => panic!("no strike"),
+        }
     }
 
     const START: GameHour = 1_000_000;
@@ -2506,6 +2663,27 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(line.contains("on province 30"), "{line}");
+    }
+
+    #[test]
+    fn an_army_takes_its_own_knobs_over_the_plans() {
+        let map = Map::new(11);
+        let mut state = State::default();
+        let on = plan(json!({"stack": 0, "armies": {"Army 1": {"stack": 2}}}));
+        let line = run(&mut state, &map, &on, START).unwrap().unwrap();
+        assert!(line.contains("2 of 3"), "{line}");
+    }
+
+    #[test]
+    fn an_army_out_of_supply_opens_no_new_strike_until_fed() {
+        let map = Map::new(11);
+        let mut state = State::default();
+        let on = plan(json!({"supply_gate": 40.0}));
+        map.pct.set(12.0);
+        assert_eq!(run(&mut state, &map, &on, START), Some(None));
+        map.pct.set(80.0);
+        let line = run(&mut state, &map, &on, START + DAY).unwrap().unwrap();
+        assert!(line.contains("on province 20"), "{line}");
     }
 
     #[test]
