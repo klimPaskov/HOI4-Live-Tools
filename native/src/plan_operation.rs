@@ -109,6 +109,9 @@ struct Unit {
     click: Option<i64>,
     line: Vec<i64>,
     anchor: Option<i64>,
+    /// an armour formation on its own front whose attack is the game's spearhead order painted
+    /// through `line` (the owner's war model, 19 Nov 2026), not the strike engine's direct moves
+    spear: bool,
 }
 
 fn key(id: &str, what: &str) -> String {
@@ -483,6 +486,7 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
                 click: None,
                 anchor: None,
                 line,
+                spear: false,
             });
             continue;
         }
@@ -507,6 +511,7 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
                 click: None,
                 anchor: line.first().copied(),
                 line,
+                spear: false,
             });
             continue;
         }
@@ -517,6 +522,14 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
                     .and_then(|r| r["army_group"].as_str())
                     .map(str::to_string);
             }
+        }
+        if role == Role::Strike && spearheads(op) && f["front"].is_object() {
+            let mut u = unit(name, Role::Mobile, &f["front"], &f["offensive"]);
+            u.line = spear_path(f);
+            u.anchor = u.line.last().copied();
+            u.spear = true;
+            out.push(u);
+            continue;
         }
         let (front, offensive) = if role == Role::Line {
             (&Value::Null, &Value::Null)
@@ -625,7 +638,31 @@ fn unit(name: String, role: Role, front: &Value, offensive: &Value) -> Unit {
         click: front["click_state"].as_i64(),
         line,
         anchor,
+        spear: false,
     }
+}
+
+/// Whether the operation's armour fights on spearheads (the default) or on the strike
+/// engine's direct moves (`armour: "moves"`, the 18-19 Nov bed behaviour kept for a test).
+fn spearheads(op: &Value) -> bool {
+    op["armour"].as_str() != Some("moves")
+}
+
+/// The states a strike formation's spearhead is painted through, deepest last: its axis without
+/// its own start states, then the states of its target line not on the axis (Panzergruppe Ost:
+/// axis 67-87-10, target 87-10-92 -> 87, 10, 92).
+fn spear_path(f: &Value) -> Vec<i64> {
+    let own: Vec<i64> = ints(&f["front"]["own_states"]);
+    let mut path: Vec<i64> = ints(&f["offensive"]["axis"])
+        .into_iter()
+        .filter(|s| !own.contains(s))
+        .collect();
+    for s in ints(&f["offensive"]["target_line"]) {
+        if !path.contains(&s) && !own.contains(&s) {
+            path.push(s);
+        }
+    }
+    path
 }
 
 fn attacker(u: &Unit) -> bool {
@@ -668,6 +705,20 @@ fn arrow_executing(roster: &Value, u: &Unit, line: &[i64]) -> Option<bool> {
     let need = need(u, line);
     let mut found = None;
     for off in offensives(roster, &u.name) {
+        if u.spear {
+            // a spearhead reads back as painted: its path and target reach the line's deepest state
+            let reach: HashSet<i64> = ints(&off["path_states"])
+                .into_iter()
+                .chain(ints(&off["target"]["states"]))
+                .collect();
+            if line.last().is_none_or(|s| reach.contains(s)) {
+                if off["executing"] == json!(true) {
+                    return Some(true);
+                }
+                found = Some(false);
+            }
+            continue;
+        }
         let target: HashSet<i64> = ints(&off["target"]["states"]).into_iter().collect();
         let hit = line.iter().filter(|s| target.contains(s)).count();
         if line.is_empty() || hit >= need {
@@ -856,6 +907,20 @@ fn front_args(u: &Unit, click: i64, peace: bool) -> Value {
 }
 
 fn offensive_args(name: &str, line: &[i64], anchor: Option<i64>) -> Value {
+    offensive_order(name, line, anchor, false)
+}
+
+/// An offensive line (across the line's states), or with `spear` the game's spearhead order
+/// painted from the army through the states in order.
+fn offensive_order(name: &str, line: &[i64], anchor: Option<i64>, spear: bool) -> Value {
+    let mut args = offensive_line_args(name, line, anchor);
+    if spear {
+        args["spearhead"] = json!(true);
+    }
+    args
+}
+
+fn offensive_line_args(name: &str, line: &[i64], anchor: Option<i64>) -> Value {
     if line.len() >= 2 {
         let states: Vec<i64> = line.iter().take(12).copied().collect();
         json!({"army": name, "state_id": anchor.filter(|a| line.contains(a)).unwrap_or(states[states.len() / 2]),
@@ -1816,7 +1881,7 @@ fn prepare(
         .iter()
         .any(|t| units.iter().any(|u| &u.enemy == t))
     {
-        for u in units.iter().filter(|u| u.role == Role::Strike) {
+        for u in units.iter().filter(|u| u.role == Role::Strike || u.spear) {
             let Some(start) = u.own_states.first().copied() else {
                 continue;
             };
@@ -1996,7 +2061,10 @@ fn reconcile(
     let stale = !offensives(roster, &u.name).is_empty();
     let k = key(id, &format!("redraw:{}:{tag}", u.name));
     let redraws = state.done.get(&k).copied().unwrap_or(0);
-    if stale && peace {
+    // a spearhead's divisions stay on the order they were given (a second arrow on the same front
+    // gets none: spr1, 19 Nov 2026): a spear whose order no longer reaches its line is cleared
+    // and painted again at war too
+    if stale && (peace || u.spear) {
         if redraws >= REDRAWS && line.len() >= 2 {
             // o1f: the stroke Lodz-Warsaw read back over Gdynia twice; one state at a time
             state
@@ -2064,9 +2132,13 @@ fn reconcile(
         tools,
         lease,
         id,
-        &format!("offensive of {} through {tag}", u.name),
+        &format!(
+            "{} of {} through {tag}",
+            if u.spear { "spearhead" } else { "offensive" },
+            u.name
+        ),
         "hoi4_army_offensive",
-        offensive_args(&u.name, line, u.anchor),
+        offensive_order(&u.name, line, u.anchor, u.spear),
     )?;
     if state.last_ok == Some(false) {
         state.skip(now, "opdraw", &u.name, 2);
@@ -2410,7 +2482,12 @@ fn advance(
     let op_line = still(&line);
     for u in units.iter().filter(|u| attacker(u)) {
         let own_line_held = u.line.is_empty() || held(tools, &me, &u.line).len() == u.line.len();
-        let mut wanted: Vec<i64> = if u.role == Role::Group || own_line_held {
+        let mut wanted: Vec<i64> = if u.spear && own_line_held {
+            // its painted line taken: the next spearhead to the nearest states still to take
+            let mut next = solo_line(state, roster, &u.name, &op_line);
+            next.truncate(2);
+            next
+        } else if u.role == Role::Group || own_line_held {
             op_line.clone()
         } else {
             still(&u.line)

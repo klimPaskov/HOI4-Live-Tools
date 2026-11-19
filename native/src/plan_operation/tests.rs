@@ -1131,3 +1131,54 @@ fn a_ready_operation_awaits_its_war_until_it_executes() {
     assert!(!awaiting_war(&state), "executing");
     assert!(!awaiting_war_on(&state, &plan, "POL"));
 }
+
+#[test]
+fn an_armour_formation_fights_on_its_own_spearhead_not_on_direct_moves() {
+    // the owner's war model (19 Nov 2026): the armour advances on the game's spearhead order
+    // painted through its axis and target line; direct moves only by the `armour: "moves"` switch
+    let game = Game::new();
+    let mut plan = plan();
+    plan["operations"][0]["formations"][2] = json!({"army": "Panzer", "role": "mobile",
+        "drive": "strike", "front": {"enemy": "POL", "own_states": [67], "click_state": 87},
+        "offensive": {"axis": [67, 87, 10], "target_line": [87, 10, 92]}});
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let panzer: Vec<(String, Value)> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, a)| a["army"] == json!("Panzer") && n != "hoi4_army_move")
+        .collect();
+    assert_eq!(panzer[0].0, "hoi4_army_front");
+    assert_eq!(
+        panzer[0].1["from_state"],
+        json!(67),
+        "a narrow front in peace"
+    );
+    assert_eq!(panzer[1].0, "hoi4_army_offensive");
+    assert_eq!(panzer[1].1["spearhead"], json!(true));
+    assert_eq!(panzer[1].1["states"], json!([87, 10, 92]));
+    // the old engine behind the switch: no front of its own
+    let game = Game::new();
+    plan["operations"][0]["armour"] = json!("moves");
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    assert!(!game
+        .orders()
+        .iter()
+        .any(|(n, a)| n == "hoi4_army_front" && a["army"] == json!("Panzer")));
+}
+
+#[test]
+fn a_spearhead_covers_its_line_by_the_path_it_was_painted_through() {
+    let mut u = unit(
+        "Panzer".into(),
+        Role::Mobile,
+        &json!({"enemy": "POL"}),
+        &Value::Null,
+    );
+    u.spear = true;
+    let roster = json!({"armies": [{"army": "Panzer", "plan": [{"kind": "front", "offensives": [
+        {"executing": true, "path_states": [67, 87, 10, 92], "target": {"states": [92]}}]}]}]});
+    assert_eq!(arrow_executing(&roster, &u, &[10, 92]), Some(true));
+    assert_eq!(arrow_executing(&roster, &u, &[90]), None);
+}

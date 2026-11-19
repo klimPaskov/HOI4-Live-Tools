@@ -3579,13 +3579,22 @@ pub(super) fn offensive(
         .filter_map(|p| pos.get(p).copied())
         .collect();
     let pivot = through.and_then(|p| pos.get(&p).copied());
-    let strokes = [
-        ("across the state", offensive_span(&own, &theirs, pivot)),
-        (
-            "from the army to the state's centre",
-            mean(&provinces).zip(mean(&target_provinces)),
-        ),
-    ];
+    // a spearhead is painted along the thrust (the game takes its provinces as painted): from
+    // the army to the objective (`through`, else the state's centre), never across the state
+    let strokes = if spearhead {
+        vec![(
+            "spearhead from the army to the objective",
+            mean(&provinces).zip(pivot.or_else(|| mean(&target_provinces))),
+        )]
+    } else {
+        vec![
+            ("across the state", offensive_span(&own, &theirs, pivot)),
+            (
+                "from the army to the state's centre",
+                mean(&provinces).zip(mean(&target_provinces)),
+            ),
+        ]
+    };
     for (kind, ends) in strokes {
         let Some((a, b)) = ends else {
             tried.push(Stroke {
@@ -3673,6 +3682,16 @@ pub(super) fn offensive_across(
             .collect();
         if let Some(c) = across_centre(&pts) {
             centres.push(c);
+        }
+    }
+    if spearhead {
+        // a spearhead path starts at the army and runs through the states in the order given
+        let own: Vec<(f64, f64)> = read(process, |r, i| army_provinces(r, i, army))?
+            .iter()
+            .filter_map(|p| pos.get(p).copied())
+            .collect();
+        if let Some(start) = across_centre(&own) {
+            centres.insert(0, start);
         }
     }
     let Some((a, b)) = farthest_pair(&centres) else {
