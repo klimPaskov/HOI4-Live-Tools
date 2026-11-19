@@ -270,9 +270,9 @@ fn prepare_reconciles_the_wanted_orders_with_the_read_back() {
         [
             "hoi4_army_plan Mitte",
             "hoi4_army_plan WestA",
-            "hoi4_army_front Army Group 2",
             "hoi4_army_front Army Group 1",
             "hoi4_army_offensive Army Group 1",
+            "hoi4_army_front Army Group 2",
             "hoi4_army_front Panzer",
             "hoi4_army_offensive Panzer",
             "hoi4_army_front Nord",
@@ -287,7 +287,7 @@ fn prepare_reconciles_the_wanted_orders_with_the_read_back() {
     );
     assert_eq!(sent[7].1, json!({"army": "Panzer", "state_id": 10}));
     assert_eq!(
-        sent[5].1,
+        sent[4].1,
         json!({"army": "Army Group 1", "state_id": 10, "states": [85, 86, 10, 88]})
     );
     // nothing executes in peace, the hold never
@@ -1093,4 +1093,166 @@ fn by_default_an_idle_line_army_gets_no_front_of_its_own_and_is_not_driven() {
         .done
         .keys()
         .any(|k| k.contains("solo:") || k.contains("drive:")));
+}
+
+#[test]
+fn the_groups_front_and_offensive_are_drawn_before_any_assembly_or_march() {
+    // the planning bonus grows only while the line stands: the group's line first (rs5/rs6,
+    // 19 Nov 2026: drawn after the assembly and the marches, six game days later)
+    let game = Game::new();
+    let d = |id: &str, army: &str, t: &str| (id.to_string(), army.to_string(), t.to_string());
+    *game.divs.borrow_mut() = vec![d("d1", "Mitte", "Pz"), d("d2", "Mitte", "Inf")];
+    let mut plan = plan();
+    plan["operations"][0]["formations"][2] = json!({"army": "Schnell", "role": "mobile",
+        "drive": "strike", "divisions": {"Pz": 1}, "front": {"enemy": "POL", "own_states": [67]}});
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let names: Vec<String> = game
+        .orders()
+        .iter()
+        .map(|(n, a)| format!("{n} {}", text(&a["army"])))
+        .collect();
+    let at = |what: &str| names.iter().position(|n| n == what).unwrap();
+    assert!(at("hoi4_army_offensive Army Group 1") < at("hoi4_army_detach Mitte"));
+    assert!(at("hoi4_army_front Army Group 1") < at("hoi4_army_front Army Group 2"));
+}
+
+#[test]
+fn a_ready_operation_awaits_its_war_until_it_executes() {
+    let plan = json!({"operations": [{"id": "op_x", "enemies": ["POL"]}]});
+    let mut state = State::default();
+    state.done.insert(key("op_x", "prep"), 0);
+    assert!(!awaiting_war(&state), "still preparing");
+    state.done.insert(key("op_x", "ready"), 10);
+    assert!(awaiting_war(&state));
+    assert!(awaiting_war_on(&state, &plan, "POL"));
+    assert!(!awaiting_war_on(&state, &plan, "FRA"));
+    state.done.insert(key("op_x", "exec"), 20);
+    assert!(!awaiting_war(&state), "executing");
+    assert!(!awaiting_war_on(&state, &plan, "POL"));
+}
+
+#[test]
+fn an_armour_formation_on_the_spearhead_switch_fights_on_its_own_spearhead() {
+    // the owner's war model (19 Nov 2026): with `armour: "spearhead"` the armour advances on the
+    // game's spearhead order painted to its axis's deepest state; the direct moves are the default
+    let game = Game::new();
+    let mut plan = plan();
+    plan["operations"][0]["armour"] = json!("spearhead");
+    plan["operations"][0]["formations"][2] = json!({"army": "Panzer", "role": "mobile",
+        "drive": "strike", "front": {"enemy": "POL", "own_states": [67], "click_state": 87},
+        "offensive": {"axis": [67, 87, 10], "target_line": [87, 10, 92]}});
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let panzer: Vec<(String, Value)> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, a)| a["army"] == json!("Panzer") && n != "hoi4_army_move")
+        .collect();
+    assert_eq!(panzer[0].0, "hoi4_army_front");
+    assert_eq!(
+        panzer[0].1["from_state"],
+        json!(67),
+        "a narrow front in peace"
+    );
+    assert_eq!(panzer[1].0, "hoi4_army_offensive");
+    assert_eq!(panzer[1].1["spearhead"], json!(true));
+    // one stroke from the front to the thrust's deepest state (its axis: 87, then 10)
+    assert_eq!(panzer[1].1["state_id"], json!(10));
+    assert!(panzer[1].1.get("states").is_none());
+    // the default engine: no front of its own
+    let game = Game::new();
+    plan["operations"][0]["armour"] = Value::Null;
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    assert!(!game
+        .orders()
+        .iter()
+        .any(|(n, a)| n == "hoi4_army_front" && a["army"] == json!("Panzer")));
+}
+
+#[test]
+fn a_spearhead_covers_its_line_by_the_path_it_was_painted_through() {
+    let mut u = unit(
+        "Panzer".into(),
+        Role::Mobile,
+        &json!({"enemy": "POL"}),
+        &Value::Null,
+    );
+    u.spear = true;
+    let roster = json!({"armies": [{"army": "Panzer", "plan": [{"kind": "front", "offensives": [
+        {"executing": true, "path_states": [67, 87, 10, 92], "target": {"states": [92]}}]}]}]});
+    assert_eq!(arrow_executing(&roster, &u, &[10, 92]), Some(true));
+    assert_eq!(arrow_executing(&roster, &u, &[90]), None);
+}
+
+#[test]
+fn a_spearhead_that_misses_gives_way_to_the_armours_offensive_line() {
+    let game = Game::new();
+    let mut plan = plan();
+    plan["operations"][0]["formations"][2] = json!({"army": "Panzer", "role": "mobile",
+        "drive": "strike", "front": {"enemy": "POL", "own_states": [67], "click_state": 87},
+        "offensive": {"axis": [67, 87, 10], "target_line": [87, 10, 92]}});
+    plan["operations"][0]["armour"] = json!("spearhead");
+    let mut state = State::default();
+    game.unit("Panzer", |r| r["states"] = json!({"67": 24}));
+    // the spear reads back elsewhere: one redraw, then the offensive line
+    game.unit("Panzer", |r| {
+        r["plan"] = json!([{"kind": "front", "offensives": [
+            {"executing": false, "path_states": [67, 88], "target": {"states": [88]}}]}])
+    });
+    state.done.insert(key("op_pol", "redraw:Panzer:87-10"), 1);
+    burst(&mut state, &game, &plan, START);
+    assert!(state.done.contains_key(&key("op_pol", "nospear:Panzer")));
+    let (units, _) = units(
+        &state,
+        "op_pol",
+        &plan["operations"][0],
+        &game.roster.borrow(),
+    );
+    assert!(!units.iter().any(|u| u.spear));
+}
+
+#[test]
+fn a_spearhead_stuck_on_a_state_leaves_it_to_the_infantry_and_goes_on() {
+    // qt1 (19 Nov 2026): Panzergruppe Ost stood 35 days in Lodz on its Warsaw spearhead
+    let game = Game::new();
+    *game.held.borrow_mut() = vec![87];
+    let mut u = unit(
+        "Panzer".into(),
+        Role::Mobile,
+        &json!({"enemy": "POL"}),
+        &Value::Null,
+    );
+    u.spear = true;
+    u.line = vec![87, 10];
+    let mut state = State::default();
+    let roster = game.roster.borrow().clone();
+    let op_line = [10, 90, 92];
+    let first = spear_line(&mut state, "op", &roster, &u, "GER", &game, &op_line, START);
+    assert_eq!(first, vec![10], "Lodz taken: Warsaw next");
+    let later = spear_line(
+        &mut state,
+        "op",
+        &roster,
+        &u,
+        "GER",
+        &game,
+        &op_line,
+        START + 5 * DAY,
+    );
+    assert_eq!(later, vec![10], "kept while it may still fall");
+    let stuck = spear_line(
+        &mut state,
+        "op",
+        &roster,
+        &u,
+        "GER",
+        &game,
+        &op_line,
+        START + 11 * DAY,
+    );
+    assert_ne!(stuck, vec![10], "given up after STRIKE_MAX_DAYS");
+    assert_eq!(stuck.len(), 1);
+    assert!(state.done.contains_key(&key("op", "spearskip:Panzer:10")));
 }

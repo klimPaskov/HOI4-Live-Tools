@@ -3272,8 +3272,8 @@ pub(super) fn front(
     }
     super::ui::trace("front: candidates", t0);
     if let Some(path) = ends {
-        // Drag along the border through every facing province pair, button held (left, then the
-        // right one): the game draws the front over the dragged stretch only. A straight drag
+        // Drag along the border through every facing province pair, button held (right, then the
+        // left one): the game draws the front over the dragged stretch only. A straight drag
         // between the two ends cut across own land on a bending border and the game took the
         // whole border (Silesia-Lodz, 18 Nov 2026).
         let screen: Vec<Option<(f64, f64)>> = read(process, |r, i| {
@@ -3328,7 +3328,12 @@ pub(super) fn front(
             ));
         }
         super::ui::trace_text(&format!("front: segment drag through {pts:?}"));
-        for right in [false, true] {
+        // the right button first: the game's own words for a shorter front are "Right-Click and
+        // drag the mouse on one of the borders ... to set the front in a shorter interval"; a
+        // left press on the border is a Click, which "set[s] the assigned front along entire
+        // border" (o1i-o1n, qs1: every armour front took the whole border and its divisions stood
+        // one a province)
+        for right in [true, false] {
             if pts.len() == 2 {
                 if right {
                     keys.right_drag(GAME, pts[0], pts[1])?;
@@ -3517,6 +3522,7 @@ pub(super) fn offensive(
     army: &str,
     state: i32,
     through: Option<i32>,
+    spearhead: bool,
 ) -> Result<()> {
     clear_notices(process, keys)?;
     if read(process, |r, i| orders(r, i, army))? == 0 {
@@ -3533,8 +3539,7 @@ pub(super) fn offensive(
     keys.click(GAME, x, y)?;
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
     let draw_line = |from: (f64, f64), to: (f64, f64)| -> Result<()> {
-        keys.press(Key::letter('x')?)?;
-        crate::phase::sleep(std::time::Duration::from_millis(300));
+        line_tool(process, keys, spearhead)?;
         keys.right_drag(GAME, from, to)?;
         wait(process, "offensive line placed", |r, i| {
             Ok(plan_nodes(r, i, army)? > before)
@@ -3579,13 +3584,43 @@ pub(super) fn offensive(
         .filter_map(|p| pos.get(p).copied())
         .collect();
     let pivot = through.and_then(|p| pos.get(&p).copied());
-    let strokes = [
-        ("across the state", offensive_span(&own, &theirs, pivot)),
-        (
-            "from the army to the state's centre",
-            mean(&provinces).zip(mean(&target_provinces)),
-        ),
-    ];
+    // a spearhead is painted along the thrust (the game takes its provinces as painted): from
+    // the army to the objective (`through`, else the state's centre), never across the state
+    let strokes = if spearhead {
+        // from the army's own front where it lies nearest the objective (the army's mean
+        // position lay inland, half-way along a march, and the stroke crossed the border far from
+        // the thrust: qs1, 19 Nov 2026), else from the army
+        let goal = pivot.or_else(|| mean(&target_provinces));
+        let front: Vec<(f64, f64)> = read(process, |r, i| {
+            let group = group_named(r, i, army)?;
+            Ok(orders::group_orders(r, i, group)?
+                .into_iter()
+                .filter(|(list, o)| *list == orders::List::Top && o.kind == 2)
+                .flat_map(|(_, o)| o.provinces)
+                .collect::<Vec<i32>>())
+        })
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|p| pos.get(p).copied())
+        .collect();
+        let start = goal
+            .and_then(|g| {
+                front.iter().copied().min_by(|a, b| {
+                    let d = |p: &(f64, f64)| (p.0 - g.0).powi(2) + (p.1 - g.1).powi(2);
+                    d(a).total_cmp(&d(b))
+                })
+            })
+            .or_else(|| mean(&provinces));
+        vec![("spearhead from the front to the objective", start.zip(goal))]
+    } else {
+        vec![
+            ("across the state", offensive_span(&own, &theirs, pivot)),
+            (
+                "from the army to the state's centre",
+                mean(&provinces).zip(mean(&target_provinces)),
+            ),
+        ]
+    };
     for (kind, ends) in strokes {
         let Some((a, b)) = ends else {
             tried.push(Stroke {
@@ -3655,6 +3690,7 @@ pub(super) fn offensive_across(
     game_dir: &std::path::Path,
     army: &str,
     states: &[i32],
+    spearhead: bool,
 ) -> Result<()> {
     clear_notices(process, keys)?;
     if read(process, |r, i| orders(r, i, army))? == 0 {
@@ -3672,6 +3708,16 @@ pub(super) fn offensive_across(
             .collect();
         if let Some(c) = across_centre(&pts) {
             centres.push(c);
+        }
+    }
+    if spearhead {
+        // a spearhead path starts at the army and runs through the states in the order given
+        let own: Vec<(f64, f64)> = read(process, |r, i| army_provinces(r, i, army))?
+            .iter()
+            .filter_map(|p| pos.get(p).copied())
+            .collect();
+        if let Some(start) = across_centre(&own) {
+            centres.insert(0, start);
         }
     }
     let Some((a, b)) = farthest_pair(&centres) else {
@@ -3710,8 +3756,7 @@ pub(super) fn offensive_across(
         ));
     };
     select_for_orders(process, keys, army)?;
-    keys.press(Key::letter('x')?)?;
-    crate::phase::sleep(std::time::Duration::from_millis(300));
+    line_tool(process, keys, spearhead)?;
     keys.right_drag_path(GAME, &path)?;
     let placed = wait(process, "offensive line placed", |r, i| {
         Ok(plan_nodes(r, i, army)? > before)
@@ -3729,6 +3774,30 @@ pub(super) fn offensive_across(
             ),
         )
     })
+}
+/// Enter the drawing of an attack line for the selected army: X for an offensive line, the
+/// battle-plan bar's spearhead button (`btn_order_draw_blitz`, interface/battleplantools.gui;
+/// its shortcut is Shift+X) for a spearhead. The game's tooltip: "Compared to Offensive Line a
+/// Spearhead will aggressively try to take all provinces as they were there when the order was
+/// first painted without adjusting to changes. Prefer Spearheads when you need to do
+/// overlapping encirclements, cutting off the enemy or for more controlled smaller thrusts".
+fn line_tool(process: &dyn Process, keys: &dyn GameInput, spearhead: bool) -> Result<()> {
+    if spearhead {
+        let (rect, state) = settled(process, "spearhead button", |r, i| {
+            super::invasion::plan_button(r, i, "btn_order_draw_blitz")
+        })?;
+        if state == 3 {
+            return Err(Error::new(
+                "button_disabled",
+                "The game disables the spearhead order for this army (it needs a front line)",
+            ));
+        }
+        super::kit::click(keys, rect)?;
+    } else {
+        keys.press(Key::letter('x')?)?;
+    }
+    crate::phase::sleep(std::time::Duration::from_millis(300));
+    Ok(())
 }
 /// The centre of a state's province positions (None for none).
 fn across_centre(pts: &[(f64, f64)]) -> Option<(f64, f64)> {

@@ -109,6 +109,9 @@ struct Unit {
     click: Option<i64>,
     line: Vec<i64>,
     anchor: Option<i64>,
+    /// an armour formation on its own front whose attack is the game's spearhead order painted
+    /// through `line` (the owner's war model, 19 Nov 2026), not the strike engine's direct moves
+    spear: bool,
 }
 
 fn key(id: &str, what: &str) -> String {
@@ -483,6 +486,7 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
                 click: None,
                 anchor: None,
                 line,
+                spear: false,
             });
             continue;
         }
@@ -507,6 +511,7 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
                 click: None,
                 anchor: line.first().copied(),
                 line,
+                spear: false,
             });
             continue;
         }
@@ -517,6 +522,18 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
                     .and_then(|r| r["army_group"].as_str())
                     .map(str::to_string);
             }
+        }
+        if role == Role::Strike && spearheads(op) && f["front"].is_object() {
+            let mut u = unit(name, Role::Mobile, &f["front"], &f["offensive"]);
+            u.line = spear_path(f);
+            u.anchor = u.line.last().copied();
+            // a spearhead that did not read back where it was painted gives way to the armour's
+            // own offensive line (the owner's other choice: "its own narrow front and offensive")
+            u.spear = !state
+                .done
+                .contains_key(&key(id, &format!("nospear:{}", u.name)));
+            out.push(u);
+            continue;
         }
         let (front, offensive) = if role == Role::Line {
             (&Value::Null, &Value::Null)
@@ -625,6 +642,31 @@ fn unit(name: String, role: Role, front: &Value, offensive: &Value) -> Unit {
         click: front["click_state"].as_i64(),
         line,
         anchor,
+        spear: false,
+    }
+}
+
+/// Whether the operation's armour fights on its own narrow front and the game's spearhead order
+/// (`armour: "spearhead"`) or on the strike engine's direct moves (the default). On the Poland bed
+/// (19 Nov 2026) the spearheads took Lodz and Krakow by day 14 but then stood or were redrawn, and
+/// reached 51-71 victory points on day 49 against 71-112 on the direct moves.
+fn spearheads(op: &Value) -> bool {
+    op["armour"].as_str() == Some("spearhead")
+}
+
+/// The states of a strike formation's thrust, deepest last: its axis without its own start
+/// states (Panzergruppe Ost: axis 67-87-10 -> 87, 10), else its target line. The spearhead is
+/// painted in one stroke from the front to the deepest of them and takes the states on its way.
+fn spear_path(f: &Value) -> Vec<i64> {
+    let own: Vec<i64> = ints(&f["front"]["own_states"]);
+    let path: Vec<i64> = ints(&f["offensive"]["axis"])
+        .into_iter()
+        .filter(|s| !own.contains(s))
+        .collect();
+    if path.is_empty() {
+        ints(&f["offensive"]["target_line"])
+    } else {
+        path
     }
 }
 
@@ -668,6 +710,20 @@ fn arrow_executing(roster: &Value, u: &Unit, line: &[i64]) -> Option<bool> {
     let need = need(u, line);
     let mut found = None;
     for off in offensives(roster, &u.name) {
+        if u.spear {
+            // a spearhead reads back as painted: its path and target reach the line's deepest state
+            let reach: HashSet<i64> = ints(&off["path_states"])
+                .into_iter()
+                .chain(ints(&off["target"]["states"]))
+                .collect();
+            if line.last().is_none_or(|s| reach.contains(s)) {
+                if off["executing"] == json!(true) {
+                    return Some(true);
+                }
+                found = Some(false);
+            }
+            continue;
+        }
         let target: HashSet<i64> = ints(&off["target"]["states"]).into_iter().collect();
         let hit = line.iter().filter(|s| target.contains(s)).count();
         if line.is_empty() || hit >= need {
@@ -855,7 +911,17 @@ fn front_args(u: &Unit, click: i64, peace: bool) -> Value {
     }
 }
 
-fn offensive_args(name: &str, line: &[i64], anchor: Option<i64>) -> Value {
+/// An offensive line (across the line's states), or with `spear` the game's spearhead order
+/// painted from the army through the states in order.
+fn offensive_order(name: &str, line: &[i64], anchor: Option<i64>, spear: bool) -> Value {
+    let mut args = offensive_line_args(name, line, anchor);
+    if spear {
+        args["spearhead"] = json!(true);
+    }
+    args
+}
+
+fn offensive_line_args(name: &str, line: &[i64], anchor: Option<i64>) -> Value {
     if line.len() >= 2 {
         let states: Vec<i64> = line.iter().take(12).copied().collect();
         json!({"army": name, "state_id": anchor.filter(|a| line.contains(a)).unwrap_or(states[states.len() / 2]),
@@ -985,6 +1051,28 @@ pub(super) fn unready(state: &State, plan: &Value, target: &str) -> Option<Strin
                 && strings(op, "enemies").iter().any(|e| e == target)
         })
         .map(|(id, _)| id)
+}
+
+/// An operation is prepared (read back as ready) and waits for its war: not executed, not ended.
+pub(super) fn awaiting_war(state: &State) -> bool {
+    state.done.keys().any(|k| {
+        k.starts_with("op:") && k.ends_with(":ready") && {
+            let base = &k[..k.len() - 6];
+            !state.done.contains_key(&format!("{base}:exec"))
+                && !state.done.contains_key(&format!("{base}:end"))
+        }
+    })
+}
+
+/// An operation against `target` is prepared and waits for its war.
+pub(super) fn awaiting_war_on(state: &State, plan: &Value, target: &str) -> bool {
+    list(plan, "operations").iter().enumerate().any(|(i, op)| {
+        let id = op_id(op, i);
+        strings(op, "enemies").iter().any(|e| e == target)
+            && state.done.contains_key(&key(&id, "ready"))
+            && !state.done.contains_key(&key(&id, "exec"))
+            && !state.done.contains_key(&key(&id, "end"))
+    })
 }
 
 /// An operation started and not yet read back as ready (its prepare still has orders to give).
@@ -1673,50 +1761,6 @@ fn prepare(
         )?;
         return Ok(Some(line));
     }
-    // ASSEMBLE: a mobile formation gathers its templates' divisions out of the other armies
-    if let Some(line) = assemble(state, tools, id, op, units, roster, lease, now)? {
-        return Ok(Some(line));
-    }
-    // a strike formation marches to its start state (its `front.own_states`, first) before
-    // the war, at once after its assembly and before the fronts are drawn (the march is game
-    // days, the drawing real seconds: drawn first, the march began 12 days into the bed's prepare
-    // and the declaration came 6-9 days late, rd2-rd6 19 Nov 2026): assembled where its divisions stood, the column began the war three to eleven
-    // days' march from its first objective (qc1/qc2, 19 Nov 2026: Panzergruppe Ost formed in
-    // Pomerania for a Lodz row and went by the Danzig corridor). Until it stands there the
-    // operation is not ready (the declaration waits, at most its own cap).
-    if !war_tags(wars)
-        .iter()
-        .any(|t| units.iter().any(|u| &u.enemy == t))
-    {
-        for u in units.iter().filter(|u| u.role == Role::Strike) {
-            let Some(start) = u.own_states.first().copied() else {
-                continue;
-            };
-            let Some(row) = army_row(roster, &u.name) else {
-                continue;
-            };
-            let total = row["division_count"].as_i64().unwrap_or(0).max(1);
-            let there = row["states"][start.to_string()].as_i64().unwrap_or(0);
-            if there * 2 >= total {
-                continue;
-            }
-            state.skip(now, "opasm", &format!("march:{}", u.name), DAY / 2);
-            if state.skipped(now, "opmarch", &u.name) {
-                continue;
-            }
-            state.skip(now, "opmarch", &u.name, 2 * DAY);
-            let line = order(
-                state,
-                tools,
-                lease,
-                id,
-                &format!("{} marches to its start state {start}", u.name),
-                "hoi4_army_move",
-                json!({"army": u.name, "state_id": start}),
-            )?;
-            return Ok(Some(line));
-        }
-    }
     // the group: formed when its line armies stand in none (never regrouped)
     let line_armies: Vec<&Unit> = units.iter().filter(|u| u.role == Role::Line).collect();
     if group.is_none() && line_armies.len() >= 2 && !state.skipped(now, "opgrp", id) {
@@ -1742,27 +1786,6 @@ fn prepare(
                 &format!("form the group of {}", names.join(", ")),
                 "hoi4_army_group_create",
                 json!({"armies": names}),
-            )?;
-            return Ok(Some(line));
-        }
-    }
-    // a formation's named commander where none leads
-    for f in list(op, "formations") {
-        let name = resolve(state, text(&f["army"]));
-        let Some(general) = f["commander"].as_str().filter(|g| !g.is_empty()) else {
-            continue;
-        };
-        let leaderless = army_row(roster, &name).is_some_and(|r| r["commander"].is_null());
-        if leaderless && !state.skipped(now, "opgen", &name) {
-            state.skip(now, "opgen", &name, 7 * DAY);
-            let line = order(
-                state,
-                tools,
-                lease,
-                id,
-                &format!("{general} commands {name}"),
-                "hoi4_army_commander",
-                json!({"army": name, "general": general}),
             )?;
             return Ok(Some(line));
         }
@@ -1826,6 +1849,89 @@ fn prepare(
             return Ok(Some(line));
         }
     }
+    // 2. the group's front and its offensive FIRST, before any assembly, march or commander: the
+    // planning bonus grows only while the line stands (PLANNING_GAIN 0.02 a day, the cap 0.3
+    // and more from doctrines and the marshal), and the attack is the battle plan executed
+    // with that bonus (the owner's war model, 19 Nov 2026). Drawn after the assembly and the
+    // marches (rs5/rs6) the group's line stood six game days later.
+    let fighting = war_tags(wars);
+    for u in units.iter().filter(|u| u.role == Role::Group) {
+        let one = key(id, &format!("one:{}:{}", u.name, line_tag(&u.line)));
+        let line = match state.done.get(&one) {
+            Some(first) => vec![*first],
+            None => u.line.clone(),
+        };
+        let peace = !fighting.contains(&u.enemy);
+        if let Some(line) = reconcile(state, tools, id, u, &line, roster, wars, lease, now, peace)?
+        {
+            return Ok(Some(line));
+        }
+    }
+    // ASSEMBLE: a mobile formation gathers its templates' divisions out of the other armies
+    if let Some(line) = assemble(state, tools, id, op, units, roster, lease, now)? {
+        return Ok(Some(line));
+    }
+    // a strike formation marches to its start state (its `front.own_states`, first) before
+    // the war, at once after its assembly and before the fronts are drawn (the march is game
+    // days, the drawing real seconds: drawn first, the march began 12 days into the bed's prepare
+    // and the declaration came 6-9 days late, rd2-rd6 19 Nov 2026): assembled where its divisions stood, the column began the war three to eleven
+    // days' march from its first objective (qc1/qc2, 19 Nov 2026: Panzergruppe Ost formed in
+    // Pomerania for a Lodz row and went by the Danzig corridor). Until it stands there the
+    // operation is not ready (the declaration waits, at most its own cap).
+    if !war_tags(wars)
+        .iter()
+        .any(|t| units.iter().any(|u| &u.enemy == t))
+    {
+        for u in units.iter().filter(|u| u.role == Role::Strike || u.spear) {
+            let Some(start) = u.own_states.first().copied() else {
+                continue;
+            };
+            let Some(row) = army_row(roster, &u.name) else {
+                continue;
+            };
+            let total = row["division_count"].as_i64().unwrap_or(0).max(1);
+            let there = row["states"][start.to_string()].as_i64().unwrap_or(0);
+            if there * 2 >= total {
+                continue;
+            }
+            state.skip(now, "opasm", &format!("march:{}", u.name), DAY / 2);
+            if state.skipped(now, "opmarch", &u.name) {
+                continue;
+            }
+            state.skip(now, "opmarch", &u.name, 2 * DAY);
+            let line = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("{} marches to its start state {start}", u.name),
+                "hoi4_army_move",
+                json!({"army": u.name, "state_id": start}),
+            )?;
+            return Ok(Some(line));
+        }
+    }
+    // a formation's named commander where none leads
+    for f in list(op, "formations") {
+        let name = resolve(state, text(&f["army"]));
+        let Some(general) = f["commander"].as_str().filter(|g| !g.is_empty()) else {
+            continue;
+        };
+        let leaderless = army_row(roster, &name).is_some_and(|r| r["commander"].is_null());
+        if leaderless && !state.skipped(now, "opgen", &name) {
+            state.skip(now, "opgen", &name, 7 * DAY);
+            let line = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("{general} commands {name}"),
+                "hoi4_army_commander",
+                json!({"army": name, "general": general}),
+            )?;
+            return Ok(Some(line));
+        }
+    }
     // 2-4. the holds first (a hold stands before any attack is drawn: qb2, 19 Nov 2026, the
     // West hold was still undrawn when the declaration's wait ran out and France took three
     // states in a week), then the group, then mobile and wing armies
@@ -1839,7 +1945,6 @@ fn prepare(
     // a unit already at war with its enemy prepares by the war's rules (it15, 18 Nov 2026:
     // Italy starts at war with Ethiopia; the peace rules cleared every offensive that read back
     // over two of the line's three states until the draws ran out, and nothing ever executed)
-    let fighting = war_tags(wars);
     for u in ordered {
         // a line that would not draw is drawn one state at a time, its first state first
         let one = key(id, &format!("one:{}:{}", u.name, line_tag(&u.line)));
@@ -1957,7 +2062,21 @@ fn reconcile(
     let stale = !offensives(roster, &u.name).is_empty();
     let k = key(id, &format!("redraw:{}:{tag}", u.name));
     let redraws = state.done.get(&k).copied().unwrap_or(0);
-    if stale && peace {
+    // a spearhead's divisions stay on the order they were given (a second arrow on the same front
+    // gets none: spr1, 19 Nov 2026): a spear whose order no longer reaches its line is cleared
+    // and painted again at war too
+    if stale && u.spear && redraws >= 1 {
+        state
+            .done
+            .insert(key(id, &format!("nospear:{}", u.name)), now);
+        let line = format!(
+            "operation {id}: the spearhead of {} misses the line {tag}: its own offensive line instead",
+            u.name
+        );
+        state.op_notes.insert(id.to_string(), line.clone());
+        return Ok(Some(line));
+    }
+    if stale && (peace || u.spear) {
         if redraws >= REDRAWS && line.len() >= 2 {
             // o1f: the stroke Lodz-Warsaw read back over Gdynia twice; one state at a time
             state
@@ -2025,9 +2144,17 @@ fn reconcile(
         tools,
         lease,
         id,
-        &format!("offensive of {} through {tag}", u.name),
+        &format!(
+            "{} of {} through {tag}",
+            if u.spear { "spearhead" } else { "offensive" },
+            u.name
+        ),
         "hoi4_army_offensive",
-        offensive_args(&u.name, line, u.anchor),
+        if u.spear {
+            offensive_order(&u.name, &line[line.len() - 1..], None, true)
+        } else {
+            offensive_order(&u.name, line, u.anchor, false)
+        },
     )?;
     if state.last_ok == Some(false) {
         state.skip(now, "opdraw", &u.name, 2);
@@ -2371,7 +2498,9 @@ fn advance(
     let op_line = still(&line);
     for u in units.iter().filter(|u| attacker(u)) {
         let own_line_held = u.line.is_empty() || held(tools, &me, &u.line).len() == u.line.len();
-        let mut wanted: Vec<i64> = if u.role == Role::Group || own_line_held {
+        let mut wanted: Vec<i64> = if u.spear {
+            spear_line(state, id, roster, u, &me, tools, &op_line, now)
+        } else if u.role == Role::Group || own_line_held {
             op_line.clone()
         } else {
             still(&u.line)
@@ -2451,6 +2580,69 @@ fn advance(
         }
     }
     Ok(None)
+}
+
+/// The line a spearhead is painted to at war: the states of its own thrust still to take, then
+/// the nearest state of the operation's line; a state its spearhead has not taken in
+/// STRIKE_MAX_DAYS is given up to the infantry's plan and the spearhead goes on to the next (qt1,
+/// 19 Nov 2026: Panzergruppe Ost stood 35 days in Lodz on a Warsaw spearhead, behind the
+/// Vistula and the city, while the states round it stood open).
+#[allow(clippy::too_many_arguments)]
+fn spear_line(
+    state: &mut State,
+    id: &str,
+    roster: &Value,
+    u: &Unit,
+    me: &str,
+    tools: &dyn Tools,
+    op_line: &[i64],
+    now: GameHour,
+) -> Vec<i64> {
+    let skipped = |state: &State, s: i64| {
+        state
+            .done
+            .contains_key(&key(id, &format!("spearskip:{}:{s}", u.name)))
+    };
+    let have = held(tools, me, &u.line);
+    let mut next: Vec<i64> = u
+        .line
+        .iter()
+        .copied()
+        .filter(|s| !have.contains(s) && !skipped(state, *s))
+        .collect();
+    if next.is_empty() {
+        next = solo_line(state, roster, &u.name, op_line)
+            .into_iter()
+            .filter(|s| !skipped(state, *s))
+            .take(1)
+            .collect();
+    }
+    let Some(target) = next.last().copied() else {
+        return next;
+    };
+    let fk = key(id, &format!("spearfor:{}", u.name));
+    let sk = key(id, &format!("spearsince:{}", u.name));
+    if state.done.get(&fk) != Some(&target) {
+        state.done.insert(fk, target);
+        state.done.insert(sk, now);
+    } else if state
+        .done
+        .get(&sk)
+        .is_some_and(|t| (now - t) as f64 >= STRIKE_MAX_DAYS * DAY as f64)
+    {
+        state
+            .done
+            .insert(key(id, &format!("spearskip:{}:{target}", u.name)), now);
+        state.op_notes.insert(
+            format!("{id}:{}", u.name),
+            format!(
+                "{}: state {target} not taken in {STRIKE_MAX_DAYS} days on its spearhead: left to the infantry's plan",
+                u.name
+            ),
+        );
+        return spear_line(state, id, roster, u, me, tools, op_line, now);
+    }
+    next
 }
 
 /// The operations' status lines for the digest.

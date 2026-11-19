@@ -103,18 +103,24 @@ pub(crate) fn order_json(
     } else {
         row["line"] = line(&node.provinces);
     }
+    // a front's attack orders: its offensive arrows (kind 1) and any other order hung on it
+    // that is not a line (a spearhead is read with its kind code until its code is mapped)
     let offensives: Vec<Value> = node
         .children
         .iter()
-        .filter(|c| c.kind == 1)
+        .filter(|c| c.kind != 2)
         .map(|arrow| {
             let target = arrow.children.iter().find(|t| t.kind == 2);
-            json!({"id": arrow.id, "executing": arrow.executing, "divisions": arrow.divisions,
+            let mut row = json!({"id": arrow.id, "executing": arrow.executing, "divisions": arrow.divisions,
                    "path_provinces": arrow.provinces.len(),
                    "path_states": states_along(&arrow.provinces, state_of),
                    "target": target.map(|t| json!({"provinces": t.provinces.len(),
                        "ends": t.provinces.first().zip(t.provinces.last()).map(|(a, b)| json!([a, b])),
-                       "states": states_along(&t.provinces, state_of)}))})
+                       "states": states_along(&t.provinces, state_of)}))});
+            if arrow.kind != 1 {
+                row["kind"] = json!(kind_name(arrow.kind, List::Top));
+            }
+            row
         })
         .collect();
     if !offensives.is_empty() {
@@ -236,9 +242,8 @@ pub(crate) fn summary(nodes: &[(List, OrderNode)]) -> String {
     let mut n: BTreeMap<String, usize> = BTreeMap::new();
     for (list, o) in nodes {
         *n.entry(kind_name(o.kind, *list)).or_default() += 1;
-        let arrows = o.children.iter().filter(|c| c.kind == 1).count();
-        if arrows > 0 {
-            *n.entry("offensive".into()).or_default() += arrows;
+        for c in o.children.iter().filter(|c| c.kind != 2) {
+            *n.entry(kind_name(c.kind, *list)).or_default() += 1;
         }
     }
     n.into_iter()
@@ -332,5 +337,24 @@ mod tests {
             summary(&[(List::Top, front), (List::Defensive, fb)]),
             "fallback x1, front x1, offensive x1"
         );
+    }
+
+    #[test]
+    fn an_attack_order_of_another_kind_on_a_front_is_read_with_its_kind() {
+        let other = OrderNode {
+            kind: 3,
+            id: 7,
+            provinces: vec![671, 861],
+            ..Default::default()
+        };
+        let front = OrderNode {
+            kind: 2,
+            children: vec![other],
+            ..Default::default()
+        };
+        let row = order_json(&front, List::Top, &st, &BTreeMap::new());
+        assert_eq!(row["offensives"][0]["kind"], "kind_3");
+        assert_eq!(row["offensives"][0]["id"], 7);
+        assert_eq!(summary(&[(List::Top, front)]), "front x1, kind_3 x1");
     }
 }
