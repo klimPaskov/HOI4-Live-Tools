@@ -4,6 +4,8 @@
 //! calling thread. Time is exclusive: a sleep inside a wait counts as sleep, not as wait. What
 //! no part claims (memory reads, computing) is `other`. The parts are written with the order
 //! (`[order]` lines on stderr) so a bed run gives a table by order kind.
+// The orders are opened by the macOS adapter; elsewhere only `sleep` is used yet.
+#![cfg_attr(not(target_os = "macos"), allow(dead_code))]
 use serde_json::{json, Value};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
