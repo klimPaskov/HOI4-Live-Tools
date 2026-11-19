@@ -341,6 +341,33 @@ impl World<'_> {
         cost.get(&target)
             .map(|c| (*c, first.get(&target).copied().unwrap_or(target)))
     }
+    /// The nearest province the enemy holds, reached over held land from `from` (fewest
+    /// steps; `closed` provinces are not entered). None when no enemy land is in reach.
+    fn nearest_enemy(&self, from: &HashSet<i64>, closed: &HashSet<i64>) -> Option<i64> {
+        let mut seen: HashSet<i64> = from.clone();
+        let mut queue: VecDeque<i64> = from.iter().copied().collect();
+        let mut starts: Vec<i64> = queue.iter().copied().collect();
+        starts.sort_unstable();
+        queue = starts.into_iter().collect();
+        while let Some(p) = queue.pop_front() {
+            let Some((_, next)) = self.memory.graph.get(&p) else {
+                continue;
+            };
+            let mut next: Vec<i64> = next.clone();
+            next.sort_unstable();
+            for n in next {
+                if !seen.insert(n) || closed.contains(&n) {
+                    continue;
+                }
+                if self.held(n) {
+                    queue.push_back(n);
+                } else if self.passable(n) {
+                    return Some(n);
+                }
+            }
+        }
+        None
+    }
     /// A held province beside land the enemy still holds: what is taken there can be lost.
     fn front(&self, province: i64) -> bool {
         self.held(province)
@@ -1088,7 +1115,15 @@ fn choose(
             best = Some((score, leg, format!("the nearest victory point {province}")));
         }
     }
-    best.map(|(_, leg, why)| Order::Strike(leg, why))
+    if let Some((_, leg, why)) = best {
+        return Some(Order::Strike(leg, why));
+    }
+    // No victory point in reach: the nearest enemy-held province over held land. An army at
+    // war with enemy land in front never stands idle (g17j3, 19 Nov 2026: 74 divisions in
+    // Poland and the armour in the West stood "idle (no objective open now)" for weeks).
+    world
+        .nearest_enemy(&here, closed)
+        .map(|p| Order::Strike(p, format!("the nearest enemy-held province {p}")))
 }
 
 /// The names a plan row may use for an army: its own and the layout roles bound to it.
@@ -2079,6 +2114,31 @@ pub(super) fn owns_armies(state: &State, plan: &Value) -> bool {
 mod tests {
     use super::*;
     use std::cell::{Cell, RefCell};
+
+    #[test]
+    fn an_army_with_enemy_land_in_front_never_idles() {
+        // own 1 - 2 (held) - 3 (an enemy state's province, no victory point) - 4; no row, no
+        // victory point in reach: the strike goes for 3
+        let mut memory = Memory::default();
+        memory.graph.insert(1, (10, vec![2]));
+        memory.graph.insert(2, (10, vec![1, 3]));
+        memory.graph.insert(3, (20, vec![2, 4]));
+        memory.graph.insert(4, (20, vec![3]));
+        let world = World {
+            memory: &memory,
+            vp: BTreeMap::new(),
+            own_states: [10].into_iter().collect(),
+            enemy_states: [20].into_iter().collect(),
+            lost_own: HashSet::new(),
+            supply: HashMap::new(),
+            decisive: HashSet::new(),
+            unfed: HashSet::new(),
+        };
+        let here: HashSet<i64> = [1].into_iter().collect();
+        assert_eq!(world.nearest_enemy(&here, &HashSet::new()), Some(3));
+        let shut: HashSet<i64> = [3].into_iter().collect();
+        assert_eq!(world.nearest_enemy(&here, &shut), None);
+    }
 
     const START: GameHour = 1_000_000;
     /// A division: (id, army, province, organisation, heading).

@@ -835,3 +835,13 @@ fn the_operations_own_nothing_until_the_army_layout_has_formed() {
     refresh(&mut state, &game, &plan, START + LAYOUT_WAIT_DAYS * DAY);
     assert!(state.op_owned.contains_key("Mitte"));
 }
+
+#[test]
+fn an_enemy_in_exile_is_out_of_the_war() {
+    // g17j3: Poland in exile stayed in hoi4_wars `enemies`; `wars_won` names it, so the
+    // operation against it ends and its armies are free
+    let wars = json!({"wars": {"enemies": ["POL", "FRA"], "wars_won": ["POL"]}});
+    assert_eq!(war_tags(&wars), vec!["FRA".to_string()]);
+    let wars = json!({"wars": {"enemies": ["POL"]}});
+    assert_eq!(war_tags(&wars), vec!["POL".to_string()]);
+}

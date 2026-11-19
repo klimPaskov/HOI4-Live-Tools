@@ -692,6 +692,41 @@ pub fn check(value: &Value, ctx: &mut Ctx) -> Truth {
     }
 }
 
+/// The atoms of `value` that read false now, as written: why a `when` is not met.
+pub fn false_atoms(value: &Value, ctx: &mut Ctx) -> Vec<String> {
+    fn walk(p: &Predicate, ctx: &mut Ctx, out: &mut Vec<String>) {
+        match p {
+            Predicate::Const(_) => {}
+            Predicate::Not(inner) => {
+                if holds(inner, ctx) == Truth::True {
+                    out.push(format!("not {}", describe(inner)));
+                }
+            }
+            Predicate::All(parts) | Predicate::Any(parts) => {
+                for part in parts {
+                    walk(part, ctx, out);
+                }
+            }
+            Predicate::Atom(atom) => {
+                if holds(p, ctx) == Truth::False {
+                    out.push(atom.text.clone());
+                }
+            }
+        }
+    }
+    fn describe(p: &Predicate) -> String {
+        match p {
+            Predicate::Atom(a) => a.text.clone(),
+            _ => "(group)".to_string(),
+        }
+    }
+    let mut out = Vec::new();
+    if let Ok(p) = parse(value) {
+        walk(&p, ctx, &mut out);
+    }
+    out
+}
+
 /// Evaluate a parsed predicate (see the module docs).
 pub fn holds(predicate: &Predicate, ctx: &mut Ctx) -> Truth {
     match predicate {
@@ -1204,13 +1239,29 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
             // 2026).
             let tag = tag_arg(atom)?;
             if enemies(ctx)?.contains(&tag) {
+                // hoi4_wars names the enemies that control none of their states (capitulated,
+                // exiled or annexed): the game's own war relation stays with an exile for good
+                // (g17j3 19 Nov 2026: Poland in exile read "not capitulated" for 282 days)
+                if let Some(won) = ctx
+                    .read("hoi4_wars", &json!({}))
+                    .and_then(|w| w["wars"]["wars_won"].as_array())
+                {
+                    if won.iter().any(|t| t.as_str() == Some(tag.as_str())) {
+                        return Ok(Reading::Flag(true));
+                    }
+                }
                 let read = ctx
                     .read("hoi4_states", &json!({"query": tag}))
                     .ok_or("hoi4_states unreadable")?;
                 let rows = read["states"].as_array().ok_or("hoi4_states unreadable")?;
+                // control decides: an exile still owns its occupied states until the peace;
+                // a country that holds a state or a victory point still fights
                 let landless = !rows.iter().any(|r| {
-                    r["owner"].as_str() == Some(tag.as_str())
-                        || r["controller"].as_str() == Some(tag.as_str())
+                    r["controller"].as_str() == Some(tag.as_str())
+                        || r["victory_points"].as_array().is_some_and(|vps| {
+                            vps.iter()
+                                .any(|v| v["controller"].as_str() == Some(tag.as_str()))
+                        })
                 });
                 return Ok(Reading::Flag(landless));
             }
@@ -1452,6 +1503,17 @@ mod tests {
     }
 
     #[test]
+    fn a_false_when_names_its_false_atoms() {
+        let f = game();
+        let mut ctx = Ctx::new(&f, date_hour("1940.6.1").unwrap());
+        let when = json!({"all": ["date >= 1940.5.10", "at_war_with:FRA", "xp:army >= 60"]});
+        assert_eq!(
+            false_atoms(&when, &mut ctx),
+            vec!["at_war_with:FRA".to_string(), "xp:army >= 60".to_string()]
+        );
+    }
+
+    #[test]
     fn capitulation_is_the_war_ending_in_a_conference_or_annexation() {
         // at war: not capitulated
         assert_eq!(eval(&game(), json!("capitulated:ETH")), Truth::False);
@@ -1477,6 +1539,15 @@ mod tests {
             json!({"wars": {"at_war": true, "validated": true, "enemies": ["AUS"]}}),
         );
         assert_eq!(eval(&f, json!("capitulated:AUS")), Truth::True);
+        // a government in exile: still an enemy, still the owner of its occupied states, named
+        // in wars_won: capitulated
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": true, "enemies": ["POL", "FRA"], "fighting": ["FRA"],
+                "wars_won": ["POL"]}}),
+        );
+        assert_eq!(eval(&f, json!("capitulated:POL")), Truth::True);
     }
     #[test]
     fn surrender_progress_is_unknown_until_hoi4_wars_maps_it() {

@@ -1079,6 +1079,21 @@ fn ledger_rest(war: bool, in_row: u32, cost: u64, passing: bool) -> (GameHour, R
 }
 /// A failure that says nothing about the order itself: the effect was not observed, a read tore
 /// or timed out, the input was held back. The game's own refusal (a typed reason) is not passing.
+/// The longest rest of an order the game refused for want of a resource that accrues
+/// (experience, political power, command power).
+const RESOURCE_WAIT: GameHour = 10 * DAY;
+
+/// A refusal for a resource that accrues: the order waits for the means and is not given up.
+fn resource_wait(cause: &str) -> bool {
+    [
+        "insufficient_experience",
+        "insufficient_political_power",
+        "insufficient_command_power",
+    ]
+    .iter()
+    .any(|c| cause.starts_with(c))
+}
+
 fn passing_failure(cause: &str) -> bool {
     [
         "action_unconfirmed",
@@ -1378,7 +1393,14 @@ impl State {
             });
         let last = last?;
         let cost = self.failed_cost.get(signature).copied().unwrap_or(0);
-        let (rest, why) = ledger_rest(war, in_row, cost, passing_failure(&cause));
+        let (mut rest, mut why) = ledger_rest(war, in_row, cost, passing_failure(&cause));
+        if resource_wait(&cause) {
+            // short of experience, political or command power: a wait for the means, never a
+            // give-up (g17j3: the Panzer (M) template was given up at 144 army experience for
+            // 240 days and never made at 273)
+            rest = rest.min(RESOURCE_WAIT);
+            why = Rest::Repeated;
+        }
         if rest <= 0 {
             return None;
         }
@@ -1615,7 +1637,10 @@ pub fn tick(
         let new = !state.seen.contains_key(&key);
         let first = *state.seen.entry(key.clone()).or_insert(now);
         let auto = plan["auto_events"] != json!(false);
-        let news = key.contains("news") || list(top, "options").len() == 1;
+        // one option (or options the read could not list): nothing to decide, answered at
+        // once; left open it timed out unanswered (g17j3: germany.88, the Danzig war goal,
+        // closed by its timeout and the war came four months late)
+        let news = key.contains("news") || list(top, "options").len() <= 1;
         let waited = now.saturating_sub(first);
         // an operation whose orders an open event refused does not wait for the model
         let patience = if state.op_events_now {
@@ -10500,6 +10525,12 @@ mod tests {
         let mut state = State::default();
         let step = tick(&mut state, &tools, &json!({}), "l", START).unwrap();
         assert!(matches!(step, Tick::Acted(_)));
+        // a war-goal event whose options the read did not list (germany.88): answered at once
+        let events = json!({"events": [{"event": "germany.88", "options": []}]});
+        let tools = fake(vec![("hoi4_events", events)]);
+        let mut state = State::default();
+        let step = tick(&mut state, &tools, &json!({}), "l", START).unwrap();
+        assert!(matches!(step, Tick::Acted(_)), "{step:?}");
     }
 
     #[test]
@@ -12917,6 +12948,25 @@ mod tests {
         assert_eq!(ledger_rest(true, GIVE_UP_AFTER + 1, 0, false).0, 12 * DAY);
         assert_eq!(ledger_rest(true, GIVE_UP_AFTER + 9, 0, false).0, 48 * DAY);
         assert_eq!(ledger_rest(false, GIVE_UP_AFTER + 2, 0, false).0, 240 * DAY);
+    }
+
+    #[test]
+    fn a_refusal_for_experience_is_a_wait_never_a_give_up() {
+        // g17j3: a template refused 7 times for army experience rested 240 days and was never
+        // made with 273 experience held
+        let mut state = State::default();
+        let sig = "hoi4_template_create {}";
+        state.failures.insert(sig.to_string(), vec![START]);
+        state.failed_run.insert(
+            sig.to_string(),
+            (7, "insufficient_experience: Saving costs 155".to_string()),
+        );
+        state.clock = START + 5 * DAY;
+        let why = state.backing_off(sig).expect("still waits");
+        assert!(why.contains("not sent unchanged"), "{why}");
+        state.clock = START + RESOURCE_WAIT;
+        assert_eq!(state.backing_off(sig), None);
+        assert!(!resource_wait("gui_timeout"));
     }
 
     #[test]
