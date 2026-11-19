@@ -1775,6 +1775,11 @@ fn lanes_tick(
         }
     }
     if declaring {
+        // nothing due: the declaration's own read of the target's diplomacy view now, not on
+        // its day
+        if plan_affairs::declaration_preread(state, tools, plan, lease, now) {
+            return Ok(Tick::Acted("diplomacy view read before the declaration".into()));
+        }
         return Ok(Tick::Nothing);
     }
     state.round.war_last = false;
