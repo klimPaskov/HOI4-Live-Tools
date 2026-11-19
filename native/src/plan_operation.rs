@@ -906,10 +906,6 @@ fn front_args(u: &Unit, click: i64, peace: bool) -> Value {
     }
 }
 
-fn offensive_args(name: &str, line: &[i64], anchor: Option<i64>) -> Value {
-    offensive_order(name, line, anchor, false)
-}
-
 /// An offensive line (across the line's states), or with `spear` the game's spearhead order
 /// painted from the army through the states in order.
 fn offensive_order(name: &str, line: &[i64], anchor: Option<i64>, spear: bool) -> Value {

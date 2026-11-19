@@ -1757,13 +1757,25 @@ fn lanes_tick(
             return Ok(Tick::Acted(line));
         }
     }
+    // In the last game days before a prepared operation's declaration only the war lane runs (its
+    // air waits too): one slow economy order there (qq2, 19 Nov 2026: a 23-second focus order on
+    // 1 September) put the declaration a week after its day.
+    let declaring = war_first
+        && plan_operation::awaiting_war(state)
+        && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD);
     let war_turn = war_first
-        && (!state.round.war_last || op_war || plan["scheduler"]["war_every_tick"] == json!(true));
+        && (!state.round.war_last
+            || op_war
+            || declaring
+            || plan["scheduler"]["war_every_tick"] == json!(true));
     if war_turn {
         if let Some(line) = war_lane(state, tools, plan, lease, now)? {
             state.round.war_last = true;
             return Ok(Tick::Acted(line));
         }
+    }
+    if declaring {
+        return Ok(Tick::Nothing);
     }
     state.round.war_last = false;
     // A free research slot and a free focus are checked every tick (cheap reads, each lost day
@@ -3109,7 +3121,13 @@ fn war_first_steps(
     // armies' fighting at once, and the steps behind them wait for the next tick.
     let mut failed: Option<String> = None;
     let mut burst: Vec<String> = Vec::new();
+    // the last days before a prepared operation's declaration: the operations' step only
+    let declaring = plan_operation::awaiting_war(state)
+        && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD);
     for (i, step) in steps.into_iter().enumerate() {
+        if declaring && i > 0 {
+            break;
+        }
         let chained = i == 6 || i == 7;
         if !chained && !burst.is_empty() {
             break;
