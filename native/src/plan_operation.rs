@@ -485,10 +485,19 @@ fn arrow_executing(roster: &Value, u: &Unit, line: &[i64]) -> Option<bool> {
 }
 
 /// The enemies the player is at war with (hoi4_wars `wars.enemies`).
+/// The enemies still fighting: hoi4_wars `enemies` without `wars_won` (a country that controls
+/// none of its states has capitulated, also when it fights on as a government in exile; the
+/// game keeps its war relation for good). g17j3 (19 Nov 2026): Poland in exile kept op_poland
+/// and every army for 282 days and held back every row behind its capitulation.
 fn war_tags(wars: &Value) -> Vec<String> {
+    let won: Vec<&str> = list(&wars["wars"], "wars_won")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
     list(&wars["wars"], "enemies")
         .iter()
         .filter_map(|t| t.as_str().or_else(|| t["tag"].as_str()).map(str::to_string))
+        .filter(|t| !won.contains(&t.as_str()))
         .collect()
 }
 

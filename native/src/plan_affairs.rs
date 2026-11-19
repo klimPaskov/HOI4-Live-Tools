@@ -240,11 +240,22 @@ fn when_holds(state: &mut State, tools: &dyn Tools, when: &Value, now: GameHour)
 }
 
 /// The item's `when` as a wait reason, None when it holds.
-fn gate(state: &mut State, tools: &dyn Tools, when: &Value, now: GameHour) -> Option<&'static str> {
+/// The wait names the atoms that read false, so a status line says what holds the item back
+/// (g17j3: "when not met" for months with no way to tell which condition failed).
+fn gate(state: &mut State, tools: &dyn Tools, when: &Value, now: GameHour) -> Option<String> {
     match when_holds(state, tools, when, now) {
         Truth::True => None,
-        Truth::False => Some("when not met"),
-        Truth::Unknown => Some("when unknown"),
+        Truth::False => {
+            let mut ctx = crate::plan_predicate::Ctx::new(tools, now);
+            ctx.phase = state.strategy.phase_id();
+            let false_atoms = crate::plan_predicate::false_atoms(when, &mut ctx);
+            Some(if false_atoms.is_empty() {
+                "when not met".to_string()
+            } else {
+                format!("when not met ({} false)", false_atoms.join(", "))
+            })
+        }
+        Truth::Unknown => Some("when unknown".to_string()),
     }
 }
 
