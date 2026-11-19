@@ -646,10 +646,12 @@ fn unit(name: String, role: Role, front: &Value, offensive: &Value) -> Unit {
     }
 }
 
-/// Whether the operation's armour fights on spearheads (the default) or on the strike
-/// engine's direct moves (`armour: "moves"`, the 18-19 Nov bed behaviour kept for a test).
+/// Whether the operation's armour fights on its own narrow front and the game's spearhead order
+/// (`armour: "spearhead"`) or on the strike engine's direct moves (the default). On the Poland bed
+/// (19 Nov 2026) the spearheads took Lodz and Krakow by day 14 but then stood or were redrawn, and
+/// reached 51-71 victory points on day 49 against 71-112 on the direct moves.
 fn spearheads(op: &Value) -> bool {
-    op["armour"].as_str() != Some("moves")
+    op["armour"].as_str() == Some("spearhead")
 }
 
 /// The states of a strike formation's thrust, deepest last: its axis without its own start

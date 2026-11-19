@@ -1133,11 +1133,12 @@ fn a_ready_operation_awaits_its_war_until_it_executes() {
 }
 
 #[test]
-fn an_armour_formation_fights_on_its_own_spearhead_not_on_direct_moves() {
-    // the owner's war model (19 Nov 2026): the armour advances on the game's spearhead order
-    // painted through its axis and target line; direct moves only by the `armour: "moves"` switch
+fn an_armour_formation_on_the_spearhead_switch_fights_on_its_own_spearhead() {
+    // the owner's war model (19 Nov 2026): with `armour: "spearhead"` the armour advances on the
+    // game's spearhead order painted to its axis's deepest state; the direct moves are the default
     let game = Game::new();
     let mut plan = plan();
+    plan["operations"][0]["armour"] = json!("spearhead");
     plan["operations"][0]["formations"][2] = json!({"army": "Panzer", "role": "mobile",
         "drive": "strike", "front": {"enemy": "POL", "own_states": [67], "click_state": 87},
         "offensive": {"axis": [67, 87, 10], "target_line": [87, 10, 92]}});
@@ -1159,9 +1160,9 @@ fn an_armour_formation_fights_on_its_own_spearhead_not_on_direct_moves() {
     // one stroke from the front to the thrust's deepest state (its axis: 87, then 10)
     assert_eq!(panzer[1].1["state_id"], json!(10));
     assert!(panzer[1].1.get("states").is_none());
-    // the old engine behind the switch: no front of its own
+    // the default engine: no front of its own
     let game = Game::new();
-    plan["operations"][0]["armour"] = json!("moves");
+    plan["operations"][0]["armour"] = Value::Null;
     let mut state = State::default();
     burst(&mut state, &game, &plan, START);
     assert!(!game
@@ -1192,6 +1193,7 @@ fn a_spearhead_that_misses_gives_way_to_the_armours_offensive_line() {
     plan["operations"][0]["formations"][2] = json!({"army": "Panzer", "role": "mobile",
         "drive": "strike", "front": {"enemy": "POL", "own_states": [67], "click_state": 87},
         "offensive": {"axis": [67, 87, 10], "target_line": [87, 10, 92]}});
+    plan["operations"][0]["armour"] = json!("spearhead");
     let mut state = State::default();
     game.unit("Panzer", |r| r["states"] = json!({"67": 24}));
     // the spear reads back elsewhere: one redraw, then the offensive line
