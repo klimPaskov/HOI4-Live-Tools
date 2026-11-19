@@ -1493,3 +1493,78 @@ fn a_mobile_formation_sends_its_other_templates_to_the_line_most_short_of_its_di
         "then the armour is gathered in: {moves:?}"
     );
 }
+
+#[test]
+fn a_line_army_outside_the_group_before_the_war_forms_the_group_again_with_it() {
+    // g17m: the group was formed in 1936 of the two line armies that existed; Armee Süd formed
+    // later and stood outside it on the war day with no front and no planning bonus
+    let game = Game::new();
+    game.unit("Sued", |r| r["army_group"] = json!(null));
+    let plan = plan();
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let groups: Vec<Value> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, _)| n == "hoi4_army_group_create")
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(
+        groups.first(),
+        Some(&json!({"armies": ["Mitte", "Sued"]})),
+        "{groups:?}"
+    );
+    // at war it is never regrouped
+    let game = Game::new();
+    game.unit("Sued", |r| r["army_group"] = json!(null));
+    let mut state = State {
+        war_active: true,
+        ..State::default()
+    };
+    burst(&mut state, &game, &plan, START);
+    assert!(game
+        .orders()
+        .iter()
+        .all(|(n, _)| n != "hoi4_army_group_create"));
+}
+
+#[test]
+fn a_hold_whose_second_army_was_never_formed_fronts_with_the_army_it_has() {
+    // g17m: Armee West Süd never existed; the hold waited for a group of two and the West
+    // stood without a front
+    let game = Game::new();
+    game.roster.borrow_mut()["armies"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|a| a["army"] != json!("WestB"));
+    game.unit("WestA", |r| r["army_group"] = json!(null));
+    let plan = plan();
+    let state = State::default();
+    let roster = game.roster.borrow().clone();
+    let (units, _) = units(&state, "op_pol", &plan["operations"][0], &roster);
+    let hold = units
+        .iter()
+        .find(|u| u.role == Role::Hold)
+        .expect("the hold stands");
+    assert_eq!(hold.name, "WestA");
+    assert!(hold.members.is_empty());
+}
+
+#[test]
+fn a_hold_of_armies_in_no_group_fronts_with_its_largest_army() {
+    let game = Game::new();
+    game.unit("WestA", |r| r["army_group"] = json!(null));
+    game.unit("WestB", |r| {
+        r["army_group"] = json!(null);
+        r["division_count"] = json!(30);
+    });
+    let plan = plan();
+    let roster = game.roster.borrow().clone();
+    let (units, _) = units(&State::default(), "op_pol", &plan["operations"][0], &roster);
+    let hold = units
+        .iter()
+        .find(|u| u.role == Role::Hold)
+        .expect("the hold stands");
+    assert_eq!(hold.name, "WestB");
+    assert!(hold.members.is_empty());
+}
