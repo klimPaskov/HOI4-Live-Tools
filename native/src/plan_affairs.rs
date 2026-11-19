@@ -1164,6 +1164,53 @@ pub fn declare_due_step(
     diplomacy_items(state, &run, true)
 }
 
+/// Game hours a read of the target's diplomacy view that offered Declare war stands for: the
+/// declaration on its day does not open the view again (r3a, 19 Nov 2026: the read took 15 s,
+/// three game days, on the war day; 2.5 s in r1a).
+const DECLARE_READ_FRESH: GameHour = 3 * DAY;
+
+/// In the last game days before a prepared operation's declaration (the ticks where only the war
+/// lane runs and nothing is due), the target's diplomacy view is read once: whether Declare war
+/// is offered. True when it read.
+pub fn declaration_preread(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> bool {
+    let run = Run {
+        tools,
+        plan,
+        lease,
+        now,
+    };
+    for item in list(plan, "diplomacy") {
+        if dip_action(text(&item["action"])).as_deref() != Some("declare_war") {
+            continue;
+        }
+        let target = dip_target(item);
+        let key = dip_key(item, "declare_war", &target);
+        let fresh = state
+            .done
+            .get(&format!("dipready:{key}"))
+            .is_some_and(|t| now >= *t && now - t < DECLARE_READ_FRESH);
+        if state.done.contains_key(&key)
+            || fresh
+            || state.skipped(now, "dippre", &key)
+            || !super::plan_operation::awaiting_war_on(state, plan, &target)
+        {
+            continue;
+        }
+        state.skip(now, "dippre", &key, DAY);
+        if declare_ready(&run, &target) == Truth::True {
+            state.done.insert(format!("dipready:{key}"), now);
+        }
+        return true;
+    }
+    false
+}
+
 fn diplomacy_items(
     state: &mut State,
     run: &Run<'_>,
@@ -1703,7 +1750,15 @@ fn declare(
         return Ok(None);
     }
     let ready_key = format!("dipready:{key}");
-    match declare_ready(run, target) {
+    let read_fresh = state
+        .done
+        .get(&ready_key)
+        .is_some_and(|t| now >= *t && now - t < DECLARE_READ_FRESH);
+    match if read_fresh {
+        Truth::True
+    } else {
+        declare_ready(run, target)
+    } {
         Truth::Unknown => {
             waits.push(format!(
                 "{label}: whether war can be declared is unknown (hoi4_diplomacy unreadable)"

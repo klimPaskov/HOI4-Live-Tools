@@ -1816,6 +1816,23 @@ fn assemble(
         }
     }
     let mobile_names: HashSet<String> = mobiles.iter().map(|m| m.0.clone()).collect();
+    // the attacking mobile formations (not the hold armies) and the line formations with the
+    // number of divisions each names
+    let strike_names: HashSet<String> = list(op, "formations")
+        .iter()
+        .filter(|f| text(&f["role"]) == "mobile")
+        .map(|f| resolve(state, text(&f["army"])))
+        .filter(|a| !a.is_empty())
+        .collect();
+    let lines: Vec<(String, i64)> = list(op, "formations")
+        .iter()
+        .filter(|f| text(&f["role"]) == "line")
+        .map(|f| {
+            let n: i64 = want_of(f).unwrap_or_default().iter().map(|(_, n)| *n).sum();
+            (resolve(state, text(&f["army"])), n)
+        })
+        .filter(|(a, _)| !a.is_empty())
+        .collect();
     for (name, hint, want, from, near) in &mobiles {
         // a formed army that kept the game's name: renamed once; the operation orders it under
         // the game's name (o1e: the name box read empty right after the detach; qb2, qc5,
@@ -1875,6 +1892,54 @@ fn assemble(
                 .filter(|d| text(&d["army"]) == army)
                 .count()
         };
+        // A mobile formation holds only its own templates: what else stands in it (the game's
+        // start army, an absorbed trainee) goes to the line formation most short of its own
+        // divisions before anything is gathered in (g17k, g17m: Panzergruppe Ost was the start
+        // army with 17 infantry divisions and marched to its narrow front with them).
+        if strike_names.contains(name.as_str()) && army_row(roster, name).is_some() {
+            let own: Vec<&Value> = divisions
+                .iter()
+                .filter(|d| text(&d["army"]) == name)
+                .collect();
+            let mut strays: Vec<String> = own
+                .iter()
+                .filter(|d| !want.iter().any(|(t, _)| t == text(&d["template"])))
+                .filter_map(|d| d["id"].as_str().map(str::to_string))
+                .collect();
+            if strays.len() == own.len() {
+                // the formation's army is never emptied: one stays until its own are in
+                strays.truncate(strays.len().saturating_sub(1));
+            }
+            strays.truncate(18);
+            let target = lines
+                .iter()
+                .filter(|(army, _)| army != name && army_row(roster, army).is_some())
+                .max_by_key(|(army, n)| n - size(army) as i64)
+                .map(|(army, _)| army.clone());
+            let out_key = key(id, &format!("asmout:{name}"));
+            let k = state.done.get(&out_key).copied().unwrap_or(0);
+            if let Some(target) = target.filter(|_| !strays.is_empty()) {
+                if k < 6 && !state.skipped(now, "opasmout", name) {
+                    state.done.insert(out_key, k + 1);
+                    let line = order(
+                        state,
+                        tools,
+                        lease,
+                        id,
+                        &format!(
+                            "assemble {name}: {} division(s) of other templates out to {target}",
+                            strays.len()
+                        ),
+                        "hoi4_army_detach",
+                        json!({"army": name, "divisions": strays, "into": target}),
+                    )?;
+                    if state.last_ok == Some(false) {
+                        state.skip(now, "opasmout", name, DAY / 4);
+                    }
+                    return Ok(Some(line));
+                }
+            }
+        }
         // per template: what the army still lacks, and where it stands elsewhere
         let mut moves: Vec<(String, Vec<String>)> = Vec::new();
         // spare per (army, template) of a line formation that names its own divisions

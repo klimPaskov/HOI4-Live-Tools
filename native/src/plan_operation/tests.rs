@@ -1452,3 +1452,44 @@ fn a_pockets_neck_not_taken_in_time_is_given_up_and_not_tried_again_soon() {
     assert!(step(&mut state, START + (POCKET_CLOSE_DAYS + 3) * DAY).is_none());
     assert_eq!(state.done.get("op:pockets_closed"), None);
 }
+
+#[test]
+fn a_mobile_formation_sends_its_other_templates_to_the_line_most_short_of_its_divisions() {
+    // g17k, g17m: Panzergruppe Ost was the game's start army with 17 infantry divisions; the
+    // armour column marched to its narrow front with them
+    let game = Game::new();
+    let d = |id: &str, army: &str, t: &str| (id.to_string(), army.to_string(), t.to_string());
+    *game.divs.borrow_mut() = vec![
+        d("p1", "Panzer", "Pz"),
+        d("i1", "Panzer", "Inf"),
+        d("i2", "Panzer", "Inf"),
+        d("m1", "Mitte", "Inf"),
+        d("m2", "Mitte", "Inf"),
+        d("s1", "Sued", "Inf"),
+        d("p2", "Other", "Pz"),
+        d("p3", "Other", "Pz"),
+    ];
+    let mut plan = plan();
+    plan["operations"][0]["formations"][0]["divisions"] = json!({"Inf": 2});
+    plan["operations"][0]["formations"][1]["divisions"] = json!({"Inf": 4});
+    plan["operations"][0]["formations"][2]["divisions"] = json!({"Pz": 2});
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let moves: Vec<Value> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, _)| n == "hoi4_army_detach")
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(
+        moves.first(),
+        Some(&json!({"army": "Panzer", "divisions": ["i1", "i2"], "into": "Sued"})),
+        "the infantry leaves first, to Sued (1 of 4) rather than Mitte (2 of 2): {moves:?}"
+    );
+    assert!(
+        moves
+            .iter()
+            .any(|m| m == &json!({"army": "Other", "divisions": ["p2"], "into": "Panzer"})),
+        "then the armour is gathered in: {moves:?}"
+    );
+}

@@ -935,6 +935,9 @@ pub(super) fn training_step(
         if state.skipped(now, "traindeploy", &place) {
             continue;
         }
+        if state.skipped(now, "traincap", &place) {
+            continue;
+        }
         let prior = queued_before.entry(template.clone()).or_insert(0);
         let target = *prior + queue;
         *prior = target;
@@ -984,7 +987,11 @@ pub(super) fn training_step(
                             "{template}: at its cap ({fielded} fielded + {have} queued >= {cap})"
                         ),
                     );
-                    state.skip(now, "train", &template, DAY);
+                    // the entry rests, not the template: the template's later entries with a
+                    // higher cap still train (g17m, 19 Nov 2026: two cap-24 rows first in the
+                    // list rested Infanterie-Division a day at a time and no infantry trained
+                    // at all at 24 fielded while the cap-95 rows behind them waited)
+                    state.skip(now, "traincap", &place, DAY);
                     continue;
                 }
                 count = count.min(room);
@@ -6348,6 +6355,7 @@ fn production_floors_removed(
     HashSet<String>,
 ) {
     let mut removed: HashSet<String> = HashSet::new();
+    let mut removed_at: HashMap<String, GameHour> = HashMap::new();
     let mut floors: HashMap<String, (GameHour, i64)> = HashMap::new();
     let mut equipment: HashMap<String, String> = HashMap::new();
     // opt-in (`production_floors: true`): a plan whose lines are only a day-0 suggestion keeps
@@ -6362,8 +6370,18 @@ fn production_floors_removed(
         if eq.starts_with("ship_hull") || entry["kind"] == json!("naval") {
             continue;
         }
+        let from = match entry.get("from") {
+            Some(v) if !v.is_null() => crate::alarms::stop_on_date(&json!({"stop_on_date": v}))
+                .ok()
+                .flatten()
+                .map_or(0, |(h, _)| h),
+            _ => 0,
+        };
         if !eq.is_empty() && entry["remove"] == json!(true) && super::reached(entry, now) {
-            removed.insert(archetype_row(stock, eq).unwrap_or_else(|| family(eq).to_string()));
+            let a = archetype_row(stock, eq).unwrap_or_else(|| family(eq).to_string());
+            let at = removed_at.entry(a.clone()).or_insert(from);
+            *at = (*at).max(from);
+            removed.insert(a);
         }
         let Some(f) = entry["factories"].as_i64() else {
             continue;
@@ -6376,19 +6394,17 @@ fn production_floors_removed(
         {
             continue;
         }
-        let from = match entry.get("from") {
-            Some(v) if !v.is_null() => crate::alarms::stop_on_date(&json!({"stop_on_date": v}))
-                .ok()
-                .flatten()
-                .map_or(0, |(h, _)| h),
-            _ => 0,
-        };
         let a = archetype_row(stock, eq).unwrap_or_else(|| family(eq).to_string());
         if floors.get(&a).is_none_or(|(at, _)| from >= *at) {
             floors.insert(a.clone(), (from, f));
             equipment.insert(a, eq.to_string());
         }
     }
+    // a remove row ends the floors dated before it (g17m, 19 Nov 2026: the 1936.1.1 light-tank
+    // floor outlived the 1936.9.1 remove row, and the balance re-added the closed line on 4-5
+    // factories); a floor dated on or after it starts the line again
+    floors.retain(|a, (from, _)| removed_at.get(a).is_none_or(|at| *from > *at));
+    equipment.retain(|a, _| floors.contains_key(a));
     removed.retain(|a| !floors.contains_key(a));
     (
         (
@@ -7383,6 +7399,28 @@ mod tests {
                 .as_deref(),
             Some("train 2 Inf: true Verified")
         );
+    }
+
+    #[test]
+    fn an_entry_at_its_cap_leaves_the_next_entry_of_the_template_to_train() {
+        // g17m: two cap-24 rows first in the list rested the whole template and no infantry
+        // trained while the cap-95 rows behind them waited
+        let fielded: Vec<Value> = (0..24).map(|_| division("Inf", 100, 100)).collect();
+        let tools = fake(vec![
+            ("hoi4_division_templates", templates_read(&[("Inf", 0)])),
+            ("hoi4_supply", json!({"divisions": fielded})),
+        ]);
+        let plan = json!({"training": [
+            {"template": "Inf", "queue": 2, "batch": 2, "deploy_state": 66, "cap": 24},
+            {"template": "Inf", "queue": 2, "batch": 2, "deploy_state": 68, "cap": 95}]});
+        let mut state = State::default();
+        let out = training_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(
+            out.as_deref().is_some_and(|o| o.starts_with("train 2 Inf")),
+            "{out:?}"
+        );
+        assert!(state.skipped(START, "traincap", "Inf@66"));
+        assert!(!state.skipped(START, "train", "Inf"));
     }
 
     #[test]
@@ -10100,6 +10138,32 @@ mod tests {
             balance_decide(&b),
             Some(BalanceAct::Remove { .. })
         ));
+    }
+
+    #[test]
+    fn a_remove_row_ends_the_floors_dated_before_it() {
+        // g17m: the 1936.1.1 light floor outlived the 1936.9.1 remove row and the balance
+        // re-added the closed line
+        let plan = json!({"production_floors": true, "production": [
+            {"equipment": "light_tank_chassis_2", "factories": 2, "from": "1936.1.1"},
+            {"equipment": "light_tank_chassis_2", "from": "1936.9.1", "remove": true},
+            {"equipment": "infantry_equipment_1", "factories": 15, "from": "1936.1.1"},
+            {"equipment": "medium_tank_chassis_1", "from": "1936.9.1", "remove": true},
+            {"equipment": "medium_tank_chassis_1", "factories": 10, "from": "1937.8.20"}]});
+        let stock = json!({});
+        let at = |d: &str| date_hour(d).expect("date");
+        let ((floors, _), removed) = production_floors_removed(&plan, &stock, at("1937.1.1"));
+        assert!(!floors.contains_key("light_tank_chassis"), "{floors:?}");
+        assert!(removed.contains("light_tank_chassis"));
+        assert_eq!(floors.get("infantry_equipment"), Some(&15));
+        // a floor dated after the remove row starts the line again
+        let ((floors, _), removed) = production_floors_removed(&plan, &stock, at("1937.9.1"));
+        assert_eq!(floors.get("medium_tank_chassis"), Some(&10));
+        assert!(!removed.contains("medium_tank_chassis"));
+        // before the remove row the floor holds
+        let ((floors, _), removed) = production_floors_removed(&plan, &stock, at("1936.6.1"));
+        assert_eq!(floors.get("light_tank_chassis"), Some(&2));
+        assert!(removed.is_empty());
     }
 
     #[test]

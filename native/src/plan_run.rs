@@ -331,6 +331,12 @@ const LEDGER_KEEP: GameHour = 120 * DAY;
 const COSTLY_FAILURE: u64 = 5;
 /// Failures in a row after which an order is given up and reported.
 const GIVE_UP_AFTER: u32 = 5;
+/// The longest rest of a failed event answer at war or while an operation's orders wait on
+/// open events (game hours): an open event refuses every other order, so its answer goes again
+/// within hours, never on the slow-failure scale (r3a, 19 Nov 2026: a 6-second failed answer of
+/// germany_mefo_bills.1 right after the declaration rested about 8 game days, and every army
+/// execute and air mission of the war's first week was refused behind it).
+const EVENT_WAR_REST: GameHour = 6;
 /// Game hours a second of wall time stands for while the game clock stands still (speed 3 runs
 /// about 22 game days a minute).
 const STILL_HOURS_PER_SECOND: u64 = 8;
@@ -1380,7 +1386,9 @@ impl State {
         let clock = self.clock;
         // a land or air order rests on the war's scale only while a war runs: a peacetime march
         // the game refuses is not offered again every few game hours (g17i: 84 refusals)
-        let war = war_order(signature.split(' ').next().unwrap_or("")) && self.war_active;
+        let tool = signature.split(' ').next().unwrap_or("");
+        let event_at_war = tool == "hoi4_event_choose" && (self.war_active || self.op_events_now);
+        let war = (war_order(tool) && self.war_active) || event_at_war;
         let times = self.failures.get_mut(signature)?;
         times.retain(|t| clock - *t < LEDGER_KEEP);
         let last = times.iter().copied().max();
@@ -1392,8 +1400,17 @@ impl State {
                 ((*n).max(in_window), c.clone())
             });
         let last = last?;
-        let cost = self.failed_cost.get(signature).copied().unwrap_or(0);
+        let cost = if event_at_war {
+            0
+        } else {
+            self.failed_cost.get(signature).copied().unwrap_or(0)
+        };
         let (mut rest, mut why) = ledger_rest(war, in_row, cost, passing_failure(&cause));
+        // until it is given up: an answer that never takes (an event drawn under another, i18b)
+        // then rests on the war scale instead of taking every other input
+        if event_at_war && in_row < GIVE_UP_AFTER {
+            rest = rest.min(EVENT_WAR_REST);
+        }
         if resource_wait(&cause) {
             // short of experience, political or command power: a wait for the means, never a
             // give-up (g17j3: the Panzer (M) template was given up at 144 army experience for
@@ -1775,6 +1792,13 @@ fn lanes_tick(
         }
     }
     if declaring {
+        // nothing due: the declaration's own read of the target's diplomacy view now, not on
+        // its day
+        if plan_affairs::declaration_preread(state, tools, plan, lease, now) {
+            return Ok(Tick::Acted(
+                "diplomacy view read before the declaration".into(),
+            ));
+        }
         return Ok(Tick::Nothing);
     }
     state.round.war_last = false;
@@ -13220,6 +13244,53 @@ mod tests {
         assert_eq!(ledger_rest(true, GIVE_UP_AFTER + 1, 0, false).0, 12 * DAY);
         assert_eq!(ledger_rest(true, GIVE_UP_AFTER + 9, 0, false).0, 48 * DAY);
         assert_eq!(ledger_rest(false, GIVE_UP_AFTER + 2, 0, false).0, 240 * DAY);
+    }
+
+    #[test]
+    fn a_failed_event_answer_at_war_goes_again_within_hours() {
+        // r3a: a 6-second failed answer of germany_mefo_bills.1 after the declaration rested
+        // about 8 game days on the slow-failure scale while every army order was refused
+        let sig = "hoi4_event_choose {\"event\":\"germany_mefo_bills.1\",\"option\":0}";
+        let fail = |state: &mut State, n: u32| {
+            state.failures.insert(sig.to_string(), vec![START]);
+            state.failed_run.insert(
+                sig.to_string(),
+                (
+                    n,
+                    "input_readback_failed: event answered: expected game change not observed"
+                        .into(),
+                ),
+            );
+            state.failed_cost.insert(sig.to_string(), 6);
+            state.clock = START + 1;
+        };
+        let mut peace = State::default();
+        fail(&mut peace, 1);
+        assert!(
+            peace.backing_off(sig).is_some(),
+            "in peace the slow failure rests"
+        );
+        let mut war = State {
+            war_active: true,
+            ..State::default()
+        };
+        fail(&mut war, 1);
+        assert_eq!(war.backing_off(sig), None, "{:?}", war.backing_off(sig));
+        fail(&mut war, 3);
+        war.clock = START + EVENT_WAR_REST;
+        assert_eq!(war.backing_off(sig), None);
+        // an operation's orders refused by the open event count as war before the war flag
+        let mut op = State {
+            op_events_now: true,
+            ..State::default()
+        };
+        fail(&mut op, 2);
+        op.clock = START + EVENT_WAR_REST;
+        assert_eq!(op.backing_off(sig), None);
+        // given up, it rests on the war scale and leaves the input to the other orders
+        fail(&mut war, GIVE_UP_AFTER);
+        war.clock = START + EVENT_WAR_REST;
+        assert!(war.backing_off(sig).is_some());
     }
 
     #[test]
