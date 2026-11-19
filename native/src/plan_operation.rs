@@ -574,6 +574,15 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
             .map(|a| name_of(state, roster, text(&a["army"])))
             .filter(|a| !a.is_empty())
             .collect();
+        // an army of the hold that is not on the map leaves the hold to the others (g17m, 19 Nov
+        // 2026: Armee West Süd was never formed, the hold waited for a group of two and the
+        // West stood without a front while France took nineteen states)
+        let present: Vec<String> = armies
+            .iter()
+            .filter(|a| army_row(roster, a).is_some())
+            .cloned()
+            .collect();
+        let armies = if present.is_empty() { armies } else { present };
         // a hold of one army fronts with that army; of several, with their group
         let name = if armies.len() == 1 {
             armies.first().cloned()

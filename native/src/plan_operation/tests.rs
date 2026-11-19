@@ -1527,3 +1527,25 @@ fn a_line_army_outside_the_group_before_the_war_forms_the_group_again_with_it() 
         .iter()
         .all(|(n, _)| n != "hoi4_army_group_create"));
 }
+
+#[test]
+fn a_hold_whose_second_army_was_never_formed_fronts_with_the_army_it_has() {
+    // g17m: Armee West Süd never existed; the hold waited for a group of two and the West
+    // stood without a front
+    let game = Game::new();
+    game.roster.borrow_mut()["armies"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|a| a["army"] != json!("WestB"));
+    game.unit("WestA", |r| r["army_group"] = json!(null));
+    let plan = plan();
+    let state = State::default();
+    let roster = game.roster.borrow().clone();
+    let (units, _) = units(&state, "op_pol", &plan["operations"][0], &roster);
+    let hold = units
+        .iter()
+        .find(|u| u.role == Role::Hold)
+        .expect("the hold stands");
+    assert_eq!(hold.name, "WestA");
+    assert!(hold.members.is_empty());
+}

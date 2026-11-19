@@ -2835,11 +2835,39 @@ fn wing_matches(entry: &Value, wing: &Value) -> bool {
             .is_none_or(|v| wing["variant"].as_str().is_none_or(|w| w == v))
 }
 
+/// An airframe without its model number: `small_plane_airframe_1` -> `small_plane_airframe`.
+fn airframe_family(airframe: &str) -> &str {
+    airframe
+        .trim_end_matches(|c: char| c.is_ascii_digit())
+        .trim_end_matches('_')
+}
+
+/// Whether a wing is of the entry's kind of plane in an older or newer model (an entry by
+/// airframe, without `version`): such a wing serves the entry when no entry of its own model
+/// claims it (g17m, 19 Nov 2026: the plan's fighter entries named the Bf 109 airframe, twelve
+/// wings of the earlier fighter matched none of them and trained in the Alps on the war day).
+fn wing_kin(entry: &Value, wing: &Value) -> bool {
+    if entry["wing"].as_str().is_some_and(|n| !n.is_empty())
+        || entry["version"].as_str().is_some_and(|v| !v.is_empty())
+    {
+        return false;
+    }
+    let Some(airframe) = entry["airframe"].as_str().filter(|a| !a.is_empty()) else {
+        return false;
+    };
+    let kind = text(&wing["aircraft_type"]);
+    !kind.is_empty() && airframe_family(kind) == airframe_family(airframe)
+}
+
 /// The extras step's default war missions leave the wings the air plan names alone.
 pub(super) fn air_plan_claims(plan: &Value, wing: &Value) -> bool {
-    list(plan, "air_plan")
-        .iter()
-        .any(|entry| wing_matches(entry, wing))
+    let entries = list(plan, "air_plan");
+    entries.iter().any(|entry| wing_matches(entry, wing))
+        || (!entries.iter().any(|entry| {
+            entry["airframe"]
+                .as_str()
+                .is_some_and(|a| text(&wing["aircraft_type"]).starts_with(a))
+        }) && entries.iter().any(|entry| wing_kin(entry, wing)))
 }
 
 /// A strategic region given as an id (number or numeric text) or a name, against `{id, name}`.
@@ -3080,12 +3108,39 @@ fn wing_owners(entries: &[Value], active: &[bool], wings: &[Value]) -> HashMap<S
             owner.insert(text(&w["wing"]).to_string(), i);
         }
     }
+    // a wing of an older or newer model of an entry's plane, its own model named by no entry,
+    // serves the entries of its kind next, within their room
+    let named = |w: &Value| {
+        entries.iter().any(|e| {
+            e["airframe"]
+                .as_str()
+                .is_some_and(|a| !a.is_empty() && text(&w["aircraft_type"]).starts_with(a))
+        })
+    };
+    for &i in &order {
+        let entry = &entries[i];
+        let cap = wing_cap(entry).unwrap_or(usize::MAX);
+        let held = owner.values().filter(|o| **o == i).count();
+        let kin: Vec<&Value> = wings
+            .iter()
+            .filter(|w| {
+                let name = text(&w["wing"]);
+                !name.is_empty() && !owner.contains_key(name) && !named(w) && wing_kin(entry, w)
+            })
+            .collect();
+        for w in kin.into_iter().take(cap.saturating_sub(held)) {
+            owner.insert(text(&w["wing"]).to_string(), i);
+        }
+    }
     for w in wings {
         let name = text(&w["wing"]);
         if name.is_empty() || owner.contains_key(name) {
             continue;
         }
-        if let Some(i) = (0..entries.len()).find(|i| active[*i] && wing_matches(&entries[*i], w)) {
+        if let Some(i) = (0..entries.len()).find(|i| {
+            active[*i]
+                && (wing_matches(&entries[*i], w) || (!named(w) && wing_kin(&entries[*i], w)))
+        }) {
             owner.insert(name.to_string(), i);
         }
     }
@@ -10343,8 +10398,48 @@ mod tests {
             "a short shortfall waits for new factories"
         );
     }
-}
 
-#[cfg(test)]
-#[path = "plan_manage_sim.rs"]
-mod sim;
+    #[test]
+    fn wings_of_an_older_fighter_serve_the_fighter_entries_when_no_entry_names_their_model() {
+        // g17m: the entries named the Bf 109 airframe; twelve wings of the earlier fighter
+        // matched none and trained on the war day
+        let entry = |id: &str, airframe: &str, max: i64| {
+            json!({"id": id, "airframe": airframe, "mission": "air_superiority", "region": 38,
+                   "deploy": {"max_wings": max}})
+        };
+        let entries = vec![
+            entry("f1", "small_plane_airframe_1", 2),
+            entry("f2", "small_plane_airframe_1", 2),
+            entry("c1", "small_plane_cas_airframe_1", 1),
+        ];
+        let wing = |name: &str, kind: &str| json!({"wing": name, "aircraft_type": kind});
+        let wings = vec![
+            wing("new", "small_plane_airframe_1"),
+            wing("old1", "small_plane_airframe_0"),
+            wing("old2", "small_plane_airframe_0"),
+            wing("old3", "small_plane_airframe_0"),
+            wing("old4", "small_plane_airframe_0"),
+            wing("cas", "small_plane_cas_airframe_0"),
+            wing("bomber", "medium_plane_airframe_0"),
+        ];
+        let owners = wing_owners(&entries, &[true, true, true], &wings);
+        assert_eq!(owners.get("new"), Some(&0));
+        for w in ["old1", "old2", "old3", "old4"] {
+            assert!(
+                matches!(owners.get(w), Some(0) | Some(1)),
+                "{w}: {owners:?}"
+            );
+        }
+        assert_eq!(
+            owners.values().filter(|o| **o == 1).count(),
+            2,
+            "{owners:?}"
+        );
+        assert_eq!(owners.get("cas"), Some(&2));
+        assert_eq!(owners.get("bomber"), None);
+        // a model an entry names stays with that entry's kind only
+        let plan = json!({"air_plan": entries});
+        assert!(air_plan_claims(&plan, &wings[1]));
+        assert!(!air_plan_claims(&plan, &wings[6]));
+    }
+}
