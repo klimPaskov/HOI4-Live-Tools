@@ -37,6 +37,8 @@ CP_PER_CIV = 5.0          # construction points per civilian factory a day (calc
 INFRA_STEP = 0.2          # x (1 + 0.2 x infrastructure level)
 PROJECT_CAP = 15          # civilian factories per project
 FACTORY_COST = {"industrial_complex": 10800.0, "arms_factory": 7200.0}  # fallback when common/buildings lacks it
+TRADE_PER_CIV = 8.0       # resource units one civilian factory imports (economy-build-orders.md EC14)
+CG_VAR_CAP = 1.0          # a consumer-goods variable that grows monthly is clamped here unless its script says
 
 SPEED_ALL = "production_speed_buildings_factor"
 SPEED = {"industrial_complex": "production_speed_industrial_complex_factor",
@@ -85,8 +87,10 @@ def idea_table(game):
                             continue
                         m = get1(idea, "modifier")
                         tr = get1(idea, "traits")
+                        shown = get1(idea, "name")
                         out[name] = {"group": group, "mods": _numbers(m) if isinstance(m, list) else {},
-                                     "traits": bare(tr) if isinstance(tr, list) else []}
+                                     "traits": bare(tr) if isinstance(tr, list) else [],
+                                     "shown_as": shown if isinstance(shown, str) else None}
         return out
 
     return game.cached("economy:ideas", load)
@@ -346,6 +350,14 @@ def _reward_events(block, tag, static=None):
                     out.append(("slots", (int(float(v)) * mult, scope)))
                 except (TypeError, ValueError):
                     pass
+            elif kl in ("add_to_variable", "subtract_from_variable") and isinstance(v, list):
+                sign = -1.0 if kl == "subtract_from_variable" else 1.0
+                for a, b in v:
+                    if a and a not in ("tooltip", "var", "value"):
+                        try:
+                            out.append(("var", (a, sign * float(b))))
+                        except (TypeError, ValueError):
+                            pass
             elif kl == "annex_country":
                 t = get1(v, "target") if isinstance(v, list) else v
                 if isinstance(t, str):
@@ -371,18 +383,22 @@ def _reward_events(block, tag, static=None):
     return out
 
 
-def _rewards(lint):
+def _rewards(lint, kind_wanted="focus"):
+    """{id: [(kind, payload)]} of the tag's focus rewards (or, with kind_wanted "decision", the decisions'
+    complete effects)."""
     from . import scenario
-    if getattr(lint, "_econ_rewards", None) is None:
-        out = {}
+    cache = getattr(lint, "_econ_rewards_by", None)
+    if cache is None:
+        cache = {}
         try:
             for kind, fid, block, _ in scenario.tag_sources(lint.world, lint.tag):
-                if kind == "focus" and block:
-                    out[fid] = _reward_events(block, lint.tag, static=lambda lim: lint.world.static(lim, lint.tag))
-        except Exception:  # noqa: BLE001 - advisory: no focus rewards then
+                if kind in ("focus", "decision") and block and fid not in cache.get(kind, {}):  # complete first
+                    cache.setdefault(kind, {})[fid] = _reward_events(
+                        block, lint.tag, static=lambda lim: lint.world.static(lim, lint.tag))
+        except Exception:  # noqa: BLE001 - advisory: no rewards then
             pass
-        lint._econ_rewards = out
-    return lint._econ_rewards
+        lint._econ_rewards_by = cache
+    return cache.get(kind_wanted, {})
 
 
 def plan_events(lint, tl, extra=()):
@@ -399,6 +415,16 @@ def plan_events(lint, tl, extra=()):
         grp = (ideas.get(name) or {}).get("group")
         ev.append((d, "law" if grp in LAW_GROUPS else "idea+", (grp, name) if grp in LAW_GROUPS else name,
                    f"politics {p.get('id') or name}"))
+    for r in lint.list_of("decision_rules"):
+        dec, when = r.get("decision"), r.get("when")
+        if not isinstance(dec, str) or when in (None, "never", False) or r.get("max") == 0:
+            continue
+        ds = tl.lint_dates(when)
+        if not ds:
+            continue
+        for kind, payload in _rewards(lint, "decision").get(dec, []):
+            if kind == "var":  # only the variables a decision moves (consumer goods): ideas and factories vary
+                ev.append((max(ds), kind, payload, f"decision {dec}"))
     for end, fid in getattr(lint, "_focus_done", []) or []:
         for kind, payload in _rewards(lint).get(fid, []):
             if kind == "idea+" and (ideas.get(payload) or {}).get("group") in LAW_GROUPS:
@@ -437,6 +463,7 @@ class _Econ:
         self.ideas = defaultdict(int)
         self.law = {}
         ideas = idea_table(lint.game)
+        dms = history_dynamic_modifiers(lint)
         for f in w.country(lint.tag).get("ideas") or []:
             name = f.get("v")
             if not name:
@@ -444,6 +471,8 @@ class _Econ:
             grp = (ideas.get(name) or {}).get("group")
             if grp in LAW_GROUPS:
                 self.law[grp] = name
+            elif (ideas.get(name) or {}).get("shown_as") in dms:
+                continue  # a start-screen proxy of a dynamic modifier the country has (the forecast counts that)
             else:
                 self.ideas[name] += 1
         self.techs = set()
@@ -454,6 +483,9 @@ class _Econ:
             pass
         self.mod_cache = {}
         self.dyn = {"factor": 0.0, "expected": 0.0}
+        self.cg_vars = {}      # variable -> "factor" | "expected" (the dynamic modifiers' consumer-goods terms)
+        self.drift = []        # [(variable, monthly amount, cap)] from the country's monthly on_action
+        self.resource_trade = 0
         self.trade = 0
         ai = lint.plan.get("auto_import")
         if isinstance(ai, dict) and ai.get("enabled", True) is not False:
@@ -559,11 +591,59 @@ class _Econ:
             elif b == "infrastructure" and isinstance(scope, int) and scope in self.slots:
                 self.slots[scope]["infra"] = min(5, max(self.slots[scope]["infra"], n if n >= 5 else
                                                         self.slots[scope]["infra"] + n))
+        elif kind == "var":
+            name, delta = payload
+            key = self.cg_vars.get(name)
+            if key:
+                self.dyn[key] = min(self.cap_of(name), self.dyn[key] + delta)
         elif kind == "annex":
             for s in self.w.owned_states(payload):
                 self._gain(s)
         elif kind == "gain":
             self._gain(payload)
+
+    def cap_of(self, name):
+        caps = [c for v, _, c in self.drift if v == name]
+        return min(caps) if caps else float("inf")
+
+    def month(self):
+        """The monthly script drift of the consumer-goods variables (on_monthly_<TAG>)."""
+        changed = False
+        for name, amount, cap in self.drift:
+            key = self.cg_vars.get(name)
+            if key and self.dyn[key] < cap:
+                self.dyn[key] = min(cap, self.dyn[key] + amount)
+                changed = True
+        return changed
+
+    def import_civs(self, lines):
+        """Civilian factories the market takes on day `today` for the resources the lines lack: per resource,
+        the lines' need (scaled to the military factories that exist) less what the owned states give after
+        the trade law's export share, in blocks of TRADE_PER_CIV."""
+        eqres = self.w.equipment_resources()
+        need = defaultdict(float)
+        pool = getattr(self.lint, "factory_pool", lambda eq: "military")
+        mil_lines = {eq: n for eq, n in lines.items() if pool(eq) == "military"}
+        total = sum(mil_lines.values()) or 0
+        scale = min(1.0, self.mil / total) if total else 0.0
+        for eq, n in lines.items():
+            k = scale if eq in mil_lines else 1.0  # dockyard lines: the dockyards are not modelled, taken as full
+            for r, a in ((eqres.get(eq) or {}).get("resources") or {}).items():
+                need[r] += a * n * k
+        if not need:
+            return 0
+        got = defaultdict(float)
+        for st in self.own:
+            for r, a in ((self.st.get(st) or {}).get("resources") or {}).items():
+                got[r] += a
+        trade = self.law.get("trade_laws")
+        share = self.mods(trade).get("min_export", 0.0) if trade else 0.0
+        civs = 0
+        for r, n in need.items():
+            short = n - got.get(r, 0.0) * (1 - share)
+            if short > 0:
+                civs += int(math.ceil(short / TRADE_PER_CIV - 1e-9))
+        return civs
 
     def _gain(self, s):
         if s in self.own or s not in self.st:
@@ -575,11 +655,92 @@ class _Econ:
         self._add_state(s)
 
 
+def history_dynamic_modifiers(lint):
+    """The dynamic modifiers the country's history adds. An idea displayed under one of these names
+    (its `name =` field) is the start-screen proxy of that modifier, not a second modifier."""
+    try:
+        _, effects = derive.history_effects_of(lint.game, lint.tag, lint.ctx, lint.start, lint.meta.get("history_file"))
+    except Exception:  # noqa: BLE001 - advisory
+        return set()
+    return {derive.get1(v, "modifier") for k, v in effects
+            if k == "add_dynamic_modifier" and isinstance(v, list) and derive.get1(v, "modifier")}
+
+
+def cg_variables(lint):
+    """({variable: "factor" | "expected"}, [(variable, monthly amount, cap)]): the variables behind the
+    consumer-goods terms of the country's dynamic modifiers, and the amounts its monthly on_action
+    (on_monthly_<TAG>) adds to them, resolved with the variables its history sets; the cap is the bound of the
+    `check_variable = { V < c }` that guards the addition (CG_VAR_CAP without one)."""
+    cached = getattr(lint, "_econ_cg_vars", None)
+    if cached is not None:
+        return cached
+    out, drift = {}, []
+    try:
+        from .lint_economy import _dynamic_consumer_goods
+        if getattr(lint, "_econ_dyn", None) is None:
+            lint._econ_dyn = _dynamic_consumer_goods(lint)
+        for r in lint._econ_dyn[1]:
+            m = re.match(r"variable (\S+)", r.get("how") or "")
+            if m:
+                out[m.group(1)] = "factor" if r["key"] == "consumer_goods_factor" else "expected"
+        if out:
+            var = {}
+            _, effects = derive.history_effects_of(lint.game, lint.tag, lint.ctx, lint.start,
+                                                   lint.meta.get("history_file"))
+            for k, v in effects:
+                if k == "set_variable" and isinstance(v, list):
+                    for x, y in v:
+                        try:
+                            var[x] = float(y)
+                        except (TypeError, ValueError):
+                            if y in var:
+                                var[x] = var[y]
+
+            def value(raw):
+                try:
+                    return float(raw)
+                except (TypeError, ValueError):
+                    return var.get(raw)
+
+            def walk(items, cap):
+                for k, v in items or []:
+                    if not isinstance(v, list):
+                        continue
+                    if k == "if":
+                        c = cap
+                        lim = get1(v, "limit")
+                        for ck, cv in (lim if isinstance(lim, list) else []):
+                            if ck == "check_variable" and isinstance(cv, list):
+                                for x, y in cv:
+                                    if x in out:
+                                        c = value(y) if value(y) is not None else c
+                        walk(v, c)
+                    elif k == "add_to_variable":
+                        for x, y in v:
+                            if x in out and value(y):
+                                drift.append((x, value(y), cap if cap is not None else CG_VAR_CAP))
+                    elif k not in ("limit", "subtract_from_variable", "set_variable"):
+                        walk(v, cap)
+
+            for p in lint.game.files("common/on_actions"):
+                for k, v in parse_file(p):
+                    if k == "on_actions" and isinstance(v, list):
+                        for name, body in v:
+                            if name == f"on_monthly_{lint.tag}" and isinstance(body, list):
+                                walk(get1(body, "effect") or [], None)
+    except Exception:  # noqa: BLE001 - advisory: the start value is kept
+        pass
+    lint._econ_cg_vars = (out, drift)
+    return lint._econ_cg_vars
+
+
 def simulate(lint, tl, switch_day, until_day, events=None, dyn=None, sample=()):
     """Run the construction day by day: {"rows": {day: {...}}, "end": {...}, "slot_bound_days": n}."""
     e = _Econ(lint, tl)
     if dyn:
         e.dyn = dict(dyn)
+    e.cg_vars, e.drift = cg_variables(lint)
+    lines_on = getattr(lint, "active_lines", None)
     events = list(events if events is not None else plan_events(lint, tl))
     start = tl.start
     war = tl.war_day
@@ -605,10 +766,23 @@ def simulate(lint, tl, switch_day, until_day, events=None, dyn=None, sample=()):
                 e.ideas[name] = max(0, e.ideas[name] - 1)
                 e.timed.remove((end, name))
                 changed = True
+        if derive.date_of(today)[2] == 1 and today > start:
+            changed = e.month() or changed
+            if lines_on is not None:
+                try:
+                    e.resource_trade = e.import_civs(lines_on(today))
+                except Exception:  # noqa: BLE001 - no resource data: no import estimate
+                    e.resource_trade = 0
+        elif today == start and lines_on is not None:
+            try:
+                e.resource_trade = e.import_civs(lines_on(today))
+            except Exception:  # noqa: BLE001
+                e.resource_trade = 0
         if changed:
             e.snapshot()
         total = e.civ + e.mil
-        free = max(0, e.civ - int(math.ceil(e.cg * total - 1e-9)) - e.trade)
+        trade = max(e.trade, e.resource_trade)
+        free = max(0, e.civ - int(math.ceil(e.cg * total - 1e-9)) - trade)
         want = int(math.ceil(free / PROJECT_CAP)) if free else 0
         at_war = war is not None and today >= war
         kind = "industrial_complex" if (today < switch_day and not at_war) else "arms_factory"
@@ -643,6 +817,7 @@ def simulate(lint, tl, switch_day, until_day, events=None, dyn=None, sample=()):
         if today in sample:
             rows[today] = {"date": _fmt(today), "civ": e.civ, "mil": e.mil, "free_civs": free,
                            "consumer_goods": round(e.cg, 3),
+                           "consumer_goods_civs": int(math.ceil(e.cg * total - 1e-9)), "trade_civs": trade,
                            "speed_civ": round(1 + e.speed_all + e.speed["industrial_complex"], 3),
                            "speed_mil": round(1 + e.speed_all + e.speed["arms_factory"], 3),
                            "slot_factor": round(e.slot_factor, 2),
@@ -733,8 +908,9 @@ def forecast(lint, tl, until=None, extra=(), marks=(), floors=None):
     switch = best[1]
     r = simulate(lint, tl, switch, until, events, dyn, sample=sample)
     left_out = ["political power: every dated pick is taken on its date",
-                "monthly script changes of consumer-goods variables and the decisions that move them (the start "
-                "value is kept)"]
+                "undated decisions that move consumer-goods variables (the monthly on_action, the focus rewards "
+                "and the dated decision_rules are counted)", "civilian factories the market pays for exports",
+                "the module resources of designed equipment (chassis, airframes, hulls) in the import estimate"]
     auto = lint.plan.get("politics_auto")
     if isinstance(auto, dict) and auto.get("order"):
         left_out.append("politics_auto picks (undated)")
@@ -746,7 +922,10 @@ def forecast(lint, tl, until=None, extra=(), marks=(), floors=None):
                                                                                        dict) else 0,
             "start_consumer_goods_dynamic": dyn, "left_out": left_out,
             "how": "day by day from the start: free civilian factories = civilian - ceil(consumer goods x all "
-                   "factories) - import budget; projects of at most 15; points = factories x 5 x (1 + 0.2 x "
+                   "factories) - civilian factories on trade (the import budget, or the resources the lines lack "
+                   "after the trade law's export share in blocks of 8, whichever is larger); consumer goods from "
+                   "the laws, ideas and the dynamic modifiers' variables, with their monthly script drift and the "
+                   "focus rewards that move them; projects of at most 15; points = factories x 5 x (1 + 0.2 x "
                    "infrastructure) x (1 + construction speed); speed, consumer goods and slot factors from the "
                    "start laws and ideas, the dated politics picks, the focus path's ideas on completion and the "
                    "research path's techs on completion; focus factories and slots instantly; states owned by "

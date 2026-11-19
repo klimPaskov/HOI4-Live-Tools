@@ -47,6 +47,13 @@ class Rewards(unittest.TestCase):
         self.assertIn(("idea+", "autarkic_economy"), ev)
         self.assertIn(("annex", "AUS"), ev)
 
+    def test_variable_changes_are_events(self):
+        block = [("add_to_variable", [("GER_cg", "-0.2"), ("tooltip", "x")]),
+                 ("subtract_from_variable", [("GER_cg", "0.05")])]
+        ev = economy._reward_events(block, "GER")
+        self.assertIn(("var", ("GER_cg", -0.2)), ev)
+        self.assertIn(("var", ("GER_cg", -0.05)), ev)
+
 
 class _StubLint:
     """The parts of a Lint that lint_economy.baseline reads: Germany 1936, horizon targets, findings."""
@@ -265,6 +272,35 @@ class Germany(unittest.TestCase):
             self.assertTrue(f)
         else:
             self.assertFalse(f)
+
+    def test_consumer_goods_drift_monthly_and_trade_takes_civilian_factories(self):
+        rows = self.appended["facts"]["economy"]["forecast"]["rows"]
+        first = rows[0]
+        later = [r for r in rows if r["date"] >= "1937.06"]
+        # MEFO bills: the factor grows 0.03 a month (on_monthly_GER) unless a focus or decision pulls it down
+        self.assertTrue(any(r["consumer_goods"] > first["consumer_goods"] for r in later), rows[:6])
+        self.assertTrue(all("trade_civs" in r and "consumer_goods_civs" in r for r in rows))
+        for r in rows:
+            self.assertEqual(r["free_civs"], max(0, r["civ"] - r["consumer_goods_civs"] - r["trade_civs"]))
+
+    def test_a_dated_decision_moves_the_consumer_goods_variable(self):
+        plan = base_plan()
+        plan["decision_rules"] = [{"id": "dr_x", "decision": "GER_implement_rations", "when": "date >= 1936.3.1",
+                                   "max": 1}]
+        lt = lint_plan.Lint(plan, self.game, lint_plan.FRONT_K, None, None, None)
+        from hoi4facts import conditions as cond
+        ev = economy.plan_events(lt, cond.Timeline(lt))
+        moved = [e for e in ev if e[1] == "var" and e[3] == "decision GER_implement_rations"]
+        if economy._rewards(lt, "decision").get("GER_implement_rations"):
+            self.assertTrue(moved, ev[:5])
+
+    def test_start_screen_proxies_of_dynamic_modifiers_are_not_counted_twice(self):
+        from hoi4facts import calc
+        from hoi4facts.world import World
+        w = World(self.game, "JAP")
+        proxies = calc.dynamic_modifier_proxies(w, "JAP")
+        self.assertIn("JAP_1936_fake_industrial_idea", proxies)  # shows JAP_early_industrialization_efforts_dm
+        self.assertAlmostEqual(calc.consumer_goods(w, "JAP")[0], 0.25)  # the law alone; the 0.3 is the modifier's
 
     def test_consumer_goods_count_the_history_modifiers(self):
         e = self.appended["facts"]["economy"]

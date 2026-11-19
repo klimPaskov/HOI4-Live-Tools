@@ -25,8 +25,10 @@ lint_force.check after the force rules, on the same war list from force.plan_war
                           war.axes): one lost border province then holds the whole war.
   war.guarantor           a declaration on a country another country guarantees at the start (give_guarantee in
                           history/countries) while the plan has no war with the guarantor that day.
-  war.declaration_gate    a focus in a declaration's `when` that the focus timeline completes less than GATE_SLACK
-                          days before the declaration's date (or never): the war starts late.
+  war.declaration_gate    a focus in a declaration's `when` that the focus timeline completes less than the slack
+                          before the declaration's date (its `date >=` atom, else the force_design war's start
+                          against that target), or never: the war starts late. Slack = GATE_SLACK + GATE_SLACK_PER_YEAR
+                          x the years from the start to the war (a live focus path drifts behind its dates).
   (a war fought as an operation, plan key `operations`, is checked by lint_operations.py instead: its placement,
   lines, holds and air; the layout rules below then leave the armies it places alone)
   war.attack_force        on an offensive war's first day: the layout in force (entries whose `when` holds by then,
@@ -38,7 +40,9 @@ lint_force.check after the force rules, on the same war list from force.plan_war
 from . import derive
 from . import force as fm
 
-GATE_SLACK = 14     # days a focus that gates a declaration finishes before the declaration's date [H]
+GATE_SLACK = 14     # days a focus that gates a declaration finishes before the declaration's date, at the start [H]
+GATE_SLACK_PER_YEAR = 25  # more slack per year from the start to the war: g17j ran 75 days behind its focus dates
+                          # after 27 months (a refused focus blocked the path ~55 days; serial focuses had none) [M]
 ATTACK_RATIO = 1.0  # divisions on the war's axes per enemy division on the front, unless the war sets attack_ratio [H]
 PLACED_SHARE = 0.8  # the layout in force on a war day places at least this share of the forecast army [H]
 HOLD_MIN = 2   # divisions per border state: the executor's war-risk read wants at least 2 (borders_not_held)
@@ -387,8 +391,16 @@ class Shape:
                      if a.replace(" ", "").startswith("date>=")]
             dates = [d for d in dates if d is not None]
             if not dates:
+                tgt = e.get("target")
+                for w in (lint.plan.get("force_design") or {}).get("wars") or []:
+                    if isinstance(w, dict) and tgt in (w.get("enemies") or []) and derive.day(w.get("start")):
+                        dates.append(derive.day(w.get("start")))
+                        break
+            if not dates:
                 continue
             day = max(dates)
+            start = derive.day(lint.start) or day
+            slack = int(GATE_SLACK + GATE_SLACK_PER_YEAR * max(0, day - start) / 365.0)
             for a in atoms:
                 if not (a.startswith("focus_completed:") or a.startswith("focus_done:")):
                     continue
@@ -401,12 +413,13 @@ class Shape:
                     lint.add("error", "war.declaration_gate", where,
                              f"the declaration on {e.get('target')} waits for {f}, which the focus timeline never "
                              "completes: the war never starts")
-                elif done > day - GATE_SLACK:
+                elif done > day - slack:
                     lint.add("error", "war.declaration_gate", where,
                              f"the declaration on {e.get('target')} is dated {_fmt(day)} but waits for {f}, which the "
                              f"focus timeline completes {_fmt(done)}: the war starts on the focus, not on the plan's day. "
-                             f"Schedule {f} to finish at least {GATE_SLACK} days before (move it earlier in "
-                             "focus_path, or a shorter route to it)")
+                             f"Schedule {f} to finish at least {slack} days before ({GATE_SLACK} plus "
+                             f"{GATE_SLACK_PER_YEAR} a year from the start: a live focus path runs behind its dates) "
+                             "by moving it earlier in focus_path, a shorter route to it, or a later war day")
 
     def attack_force(self):
         """war.attack_force: on an offensive war's first day the layout places the forecast army, the formations
