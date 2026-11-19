@@ -1247,6 +1247,7 @@ fn diplomacy_items(
         // West hold undrawn, and France took four states while no attack executed.
         if action == "declare_war" {
             if let Some(op) = super::plan_operation::unready(state, plan, &target) {
+                super::plan_operation::mark_due(state, &op, now);
                 let first = *state.done.entry(format!("declwait:{key}")).or_insert(now);
                 if now - first < OP_DECLARE_WAIT {
                     waits.push(format!(

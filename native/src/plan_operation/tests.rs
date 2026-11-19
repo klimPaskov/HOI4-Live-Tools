@@ -13,6 +13,8 @@ struct Game {
     refuse_multi: RefCell<bool>,
     /// every offensive draw refused
     refuse_all: RefCell<bool>,
+    /// every division move refused (a row the army panel does not draw)
+    refuse_detach: RefCell<bool>,
     /// (division id, army, template) as hoi4_supply lists them
     divs: RefCell<Vec<(String, String, String)>>,
     /// division id -> the state it stands in (hoi4_supply state_id)
@@ -45,6 +47,7 @@ impl Game {
             held: RefCell::new(vec![]),
             refuse_multi: RefCell::new(false),
             refuse_all: RefCell::new(false),
+            refuse_detach: RefCell::new(false),
             divs: RefCell::new(vec![]),
             div_states: RefCell::new(HashMap::new()),
             calls: RefCell::new(vec![]),
@@ -99,6 +102,9 @@ impl Tools for Game {
                 };
                 return Ok(json!({"states": [{"state_id": s, "controller": c,
                     "provinces": [{"controller": c}]}]}));
+            }
+            "hoi4_army_detach" if *self.refuse_detach.borrow() => {
+                return Ok(json!({"receipt": {"status": "NotApplied"}}));
             }
             "hoi4_army_offensive" if *self.refuse_all.borrow() => {
                 return Ok(json!({"receipt": {"status": "NotApplied"}}));
@@ -673,6 +679,37 @@ fn a_declaration_waits_for_an_operation_still_preparing() {
     assert_eq!(unready(&state, &plan, "FRA"), None, "another enemy");
     state.done.insert(key("op_poland", "ready"), START);
     assert_eq!(unready(&state, &plan, "POL"), None);
+}
+
+#[test]
+fn a_failed_assembly_holds_the_war_only_until_its_declaration_is_due() {
+    let game = Game::new();
+    let d = |id: &str, army: &str, t: &str| (id.to_string(), army.to_string(), t.to_string());
+    *game.divs.borrow_mut() = vec![d("d1", "Mitte", "Pz"), d("d2", "Mitte", "Inf")];
+    *game.refuse_detach.borrow_mut() = true;
+    let mut plan = plan();
+    plan["operations"][0]["formations"][2] = json!({"army": "Schnell", "role": "mobile",
+        "divisions": {"Pz": 1}, "front": {"enemy": "POL", "own_states": [67]},
+        "offensive": {"axis": [67, 10], "target_line": [10]}});
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    assert!(
+        !state.done.contains_key("op:op_pol:ready"),
+        "a refused assembly rests and holds the prepare"
+    );
+    // the declaration is due: the formation that had its try no longer holds the war
+    mark_due(&mut state, "op_pol", START + 1);
+    // (before the rest of the refused move has run out)
+    wake(&mut state);
+    burst(&mut state, &game, &plan, START + 2);
+    assert!(state.done.contains_key("op:op_pol:ready"));
+    assert!(state.done.contains_key("op:op_pol:asm:Schnell"));
+    assert!(unready(&state, &plan, "POL").is_none());
+    // the line formations' fronts were all drawn (the assembly did not stop the prepare)
+    assert!(game
+        .orders()
+        .iter()
+        .any(|(n, a)| n == "hoi4_army_front" && a["army"] == json!("Army Group 2")));
 }
 
 #[test]

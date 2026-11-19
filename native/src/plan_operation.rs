@@ -118,6 +118,20 @@ fn key(id: &str, what: &str) -> String {
     format!("op:{id}:{what}")
 }
 
+/// The declaration of the operation's war is due and waits for its prepare (set by the
+/// diplomacy step). From then on a secondary step that has had its try (a mobile formation's
+/// assembly, a march to its start state) no longer holds the war: the formation fights with what
+/// it has and the rest inside its own army (qs1, qu2, qv2, 19 Nov 2026: one failing detach of
+/// Panzergruppe Nord held the declaration to 18-21 September, qv1 declared on the 2nd).
+fn due(state: &State, id: &str) -> bool {
+    state.done.contains_key(&key(id, "due"))
+}
+
+/// Marks the declaration against the operation `id` as due (see `due`).
+pub(super) fn mark_due(state: &mut State, id: &str, now: GameHour) {
+    state.done.entry(key(id, "due")).or_insert(now);
+}
+
 fn op_id(op: &Value, index: usize) -> String {
     item_id(op).unwrap_or_else(|| format!("#{index}"))
 }
@@ -1144,10 +1158,10 @@ fn one(
     }
     // every order of the prepare reads back (none rests after a failure): a declaration
     // against its enemies may go out
-    let resting = state
-        .bad
-        .iter()
-        .any(|(k, until)| *until > now && (k.starts_with("opdraw:") || k.starts_with("opasm:")));
+    let secondary_free = due(state, id);
+    let resting = state.bad.iter().any(|(k, until)| {
+        *until > now && (k.starts_with("opdraw:") || (k.starts_with("opasm:") && !secondary_free))
+    });
     if !resting {
         state.done.entry(key(id, "ready")).or_insert(now);
     }
@@ -1592,11 +1606,21 @@ fn assemble(
             }
         }
         let done = key(id, &format!("asm:{name}"));
+        let tries = key(id, &format!("asmtry:{name}"));
+        let n = state.done.get(&tries).copied().unwrap_or(0);
+        if !state.done.contains_key(&done) && n >= 1 && due(state, id) {
+            state.done.insert(done, now);
+            state.op_notes.insert(
+                format!("{id}:{name}"),
+                format!(
+                    "{name}: assembly left after {n} move(s) at the declaration; the rest fights in its own army"
+                ),
+            );
+            continue;
+        }
         if state.done.contains_key(&done) || state.skipped(now, "opasm", name) {
             continue;
         }
-        let tries = key(id, &format!("asmtry:{name}"));
-        let n = state.done.get(&tries).copied().unwrap_or(0);
         if n >= 12 {
             state.op_notes.insert(
                 format!("{id}:{name}"),

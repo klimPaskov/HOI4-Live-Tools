@@ -2001,10 +2001,24 @@ fn row_shown_rect(r: &Reader<'_>, image: u64, row: u64) -> Result<Option<Rect>> 
     Ok(None)
 }
 
-/// Where the panel must scroll to show division `id`: (index of its row, index of the first
-/// shown row, that row's rectangle as the wheel's point). None when the shown list holds no row
-/// of that division or shows no row at all.
-fn row_scroll_hint(r: &Reader<'_>, image: u64, id: &str) -> Result<Option<(usize, usize, Rect)>> {
+/// What the shown division list draws, for scrolling to division `id`.
+struct RowView {
+    /// index of the division's row object, None when the list keeps none for it
+    target: Option<usize>,
+    /// index of the first shown row
+    first: usize,
+    /// the first shown row's rectangle (the wheel's point)
+    rect: Rect,
+    /// the division id words of the first shown row (an unchanged top after a wheel notch is
+    /// the list's end)
+    top: (u32, u32),
+}
+
+/// Where the panel must scroll to show division `id`. None when the list shows no row at all.
+/// The list keeps row objects only for the rows it draws (rp1, 19 Nov 2026: Armee Süd's 21st
+/// division had none, its detach failed in 1.3 s without one wheel notch and moved at once
+/// when the army had 20): the target is then None and the caller sweeps the list.
+fn row_scroll_hint(r: &Reader<'_>, image: u64, id: &str) -> Result<Option<RowView>> {
     let abi = r.string_abi();
     let u = ui(r)?;
     let Some((t, k)) = id.split_once(':').and_then(|(a, b)| {
@@ -2026,23 +2040,29 @@ fn row_scroll_hint(r: &Reader<'_>, image: u64, id: &str) -> Result<Option<(usize
         }
         let (_, data, count) = r.array_header(list + fld(abi, &DIVISION_LIST, LIST_ROWS)?)?;
         let mut target = None;
-        let mut first_shown: Option<(usize, Rect)> = None;
+        let mut first_shown: Option<(usize, Rect, (u32, u32))> = None;
         for n in 0..count.min(256) {
             let row = r.u64(data + n as u64 * 8)?;
             if r.u64(row)? != row_vt {
                 continue;
             }
-            if r.i32(row + word)? as u32 == t && r.i32(row + word + 4)? as u32 == k {
+            let words = (r.i32(row + word)? as u32, r.i32(row + word + 4)? as u32);
+            if words == (t, k) {
                 target = Some(n);
             }
             if first_shown.is_none() {
                 if let Some(rect) = row_shown_rect(r, image, row)? {
-                    first_shown = Some((n, rect));
+                    first_shown = Some((n, rect, words));
                 }
             }
         }
-        if let (Some(n), Some((first, rect))) = (target, first_shown) {
-            return Ok(Some((n, first, rect)));
+        if let Some((first, rect, top)) = first_shown {
+            return Ok(Some(RowView {
+                target,
+                first,
+                rect,
+                top,
+            }));
         }
     }
     Ok(None)
@@ -2053,17 +2073,43 @@ fn row_scroll_hint(r: &Reader<'_>, image: u64, id: &str) -> Result<Option<(usize
 /// "no shown row in the army panel"). One wheel notch at a time towards the row, each read back.
 fn division_row_scrolled(process: &dyn Process, keys: &dyn GameInput, id: &str) -> Result<Rect> {
     let mut last = None;
-    for _ in 0..48 {
+    // without a row object for the division: down to the list's end, then up to its top
+    let mut down = true;
+    let mut top = None;
+    for _ in 0..64 {
         match settled(process, "division row", |r, i| division_row(r, i, id)) {
             Ok(rect) => return Ok(rect),
             Err(e) if e.code == "gui_target_unavailable" => last = Some(e),
             Err(e) => return Err(e),
         }
-        let Some((want, first, rect)) = read(process, |r, i| row_scroll_hint(r, i, id))? else {
+        let Some(view) = read(process, |r, i| row_scroll_hint(r, i, id))? else {
             break;
         };
-        let (x, y) = rect.center();
-        keys.scroll(GAME, (x, y), if want > first { -120 } else { 120 })?;
+        let delta = match view.target {
+            Some(want) => {
+                if want > view.first {
+                    -120
+                } else {
+                    120
+                }
+            }
+            None => {
+                if top == Some(view.top) {
+                    if !down {
+                        break;
+                    }
+                    down = false;
+                }
+                top = Some(view.top);
+                if down {
+                    -120
+                } else {
+                    120
+                }
+            }
+        };
+        let (x, y) = view.rect.center();
+        keys.scroll(GAME, (x, y), delta)?;
         crate::phase::sleep(std::time::Duration::from_millis(120));
     }
     Err(last.unwrap_or_else(|| {
