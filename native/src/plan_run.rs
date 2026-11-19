@@ -2930,14 +2930,8 @@ const AIR_DECLARE_AHEAD: GameHour = 3 * DAY;
 
 /// The air waits while a prepared operation's declaration is due or near: the declaration and
 /// the attack's execution go first, the air's missions follow in the declaration's own tick.
-/// Until the wings have all their peace missions (`op:airset`) the air keeps its turns in those
-/// days: the declaration still goes first in every tick, so it waits at most one air order, and
-/// the fighters fly on the first war day whatever day the prepare read back (qv1, 19 Nov 2026:
-/// ready on 27 August, one air order, then three idle days and 0 of 12 fighters on day 1; qv2,
-/// declared late, 12 of 12).
 fn air_waits_for_war(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) -> bool {
     !state.war_active
-        && state.done.contains_key("op:airset")
         && plan_operation::awaiting_war(state)
         && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD)
 }
@@ -6309,10 +6303,6 @@ fn air_war_missions(
             "x",
             if waiting { DAY / 4 } else { 3 * DAY },
         );
-        if !waiting && !state.war_active {
-            // in peace: every wing that can go has its mission over the operation
-            state.done.entry("op:airset".to_string()).or_insert(now);
-        }
     }
     Ok(None)
 }
@@ -10209,23 +10199,6 @@ mod tests {
             refuse: RefCell::new(HashMap::new()),
             refuse_text: RefCell::new(HashMap::new()),
         }
-    }
-    #[test]
-    fn the_air_keeps_its_turns_before_a_due_declaration_until_every_wing_has_its_mission() {
-        let f = fake(vec![]);
-        let plan = json!({"operations": [{"id": "op_pol", "enemies": ["POL"]}]});
-        let mut state = State::default();
-        let now = 1_000_000;
-        state.done.insert("op:op_pol:prep".into(), now - 300);
-        state.done.insert("op:op_pol:ready".into(), now - 100);
-        // the declaration is near (its cached judgement)
-        state.done.insert("declnear:at".into(), now);
-        state.done.insert("declnear:v".into(), 1);
-        assert!(!air_waits_for_war(&mut state, &f, &plan, now));
-        state.done.insert("op:airset".into(), now);
-        assert!(air_waits_for_war(&mut state, &f, &plan, now));
-        state.war_active = true;
-        assert!(!air_waits_for_war(&mut state, &f, &plan, now));
     }
     #[test]
     fn consolidation_disbands_one_division_at_a_time_and_passes_over_refused_ones() {

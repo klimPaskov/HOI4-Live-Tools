@@ -15,6 +15,8 @@ struct Game {
     refuse_all: RefCell<bool>,
     /// every division move refused (a row the army panel does not draw)
     refuse_detach: RefCell<bool>,
+    /// what hoi4_encirclement_candidates reads
+    pockets: RefCell<Value>,
     /// (division id, army, template) as hoi4_supply lists them
     divs: RefCell<Vec<(String, String, String)>>,
     /// division id -> the state it stands in (hoi4_supply state_id)
@@ -48,6 +50,7 @@ impl Game {
             refuse_multi: RefCell::new(false),
             refuse_all: RefCell::new(false),
             refuse_detach: RefCell::new(false),
+            pockets: RefCell::new(json!({"pockets": []})),
             divs: RefCell::new(vec![]),
             div_states: RefCell::new(HashMap::new()),
             calls: RefCell::new(vec![]),
@@ -103,6 +106,7 @@ impl Tools for Game {
                 return Ok(json!({"states": [{"state_id": s, "controller": c,
                     "provinces": [{"controller": c}]}]}));
             }
+            "hoi4_encirclement_candidates" => return Ok(self.pockets.borrow().clone()),
             "hoi4_army_detach" if *self.refuse_detach.borrow() => {
                 return Ok(json!({"receipt": {"status": "NotApplied"}}));
             }
@@ -1292,4 +1296,159 @@ fn a_spearhead_stuck_on_a_state_leaves_it_to_the_infantry_and_goes_on() {
     assert_ne!(stuck, vec![10], "given up after STRIKE_MAX_DAYS");
     assert_eq!(stuck.len(), 1);
     assert!(state.done.contains_key(&key("op", "spearskip:Panzer:10")));
+}
+
+#[test]
+fn a_wing_standing_before_its_first_state_attacks_the_next_one() {
+    let game = Game::new();
+    game.unit("Nord", |r| r["states"] = json!({"5": 17}));
+    // East Prussia is own land
+    game.held.borrow_mut().push(5);
+    let u = unit(
+        "Nord".into(),
+        Role::Wing,
+        &json!({"enemy": "POL", "own_states": [5]}),
+        &json!({"axis": [5, 807], "target_line": [807, 98, 97]}),
+    );
+    let roster = game.roster.borrow().clone();
+    let mut state = State::default();
+    let mut wanted = vec![807, 98, 97];
+    let r = wing_stall(
+        &mut state,
+        &game,
+        "op",
+        &u,
+        "GER",
+        &roster,
+        &mut wanted,
+        "l",
+        START,
+    )
+    .unwrap();
+    assert!(r.is_none());
+    let mut wanted = vec![807, 98, 97];
+    let r = wing_stall(
+        &mut state,
+        &game,
+        "op",
+        &u,
+        "GER",
+        &roster,
+        &mut wanted,
+        "l",
+        START + 4 * DAY,
+    )
+    .unwrap();
+    assert!(r.is_none(), "not yet {WING_STALL_DAYS} days");
+    let mut wanted = vec![807, 98, 97];
+    let r = wing_stall(
+        &mut state,
+        &game,
+        "op",
+        &u,
+        "GER",
+        &roster,
+        &mut wanted,
+        "l",
+        START + WING_STALL_DAYS * DAY,
+    )
+    .unwrap();
+    assert!(r.is_some());
+    assert_eq!(wanted, vec![98, 97]);
+    assert!(game.orders().iter().any(|(n, a)| n == "hoi4_army_plan"
+        && a["army"] == json!("Nord")
+        && a["clear_orders"] == json!(true)));
+    // later calls want the next line at once, and divisions across the border keep it
+    game.unit("Nord", |r| r["states"] = json!({"5": 10, "98": 7}));
+    let roster = game.roster.borrow().clone();
+    let mut wanted = vec![807, 98, 97];
+    let r = wing_stall(
+        &mut state,
+        &game,
+        "op",
+        &u,
+        "GER",
+        &roster,
+        &mut wanted,
+        "l",
+        START + 20 * DAY,
+    )
+    .unwrap();
+    assert!(r.is_none());
+    assert_eq!(wanted, vec![98, 97]);
+}
+
+#[test]
+fn two_armour_formations_meet_in_a_pockets_neck_hold_the_ring_and_go_on() {
+    let game = Game::new();
+    for (name, main) in [("Panzer", 67), ("Sued", 66), ("Mitte", 63)] {
+        game.unit(name, |r| r["main_state"] = json!(main));
+    }
+    *game.pockets.borrow_mut() = json!({"pockets": [
+        {"already_cut_off": false, "pincer_ready": true, "capital_inside": false,
+         "neck_states": [{"state_id": 87}, {"state_id": 88}], "pocket_states": [{"state_id": 90}]},
+        {"already_cut_off": false, "pincer_ready": true, "capital_inside": false,
+         "neck_states": [{"state_id": 87}], "pocket_states": [{"state_id": 86}]}]});
+    let mut state = State::default();
+    for (s, p) in [
+        (87, (10.0, 0.0)),
+        (67, (12.0, 0.0)),
+        (66, (9.0, 0.0)),
+        (63, (40.0, 0.0)),
+    ] {
+        state.centers.insert(s, p);
+    }
+    let strikers: Vec<String> = ["Panzer", "Sued", "Mitte"].map(String::from).to_vec();
+    let fighting: HashSet<String> = ["POL".to_string()].into_iter().collect();
+    let best: HashMap<i64, (i64, f64)> = [(87, (584, 10.0)), (86, (6, 10.0))].into_iter().collect();
+    let roster = game.roster.borrow().clone();
+    let step = |state: &mut State, now| {
+        pocket_step(
+            state, &game, &roster, &strikers, &fighting, &best, "GER", now,
+        )
+        .unwrap()
+    };
+    // the one-neck pocket (the two-neck one is passed over); the two nearest formations
+    let pk = step(&mut state, START).expect("a pocket");
+    assert_eq!(pk.province, 584);
+    assert!(!pk.closed);
+    assert_eq!(pk.arms, vec!["Sued".to_string(), "Panzer".to_string()]);
+    // the neck taken: the ring is closed and counted, the arms hold
+    game.held.borrow_mut().push(87);
+    let pk = step(&mut state, START + DAY).expect("held");
+    assert!(pk.closed);
+    assert_eq!(state.done.get("op:pockets_closed"), Some(&1));
+    // the pocket's states taken: the armour goes on
+    game.held.borrow_mut().push(86);
+    assert!(step(&mut state, START + 2 * DAY).is_none());
+    assert!(!state.done.contains_key("pocket:neck"));
+}
+
+#[test]
+fn a_pockets_neck_not_taken_in_time_is_given_up_and_not_tried_again_soon() {
+    let game = Game::new();
+    for (name, main) in [("Panzer", 67), ("Sued", 66)] {
+        game.unit(name, |r| r["main_state"] = json!(main));
+    }
+    *game.pockets.borrow_mut() = json!({"pockets": [
+        {"already_cut_off": false, "pincer_ready": true, "capital_inside": false,
+         "neck_states": [{"state_id": 87}], "pocket_states": [{"state_id": 86}]}]});
+    let mut state = State::default();
+    for (s, p) in [(87, (10.0, 0.0)), (67, (12.0, 0.0)), (66, (9.0, 0.0))] {
+        state.centers.insert(s, p);
+    }
+    let strikers: Vec<String> = ["Panzer", "Sued"].map(String::from).to_vec();
+    let fighting: HashSet<String> = ["POL".to_string()].into_iter().collect();
+    let best: HashMap<i64, (i64, f64)> = [(87, (584, 10.0))].into_iter().collect();
+    let roster = game.roster.borrow().clone();
+    let step = |state: &mut State, now| {
+        pocket_step(
+            state, &game, &roster, &strikers, &fighting, &best, "GER", now,
+        )
+        .unwrap()
+    };
+    assert!(step(&mut state, START).is_some());
+    assert!(step(&mut state, START + POCKET_CLOSE_DAYS * DAY).is_none());
+    assert!(step(&mut state, START + (POCKET_CLOSE_DAYS + 3) * DAY).is_none());
+    assert_eq!(state.done.get("op:pockets_closed"), None);
 }

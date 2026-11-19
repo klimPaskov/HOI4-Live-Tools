@@ -65,6 +65,11 @@ const STUCK_DAYS: i64 = 7;
 const ROLL_STATES: usize = 3;
 /// Game days without a gain before a rolling contact line rolls on.
 const ROLL_STALL_DAYS: i64 = 4;
+/// Game days a wing stands at war with no state of its line taken and no division across the
+/// border before it gives the first state of its line up to the group's plan and attacks the next
+/// one (qv1, rs5, qv2, 19 Nov 2026: Armee Nord's 17 divisions stood 14-21 days in East Prussia on
+/// the save's arrow at Danzig and Gdynia, none of them in Poland, while the group fought alone).
+const WING_STALL_DAYS: i64 = 5;
 /// Game days a strike formation keeps one objective before it turns to the next (qc1: at 4 the
 /// column flipped between Warsaw and Krakow every four days and took neither).
 const STRIKE_MAX_DAYS: f64 = 10.0;
@@ -1416,9 +1421,25 @@ fn strikes(
         .values()
         .max_by(|a, b| a.1.total_cmp(&b.1).then(b.0.cmp(&a.0)))
         .map(|b| b.0);
+    let me = player(tools, plan);
+    let names: Vec<String> = strikers.iter().map(|u| u.name.clone()).collect();
+    let pocket = if op["pockets"] == json!(false) {
+        None
+    } else {
+        pocket_step(state, tools, roster, &names, &fighting, &best, &me, now)?
+    };
     let mut rows: Vec<Value> = Vec::new();
     let mut knobs = json!({});
     for u in &strikers {
+        if let Some(pk) = &pocket {
+            if pk.arms.contains(&u.name) {
+                // an arm of the pocket: the neck only while it closes, nothing while it holds
+                if !pk.closed {
+                    rows.push(json!({"army": u.name, "province": pk.province, "path": []}));
+                }
+                continue;
+            }
+        }
         let mut last: Vec<i64> = Vec::new();
         for s in &u.line {
             if let Some((p, _)) = best.get(s) {
@@ -1465,13 +1486,229 @@ fn strikes(
     let mut p = plan.clone();
     p["war"]["strike"] = knobs;
     p["vp_targets"] = json!(rows);
+    // the arms of a closed ring hold it: no strike order goes to them
+    let holding: Vec<String> = pocket
+        .filter(|pk| pk.closed)
+        .map(|pk| pk.arms)
+        .unwrap_or_default();
     let reserve: Vec<String> = list(roster, "armies")
         .iter()
         .map(|a| text(&a["army"]).to_string())
-        .filter(|n| !strikers.iter().any(|u| &u.name == n))
+        .filter(|n| !strikers.iter().any(|u| &u.name == n) || holding.contains(n))
         .collect();
-    let me = player(tools, plan);
     Ok(super::plan_strike::step(state, tools, &p, lease, &me, &fighting, &reserve, now)?.flatten())
+}
+
+/// Game hours between two reads of the pockets the enemy's map offers.
+const POCKET_SCAN: GameHour = 2 * DAY;
+/// Game days two armour formations have to meet in a pocket's neck before the pocket is given up
+/// ("cut off within about three days": twice that, the march included).
+const POCKET_CLOSE_DAYS: i64 = 6;
+/// Game days the arms hold a closed ring while the group's plan reduces the pocket.
+const POCKET_HOLD_DAYS: i64 = 10;
+/// Game days a given-up neck is not tried again.
+const POCKET_RETRY_DAYS: i64 = 20;
+
+/// The armour's pocket: the two strike formations sent to meet in its neck, the neck's province
+/// they march at, and whether the ring is closed (the neck held: the arms hold it).
+struct PocketOrder {
+    arms: Vec<String>,
+    province: i64,
+    closed: bool,
+}
+
+/// THE POCKET ORDER, the one place the owner wants direct orders (19 Nov 2026: "Micro generally
+/// for creating encirclements"): from the state-control read (hoi4_encirclement_candidates, one
+/// neck state) the best pocket two strike formations can cut off is chosen, both march at the
+/// neck by whole-army moves, the ring is held (no strike order to the arms) while the group's
+/// plan reduces it, and the armour goes back to its objectives when the pocket's states are
+/// held or after POCKET_HOLD_DAYS. A neck not taken in POCKET_CLOSE_DAYS is given up for
+/// POCKET_RETRY_DAYS. Pockets closed are counted in `op:pockets_closed`. `pockets: false` on the
+/// operation switches it off.
+#[allow(clippy::too_many_arguments)]
+fn pocket_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    roster: &Value,
+    strikers: &[String],
+    fighting: &HashSet<String>,
+    best: &HashMap<i64, (i64, f64)>,
+    me: &str,
+    now: GameHour,
+) -> Result<Option<PocketOrder>> {
+    let arms_now = |state: &State| -> Vec<String> {
+        strikers
+            .iter()
+            .filter(|n| state.done.contains_key(&format!("pocket:arm:{n}")))
+            .cloned()
+            .collect()
+    };
+    let end = |state: &mut State| {
+        state.done.retain(|k, _| {
+            !(k.starts_with("pocket:arm:")
+                || k.starts_with("pocket:in:")
+                || matches!(
+                    k.as_str(),
+                    "pocket:neck" | "pocket:prov" | "pocket:at" | "pocket:closed"
+                ))
+        });
+    };
+    if let Some(neck) = state.done.get("pocket:neck").copied() {
+        let arms = arms_now(state);
+        let province = state.done.get("pocket:prov").copied().unwrap_or(0);
+        let at = state.done.get("pocket:at").copied().unwrap_or(now);
+        let inside: Vec<i64> = state
+            .done
+            .keys()
+            .filter_map(|k| k.strip_prefix("pocket:in:").and_then(|s| s.parse().ok()))
+            .collect();
+        if arms.len() < 2 {
+            end(state);
+            return Ok(None);
+        }
+        let closed_at = state.done.get("pocket:closed").copied();
+        if closed_at.is_none() && !held(tools, me, &[neck]).is_empty() {
+            state.done.insert("pocket:closed".into(), now);
+            *state.done.entry("op:pockets_closed".into()).or_insert(0) += 1;
+            state.op_notes.insert(
+                "pocket".into(),
+                format!(
+                    "pocket closed at state {neck} by {}: {} state(s) {inside:?} cut off, the ring held",
+                    arms.join(" and "),
+                    inside.len()
+                ),
+            );
+        }
+        if let Some(c) = state.done.get("pocket:closed").copied() {
+            let reduced = held(tools, me, &inside).len() == inside.len();
+            if reduced || now - c >= POCKET_HOLD_DAYS * DAY {
+                state.op_notes.insert(
+                    "pocket".into(),
+                    format!(
+                        "pocket at state {neck}: {} after {} days; the armour goes on",
+                        if reduced { "reduced" } else { "held" },
+                        (now - c) / DAY
+                    ),
+                );
+                end(state);
+                return Ok(None);
+            }
+            return Ok(Some(PocketOrder {
+                arms,
+                province,
+                closed: true,
+            }));
+        }
+        if now - at >= POCKET_CLOSE_DAYS * DAY {
+            state.done.insert(format!("pocket:tried:{neck}"), now);
+            state.op_notes.insert(
+                "pocket".into(),
+                format!(
+                    "pocket at state {neck}: neck not taken in {POCKET_CLOSE_DAYS} days, given up"
+                ),
+            );
+            end(state);
+            return Ok(None);
+        }
+        return Ok(Some(PocketOrder {
+            arms,
+            province,
+            closed: false,
+        }));
+    }
+    if strikers.len() < 2
+        || state
+            .done
+            .get("pocket:scan")
+            .is_some_and(|t| now >= *t && now - t < POCKET_SCAN)
+    {
+        return Ok(None);
+    }
+    state.done.insert("pocket:scan".into(), now);
+    let mut tags: Vec<&String> = fighting.iter().collect();
+    tags.sort();
+    let Ok(read) = tools.call(
+        "hoi4_encirclement_candidates",
+        &json!({"enemy": tags, "max_gap": 1, "limit": 8}),
+    ) else {
+        return Ok(None);
+    };
+    let mains: HashMap<String, (f64, f64)> = strikers
+        .iter()
+        .filter_map(|n| {
+            let s = army_row(roster, n)?["main_state"].as_i64()?;
+            Some((n.clone(), state.centers.get(&(s as i32)).copied()?))
+        })
+        .collect();
+    for pk in list(&read, "pockets") {
+        if pk["already_cut_off"] == json!(true)
+            || pk["pincer_ready"] != json!(true)
+            || pk["capital_inside"] == json!(true)
+        {
+            continue;
+        }
+        let necks: Vec<i64> = list(pk, "neck_states")
+            .iter()
+            .filter_map(|n| n["state_id"].as_i64())
+            .collect();
+        let [neck] = necks.as_slice() else {
+            continue;
+        };
+        let neck = *neck;
+        if state
+            .done
+            .get(&format!("pocket:tried:{neck}"))
+            .is_some_and(|t| now - t < POCKET_RETRY_DAYS * DAY)
+        {
+            continue;
+        }
+        let Some((province, _)) = best.get(&neck).copied() else {
+            continue;
+        };
+        // the two strike formations nearest the neck (map centres of their main states)
+        let Some(at) = state.centers.get(&(neck as i32)).copied() else {
+            continue;
+        };
+        let mut near: Vec<(f64, String)> = strikers
+            .iter()
+            .filter_map(|n| {
+                let (x, z) = mains.get(n).copied()?;
+                Some(((x - at.0).hypot(z - at.1), n.clone()))
+            })
+            .collect();
+        near.sort_by(|a, b| a.0.total_cmp(&b.0));
+        if near.len() < 2 {
+            continue;
+        }
+        let inside: Vec<i64> = list(pk, "pocket_states")
+            .iter()
+            .filter_map(|n| n["state_id"].as_i64())
+            .collect();
+        state.done.insert("pocket:neck".into(), neck);
+        state.done.insert(format!("pocket:chosen:{neck}"), now);
+        state.done.insert("pocket:prov".into(), province);
+        state.done.insert("pocket:at".into(), now);
+        for (_, n) in near.iter().take(2) {
+            state.done.insert(format!("pocket:arm:{n}"), now);
+        }
+        for s in &inside {
+            state.done.insert(format!("pocket:in:{s}"), 1);
+        }
+        let arms: Vec<String> = near.iter().take(2).map(|(_, n)| n.clone()).collect();
+        state.op_notes.insert(
+            "pocket".into(),
+            format!(
+                "pocket: {} meet in state {neck} (province {province}) to cut off {inside:?}",
+                arms.join(" and ")
+            ),
+        );
+        return Ok(Some(PocketOrder {
+            arms,
+            province,
+            closed: false,
+        }));
+    }
+    Ok(None)
 }
 
 /// An operation's strike formation fights as ONE stack on whole-army orders: no part of it is
@@ -2529,6 +2766,13 @@ fn advance(
         } else {
             still(&u.line)
         };
+        if u.role == Role::Wing && !u.spear && !own_line_held && op["wing_stall"] != json!(false) {
+            if let Some(line) =
+                wing_stall(state, tools, id, u, &me, roster, &mut wanted, lease, now)?
+            {
+                return Ok(Some(line));
+            }
+        }
         // a line that would not draw at war is taken one state at a time
         let one = key(id, &format!("one:{}:{}", u.name, line_tag(&wanted)));
         if let Some(first) = state.done.get(&one).copied() {
@@ -2604,6 +2848,67 @@ fn advance(
         }
     }
     Ok(None)
+}
+
+/// A wing that stood WING_STALL_DAYS at war with no state of its wanted line taken and none of
+/// its divisions in land it does not control gives the line's first state up (to the group's
+/// plan, or to a pocket) and attacks the next one: its own orders are cleared once, then its
+/// front is clicked at the new line and the offensive drawn and executed as at the start of a
+/// war. `wanted` loses the states given up. Never a new front of another army.
+#[allow(clippy::too_many_arguments)]
+fn wing_stall(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    u: &Unit,
+    me: &str,
+    roster: &Value,
+    wanted: &mut Vec<i64>,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let gk = key(id, &format!("wingskip:{}", u.name));
+    let given = state.done.get(&gk).copied().unwrap_or(0).max(0) as usize;
+    let drop = given.min(wanted.len().saturating_sub(1));
+    wanted.drain(..drop);
+    let sk = key(id, &format!("wingsince:{}", u.name));
+    let since = *state.done.entry(sk.clone()).or_insert(now);
+    let stands: Vec<i64> = army_row(roster, &u.name)
+        .and_then(|r| r["states"].as_object())
+        .map(|m| m.keys().filter_map(|k| k.parse().ok()).collect())
+        .unwrap_or_default();
+    let across = !stands.is_empty() && held(tools, me, &stands).len() < stands.len();
+    let gained = !held(tools, me, wanted).is_empty();
+    if across || gained {
+        state.done.insert(sk, now);
+        return Ok(None);
+    }
+    if now - since < WING_STALL_DAYS * DAY || wanted.len() < 2 {
+        return Ok(None);
+    }
+    let gone = wanted.remove(0);
+    state.done.insert(gk, (given + 1) as i64);
+    state.done.insert(sk, now);
+    state.op_notes.insert(
+        format!("{id}:{}", u.name),
+        format!(
+            "{}: stood {WING_STALL_DAYS} days with no state of its line taken: state {gone} left to the group, the next line {wanted:?}",
+            u.name
+        ),
+    );
+    let line = order(
+        state,
+        tools,
+        lease,
+        id,
+        &format!(
+            "{} stands before state {gone}: its orders cleared for the line {wanted:?}",
+            u.name
+        ),
+        "hoi4_army_plan",
+        json!({"army": u.name, "clear_orders": true}),
+    )?;
+    Ok(Some(line))
 }
 
 /// The line a spearhead is painted to at war: the states of its own thrust still to take, then
