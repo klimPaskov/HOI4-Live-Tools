@@ -1058,3 +1058,16 @@ fn a_line_army_standing_a_week_on_the_groups_front_is_driven_one_at_a_time() {
             .collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn an_operation_is_preparing_from_its_start_until_it_reads_back_ready() {
+    let mut state = State::default();
+    assert!(!preparing(&state));
+    state.done.insert(key("op_x", "prep"), 0);
+    assert!(preparing(&state), "started, nothing read back yet");
+    state.done.insert(key("op_x", "ready"), 10);
+    assert!(!preparing(&state), "ready: the lanes alternate again");
+    state.done.remove(&key("op_x", "ready"));
+    state.done.insert(key("op_x", "end"), 20);
+    assert!(!preparing(&state), "an ended operation prepares nothing");
+}

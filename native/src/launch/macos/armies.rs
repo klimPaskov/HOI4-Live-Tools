@@ -2073,6 +2073,129 @@ fn division_row_scrolled(process: &dyn Process, keys: &dyn GameInput, id: &str) 
         )
     }))
 }
+/// Which modified click toggles a division row in the selection in this game: 0 not yet known,
+/// 1 Control, 2 Command, 3 neither (the rows are then ordered one division at a time).
+static ROW_TOGGLE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+/// Toggle clicks that found no working way in a row while the way was unknown: three of them
+/// settle "neither" (one miss is a click the game lost, rs2 19 Nov 2026, not the game's rule).
+static ROW_TOGGLE_MISSES: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+/// One toggle click on division `id`'s row, read back as the selection reaching `want`
+/// divisions. false when the row is not shown or the selection did not follow.
+fn toggle_row(process: &dyn Process, keys: &dyn GameInput, id: &str, want: u64) -> Result<bool> {
+    use std::sync::atomic::Ordering;
+    let Ok(row) = division_row_scrolled(process, keys, id) else {
+        return Ok(false);
+    };
+    let (x, y) = row.center();
+    let before = read(process, selection_size)?;
+    let known = ROW_TOGGLE.load(Ordering::Relaxed);
+    let tries: &[u8] = match known {
+        1 => &[1],
+        2 => &[2],
+        _ => &[1, 2],
+    };
+    for &how in tries {
+        let sent = if how == 1 {
+            keys.ctrl_click(GAME, x, y)
+        } else {
+            keys.cmd_click(GAME, x, y)
+        };
+        if sent.is_err() {
+            continue;
+        }
+        let bound = std::time::Duration::from_millis(700);
+        if super::ui::wait_up_to(process, "division toggled", bound, |r, i| {
+            Ok(selection_size(r, i)? == want)
+        })
+        .is_ok()
+        {
+            ROW_TOGGLE.store(how, Ordering::Relaxed);
+            ROW_TOGGLE_MISSES.store(0, Ordering::Relaxed);
+            return Ok(true);
+        }
+        // the click changed the selection some other way: no second way on top of it
+        if read(process, selection_size)? != before {
+            return Ok(false);
+        }
+    }
+    if known == 0 && ROW_TOGGLE_MISSES.fetch_add(1, Ordering::Relaxed) + 1 >= 3 {
+        ROW_TOGGLE.store(3, Ordering::Relaxed);
+    }
+    Ok(false)
+}
+/// Select divisions `ids` of `army` in its division list with the game's own controls (its
+/// tooltips: "Click to select Division", "Ctrl+Click to toggle selection") and return the ones
+/// selected now, read from the game's selection: all of `ids`, a part of them (the caller orders
+/// that part at once and the rest one at a time), or none (the game took no multi-selection).
+/// Few left out: the army's card selects all, a toggle takes each other division out. Else:
+/// a click on the first row (that division alone; the list stays), a toggle on each other row.
+/// One selection then one order replaces a re-selection, a row click and a camera trip per
+/// division (rd6, 19 Nov 2026: 14 division-list moves at 13.3 s each, a third of the war).
+fn select_rows(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    ids: &[String],
+) -> Result<Vec<String>> {
+    use std::sync::atomic::Ordering;
+    if ids.len() < 2 || ROW_TOGGLE.load(Ordering::Relaxed) == 3 {
+        return Ok(Vec::new());
+    }
+    let members = read(process, |r, i| army_division_ids(r, i, army))?;
+    let out: Vec<String> = members
+        .iter()
+        .filter(|m| !ids.contains(m))
+        .cloned()
+        .collect();
+    let chosen = |process: &dyn Process| -> Result<Option<Vec<String>>> {
+        read(process, selected_divisions)
+    };
+    clear_notices(process, keys)?;
+    if out.len() + 1 < ids.len() {
+        select_army(process, keys, army)?;
+        let mut size = read(process, selection_size)?;
+        let mut whole = true;
+        for id in &out {
+            if !toggle_row(process, keys, id, size.saturating_sub(1))? {
+                whole = false;
+                break;
+            }
+            size -= 1;
+        }
+        if whole {
+            if let Some(picked) = chosen(process)? {
+                if picked.iter().all(|p| ids.contains(p)) {
+                    return Ok(picked);
+                }
+            }
+        }
+    }
+    select_army(process, keys, army)?;
+    let Ok(first) = division_row_scrolled(process, keys, &ids[0]) else {
+        return Ok(Vec::new());
+    };
+    let (x, y) = first.center();
+    keys.click(GAME, x, y)?;
+    let bound = std::time::Duration::from_millis(900);
+    if super::ui::wait_up_to(process, "first division selected", bound, |r, i| {
+        Ok(selection_size(r, i)? == 1)
+    })
+    .is_err()
+    {
+        return Ok(Vec::new());
+    }
+    for (size, id) in (1u64..).zip(&ids[1..]) {
+        if !toggle_row(process, keys, id, size + 1)? {
+            break;
+        }
+    }
+    let picked = chosen(process)?.unwrap_or_default();
+    Ok(if picked.iter().all(|p| ids.contains(p)) {
+        picked
+    } else {
+        Vec::new()
+    })
+}
 /// Move the chosen divisions of `army` into `into` (an own army) or, without it, into one
 /// new army, one division at a time with the game's controls: the army's card opens its
 /// division list, a click on a division's row selects that division alone, then the new-army
@@ -2102,7 +2225,58 @@ pub(super) fn detach(
         ));
     }
     let mut dest: Option<String> = into.map(str::to_string);
-    for id in ids {
+    // the chosen rows in one selection, then one card click moves them together (the rest,
+    // if the game took only a part, one at a time below)
+    let picked = select_rows(process, keys, army, ids)?;
+    if picked.len() >= 2 {
+        let ids: &[String] = &picked;
+        let moved = match &dest {
+            Some(name) => {
+                let target = read(process, |r, i| group_named(r, i, name))?;
+                let card = read(process, |r, i| card_rect(r, i, name, "portrait_btn"))?;
+                let (cx, cy) = card.center();
+                keys.right_click(GAME, cx, cy)?;
+                wait(process, "divisions moved", |r, i| {
+                    let m = membership(r, i)?;
+                    Ok(ids.iter().all(|id| m.get(id) == Some(&target)))
+                })
+                .is_ok()
+            }
+            None => {
+                let groups_before: BTreeSet<u64> =
+                    read(process, membership)?.values().copied().collect();
+                let card = settled(process, "new army card", |r, i| new_card(r, i, false))?;
+                let (cx, cy) = card.center();
+                keys.click(GAME, cx, cy)?;
+                let fresh = wait(process, "new army", |r, i| {
+                    let m = membership(r, i)?;
+                    let g = m.get(&ids[0]).copied().unwrap_or(0);
+                    Ok(g != 0
+                        && !groups_before.contains(&g)
+                        && ids.iter().all(|id| m.get(id) == Some(&g)))
+                })
+                .is_ok();
+                if fresh {
+                    dest = Some(read(process, |r, i| {
+                        let g = membership(r, i)?[&ids[0]];
+                        army_name(r, g)
+                    })?);
+                }
+                fresh
+            }
+        };
+        let _ = moved;
+    }
+    let members_now = read(process, membership)?;
+    let ids: Vec<String> = ids
+        .iter()
+        .filter(|id| members_now.get(*id) == Some(&source))
+        .cloned()
+        .collect();
+    if ids.is_empty() {
+        return dest.ok_or_else(|| Error::new("invalid_arguments", "No division given"));
+    }
+    for id in &ids {
         clear_notices(process, keys)?;
         select_army(process, keys, army)?;
         let row = division_row_scrolled(process, keys, id)?;
@@ -4200,6 +4374,51 @@ pub(super) fn move_divisions(
     province: i32,
 ) -> Result<()> {
     let mut refused: Vec<&str> = Vec::new();
+    // all of them in one selection and one right click when the game takes it; whoever did not
+    // take the order is then ordered alone below
+    let heading = read(process, division_headings)?;
+    let todo: Vec<String> = ids
+        .iter()
+        .filter(|id| heading.get(*id) != Some(&province))
+        .cloned()
+        .collect();
+    let picked = if todo.len() >= 2 {
+        select_rows(process, keys, army, &todo)?
+    } else {
+        Vec::new()
+    };
+    if picked.len() >= 2 {
+        let todo = &picked;
+        let mut points = target_points(process, state, Some(province)).unwrap_or_default();
+        if points.is_empty() {
+            find_state(process, keys, state)?;
+            points = target_points(process, state, Some(province)).unwrap_or_default();
+        }
+        for (x, y) in with_icon_offsets(points, Some(province)) {
+            keys.right_click(GAME, x, y)?;
+            let deadline = std::time::Instant::now() + std::time::Duration::from_millis(700);
+            let mut any = false;
+            while std::time::Instant::now() < deadline {
+                let now = read(process, division_headings)?;
+                let took = todo
+                    .iter()
+                    .filter(|id| now.get(*id) == Some(&province))
+                    .count();
+                if took == todo.len() {
+                    any = true;
+                    break;
+                }
+                if took > 0 && !any {
+                    // the order landed: the rest of the selection follows within moments
+                    any = true;
+                }
+                crate::phase::sleep(std::time::Duration::from_millis(40));
+            }
+            if any {
+                break;
+            }
+        }
+    }
     for id in ids {
         if read(process, division_headings)?.get(id) == Some(&province) {
             continue;

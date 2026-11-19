@@ -758,8 +758,26 @@ impl<'p> MacKeys<'p> {
     /// device-dependent left-shift bit; a plain key-down or flags on the mouse
     /// events alone reach army cards but not the division list.
     pub fn shift_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
-        const SHIFT_KEY: u16 = 56;
-        const SHIFT_FLAGS: u64 = 0x2_0002;
+        self.modifier_click(game, x, y, 56, 0x2_0002, [100, 250, 60, 150])
+    }
+    /// One left click with Control held (left-control key 59, its device bit), posted the way
+    /// Shift is: the game's Ctrl+Click toggles a division row of an army's list.
+    pub fn ctrl_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        self.modifier_click(game, x, y, 59, 0x4_0001, [100, 250, 60, 150])
+    }
+    /// One left click with Command held (left-command key 55, its device bit).
+    pub fn cmd_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        self.modifier_click(game, x, y, 55, 0x10_0008, [100, 250, 60, 150])
+    }
+    fn modifier_click(
+        &self,
+        game: (u32, u32),
+        x: f64,
+        y: f64,
+        modifier_key: u16,
+        modifier_flags: u64,
+        pauses: [u64; 4],
+    ) -> Result<Point> {
         const FLAGS_CHANGED: u32 = 12;
         let point = client_point(self.verified_content(game)?, x, y)?;
         let pause = |ms: u64| crate::phase::sleep(std::time::Duration::from_millis(ms));
@@ -782,37 +800,37 @@ impl<'p> MacKeys<'p> {
                 ready
             };
             let modifier = |down: bool| -> Result<()> {
-                let event = CGEventCreateKeyboardEvent(std::ptr::null(), SHIFT_KEY, down);
+                let event = CGEventCreateKeyboardEvent(std::ptr::null(), modifier_key, down);
                 if !event.is_null() {
                     CGEventSetType(event, FLAGS_CHANGED);
                 }
-                post(event, if down { SHIFT_FLAGS } else { 0 }, false)
+                post(event, if down { modifier_flags } else { 0 }, false)
             };
             post(
                 CGEventCreateMouseEvent(std::ptr::null(), MOUSE_MOVED, point, LEFT_BUTTON),
                 0,
                 true,
             )?;
-            pause(100);
+            pause(pauses[0]);
             self.preflight()?;
             modifier(true)?;
-            pause(250);
+            pause(pauses[1]);
             let result = (|| {
                 self.preflight()?;
                 post(
                     CGEventCreateMouseEvent(std::ptr::null(), LEFT_MOUSE_DOWN, point, LEFT_BUTTON),
-                    SHIFT_FLAGS,
+                    modifier_flags,
                     true,
                 )?;
-                pause(60);
+                pause(pauses[2]);
                 post(
                     CGEventCreateMouseEvent(std::ptr::null(), LEFT_MOUSE_UP, point, LEFT_BUTTON),
-                    SHIFT_FLAGS,
+                    modifier_flags,
                     false,
                 )
             })();
-            pause(150);
-            // Always release Shift, even when the click failed.
+            pause(pauses[3]);
+            // Always release the modifier, even when the click failed.
             modifier(false)?;
             result?;
         }
@@ -1930,6 +1948,14 @@ impl GameInput for MacKeys<'_> {
     fn shift_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
         let _phase = crate::phase::enter("input.click");
         MacKeys::shift_click(self, game, x, y)
+    }
+    fn ctrl_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        let _phase = crate::phase::enter("input.click");
+        MacKeys::ctrl_click(self, game, x, y)
+    }
+    fn cmd_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        let _phase = crate::phase::enter("input.click");
+        MacKeys::cmd_click(self, game, x, y)
     }
     fn right_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
         let _phase = crate::phase::enter("input.click");

@@ -1741,8 +1741,13 @@ fn lanes_tick(
     // war days while every other tick went to a lane and one MIO listing held the input 54 s.
     // (declared and not yet executed counts: qc8, 19 Nov 2026, the tick after the declaration
     // went to politics while the attack waited for the events the declaration opened)
-    let op_war =
-        plan_operation::executing_any(state) || (state.war_active && plan_operation::active(state));
+    // An operation still preparing takes every tick too until its orders read back: its
+    // declaration waits on it, and the ticks it gave to focus and production put the war 4-9
+    // days after the plan's day (rd2-rs1, 19 Nov 2026). Once ready the lanes alternate again,
+    // so a campaign's months-long prepare costs the economy only the days of its drawing.
+    let op_war = plan_operation::executing_any(state)
+        || (state.war_active && plan_operation::active(state))
+        || plan_operation::preparing(state);
     let war_turn = war_first
         && (!state.round.war_last || op_war || plan["scheduler"]["war_every_tick"] == json!(true));
     if war_turn {
@@ -6192,8 +6197,35 @@ fn air_war_missions(
                         state.done.retain(|k, _| !k.starts_with(&mine));
                     }
                 }
+                // the moved wings take their mission in the same call: the game takes it while
+                // they fly to the new base, and a mission left to a later tick came a war day
+                // or more after the rebase (rd2-rd6, 19 Nov 2026: 6 of 12 fighters flew on
+                // war day 1, the 6 rebased ones only from day 3-5)
+                let went: Vec<String> = names
+                    .iter()
+                    .filter(|n| moved.contains(*n))
+                    .cloned()
+                    .collect();
+                let mut then = String::new();
+                if !went.is_empty() {
+                    let mut targets: Vec<i64> = operation.clone();
+                    targets.sort_by_key(|t| !contact.contains(t));
+                    let over = air_target(&borders, &targets, Some(to), first);
+                    let args = if went.len() == 1 {
+                        json!({"wing": went[0], "mission": mission, "state_id": over})
+                    } else {
+                        json!({"wings": went, "mission": mission, "state_id": over})
+                    };
+                    let (flew, how) = state.act(tools, lease, "hoi4_air_mission", args, "am")?;
+                    if flew {
+                        for name in &went {
+                            state.skip(now, "airwing", name, 30 * DAY);
+                        }
+                    }
+                    then = format!("; then {mission} over state {over}: {flew} {how}");
+                }
                 return Ok(Some(format!(
-                    "air {} wing(s) rebase to front state {to} for {mission} ({}): {ok} {why}",
+                    "air {} wing(s) rebase to front state {to} for {mission} ({}): {ok} {why}{then}",
                     names.len(),
                     names.join(", ")
                 )));
@@ -12255,11 +12287,17 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(first.contains("rebase to front state 66"), "{first}");
-        assert!(!tools
-            .0
-            .borrow()
-            .iter()
-            .any(|(n, _)| n == "hoi4_air_mission"));
+        // the moved wing is asked for its mission in the same call, after the rebase
+        let calls: Vec<String> = tools.0.borrow().iter().map(|(n, _)| n.clone()).collect();
+        let rebase = calls.iter().position(|n| n == "hoi4_air_rebase").unwrap();
+        assert!(
+            calls[rebase..].iter().any(|n| n == "hoi4_air_mission"),
+            "{calls:?}"
+        );
+        assert!(
+            first.contains("; then air_superiority over state"),
+            "{first}"
+        );
         assert!(!state.done.contains_key("airfar:JG 136"));
     }
 
@@ -12302,13 +12340,16 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(first.contains("rebase to front state 66"), "{first}");
-        // asked again three hours later, from the facing base, over the operation's region
-        let next = air_war_step(&mut state, &tools, &plan, "l", START + DAY / 8 + 1)
-            .unwrap()
-            .unwrap();
+        // the same call sets the mission over the operation's region (the game takes it while
+        // the wing flies to the new base); three hours later nothing is left to ask
         assert!(
-            next.contains("air_superiority over state 85 (JG 136): true"),
-            "{next}"
+            first.contains("then air_superiority over state 85: true"),
+            "{first}"
+        );
+        assert!(
+            air_war_step(&mut state, &tools, &plan, "l", START + DAY / 8 + 1)
+                .unwrap()
+                .is_none()
         );
     }
 
