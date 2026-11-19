@@ -363,7 +363,10 @@ def check_production(game, plan, rep):
         n = line.get("factories")
         if not isinstance(n, int) or not 1 <= n <= 150:
             rep.error(f"production[{i}] {k}: factories must be an integer 1..150")
-        seen.append(k)
+        # with production_floors true the adds of one equipment on distinct `from` dates are its dated floors
+        # (the latest reached one is the floor, native/src/plan_manage.rs production_floors), not second lines
+        dated = plan.get("production_floors") is True and line.get("from") is not None
+        seen.append(f"{k} from {line['from']}" if dated else k)
     dup_check(rep, "production", seen)
     for i, prefix in enumerate(strings(plan, "production_priority")):
         if not any(e.startswith(prefix) for e in equip):

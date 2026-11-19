@@ -495,11 +495,37 @@ def _idle(ctx, w):
                  f"{w['id']} ({_fmt(day)}): about {pp[day]:.0f} political power lies idle on the war day by the plan's "
                  f"own budget (more than {PP_WAR_IDLE:g}): name advisors, laws or decisions that take it before the war")
     pool = xp_pool(lint, tl, ctx.wars, day)
+    if pool is not None:
+        _unpaid_templates(lint, w, day, pool)
     if pool is not None and pool["idle"] > XP_IDLE:
         lint.add("error", "force.idle_xp", "xp_budget.army",
                  f"{w['id']} ({_fmt(day)}): about {pool['idle']:.0f} army experience lies idle on the war day "
                  f"(pool {pool['pool']:.0f}, next spend {pool['next']}): buy officer-corps spirits, template edits or "
                  "a doctrine before the war")
+
+
+def _unpaid_templates(lint, w, day, pool):
+    """templates.xp_cost (forecast part): a template spend of xp_budget.army, priced at least at what the game charges
+    (lint_plan's price rule), that the army pool forecast (start, focus rewards on the timeline, exercise days; spends
+    in budget order) has not paid by the war day: the division the war plans with does not exist on the day."""
+    told = getattr(lint, "_xp_unpaid_told", None)
+    if told is None:
+        told = lint._xp_unpaid_told = set()
+    xb = lint.plan.get("xp_budget") if isinstance(lint.plan.get("xp_budget"), dict) else {}
+    for e in xb.get("army") or []:
+        if not isinstance(e, dict) or not str(e.get("ref") or "").startswith("template:"):
+            continue
+        if not isinstance(e.get("cost"), (int, float)) or e["cost"] <= 0 or e.get("id") in pool["bought"]:
+            continue
+        gate = _date_gate(e.get("when"))
+        if (gate is not None and gate > day) or e.get("id") in told:
+            continue
+        told.add(e.get("id"))
+        lint.add("error", "templates.xp_cost", "xp_budget.army",
+                 f"{e.get('id')} ({e['ref']}, {e['cost']:g} XP) is not paid by {w['id']} ({_fmt(day)}): the army pool "
+                 f"forecast holds {pool['pool']:.0f} then with the spends before it in budget order (next unpaid: "
+                 f"{pool['next']}). Edit an existing template instead of creating one, move the spend earlier in the "
+                 "budget, or plan the war without that template")
 
 
 def xp_pool(lint, tl, wars, until):

@@ -29,6 +29,12 @@ lint_force.check after the force rules, on the same war list from force.plan_war
                           before the declaration's date (its `date >=` atom, else the force_design war's start
                           against that target), or never: the war starts late. Slack = GATE_SLACK + GATE_SLACK_PER_YEAR
                           x the years from the start to the war (a live focus path drifts behind its dates).
+                          When the focus (its reward, or an event it fires, followed GOAL_EVENT_DEPTH events deep)
+                          creates a war goal on the declaration's target whose common/wargoals type EXPIRES after
+                          E days (take_state: 60), the slack is bounded by that life: the focus completes inside
+                          [war day - E + GATE_SLACK, war day - GATE_SLACK], neither later (the war waits) nor
+                          earlier (the goal lapses before the war day: g17j and g17k finished Danzig or War in
+                          April-May for a 1 September war and had no war goal on the day).
   (a war fought as an operation, plan key `operations`, is checked by lint_operations.py instead: its placement,
   lines, holds and air; the layout rules below then leave the armies it places alone)
   war.attack_force        on an offensive war's first day: the layout in force (entries whose `when` holds by then,
@@ -43,6 +49,7 @@ from . import force as fm
 GATE_SLACK = 14     # days a focus that gates a declaration finishes before the declaration's date, at the start [H]
 GATE_SLACK_PER_YEAR = 25  # more slack per year from the start to the war: g17j ran 75 days behind its focus dates
                           # after 27 months (a refused focus blocked the path ~55 days; serial focuses had none) [M]
+GOAL_EVENT_DEPTH = 3  # events followed from a focus reward to the create_wargoal it leads to (germany.86 -> .88) [H]
 ATTACK_RATIO = 1.0  # divisions on the war's axes per enemy division on the front, unless the war sets attack_ratio [H]
 PLACED_SHARE = 0.8  # the layout in force on a war day places at least this share of the forecast army [H]
 HOLD_MIN = 2   # divisions per border state: the executor's war-risk read wants at least 2 (borders_not_held)
@@ -372,6 +379,55 @@ class Shape:
                        "followed by the attack axes, so the war goes on while the land is retaken")
 
 
+    def goal_life(self, focus, target):
+        """(war goal type, expire days) of the shortest-lived war goal on `target` that completing `focus` creates:
+        its completion reward and the events it fires (their immediate blocks and every option), followed
+        GOAL_EVENT_DEPTH events deep; None when it creates none, or none that expires (common/wargoals expire)."""
+        w = self.lint.world
+        if w is None or not target:
+            return None
+        cache = getattr(self.lint, "_goal_life", None)
+        if cache is None:
+            cache = self.lint._goal_life = {}
+        if (focus, target) in cache:
+            return cache[(focus, target)]
+        from . import focus as focusmod
+        from . import scenario as scenmod
+        try:
+            row = (focusmod.tree(w, self.lint.tag).get("focuses") or {}).get(focus) or {}
+            goals = w.wargoals()
+        except Exception:  # noqa: BLE001 - no tree or no wargoal files: no bound
+            cache[(focus, target)] = None
+            return None
+        found, seen = [], set()
+
+        def walk(effects, depth):
+            for e in effects or []:
+                if not isinstance(e, str):
+                    continue
+                if e.startswith("wargoal:"):
+                    tag, _, kind = e[len("wargoal:"):].partition("(")
+                    kind = kind.rstrip(")")
+                    life = (goals.get(kind) or {}).get("expire")
+                    if tag == target and isinstance(life, (int, float)) and life > 0:
+                        found.append((kind, int(life)))
+                elif e.startswith("event:") and depth < GOAL_EVENT_DEPTH:
+                    eid = e[len("event:"):]
+                    if eid in seen:
+                        continue
+                    seen.add(eid)
+                    ev = scenmod.event(w, eid)
+                    if not ev:
+                        continue
+                    walk(ev.get("immediate"), depth + 1)
+                    for o in ev.get("options") or []:
+                        walk(o.get("effects"), depth + 1)
+
+        walk(row.get("reward"), 0)
+        out = min(found, key=lambda x: x[1]) if found else None
+        cache[(focus, target)] = out
+        return out
+
     def declaration_gates(self):
         """war.declaration_gate: a focus in a declaration's `when` that the focus timeline completes later than
         GATE_SLACK days before the declaration's own date: the war starts on the focus, not on the plan's day."""
@@ -413,7 +469,28 @@ class Shape:
                     lint.add("error", "war.declaration_gate", where,
                              f"the declaration on {e.get('target')} waits for {f}, which the focus timeline never "
                              "completes: the war never starts")
-                elif done > day - slack:
+                    continue
+                life = self.goal_life(f, e.get("target"))
+                if life is not None:
+                    kind, expire = life
+                    first, last = day - expire + GATE_SLACK, day - GATE_SLACK
+                    aim = _fmt((first + last) // 2)
+                    if done > last:
+                        lint.add("error", "war.declaration_gate", where,
+                                 f"the declaration on {e.get('target')} is dated {_fmt(day)} but waits for {f}, which "
+                                 f"the focus timeline completes {_fmt(done)}: the war starts on the focus. Its war goal "
+                                 f"({kind}) expires {expire} days after it is created (common/wargoals), so finish "
+                                 f"{f} between {_fmt(first)} and {_fmt(last)} (aim {aim}): earlier in focus_path, or "
+                                 "a later war day")
+                    elif done < first:
+                        lint.add("error", "war.declaration_gate", where,
+                                 f"the declaration on {e.get('target')} is dated {_fmt(day)} but {f} completes "
+                                 f"{_fmt(done)} and its war goal ({kind}) expires {expire} days after it is created "
+                                 f"(common/wargoals): the goal lapses on {_fmt(done + expire)}, before the war day. "
+                                 f"Finish {f} between {_fmt(first)} and {_fmt(last)} (aim {aim}): later in "
+                                 "focus_path behind focuses that keep the slot busy, or an earlier war day")
+                    continue
+                if done > day - slack:
                     lint.add("error", "war.declaration_gate", where,
                              f"the declaration on {e.get('target')} is dated {_fmt(day)} but waits for {f}, which the "
                              f"focus timeline completes {_fmt(done)}: the war starts on the focus, not on the plan's day. "

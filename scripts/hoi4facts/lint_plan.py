@@ -216,6 +216,13 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   templates.equipment     a template unit or its equipment unlocked by no tech at the start or in the
                            research plan (warning when the tech comes after the template's date)
   templates.xp             a template with xp and no xp_budget.army spend ref template:<id>
+  templates.xp_cost        a template row priced below what the game charges: a create (no `base`, or a base the
+                           start OOB and earlier rows do not make) whose `xp` (or budget cost) is under 5 per
+                           battalion + 10 per company + 25 per column after the first (hoi4_template_create on this
+                           build), or an edit whose `xp` is under the tool's pre-check floor of 5 per battalion
+                           added, replaced or removed against the template it edits (refused insufficient_experience
+                           before any click, also when a spirit makes the battalions free); and (lint_firepower) a
+                           template spend the army pool forecast cannot pay at that price before the first war day
   templates.locked         a template whose base is obsolete (decommissioned) or is_locked in the history
                            OOB: the game offers no Edit for it
   templates.cleanup        a template_cleanup entry that deletes or renames a template the plan still trains
@@ -398,7 +405,9 @@ module's docstring has the detail:
   plan.stop_date           stop_on_date before the run's end in a no-pause run
   manage.owner             an inventory item or alert with neither owner nor written reason
   production.start_lines   a start line no production entry names
-  production.duplicate_line  a second add, or a new tier beside a running line of the family
+  production.duplicate_line  a second add, or a new tier beside a running line of the family (with
+                           production_floors true, adds of one equipment on distinct `from` dates are its dated
+                           floors, not second lines)
   production.priority_all  production_priority leaves military lines unordered
   production.missing_line  a family the planned divisions need that no line makes or stocks
   production.need_balance  one family far above its need while another sits far below
@@ -580,7 +589,8 @@ BALANCE_DAYS = 90
 BALANCE_ERROR_DAYS = 120
 NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "navy.shape", "supply.port_convoys",
              "supply.convoy_size",
-             "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp", "templates.locked",
+             "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp", "templates.xp_cost",
+             "templates.locked",
              "templates.cleanup", "projects.keys",
              "politics.law_gates", "diplomacy.incoming", "occupation.required", "occupation.law_shown", "peace.enemies",
              "manage.thresholds", "production.replace",
@@ -722,6 +732,47 @@ def _atoms(pred):
 
 def _ints(v):
     return [x for x in v if isinstance(x, int) and not isinstance(x, bool)] if isinstance(v, list) else []
+
+
+def template_create_cost(cols, companies):
+    """Army XP hoi4_template_create spends on this build: 5 per battalion, 10 per company, 25 per column after the
+    first (native/src/plan_manage.rs create_cost)."""
+    return sum(len(c) for c in cols) * 5 + companies * 10 + max(0, len(cols) - 1) * 25
+
+
+def template_edit_floor(before, after):
+    """The tool's pre-check floor for an edit: 5 per battalion slot added, replaced or removed, column by column."""
+    n = 0
+    for k in range(max(len(before), len(after))):
+        a = before[k] if k < len(before) else []
+        b = after[k] if k < len(after) else []
+        for r in range(max(len(a), len(b))):
+            if (a[r] if r < len(a) else None) != (b[r] if r < len(b) else None):
+                n += 1
+    return n * 5
+
+
+def template_layouts(lint):
+    """{template name: (columns, support)} of the start OOB templates. The history's slot positions are not read
+    (world.oob counts battalions by type), so each type fills columns of 3 in its order: exact for the usual 3 x 3
+    start templates, an estimate otherwise."""
+    out = {}
+    try:
+        oob = lint.world.oob(lint.tag) if lint.world is not None and lint.tag else {}
+    except Exception:  # noqa: BLE001 - no history: every row is priced as a create
+        return out
+    rows = oob.get("templates") or {}
+    for t in (rows.values() if isinstance(rows, dict) else rows):
+        if not isinstance(t, dict) or not t.get("name"):
+            continue
+        cols = []
+        for unit, n in (t.get("regiments") or {}).items():
+            n = int(n)
+            while n > 0:
+                cols.append([unit] * min(3, n))
+                n -= 3
+        out[t["name"]] = (cols, list(t.get("support") or []))
+    return out
 
 
 class Lint:
@@ -2388,8 +2439,11 @@ class Lint:
 
     def active_lines(self, d):
         """{equipment: factories} of the production lines in force on day d (remove and replace
-        entries applied in date order)."""
+        entries applied in date order). With `production_floors: true` a dated add entry is the floor of its
+        equipment from its date: the latest reached one replaces the earlier size (plan_manage.rs
+        production_floors), it is not a second line."""
         start = derive.day(self.start)
+        floors = self.plan.get("production_floors") is True
         rows = sorted(enumerate(self.list_of("production")),
                       key=lambda ix: ((derive.day(ix[1].get("from")) or start), ix[0]))
         out = {}
@@ -2403,7 +2457,10 @@ class Lint:
                 if k in out:
                     out[x["replace"]] = out.get(x["replace"], 0) + out.pop(k)
             elif isinstance(x.get("factories"), int):
-                out[k] = out.get(k, 0) + x["factories"]
+                if floors and x.get("from") is not None:
+                    out[k] = x["factories"]
+                else:
+                    out[k] = out.get(k, 0) + x["factories"]
         return out
 
     def factory_pool(self, eq):
@@ -3147,8 +3204,10 @@ class Lint:
         spends = {s.get("ref"): s for s in (xb or {}).get("army") or [] if isinstance(s, dict)}
         start_year = derive.as_tuple(self.start)[0]
         locked = game.locked_templates() if hasattr(game, "locked_templates") else {}
+        layouts = template_layouts(self)
         for i, t in enumerate(temps):
             where = f"templates[{i}] {t.get('id', t.get('name'))}"
+            self.template_price(t, where, layouts, spends)
             base = t.get("base")
             if isinstance(base, str) and base in locked:
                 self.add("error", "templates.locked", where,
@@ -3187,6 +3246,37 @@ class Lint:
                     self.add("warning", "templates.xp", where,
                              f"xp_budget.army spend {spends[ref].get('id')} budgets {spends[ref]['cost']:g} XP, the "
                              f"template costs {xp:g}")
+
+    def template_price(self, t, where, layouts, spends):
+        """templates.xp_cost: the row's price against the game's charge (create) or the tool's floor (edit); then
+        records the layout the row leaves, so a later edit of it is priced against it."""
+        cols = template_columns(t.get("regiments"))
+        if not cols:
+            return
+        name, base = t.get("name"), t.get("base")
+        ref = spends.get(f"template:{t.get('id')}") or {}
+        priced = [x for x in (t.get("xp"), ref.get("cost")) if isinstance(x, (int, float)) and not isinstance(x, bool)]
+        price = max(priced) if priced else None
+        support = [u for u in t.get("support") or [] if isinstance(u, str)]
+        before = layouts.get(base) if isinstance(base, str) else None
+        if before is None:
+            charge = template_create_cost(cols, len(support))
+            if price is None or price < charge:
+                self.add("error", "templates.xp_cost", where,
+                         f"creates {name!r} ({sum(len(c) for c in cols)} battalions, {len(support)} companies, "
+                         f"{len(cols)} columns) priced {'no XP' if price is None else f'{price:g} XP'}, but the game "
+                         f"charges {charge} army XP for a new template (5 a battalion, 10 a company, 25 a column after "
+                         "the first): the row waits for experience the plan never budgets. Price it at the charge, or "
+                         "EDIT an existing template (a column added or the last column changed costs far less)")
+        else:
+            floor = template_edit_floor(before[0], cols)
+            if floor and (price is None or price < floor):
+                self.add("error", "templates.xp_cost", where,
+                         f"edits {base!r} with {floor // 5} battalion(s) added, replaced or removed, priced "
+                         f"{'no XP' if price is None else f'{price:g} XP'}: hoi4_template_edit refuses below {floor} "
+                         "army XP held (5 per changed battalion, checked before any click, even when a spirit makes "
+                         "the battalions free). Price the row at least at the floor")
+        layouts[name] = (cols, support)
 
     def unlocked(self, where, what, active, techs, have, planned, year):
         if active or not techs or techs & have:

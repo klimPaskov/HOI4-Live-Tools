@@ -128,9 +128,17 @@ def structure(lint):
     dropped = {x["equipment"] for x in entries if isinstance(x.get("equipment"), str)
                and (x.get("remove") or "replace" in x)}
     start_keys = {r["type"] for r in start}
+    floors = lint.plan.get("production_floors") is True
     for f, rows in adds.items():
         keys = Counter(x["equipment"] for _, x in rows)
-        dup = [k for k, n in keys.items() if n > 1]
+        # with production_floors the adds of one equipment on distinct dates are its dated floors (the latest
+        # reached one is the floor, plan_manage.rs production_floors): only the same equipment twice on one date
+        # (or undated) is a second line
+        per = Counter((x["equipment"], x.get("from")) for _, x in rows)
+        if floors:
+            dup = sorted({e for (e, _), n in per.items() if n > 1})
+        else:
+            dup = [k for k, n in keys.items() if n > 1]
         for k in dup:
             idx = [i for i, x in rows if x["equipment"] == k]
             lint.add("error", "production.duplicate_line", f"production[{idx[1]}]",
