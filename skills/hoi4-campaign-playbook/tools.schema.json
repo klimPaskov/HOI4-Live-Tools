@@ -116,10 +116,19 @@
      "wing": {
       "maxLength": 128,
       "type": "string"
+     },
+     "wings": {
+      "description": "Several wings (instead of wing) given the same mission over the same region in one input sequence: selected together in the overview (a click, then Shift+clicks), one mission click, one region click; a wing the selection does not take is ordered alone. The receipt is Verified when all fly it, Diverged when some do (detail.wings names each, result.failed says why)",
+      "items": {
+       "maxLength": 128,
+       "type": "string"
+      },
+      "maxItems": 24,
+      "minItems": 1,
+      "type": "array"
      }
     },
     "required": [
-     "wing",
      "mission",
      "request_id",
      "lease_token"
@@ -147,10 +156,19 @@
      "wing": {
       "maxLength": 128,
       "type": "string"
+     },
+     "wings": {
+      "description": "Several wings (instead of wing) to the same base in one call: one air mode, each selected and right-clicked onto the base in turn (the camera stays on the base). Verified when all transfer, Diverged when some do (detail.wings, result.failed)",
+      "items": {
+       "maxLength": 128,
+       "type": "string"
+      },
+      "maxItems": 24,
+      "minItems": 1,
+      "type": "array"
      }
     },
     "required": [
-     "wing",
      "state_id",
      "request_id",
      "lease_token"
@@ -3409,7 +3427,7 @@
    "source": "--list-tools"
   },
   "hoi4_officer_corps": {
-   "description": "Live-verified read (pp18, pp23, 17 Nov 2026): the officer corps spirits with ordinary input. list:true opens the officer corps view (Shift+E), returns its spirit slots (view army/navy/air, index, entry kind such as academy, army or division_command, the slot button's rect, selected, taken: a spirit shown in the slot) and closes it, changing nothing. With slot \"VIEW:INDEX\" (e.g. \"army:0\") it also opens that slot's spirit window and returns its title and the spirits offered (index, name, cost in the branch's experience, entry rect); the window closes with the view. With slot and spirit (a name the window shows) it picks that spirit: clicks its entry and verifies the slot shows a spirit it did not show before (taken_before/taken_after; Diverged otherwise, e.g. too little experience). Refusals while driving: slot_missing, spirit_unknown (lists the spirits offered). Results carry verification gui_only.",
+   "description": "Live-verified read (pp18, pp23, 17 Nov 2026) and pick (fk1, 18 Nov 2026: army:0, army:1, army:2, air:0): the officer corps spirits with ordinary input. list:true opens the officer corps view (Shift+E), returns its spirit slots (view army/navy/air, index, entry kind such as academy, army or division_command, the slot button's rect, selected, taken: a spirit shown in the slot) and closes it, changing nothing. With slot \"VIEW:INDEX\" (e.g. \"army:0\") it also opens that slot's spirit window and returns its title and the spirits offered (index, name, cost in the branch's experience, entry rect); the window closes with the view. With slot and spirit (a name the window shows) it picks that spirit: clicks its entry and verifies the slot shows a spirit it did not show before (taken_before/taken_after; Diverged otherwise, e.g. too little experience). Refusals while driving: slot_missing, spirit_unknown (lists the spirits offered). Results carry verification gui_only.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -4961,7 +4979,7 @@
    "source": "--list-tools"
   },
   "hoi4_wait_change": {
-   "description": "Block until a change after `since` arrives (optionally only given kinds or urgent ones), or until timeout_seconds (1-30) pass; then reply like hoi4_observe with woke_because change|timeout. Use it instead of polling: the reply comes within a few hundred milliseconds of the change. Pure read; never pauses.",
+   "description": "Block until a change after `since` arrives (optionally only given kinds or urgent ones), or until timeout_seconds (1-30) pass; then reply like hoi4_observe with woke_because change|timeout. `now.omissions` lists what the game marks actionable and is still open (item, days_open, the game's todo, the executor rule that owns it, that rule's dated note, note_contradicts_read), longest open first, so a wake needs no alert read. Use it instead of polling: the reply comes within a few hundred milliseconds of the change. Pure read; never pauses.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
