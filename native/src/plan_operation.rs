@@ -987,6 +987,28 @@ pub(super) fn unready(state: &State, plan: &Value, target: &str) -> Option<Strin
         .map(|(id, _)| id)
 }
 
+/// An operation is prepared (read back as ready) and waits for its war: not executed, not ended.
+pub(super) fn awaiting_war(state: &State) -> bool {
+    state.done.keys().any(|k| {
+        k.starts_with("op:") && k.ends_with(":ready") && {
+            let base = &k[..k.len() - 6];
+            !state.done.contains_key(&format!("{base}:exec"))
+                && !state.done.contains_key(&format!("{base}:end"))
+        }
+    })
+}
+
+/// An operation against `target` is prepared and waits for its war.
+pub(super) fn awaiting_war_on(state: &State, plan: &Value, target: &str) -> bool {
+    list(plan, "operations").iter().enumerate().any(|(i, op)| {
+        let id = op_id(op, i);
+        strings(op, "enemies").iter().any(|e| e == target)
+            && state.done.contains_key(&key(&id, "ready"))
+            && !state.done.contains_key(&key(&id, "exec"))
+            && !state.done.contains_key(&key(&id, "end"))
+    })
+}
+
 /// An operation started and not yet read back as ready (its prepare still has orders to give).
 pub(super) fn preparing(state: &State) -> bool {
     state.done.keys().any(|k| {
@@ -1673,50 +1695,6 @@ fn prepare(
         )?;
         return Ok(Some(line));
     }
-    // ASSEMBLE: a mobile formation gathers its templates' divisions out of the other armies
-    if let Some(line) = assemble(state, tools, id, op, units, roster, lease, now)? {
-        return Ok(Some(line));
-    }
-    // a strike formation marches to its start state (its `front.own_states`, first) before
-    // the war, at once after its assembly and before the fronts are drawn (the march is game
-    // days, the drawing real seconds: drawn first, the march began 12 days into the bed's prepare
-    // and the declaration came 6-9 days late, rd2-rd6 19 Nov 2026): assembled where its divisions stood, the column began the war three to eleven
-    // days' march from its first objective (qc1/qc2, 19 Nov 2026: Panzergruppe Ost formed in
-    // Pomerania for a Lodz row and went by the Danzig corridor). Until it stands there the
-    // operation is not ready (the declaration waits, at most its own cap).
-    if !war_tags(wars)
-        .iter()
-        .any(|t| units.iter().any(|u| &u.enemy == t))
-    {
-        for u in units.iter().filter(|u| u.role == Role::Strike) {
-            let Some(start) = u.own_states.first().copied() else {
-                continue;
-            };
-            let Some(row) = army_row(roster, &u.name) else {
-                continue;
-            };
-            let total = row["division_count"].as_i64().unwrap_or(0).max(1);
-            let there = row["states"][start.to_string()].as_i64().unwrap_or(0);
-            if there * 2 >= total {
-                continue;
-            }
-            state.skip(now, "opasm", &format!("march:{}", u.name), DAY / 2);
-            if state.skipped(now, "opmarch", &u.name) {
-                continue;
-            }
-            state.skip(now, "opmarch", &u.name, 2 * DAY);
-            let line = order(
-                state,
-                tools,
-                lease,
-                id,
-                &format!("{} marches to its start state {start}", u.name),
-                "hoi4_army_move",
-                json!({"army": u.name, "state_id": start}),
-            )?;
-            return Ok(Some(line));
-        }
-    }
     // the group: formed when its line armies stand in none (never regrouped)
     let line_armies: Vec<&Unit> = units.iter().filter(|u| u.role == Role::Line).collect();
     if group.is_none() && line_armies.len() >= 2 && !state.skipped(now, "opgrp", id) {
@@ -1742,27 +1720,6 @@ fn prepare(
                 &format!("form the group of {}", names.join(", ")),
                 "hoi4_army_group_create",
                 json!({"armies": names}),
-            )?;
-            return Ok(Some(line));
-        }
-    }
-    // a formation's named commander where none leads
-    for f in list(op, "formations") {
-        let name = resolve(state, text(&f["army"]));
-        let Some(general) = f["commander"].as_str().filter(|g| !g.is_empty()) else {
-            continue;
-        };
-        let leaderless = army_row(roster, &name).is_some_and(|r| r["commander"].is_null());
-        if leaderless && !state.skipped(now, "opgen", &name) {
-            state.skip(now, "opgen", &name, 7 * DAY);
-            let line = order(
-                state,
-                tools,
-                lease,
-                id,
-                &format!("{general} commands {name}"),
-                "hoi4_army_commander",
-                json!({"army": name, "general": general}),
             )?;
             return Ok(Some(line));
         }
@@ -1826,6 +1783,89 @@ fn prepare(
             return Ok(Some(line));
         }
     }
+    // 2. the group's front and its offensive FIRST, before any assembly, march or commander: the
+    // planning bonus grows only while the line stands (PLANNING_GAIN 0.02 a day, the cap 0.3
+    // and more from doctrines and the marshal), and the attack is the battle plan executed
+    // with that bonus (the owner's war model, 19 Nov 2026). Drawn after the assembly and the
+    // marches (rs5/rs6) the group's line stood six game days later.
+    let fighting = war_tags(wars);
+    for u in units.iter().filter(|u| u.role == Role::Group) {
+        let one = key(id, &format!("one:{}:{}", u.name, line_tag(&u.line)));
+        let line = match state.done.get(&one) {
+            Some(first) => vec![*first],
+            None => u.line.clone(),
+        };
+        let peace = !fighting.contains(&u.enemy);
+        if let Some(line) = reconcile(state, tools, id, u, &line, roster, wars, lease, now, peace)?
+        {
+            return Ok(Some(line));
+        }
+    }
+    // ASSEMBLE: a mobile formation gathers its templates' divisions out of the other armies
+    if let Some(line) = assemble(state, tools, id, op, units, roster, lease, now)? {
+        return Ok(Some(line));
+    }
+    // a strike formation marches to its start state (its `front.own_states`, first) before
+    // the war, at once after its assembly and before the fronts are drawn (the march is game
+    // days, the drawing real seconds: drawn first, the march began 12 days into the bed's prepare
+    // and the declaration came 6-9 days late, rd2-rd6 19 Nov 2026): assembled where its divisions stood, the column began the war three to eleven
+    // days' march from its first objective (qc1/qc2, 19 Nov 2026: Panzergruppe Ost formed in
+    // Pomerania for a Lodz row and went by the Danzig corridor). Until it stands there the
+    // operation is not ready (the declaration waits, at most its own cap).
+    if !war_tags(wars)
+        .iter()
+        .any(|t| units.iter().any(|u| &u.enemy == t))
+    {
+        for u in units.iter().filter(|u| u.role == Role::Strike) {
+            let Some(start) = u.own_states.first().copied() else {
+                continue;
+            };
+            let Some(row) = army_row(roster, &u.name) else {
+                continue;
+            };
+            let total = row["division_count"].as_i64().unwrap_or(0).max(1);
+            let there = row["states"][start.to_string()].as_i64().unwrap_or(0);
+            if there * 2 >= total {
+                continue;
+            }
+            state.skip(now, "opasm", &format!("march:{}", u.name), DAY / 2);
+            if state.skipped(now, "opmarch", &u.name) {
+                continue;
+            }
+            state.skip(now, "opmarch", &u.name, 2 * DAY);
+            let line = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("{} marches to its start state {start}", u.name),
+                "hoi4_army_move",
+                json!({"army": u.name, "state_id": start}),
+            )?;
+            return Ok(Some(line));
+        }
+    }
+    // a formation's named commander where none leads
+    for f in list(op, "formations") {
+        let name = resolve(state, text(&f["army"]));
+        let Some(general) = f["commander"].as_str().filter(|g| !g.is_empty()) else {
+            continue;
+        };
+        let leaderless = army_row(roster, &name).is_some_and(|r| r["commander"].is_null());
+        if leaderless && !state.skipped(now, "opgen", &name) {
+            state.skip(now, "opgen", &name, 7 * DAY);
+            let line = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("{general} commands {name}"),
+                "hoi4_army_commander",
+                json!({"army": name, "general": general}),
+            )?;
+            return Ok(Some(line));
+        }
+    }
     // 2-4. the holds first (a hold stands before any attack is drawn: qb2, 19 Nov 2026, the
     // West hold was still undrawn when the declaration's wait ran out and France took three
     // states in a week), then the group, then mobile and wing armies
@@ -1839,7 +1879,6 @@ fn prepare(
     // a unit already at war with its enemy prepares by the war's rules (it15, 18 Nov 2026:
     // Italy starts at war with Ethiopia; the peace rules cleared every offensive that read back
     // over two of the line's three states until the draws ran out, and nothing ever executed)
-    let fighting = war_tags(wars);
     for u in ordered {
         // a line that would not draw is drawn one state at a time, its first state first
         let one = key(id, &format!("one:{}:{}", u.name, line_tag(&u.line)));

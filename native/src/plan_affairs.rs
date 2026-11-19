@@ -1104,6 +1104,45 @@ fn diplomacy_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     diplomacy_items(state, run, false)
 }
 
+/// Whether a declaration of war against the enemy of an operation that is prepared and waits
+/// for its war (see `plan_operation::awaiting_war`) is due now or within `ahead` game hours
+/// (its `when` judged at that hour). Judged at most every six game hours. The slow peace-time
+/// orders (air rebases and missions, 10-25 s each) wait while it holds: they ran past the war
+/// day and the declaration came six to nine days late on the Poland bed (rs1-rs6, 19 Nov 2026).
+pub fn declaration_near(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    now: GameHour,
+    ahead: GameHour,
+) -> bool {
+    let at = state.done.get("declnear:at").copied();
+    if at.is_some_and(|t| now >= t && now - t < DAY / 4) {
+        return state.done.get("declnear:v") == Some(&1);
+    }
+    let mut near = false;
+    for item in list(plan, "diplomacy") {
+        if dip_action(text(&item["action"])).as_deref() != Some("declare_war") {
+            continue;
+        }
+        let target = dip_target(item);
+        if state
+            .done
+            .contains_key(&dip_key(item, "declare_war", &target))
+            || !super::plan_operation::awaiting_war_on(state, plan, &target)
+        {
+            continue;
+        }
+        if when_holds(state, tools, &item["when"], now + ahead) == Truth::True {
+            near = true;
+            break;
+        }
+    }
+    state.done.insert("declnear:at".to_string(), now);
+    state.done.insert("declnear:v".to_string(), i64::from(near));
+    near
+}
+
 /// The plan's war declarations whose condition holds, ahead of everything else: a declaration
 /// rides the war-first block, never a domain's overdue turn (b1a, 18 Nov 2026: Danzig or War was
 /// done and the date had come on 1 September, and the declaration went out on the 13th as an

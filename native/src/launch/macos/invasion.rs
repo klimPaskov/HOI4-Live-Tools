@@ -335,7 +335,7 @@ fn progress(process: &dyn Process, plan: &Plan) -> Result<(Option<usize>, Option
 
 // ---- driving --------------------------------------------------------------------------------------
 /// A battle plan toolbar button: rectangle and state (3 disabled).
-fn plan_button(r: &Reader<'_>, image: u64, name: &str) -> Result<(Rect, i32)> {
+pub(super) fn plan_button(r: &Reader<'_>, image: u64, name: &str) -> Result<(Rect, i32)> {
     let view = kit::find_view(r, image, BATTLE_PLAN_TOOLS)?.ok_or_else(|| {
         Error::new(
             "gui_target_unavailable",

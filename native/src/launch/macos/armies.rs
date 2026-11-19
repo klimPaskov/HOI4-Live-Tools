@@ -3517,6 +3517,7 @@ pub(super) fn offensive(
     army: &str,
     state: i32,
     through: Option<i32>,
+    spearhead: bool,
 ) -> Result<()> {
     clear_notices(process, keys)?;
     if read(process, |r, i| orders(r, i, army))? == 0 {
@@ -3533,8 +3534,7 @@ pub(super) fn offensive(
     keys.click(GAME, x, y)?;
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
     let draw_line = |from: (f64, f64), to: (f64, f64)| -> Result<()> {
-        keys.press(Key::letter('x')?)?;
-        crate::phase::sleep(std::time::Duration::from_millis(300));
+        line_tool(process, keys, spearhead)?;
         keys.right_drag(GAME, from, to)?;
         wait(process, "offensive line placed", |r, i| {
             Ok(plan_nodes(r, i, army)? > before)
@@ -3655,6 +3655,7 @@ pub(super) fn offensive_across(
     game_dir: &std::path::Path,
     army: &str,
     states: &[i32],
+    spearhead: bool,
 ) -> Result<()> {
     clear_notices(process, keys)?;
     if read(process, |r, i| orders(r, i, army))? == 0 {
@@ -3710,8 +3711,7 @@ pub(super) fn offensive_across(
         ));
     };
     select_for_orders(process, keys, army)?;
-    keys.press(Key::letter('x')?)?;
-    crate::phase::sleep(std::time::Duration::from_millis(300));
+    line_tool(process, keys, spearhead)?;
     keys.right_drag_path(GAME, &path)?;
     let placed = wait(process, "offensive line placed", |r, i| {
         Ok(plan_nodes(r, i, army)? > before)
@@ -3729,6 +3729,30 @@ pub(super) fn offensive_across(
             ),
         )
     })
+}
+/// Enter the drawing of an attack line for the selected army: X for an offensive line, the
+/// battle-plan bar's spearhead button (`btn_order_draw_blitz`, interface/battleplantools.gui;
+/// its shortcut is Shift+X) for a spearhead. The game's tooltip: "Compared to Offensive Line a
+/// Spearhead will aggressively try to take all provinces as they were there when the order was
+/// first painted without adjusting to changes. Prefer Spearheads when you need to do
+/// overlapping encirclements, cutting off the enemy or for more controlled smaller thrusts".
+fn line_tool(process: &dyn Process, keys: &dyn GameInput, spearhead: bool) -> Result<()> {
+    if spearhead {
+        let (rect, state) = settled(process, "spearhead button", |r, i| {
+            super::invasion::plan_button(r, i, "btn_order_draw_blitz")
+        })?;
+        if state == 3 {
+            return Err(Error::new(
+                "button_disabled",
+                "The game disables the spearhead order for this army (it needs a front line)",
+            ));
+        }
+        super::kit::click(keys, rect)?;
+    } else {
+        keys.press(Key::letter('x')?)?;
+    }
+    crate::phase::sleep(std::time::Duration::from_millis(300));
+    Ok(())
 }
 /// The centre of a state's province positions (None for none).
 fn across_centre(pts: &[(f64, f64)]) -> Option<(f64, f64)> {

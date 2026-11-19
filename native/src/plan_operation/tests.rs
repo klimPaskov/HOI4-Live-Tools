@@ -270,9 +270,9 @@ fn prepare_reconciles_the_wanted_orders_with_the_read_back() {
         [
             "hoi4_army_plan Mitte",
             "hoi4_army_plan WestA",
-            "hoi4_army_front Army Group 2",
             "hoi4_army_front Army Group 1",
             "hoi4_army_offensive Army Group 1",
+            "hoi4_army_front Army Group 2",
             "hoi4_army_front Panzer",
             "hoi4_army_offensive Panzer",
             "hoi4_army_front Nord",
@@ -287,7 +287,7 @@ fn prepare_reconciles_the_wanted_orders_with_the_read_back() {
     );
     assert_eq!(sent[7].1, json!({"army": "Panzer", "state_id": 10}));
     assert_eq!(
-        sent[5].1,
+        sent[4].1,
         json!({"army": "Army Group 1", "state_id": 10, "states": [85, 86, 10, 88]})
     );
     // nothing executes in peace, the hold never
@@ -1093,4 +1093,41 @@ fn by_default_an_idle_line_army_gets_no_front_of_its_own_and_is_not_driven() {
         .done
         .keys()
         .any(|k| k.contains("solo:") || k.contains("drive:")));
+}
+
+#[test]
+fn the_groups_front_and_offensive_are_drawn_before_any_assembly_or_march() {
+    // the planning bonus grows only while the line stands: the group's line first (rs5/rs6,
+    // 19 Nov 2026: drawn after the assembly and the marches, six game days later)
+    let game = Game::new();
+    let d = |id: &str, army: &str, t: &str| (id.to_string(), army.to_string(), t.to_string());
+    *game.divs.borrow_mut() = vec![d("d1", "Mitte", "Pz"), d("d2", "Mitte", "Inf")];
+    let mut plan = plan();
+    plan["operations"][0]["formations"][2] = json!({"army": "Schnell", "role": "mobile",
+        "drive": "strike", "divisions": {"Pz": 1}, "front": {"enemy": "POL", "own_states": [67]}});
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let names: Vec<String> = game
+        .orders()
+        .iter()
+        .map(|(n, a)| format!("{n} {}", text(&a["army"])))
+        .collect();
+    let at = |what: &str| names.iter().position(|n| n == what).unwrap();
+    assert!(at("hoi4_army_offensive Army Group 1") < at("hoi4_army_detach Mitte"));
+    assert!(at("hoi4_army_front Army Group 1") < at("hoi4_army_front Army Group 2"));
+}
+
+#[test]
+fn a_ready_operation_awaits_its_war_until_it_executes() {
+    let plan = json!({"operations": [{"id": "op_x", "enemies": ["POL"]}]});
+    let mut state = State::default();
+    state.done.insert(key("op_x", "prep"), 0);
+    assert!(!awaiting_war(&state), "still preparing");
+    state.done.insert(key("op_x", "ready"), 10);
+    assert!(awaiting_war(&state));
+    assert!(awaiting_war_on(&state, &plan, "POL"));
+    assert!(!awaiting_war_on(&state, &plan, "FRA"));
+    state.done.insert(key("op_x", "exec"), 20);
+    assert!(!awaiting_war(&state), "executing");
+    assert!(!awaiting_war_on(&state, &plan, "POL"));
 }

@@ -1748,6 +1748,15 @@ fn lanes_tick(
     let op_war = plan_operation::executing_any(state)
         || (state.war_active && plan_operation::active(state))
         || plan_operation::preparing(state);
+    // A prepared operation waits for its war: the declaration goes first in every tick it is
+    // due, ahead of any lane (rs1-rs6, 19 Nov 2026: the prepare read back by 30 August and the
+    // declaration came on 7-9 September behind air batches and economy ticks).
+    if war_first && plan_operation::awaiting_war(state) {
+        if let Some(line) = declare_first(state, tools, plan, lease, now)? {
+            state.round.war_last = true;
+            return Ok(Tick::Acted(line));
+        }
+    }
     let war_turn = war_first
         && (!state.round.war_last || op_war || plan["scheduler"]["war_every_tick"] == json!(true));
     if war_turn {
@@ -1783,6 +1792,11 @@ fn lanes_tick(
         state.round.cursor += 1;
         // slow GUI lanes that do not decide a running war wait for its end
         if op_war && WAR_DEFERRED_LANES.contains(&name) {
+            continue;
+        }
+        // the air lanes wait while a prepared operation's declaration is near (see
+        // `air_waits_for_war`)
+        if name.starts_with("air") && air_waits_for_war(state, tools, plan, now) {
             continue;
         }
         state.sched.turns.insert(name, now);
@@ -2898,8 +2912,21 @@ fn line_organisation(line: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
-/// The war-first block: layout, war executive, triggered build order, armies, early disbands.
-fn war_first_steps(
+/// Game hours before a prepared operation's declaration from which the peace-time air orders
+/// wait for the war (one air batch is 10-25 real seconds, two to five game days at speed 3).
+const AIR_DECLARE_AHEAD: GameHour = 3 * DAY;
+
+/// The air waits while a prepared operation's declaration is due or near: the declaration and
+/// the attack's execution go first, the air's missions follow in the declaration's own tick.
+fn air_waits_for_war(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) -> bool {
+    !state.war_active
+        && plan_operation::awaiting_war(state)
+        && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD)
+}
+
+/// A due declaration of war, then (same tick) the execution of the operations that wait for
+/// it and the opening air burst; None when no declaration is due or it was refused.
+fn declare_first(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,
@@ -2951,6 +2978,20 @@ fn war_first_steps(
             return Ok(Some(line));
         }
     }
+    Ok(None)
+}
+
+/// The war-first block: layout, war executive, triggered build order, armies, early disbands.
+fn war_first_steps(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if let Some(line) = declare_first(state, tools, plan, lease, now)? {
+        return Ok(Some(line));
+    }
     let steps: [Step; 11] = [
         // the operations: prepare, execute, advance (plan_operation.rs); the air burst follows in
         // the same tick (o1d: the operation acted in every tick of the first war days and the
@@ -2979,7 +3020,10 @@ fn war_first_steps(
                     .done
                     .get("op:airtick")
                     .is_none_or(|at| now - at >= AIR_EVERY);
-            let air = if (ops.is_some() || plan_operation::active(state)) && air_due {
+            let air = if (ops.is_some() || plan_operation::active(state))
+                && air_due
+                && !air_waits_for_war(state, tools, plan, now)
+            {
                 let max = if opening {
                     AIR_OPENING_SECONDS
                 } else if plan_operation::executing_any(state) && ops.is_some() {
@@ -3039,7 +3083,9 @@ fn war_first_steps(
         },
         |state, tools, plan, lease, now| war_burst(state, tools, plan, lease, now, war_step),
         |state, tools, plan, lease, now| {
-            if plan_operation::active(state) {
+            if air_waits_for_war(state, tools, plan, now) {
+                Ok(None)
+            } else if plan_operation::active(state) {
                 war_burst_for(
                     state,
                     tools,
