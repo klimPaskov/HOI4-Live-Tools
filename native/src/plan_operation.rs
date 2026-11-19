@@ -593,12 +593,25 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
                     .map(str::to_string)
             })
         };
+        // several armies in no group yet: the largest fronts for the hold until they are grouped
+        // (g17m: West Süd was bound to a one-division army and the hold waited for a group that
+        // nothing formed, while France took the Rhineland)
+        let name = name.or_else(|| {
+            armies
+                .iter()
+                .filter_map(|a| Some((a, army_row(roster, a)?["division_count"].as_i64()?)))
+                .max_by_key(|(_, n)| *n)
+                .map(|(a, _)| a.clone())
+        });
+        let grouped = name
+            .as_deref()
+            .is_some_and(|n| group_row(roster, n).is_some());
         let Some(name) = name else { continue };
         let facing = strings(hold, "facing");
         let front = json!({"enemy": facing.first().cloned().unwrap_or_default(),
                            "own_states": hold["states"], "click_state": hold["click_state"]});
         let mut hold = unit(name, Role::Hold, &front, &Value::Null);
-        if armies.len() > 1 {
+        if armies.len() > 1 && grouped {
             hold.members = armies;
         }
         out.push(hold);

@@ -1549,3 +1549,22 @@ fn a_hold_whose_second_army_was_never_formed_fronts_with_the_army_it_has() {
     assert_eq!(hold.name, "WestA");
     assert!(hold.members.is_empty());
 }
+
+#[test]
+fn a_hold_of_armies_in_no_group_fronts_with_its_largest_army() {
+    let game = Game::new();
+    game.unit("WestA", |r| r["army_group"] = json!(null));
+    game.unit("WestB", |r| {
+        r["army_group"] = json!(null);
+        r["division_count"] = json!(30);
+    });
+    let plan = plan();
+    let roster = game.roster.borrow().clone();
+    let (units, _) = units(&State::default(), "op_pol", &plan["operations"][0], &roster);
+    let hold = units
+        .iter()
+        .find(|u| u.role == Role::Hold)
+        .expect("the hold stands");
+    assert_eq!(hold.name, "WestB");
+    assert!(hold.members.is_empty());
+}

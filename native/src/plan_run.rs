@@ -6120,6 +6120,19 @@ fn air_war_missions(
             let air = tools.call("hoi4_air", &json!({}))?;
             let mut batch: Vec<(String, &str, i64, bool)> = Vec::new();
             let mut rebases: Vec<(String, i64, &str)> = Vec::new();
+            // the planes already put in the rebase batch (its base's free room bounds it)
+            let mut batch_planes = 0;
+            // a front base that refused a batch is not asked again for 7 days (g17m, 19 Nov
+            // 2026: the twelve fighters were sent in one order to a base with room for ten, the
+            // game refused it whole, and the same order rested and failed until the war day)
+            let refused: HashSet<i64> = state
+                .done
+                .iter()
+                .filter_map(|(k, at)| {
+                    let base = k.strip_prefix("airbaseno:")?.parse::<i64>().ok()?;
+                    (now.saturating_sub(*at) < 7 * DAY).then_some(base)
+                })
+                .collect();
             for wing in list(&air, "wings") {
                 let name = text(&wing["wing"]).to_string();
                 // a wing training in peace (plan_manage air_idle_step) is free for the war
@@ -6171,13 +6184,24 @@ fn air_war_missions(
                 }
                 if far || (base.is_some_and(|b| !near.contains(&b)) && !operation.is_empty()) {
                     let planes = wing["aircraft"].as_i64().unwrap_or(0);
-                    if let Some(to) = front_air_base(&air, &facing, &fronts, planes) {
-                        // the wings for the same front base go in one order
-                        if rebases.first().is_none_or(|(_, t, _)| *t == to)
-                            && rebases.len() < AIR_BATCH
-                        {
+                    let first_to = rebases.first().map(|r| r.1);
+                    let room = first_to.map(|t| base_free(&air, t) - batch_planes);
+                    let to = match (first_to, room) {
+                        (Some(t), Some(r)) if r >= planes.max(1) => Some(t),
+                        (Some(_), _) => None,
+                        _ => front_air_base(&air, &facing, &fronts, planes, &refused),
+                    };
+                    if let Some(to) = to {
+                        // the wings for the same front base go in one order, as many as its
+                        // free room takes
+                        if rebases.len() < AIR_BATCH {
                             rebases.push((name.clone(), to, mission));
+                            batch_planes += planes;
                         }
+                        continue;
+                    }
+                    if first_to.is_some() {
+                        // the batch's base is full: this wing goes in a later order
                         continue;
                     }
                 }
@@ -6259,6 +6283,9 @@ fn air_war_missions(
                     json!({"wings": names, "state_id": to})
                 };
                 let (ok, why) = state.act(tools, lease, "hoi4_air_rebase", args, "ar")?;
+                if !ok {
+                    state.done.insert(format!("airbaseno:{to}"), now);
+                }
                 // each wing judged by its base now (a batch can be partly taken)
                 let moved: HashSet<String> = if ok {
                     names.iter().cloned().collect()
@@ -6333,10 +6360,17 @@ fn air_war_missions(
 
 /// The own front air base with room for `planes` (`air_bases[].free`): one across the border from
 /// an operation target first, then the most free room.
-fn front_air_base(air: &Value, facing: &HashSet<i64>, fronts: &[i64], planes: i64) -> Option<i64> {
+fn front_air_base(
+    air: &Value,
+    facing: &HashSet<i64>,
+    fronts: &[i64],
+    planes: i64,
+    refused: &HashSet<i64>,
+) -> Option<i64> {
     list(air, "air_bases")
         .iter()
         .filter_map(|b| Some((b["state_id"].as_i64()?, b["free"].as_i64().unwrap_or(0))))
+        .filter(|(s, _)| !refused.contains(s))
         // with an operation only a base facing it (a base on another front is as far away)
         .filter(|(s, free)| {
             fronts.contains(s)
@@ -6345,6 +6379,15 @@ fn front_air_base(air: &Value, facing: &HashSet<i64>, fronts: &[i64], planes: i6
         })
         .max_by_key(|(s, free)| (facing.contains(s), *free))
         .map(|(s, _)| s)
+}
+
+/// The free room of the own air base in `state_id` (`air_bases[].free`; 0 when unknown).
+fn base_free(air: &Value, state_id: i64) -> i64 {
+    list(air, "air_bases")
+        .iter()
+        .find(|b| b["state_id"].as_i64() == Some(state_id))
+        .and_then(|b| b["free"].as_i64())
+        .unwrap_or(0)
 }
 
 /// Target states of the own executing offensives (armies and army groups, from the battle-plan
@@ -12332,14 +12375,23 @@ mod tests {
         let air = json!({"air_bases": [
             {"state_id": 42, "free": 900}, {"state_id": 66, "free": 200},
             {"state_id": 67, "free": 50}, {"state_id": 3, "free": 2000}]});
-        assert_eq!(front_air_base(&air, &facing, &[42, 66, 67], 100), Some(66));
-        assert_eq!(front_air_base(&air, &facing, &[42, 66, 67], 300), None);
+        assert_eq!(
+            front_air_base(&air, &facing, &[42, 66, 67], 100, &HashSet::new()),
+            Some(66)
+        );
+        assert_eq!(
+            front_air_base(&air, &facing, &[42, 66, 67], 300, &HashSet::new()),
+            None
+        );
         // no operation: any front base with room
         assert_eq!(
-            front_air_base(&air, &HashSet::new(), &[42, 66, 67], 300),
+            front_air_base(&air, &HashSet::new(), &[42, 66, 67], 300, &HashSet::new()),
             Some(42)
         );
-        assert_eq!(front_air_base(&air, &facing, &[42, 66, 67], 1000), None);
+        assert_eq!(
+            front_air_base(&air, &facing, &[42, 66, 67], 1000, &HashSet::new()),
+            None
+        );
     }
 
     #[test]
@@ -12387,6 +12439,76 @@ mod tests {
             "{first}"
         );
         assert!(!state.done.contains_key("airfar:JG 136"));
+    }
+
+    #[test]
+    fn a_rebase_batch_holds_no_more_planes_than_its_base_takes_and_a_refused_base_rests() {
+        // g17m: twelve fighters of 100 went in one order to a base with room for 1,000; the
+        // game refused the order whole and the same order failed until the war day
+        struct Full(
+            std::cell::RefCell<Vec<(String, Value)>>,
+            std::cell::Cell<bool>,
+        );
+        impl Tools for Full {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                let wings: Vec<Value> = (0..12)
+                    .map(|i| {
+                        json!({"wing": format!("JG {i}"), "aircraft_type": "small_plane_airframe_0",
+                        "aircraft": 100, "standing_by": false, "missions": ["training"],
+                        "air_base": {"base_id": 3, "state_id": 52}})
+                    })
+                    .collect();
+                match name {
+                    "hoi4_wars" => Ok(json!({"borders": [{"neighbour_tag": "POL", "hostile": true,
+                        "own_border_states": [66, 75], "neighbour_states": [85]}]})),
+                    "hoi4_armies" => Ok(json!({"army_groups": [{"plan": [{"offensives": [
+                        {"executing": true, "target": {"states": [85]}}]}]}]})),
+                    "hoi4_air" => Ok(json!({"air_bases": [{"state_id": 75, "free": 1000},
+                        {"state_id": 66, "free": 800}], "wings": wings})),
+                    "hoi4_air_rebase" if self.1.get() => {
+                        Ok(json!({"receipt": {"status": "NotApplied"}}))
+                    }
+                    _ => Ok(json!({"receipt": {"status": "Verified"}})),
+                }
+            }
+        }
+        let rebases = |t: &Full| -> Vec<Value> {
+            t.0.borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_air_rebase")
+                .map(|(_, a)| a.clone())
+                .collect()
+        };
+        let tools = Full(Default::default(), std::cell::Cell::new(false));
+        let plan = json!({"air": {"war_missions": true}});
+        let mut state = State {
+            war_active: true,
+            ..State::default()
+        };
+        air_war_missions(&mut state, &tools, &plan, "l", START).unwrap();
+        let sent = rebases(&tools);
+        assert_eq!(sent[0]["state_id"], json!(75));
+        assert_eq!(
+            sent[0]["wings"].as_array().map(Vec::len),
+            Some(10),
+            "{sent:?}"
+        );
+        // the game refuses the base: the next order goes to the other facing base
+        let tools = Full(Default::default(), std::cell::Cell::new(true));
+        let mut state = State {
+            war_active: true,
+            ..State::default()
+        };
+        air_war_missions(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(state.done.contains_key("airbaseno:75"));
+        air_war_missions(&mut state, &tools, &plan, "l", START + 2 * DAY).unwrap();
+        let sent = rebases(&tools);
+        assert_eq!(
+            sent.last().map(|a| a["state_id"].clone()),
+            Some(json!(66)),
+            "{sent:?}"
+        );
     }
 
     #[test]
