@@ -40,6 +40,30 @@ const CHECK_HOURS: GameHour = 2 * DAY;
 const REDRAWS: i64 = 2;
 /// Share of a line's states an offensive's target must cover.
 const COVER: f64 = 0.8;
+/// Game hours a line army may stand at war without an executing order of its own before it
+/// gets its own front and offensive.
+const SOLO_AFTER: GameHour = 2 * DAY;
+/// States in a solo line army's objective line.
+const SOLO_STATES: usize = 2;
+/// Organisation share under which a strike formation opens no new strike (qc4: strikes at
+/// 17-31% organisation took nothing and cost 1:1), and the days it waits for it at most.
+const STRIKE_WORN: f64 = 0.4;
+const STRIKE_REST_DAYS: f64 = 3.0;
+/// Divisions of a driven infantry army that strike from one province.
+const STACK_INFANTRY: i64 = 4;
+/// Tries to rename a formed army to its plan name.
+const RENAME_TRIES: i64 = 1;
+/// Supply percent under which a strike formation opens no new strike.
+const STRIKE_SUPPLY: f64 = 20.0;
+/// War days a line army may stand in one state before it is driven by objectives.
+const STUCK_DAYS: i64 = 7;
+/// States in a rolling contact line of the operation's group.
+const ROLL_STATES: usize = 3;
+/// Game days without a gain before a rolling contact line rolls on.
+const ROLL_STALL_DAYS: i64 = 4;
+/// Game days a strike formation keeps one objective before it turns to the next (qc1: at 4 the
+/// column flipped between Warsaw and Krakow every four days and took neither).
+const STRIKE_MAX_DAYS: f64 = 10.0;
 
 /// Land order tools another step may not send for an owned army (by its `army` argument).
 const LAND_ORDERS: [&str; 11] = [
@@ -127,9 +151,27 @@ pub(super) fn refresh(state: &mut State, tools: &dyn Tools, plan: &Value, now: G
         }
         let from = !op["prepare_from"].is_null() && holds(state, tools, &op["prepare_from"], now);
         let on = !op["execute_on"].is_null() && holds(state, tools, &op["execute_on"], now);
-        if from || on {
-            state.done.insert(key(&id, "prep"), now);
+        if !(from || on) {
+            continue;
         }
+        // OPERATIONS NEVER STEAL: an operation whose armies a running operation holds waits
+        // until that one is done (g17k, 19 Nov 2026: op_sov fired on the Soviet declaration in
+        // the middle of the Polish war, took the Polish armies east, and Poland walked into
+        // Berlin). The new enemy meets the armies no operation owns (the war step's fronts).
+        let mine = army_hints(op);
+        let busy = ops.iter().enumerate().find(|(j, other)| {
+            let oid = op_id(other, *j);
+            oid != id && started(state, &oid) && army_hints(other).iter().any(|a| mine.contains(a))
+        });
+        if let Some((j, other)) = busy {
+            let oid = op_id(other, j);
+            state.op_notes.insert(
+                id.clone(),
+                format!("operation {id}: waits for operation {oid} (it holds the same armies) to finish"),
+            );
+            continue;
+        }
+        state.done.insert(key(&id, "prep"), now);
     }
     let active: Vec<(String, &Value)> = ops
         .iter()
@@ -155,17 +197,32 @@ pub(super) fn refresh(state: &mut State, tools: &dyn Tools, plan: &Value, now: G
     state.op_owned = owned;
 }
 
+/// The army names an operation's formations and holds use (as the plan writes them).
+fn army_hints(op: &Value) -> Vec<String> {
+    list(op, "formations")
+        .iter()
+        .map(|f| text(&f["army"]).to_string())
+        .chain(
+            list(op, "holds")
+                .iter()
+                .flat_map(|h| list(h, "armies").iter())
+                .map(|a| text(&a["army"]).to_string()),
+        )
+        .filter(|a| !a.is_empty())
+        .collect()
+}
+
 /// The game names an operation owns: its formation and hold armies and their army groups.
 fn owned_names(state: &State, plan: &Value, op: &Value, roster: &Value) -> Vec<String> {
     let mut armies: Vec<String> = list(op, "formations")
         .iter()
-        .map(|f| resolve(state, text(&f["army"])))
+        .map(|f| name_of(state, roster, text(&f["army"])))
         .collect();
     for hold in list(op, "holds") {
         armies.extend(
             list(hold, "armies")
                 .iter()
-                .map(|a| resolve(state, text(&a["army"]))),
+                .map(|a| name_of(state, roster, text(&a["army"]))),
         );
     }
     armies.retain(|a| !a.is_empty());
@@ -236,6 +293,38 @@ fn resolve(state: &State, hint: &str) -> String {
         .filter(|a| !a.is_empty())
         .cloned()
         .unwrap_or_else(|| hint.to_string())
+}
+
+/// The game name of `name` on the map: the game cuts long army names (g17k, pb1 19 Nov 2026:
+/// "Grenzschutz Ostpreussen" read back as "Grenzschutz Ostpreus"); a hold the operation did not
+/// recognise under its cut name was not owned, and the command step merged it into its wing.
+fn on_map(roster: &Value, name: &str) -> String {
+    if name.is_empty() || army_row(roster, name).is_some() || group_row(roster, name).is_some() {
+        return name.to_string();
+    }
+    list(roster, "armies")
+        .iter()
+        .map(|a| text(&a["army"]))
+        .filter(|a| a.chars().count() >= 10 && name.starts_with(a))
+        .max_by_key(|a| a.len())
+        .map_or_else(|| name.to_string(), str::to_string)
+}
+
+/// The game name of a plan army (layout role or name) on the map: the bound army, else the
+/// plan's own name, each also under the game's cut form. A formation formed as "Army 3" and
+/// renamed to a long name is on the map under the cut long name, not under "Army 3".
+fn name_of(state: &State, roster: &Value, hint: &str) -> String {
+    let bound = resolve(state, hint);
+    let found = |n: &str| army_row(roster, n).is_some() || group_row(roster, n).is_some();
+    if found(&bound) {
+        return bound;
+    }
+    for n in [on_map(roster, &bound), on_map(roster, hint)] {
+        if found(&n) {
+            return n;
+        }
+    }
+    bound
 }
 
 fn army_row<'a>(roster: &'a Value, name: &str) -> Option<&'a Value> {
@@ -352,11 +441,13 @@ pub(super) fn hide_owned(state: &State, roster: &mut Value) {
 
 /// The units of an operation by role, with the game name of its group (None when the line
 /// armies stand in no group yet).
-fn units(state: &State, plan: &Value, op: &Value, roster: &Value) -> (Vec<Unit>, Option<String>) {
+fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Option<String>) {
     let mut out = Vec::new();
     let mut group: Option<String> = None;
+    let mut lines_in_group = 0;
+    let (_, op_line) = current_line(state, id, op);
     for f in list(op, "formations") {
-        let name = resolve(state, text(&f["army"]));
+        let name = name_of(state, roster, text(&f["army"]));
         if name.is_empty() {
             continue;
         }
@@ -366,10 +457,62 @@ fn units(state: &State, plan: &Value, op: &Value, roster: &Value) -> (Vec<Unit>,
             "wing" => Role::Wing,
             _ => Role::Line,
         };
-        if role == Role::Line && group.is_none() {
-            group = army_row(roster, &name)
-                .and_then(|r| r["army_group"].as_str())
-                .map(str::to_string);
+        // a line army that stood still behind an executing front is driven by objectives as
+        // one stack (see `solo_watch`)
+        if matches!(role, Role::Line | Role::Wing)
+            && state.done.contains_key(&key(id, &format!("drive:{name}")))
+        {
+            // its own objectives when the plan gives them (a wing: Torun, Plock, then Warsaw
+            // from the north), else the operation's line states nearest it
+            let own: Vec<i64> = ints(&f["line"]);
+            let line = if own.is_empty() {
+                solo_line(state, roster, &name, &op_line)
+            } else {
+                own
+            };
+            out.push(Unit {
+                name,
+                role: Role::Strike,
+                members: Vec::new(),
+                enemy: op["front"]["enemy"].as_str().unwrap_or("").to_string(),
+                own_states: Vec::new(),
+                click: None,
+                anchor: None,
+                line,
+            });
+            continue;
+        }
+        // a line army the group's front left without an executing order fights on its own
+        // front (see `solo_line`)
+        if role == Role::Line && state.done.contains_key(&key(id, &format!("solo:{name}"))) {
+            let enemy = op["front"]["enemy"]
+                .as_str()
+                .map(str::to_string)
+                .or_else(|| strings(op, "enemies").first().cloned())
+                .unwrap_or_default();
+            let line = solo_line(state, roster, &name, &op_line);
+            out.push(Unit {
+                own_states: army_row(roster, &name)
+                    .and_then(|r| r["main_state"].as_i64())
+                    .into_iter()
+                    .collect(),
+                name,
+                role: Role::Wing,
+                members: Vec::new(),
+                enemy,
+                click: None,
+                anchor: line.first().copied(),
+                line,
+            });
+            continue;
+        }
+        if role == Role::Line {
+            lines_in_group += 1;
+            if group.is_none() {
+                group = army_row(roster, &name)
+                    .and_then(|r| r["army_group"].as_str())
+                    .map(str::to_string);
+            }
         }
         let (front, offensive) = if role == Role::Line {
             (&Value::Null, &Value::Null)
@@ -378,13 +521,17 @@ fn units(state: &State, plan: &Value, op: &Value, roster: &Value) -> (Vec<Unit>,
         };
         out.push(unit(name, role, front, offensive));
     }
+    if lines_in_group == 0 {
+        // every line army fights on its own front: the group has no divisions left to order
+        group = None;
+    }
     if let Some(g) = &group {
         out.push(unit(g.clone(), Role::Group, &op["front"], &op["offensive"]));
     }
     for hold in list(op, "holds") {
         let armies: Vec<String> = list(hold, "armies")
             .iter()
-            .map(|a| resolve(state, text(&a["army"])))
+            .map(|a| name_of(state, roster, text(&a["army"])))
             .filter(|a| !a.is_empty())
             .collect();
         // a hold of one army fronts with that army; of several, with their group
@@ -407,8 +554,53 @@ fn units(state: &State, plan: &Value, op: &Value, roster: &Value) -> (Vec<Unit>,
         }
         out.push(hold);
     }
-    let _ = plan;
     (out, group)
+}
+
+/// Objectives of a line army on its own front: the SOLO_STATES states of the operation's line
+/// nearest the army (map centres of its states, weighted by its divisions there); the line's
+/// first states when no centre is known. Computed afresh each call: a state taken drops out and
+/// the next nearest comes in, so the army always has a next objective.
+fn solo_line(state: &State, roster: &Value, name: &str, op_line: &[i64]) -> Vec<i64> {
+    let Some(row) = army_row(roster, name) else {
+        return op_line.iter().take(SOLO_STATES).copied().collect();
+    };
+    let mut x = 0.0;
+    let mut z = 0.0;
+    let mut n = 0.0;
+    if let Some(at) = row["states"].as_object() {
+        for (sid, count) in at {
+            let (Ok(sid), Some(count)) = (sid.parse::<i32>(), count.as_f64()) else {
+                continue;
+            };
+            if let Some(p) = state.centers.get(&sid) {
+                x += p.0 * count;
+                z += p.1 * count;
+                n += count;
+            }
+        }
+    }
+    if n == 0.0 {
+        if let Some(p) = row["main_state"]
+            .as_i64()
+            .and_then(|s| state.centers.get(&(s as i32)))
+        {
+            (x, z, n) = (p.0, p.1, 1.0);
+        }
+    }
+    let mut line: Vec<i64> = op_line.to_vec();
+    if n > 0.0 {
+        let (x, z) = (x / n, z / n);
+        let d = |s: &i64| {
+            state
+                .centers
+                .get(&(*s as i32))
+                .map_or(f64::MAX, |p| (p.0 - x).powi(2) + (p.1 - z).powi(2))
+        };
+        line.sort_by(|a, b| d(a).total_cmp(&d(b)));
+    }
+    line.truncate(SOLO_STATES);
+    line
 }
 
 fn unit(name: String, role: Role, front: &Value, offensive: &Value) -> Unit {
@@ -607,7 +799,8 @@ fn line_tag(line: &[i64]) -> String {
 fn learn_centres(state: &mut State, tools: &dyn Tools, tags: &[String]) {
     for tag in tags {
         let k = format!("op_centres:{tag}");
-        if tag.is_empty() || state.done.contains_key(&k) {
+        // (the centres live in this server life: after a restart they are read again)
+        if tag.is_empty() || (state.done.contains_key(&k) && !state.centers.is_empty()) {
             continue;
         }
         if let Ok(read) = tools.call("hoi4_states", &json!({"query": tag})) {
@@ -731,6 +924,49 @@ pub(super) fn active(state: &State) -> bool {
     })
 }
 
+/// Whether the war on `target` may start: every running operation against it has prepared
+/// (read back), and one runs; true when the plan has no operation against it.
+pub(super) fn prepared_against(state: &State, plan: &Value, target: &str) -> bool {
+    let ops: Vec<String> = list(plan, "operations")
+        .iter()
+        .enumerate()
+        .filter(|(_, op)| strings(op, "enemies").iter().any(|e| e == target))
+        .map(|(i, op)| op_id(op, i))
+        .collect();
+    ops.is_empty()
+        || ops
+            .iter()
+            .any(|id| started(state, id) && state.done.contains_key(&key(id, "ready")))
+            && unready(state, plan, target).is_none()
+}
+
+/// An operation executes (its war was declared and it has not finished).
+/// When the earliest operation still executing began executing.
+pub(super) fn executing_since(state: &State) -> Option<GameHour> {
+    state
+        .done
+        .iter()
+        .filter(|(k, _)| {
+            k.starts_with("op:")
+                && k.ends_with(":exec")
+                && !state
+                    .done
+                    .contains_key(&format!("{}:end", &k[..k.len() - 5]))
+        })
+        .map(|(_, at)| *at)
+        .min()
+}
+
+pub(super) fn executing_any(state: &State) -> bool {
+    state.done.keys().any(|k| {
+        k.starts_with("op:")
+            && k.ends_with(":exec")
+            && !state
+                .done
+                .contains_key(&format!("{}:end", &k[..k.len() - 5]))
+    })
+}
+
 /// A running operation against `target` whose prepare has not finished (some front, hold or
 /// assembly does not read back yet): its id. The declaration waits for it (o2b, 18 Nov 2026: the
 /// war was declared while the West hold's front was still refused, and France took four states).
@@ -768,15 +1004,24 @@ fn one(
     let enemies = strings(op, "enemies");
     let at_war = war_tags(wars);
     let executed = state.done.contains_key(&key(id, "exec"));
-    let (units, group) = units(state, plan, op, roster);
+    let (units, group) = units(state, id, op, roster);
     if executed {
-        if let Some(line) = advance(
-            state, tools, plan, id, op, &units, roster, wars, &enemies, &at_war, lease, now,
+        if state.centers.is_empty() {
+            let mut tags = enemies.clone();
+            tags.push(player(tools, plan));
+            learn_centres(state, tools, &tags);
+        }
+        solo_watch(state, id, op, roster, &at_war, now);
+        // the strike formations first: their orders are quick whole-army moves, and behind the
+        // line work they got no turn while a line order kept failing (qb1, 19 Nov 2026: the
+        // column stood in Lodz from day 28 to day 56 while the burst ended on resting redraws)
+        if let Some(line) = strikes(
+            state, tools, plan, op, &units, roster, &enemies, &at_war, lease, now,
         )? {
             return Ok(Some(line));
         }
-        return strikes(
-            state, tools, plan, op, &units, roster, &enemies, &at_war, lease, now,
+        return advance(
+            state, tools, plan, id, op, &units, roster, wars, &enemies, &at_war, lease, now,
         );
     }
     if let Some(line) = prepare(
@@ -884,6 +1129,107 @@ fn one(
     Ok(None)
 }
 
+/// A line army at war whose own read-back shows no executing order for SOLO_AFTER game hours
+/// gets its own front and an offensive on its nearest objectives (it becomes a wing of the
+/// operation for good). pb1 and g17k (19 Nov 2026): Armee Mitte and Armee Sued stood behind the
+/// group's whole-border front with no order of their own for the whole war (24 divisions idle
+/// in Silesia), and the group's one country-wide arrow took three states in 56 days.
+/// Whether another line army of `row`'s army group is already driven by objectives: one at a
+/// time leaves the group's front (qc3, 19 Nov 2026: Mitte and Süd both left it, Poland walked
+/// into Silesia behind them and retook 30 of the 50 points it had lost).
+fn group_driven(state: &State, id: &str, op: &Value, roster: &Value, row: Option<&Value>) -> bool {
+    let Some(group) = row.and_then(|r| r["army_group"].as_str()) else {
+        return false;
+    };
+    list(op, "formations").iter().any(|f| {
+        let other = name_of(state, roster, text(&f["army"]));
+        state.done.contains_key(&key(id, &format!("drive:{other}")))
+            && army_row(roster, &other).and_then(|r| r["army_group"].as_str()) == Some(group)
+    })
+}
+
+fn solo_watch(
+    state: &mut State,
+    id: &str,
+    op: &Value,
+    roster: &Value,
+    at_war: &[String],
+    now: GameHour,
+) {
+    if !strings(op, "enemies").iter().any(|e| at_war.contains(e)) {
+        return;
+    }
+    for f in list(op, "formations") {
+        // a wing is driven when it stands (qc4: Armee Nord stood in East Prussia 56 war days on
+        // an executing offensive that never drew); only a line army fights on a front of its own
+        let wing = text(&f["role"]) == "wing";
+        if !matches!(text(&f["role"]), "" | "line" | "wing") {
+            continue;
+        }
+        let name = name_of(state, roster, text(&f["army"]));
+        let solo = key(id, &format!("solo:{name}"));
+        let idle = key(id, &format!("idle:{name}"));
+        if name.is_empty()
+            || state.done.contains_key(&solo)
+            || state.done.contains_key(&key(id, &format!("drive:{name}")))
+            || army_row(roster, &name).is_none()
+        {
+            continue;
+        }
+        // the army's own orders, or its group's executing front (it carries the army: qb1, the
+        // group's whole-border front left no border for an army front of its own)
+        let row = army_row(roster, &name);
+        let own_executing = row.is_some_and(|r| {
+            r["plan_executing"] == json!(true)
+                || list(r, "plan")
+                    .iter()
+                    .any(|o| o["executing"] == json!(true))
+        }) || row
+            .and_then(|r| r["army_group"].as_str())
+            .is_some_and(|g| executing(roster, g));
+        // an army that stands in the same state for STUCK_DAYS of the war while its group's
+        // front executes is moved up by objectives (pb1, qc1, qc2, 19 Nov 2026: Armee Mitte
+        // stood in German Silesia 71 for 56 war days on the group's executing front)
+        if let Some(main) = row.and_then(|r| r["main_state"].as_i64()) {
+            let at = key(id, &format!("at:{name}"));
+            let since = key(id, &format!("atsince:{name}"));
+            if state.done.get(&at) != Some(&main) {
+                state.done.insert(at, main);
+                state.done.insert(since, now);
+            } else if state
+                .done
+                .get(&since)
+                .is_some_and(|t| now - t >= STUCK_DAYS * DAY)
+                && !group_driven(state, id, op, roster, row)
+            {
+                state.done.insert(key(id, &format!("drive:{name}")), now);
+                state.op_notes.insert(
+                    format!("{id}:{name}"),
+                    format!(
+                        "{name}: stood in state {main} for {STUCK_DAYS} war days: driven by objectives as one stack"
+                    ),
+                );
+                continue;
+            }
+        }
+        if own_executing || wing {
+            state.done.remove(&idle);
+            continue;
+        }
+        let since = *state.done.entry(idle).or_insert(now);
+        if now - since >= SOLO_AFTER {
+            state.done.insert(solo, now);
+            state.op_notes.insert(
+                format!("{id}:{name}"),
+                format!(
+                    "{name}: no executing order of its own for {} game hours at war: its own front and offensive",
+                    (now - since)
+                ),
+            );
+        }
+    }
+}
+
 /// The operation's strike formations (`drive: "strike"`) at war: the strike engine moves each as
 /// one column, at most `stack` (4) divisions a province, on the victory points of its line's
 /// states in order (then the nearest ones), resting by organisation. A segment front could not
@@ -938,17 +1284,33 @@ fn strikes(
             }
         }
     }
+    // The enemy's largest victory point (its capital) is every formation's LAST row: it is
+    // taken late and from several sides, after the points around it (qc2-qc4, 19 Nov 2026: the
+    // columns struck Warsaw, urban behind a river, from one side for weeks at 17-31%
+    // organisation and casualties went to 1:1 while Krakow, Kielce and Lublin stood open).
+    let capital = best
+        .values()
+        .max_by(|a, b| a.1.total_cmp(&b.1).then(b.0.cmp(&a.0)))
+        .map(|b| b.0);
     let mut rows: Vec<Value> = Vec::new();
     let mut knobs = json!({});
     for u in &strikers {
+        let mut last: Vec<i64> = Vec::new();
         for s in &u.line {
             if let Some((p, _)) = best.get(s) {
-                rows.push(json!({"army": u.name, "province": p, "path": []}));
+                if Some(*p) == capital {
+                    last.push(*p);
+                } else {
+                    rows.push(json!({"army": u.name, "province": p, "path": []}));
+                }
             }
+        }
+        for p in last {
+            rows.push(json!({"army": u.name, "province": p, "path": []}));
         }
         if let Some(f) = list(op, "formations")
             .iter()
-            .find(|f| resolve(state, text(&f["army"])) == u.name)
+            .find(|f| name_of(state, roster, text(&f["army"])) == u.name)
         {
             if f["strike"].is_object() {
                 knobs = f["strike"].clone();
@@ -961,6 +1323,21 @@ fn strikes(
         knobs["cover"] = json!(0);
     }
     knobs["way"] = json!(true);
+    concentrate(&mut knobs);
+    // a driven infantry army does not fight as one stack: it widens (at most STACK_INFANTRY a
+    // province), feeds and garrisons its points (qc5, 19 Nov 2026: Armee Nord and Süd struck as
+    // 17- and 20-division stacks and Germany lost 129k to Poland's 68k)
+    let id = text(&op["id"]);
+    for u in &strikers {
+        if state
+            .done
+            .contains_key(&key(id, &format!("drive:{}", u.name)))
+        {
+            knobs["armies"][u.name.as_str()] = json!({
+                "widen": true, "feed": true, "garrison": true, "stack": STACK_INFANTRY
+            });
+        }
+    }
     let mut p = plan.clone();
     p["war"]["strike"] = knobs;
     p["vp_targets"] = json!(rows);
@@ -971,6 +1348,35 @@ fn strikes(
         .collect();
     let me = player(tools, plan);
     Ok(super::plan_strike::step(state, tools, &p, lease, &me, &fighting, &reserve, now)?.flatten())
+}
+
+/// An operation's strike formation fights as ONE stack on whole-army orders: no part of it is
+/// split off (no stack limit, widening, feeding, garrison or post), it never rests longer than a
+/// day, and a strike that has not taken its objective in STRIKE_MAX_DAYS gives way to the next
+/// objective. pb1 and g17k (19 Nov 2026): the division-list orders of the split column failed
+/// about half the time ("not on screen", 30 s each) while every whole-army order read back, and
+/// the column stood 70 days after its first state between rests, closures and failed splits.
+fn concentrate(knobs: &mut Value) {
+    for k in ["widen", "feed", "garrison", "halt"] {
+        knobs[k] = json!(false);
+    }
+    knobs["stack"] = json!(0);
+    knobs["cover"] = json!(0);
+    let capped = |v: &Value, default: f64, max: f64| v.as_f64().unwrap_or(default).min(max);
+    knobs["rest_days"] = json!(capped(
+        &knobs["rest_days"],
+        STRIKE_REST_DAYS,
+        STRIKE_REST_DAYS
+    ));
+    knobs["max_days"] = json!(capped(&knobs["max_days"], STRIKE_MAX_DAYS, STRIKE_MAX_DAYS));
+    knobs["close_days"] = json!(capped(&knobs["close_days"], 3.0, 3.0));
+    knobs["worn_gate"] = json!(knobs["worn_gate"].as_f64().unwrap_or(STRIKE_WORN));
+    // a column under STRIKE_SUPPLY percent supply stops where it stands and waits for the supply
+    // and the infantry; it resumes once fed (qc4: Warsaw struck at 4-8% supply)
+    if knobs.get("supply_gate").is_none() {
+        knobs["supply_gate"] = json!(STRIKE_SUPPLY);
+    }
+    knobs["rest"] = json!(capped(&knobs["rest"], 0.25, 0.25));
 }
 
 /// A formation to assemble: its army's game name, the plan's name, {template: count}, the one
@@ -1050,13 +1456,14 @@ fn assemble(
     }
     let mobile_names: HashSet<String> = mobiles.iter().map(|m| m.0.clone()).collect();
     for (name, hint, want, from, near) in &mobiles {
-        // a formed army that kept the game's name: renamed once a day, at most three times; the
-        // operation orders it under the game's name meanwhile (o1e: the name box read empty
-        // right after the detach)
+        // a formed army that kept the game's name: renamed once; the operation orders it under
+        // the game's name (o1e: the name box read empty right after the detach; qb2, qc5,
+        // 19 Nov 2026: every retry failed the same way and the 7 s tries before the war pushed
+        // the declaration 10-18 days late)
         if name != hint && army_row(roster, hint).is_none() && army_row(roster, name).is_some() {
             let rk = key(id, &format!("rename:{hint}"));
             let n = state.done.get(&rk).copied().unwrap_or(0);
-            if n < 3 && !state.skipped(now, "oprename", hint) {
+            if n < RENAME_TRIES && !state.skipped(now, "oprename", hint) {
                 state.done.insert(rk, n + 1);
                 state.skip(now, "oprename", hint, DAY);
                 let line = order(
@@ -1357,13 +1764,16 @@ fn prepare(
             return Ok(Some(line));
         }
     }
-    // 2-4. mobile and wing armies, then the group, then the holds
-    let mut ordered: Vec<&Unit> = units
-        .iter()
-        .filter(|u| matches!(u.role, Role::Mobile | Role::Wing))
-        .collect();
+    // 2-4. the holds first (a hold stands before any attack is drawn: qb2, 19 Nov 2026, the
+    // West hold was still undrawn when the declaration's wait ran out and France took three
+    // states in a week), then the group, then mobile and wing armies
+    let mut ordered: Vec<&Unit> = units.iter().filter(|u| u.role == Role::Hold).collect();
     ordered.extend(units.iter().filter(|u| u.role == Role::Group));
-    ordered.extend(units.iter().filter(|u| u.role == Role::Hold));
+    ordered.extend(
+        units
+            .iter()
+            .filter(|u| matches!(u.role, Role::Mobile | Role::Wing)),
+    );
     // a unit already at war with its enemy prepares by the war's rules (it15, 18 Nov 2026:
     // Italy starts at war with Ethiopia; the peace rules cleared every offensive that read back
     // over two of the line's three states until the draws ran out, and nothing ever executed)
@@ -1378,6 +1788,41 @@ fn prepare(
         let peace = !fighting.contains(&u.enemy);
         if let Some(line) = reconcile(state, tools, id, u, &line, roster, wars, lease, now, peace)?
         {
+            return Ok(Some(line));
+        }
+    }
+    // 4b. a strike formation marches to its start state (its `front.own_states`, first) before
+    // the war: assembled where its divisions stood, the column began the war three to eleven
+    // days' march from its first objective (qc1/qc2, 19 Nov 2026: Panzergruppe Ost formed in
+    // Pomerania for a Lodz row and went by the Danzig corridor). Until it stands there the
+    // operation is not ready (the declaration waits, at most its own cap).
+    if !fighting.iter().any(|t| units.iter().any(|u| &u.enemy == t)) {
+        for u in units.iter().filter(|u| u.role == Role::Strike) {
+            let Some(start) = u.own_states.first().copied() else {
+                continue;
+            };
+            let Some(row) = army_row(roster, &u.name) else {
+                continue;
+            };
+            let total = row["division_count"].as_i64().unwrap_or(0).max(1);
+            let there = row["states"][start.to_string()].as_i64().unwrap_or(0);
+            if there * 2 >= total {
+                continue;
+            }
+            state.skip(now, "opasm", &format!("march:{}", u.name), DAY / 2);
+            if state.skipped(now, "opmarch", &u.name) {
+                continue;
+            }
+            state.skip(now, "opmarch", &u.name, 2 * DAY);
+            let line = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("{} marches to its start state {start}", u.name),
+                "hoi4_army_move",
+                json!({"army": u.name, "state_id": start}),
+            )?;
             return Ok(Some(line));
         }
     }
@@ -1613,6 +2058,13 @@ fn player(tools: &dyn Tools, plan: &Value) -> String {
 /// lines one state chosen at the time (kept as `auto:<k>`).
 fn current_line(state: &State, id: &str, op: &Value) -> (i64, Vec<i64>) {
     let k = state.done.get(&key(id, "line")).copied().unwrap_or(0);
+    // a rolling contact line (see `contact_line`) stands for the line until a phase line is due
+    let roll: Vec<i64> = (0..ROLL_STATES as i64)
+        .map_while(|i| state.done.get(&key(id, &format!("roll:{i}"))).copied())
+        .collect();
+    if !roll.is_empty() {
+        return (k, roll);
+    }
     let phases = list(op, "phase_lines");
     let line = if k == 0 {
         ints(&op["offensive"]["target_line"])
@@ -1679,6 +2131,32 @@ fn next_state(
         }
     }
     best.map(|(_, s)| s)
+}
+
+/// The enemy states the own land touches (hoi4_wars borders), the most victory points first
+/// (hoi4_states `victory_points_total`), at most ROLL_STATES, none the player controls.
+fn contact_line(tools: &dyn Tools, wars: &Value, enemies: &[String], me: &str) -> Vec<i64> {
+    let touching: HashSet<i64> = list(wars, "borders")
+        .iter()
+        .filter(|b| enemies.iter().any(|e| e == text(&b["neighbour_tag"])))
+        .flat_map(|b| ints(&b["neighbour_states"]))
+        .collect();
+    let mut rows: Vec<(f64, i64)> = Vec::new();
+    for tag in enemies {
+        let Ok(read) = tools.call("hoi4_states", &json!({"query": tag})) else {
+            continue;
+        };
+        for row in list(&read, "states") {
+            let Some(sid) = row["state_id"].as_i64() else {
+                continue;
+            };
+            if touching.contains(&sid) && text(&row["controller"]) != me {
+                rows.push((row["victory_points_total"].as_f64().unwrap_or(0.0), sid));
+            }
+        }
+    }
+    rows.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+    rows.into_iter().take(ROLL_STATES).map(|(_, s)| s).collect()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1764,7 +2242,43 @@ fn advance(
                 let when = list(op, "phase_lines")[k as usize]["when"].clone();
                 holds(state, tools, &when, now)
             };
-        if taken || stalled || due || line.is_empty() {
+        // ROLLING CONTACT LINE: a line taken or stalled with no phase line due goes on to the
+        // enemy states the front touches, the most victory points first (pb1/qb1, 19 Nov 2026:
+        // the group's stalled country-wide line jumped to the far eastern border, which did not
+        // draw, and the infantry took 3 states in 56 days)
+        let roll_stall = ROLL_STALL_DAYS * DAY;
+        let rolling = state.done.contains_key(&key(id, "roll:0"));
+        let roll_stalled = rolling && now - moved >= roll_stall;
+        if !due && (taken || stalled || roll_stalled) {
+            let next = contact_line(tools, wars, enemies, &me);
+            if !next.is_empty() && next != line {
+                for i in 0..ROLL_STATES as i64 {
+                    state.done.remove(&key(id, &format!("roll:{i}")));
+                }
+                for (i, s) in next.iter().enumerate() {
+                    state.done.insert(key(id, &format!("roll:{i}")), *s);
+                }
+                state.done.insert(key(id, "held"), 0);
+                state.done.insert(key(id, "moved"), now);
+                let line = format!(
+                    "operation {id}: line {} ({}/{} states): the contact line {:?}",
+                    if taken { "taken" } else { "stalled" },
+                    got.len(),
+                    line.len(),
+                    next
+                );
+                state.op_notes.insert(id.to_string(), line.clone());
+                return Ok(Some(line));
+            }
+        }
+        if due {
+            for i in 0..ROLL_STATES as i64 {
+                state.done.remove(&key(id, &format!("roll:{i}")));
+            }
+        }
+        // a rolling line whose contact states have not changed keeps attacking them (the far
+        // phase line is drawn only when it is due)
+        if (taken || stalled || due || line.is_empty()) && (due || !rolling) {
             let phases = list(op, "phase_lines");
             let mut next = k + 1;
             let mut chosen: Option<Vec<i64>> = None;

@@ -1173,14 +1173,33 @@ fn diplomacy_items(
         }
         if action == "declare_war" {
             expiry_watch(state, plan, now, item, &key, &target);
+            if let Some(line) = war_goal_watch(state, run, item, &key, &target)? {
+                return Ok(Some(line));
+            }
         }
         if state.skipped(now, "dip", &key) {
             waits.push(format!("{label}: waiting"));
             continue;
         }
-        if let Some(why) = gate(state, tools, &item["when"], now) {
-            waits.push(format!("{label}: {why}"));
-            continue;
+        // a goal about to lapse before the war day with the operation prepared: no gate
+        let early = action == "declare_war" && state.done.contains_key(&format!("dipearly:{key}"));
+        if let Some(why) = (!early)
+            .then(|| gate(state, tools, &item["when"], now))
+            .flatten()
+        {
+            // a war goal on the target and the war day reached: the declaration does not wait
+            // for a focus the goal did not come from (g17k: dip_declare_pol waited on
+            // GER_danzig_or_war though the goal had been justified by hand)
+            let goal_day = state.done.contains_key(&format!("dipgoal:{key}"))
+                && planned_day(item).is_some_and(|d| now >= d);
+            let without_focus = without_focus_atoms(&item["when"]);
+            if !(action == "declare_war"
+                && goal_day
+                && gate(state, tools, &without_focus, now).is_none())
+            {
+                waits.push(format!("{label}: {why}"));
+                continue;
+            }
         }
         // An operation against the target still preparing holds the declaration, at most
         // OP_DECLARE_WAIT from the day the declaration itself was due. The wait used to count
@@ -1282,6 +1301,187 @@ fn justify(
     }
     Ok(Some(format!(
         "diplomacy justify_war_goal {target}: {ok} {why}"
+    )))
+}
+
+/// Game days before the war day the war-goal watch starts, beyond the justification itself.
+const GOAL_LEAD_DAYS: i64 = 10;
+/// Days a justification takes when the plan names none (`justify_days`).
+const JUSTIFY_DAYS: i64 = 30;
+
+/// The war day a declaration row plans: its `war_day`, else the date atom of its `when`
+/// ("date >= 1939.9.1", also inside `all`).
+fn planned_day(item: &Value) -> Option<GameHour> {
+    if let Some(d) = item["war_day"].as_str().and_then(super::date_hour) {
+        return Some(d);
+    }
+    fn find(v: &Value) -> Option<GameHour> {
+        match v {
+            Value::String(s) => {
+                let s = s.trim();
+                let rest = s.strip_prefix("date")?.trim_start();
+                let rest = rest.strip_prefix(">=").or_else(|| rest.strip_prefix('>'))?;
+                super::date_hour(rest.trim())
+            }
+            Value::Array(rows) => rows.iter().find_map(find),
+            Value::Object(m) => m.get("all").and_then(find),
+            _ => None,
+        }
+    }
+    find(&item["when"])
+}
+
+/// `when` without its focus atoms (a `focus_completed:` atom holds).
+fn without_focus_atoms(when: &Value) -> Value {
+    match when {
+        Value::String(s) if s.trim().starts_with("focus_completed:") => Value::Null,
+        Value::Object(m) if m.contains_key("all") => {
+            let kept: Vec<Value> = m["all"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(without_focus_atoms)
+                .filter(|v| !v.is_null())
+                .collect();
+            if kept.is_empty() {
+                Value::Null
+            } else {
+                json!({"all": kept})
+            }
+        }
+        other => other.clone(),
+    }
+}
+
+/// THE WAR-GOAL WATCH (read every two game days while the declaration is pending). A goal has a
+/// kind and a life: `expire_days` (the type's `expire` in common/wargoals) from the day it was
+/// first seen. (a) The declaration must fall inside a goal's life. (b) A goal that lapses before
+/// the war day: a week before it lapses the war is declared at once when the operation against
+/// the target has prepared (or none is planned), else the run is told loudly. (c) Only without
+/// any goal, from (justification + GOAL_LEAD_DAYS) before the war day, one is justified from the
+/// plan's justification row. g17j and g17k: Danzig or War's take_state goal (60 days) was made
+/// in April-May for a 1 September war, lapsed, and both September wars were lost.
+fn war_goal_watch(
+    state: &mut State,
+    run: &Run<'_>,
+    item: &Value,
+    key: &str,
+    target: &str,
+) -> Result<Option<String>> {
+    let now = run.now;
+    let Some(day) = planned_day(item) else {
+        return Ok(None);
+    };
+    if state.skipped(now, "goalwatch", key) {
+        return Ok(None);
+    }
+    state.skip(now, "goalwatch", key, 2 * DAY);
+    let Ok(ds) = run.tools.call("hoi4_diplomacy_state", &json!({})) else {
+        return Ok(None);
+    };
+    let goals: Vec<&Value> = list(&ds, "own_war_goals")
+        .iter()
+        .filter(|g| {
+            g["target"]["tag"].as_str() == Some(target) || g["target"].as_str() == Some(target)
+        })
+        .collect();
+    let justifies = justify_items(run.plan, target);
+    if !goals.is_empty() {
+        state.done.insert(format!("dipgoal:{key}"), now);
+        // a goal from a focus or event stands for the plan's own justification row
+        for j in &justifies {
+            state
+                .done
+                .entry(dip_key(j, "justify_war_goal", target))
+                .or_insert(now);
+        }
+        // the longest life among the goals (None: one never lapses)
+        let mut end: Option<GameHour> = Some(GameHour::MIN);
+        for g in &goals {
+            let kind = text(&g["type"]).to_string();
+            let seen = *state
+                .done
+                .entry(format!("goalseen:{target}:{kind}"))
+                .or_insert(now);
+            match g["expire_days"].as_i64() {
+                Some(days) => end = end.map(|e| e.max(seen + days * DAY)),
+                None => end = None,
+            }
+        }
+        let Some(end) = end else {
+            return Ok(None);
+        };
+        if day < end - DAY || now < end - 7 * DAY {
+            return Ok(None);
+        }
+        // the war day lies beyond the goal's life and it lapses within a week
+        if super::plan_operation::prepared_against(state, run.plan, target) {
+            if state.done.contains_key(&format!("dipearly:{key}")) {
+                return Ok(None);
+            }
+            state.done.insert(format!("dipearly:{key}"), now);
+            return Ok(Some(format!(
+                "war-goal watch: the war goal on {target} lapses in {} days, {} days before the war day: the operation is prepared, the war is declared now",
+                (end - now) / DAY,
+                (day - end) / DAY
+            )));
+        }
+        wake(
+            state,
+            run.plan,
+            now,
+            29,
+            &format!("war_goal_lapses:{key}"),
+            format!(
+                "the war goal on {target} lapses in {} days, {} days before the planned war day, and the operation against it has not prepared: declare earlier or justify a new goal",
+                (end - now) / DAY,
+                (day - end) / DAY
+            ),
+            json!({"target": target, "lapses_hour": end, "war_day_hour": day, "item": item}),
+        );
+        return Ok(None);
+    }
+    state.done.remove(&format!("dipgoal:{key}"));
+    state.done.remove(&format!("dipearly:{key}"));
+    let days = justifies
+        .iter()
+        .find_map(|j| j["justify_days"].as_i64())
+        .or(item["justify_days"].as_i64())
+        .unwrap_or(JUSTIFY_DAYS);
+    if now < day - (days + GOAL_LEAD_DAYS) * DAY {
+        return Ok(None);
+    }
+    let Some(j) = justifies
+        .iter()
+        .find(|j| !text(&j["war_goal"]).trim().is_empty() && !strings(j, "states").is_empty())
+    else {
+        note(
+            state,
+            "war_goal_watch",
+            format!(
+                "no war goal on {target} {} days before the war day and no justification row with war_goal and states to make one",
+                (day - now) / DAY
+            ),
+        );
+        return Ok(None);
+    };
+    let (ok, why) = state.act(
+        run.tools,
+        run.lease,
+        "hoi4_diplomacy_act",
+        json!({"action": "justify_war_goal", "country": target,
+               "war_goal": text(&j["war_goal"]).trim(), "states": strings(j, "states")}),
+        "dp",
+    )?;
+    if ok || code(&why) == "nothing_to_change" {
+        // the plan's justification row counts as done from now (the declaration waits on it)
+        state
+            .done
+            .insert(dip_key(j, "justify_war_goal", target), now);
+    }
+    Ok(Some(format!(
+        "war-goal watch: no war goal on {target} {} days before the war day: justify_war_goal: {ok} {why}",
+        (day - now) / DAY
     )))
 }
 
@@ -5130,5 +5330,25 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("h: when unknown"));
+    }
+
+    #[test]
+    fn the_war_goal_watch_reads_the_war_day_and_drops_focus_gates() {
+        let item = json!({"action": "declare_war", "target": "POL",
+            "when": {"all": ["date >= 1939.9.1", "focus_completed:GER_danzig_or_war"]}});
+        assert_eq!(planned_day(&item), date_hour("1939.9.1"));
+        assert_eq!(
+            without_focus_atoms(&item["when"]),
+            json!({"all": ["date >= 1939.9.1"]})
+        );
+        assert_eq!(
+            planned_day(&json!({"war_day": "1940.5.10", "when": "date >= 1939.9.1"})),
+            date_hour("1940.5.10")
+        );
+        assert_eq!(planned_day(&json!({"when": "focus_completed:X"})), None);
+        assert_eq!(
+            without_focus_atoms(&json!("focus_completed:X")),
+            Value::Null
+        );
     }
 }
