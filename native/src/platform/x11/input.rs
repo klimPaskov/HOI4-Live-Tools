@@ -730,6 +730,10 @@ impl GameInput for X11Input<'_> {
         let shift = self.keycode_of_sym(XK_SHIFT_L)?;
         self.click_with(game, x, y, LEFT, Some(shift), &|| Ok(()))
     }
+    fn ctrl_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        let control = self.keycode_of_sym(XK_CONTROL_L)?;
+        self.click_with(game, x, y, LEFT, Some(control), &|| Ok(()))
+    }
     fn right_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
         self.click_with(game, x, y, RIGHT, None, &|| Ok(()))
     }

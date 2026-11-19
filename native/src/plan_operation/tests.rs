@@ -850,7 +850,10 @@ fn an_enemy_in_exile_is_out_of_the_war() {
 #[test]
 fn a_line_army_without_an_executing_order_fights_on_its_own_front_after_two_days() {
     let game = Game::new();
-    let plan = plan();
+    // the old behaviour, kept behind the plan switch (off by default since 19 Nov 2026)
+    let mut plan = plan();
+    plan["operations"][0]["solo_armies"] = json!(true);
+    let plan = plan;
     let mut state = State::default();
     prepared(&mut state, &game, &plan);
     // Mitte stands outside the group (no front carries it); Sued executes its own orders
@@ -1024,7 +1027,10 @@ fn a_strike_formation_marches_to_its_start_state_before_the_war() {
 #[test]
 fn a_line_army_standing_a_week_on_the_groups_front_is_driven_one_at_a_time() {
     let game = Game::new();
-    let plan = plan();
+    // the old behaviour, kept behind the plan switch (off by default since 19 Nov 2026)
+    let mut plan = plan();
+    plan["operations"][0]["solo_armies"] = json!(true);
+    let plan = plan;
     let mut state = State::default();
     prepared(&mut state, &game, &plan);
     // both line armies stand still on the group's executing front
@@ -1057,4 +1063,34 @@ fn a_line_army_standing_a_week_on_the_groups_front_is_driven_one_at_a_time() {
             .map(|(k, v)| format!("{k}={}", v - START))
             .collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn an_operation_is_preparing_from_its_start_until_it_reads_back_ready() {
+    let mut state = State::default();
+    assert!(!preparing(&state));
+    state.done.insert(key("op_x", "prep"), 0);
+    assert!(preparing(&state), "started, nothing read back yet");
+    state.done.insert(key("op_x", "ready"), 10);
+    assert!(!preparing(&state), "ready: the lanes alternate again");
+    state.done.remove(&key("op_x", "ready"));
+    state.done.insert(key("op_x", "end"), 20);
+    assert!(!preparing(&state), "an ended operation prepares nothing");
+}
+
+#[test]
+fn by_default_an_idle_line_army_gets_no_front_of_its_own_and_is_not_driven() {
+    let mut state = State::default();
+    let plan = plan();
+    let op = &plan["operations"][0];
+    let roster = json!({"armies": [{"army": "Mitte", "army_group": "ag", "main_state": 66,
+        "plan": [], "plan_executing": false}], "army_groups": []});
+    let wars = vec!["POL".to_string()];
+    for day in 0..20 {
+        solo_watch(&mut state, "op_pol", op, &roster, &wars, START + day * DAY);
+    }
+    assert!(!state
+        .done
+        .keys()
+        .any(|k| k.contains("solo:") || k.contains("drive:")));
 }

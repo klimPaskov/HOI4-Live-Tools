@@ -211,6 +211,22 @@ pub(crate) trait GameInput: Send + Sync {
         before_down: &dyn Fn() -> Result<()>,
     ) -> Result<()>;
     fn shift_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point>;
+    /// One left click with Control held: the game's Ctrl+Click, which toggles one division row
+    /// of an army's list in the selection. A platform without it refuses before any input.
+    fn ctrl_click(&self, _game: (u32, u32), _x: f64, _y: f64) -> Result<Point> {
+        Err(Error::new(
+            "not_supported",
+            "Ctrl+click is not built for this platform's input",
+        ))
+    }
+    /// One left click with Command held (macOS games may read Command where others read
+    /// Control). A platform without it refuses before any input.
+    fn cmd_click(&self, _game: (u32, u32), _x: f64, _y: f64) -> Result<Point> {
+        Err(Error::new(
+            "not_supported",
+            "Command+click is not built for this platform's input",
+        ))
+    }
     fn right_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point>;
     fn right_drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()>;
     /// A right-button drag through every point (one stroke, e.g. a battle-plan line that bends
@@ -323,6 +339,12 @@ macro_rules! delegate_game_input {
             }
             fn shift_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
                 (**self).shift_click(game, x, y)
+            }
+            fn ctrl_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+                (**self).ctrl_click(game, x, y)
+            }
+            fn cmd_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+                (**self).cmd_click(game, x, y)
             }
             fn right_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
                 (**self).right_click(game, x, y)

@@ -349,6 +349,14 @@ impl GameInput for Watched<'_> {
         self.watch.judge();
         self.inner.shift_click(game, x, y)
     }
+    fn ctrl_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        self.watch.judge();
+        self.inner.ctrl_click(game, x, y)
+    }
+    fn cmd_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        self.watch.judge();
+        self.inner.cmd_click(game, x, y)
+    }
     fn right_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
         self.watch.judge();
         self.inner.right_click(game, x, y)
