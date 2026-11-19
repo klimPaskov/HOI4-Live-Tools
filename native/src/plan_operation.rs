@@ -527,7 +527,11 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
             let mut u = unit(name, Role::Mobile, &f["front"], &f["offensive"]);
             u.line = spear_path(f);
             u.anchor = u.line.last().copied();
-            u.spear = true;
+            // a spearhead that did not read back where it was painted gives way to the armour's
+            // own offensive line (the owner's other choice: "its own narrow front and offensive")
+            u.spear = !state
+                .done
+                .contains_key(&key(id, &format!("nospear:{}", u.name)));
             out.push(u);
             continue;
         }
@@ -648,21 +652,20 @@ fn spearheads(op: &Value) -> bool {
     op["armour"].as_str() != Some("moves")
 }
 
-/// The states a strike formation's spearhead is painted through, deepest last: its axis without
-/// its own start states, then the states of its target line not on the axis (Panzergruppe Ost:
-/// axis 67-87-10, target 87-10-92 -> 87, 10, 92).
+/// The states of a strike formation's thrust, deepest last: its axis without its own start
+/// states (Panzergruppe Ost: axis 67-87-10 -> 87, 10), else its target line. The spearhead is
+/// painted in one stroke from the front to the deepest of them and takes the states on its way.
 fn spear_path(f: &Value) -> Vec<i64> {
     let own: Vec<i64> = ints(&f["front"]["own_states"]);
-    let mut path: Vec<i64> = ints(&f["offensive"]["axis"])
+    let path: Vec<i64> = ints(&f["offensive"]["axis"])
         .into_iter()
         .filter(|s| !own.contains(s))
         .collect();
-    for s in ints(&f["offensive"]["target_line"]) {
-        if !path.contains(&s) && !own.contains(&s) {
-            path.push(s);
-        }
+    if path.is_empty() {
+        ints(&f["offensive"]["target_line"])
+    } else {
+        path
     }
-    path
 }
 
 fn attacker(u: &Unit) -> bool {
@@ -2060,6 +2063,17 @@ fn reconcile(
     // a spearhead's divisions stay on the order they were given (a second arrow on the same front
     // gets none: spr1, 19 Nov 2026): a spear whose order no longer reaches its line is cleared
     // and painted again at war too
+    if stale && u.spear && redraws >= 1 {
+        state
+            .done
+            .insert(key(id, &format!("nospear:{}", u.name)), now);
+        let line = format!(
+            "operation {id}: the spearhead of {} misses the line {tag}: its own offensive line instead",
+            u.name
+        );
+        state.op_notes.insert(id.to_string(), line.clone());
+        return Ok(Some(line));
+    }
     if stale && (peace || u.spear) {
         if redraws >= REDRAWS && line.len() >= 2 {
             // o1f: the stroke Lodz-Warsaw read back over Gdynia twice; one state at a time
@@ -2134,7 +2148,11 @@ fn reconcile(
             u.name
         ),
         "hoi4_army_offensive",
-        offensive_order(&u.name, line, u.anchor, u.spear),
+        if u.spear {
+            offensive_order(&u.name, &line[line.len() - 1..], None, true)
+        } else {
+            offensive_order(&u.name, line, u.anchor, false)
+        },
     )?;
     if state.last_ok == Some(false) {
         state.skip(now, "opdraw", &u.name, 2);

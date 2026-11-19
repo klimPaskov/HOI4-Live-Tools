@@ -1156,7 +1156,9 @@ fn an_armour_formation_fights_on_its_own_spearhead_not_on_direct_moves() {
     );
     assert_eq!(panzer[1].0, "hoi4_army_offensive");
     assert_eq!(panzer[1].1["spearhead"], json!(true));
-    assert_eq!(panzer[1].1["states"], json!([87, 10, 92]));
+    // one stroke from the front to the thrust's deepest state (its axis: 87, then 10)
+    assert_eq!(panzer[1].1["state_id"], json!(10));
+    assert!(panzer[1].1.get("states").is_none());
     // the old engine behind the switch: no front of its own
     let game = Game::new();
     plan["operations"][0]["armour"] = json!("moves");
@@ -1181,4 +1183,30 @@ fn a_spearhead_covers_its_line_by_the_path_it_was_painted_through() {
         {"executing": true, "path_states": [67, 87, 10, 92], "target": {"states": [92]}}]}]}]});
     assert_eq!(arrow_executing(&roster, &u, &[10, 92]), Some(true));
     assert_eq!(arrow_executing(&roster, &u, &[90]), None);
+}
+
+#[test]
+fn a_spearhead_that_misses_gives_way_to_the_armours_offensive_line() {
+    let game = Game::new();
+    let mut plan = plan();
+    plan["operations"][0]["formations"][2] = json!({"army": "Panzer", "role": "mobile",
+        "drive": "strike", "front": {"enemy": "POL", "own_states": [67], "click_state": 87},
+        "offensive": {"axis": [67, 87, 10], "target_line": [87, 10, 92]}});
+    let mut state = State::default();
+    game.unit("Panzer", |r| r["states"] = json!({"67": 24}));
+    // the spear reads back elsewhere: one redraw, then the offensive line
+    game.unit("Panzer", |r| {
+        r["plan"] = json!([{"kind": "front", "offensives": [
+            {"executing": false, "path_states": [67, 88], "target": {"states": [88]}}]}])
+    });
+    state.done.insert(key("op_pol", "redraw:Panzer:87-10"), 1);
+    burst(&mut state, &game, &plan, START);
+    assert!(state.done.contains_key(&key("op_pol", "nospear:Panzer")));
+    let (units, _) = units(
+        &state,
+        "op_pol",
+        &plan["operations"][0],
+        &game.roster.borrow(),
+    );
+    assert!(!units.iter().any(|u| u.spear));
 }

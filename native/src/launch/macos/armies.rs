@@ -3272,8 +3272,8 @@ pub(super) fn front(
     }
     super::ui::trace("front: candidates", t0);
     if let Some(path) = ends {
-        // Drag along the border through every facing province pair, button held (left, then the
-        // right one): the game draws the front over the dragged stretch only. A straight drag
+        // Drag along the border through every facing province pair, button held (right, then the
+        // left one): the game draws the front over the dragged stretch only. A straight drag
         // between the two ends cut across own land on a bending border and the game took the
         // whole border (Silesia-Lodz, 18 Nov 2026).
         let screen: Vec<Option<(f64, f64)>> = read(process, |r, i| {
@@ -3328,7 +3328,12 @@ pub(super) fn front(
             ));
         }
         super::ui::trace_text(&format!("front: segment drag through {pts:?}"));
-        for right in [false, true] {
+        // the right button first: the game's own words for a shorter front are "Right-Click and
+        // drag the mouse on one of the borders ... to set the front in a shorter interval"; a
+        // left press on the border is a Click, which "set[s] the assigned front along entire
+        // border" (o1i-o1n, qs1: every armour front took the whole border and its divisions stood
+        // one a province)
+        for right in [true, false] {
             if pts.len() == 2 {
                 if right {
                     keys.right_drag(GAME, pts[0], pts[1])?;
@@ -3582,10 +3587,31 @@ pub(super) fn offensive(
     // a spearhead is painted along the thrust (the game takes its provinces as painted): from
     // the army to the objective (`through`, else the state's centre), never across the state
     let strokes = if spearhead {
-        vec![(
-            "spearhead from the army to the objective",
-            mean(&provinces).zip(pivot.or_else(|| mean(&target_provinces))),
-        )]
+        // from the army's own front where it lies nearest the objective (the army's mean
+        // position lay inland, half-way along a march, and the stroke crossed the border far from
+        // the thrust: qs1, 19 Nov 2026), else from the army
+        let goal = pivot.or_else(|| mean(&target_provinces));
+        let front: Vec<(f64, f64)> = read(process, |r, i| {
+            let group = group_named(r, i, army)?;
+            Ok(orders::group_orders(r, i, group)?
+                .into_iter()
+                .filter(|(list, o)| *list == orders::List::Top && o.kind == 2)
+                .flat_map(|(_, o)| o.provinces)
+                .collect::<Vec<i32>>())
+        })
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|p| pos.get(p).copied())
+        .collect();
+        let start = goal
+            .and_then(|g| {
+                front.iter().copied().min_by(|a, b| {
+                    let d = |p: &(f64, f64)| (p.0 - g.0).powi(2) + (p.1 - g.1).powi(2);
+                    d(a).total_cmp(&d(b))
+                })
+            })
+            .or_else(|| mean(&provinces));
+        vec![("spearhead from the front to the objective", start.zip(goal))]
     } else {
         vec![
             ("across the state", offensive_span(&own, &theirs, pivot)),
