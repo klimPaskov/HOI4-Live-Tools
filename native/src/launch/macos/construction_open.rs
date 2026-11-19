@@ -15,7 +15,7 @@ use crate::{
     },
 };
 use serde_json::{json, Value};
-use std::{thread, time::Duration};
+use std::time::Duration;
 
 #[cfg(test)]
 #[path = "construction_open/delivery_tests.rs"]
@@ -174,7 +174,7 @@ impl Attempt for Live<'_, '_> {
                     )
                 });
             }
-            thread::sleep(
+            crate::phase::sleep(
                 Duration::from_millis(10).min(
                     self.fence
                         .until

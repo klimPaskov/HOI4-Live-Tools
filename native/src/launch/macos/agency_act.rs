@@ -35,13 +35,14 @@ use crate::{
     xlayout::{fld, Class},
 };
 use serde_json::{json, Value};
-use std::{cell::RefCell, thread, time::Duration};
+use std::{cell::RefCell, time::Duration};
 
 /// ANSI virtual key code of `w` (Shift+W opens the intelligence agency view).
 const KEY_W: u16 = 13;
 
+#[track_caller]
 fn pause(ms: u64) {
-    thread::sleep(Duration::from_millis(ms));
+    crate::phase::sleep(Duration::from_millis(ms));
 }
 
 // ------------------------------------------------------------ window state

@@ -301,7 +301,7 @@ fn original_deadline_expiring_during_retry_wait_prevents_another_probe() {
             |duration| {
                 assert!(duration <= Duration::from_millis(2));
                 waits.set(waits.get() + 1);
-                thread::sleep(
+                crate::phase::sleep(
                     (until + Duration::from_millis(1)).saturating_duration_since(Instant::now()),
                 );
             },
@@ -325,7 +325,7 @@ fn late_coherent_or_torn_probe_is_discarded_before_success_or_retry() {
             .check_context(
                 || {
                     attempts.set(attempts.get() + 1);
-                    thread::sleep(
+                    crate::phase::sleep(
                         (until + Duration::from_millis(1))
                             .saturating_duration_since(Instant::now()),
                     );

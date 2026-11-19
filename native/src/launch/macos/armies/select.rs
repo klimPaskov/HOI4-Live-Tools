@@ -459,7 +459,7 @@ fn rested_selection(process: &dyn Process) -> Result<Option<Vec<String>>> {
     let started = std::time::Instant::now();
     let mut last = super::read(process, selected_divisions)?;
     loop {
-        std::thread::sleep(std::time::Duration::from_millis(60));
+        crate::phase::sleep(std::time::Duration::from_millis(60));
         let now = super::read(process, selected_divisions)?;
         let held = now.as_ref().is_some_and(|ids| !ids.is_empty());
         let resting = now == last && held;
@@ -538,7 +538,7 @@ pub(super) fn select(
         };
         let before = height;
         keys.scroll_burst(GAME, (960.0, 540.0), -120, k as u32)?;
-        std::thread::sleep(std::time::Duration::from_millis(60));
+        crate::phase::sleep(std::time::Duration::from_millis(60));
         super::super::screenmap::wait_camera_still(process, 900);
         (stacks, height) = project(process, &positions, &heights, &want, &ok)?;
         zoom_events += k as u32;
@@ -552,7 +552,7 @@ pub(super) fn select(
         if let Some(q) = step {
             let k = (-wheel_events(height, MAX_HEIGHT, q)).max(1);
             keys.scroll_burst(GAME, (960.0, 540.0), 120, k as u32)?;
-            std::thread::sleep(std::time::Duration::from_millis(60));
+            crate::phase::sleep(std::time::Duration::from_millis(60));
             super::super::screenmap::wait_camera_still(process, 900);
             (stacks, height) = project(process, &positions, &heights, &want, &ok)?;
         }
@@ -565,7 +565,7 @@ pub(super) fn select(
             break;
         };
         keys.press_code(key)?;
-        std::thread::sleep(std::time::Duration::from_millis(220));
+        crate::phase::sleep(std::time::Duration::from_millis(220));
         super::super::screenmap::wait_camera_still(process, 900);
         (stacks, height) = project(process, &positions, &heights, &want, &ok)?;
     }

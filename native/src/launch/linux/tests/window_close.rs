@@ -181,7 +181,7 @@ fn generated_close_client() {
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
             Err(error) => panic!("Private child input failed: {error}"),
         }
-        thread::sleep(Duration::from_millis(5));
+        crate::phase::sleep(Duration::from_millis(5));
     }
 }
 
@@ -316,7 +316,7 @@ impl WindowOwner {
                     "EOF/watchdog child did not reap",
                 ));
             }
-            thread::sleep(Duration::from_millis(10));
+            crate::phase::sleep(Duration::from_millis(10));
         }
         // If no WM intent existed (startup/test unwind), the legacy close only
         // ends an owner whose pinned pidfd has ALREADY observed child exit.
@@ -339,7 +339,7 @@ impl WindowOwner {
                     "Exited-child owner did not finish",
                 ));
             }
-            thread::sleep(Duration::from_millis(10));
+            crate::phase::sleep(Duration::from_millis(10));
         }
         let owner = self
             .fixture
@@ -639,7 +639,7 @@ impl ForwardDisplay {
                         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
                         Err(error) => return Err(error.into()),
                     }
-                    thread::sleep(Duration::from_millis(5));
+                    crate::phase::sleep(Duration::from_millis(5));
                 }
                 relay_stop.store(true, Ordering::Release);
                 if let Some(worker) = connection {
@@ -735,7 +735,7 @@ fn owned_xvfb_window_close_reaches_sole_reaper_normal_exit() {
             Instant::now() < until,
             "Pinned child exit was not monitored"
         );
-        thread::sleep(Duration::from_millis(5));
+        crate::phase::sleep(Duration::from_millis(5));
     }
     assert!(
         !result.is_finished(),

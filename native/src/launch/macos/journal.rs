@@ -605,6 +605,7 @@ impl GameJournal {
         settle: &mut dyn FnMut() -> Result<Outcome>,
         cause: Option<&Error>,
     ) -> Result<Receipt> {
+        let _phase = crate::phase::enter("verify");
         let started = Instant::now();
         let end = started + self.window;
         let mut polls = 0u32;
@@ -634,7 +635,7 @@ impl GameJournal {
                 if now >= end {
                     break None;
                 }
-                std::thread::sleep(self.poll.min(end - now));
+                crate::phase::sleep(self.poll.min(end - now));
             }
         };
         let (status, detail) = match outcome {

@@ -369,7 +369,7 @@ pub(super) fn set_default(
             Some([x, y, w, h]) => {
                 clear_notices(process, keys)?;
                 keys.click(GAME, (x + w / 2) as f64, (y + h / 2) as f64)?;
-                std::thread::sleep(std::time::Duration::from_millis(900));
+                crate::phase::sleep(std::time::Duration::from_millis(900));
             }
             None => {
                 stateslots::open_state_view(process, keys, state)?;
@@ -387,7 +387,7 @@ pub(super) fn set_default(
                 )
             })?;
             if button.is_none() {
-                std::thread::sleep(std::time::Duration::from_millis(150));
+                crate::phase::sleep(std::time::Duration::from_millis(150));
             }
         }
         let Some(button) = button else {
@@ -398,7 +398,7 @@ pub(super) fn set_default(
             ));
         };
         // Let the slide-in finish before clicking.
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        crate::phase::sleep(std::time::Duration::from_millis(300));
         let button = read(process, |r, i| {
             let w = stateslots::state_view_widget(r, i, "select_law_button")?
                 .ok_or_else(|| Error::new("input_readback_failed", "State view closed"))?;
@@ -410,15 +410,15 @@ pub(super) fn set_default(
         wait(process, "occupied territories view", |r, i| {
             Ok(header_law_button(r, i)?.is_some())
         })?;
-        std::thread::sleep(std::time::Duration::from_millis(400));
+        crate::phase::sleep(std::time::Duration::from_millis(400));
     }
     let header = read(process, header_law_button)?
         .ok_or_else(|| Error::new("input_readback_failed", "Occupied territories view closed"))?;
     let (x, y) = header.center();
     keys.click(GAME, x, y)?;
-    std::thread::sleep(std::time::Duration::from_millis(600));
+    crate::phase::sleep(std::time::Duration::from_millis(600));
     keys.click(GAME, ROW_X, FIRST_ROW_Y + ROW_STEP * row as f64)?;
-    std::thread::sleep(std::time::Duration::from_millis(400));
+    crate::phase::sleep(std::time::Duration::from_millis(400));
     Ok(())
 }
 

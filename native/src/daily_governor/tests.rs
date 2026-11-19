@@ -324,7 +324,7 @@ impl Backend for Fake {
                     Mode::WrongOwner => r.observed.scope.epoch.game.start_ticks = "changed".into(),
                     Mode::StaleReceipt => r.observed.sequence = a.before_sequence,
                     Mode::Late => {
-                        std::thread::sleep(
+                        crate::phase::sleep(
                             deadline.saturating_duration_since(Instant::now())
                                 + Duration::from_millis(1),
                         );
@@ -777,7 +777,7 @@ fn event_notifications_are_bounded_and_not_model_polling() {
     assert_eq!(wake.wait_after(0, Duration::ZERO).unwrap().generation, 0);
     let w = wake.clone();
     let thread = std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(5));
+        crate::phase::sleep(Duration::from_millis(5));
         w.notify(WakeReason::GameDay).unwrap();
     });
     assert_eq!(

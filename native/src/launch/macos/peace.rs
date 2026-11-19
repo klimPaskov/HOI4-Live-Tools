@@ -500,7 +500,7 @@ pub(super) fn take(
         let (x, y) = rect.center();
         sent.set(true);
         keys.click(GAME, x, y)?;
-        std::thread::sleep(Duration::from_millis(300));
+        crate::phase::sleep(Duration::from_millis(300));
     }
     let mut costs = Vec::new();
     let mut last = plan.score_before;
@@ -624,7 +624,7 @@ fn click_state_row(process: &dyn Process, keys: &dyn GameInput, name: &str) -> R
         for (_, expand) in &countries {
             let (x, y) = expand.center();
             keys.click(GAME, x, y)?;
-            std::thread::sleep(Duration::from_millis(350));
+            crate::phase::sleep(Duration::from_millis(350));
             target = wanted(&read(process, list_rows)?.1);
             if target.is_some() {
                 break;
@@ -751,11 +751,11 @@ pub(super) fn exit(
         // 1.19.4.1: the "Exit Conference" popup (PEACE_DONE_POPUP_DESCRIPTION) is neither;
         // Return accepts it (verified live 1 November 2026). Pressed once.
         if !accepted && !returned {
-            std::thread::sleep(Duration::from_millis(300));
+            crate::phase::sleep(Duration::from_millis(300));
             keys.press_code(crate::platform::game_input::vk::RETURN)?;
             returned = true;
         }
-        std::thread::sleep(Duration::from_millis(200));
+        crate::phase::sleep(Duration::from_millis(200));
     }
 }
 

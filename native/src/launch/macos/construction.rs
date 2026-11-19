@@ -16,7 +16,7 @@ use crate::{
     },
     xlayout::{fld, img, Class},
 };
-use std::{thread, time::Duration};
+use std::time::Duration;
 
 #[derive(Clone, Copy)]
 struct Ui {
@@ -155,7 +155,7 @@ pub(super) fn queued(process: &dyn Process, key: &str, state: i32) -> Result<i64
         match construction::target_snapshot::observe(process, key, state) {
             Err(e) if e.code == "torn_read" && attempt < 8 => {
                 attempt += 1;
-                thread::sleep(Duration::from_millis(10 * attempt));
+                crate::phase::sleep(Duration::from_millis(10 * attempt));
             }
             result => break result?,
         }
@@ -323,7 +323,7 @@ fn bring_province_in(process: &dyn Process, keys: &dyn GameInput, province: i32)
             break;
         }
         keys.scroll_burst(GAME, (mx, my), -120, 1)?;
-        thread::sleep(Duration::from_millis(60));
+        crate::phase::sleep(Duration::from_millis(60));
         super::screenmap::wait_camera_still(process, 900);
     }
     for _ in 0..PROVINCE_PAN_TAPS {
@@ -347,7 +347,7 @@ fn bring_province_in(process: &dyn Process, keys: &dyn GameInput, province: i32)
             None => vk::DOWN,
         };
         keys.press_code(key)?;
-        thread::sleep(Duration::from_millis(220));
+        crate::phase::sleep(Duration::from_millis(220));
         super::screenmap::wait_camera_still(process, 900);
     }
     Ok(())
@@ -416,7 +416,7 @@ pub(super) fn select_building(
                 "This building is not offered in the construction panel",
             ));
         }
-        thread::sleep(Duration::from_millis(100));
+        crate::phase::sleep(Duration::from_millis(100));
     }
     click_building(process, keys, key)
 }
@@ -455,7 +455,7 @@ pub(super) fn add(
                 "This building is not offered in the construction panel",
             ));
         }
-        thread::sleep(Duration::from_millis(100));
+        crate::phase::sleep(Duration::from_millis(100));
     }
     click_building(process, keys, key)?;
     let result = (|| {
@@ -485,7 +485,7 @@ pub(super) fn add(
             if click > 0 {
                 // A click right after a placement was ignored by 1.19.4 (gate1194, 1 Nov 2026):
                 // the queue never grew while a fresh call on the same state worked.
-                thread::sleep(Duration::from_millis(600));
+                crate::phase::sleep(Duration::from_millis(600));
             }
             if read(process, selection)?.1.as_deref() != Some(key) {
                 return Err(Error::new(
@@ -508,7 +508,7 @@ pub(super) fn add(
                     if std::time::Instant::now() >= deadline {
                         break false;
                     }
-                    thread::sleep(Duration::from_millis(40));
+                    crate::phase::sleep(Duration::from_millis(40));
                 };
                 if grew {
                     break;
@@ -678,7 +678,7 @@ pub(super) fn reorder(
                         let Some(rect) = rows.get(at) else { break };
                         let (x, y) = rect.center();
                         keys.click(GAME, x, y)?;
-                        thread::sleep(Duration::from_millis(400));
+                        crate::phase::sleep(Duration::from_millis(400));
                     }
                 }
                 let now = position(process)?;

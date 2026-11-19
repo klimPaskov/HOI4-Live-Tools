@@ -38,7 +38,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use std::{collections::BTreeSet, thread, time::Duration};
+use std::{collections::BTreeSet, time::Duration};
 
 pub(super) const TOOL: &str = "hoi4_naval_invasion";
 /// `CBattlePlansTools` (the view that owns `battleplantools_window`), image offset from the RTTI map.
@@ -356,8 +356,9 @@ fn plan_button(r: &Reader<'_>, image: u64, name: &str) -> Result<(Rect, i32)> {
     }
     kit::rect_deep(r, image, window, name)
 }
+#[track_caller]
 fn pause(ms: u64) {
-    thread::sleep(Duration::from_millis(ms));
+    crate::phase::sleep(Duration::from_millis(ms));
 }
 fn aim(centre: (f64, f64), offset: (i32, i32)) -> (f64, f64) {
     (

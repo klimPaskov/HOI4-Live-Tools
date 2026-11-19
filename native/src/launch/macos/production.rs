@@ -401,7 +401,7 @@ pub(super) fn reveal_named(
         // rows keep the place of an older scroll until the list is drawn again. One burst to
         // the list's top redraws it, then the glide is tried once more.
         keys.scroll_burst(GAME, (260.0, 700.0), 240, 60)?;
-        std::thread::sleep(std::time::Duration::from_millis(700));
+        crate::phase::sleep(std::time::Duration::from_millis(700));
         outcome = glide_once()?;
     }
     if matches!(outcome, super::glide::Glided::InBand(_)) {
@@ -741,7 +741,7 @@ pub(super) fn set(
         click(process, keys, rect)?;
         // "Cancel Production Line" asks for confirmation; Return accepts it (1.19.4.1).
         if !super::ui::accept_command(process, keys)? {
-            std::thread::sleep(std::time::Duration::from_millis(300));
+            crate::phase::sleep(std::time::Duration::from_millis(300));
             keys.press(Key::Return)?;
         }
         return wait(process, "line removed", |r, base| {

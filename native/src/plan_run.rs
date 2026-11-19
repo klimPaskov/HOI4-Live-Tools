@@ -6025,6 +6025,8 @@ fn air_war_missions(
             .collect();
         if let Some(first) = fronts.first().copied() {
             let air = tools.call("hoi4_air", &json!({}))?;
+            let mut batch: Vec<(String, &str, i64, bool)> = Vec::new();
+            let mut rebases: Vec<(String, i64, &str)> = Vec::new();
             for wing in list(&air, "wings") {
                 let name = text(&wing["wing"]).to_string();
                 // a wing training in peace (plan_manage air_idle_step) is free for the war
@@ -6077,41 +6079,59 @@ fn air_war_missions(
                 if far || (base.is_some_and(|b| !near.contains(&b)) && !operation.is_empty()) {
                     let planes = wing["aircraft"].as_i64().unwrap_or(0);
                     if let Some(to) = front_air_base(&air, &facing, &fronts, planes) {
-                        let (ok, why) = state.act(
-                            tools,
-                            lease,
-                            "hoi4_air_rebase",
-                            json!({"wing": name, "state_id": to}),
-                            "ar",
-                        )?;
-                        // the game takes the mission while the wing is still flying to the new
-                        // base (airdbg2, 18 Nov 2026): ask again within hours, not a day later
-                        state.skip(now, "airwing", &name, if ok { DAY / 8 } else { DAY });
-                        if ok {
-                            state.done.remove(&format!("airfar:{name}"));
-                            state.done.insert(format!("airmoved:{name}"), now);
-                            let mine = format!("airtry:{name}:");
-                            state.done.retain(|k, _| !k.starts_with(&mine));
+                        // the wings for the same front base go in one order
+                        if rebases.first().is_none_or(|(_, t, _)| *t == to)
+                            && rebases.len() < AIR_BATCH
+                        {
+                            rebases.push((name.clone(), to, mission));
                         }
-                        return Ok(Some(format!(
-                            "air {name} rebases to front state {to} for {mission}: {ok} {why}"
-                        )));
+                        continue;
                     }
                 }
                 let state_id = air_target(&borders, &untried, base, first);
-                let (ok, why) = state.act(
-                    tools,
-                    lease,
-                    "hoi4_air_mission",
-                    json!({"wing": name, "mission": mission, "state_id": state_id}),
-                    "am",
-                )?;
-                if ok {
-                    state.skip(now, "airwing", &name, 30 * DAY);
+                // the wings for the same mission over the same state go in one order (the
+                // batch: one selection, one mission click, one region click); every wing order
+                // alone cost ~5 s = one game day at speed 3 (qc8: 15 wings, 15 game days)
+                if batch
+                    .first()
+                    .is_none_or(|(_, m, s, _)| *m == mission && *s == state_id)
+                    && batch.len() < AIR_BATCH
+                {
+                    batch.push((name, mission, state_id, contact.contains(&state_id)));
+                }
+            }
+            if !batch.is_empty() {
+                let (_, mission, state_id, on_contact) = batch[0].clone();
+                let names: Vec<String> = batch.iter().map(|b| b.0.clone()).collect();
+                let args = if names.len() == 1 {
+                    json!({"wing": names[0], "mission": mission, "state_id": state_id})
                 } else {
-                    // a mission the game did not take (read back) tries the next region of the operation; with none left the wing
-                    // goes to a front base facing the operation; a refusal before input (an open
-                    // event, o1g) only waits
+                    json!({"wings": names, "mission": mission, "state_id": state_id})
+                };
+                let (ok, why) = state.act(tools, lease, "hoi4_air_mission", args, "am")?;
+                // each wing judged by what it flies now (a batch can be partly taken)
+                let flying: HashSet<String> = if ok {
+                    names.iter().cloned().collect()
+                } else {
+                    let air = tools.call("hoi4_air", &json!({})).unwrap_or_default();
+                    list(&air, "wings")
+                        .iter()
+                        .filter(|w| {
+                            w["standing_by"] == json!(false)
+                                && strings(w, "missions").iter().any(|m| m == mission)
+                                && w["region"]["id"].is_i64()
+                        })
+                        .map(|w| text(&w["wing"]).to_string())
+                        .collect()
+                };
+                for name in &names {
+                    if flying.contains(name) {
+                        state.skip(now, "airwing", name, 30 * DAY);
+                        continue;
+                    }
+                    // a mission the game did not take (read back) tries the next region of the
+                    // operation; with none left the wing goes to a front base facing the
+                    // operation; a refusal before input (an open event, o1g) only waits.
                     // A region on the contact line is the nearest the operation has: failing
                     // there, the wing is out of range from its base and is rebased at once (o1l:
                     // wings at inland bases failed over Danzig and Poznan alike).
@@ -6123,17 +6143,59 @@ fn air_war_missions(
                         && !why.contains("events_open")
                     {
                         let moved = state.done.contains_key(&format!("airmoved:{name}"));
-                        if operation.contains(&state_id) && (moved || !contact.contains(&state_id))
-                        {
+                        if operation.contains(&state_id) && (moved || !on_contact) {
                             state.done.insert(format!("airtry:{name}:{state_id}"), now);
                         } else {
                             state.done.insert(format!("airfar:{name}"), now);
                         }
                     }
-                    state.skip(now, "airwing", &name, DAY / 4);
+                    state.skip(now, "airwing", name, DAY / 4);
                 }
                 return Ok(Some(format!(
-                    "air {name} {mission} over state {state_id}: {ok} {why}"
+                    "air {} wing(s) {mission} over state {state_id} ({}): {ok} {why}",
+                    names.len(),
+                    names.join(", ")
+                )));
+            }
+            if !rebases.is_empty() {
+                let (_, to, mission) = rebases[0].clone();
+                let names: Vec<String> = rebases.iter().map(|r| r.0.clone()).collect();
+                let args = if names.len() == 1 {
+                    json!({"wing": names[0], "state_id": to})
+                } else {
+                    json!({"wings": names, "state_id": to})
+                };
+                let (ok, why) = state.act(tools, lease, "hoi4_air_rebase", args, "ar")?;
+                // each wing judged by its base now (a batch can be partly taken)
+                let moved: HashSet<String> = if ok {
+                    names.iter().cloned().collect()
+                } else {
+                    let air = tools.call("hoi4_air", &json!({})).unwrap_or_default();
+                    list(&air, "wings")
+                        .iter()
+                        .filter(|w| {
+                            w["air_base"]["state_id"].as_i64() == Some(to)
+                                || w["transfer_to_base_id"].is_i64()
+                        })
+                        .map(|w| text(&w["wing"]).to_string())
+                        .collect()
+                };
+                for name in &names {
+                    let ok = moved.contains(name);
+                    // the game takes the mission while the wing is still flying to the new
+                    // base (airdbg2, 18 Nov 2026): ask again within hours, not a day later
+                    state.skip(now, "airwing", name, if ok { DAY / 8 } else { DAY });
+                    if ok {
+                        state.done.remove(&format!("airfar:{name}"));
+                        state.done.insert(format!("airmoved:{name}"), now);
+                        let mine = format!("airtry:{name}:");
+                        state.done.retain(|k, _| !k.starts_with(&mine));
+                    }
+                }
+                return Ok(Some(format!(
+                    "air {} wing(s) rebase to front state {to} for {mission} ({}): {ok} {why}",
+                    names.len(),
+                    names.join(", ")
                 )));
             }
         }
@@ -6207,6 +6269,9 @@ fn operation_targets(tools: &dyn Tools) -> Vec<i64> {
 /// The state a war wing based in `base` flies over: an operation target across the border its
 /// base lies on, else the first operation target, else the first enemy state across its border,
 /// else (no enemy states listed) the front state itself.
+/// Wings one air mission order takes at most (`hoi4_air_mission` wings).
+const AIR_BATCH: usize = 12;
+
 fn air_target(hostile: &[&Value], operation: &[i64], base: Option<i64>, first_front: i64) -> i64 {
     let across: Vec<i64> = hostile
         .iter()
@@ -9611,7 +9676,7 @@ pub fn run(
         if std::time::Instant::now() + pause >= deadline {
             break json!("deadline");
         }
-        std::thread::sleep(pause);
+        crate::phase::sleep(pause);
     };
     let plan = read_plan(plan_path).unwrap_or_else(|_| json!({}));
     // the digest uses the plan as the ticks did: with the active phase's overrides (alarms too)
@@ -12110,7 +12175,7 @@ mod tests {
         let mut state = State::default();
         let step = acted(tick(&mut state, &tools, &plan, "l", START).unwrap());
         assert!(
-            step.starts_with("air JG 1 air_superiority over state 64: true"),
+            step.starts_with("air 1 wing(s) air_superiority over state 64 (JG 1): true"),
             "{step}"
         );
     }
@@ -12189,7 +12254,7 @@ mod tests {
         let first = air_war_missions(&mut state, &tools, &plan, "l", START)
             .unwrap()
             .unwrap();
-        assert!(first.contains("rebases to front state 66"), "{first}");
+        assert!(first.contains("rebase to front state 66"), "{first}");
         assert!(!tools
             .0
             .borrow()
@@ -12236,13 +12301,13 @@ mod tests {
         let first = air_war_step(&mut state, &tools, &plan, "l", START)
             .unwrap()
             .unwrap();
-        assert!(first.contains("rebases to front state 66"), "{first}");
+        assert!(first.contains("rebase to front state 66"), "{first}");
         // asked again three hours later, from the facing base, over the operation's region
         let next = air_war_step(&mut state, &tools, &plan, "l", START + DAY / 8 + 1)
             .unwrap()
             .unwrap();
         assert!(
-            next.contains("air_superiority over state 85: true"),
+            next.contains("air_superiority over state 85 (JG 136): true"),
             "{next}"
         );
     }

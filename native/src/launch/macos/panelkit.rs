@@ -700,6 +700,7 @@ pub(super) fn click(
 }
 /// A window that is not shown yet is closed by Escape (their `.gui` shortcut).
 pub(super) fn dismiss_window(process: &dyn Process, keys: &dyn GameInput, class: &'static Class) {
+    let _phase = crate::phase::enter("close");
     super::ui::dismiss(process, keys, |r, i| Ok(!is_open(r, i, class)?));
 }
 pub(super) fn open_now(process: &dyn Process, class: &Class) -> bool {
@@ -1676,6 +1677,7 @@ pub(super) fn open_panels(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
 /// timer then went to the free map and opened the game menu, which pauses the game (the army
 /// orders that followed a focus or research action in the shakedown of 10 November 2026).
 pub(super) fn close_panels(process: &dyn Process, keys: &dyn GameInput) -> Result<Vec<String>> {
+    let _phase = crate::phase::enter("close");
     let first = read(process, open_panels)?;
     super::ui::escape_close(process, keys, 4, crate::pause_guard::ESCAPE_WAIT, |r, i| {
         let open = open_panels(r, i)?;
@@ -1704,6 +1706,7 @@ fn focus_tree_open(r: &Reader<'_>, image: u64) -> Result<bool> {
 /// Close an open focus tree (Escape leaves the search box, then closes the tree); a game menu
 /// opened by a spare Escape is closed again.
 pub(super) fn close_focus_tree(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+    let _phase = crate::phase::enter("close");
     if !read(process, focus_tree_open)? {
         return Ok(());
     }

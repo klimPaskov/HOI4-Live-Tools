@@ -172,7 +172,7 @@ impl Backend for Generated {
                     observed.scope.own_country += 8;
                 }
                 if matches!(self.reply, Reply::Late) {
-                    std::thread::sleep(
+                    crate::phase::sleep(
                         until.saturating_duration_since(Instant::now()) + Duration::from_millis(2),
                     );
                 }

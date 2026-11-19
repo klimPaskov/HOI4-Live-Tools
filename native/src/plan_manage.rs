@@ -9160,7 +9160,7 @@ mod tests {
         let out = extras_step(&mut state, &tools, &plan, "l", START).unwrap();
         assert_eq!(
             out.as_deref(),
-            Some("air 3. Stormo air_superiority over state 550: true Verified"),
+            Some("air 1 wing(s) air_superiority over state 550 (3. Stormo): true Verified"),
             "1. Stormo belongs to the air plan"
         );
     }
@@ -9169,6 +9169,39 @@ mod tests {
         json!({"player": {"tag": "ITA"}, "wars": [{"includes_player": true, "sides": [
             {"countries": [{"tag": "ITA", "casualties_total": total}]},
             {"countries": [{"tag": "ETH", "casualties_total": 1.0}]}]}]})
+    }
+
+    #[test]
+    fn wings_for_one_mission_over_one_state_go_in_one_order() {
+        let mut read = air_read();
+        // two fighter wings standing by at the front: one order with both
+        read["wings"][2]["air_base"] = json!({"base_id": 3, "state_id": 550});
+        read["wings"].as_array_mut().unwrap().push(
+            json!({"wing": "4. Stormo", "aircraft_type": "fighter_equipment_0", "aircraft": 40,
+                "air_base": {"base_id": 3, "state_id": 550}, "standing_by": true, "missions": []}),
+        );
+        let tools = fake(vec![
+            ("hoi4_air", read),
+            (
+                "hoi4_wars",
+                json!({"borders": [{"hostile": true, "own_border_states": [550]}]}),
+            ),
+        ]);
+        let plan = json!({"air": {"war_missions": true}});
+        let mut state = State::default();
+        let out = extras_step(&mut state, &tools, &plan, "l", START).unwrap();
+        let sent: Vec<(String, Value)> = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_air_mission")
+            .collect();
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!(
+            sent[0].1["wings"],
+            json!(["3. Stormo", "4. Stormo"]),
+            "{out:?}"
+        );
+        assert_eq!(sent[0].1["mission"], "air_superiority");
+        assert!(state.skipped(START, "airwing", "4. Stormo"));
     }
 
     fn pp(points: f64) -> Value {

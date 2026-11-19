@@ -28,7 +28,7 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::cell::RefCell;
-use std::{thread, time::Duration};
+use std::time::Duration;
 
 /// ANSI virtual key code of `w` (Shift+W opens the intelligence agency view).
 const KEY_W: u16 = 13;
@@ -40,8 +40,9 @@ const OPERATION_KEY: u64 = 0x450;
 /// Wheel steps tried while the wanted row is not on screen.
 const SCROLL_TRIES: usize = 8;
 
+#[track_caller]
 fn pause(ms: u64) {
-    thread::sleep(Duration::from_millis(ms));
+    crate::phase::sleep(Duration::from_millis(ms));
 }
 
 /// What the request names and what the plan resolved from memory and the files.

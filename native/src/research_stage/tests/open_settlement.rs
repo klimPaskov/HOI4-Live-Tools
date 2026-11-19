@@ -105,7 +105,7 @@ fn persistent_opening_animation_past_the_deadline_closes_unconfirmed_without_rep
                 // performance test. Consume the caller's original deadline only
                 // after possible input and a known pending read. Never renew it.
                 let deadline = self.dispatched_deadline.unwrap();
-                thread::sleep(
+                crate::phase::sleep(
                     deadline.saturating_duration_since(Instant::now()) + Duration::from_millis(1),
                 );
             }

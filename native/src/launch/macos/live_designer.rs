@@ -117,7 +117,7 @@ fn live_cancel_last_conveyor() {
     eprintln!("last conveyor cancel {rect:?}");
     let (x, y) = rect.center();
     keys.click((1920, 1080), x, y).expect("click");
-    std::thread::sleep(std::time::Duration::from_millis(800));
+    crate::phase::sleep(std::time::Duration::from_millis(800));
 }
 
 /// Owner-only manual helper: HOI4_X/HOI4_Y game coordinates to click (HOI4_KEY=letter to press).

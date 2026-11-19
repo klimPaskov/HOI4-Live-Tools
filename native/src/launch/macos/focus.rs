@@ -18,7 +18,6 @@ use crate::{
 };
 use std::{
     collections::BTreeSet,
-    thread,
     time::{Duration, Instant},
 };
 
@@ -215,7 +214,7 @@ fn wait_window<T>(
             Err(error) if error.code == "torn_read" => {}
             Err(error) => return Err(error),
         }
-        thread::sleep(interval.min(end.saturating_duration_since(Instant::now())));
+        crate::phase::sleep(interval.min(end.saturating_duration_since(Instant::now())));
     }
 }
 fn settle<T: PartialEq>(until: Instant, mut probe: impl FnMut() -> Result<T>) -> Result<T> {
@@ -475,7 +474,7 @@ fn start_inner(
         trace.pan_requests += 1;
         guarded.drag_checked(GAME, pan.from, pan.to, &before_down)?;
         deadline(until)?;
-        thread::sleep(
+        crate::phase::sleep(
             Duration::from_millis(150).min(until.saturating_duration_since(Instant::now())),
         );
     }
@@ -620,7 +619,7 @@ mod tests {
     fn late_native_refusal_retains_its_ownership_cause() {
         let until = Instant::now() + Duration::from_secs(1);
         let result: Result<()> = wait_for(until, || {
-            thread::sleep(until.saturating_duration_since(Instant::now()));
+            crate::phase::sleep(until.saturating_duration_since(Instant::now()));
             Err(Error::new("ownership_changed", "original native refusal"))
         });
         let error = result.unwrap_err();
@@ -667,7 +666,7 @@ mod tests {
         assert_eq!((value, probes), (7, 2));
         let until = Instant::now() + Duration::from_millis(10);
         let result = wait_for(until, || {
-            thread::sleep(until.saturating_duration_since(Instant::now()));
+            crate::phase::sleep(until.saturating_duration_since(Instant::now()));
             Ok(Some(7))
         });
         assert_eq!(result.unwrap_err().code, "action_deadline");

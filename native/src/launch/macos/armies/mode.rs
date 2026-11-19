@@ -170,7 +170,7 @@ pub(in super::super) fn clear_orders(
                     "the battle plan bar's delete button (btn_order_delete) is not shown",
                 ));
             }
-            std::thread::sleep(Duration::from_millis(60));
+            crate::phase::sleep(Duration::from_millis(60));
         }
         let button = settled(process, "delete button", |r, i| {
             kit::find_deep(r, i, bar, "btn_order_delete", 6)?
@@ -392,7 +392,7 @@ fn stable(
             return Ok((now, false));
         }
         last = Some(now);
-        std::thread::sleep(Duration::from_millis(60));
+        crate::phase::sleep(Duration::from_millis(60));
     }
 }
 
@@ -488,7 +488,7 @@ fn drive(
         if Instant::now() >= deadline {
             break;
         }
-        std::thread::sleep(Duration::from_millis(60));
+        crate::phase::sleep(Duration::from_millis(60));
     }
     let memory_after = read(process, |r, i| snapshot(r, i, bar)).unwrap_or_default();
     trail.changed = Some(changes(&memory_before, &memory_after));

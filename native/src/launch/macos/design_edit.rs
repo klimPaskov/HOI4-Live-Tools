@@ -24,7 +24,7 @@ use crate::{
     },
 };
 use serde_json::{json, Map, Value};
-use std::{collections::BTreeMap, thread, time::Duration};
+use std::{collections::BTreeMap, time::Duration};
 
 /// Longest design name accepted (the game's boxes take more; the tool stays short).
 pub(super) const MAX_NAME: usize = 40;
@@ -432,7 +432,7 @@ pub(super) fn type_name(
         return Ok(());
     }
     keys.click(dui::GAME, point.0, point.1)?;
-    thread::sleep(Duration::from_millis(250));
+    crate::phase::sleep(Duration::from_millis(250));
     keys.press_code(crate::platform::game_input::vk::END)?; // End
     let mut length = have.chars().count();
     if length > 0 {

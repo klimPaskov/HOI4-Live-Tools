@@ -52,7 +52,11 @@ const STRIKE_REST_DAYS: f64 = 3.0;
 /// Divisions of a driven infantry army that strike from one province.
 const STACK_INFANTRY: i64 = 4;
 /// Tries to rename a formed army to its plan name.
-const RENAME_TRIES: i64 = 1;
+/// Renames an operation's prepare sends: none. A name is cosmetic: the operation orders a formed
+/// army under the game's name (bound by identity in `state.layout`) and the layout's own name step
+/// renames it when the executor has nothing else to do. Every rename in the prepare cost ~5 s, a
+/// game day before the war at speed 3, and half of them failed (qc5: five renames, all failed).
+const RENAME_TRIES: i64 = 0;
 /// Supply percent under which a strike formation opens no new strike.
 const STRIKE_SUPPLY: f64 = 20.0;
 /// War days a line army may stand in one state before it is driven by objectives.

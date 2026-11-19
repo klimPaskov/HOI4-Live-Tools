@@ -5,7 +5,6 @@ use std::{
     collections::VecDeque,
     fs,
     sync::atomic::{AtomicUsize, Ordering},
-    thread,
 };
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 struct Scratch(std::path::PathBuf);
@@ -346,14 +345,14 @@ impl Fake {
 impl Backend for Fake {
     fn observe(&mut self) -> Result<OwnState> {
         if self.expire_readback && self.dispatches > 0 {
-            thread::sleep(
+            crate::phase::sleep(
                 self.dispatched_deadline
                     .unwrap()
                     .saturating_duration_since(Instant::now())
                     + Duration::from_millis(1),
             );
         }
-        thread::sleep(
+        crate::phase::sleep(
             self.slow
                 + if self.dispatches > 0 {
                     self.post_delay

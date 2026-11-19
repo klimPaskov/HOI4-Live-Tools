@@ -36,7 +36,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use std::{collections::BTreeSet, thread, time::Duration};
+use std::{collections::BTreeSet, time::Duration};
 
 pub(super) const TOOLS: [&str; 6] = [
     "hoi4_fleet_merge",
@@ -369,7 +369,7 @@ fn deselect_all(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
             f64::from(selected.select.x) + 30.0,
             f64::from(selected.select.y + selected.select.h / 2),
         )?;
-        thread::sleep(Duration::from_millis(600));
+        crate::phase::sleep(Duration::from_millis(600));
     }
     Err(Error::new("ui_blocked", "A task force stayed selected"))
 }
@@ -468,7 +468,7 @@ pub(super) fn drive(
                 if !answered && plan.op == Op::Delete {
                     // Last resort for an unknown dialog class: Return accepts the modal window
                     // this press opened; the fleet list below verifies what happened.
-                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    crate::phase::sleep(std::time::Duration::from_millis(300));
                     keys.press_code(crate::platform::game_input::vk::RETURN)?;
                     answered = true;
                 }

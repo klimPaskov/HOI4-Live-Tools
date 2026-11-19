@@ -30,7 +30,7 @@ use crate::{
     },
 };
 use serde_json::{json, Value};
-use std::{thread, time::Duration};
+use std::time::Duration;
 
 const GAME: (u32, u32) = airui::GAME;
 const F1: u16 = 122;
@@ -545,8 +545,9 @@ pub(super) fn base_position(process: &dyn Process, state: i32) -> Result<(f64, f
 fn click(keys: &dyn GameInput, x: f64, y: f64) -> Result<()> {
     keys.click(GAME, x, y).map(|_| ())
 }
+#[track_caller]
 fn pause(ms: u64) {
-    thread::sleep(Duration::from_millis(ms));
+    crate::phase::sleep(Duration::from_millis(ms));
 }
 fn icons_shown(r: &crate::memory::Reader<'_>, image: u64) -> Result<bool> {
     Ok(airui::base_icons(r, image)?.iter().any(|i| i.strategic))
@@ -624,6 +625,15 @@ fn release(process: &dyn Process, keys: &dyn GameInput, entered: bool) {
 /// Centre the camera on `state` and return the screen point of its air base circle.
 fn base_point(process: &dyn Process, keys: &dyn GameInput, state: i32) -> Result<(f64, f64)> {
     let pos = base_position(process, state)?;
+    // already on screen (the wing before went to the same base): no Find view, no camera travel
+    super::screenmap::wait_camera_still(process, 400);
+    if let Some(p) = read(process, |r, i| {
+        Ok(airui::icon_at(&airui::base_icons(r, i)?, pos).map(|icon| icon.center()))
+    })?
+    .filter(|p| airui::clickable(*p))
+    {
+        return Ok(p);
+    }
     find_state(process, keys, state)?;
     // At most eight zoom-out wheel steps in all, as before, but sized and sent as one flick.
     let mut left: u32 = 8;
@@ -685,36 +695,70 @@ pub(super) fn rebase(
 ) -> Result<Value> {
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
-    let result = (|| -> Result<Value> {
-        air::select_wing(process, keys, &plan.wing)?;
-        let (x, y) = base_point(process, keys, plan.state)?;
-        if !only_selected(process, &plan.wing)? {
-            return Err(Error::new(
-                "selection_lost",
-                "The wing selection changed while the base was brought on screen; nothing was ordered",
-            ));
-        }
-        keys.right_click(GAME, x, y)?;
-        let (name, to) = (plan.wing.clone(), plan.to_base_id);
-        wait(process, "rebase accepted", move |r, i| {
-            let own = fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
-            let (_, wings) = airread::bases_and_wings(r, i, own)?;
-            Ok(wings
-                .iter()
-                .any(|w| w.name == name && (w.base_id == to || w.transfer_base_id == to)))
-        })
-        .map_err(|_| {
-            Error::new(
-                "rebase_refused",
-                "The wing did not start a transfer (the game refused the base: it is full or the wing cannot move)",
-            )
-        })?;
-        Ok(
-            json!({"wing":plan.wing,"to_state":plan.state,"planes":plan.planes,"from_state":plan.from_state}),
-        )
-    })();
+    let result = rebase_one(process, keys, plan);
     release(process, keys, entered);
     result
+}
+/// The wing selected, the base's circle right-clicked, the transfer read back (in air mode).
+fn rebase_one(process: &dyn Process, keys: &dyn GameInput, plan: &RebasePlan) -> Result<Value> {
+    air::select_wing(process, keys, &plan.wing)?;
+    let (x, y) = base_point(process, keys, plan.state)?;
+    if !only_selected(process, &plan.wing)? {
+        return Err(Error::new(
+            "selection_lost",
+            "The wing selection changed while the base was brought on screen; nothing was ordered",
+        ));
+    }
+    keys.right_click(GAME, x, y)?;
+    let (name, to) = (plan.wing.clone(), plan.to_base_id);
+    wait(process, "rebase accepted", move |r, i| {
+        let own = fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
+        let (_, wings) = airread::bases_and_wings(r, i, own)?;
+        Ok(wings
+            .iter()
+            .any(|w| w.name == name && (w.base_id == to || w.transfer_base_id == to)))
+    })
+    .map_err(|_| {
+        Error::new(
+            "rebase_refused",
+            "The wing did not start a transfer (the game refused the base: it is full or the wing cannot move)",
+        )
+    })?;
+    Ok(
+        json!({"wing":plan.wing,"to_state":plan.state,"planes":plan.planes,"from_state":plan.from_state}),
+    )
+}
+/// Several rebases in one call: one air mode, the camera left on a base the next wing goes to
+/// too (base_point finds its circle on screen without the Find view). Returns each wing's
+/// outcome (None = its transfer started).
+pub(super) fn rebase_many(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    plans: &[RebasePlan],
+) -> Result<Vec<(String, Option<Error>)>> {
+    clear_notices(process, keys)?;
+    let entered = enter_air_mode(process, keys)?;
+    let mut out = Vec::new();
+    for plan in plans {
+        let result = rebase_one(process, keys, plan);
+        if read(process, airui::reorg_open).unwrap_or(false) {
+            release(process, keys, false);
+        } else {
+            let _ = air::deselect(process, keys);
+        }
+        if let Err(e) = &result {
+            if matches!(
+                e.code,
+                "system_dialog_open" | "input_target_not_frontmost" | "action_deadline"
+            ) {
+                leave_air_mode(process, keys, entered);
+                return Err(result.unwrap_err());
+            }
+        }
+        out.push((plan.wing.clone(), result.err()));
+    }
+    leave_air_mode(process, keys, entered);
+    Ok(out)
 }
 
 /// Select the base (left click on its circle), N, pick the reserve row, Ok.
@@ -818,6 +862,22 @@ pub(super) fn mission(
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
     let result = air::assign(process, keys, wing, mission, state, region);
+    leave_air_mode(process, keys, entered);
+    result
+}
+
+/// `air::assign_many` inside the strategic air map (one air mode for every wing listed).
+pub(super) fn missions(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    wings: &[String],
+    mission: &str,
+    state: i32,
+    region: Option<i32>,
+) -> Result<Vec<(String, Option<Error>)>> {
+    clear_notices(process, keys)?;
+    let entered = enter_air_mode(process, keys)?;
+    let result = air::assign_many(process, keys, wings, mission, state, region);
     leave_air_mode(process, keys, entered);
     result
 }

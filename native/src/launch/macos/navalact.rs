@@ -29,7 +29,7 @@ use crate::{
     platform::{game_input::GameInput, Process},
 };
 use serde_json::{json, Value};
-use std::{thread, time::Duration};
+use std::time::Duration;
 
 /// (tool name, mission button, mission code, needs a fleet area of operation).
 pub(super) const MISSIONS: [(&str, &str, i32, bool); 9] = [
@@ -295,8 +295,9 @@ pub(super) fn canonical_region(process: &dyn Process, region: &str) -> Option<St
 pub(super) fn click_at(keys: &dyn GameInput, x: f64, y: f64) -> Result<()> {
     keys.click(GAME, x, y).map(|_| ())
 }
+#[track_caller]
 fn pause(ms: u64) {
-    thread::sleep(Duration::from_millis(ms));
+    crate::phase::sleep(Duration::from_millis(ms));
 }
 /// Switch to the Strategic Navy map mode.
 pub(super) fn enter_navy_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {

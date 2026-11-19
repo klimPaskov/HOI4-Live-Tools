@@ -32,7 +32,7 @@ use crate::{
     xlayout::{self, fld, img},
 };
 use serde_json::{json, Value};
-use std::{collections::BTreeMap, thread, time::Duration};
+use std::{collections::BTreeMap, time::Duration};
 
 const GAME: (u32, u32) = (1920, 1080);
 
@@ -1011,7 +1011,7 @@ fn open_tab(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
         keys.press(Key::letter('w')?)?;
         wait(process, "open research panel", panel_open)?;
         // The panel reopens on the research slots tab; let that settle.
-        thread::sleep(Duration::from_millis(300));
+        crate::phase::sleep(Duration::from_millis(300));
     }
     if !read(process, facilities_shown)? {
         let rect = settled(process, "facilities tab", tab_rect)?;
@@ -1357,7 +1357,7 @@ pub(super) fn panel(
             let (x, y) = rect.center();
             keys.click(GAME, x, y)?;
             wait(process, "open scientist roster", roster_open)?;
-            thread::sleep(Duration::from_millis(250));
+            crate::phase::sleep(Duration::from_millis(250));
             roster = Some(settled(process, "roster rows", roster_names)?);
         }
         if let Some(handle) = handle {
@@ -1367,7 +1367,7 @@ pub(super) fn panel(
             let (x, y) = card.open.center();
             keys.click(GAME, x, y)?;
             wait(process, "open facility window", program_view_open)?;
-            thread::sleep(Duration::from_millis(250));
+            crate::phase::sleep(Duration::from_millis(250));
             entries = Some(settled(process, "project list", |r, i| {
                 // a running facility shows its project instead of a list
                 Ok(project_entries(r, i).unwrap_or_default())
@@ -1469,7 +1469,7 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &Plan) -
             let (x, y) = card.portrait.center();
             keys.click(GAME, x, y)?;
             wait(process, "open scientist roster", roster_open)?;
-            thread::sleep(Duration::from_millis(250));
+            crate::phase::sleep(Duration::from_millis(250));
             pick_scientist(process, keys, &scientist.name)?;
             wait(process, "scientist assigned", |r, i| {
                 let snap = snapshot_from(r, i)?;
@@ -1485,7 +1485,7 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &Plan) -
             let (x, y) = card.open.center();
             keys.click(GAME, x, y)?;
             wait(process, "open facility window", program_view_open)?;
-            thread::sleep(Duration::from_millis(250));
+            crate::phase::sleep(Duration::from_millis(250));
             let find_entry = |r: &Reader<'_>, i: u64| -> Result<Entry> {
                 project_entries(r, i)?
                     .into_iter()
@@ -1864,7 +1864,7 @@ fn open_card_window(process: &dyn Process, keys: &dyn GameInput, handle: u64) ->
     let (x, y) = card.open.center();
     keys.click(GAME, x, y)?;
     wait(process, "open facility window", program_view_open)?;
-    thread::sleep(Duration::from_millis(250));
+    crate::phase::sleep(Duration::from_millis(250));
     Ok(())
 }
 /// Stop the project of one facility: facility window, the stop button and
@@ -1935,7 +1935,7 @@ pub(super) fn unassign(process: &dyn Process, keys: &dyn GameInput, facility: i3
             {
                 break;
             }
-            thread::sleep(Duration::from_millis(40));
+            crate::phase::sleep(Duration::from_millis(40));
         }
         wait(process, "scientist unassigned", |r, i| {
             Ok(snapshot_from(r, i)?
@@ -2012,13 +2012,13 @@ pub(super) fn recruit(process: &dyn Process, keys: &dyn GameInput, name: &str) -
             let (x, y) = rect.center();
             keys.click(GAME, x, y)?;
             wait(process, "open scientist roster", roster_open)?;
-            thread::sleep(Duration::from_millis(250));
+            crate::phase::sleep(Duration::from_millis(250));
         }
         let rect = settled(process, "recruit button", recruit_button)?;
         let (x, y) = rect.center();
         keys.click(GAME, x, y)?;
         wait(process, "open recruit window", recruit_open)?;
-        thread::sleep(Duration::from_millis(250));
+        crate::phase::sleep(Duration::from_millis(250));
         let row = settled(process, "candidate row", |r, i| {
             Ok(recruit_rows(r, i)?
                 .into_iter()

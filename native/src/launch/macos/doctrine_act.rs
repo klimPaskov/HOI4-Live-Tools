@@ -32,7 +32,7 @@ use crate::{
     xlayout::{self, fld, img},
 };
 use serde_json::{json, Value};
-use std::{cell::RefCell, thread, time::Duration};
+use std::{cell::RefCell, time::Duration};
 
 /// ANSI virtual key code of `e` (Shift+E opens the officer corps view).
 const KEY_E: u16 = 14;
@@ -409,7 +409,7 @@ fn open_view(process: &dyn Process, keys: &dyn GameInput, t: &Target) -> Result<
         wait(process, "open officer corps view", |r, i| {
             pk::is_open(r, i, &pk::OFFICER_VIEW)
         })?;
-        thread::sleep(Duration::from_millis(300));
+        crate::phase::sleep(Duration::from_millis(300));
     }
     let button = format!("{}_doctrine_button", t.folder);
     pk::click(process, keys, "doctrine folder button", |r, i| {
@@ -420,7 +420,7 @@ fn open_view(process: &dyn Process, keys: &dyn GameInput, t: &Target) -> Result<
     wait(process, "open doctrine view", |r, i| {
         pk::is_open(r, i, &pk::DOCTRINE_VIEW)
     })?;
-    thread::sleep(Duration::from_millis(300));
+    crate::phase::sleep(Duration::from_millis(300));
     Ok(())
 }
 
@@ -441,7 +441,7 @@ fn select_folder_tab(process: &dyn Process, keys: &dyn GameInput, t: &Target) ->
         })?;
         pk::rect_of(r, i, item.frame, "folder_button", 2)
     })?;
-    thread::sleep(Duration::from_millis(300));
+    crate::phase::sleep(Duration::from_millis(300));
     Ok(())
 }
 
@@ -470,7 +470,7 @@ fn open_selection(process: &dyn Process, keys: &dyn GameInput, t: &Target) -> Re
         }
     })?;
     wait(process, "open doctrine selection list", selection_open)?;
-    thread::sleep(Duration::from_millis(300));
+    crate::phase::sleep(Duration::from_millis(300));
     Ok(())
 }
 
@@ -532,7 +532,7 @@ fn adopt(process: &dyn Process, keys: &dyn GameInput, t: &Target, display: &str)
                 .2
                 .ok_or_else(|| Error::new("gui_target_unavailable", "Row select button not found"))
         })?;
-        thread::sleep(Duration::from_millis(250));
+        crate::phase::sleep(Duration::from_millis(250));
         let unlock_enabled = read(process, |r, i| {
             let root = selection_root(r, i)?
                 .ok_or_else(|| Error::new("window_not_open", "Doctrine selection list closed"))?;
@@ -1012,7 +1012,7 @@ pub(super) fn officer_call(
                     })?;
                 }
                 // the view slides in from the left edge
-                thread::sleep(Duration::from_millis(600));
+                crate::phase::sleep(Duration::from_millis(600));
                 let slots = slots_of(&read(process, |r, i| officer_widgets(r, i, false))?);
                 let Some((view, k)) = &slot else {
                     return Ok(json!({"listing_only": true, "slots": slots,
@@ -1125,7 +1125,7 @@ pub(super) fn officer_call(
                     .map(|s| s["taken"] == json!(true))
                     .unwrap_or(false);
                 pk::click(process, keys, "officer corps spirit", |_, _| Ok(target))?;
-                thread::sleep(Duration::from_millis(500));
+                crate::phase::sleep(Duration::from_millis(500));
                 let after = slots_of(&read(process, |r, i| officer_widgets(r, i, false))?);
                 let taken = after
                     .iter()

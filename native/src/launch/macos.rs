@@ -128,7 +128,6 @@ use std::{
     io::Read,
     path::Path,
     sync::{Arc, Mutex},
-    thread,
     time::{Duration, Instant},
 };
 
@@ -239,7 +238,7 @@ impl Guard {
             match game::clock_context(process) {
                 Err(e) if e.code == "torn_read" && retries < 3 => {
                     retries += 1;
-                    thread::sleep(Duration::from_millis(2));
+                    crate::phase::sleep(Duration::from_millis(2));
                 }
                 result => break result?,
             }
@@ -458,7 +457,7 @@ impl ClockBackend<'_> {
                     "Clock state did not change after one ordinary key",
                 ));
             }
-            thread::sleep(Duration::from_millis(20));
+            crate::phase::sleep(Duration::from_millis(20));
         }
     }
 }
@@ -816,8 +815,8 @@ pub fn mac_tool_list() -> Vec<Value> {
         doctrine_act::tool(),
         json!({"name":"hoi4_army_commander","description":"Assign a general (exact name as listed by hoi4_commanders) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list. Verified when the army's commander is that general. Refused before any click with army_unknown (lists valid armies/groups), unknown_commander (5 closest names) or commander_unavailable (already leads another army/group; pass reassign: true to move them).","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"general":{"type":"string"},"reassign":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","general","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wings","description":"Own air wings with air base, assigned region and missions, from the Air Forces Overview (opens it). Changes nothing in the game.","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_air_mission","description":"Give an own air wing (exact name) a mission over a strategic air region with the game's ordinary controls: wing row of the Air Forces Overview (L), the mission button, the Find view centres `state_id` (any state inside the wanted region) and a right click assigns. Pass `region` (region id or display name, e.g. 'Eastern Germany') instead of or with `state_id`: the state is then chosen from the game's files and the result is verified to be that region; a sea region (no state in it, e.g. 'English Channel') is reached by centring the nearest state and clicking the region's own sea provinces on screen. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (unknown mission), region_unknown, region_state_mismatch; the game's own disabling (mission not offered / needs more planes) surfaces as invalid_target. Verified from the wing's mission mask and region id in memory (hoi4_air). No percent or intensity control exists in the game's air UI; aggressiveness and day/night are per-wing cycle buttons not driven by this tool.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","mission","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_air_rebase","description":"Rebase one own air wing to the air base of a state with ordinary input: strategic air map (F3), the wing's row of the Air Forces Overview, the Find view centres `state_id`, the base's circle is located from the game's own map icon objects and right clicked. The wing flies a transfer (status 'To <base>'); verified from the wing's transfer destination in memory (hoi4_air `transfer_to_base_id`), the base id changes on arrival. Typed refusals before any input: wing_unknown, wing_ambiguous, air_base_unknown (state without an own air base; lists own base states), nothing_to_change (already based or already flying there), air_base_full (capacity minus wings stationed or incoming). The game set no range limit on a transfer in the test (a 570 km fighter wing was accepted 207 map units away); if it refuses anyway the tool reports rebase_refused. Map mode is restored afterwards.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","state_id","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_air_mission","description":"Give an own air wing (exact name) a mission over a strategic air region with the game's ordinary controls: wing row of the Air Forces Overview (L), the mission button, the Find view centres `state_id` (any state inside the wanted region) and a right click assigns. Pass `region` (region id or display name, e.g. 'Eastern Germany') instead of or with `state_id`: the state is then chosen from the game's files and the result is verified to be that region; a sea region (no state in it, e.g. 'English Channel') is reached by centring the nearest state and clicking the region's own sea provinces on screen. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (unknown mission), region_unknown, region_state_mismatch; the game's own disabling (mission not offered / needs more planes) surfaces as invalid_target. Verified from the wing's mission mask and region id in memory (hoi4_air). No percent or intensity control exists in the game's air UI; aggressiveness and day/night are per-wing cycle buttons not driven by this tool.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) given the same mission over the same region in one input sequence: selected together in the overview (a click, then Shift+clicks), one mission click, one region click; a wing the selection does not take is ordered alone. The receipt is Verified when all fly it, Diverged when some do (detail.wings names each, result.failed says why)"},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["mission","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_air_rebase","description":"Rebase one own air wing to the air base of a state with ordinary input: strategic air map (F3), the wing's row of the Air Forces Overview, the Find view centres `state_id`, the base's circle is located from the game's own map icon objects and right clicked. The wing flies a transfer (status 'To <base>'); verified from the wing's transfer destination in memory (hoi4_air `transfer_to_base_id`), the base id changes on arrival. Typed refusals before any input: wing_unknown, wing_ambiguous, air_base_unknown (state without an own air base; lists own base states), nothing_to_change (already based or already flying there), air_base_full (capacity minus wings stationed or incoming). The game set no range limit on a transfer in the test (a 570 km fighter wing was accepted 207 map units away); if it refuses anyway the tool reports rebase_refused. Map mode is restored afterwards.","inputSchema":{"type":"object","properties":{"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) to the same base in one call: one air mode, each selected and right-clicked onto the base in turn (the camera stays on the base). Verified when all transfer, Diverged when some do (detail.wings, result.failed)"},"wing":{"type":"string","maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_create","description":"Found a new air wing from reserve aircraft at an own air base: strategic air map, Find view centres `state_id`, left click on the base circle, the N shortcut ('Add new Air Wing'), the reserve row of `aircraft` (variant name such as 'Ju 86' or class name such as 'Inter-War Fighter', case-insensitive) moves up to 100 planes of that variant into the wing (the game's own limit per click), Ok. Reserve aircraft come from production or from disbanding a wing. Typed refusals: air_base_unknown, air_base_full (before input); no_reserve_aircraft (the game refuses the window when the reserve is empty), aircraft_not_in_reserve (lists what is in reserve), aircraft_ambiguous, create_unavailable (Ok disabled, e.g. no manpower) while driving; nothing is created in those cases. Verified from the new wing's name appearing at that base in memory (hoi4_air). The wing gets the game's default name and 'Deploying from Reserves' status.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"aircraft":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","aircraft","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_disband","description":"Disband one own air wing (row of the Air Forces Overview, toolbar Disband, OK of the confirmation); all its equipment returns to the reserve. Typed refusals before input: wing_unknown, wing_ambiguous; disband_unavailable if the game disables the button. Verified from the wing's absence in memory (hoi4_air).","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_split","description":"Split one own air wing in two halves with the toolbar's Split button (shortcut D) after selecting it in the Air Forces Overview: the original keeps half of its aircraft, a new wing of the same type, base and orders takes the rest and gets the game's default name. Typed refusals before input: wing_unknown, wing_ambiguous, wing_in_transfer, nothing_to_change (fewer than 2 aircraft); split_unavailable if the game disables the button. Verified from memory: one more wing at the base and fewer aircraft in the original. This and hoi4_air_wing_create (up to 100 aircraft per click) are the ways to size wings; hoi4_air_wing_merge joins them again.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","request_id","lease_token"],"additionalProperties":false}}),
@@ -1027,7 +1026,23 @@ impl Commands for MacClock {
         // settlement of an earlier dispatch resolves the same way, so its action still matches.
         let (resolved_arguments, resolved) = self.resolve_army_roles(process, name, arguments);
         let arguments = resolved_arguments.as_ref().unwrap_or(arguments);
+        // An order (a call with a request_id) writes where its seconds went (crate::phase).
+        let order = arguments
+            .get("request_id")
+            .is_some()
+            .then(crate::phase::begin);
         let result = self.call_resolved(process, name, arguments);
+        if let Some(parts) = order.and_then(crate::phase::Order::finish) {
+            eprintln!(
+                "[order] {}",
+                json!({"tool": name, "kind": order_kind(name, arguments),
+                    "ok": result.is_ok(),
+                    "status": result.as_ref().ok().and_then(|v| v.get("status")
+                        .or_else(|| v.get("receipt").and_then(|r| r.get("status")))).cloned(),
+                    "error": result.as_ref().err().map(|e| e.code),
+                    "ms": parts})
+            );
+        }
         if resolved.is_empty() {
             return result;
         }
@@ -1240,7 +1255,7 @@ impl MacClock {
         let process = self.process.as_ref();
         panelkit::close_panels(process, &*self.keys)?;
         self.keys.press_code(122)?;
-        std::thread::sleep(std::time::Duration::from_millis(150));
+        crate::phase::sleep(std::time::Duration::from_millis(150));
         Ok(())
     }
 }
@@ -4547,7 +4562,7 @@ impl MacClock {
                     let card = armies::shown_card(process, &self.keys, &army)?;
                     let (cx, cy) = card.center();
                     let icon = (cx, f64::from(card.y) - 50.0);
-                    std::thread::sleep(Duration::from_millis(300));
+                    crate::phase::sleep(Duration::from_millis(300));
                     match how {
                         1 => {
                             self.keys.right_click(navalui::GAME, cx, cy)?;
@@ -4559,7 +4574,7 @@ impl MacClock {
                             self.keys.click(navalui::GAME, icon.0, icon.1)?;
                         }
                     }
-                    std::thread::sleep(Duration::from_millis(900));
+                    crate::phase::sleep(Duration::from_millis(900));
                     let (_, w1) = words(process)?;
                     let (_, a1) = armies::debug_army_words(process, &army, 0x3000)?;
                     let diff = |a: &[u64], b: &[u64]| -> Vec<String> {
@@ -4634,14 +4649,16 @@ impl MacClock {
         ) {
             enum Air {
                 Mission {
-                    wing: String,
+                    // one wing, or several ordered in one input sequence (air::assign_many)
+                    wings: Vec<String>,
                     mission: String,
                     state: i32,
                     region: Option<i32>,
                     mask: i32,
                 },
                 Rebase {
-                    wing: String,
+                    // one wing, or several to the same base in one call (airact::rebase_many)
+                    wings: Vec<String>,
                     state: i32,
                 },
                 Create {
@@ -4668,6 +4685,7 @@ impl MacClock {
                         args,
                         &[
                             "wing",
+                            "wings",
                             "mission",
                             "state_id",
                             "region",
@@ -4675,7 +4693,42 @@ impl MacClock {
                             "lease_token",
                         ],
                     )?;
-                    let wing = airact::text_arg(args, "wing", 128)?;
+                    let wings: Vec<String> = match args.get("wings") {
+                        Some(list) => {
+                            let list = list
+                                .as_array()
+                                .filter(|l| (1..=24).contains(&l.len()))
+                                .ok_or_else(|| {
+                                    Error::new(
+                                        "invalid_arguments",
+                                        "wings must list 1..24 wing names",
+                                    )
+                                })?;
+                            let mut out: Vec<String> = Vec::new();
+                            for v in list {
+                                let w = v
+                                    .as_str()
+                                    .filter(|w| !w.is_empty() && w.len() <= 128)
+                                    .ok_or_else(|| {
+                                        Error::new(
+                                            "invalid_arguments",
+                                            "a wing name must be 1..128 characters",
+                                        )
+                                    })?;
+                                if !out.iter().any(|o| o == w) {
+                                    out.push(w.to_string());
+                                }
+                            }
+                            if args.get("wing").is_some() {
+                                return Err(Error::new(
+                                    "invalid_arguments",
+                                    "give wing or wings, not both",
+                                ));
+                            }
+                            out
+                        }
+                        None => vec![airact::text_arg(args, "wing", 128)?],
+                    };
                     let mission = airact::text_arg(args, "mission", 40)?;
                     let Some(&(_, frame)) = air::MISSIONS.iter().find(|(n, _)| *n == mission)
                     else {
@@ -4701,7 +4754,7 @@ impl MacClock {
                             .transpose()?,
                     )?;
                     Air::Mission {
-                        wing,
+                        wings,
                         // training has no region in memory (air::assign)
                         region: if mission == "training" { None } else { region },
                         mission,
@@ -4710,9 +4763,48 @@ impl MacClock {
                     }
                 }
                 "hoi4_air_rebase" => {
-                    allowed(args, &["wing", "state_id", "request_id", "lease_token"])?;
+                    allowed(
+                        args,
+                        &["wing", "wings", "state_id", "request_id", "lease_token"],
+                    )?;
+                    let wings = match args.get("wings") {
+                        Some(list) => {
+                            if args.get("wing").is_some() {
+                                return Err(Error::new(
+                                    "invalid_arguments",
+                                    "give wing or wings, not both",
+                                ));
+                            }
+                            let list = list
+                                .as_array()
+                                .filter(|l| (1..=24).contains(&l.len()))
+                                .ok_or_else(|| {
+                                    Error::new(
+                                        "invalid_arguments",
+                                        "wings must list 1..24 wing names",
+                                    )
+                                })?;
+                            let mut out: Vec<String> = Vec::new();
+                            for v in list {
+                                let w = v
+                                    .as_str()
+                                    .filter(|w| !w.is_empty() && w.len() <= 128)
+                                    .ok_or_else(|| {
+                                        Error::new(
+                                            "invalid_arguments",
+                                            "a wing name must be 1..128 characters",
+                                        )
+                                    })?;
+                                if !out.iter().any(|o| o == w) {
+                                    out.push(w.to_string());
+                                }
+                            }
+                            out
+                        }
+                        None => vec![airact::text_arg(args, "wing", 128)?],
+                    };
                     Air::Rebase {
-                        wing: airact::text_arg(args, "wing", 128)?,
+                        wings,
                         state: airact::state_arg(args, "state_id")?,
                     }
                 }
@@ -4777,12 +4869,25 @@ impl MacClock {
             let mut create_plan = None;
             let mut split_plan = None;
             let mut merge_plan = None;
+            let mut rebase_plans: Vec<airact::RebasePlan> = Vec::new();
             let mut before: Option<airact::WingSnap> = None;
+            let mut befores: Vec<airact::WingSnap> = Vec::new();
             if !retry {
                 match &op {
-                    Air::Mission { wing, .. } => before = Some(airact::plan_disband(&wings, wing)?),
-                    Air::Rebase { wing, state } => {
-                        rebase_plan = Some(airact::plan_rebase(&bases, &wings, wing, *state)?);
+                    Air::Mission { wings: names, .. } => {
+                        for wing in names {
+                            befores.push(airact::plan_disband(&wings, wing)?);
+                        }
+                        before = befores.first().cloned();
+                    }
+                    Air::Rebase {
+                        wings: names,
+                        state,
+                    } => {
+                        for wing in names {
+                            rebase_plans.push(airact::plan_rebase(&bases, &wings, wing, *state)?);
+                        }
+                        rebase_plan = rebase_plans.first().cloned();
                     }
                     Air::Create { state, aircraft } => {
                         create_plan = Some(airact::plan_create(&bases, &wings, *state, aircraft)?);
@@ -4798,17 +4903,23 @@ impl MacClock {
             }
             let action = match &op {
                 Air::Mission {
-                    wing,
+                    wings,
                     mission,
                     state,
                     region,
                     ..
-                } => {
-                    json!({"kind":"air_mission","wing":wing,"mission":mission,"state_id":state,"region":region})
-                }
-                Air::Rebase { wing, state } => {
-                    json!({"kind":"air_rebase","wing":wing,"state_id":state})
-                }
+                } => match wings.as_slice() {
+                    [wing] => {
+                        json!({"kind":"air_mission","wing":wing,"mission":mission,"state_id":state,"region":region})
+                    }
+                    _ => {
+                        json!({"kind":"air_mission","wings":wings,"mission":mission,"state_id":state,"region":region})
+                    }
+                },
+                Air::Rebase { wings, state } => match wings.as_slice() {
+                    [wing] => json!({"kind":"air_rebase","wing":wing,"state_id":state}),
+                    _ => json!({"kind":"air_rebase","wings":wings,"state_id":state}),
+                },
                 Air::Create { state, aircraft } => {
                     json!({"kind":"air_wing_create","state_id":state,"aircraft":aircraft})
                 }
@@ -4824,7 +4935,27 @@ impl MacClock {
                 let (bases_now, wings_now) = airact::own(process)?;
                 let snap_of = |n: &str| wings_now.iter().find(|w| w.name == n).map(airact::snap);
                 Ok(match &op {
-                    Air::Mission { wing, mask, region, .. } => {
+                    Air::Mission { wings, mask, region, .. } if wings.len() > 1 => {
+                        // several wings: all on it = Reached, some = Diverged (each named), none
+                        // = Unchanged; the dispatch already waited for each wing's answer
+                        let on = |n: &airact::WingSnap| n.mission_mask & mask == *mask && region.is_none_or(|r| n.region_id == r);
+                        let rows: Vec<(String, Option<airact::WingSnap>)> =
+                            wings.iter().map(|w| (w.clone(), snap_of(w))).collect();
+                        let reached = rows.iter().filter(|(_, n)| n.as_ref().is_some_and(on)).count();
+                        let detail = json!({"wings": rows.iter().map(|(w, n)| json!({"wing": w,
+                            "flying": n.as_ref().is_some_and(on),
+                            "mission_mask": n.as_ref().map(|n| n.mission_mask),
+                            "region_id": n.as_ref().map(|n| n.region_id)})).collect::<Vec<_>>()});
+                        if reached == rows.len() {
+                            journal::Outcome::Reached(detail)
+                        } else if reached > 0 {
+                            journal::Outcome::Diverged(detail)
+                        } else {
+                            journal::Outcome::Unchanged(detail)
+                        }
+                    }
+                    Air::Mission { wings, mask, region, .. } => {
+                        let wing = &wings[0];
                         let now = snap_of(wing);
                         let verdict = match (&before, retry) {
                             (Some(b), false) => airact::settle_mission(b, now.as_ref(), *mask, *region),
@@ -4836,7 +4967,26 @@ impl MacClock {
                         };
                         verdict.outcome(json!({"wing":now.map(|n| json!({"mission_mask":n.mission_mask,"region_id":n.region_id}))}))
                     }
-                    Air::Rebase { wing, state } => {
+                    Air::Rebase { wings, state } if wings.len() > 1 => {
+                        let to = bases_now.iter().find(|b| b.state == Some(*state)).map(|b| b.id).unwrap_or(-1);
+                        let rows: Vec<(String, Option<airact::WingSnap>)> =
+                            wings.iter().map(|w| (w.clone(), snap_of(w))).collect();
+                        let moving = |n: &airact::WingSnap| n.base_id == to || n.transfer_base_id == to;
+                        let reached = rows.iter().filter(|(_, n)| n.as_ref().is_some_and(moving)).count();
+                        let detail = json!({"wings": rows.iter().map(|(w, n)| json!({"wing": w,
+                            "moving": n.as_ref().is_some_and(moving),
+                            "base_id": n.as_ref().map(|n| n.base_id),
+                            "transfer_to_base_id": n.as_ref().map(|n| n.transfer_base_id)})).collect::<Vec<_>>()});
+                        if reached == rows.len() {
+                            journal::Outcome::Reached(detail)
+                        } else if reached > 0 {
+                            journal::Outcome::Diverged(detail)
+                        } else {
+                            journal::Outcome::Unchanged(detail)
+                        }
+                    }
+                    Air::Rebase { wings, state } => {
+                        let wing = &wings[0];
                         let now = snap_of(wing);
                         let to = bases_now.iter().find(|b| b.state == Some(*state)).map(|b| b.id).unwrap_or(-1);
                         let verdict = match (&rebase_plan, retry) {
@@ -4898,14 +5048,56 @@ impl MacClock {
                 }
                 *info.borrow_mut() = match &op {
                     Air::Mission {
-                        wing,
+                        wings,
+                        mission,
+                        state,
+                        region,
+                        ..
+                    } if wings.len() > 1 => {
+                        let outcomes =
+                            airact::missions(process, keys, wings, mission, *state, *region)?;
+                        let failed: Vec<Value> = outcomes
+                            .iter()
+                            .filter_map(|(w, e)| {
+                                e.as_ref().map(
+                                    |e| json!({"wing": w, "code": e.code, "message": e.message}),
+                                )
+                            })
+                            .collect();
+                        if failed.len() == outcomes.len() {
+                            if let Some((_, Some(e))) = outcomes.into_iter().next() {
+                                return Err(e);
+                            }
+                        }
+                        json!({"wings":wings,"mission":mission,"state_id":state,"failed":failed})
+                    }
+                    Air::Mission {
+                        wings,
                         mission,
                         state,
                         region,
                         ..
                     } => {
+                        let wing = &wings[0];
                         airact::mission(process, keys, wing, mission, *state, *region)?;
                         json!({"wing":wing,"mission":mission,"state_id":state})
+                    }
+                    Air::Rebase { wings, state } if wings.len() > 1 => {
+                        let outcomes = airact::rebase_many(process, keys, &rebase_plans)?;
+                        let failed: Vec<Value> = outcomes
+                            .iter()
+                            .filter_map(|(w, e)| {
+                                e.as_ref().map(
+                                    |e| json!({"wing": w, "code": e.code, "message": e.message}),
+                                )
+                            })
+                            .collect();
+                        if failed.len() == outcomes.len() {
+                            if let Some((_, Some(e))) = outcomes.into_iter().next() {
+                                return Err(e);
+                            }
+                        }
+                        json!({"wings":wings,"to_state":state,"failed":failed})
                     }
                     Air::Rebase { .. } => airact::rebase(
                         process,
@@ -4944,7 +5136,15 @@ impl MacClock {
                 actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
             let (_, after) = airact::own(process)?;
             let after_rows: Vec<Value> = match &op {
-                Air::Mission { wing, .. } | Air::Rebase { wing, .. } | Air::Hold { wing } => after
+                Air::Mission { wings: names, .. } | Air::Rebase { wings: names, .. } => after
+                    .iter()
+                    .filter(|w| names.contains(&w.name))
+                    .map(|w| json!({"wing":w.name,"aircraft":w.planes,"air_base_state":w.base_state,
+                        "missions":if w.region_id > 0 { airread::missions_in(w.mission_mask) } else { Vec::new() },
+                        "standing_by":w.region_id <= 0,"region_id":(w.region_id > 0).then_some(w.region_id),
+                        "region":w.region_name}))
+                    .collect(),
+                Air::Hold { wing } => after
                     .iter()
                     .filter(|w| w.name == *wing)
                     .map(|w| json!({"wing":w.name,"aircraft":w.planes,"air_base_state":w.base_state,
@@ -5095,7 +5295,7 @@ impl MacClock {
                 while std::time::Instant::now() < deadline
                     && read_now().ok().and_then(|x| x.0).as_deref() != Some(law)
                 {
-                    std::thread::sleep(std::time::Duration::from_millis(150));
+                    crate::phase::sleep(std::time::Duration::from_millis(150));
                 }
                 occlaw::close(process, keys);
                 result
@@ -7103,5 +7303,24 @@ mod speed_lock_tests {
         );
         assert!(super::speed_lock(None, 1).is_ok());
         assert!(super::speed_lock(Some(""), 4).is_ok());
+    }
+}
+
+/// The order kind an `[order]` timing line is filed under: the tool without its prefix, with
+/// the variant that changes its input path (a move of listed divisions, a halt, a plan mode).
+fn order_kind(name: &str, arguments: &Value) -> String {
+    let base = name.trim_start_matches("hoi4_");
+    let has = |k: &str| arguments.get(k).is_some_and(|v| !v.is_null());
+    let variant = match base {
+        "army_move" if has("divisions") => "divisions",
+        "army_move" if has("halt") => "halt",
+        "army_plan" if has("mode") && !has("execute") => "mode",
+        "army_plan" if has("clear_orders") => "clear",
+        _ => "",
+    };
+    if variant.is_empty() {
+        base.to_string()
+    } else {
+        format!("{base}.{variant}")
     }
 }
