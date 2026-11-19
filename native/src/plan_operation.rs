@@ -2087,23 +2087,42 @@ fn prepare(
         )?;
         return Ok(Some(line));
     }
-    // the group: formed when its line armies stand in none (never regrouped)
+    // the group: formed when its line armies stand in none; formed again with every line army
+    // when one of them stands outside it before the war (g17m, 19 Nov 2026: the group was made in
+    // 1936 of the two line armies that existed, Armee Süd formed later and stood outside it on
+    // the group's war day, with no front and no planning bonus). The game keeps the fronts and
+    // planning of a regrouped army (probe rp2).
     let line_armies: Vec<&Unit> = units.iter().filter(|u| u.role == Role::Line).collect();
-    if group.is_none() && line_armies.len() >= 2 && !state.skipped(now, "opgrp", id) {
+    let outside = line_armies
+        .iter()
+        .any(|u| army_row(roster, &u.name).is_some_and(|r| r["army_group"].is_null()));
+    let regroup_key = key(id, "group_again");
+    let regroups = state.done.get(&regroup_key).copied().unwrap_or(0);
+    let regroup = group.is_some() && outside && !state.war_active && regroups < 3;
+    if (group.is_none() || regroup) && line_armies.len() >= 2 && !state.skipped(now, "opgrp", id) {
         let mut names: Vec<String> = line_armies.iter().map(|u| u.name.clone()).collect();
         let planned = list(plan, "army_group")
             .iter()
             .find(|g| item_id(g).as_deref() == op["group"].as_str());
         for hint in planned.map(|g| strings(g, "armies")).unwrap_or_default() {
             let n = resolve(state, &hint);
-            let free = army_row(roster, &n).is_some_and(|r| r["army_group"].is_null());
+            let free = army_row(roster, &n).is_some_and(|r| {
+                r["army_group"].is_null() || (regroup && r["army_group"].as_str() == group)
+            });
             if free && !names.contains(&n) {
                 names.push(n);
             }
         }
-        names.retain(|n| army_row(roster, n).is_some_and(|r| r["army_group"].is_null()));
+        names.retain(|n| {
+            army_row(roster, n).is_some_and(|r| {
+                r["army_group"].is_null() || (regroup && r["army_group"].as_str() == group)
+            })
+        });
         if names.len() >= 2 {
             state.skip(now, "opgrp", id, 2 * DAY);
+            if regroup {
+                state.done.insert(regroup_key, regroups + 1);
+            }
             let line = order(
                 state,
                 tools,

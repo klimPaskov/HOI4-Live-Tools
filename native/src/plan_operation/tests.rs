@@ -1493,3 +1493,37 @@ fn a_mobile_formation_sends_its_other_templates_to_the_line_most_short_of_its_di
         "then the armour is gathered in: {moves:?}"
     );
 }
+
+#[test]
+fn a_line_army_outside_the_group_before_the_war_forms_the_group_again_with_it() {
+    // g17m: the group was formed in 1936 of the two line armies that existed; Armee Süd formed
+    // later and stood outside it on the war day with no front and no planning bonus
+    let game = Game::new();
+    game.unit("Sued", |r| r["army_group"] = json!(null));
+    let plan = plan();
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let groups: Vec<Value> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, _)| n == "hoi4_army_group_create")
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(
+        groups.first(),
+        Some(&json!({"armies": ["Mitte", "Sued"]})),
+        "{groups:?}"
+    );
+    // at war it is never regrouped
+    let game = Game::new();
+    game.unit("Sued", |r| r["army_group"] = json!(null));
+    let mut state = State {
+        war_active: true,
+        ..State::default()
+    };
+    burst(&mut state, &game, &plan, START);
+    assert!(game
+        .orders()
+        .iter()
+        .all(|(n, _)| n != "hoi4_army_group_create"));
+}
