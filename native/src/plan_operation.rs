@@ -2496,11 +2496,8 @@ fn advance(
     let op_line = still(&line);
     for u in units.iter().filter(|u| attacker(u)) {
         let own_line_held = u.line.is_empty() || held(tools, &me, &u.line).len() == u.line.len();
-        let mut wanted: Vec<i64> = if u.spear && own_line_held {
-            // its painted line taken: the next spearhead to the nearest states still to take
-            let mut next = solo_line(state, roster, &u.name, &op_line);
-            next.truncate(2);
-            next
+        let mut wanted: Vec<i64> = if u.spear {
+            spear_line(state, id, roster, u, &me, tools, &op_line, now)
         } else if u.role == Role::Group || own_line_held {
             op_line.clone()
         } else {
@@ -2581,6 +2578,69 @@ fn advance(
         }
     }
     Ok(None)
+}
+
+/// The line a spearhead is painted to at war: the states of its own thrust still to take, then
+/// the nearest state of the operation's line; a state its spearhead has not taken in
+/// STRIKE_MAX_DAYS is given up to the infantry's plan and the spearhead goes on to the next (qt1,
+/// 19 Nov 2026: Panzergruppe Ost stood 35 days in Lodz on a Warsaw spearhead, behind the
+/// Vistula and the city, while the states round it stood open).
+#[allow(clippy::too_many_arguments)]
+fn spear_line(
+    state: &mut State,
+    id: &str,
+    roster: &Value,
+    u: &Unit,
+    me: &str,
+    tools: &dyn Tools,
+    op_line: &[i64],
+    now: GameHour,
+) -> Vec<i64> {
+    let skipped = |state: &State, s: i64| {
+        state
+            .done
+            .contains_key(&key(id, &format!("spearskip:{}:{s}", u.name)))
+    };
+    let have = held(tools, me, &u.line);
+    let mut next: Vec<i64> = u
+        .line
+        .iter()
+        .copied()
+        .filter(|s| !have.contains(s) && !skipped(state, *s))
+        .collect();
+    if next.is_empty() {
+        next = solo_line(state, roster, &u.name, op_line)
+            .into_iter()
+            .filter(|s| !skipped(state, *s))
+            .take(1)
+            .collect();
+    }
+    let Some(target) = next.last().copied() else {
+        return next;
+    };
+    let fk = key(id, &format!("spearfor:{}", u.name));
+    let sk = key(id, &format!("spearsince:{}", u.name));
+    if state.done.get(&fk) != Some(&target) {
+        state.done.insert(fk, target);
+        state.done.insert(sk, now);
+    } else if state
+        .done
+        .get(&sk)
+        .is_some_and(|t| (now - t) as f64 >= STRIKE_MAX_DAYS * DAY as f64)
+    {
+        state
+            .done
+            .insert(key(id, &format!("spearskip:{}:{target}", u.name)), now);
+        state.op_notes.insert(
+            format!("{id}:{}", u.name),
+            format!(
+                "{}: state {target} not taken in {STRIKE_MAX_DAYS} days on its spearhead: left to the infantry's plan",
+                u.name
+            ),
+        );
+        return spear_line(state, id, roster, u, me, tools, op_line, now);
+    }
+    next
 }
 
 /// The operations' status lines for the digest.

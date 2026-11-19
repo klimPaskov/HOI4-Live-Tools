@@ -1210,3 +1210,47 @@ fn a_spearhead_that_misses_gives_way_to_the_armours_offensive_line() {
     );
     assert!(!units.iter().any(|u| u.spear));
 }
+
+#[test]
+fn a_spearhead_stuck_on_a_state_leaves_it_to_the_infantry_and_goes_on() {
+    // qt1 (19 Nov 2026): Panzergruppe Ost stood 35 days in Lodz on its Warsaw spearhead
+    let game = Game::new();
+    *game.held.borrow_mut() = vec![87];
+    let mut u = unit(
+        "Panzer".into(),
+        Role::Mobile,
+        &json!({"enemy": "POL"}),
+        &Value::Null,
+    );
+    u.spear = true;
+    u.line = vec![87, 10];
+    let mut state = State::default();
+    let roster = game.roster.borrow().clone();
+    let op_line = [10, 90, 92];
+    let first = spear_line(&mut state, "op", &roster, &u, "GER", &game, &op_line, START);
+    assert_eq!(first, vec![10], "Lodz taken: Warsaw next");
+    let later = spear_line(
+        &mut state,
+        "op",
+        &roster,
+        &u,
+        "GER",
+        &game,
+        &op_line,
+        START + 5 * DAY,
+    );
+    assert_eq!(later, vec![10], "kept while it may still fall");
+    let stuck = spear_line(
+        &mut state,
+        "op",
+        &roster,
+        &u,
+        "GER",
+        &game,
+        &op_line,
+        START + 11 * DAY,
+    );
+    assert_ne!(stuck, vec![10], "given up after STRIKE_MAX_DAYS");
+    assert_eq!(stuck.len(), 1);
+    assert!(state.done.contains_key(&key("op", "spearskip:Panzer:10")));
+}
