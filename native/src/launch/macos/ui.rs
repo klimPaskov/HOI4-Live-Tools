@@ -7,10 +7,7 @@ use crate::{
     platform::Process,
     xlayout::{self, fld, img},
 };
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 const STAGE_WAIT: Duration = Duration::from_secs(3);
 const SETTLE_WAIT: Duration = Duration::from_secs(2);
@@ -24,7 +21,7 @@ pub(super) fn retry_torn<T>(mut f: impl FnMut() -> Result<T>) -> Result<T> {
         match f() {
             Err(e) if e.code == "torn_read" && attempt < 8 => {
                 attempt += 1;
-                thread::sleep(Duration::from_millis(5 * attempt));
+                crate::phase::sleep(Duration::from_millis(5 * attempt));
             }
             result => return result,
         }
@@ -48,7 +45,7 @@ pub(super) fn read<T>(
             {
                 // A busy game day can rewrite the same data for a while.
                 attempt += 1;
-                thread::sleep(Duration::from_millis(5 * attempt));
+                crate::phase::sleep(Duration::from_millis(5 * attempt));
             }
             result => {
                 process.check()?;
@@ -67,6 +64,7 @@ pub(super) fn trace_text(text: &str) {
     }
 }
 pub(super) fn trace(stage: &str, since: Instant) {
+    crate::phase::note(&format!("stage {stage}"), since.elapsed());
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     if *ON.get_or_init(|| std::env::var_os("HOI4_TRACE").is_some()) {
         eprintln!("[trace] {stage} {} ms", since.elapsed().as_millis());
@@ -79,6 +77,7 @@ pub(super) fn wait(
     stage: &str,
     f: impl Fn(&Reader<'_>, u64) -> Result<bool>,
 ) -> Result<()> {
+    let _phase = crate::phase::enter("wait");
     let started = Instant::now();
     let deadline = started + STAGE_WAIT;
     loop {
@@ -92,7 +91,7 @@ pub(super) fn wait(
                 format!("{stage}: expected game change not observed"),
             ));
         }
-        thread::sleep(Duration::from_millis(30));
+        crate::phase::sleep(Duration::from_millis(30));
     }
 }
 
@@ -221,6 +220,7 @@ fn blocked_error(count: usize, shown: &[u64], events: &[String]) -> Error {
 /// a click counts when any notice closes (a covered OK lands harmlessly on the
 /// covering pop-up's body).
 pub(super) fn clear_notices(process: &dyn Process, keys: &dyn GameInput) -> Result<usize> {
+    let _phase = crate::phase::enter("notices");
     let started = Instant::now();
     let out = clear_notices_inner(process, keys);
     trace("clear_notices", started);
@@ -278,6 +278,7 @@ fn acknowledge_news(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
 }
 /// Click away every notice pop-up (they can sit on top of an event window).
 pub(super) fn dismiss_notices(process: &dyn Process, keys: &dyn GameInput) -> Result<usize> {
+    let _phase = crate::phase::enter("notices");
     let mut cleared = 0;
     let mut misses = 0;
     loop {
@@ -411,7 +412,7 @@ pub(super) fn save_game(
             }
             Err(e) if tries < SAVE_TRIES && save_retryable(&e) => {
                 tries += 1;
-                std::thread::sleep(Duration::from_millis(800));
+                crate::phase::sleep(Duration::from_millis(800));
             }
             Err(e) => return Err(e),
         }
@@ -463,7 +464,7 @@ fn save_game_once(
         presses += 1;
         let deadline = Instant::now() + Duration::from_millis(900);
         while Instant::now() < deadline && !read(process, menu_open)? {
-            std::thread::sleep(Duration::from_millis(50));
+            crate::phase::sleep(Duration::from_millis(50));
         }
     }
     // Any failure from here closes the game menu again (it was left open on the error path,
@@ -522,7 +523,7 @@ fn save_game_once(
                     "No save file was written within 60 s",
                 ));
             }
-            std::thread::sleep(Duration::from_millis(500));
+            crate::phase::sleep(Duration::from_millis(500));
         };
         Ok(written)
     })();
@@ -534,7 +535,7 @@ fn save_game_once(
         }
     };
     // Let the writer finish, then close the menu.
-    std::thread::sleep(Duration::from_secs(3));
+    crate::phase::sleep(Duration::from_secs(3));
     close_menu(process, keys)?;
     Ok(serde_json::json!({"saved":written,"directory":saves.display().to_string()}))
 }
@@ -549,6 +550,7 @@ pub(super) fn menu_shown(process: &dyn Process) -> bool {
     read(process, menu_open).unwrap_or(false)
 }
 pub(super) fn close_menu(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+    let _phase = crate::phase::enter("close");
     if read(process, menu_open)? {
         MENUS_CLOSED.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         keys.press(crate::platform::game_input::Key::Escape)?;
@@ -595,6 +597,7 @@ pub(super) fn open_politics(
     keys: &dyn GameInput,
     open: impl Fn(&Reader<'_>, u64) -> Result<bool>,
 ) -> Result<()> {
+    let _phase = crate::phase::enter("open");
     use crate::platform::game_input::Key;
     keys.press(Key::letter('q')?)?;
     if wait(process, "open politics", &open).is_ok() {
@@ -644,6 +647,7 @@ fn view_close(
 }
 /// Close the state view and the air region window if they are open.
 pub(super) fn close_state_view(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+    let _phase = crate::phase::enter("close");
     for (what, probe) in [
         ("state view closed", state_view_close as ViewClose),
         ("air region window closed", air_region_close as ViewClose),
@@ -772,7 +776,7 @@ pub(super) fn accept_command_until(
         if Instant::now() >= deadline || read(process, &done)? {
             return Ok(false);
         }
-        thread::sleep(Duration::from_millis(40));
+        crate::phase::sleep(Duration::from_millis(40));
     }
 }
 /// The game's Find view (interface manager +0x190) on macOS 089EA519: own
@@ -830,6 +834,7 @@ fn find_result(r: &Reader<'_>, image: u64) -> Result<(String, Option<i32>)> {
 /// view; Return is pressed only when the query and the highlighted state both
 /// match, otherwise Find is closed and the step refused.
 pub(super) fn find_state(process: &dyn Process, keys: &dyn GameInput, state: i32) -> Result<()> {
+    let _phase = crate::phase::enter("camera");
     use crate::platform::game_input::Key;
     // The Recruit & Deploy panel covers the left half of the map, where the
     // box selections and map clicks that follow a Find would otherwise land.
@@ -837,12 +842,12 @@ pub(super) fn find_state(process: &dyn Process, keys: &dyn GameInput, state: i32
     // 1.19.4 rebound the Find view from F to Ctrl+F.
     keys.press_control(FIND_KEY)?;
     wait(process, "open find", find_open)?;
-    thread::sleep(Duration::from_millis(80));
+    crate::phase::sleep(Duration::from_millis(80));
     // The box keeps the previous query; erase it before typing.
     let previous = read(process, |r, i| Ok(find_result(r, i)?.0.chars().count()))?;
     for _ in 0..previous.min(64) {
         keys.press_code(BACKSPACE)?;
-        thread::sleep(Duration::from_millis(15));
+        crate::phase::sleep(Duration::from_millis(15));
     }
     wait(process, "find query cleared", |r, i| {
         Ok(find_result(r, i)?.0.is_empty())
@@ -850,7 +855,7 @@ pub(super) fn find_state(process: &dyn Process, keys: &dyn GameInput, state: i32
     let query = state.to_string();
     for digit in query.bytes() {
         keys.press_code(DIGITS[(digit - b'0') as usize])?;
-        thread::sleep(Duration::from_millis(25));
+        crate::phase::sleep(Duration::from_millis(25));
     }
     let matched = wait(process, "find result", |r, i| {
         let (text, id) = find_result(r, i)?;
@@ -866,7 +871,7 @@ pub(super) fn find_state(process: &dyn Process, keys: &dyn GameInput, state: i32
     keys.press(Key::Return)?;
     wait(process, "find closes", |r, i| Ok(!find_open(r, i)?))?;
     // The camera glides to the state: wait for it to stop instead of a fixed 400 ms.
-    thread::sleep(Duration::from_millis(60));
+    crate::phase::sleep(Duration::from_millis(60));
     super::screenmap::wait_camera_still(process, 700);
     Ok(())
 }
@@ -881,6 +886,7 @@ pub(super) fn escape_close<T: PartialEq>(
     wait: Duration,
     open: impl Fn(&Reader<'_>, u64) -> Result<Option<T>>,
 ) -> Result<()> {
+    let _phase = crate::phase::enter("close");
     use crate::pause_guard::Seen;
     crate::pause_guard::escape_close(
         presses,
@@ -905,6 +911,7 @@ pub(super) fn dismiss(
     keys: &dyn GameInput,
     closed: impl Fn(&Reader<'_>, u64) -> Result<bool>,
 ) {
+    let _phase = crate::phase::enter("close");
     let _ = escape_close(process, keys, 3, crate::pause_guard::ESCAPE_WAIT, |r, i| {
         Ok((!closed(r, i)?).then_some(()))
     });
@@ -916,6 +923,7 @@ pub(super) fn settled<T: PartialEq>(
     stage: &str,
     f: impl Fn(&Reader<'_>, u64) -> Result<T>,
 ) -> Result<T> {
+    let _phase = crate::phase::enter("wait");
     let deadline = Instant::now() + SETTLE_WAIT;
     // A panel sliding in reports its widgets off screen for a moment.
     let attempt = || loop {
@@ -924,7 +932,7 @@ pub(super) fn settled<T: PartialEq>(
                 if Instant::now() < deadline
                     && matches!(e.code, "gui_geometry_unavailable" | "invalid_gui_geometry") =>
             {
-                thread::sleep(Duration::from_millis(60));
+                crate::phase::sleep(Duration::from_millis(60));
             }
             result => return result,
         }
@@ -932,7 +940,7 @@ pub(super) fn settled<T: PartialEq>(
     let started = Instant::now();
     let mut last = attempt()?;
     loop {
-        thread::sleep(Duration::from_millis(60));
+        crate::phase::sleep(Duration::from_millis(60));
         let now = attempt()?;
         if now == last {
             trace(stage, started);

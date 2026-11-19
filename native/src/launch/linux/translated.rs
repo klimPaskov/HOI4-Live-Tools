@@ -98,7 +98,7 @@ fn capture_reader<T>(
             Err(error) if error.code == "translated_image_loading" => {}
             Err(error) => return Err(error),
         }
-        thread::sleep(
+        crate::phase::sleep(
             Duration::from_millis(10).min(deadline.saturating_duration_since(Instant::now())),
         );
     }
@@ -126,7 +126,7 @@ fn await_guest_observed(
         if mapped {
             return Ok(());
         }
-        thread::sleep(
+        crate::phase::sleep(
             Duration::from_millis(10).min(deadline.saturating_duration_since(Instant::now())),
         );
     }
@@ -316,7 +316,7 @@ mod tests {
         let mut child = child();
         let deadline = Instant::now() + Duration::from_millis(100);
         let result = capture_reader(&mut child, deadline, || {
-            thread::sleep(
+            crate::phase::sleep(
                 deadline.saturating_duration_since(Instant::now()) + Duration::from_millis(1),
             );
             Ok("late reader")

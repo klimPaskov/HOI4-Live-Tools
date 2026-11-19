@@ -12,10 +12,7 @@ use crate::{
     platform::game_input::GameInput,
 };
 use serde_json::{json, Value};
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 pub(super) struct Request<'a> {
     pub id: &'a str,
@@ -134,7 +131,7 @@ impl Attempt for Live<'_, '_> {
             if !clicked {
                 return Err(changed());
             }
-            thread::sleep(
+            crate::phase::sleep(
                 Duration::from_millis(10)
                     .min(self.fence.until.saturating_duration_since(Instant::now())),
             );

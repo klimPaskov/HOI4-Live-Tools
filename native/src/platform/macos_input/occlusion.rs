@@ -131,7 +131,7 @@ fn system_cursor_owner(pid: i32) -> Result<CursorOwner> {
         if Instant::now() >= until {
             return Err(invalid());
         }
-        std::thread::sleep(Duration::from_millis(2));
+        crate::phase::sleep(Duration::from_millis(2));
     }
     let mut bytes = Vec::new();
     child

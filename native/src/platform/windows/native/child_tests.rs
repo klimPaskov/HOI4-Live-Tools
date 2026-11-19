@@ -106,7 +106,7 @@ fn native_owned_child_read_and_exit_refusal() {
             std::time::Instant::now() < deadline,
             "Synthetic child did not exit after EOF"
         );
-        std::thread::sleep(Duration::from_millis(5));
+        crate::phase::sleep(Duration::from_millis(5));
     }
     assert!(reader.read(address, 32).is_err());
 }

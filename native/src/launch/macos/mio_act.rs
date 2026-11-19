@@ -33,7 +33,7 @@ use crate::{
     xlayout::{fld, img, Class},
 };
 use serde_json::{json, Value};
-use std::{cell::RefCell, thread, time::Duration};
+use std::{cell::RefCell, time::Duration};
 
 pub(super) const TOOLS: [&str; 4] = [
     "hoi4_mio_design_team",
@@ -42,8 +42,9 @@ pub(super) const TOOLS: [&str; 4] = [
     "hoi4_mio_line",
 ];
 
+#[track_caller]
 fn pause(ms: u64) {
-    thread::sleep(Duration::from_millis(ms));
+    crate::phase::sleep(Duration::from_millis(ms));
 }
 
 // ----------------------------------------------------------------- planning
@@ -1407,7 +1408,7 @@ fn policy(
                 .ok()
                 .and_then(|v| v.parse::<u64>().ok())
             {
-                std::thread::sleep(std::time::Duration::from_secs(secs.min(60)));
+                crate::phase::sleep(std::time::Duration::from_secs(secs.min(60)));
             }
             return Err(e.into());
         }

@@ -101,7 +101,6 @@ mod macos {
         io::Write,
         os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt},
         process::{Child, Command, Stdio},
-        thread,
         time::{Duration, Instant},
     };
 
@@ -193,7 +192,7 @@ mod macos {
                     "Recorder exceeded finalization deadline; partial evidence preserved",
                 ));
             }
-            thread::sleep(Duration::from_millis(100));
+            crate::phase::sleep(Duration::from_millis(100));
         };
         let result: serde_json::Value =
             serde_json::from_slice(&read_bounded(&config.output.join("result.json"))?)

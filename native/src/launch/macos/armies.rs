@@ -384,7 +384,7 @@ pub(super) fn halt(process: &dyn Process, keys: &dyn GameInput, army: &str) -> R
             false
         }
     };
-    std::thread::sleep(std::time::Duration::from_millis(300));
+    crate::phase::sleep(std::time::Duration::from_millis(300));
     clear_selection(process, keys)?;
     Ok(clicked)
 }
@@ -574,7 +574,7 @@ fn counter_select_with(
         if !points.is_empty() && zooms < 2 {
             keys.scroll(GAME, (960.0, 540.0), -120)?;
             zooms += 1;
-            std::thread::sleep(std::time::Duration::from_millis(400));
+            crate::phase::sleep(std::time::Duration::from_millis(400));
             continue;
         }
         use crate::platform::game_input::vk;
@@ -589,7 +589,7 @@ fn counter_select_with(
             keys.press_code(vk::DOWN)?;
         }
         taps += 1;
-        std::thread::sleep(std::time::Duration::from_millis(250));
+        crate::phase::sleep(std::time::Duration::from_millis(250));
     };
     if points.is_empty() {
         return Ok(None);
@@ -600,9 +600,9 @@ fn counter_select_with(
         } else {
             keys.shift_click(GAME, *x, *y)?;
         }
-        std::thread::sleep(std::time::Duration::from_millis(150));
+        crate::phase::sleep(std::time::Duration::from_millis(150));
     }
-    std::thread::sleep(std::time::Duration::from_millis(250));
+    crate::phase::sleep(std::time::Duration::from_millis(250));
     read(process, |r, i| {
         Ok(selected_divisions(r, i)?.and_then(|ids| {
             (ids.iter().any(|id| wanted_set.contains(id.as_str()))
@@ -1132,11 +1132,11 @@ fn assign_boxes(
             find_state(process, keys, plan.state)?;
             // Both wheel steps in one flick: one smooth zoom-out.
             keys.scroll_burst(GAME, (960.0, 540.0), -240, 2)?;
-            std::thread::sleep(std::time::Duration::from_millis(500));
+            crate::phase::sleep(std::time::Duration::from_millis(500));
         }
         for (k, (from, to)) in ASSIGN_BOXES.into_iter().enumerate() {
             keys.drag(GAME, from, to)?;
-            std::thread::sleep(std::time::Duration::from_millis(350));
+            crate::phase::sleep(std::time::Duration::from_millis(350));
             let size = read(process, selection_size)? as usize;
             sizes.push(size);
             if size == expected {
@@ -1184,10 +1184,10 @@ fn assign_boxes(
             }
         }
         find_state(process, keys, plan.state)?;
-        std::thread::sleep(std::time::Duration::from_millis(400));
+        crate::phase::sleep(std::time::Duration::from_millis(400));
         if let Some((from, to)) = projected_box(process, &ids)? {
             keys.drag(GAME, from, to)?;
-            std::thread::sleep(std::time::Duration::from_millis(400));
+            crate::phase::sleep(std::time::Duration::from_millis(400));
             let size = read(process, selection_size)? as usize;
             sizes.push(size);
             exact = size == expected
@@ -1300,7 +1300,7 @@ pub(super) fn clear_selection(process: &dyn Process, keys: &dyn GameInput) -> Re
     keys.press_code(crate::platform::game_input::vk::ESCAPE)?;
     let pressed = std::time::Instant::now();
     while pressed.elapsed() < std::time::Duration::from_millis(600) {
-        std::thread::sleep(std::time::Duration::from_millis(40));
+        crate::phase::sleep(std::time::Duration::from_millis(40));
         if read(process, selection_size).unwrap_or(0) == 0 {
             break;
         }
@@ -1470,7 +1470,7 @@ fn click_new_army(
             Ok(super::ui::reassign_open(r, i)? || created(r, i)?)
         })?
     {
-        std::thread::sleep(std::time::Duration::from_millis(30));
+        crate::phase::sleep(std::time::Duration::from_millis(30));
     }
     if read(process, super::ui::reassign_open)? {
         if absorb {
@@ -1542,7 +1542,7 @@ fn create_once(
         if read(process, selection_size)? as usize != expected {
             for (from, to) in ASSIGN_BOXES.iter().skip(1) {
                 keys.drag(GAME, *from, *to)?;
-                std::thread::sleep(std::time::Duration::from_millis(350));
+                crate::phase::sleep(std::time::Duration::from_millis(350));
                 if read(process, selection_size)? as usize == expected {
                     break;
                 }
@@ -1553,10 +1553,10 @@ fn create_once(
                 if let Some(view) = view_before.as_ref() {
                     let ids = unassigned_ids(view, state);
                     find_state(process, keys, state)?;
-                    std::thread::sleep(std::time::Duration::from_millis(400));
+                    crate::phase::sleep(std::time::Duration::from_millis(400));
                     if let Some((from, to)) = projected_box(process, &ids)? {
                         keys.drag(GAME, from, to)?;
-                        std::thread::sleep(std::time::Duration::from_millis(400));
+                        crate::phase::sleep(std::time::Duration::from_millis(400));
                         held = read(process, selection_size)? as usize;
                     }
                 }
@@ -2064,7 +2064,7 @@ fn division_row_scrolled(process: &dyn Process, keys: &dyn GameInput, id: &str) 
         };
         let (x, y) = rect.center();
         keys.scroll(GAME, (x, y), if want > first { -120 } else { 120 })?;
-        std::thread::sleep(std::time::Duration::from_millis(120));
+        crate::phase::sleep(std::time::Duration::from_millis(120));
     }
     Err(last.unwrap_or_else(|| {
         Error::new(
@@ -2175,7 +2175,7 @@ pub(super) fn disband(
             if gone(&read(process, membership)?) {
                 return Ok(());
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            crate::phase::sleep(std::time::Duration::from_millis(100));
         }
         // A confirmation dialog: accept it.
         keys.press(Key::Return)?;
@@ -2348,7 +2348,7 @@ pub(super) fn shown_card(process: &dyn Process, keys: &dyn GameInput, army: &str
                     if let Ok(card) = read(process, |r, i| card_rect(r, i, army, "portrait_btn")) {
                         return Ok(card);
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    crate::phase::sleep(std::time::Duration::from_millis(100));
                 }
             }
             Err(e)
@@ -2362,7 +2362,7 @@ pub(super) fn shown_card(process: &dyn Process, keys: &dyn GameInput, army: &str
 pub(super) fn select_army(process: &dyn Process, keys: &dyn GameInput, army: &str) -> Result<Rect> {
     let card = select_army_quick(process, keys, army)?;
     // The army panel slides in after the selection; callers click its division rows next.
-    std::thread::sleep(std::time::Duration::from_millis(300));
+    crate::phase::sleep(std::time::Duration::from_millis(300));
     Ok(card)
 }
 /// `select_army` without the wait for the army panel, for orders that go to the map next.
@@ -2401,7 +2401,7 @@ pub(super) fn select_army_quick(
             Ok(()) => return Ok(card),
             Err(e) => last = Some(e),
         }
-        std::thread::sleep(std::time::Duration::from_millis(400));
+        crate::phase::sleep(std::time::Duration::from_millis(400));
     }
     Err(last.unwrap())
 }
@@ -2967,7 +2967,7 @@ pub(super) fn front(
                 break;
             }
             keys.scroll_burst(GAME, (960.0, 540.0), -240, events)?;
-            std::thread::sleep(std::time::Duration::from_millis(80));
+            crate::phase::sleep(std::time::Duration::from_millis(80));
             super::screenmap::wait_camera_still(process, 600);
             left -= events;
             if left == 0 {
@@ -3007,7 +3007,7 @@ pub(super) fn front(
                 vk::DOWN
             };
             keys.press_code(key)?;
-            std::thread::sleep(std::time::Duration::from_millis(160));
+            crate::phase::sleep(std::time::Duration::from_millis(160));
             super::screenmap::wait_camera_still(process, 600);
         }
         super::ui::trace_text(&format!(
@@ -3034,12 +3034,12 @@ pub(super) fn front(
     for _ in 0..6 {
         if !candidates.is_empty() {
             // One more frame: the highlight fades in, and a later frame holds all of it.
-            std::thread::sleep(std::time::Duration::from_millis(60));
+            crate::phase::sleep(std::time::Duration::from_millis(60));
             drawing = keys.capture(GAME)?;
             candidates = highlighted(&plain, &drawing, &tooltip, 4);
             break;
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        crate::phase::sleep(std::time::Duration::from_millis(50));
         drawing = keys.capture(GAME)?;
         candidates = highlighted(&plain, &drawing, &tooltip, 4);
     }
@@ -3050,7 +3050,7 @@ pub(super) fn front(
         let reversed = highlighted(&drawing, &plain, &tooltip, 4);
         if !reversed.is_empty() {
             keys.press(Key::letter('z')?)?;
-            std::thread::sleep(std::time::Duration::from_millis(250));
+            crate::phase::sleep(std::time::Duration::from_millis(250));
             drawing = keys.capture(GAME)?;
             candidates = highlighted(&plain, &drawing, &tooltip, 4);
             if candidates.is_empty() {
@@ -3165,7 +3165,7 @@ pub(super) fn front(
                     let _ = keys.press(Key::Escape);
                     return Ok(());
                 }
-                std::thread::sleep(std::time::Duration::from_millis(40));
+                crate::phase::sleep(std::time::Duration::from_millis(40));
             }
         }
         let _ = keys.press(Key::Escape);
@@ -3181,7 +3181,7 @@ pub(super) fn front(
             if read(process, |r, i| orders(r, i, army))? > before {
                 return Ok(());
             }
-            std::thread::sleep(std::time::Duration::from_millis(40));
+            crate::phase::sleep(std::time::Duration::from_millis(40));
         }
     }
     // Leave front-line drawing without touching the map.
@@ -3340,7 +3340,7 @@ pub(super) fn offensive(
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
     let draw_line = |from: (f64, f64), to: (f64, f64)| -> Result<()> {
         keys.press(Key::letter('x')?)?;
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        crate::phase::sleep(std::time::Duration::from_millis(300));
         keys.right_drag(GAME, from, to)?;
         wait(process, "offensive line placed", |r, i| {
             Ok(plan_nodes(r, i, army)? > before)
@@ -3517,7 +3517,7 @@ pub(super) fn offensive_across(
     };
     select_for_orders(process, keys, army)?;
     keys.press(Key::letter('x')?)?;
-    std::thread::sleep(std::time::Duration::from_millis(300));
+    crate::phase::sleep(std::time::Duration::from_millis(300));
     keys.right_drag_path(GAME, &path)?;
     let placed = wait(process, "offensive line placed", |r, i| {
         Ok(plan_nodes(r, i, army)? > before)
@@ -3779,7 +3779,7 @@ pub(super) fn fallback(
     };
     select_for_orders(process, keys, army)?;
     keys.press(Key::letter('c')?)?;
-    std::thread::sleep(std::time::Duration::from_millis(300));
+    crate::phase::sleep(std::time::Duration::from_millis(300));
     keys.right_drag(GAME, from, to)?;
     let placed = wait(process, "fallback line placed", |r, i| {
         Ok(plan_nodes(r, i, army)? > before)
@@ -3858,10 +3858,10 @@ pub(super) fn area_defense(
         }
         select_for_orders(process, keys, army)?;
         keys.press(Key::letter('v')?)?;
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        crate::phase::sleep(std::time::Duration::from_millis(300));
         // a click toggles the state: a second click on a state already in the order removes it
         keys.click(GAME, x, y)?;
-        std::thread::sleep(std::time::Duration::from_millis(250));
+        crate::phase::sleep(std::time::Duration::from_millis(250));
         clicked += 1;
     }
     let _ = keys.press(Key::Escape);
@@ -3958,7 +3958,7 @@ pub(super) fn divisions_heading_for(
 /// air tools the division counters are hidden and a box selection picks nothing.
 fn default_map_mode(keys: &dyn GameInput) -> Result<()> {
     keys.press_code(crate::platform::game_input::vk::F1)?;
-    std::thread::sleep(std::time::Duration::from_millis(250));
+    crate::phase::sleep(std::time::Duration::from_millis(250));
     Ok(())
 }
 pub(super) fn box_select_exact(
@@ -3972,7 +3972,7 @@ pub(super) fn box_select_exact(
     let mut sizes = Vec::new();
     for (from, to) in ASSIGN_BOXES {
         keys.drag(GAME, from, to)?;
-        std::thread::sleep(std::time::Duration::from_millis(350));
+        crate::phase::sleep(std::time::Duration::from_millis(350));
         let size = (read(process, selection_size)? & 0xffff_ffff) as usize;
         sizes.push(size);
         if size == expected {
@@ -4172,7 +4172,7 @@ fn order_at(
             if took {
                 return Ok(true);
             }
-            std::thread::sleep(std::time::Duration::from_millis(40));
+            crate::phase::sleep(std::time::Duration::from_millis(40));
         }
     }
     Ok(false)
@@ -4232,7 +4232,7 @@ pub(super) fn move_divisions(
                     took = true;
                     break;
                 }
-                std::thread::sleep(std::time::Duration::from_millis(40));
+                crate::phase::sleep(std::time::Duration::from_millis(40));
             }
             if took {
                 break;
@@ -4499,7 +4499,7 @@ fn assign_commander_once(
     wait(process, "select", |r, i| {
         Ok(selection_size(r, i)? & 0xffff_ffff > 0)
     })?;
-    std::thread::sleep(std::time::Duration::from_millis(250));
+    crate::phase::sleep(std::time::Duration::from_millis(250));
     keys.click(GAME, COMMANDER_SLOT.0, COMMANDER_SLOT.1)?;
     wait(process, "commander list open", leader_list_open)?;
     let wanted = general.to_lowercase();
@@ -4535,7 +4535,7 @@ fn assign_commander_once(
                 f64::from(band.0 + band.1) / 2.0,
             );
             keys.scroll(GAME, at, -f64::from(band.1 - band.0).max(120.0) as i32)?;
-            std::thread::sleep(std::time::Duration::from_millis(300));
+            crate::phase::sleep(std::time::Duration::from_millis(300));
             found = settled(process, "commander list", find)?;
             if found.is_some() {
                 break;
@@ -4584,7 +4584,7 @@ fn assign_commander_once(
                 if read(process, |r, i| Ok(leader_list_open(r, i).unwrap_or(false)))? {
                     return Ok(());
                 }
-                std::thread::sleep(std::time::Duration::from_millis(250));
+                crate::phase::sleep(std::time::Duration::from_millis(250));
                 if attempt == 4 {
                     keys.click(GAME, COMMANDER_SLOT.0, COMMANDER_SLOT.1)?;
                 }
@@ -4659,7 +4659,7 @@ fn assign_commander_once(
             wait(process, "general promoted", |r, i| {
                 Ok(leader_list_open(r, i).unwrap_or(false) && promote_of(r, i)?.is_none())
             })?;
-            std::thread::sleep(std::time::Duration::from_millis(400));
+            crate::phase::sleep(std::time::Duration::from_millis(400));
             // The game closes the list on promotion: open it again.
             return assign_commander_once(process, keys, army, general, false);
         }

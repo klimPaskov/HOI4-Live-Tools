@@ -50,14 +50,14 @@ use std::{
     collections::HashMap,
     path::Path,
     sync::{Arc, Mutex},
-    thread,
     time::{Duration, Instant},
 };
 
 pub(super) const TOOLS: [&str; 1] = ["hoi4_general_trait"];
 
+#[track_caller]
 fn pause(ms: u64) {
-    thread::sleep(Duration::from_millis(ms));
+    crate::phase::sleep(Duration::from_millis(ms));
 }
 
 // ------------------------------------------------------------ the game files

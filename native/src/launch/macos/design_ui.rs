@@ -765,7 +765,7 @@ fn set_outdated(process: &dyn Process, keys: &dyn GameInput, want: bool) -> Resu
     // 1.19.4: the selection list slides in from the left; right after it opens the box's sprite
     // still sits ~370 px left of where it is drawn (read live 31 October 2026: x 322 vs 679), and
     // a click there misses. Let the slide finish before the rectangle is read.
-    std::thread::sleep(Duration::from_millis(600));
+    crate::phase::sleep(Duration::from_millis(600));
     let rect = settled(process, "outdated box", outdated_checkbox)?;
     click(keys, rect)?;
     wait(process, "outdated filter", |r, i| {
@@ -972,7 +972,7 @@ pub(super) fn close(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
         keys.press(Key::Escape)?;
         let deadline = Instant::now() + Duration::from_secs(2);
         while Instant::now() < deadline && read(process, designer_open)? {
-            std::thread::sleep(Duration::from_millis(60));
+            crate::phase::sleep(Duration::from_millis(60));
         }
     }
     if read(process, designer_open)? {

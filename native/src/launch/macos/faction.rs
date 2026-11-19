@@ -35,10 +35,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 pub(super) const TOOLS: [&str; 3] = [
     "hoi4_faction_create",
@@ -61,8 +58,9 @@ const GRID_ITEM: xlayout::Class = xlayout::Class::new("grid.item", 0);
 const ITEM_CONTAINER: u64 = 0x10;
 const NAME_BOX_FROM_ICON: (f64, f64) = (222.0, 1.0);
 
+#[track_caller]
 fn pause(ms: u64) {
-    thread::sleep(Duration::from_millis(ms));
+    crate::phase::sleep(Duration::from_millis(ms));
 }
 
 // ---- windows --------------------------------------------------------------------------------------
@@ -151,7 +149,7 @@ fn open_from_politics(process: &dyn Process, keys: &dyn GameInput) -> Result<()>
                      button is available (the country may not be allowed to create a faction)",
                 ));
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            crate::phase::sleep(std::time::Duration::from_millis(100));
         }
     }
     let rect = settled(process, "create faction button", |r, i| {

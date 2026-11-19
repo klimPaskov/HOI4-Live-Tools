@@ -388,7 +388,7 @@ impl Journal {
             if start.elapsed() >= window {
                 break;
             }
-            std::thread::sleep(
+            crate::phase::sleep(
                 Duration::from_millis(20).min(window.saturating_sub(start.elapsed())),
             );
         }

@@ -414,7 +414,7 @@ mod tests {
                 std::time::Instant::now() < deadline,
                 "fixture exec deadline"
             );
-            std::thread::sleep(std::time::Duration::from_millis(5));
+            crate::phase::sleep(std::time::Duration::from_millis(5));
         };
         let supervisor = capture_identity(std::process::id() as i32).unwrap();
         (

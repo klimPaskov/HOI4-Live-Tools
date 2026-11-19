@@ -22,6 +22,7 @@ pub mod operation_rules;
 pub mod own_focus;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) mod pause_guard;
+pub(crate) mod phase;
 pub mod plan_predicate;
 pub mod plan_run;
 pub mod platform;

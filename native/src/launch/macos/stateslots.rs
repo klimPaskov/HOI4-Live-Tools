@@ -183,7 +183,7 @@ fn click_open(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
         // point only holds the input (six points at four seconds each took 24 s a state).
         let clicked = std::time::Instant::now();
         seen = loop {
-            std::thread::sleep(std::time::Duration::from_millis(60));
+            crate::phase::sleep(std::time::Duration::from_millis(60));
             if read(process, opened)? {
                 break Ok(());
             }
@@ -206,9 +206,9 @@ const VIEW_WAIT: std::time::Duration = std::time::Duration::from_millis(1300);
 pub(super) fn open_state_view(process: &dyn Process, keys: &dyn GameInput, id: i32) -> Result<u64> {
     clear_notices(process, keys)?;
     keys.press_code(crate::platform::game_input::vk::F1)?;
-    std::thread::sleep(std::time::Duration::from_millis(400));
+    crate::phase::sleep(std::time::Duration::from_millis(400));
     find_state(process, keys, id)?;
-    std::thread::sleep(std::time::Duration::from_millis(600));
+    crate::phase::sleep(std::time::Duration::from_millis(600));
     click_open(process, keys)?;
     read(process, root)
 }
@@ -233,7 +233,7 @@ pub(super) fn read_states(
     // F1 returns the map to its plain mode (an air or construction map mode
     // would turn the click on a state into a different action).
     keys.press_code(crate::platform::game_input::vk::F1)?;
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    crate::phase::sleep(std::time::Duration::from_millis(500));
     let mut rows = Vec::new();
     // One queue read for every state: queued shared-slot buildings hold their slots.
     let queued_by_state = read(process, |r, i| {
@@ -251,7 +251,7 @@ pub(super) fn read_states(
             continue;
         }
         find_state(process, keys, id)?;
-        std::thread::sleep(std::time::Duration::from_millis(600));
+        crate::phase::sleep(std::time::Duration::from_millis(600));
         let seen = click_open(process, keys);
         if seen.is_err() {
             shut = Some(id);

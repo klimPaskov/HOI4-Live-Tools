@@ -655,7 +655,7 @@ fn click_option(
                     centre += shift;
                     break;
                 }
-                std::thread::sleep(std::time::Duration::from_millis(250));
+                crate::phase::sleep(std::time::Duration::from_millis(250));
             }
             if bands.len() < top.options.len() {
                 return Err(Error::new(

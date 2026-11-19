@@ -318,7 +318,7 @@ fn ensure_open(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if !read(process, open)? {
         keys.press(Key::letter('r')?)?;
         wait(process, "open trade view", open)?;
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        crate::phase::sleep(std::time::Duration::from_millis(300));
     }
     Ok(())
 }
@@ -330,7 +330,7 @@ fn select_resource(process: &dyn Process, keys: &dyn GameInput, index: usize) ->
     let rect = settled(process, "resource filter", |r, i| filter_rect(r, i, index))?;
     let (x, y) = rect.center();
     keys.click(GAME, x, y)?;
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    crate::phase::sleep(std::time::Duration::from_millis(500));
     Ok(())
 }
 fn resource_index(name: &str) -> Result<usize> {
@@ -597,14 +597,14 @@ pub(super) fn execute(
             })?
             .center();
             keys.click(GAME, bx, by)?;
-            std::thread::sleep(std::time::Duration::from_millis(300));
+            crate::phase::sleep(std::time::Duration::from_millis(300));
         } else {
             // a click on the track, then arrow clicks until the window reads the amount
             let span = SLIDER_LENGTH - 2.0 * SLIDER_ARROW;
             let fraction = (target - min) as f64 / (max - min) as f64;
             let at = left + SLIDER_ARROW + span * fraction.clamp(0.0, 1.0);
             keys.click(GAME, at, mid)?;
-            std::thread::sleep(std::time::Duration::from_millis(250));
+            crate::phase::sleep(std::time::Duration::from_millis(250));
             // the window sells whole blocks (one civilian factory per block,
             // e.g. 8 units of rubber): the arrows move one block, so walk
             // towards the target and stop when it is reached or passed
@@ -627,7 +627,7 @@ pub(super) fn execute(
                     (left + 6.0, mid)
                 };
                 keys.click(GAME, ax, ay)?;
-                std::thread::sleep(std::time::Duration::from_millis(150));
+                crate::phase::sleep(std::time::Duration::from_millis(150));
                 let after = current_amount(process)?.unwrap_or(now);
                 if (up && after > target) || (!up && after < target) {
                     return Err(Error::new(
@@ -883,7 +883,7 @@ pub(super) fn auto_import_set(
                 break;
             }
             keys.drag(GAME, (at(now), y), (at(want), y))?;
-            std::thread::sleep(std::time::Duration::from_millis(300));
+            crate::phase::sleep(std::time::Duration::from_millis(300));
             match read(process, auto_budget)? {
                 Some(v) => now = v,
                 None => break,

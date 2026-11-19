@@ -31,7 +31,7 @@ use crate::{
     platform::{game_input::GameInput, Process},
 };
 use serde_json::{json, Value};
-use std::{thread, time::Duration};
+use std::time::Duration;
 
 const BAR: &str = "battleplantools_window";
 /// The bar's exercise button, and the animated one it shows while the selection exercises.
@@ -113,7 +113,7 @@ fn accept_exercise_confirm(process: &dyn Process, keys: &dyn GameInput) -> Resul
         if found.is_some() {
             break;
         }
-        thread::sleep(Duration::from_millis(100));
+        crate::phase::sleep(Duration::from_millis(100));
     }
     let Some((title, accept, decline)) = found else {
         return Ok(false);

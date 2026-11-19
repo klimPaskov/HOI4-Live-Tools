@@ -479,7 +479,7 @@ impl Server {
                     json!({"reasons":["research_ui_reached"],"state":current,"condition_meaning":"active view and local visibility predicates; no hit routing or input authorization","elapsed_seconds":start.elapsed().as_secs_f64(),"rejected_torn_reads":rejected,"state_age_ms":current_received.elapsed().as_millis()}),
                 );
             }
-            std::thread::sleep(
+            crate::phase::sleep(
                 Duration::from_millis(250).min(timeout.saturating_sub(start.elapsed())),
             );
             if start.elapsed() >= timeout {

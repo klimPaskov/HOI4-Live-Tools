@@ -82,7 +82,7 @@ impl Watch {
                 match crate::game::clock_context(process.as_ref()) {
                     Err(e) if e.code == "torn_read" && tries < 3 => {
                         tries += 1;
-                        std::thread::sleep(Duration::from_millis(2));
+                        crate::phase::sleep(Duration::from_millis(2));
                     }
                     result => break result.ok()?,
                 }
@@ -154,7 +154,7 @@ impl Watch {
             if self.lock().armed.is_none() {
                 return;
             }
-            std::thread::sleep(Duration::from_millis(15));
+            crate::phase::sleep(Duration::from_millis(15));
         }
     }
     /// Bracket one action: the pause state now is the state the action must leave behind.
@@ -235,7 +235,7 @@ impl Scope<'_> {
                 if Instant::now() >= deadline {
                     break;
                 }
-                std::thread::sleep(Duration::from_millis(20));
+                crate::phase::sleep(Duration::from_millis(20));
             }
         }
         verdict.restored = Some(restored);
@@ -280,7 +280,7 @@ pub(crate) fn escape_close<T: PartialEq>(
             if menu || now != before || Instant::now() >= deadline {
                 break;
             }
-            std::thread::sleep(Duration::from_millis(20));
+            crate::phase::sleep(Duration::from_millis(20));
         }
     }
     Ok(pressed)

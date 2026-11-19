@@ -368,7 +368,7 @@ impl ReadMemory for Probe<'_> {
     }
     fn read_many(&self, requests: &[(u64, usize)]) -> Result<Vec<Vec<u8>>> {
         self.batches.set(self.batches.get() + 1);
-        std::thread::sleep(self.batch_delay);
+        crate::phase::sleep(self.batch_delay);
         self.inner.read_many(requests)
     }
 }
@@ -593,7 +593,7 @@ impl Process for Late {
     }
     fn check(&self) -> Result<()> {
         self.checks.set(self.checks.get() + 1);
-        std::thread::sleep(Duration::from_millis(20));
+        crate::phase::sleep(Duration::from_millis(20));
         self.inner.check()
     }
 }

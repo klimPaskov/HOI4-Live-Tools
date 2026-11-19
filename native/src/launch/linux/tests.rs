@@ -1038,7 +1038,7 @@ fn worker_creation_refusal_preserves_owner_and_inflight_reads_then_recovers() {
         if Instant::now() >= deadline {
             panic!("Isolated worker-refusal fixture exceeded its 40-second deadline");
         }
-        thread::sleep(Duration::from_millis(10));
+        crate::phase::sleep(Duration::from_millis(10));
     };
     assert!(
         status.success(),
@@ -1088,7 +1088,7 @@ fn executable_readiness_waits_for_the_configured_image() {
     let before = child.identity.clone().unwrap();
     let mut input = child.child.stdin.take().unwrap();
     let release = thread::spawn(move || {
-        thread::sleep(Duration::from_millis(50));
+        crate::phase::sleep(Duration::from_millis(50));
         input.write_all(b"x").unwrap();
     });
     let executable = fs::canonicalize("/bin/sleep").unwrap();
@@ -1336,7 +1336,7 @@ fn refused_window_close_preserves_child_read_and_endpoint_without_replay() {
             Instant::now() < until,
             "WM request did not enter owner queue"
         );
-        thread::sleep(Duration::from_millis(5));
+        crate::phase::sleep(Duration::from_millis(5));
     }
     assert_eq!(checks.load(Ordering::Relaxed), 0);
     assert_eq!(capture_identity(identity.pid).unwrap(), identity);
@@ -1527,7 +1527,7 @@ fn readiness_late_image_cannot_publish_success() {
     let exe = fs::canonicalize("/bin/sleep").unwrap();
     let e = c
         .await_executable_observed(&exe, &fs::metadata(&exe).unwrap(), &mut |pid| {
-            thread::sleep(Duration::from_millis(2100));
+            crate::phase::sleep(Duration::from_millis(2100));
             readiness_image(pid)
         })
         .unwrap_err();
@@ -1628,7 +1628,7 @@ fn readiness_threaded_exec_collects_actual_image_operation_failures() {
         let before = child.identity.clone().unwrap();
         let mut input = child.child.stdin.take().unwrap();
         let release = thread::spawn(move || {
-            thread::sleep(Duration::from_millis(50));
+            crate::phase::sleep(Duration::from_millis(50));
             input.write_all(b"x").unwrap();
         });
         let exe = fs::canonicalize("/bin/sleep").unwrap();
@@ -1690,7 +1690,7 @@ fn readiness_threaded_exec_collects_actual_image_operation_failures() {
                         Instant::now() < until,
                         "Generated refusal child exceeded bounded natural-exit fixture"
                     );
-                    thread::sleep(Duration::from_millis(5));
+                    crate::phase::sleep(Duration::from_millis(5));
                 }
                 let status = child.child.wait().unwrap();
                 child.exited = true;

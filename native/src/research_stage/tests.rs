@@ -3,7 +3,6 @@ use std::{
     collections::VecDeque,
     fs,
     sync::atomic::{AtomicUsize, Ordering},
-    thread,
 };
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 struct Scratch(std::path::PathBuf);
@@ -137,7 +136,7 @@ impl Backend for Fake {
     }
     fn observe(&mut self) -> Result<OwnState> {
         self.calls += 1;
-        thread::sleep(self.slow);
+        crate::phase::sleep(self.slow);
         if self.ended {
             return Err(error("fixture_end", "End of fixture"));
         }
@@ -164,7 +163,7 @@ impl Backend for Fake {
             // Consume the actual journal deadline only AFTER the fixture has
             // recorded possible input. File sync/scheduler cost before dispatch
             // must not accidentally turn this readback test into NotQueued.
-            thread::sleep(
+            crate::phase::sleep(
                 deadline.saturating_duration_since(Instant::now()) + Duration::from_millis(1),
             );
         }

@@ -283,7 +283,7 @@ pub(super) fn open_overview(process: &dyn Process, keys: &dyn GameInput) -> Resu
         wait(process, "air overview open", overview_open)?;
         // A row click right after L was lost now and then on 1.19.4.1 (31 October 2026: the
         // selection never appeared, the same call succeeded later); let the list settle first.
-        std::thread::sleep(std::time::Duration::from_millis(400));
+        crate::phase::sleep(std::time::Duration::from_millis(200));
     }
     Ok(())
 }
@@ -351,7 +351,7 @@ pub(super) fn select_wing(
     let (x, y) = rect.center();
     keys.click(GAME, x.min(330.0), y)?;
     wait(process, "air wing selected", selection_open)?;
-    std::thread::sleep(std::time::Duration::from_millis(250));
+    crate::phase::sleep(std::time::Duration::from_millis(250));
     Ok(before)
 }
 
@@ -423,6 +423,50 @@ fn region_points(
         Ok(pts.into_iter().filter(clear).take(4).collect())
     })
     .unwrap_or_default()
+}
+/// Screen points for the region click over `state` (`region_points` filtered to the usable
+/// map area): where the camera already is when the state shows at an aiming height, else after
+/// the Find view centres it; the screen centre as the last resort.
+fn region_targets(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    dir: Option<&std::path::Path>,
+    state: i32,
+    region: Option<i32>,
+) -> Result<Vec<(f64, f64)>> {
+    // The state's centre where the camera already is (aiming height); the Find view
+    // (which centres it and waits for the camera to rest) otherwise.
+    // Strategic air regions are large: a click on the state's projected centre lands in the
+    // right region from far higher than unit orders allow.
+    // Project only once the camera rests (air mode may have just zoomed it in).
+    super::screenmap::wait_camera_still(process, 700);
+    let high_ok = read(process, super::screenmap::camera_height).is_ok_and(|h| h <= 1400.0);
+    let near = |pts: Vec<(f64, f64)>, x: (f64, f64), y: (f64, f64)| -> Vec<(f64, f64)> {
+        pts.into_iter()
+            .filter(|p| (x.0..x.1).contains(&p.0) && (y.0..y.1).contains(&p.1))
+            .collect()
+    };
+    let mut targets = if high_ok {
+        near(
+            region_points(process, dir, state, region),
+            (520.0, 1500.0),
+            (160.0, 800.0),
+        )
+    } else {
+        Vec::new()
+    };
+    if targets.is_empty() {
+        find_state(process, keys, state)?;
+        targets = near(
+            region_points(process, dir, state, region),
+            (420.0, 1700.0),
+            (120.0, 900.0),
+        );
+        if targets.is_empty() {
+            targets.push((960.0, 540.0));
+        }
+    }
+    Ok(targets)
 }
 /// Give wing `name` mission `mission` over the region containing `state`.
 pub(super) fn assign(
@@ -518,38 +562,7 @@ pub(super) fn assign(
         let _ = deselect(process, keys);
         return Ok(());
     }
-    // The state's centre where the camera already is (aiming height); the Find view
-    // (which centres it and waits for the camera to rest) otherwise.
-    // Strategic air regions are large: a click on the state's projected centre lands in the
-    // right region from far higher than unit orders allow.
-    // Project only once the camera rests (air mode may have just zoomed it in).
-    super::screenmap::wait_camera_still(process, 700);
-    let high_ok = read(process, super::screenmap::camera_height).is_ok_and(|h| h <= 1400.0);
-    let near = |pts: Vec<(f64, f64)>, x: (f64, f64), y: (f64, f64)| -> Vec<(f64, f64)> {
-        pts.into_iter()
-            .filter(|p| (x.0..x.1).contains(&p.0) && (y.0..y.1).contains(&p.1))
-            .collect()
-    };
-    let mut targets = if high_ok {
-        near(
-            region_points(process, dir.as_deref(), state, region),
-            (520.0, 1500.0),
-            (160.0, 800.0),
-        )
-    } else {
-        Vec::new()
-    };
-    if targets.is_empty() {
-        find_state(process, keys, state)?;
-        targets = near(
-            region_points(process, dir.as_deref(), state, region),
-            (420.0, 1700.0),
-            (120.0, 900.0),
-        );
-        if targets.is_empty() {
-            targets.push((960.0, 540.0));
-        }
-    }
+    let targets = region_targets(process, keys, dir.as_deref(), state, region)?;
     if !read(process, has_bit)? {
         let _ = deselect(process, keys);
         return Err(Error::new(
@@ -592,7 +605,7 @@ pub(super) fn assign(
                 result = Ok(());
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(40));
+            crate::phase::sleep(std::time::Duration::from_millis(40));
         }
         if result.is_ok() {
             break;
@@ -614,4 +627,34 @@ pub(super) fn assign(
     }
     let _ = deselect(process, keys);
     result
+}
+
+/// One mission for several wings in one call: the per-order costs of `assign` (the air mode,
+/// the camera over the region) are paid once and each wing is selected and ordered in turn.
+/// The game takes no multi-selection from the Air Forces Overview: a click on a row, Shift or
+/// not, closes it and selects that wing alone (rt2, 19 Nov 2026). Returns each wing's outcome
+/// (None = it flies the mission over the region).
+pub(super) fn assign_many(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    names: &[String],
+    mission: &str,
+    state: i32,
+    named: Option<i32>,
+) -> Result<Vec<(String, Option<Error>)>> {
+    let mut out = Vec::new();
+    for name in names {
+        let result = assign(process, keys, name, mission, state, named);
+        // a refusal before any input for every wing alike ends the call
+        if let Err(e) = &result {
+            if matches!(
+                e.code,
+                "system_dialog_open" | "input_target_not_frontmost" | "action_deadline"
+            ) {
+                return Err(result.unwrap_err());
+            }
+        }
+        out.push((name.clone(), result.err()));
+    }
+    Ok(out)
 }

@@ -325,7 +325,7 @@ impl DateStop {
                         if flag.load(Ordering::Acquire) {
                             return;
                         }
-                        thread::sleep(Duration::from_millis(100));
+                        crate::phase::sleep(Duration::from_millis(100));
                     }
                 }
             }) {
@@ -412,7 +412,7 @@ impl Env for Live {
             match game::clock_context(self.process.as_ref()) {
                 Err(e) if e.code == "torn_read" && retries < 3 => {
                     retries += 1;
-                    thread::sleep(Duration::from_millis(2));
+                    crate::phase::sleep(Duration::from_millis(2));
                 }
                 result => break result?,
             }
@@ -753,7 +753,7 @@ mod tests {
         watcher.arm("tok".into(), |_| env);
         let deadline = std::time::Instant::now() + Duration::from_secs(3);
         while fake.pauses.load(Ordering::SeqCst) == 0 && std::time::Instant::now() < deadline {
-            thread::sleep(Duration::from_millis(20));
+            crate::phase::sleep(Duration::from_millis(20));
         }
         assert_eq!(fake.pauses.load(Ordering::SeqCst), 1);
         let v = watcher.status_json(std::path::Path::new("/nonexistent/plan.json"));

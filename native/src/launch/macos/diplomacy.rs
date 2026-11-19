@@ -403,7 +403,7 @@ fn show(process: &dyn Process, keys: &dyn GameInput, state: i32) -> Result<i32> 
     wait(process, "diplomacy shows the country", |r, i| {
         Ok(open(r, i)? && shown_tag(r, i)? == owner)
     })?;
-    std::thread::sleep(std::time::Duration::from_millis(300));
+    crate::phase::sleep(std::time::Duration::from_millis(300));
     Ok(owner)
 }
 
@@ -541,7 +541,7 @@ fn war_goal_choose(
     // The first click right after the dialog opens was lost once (live 6 Nov 2026, Albania);
     // a second click on the same row picks the type (choosing a type changes nothing yet).
     if click_and_check(process, keys, at, "war goal type chosen", chosen).is_err() {
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        crate::phase::sleep(std::time::Duration::from_millis(300));
         click_and_check(process, keys, at, "war goal type chosen", chosen)?;
     }
     let offered = settled(process, "war goal states", |r, i| {
@@ -826,7 +826,7 @@ pub(super) fn execute(
     }
     let (x, y) = rect.center();
     keys.click(GAME, x, y)?;
-    std::thread::sleep(std::time::Duration::from_millis(400));
+    crate::phase::sleep(std::time::Duration::from_millis(400));
     let mut texts = Value::Null;
     if let Some((name, _)) = read(process, dialog)? {
         let flow = (|| -> Result<Value> {
@@ -873,7 +873,7 @@ pub(super) fn execute(
                         if wars.first().is_some_and(|(_, rect)| rect.is_some()) {
                             break;
                         }
-                        std::thread::sleep(std::time::Duration::from_millis(150));
+                        crate::phase::sleep(std::time::Duration::from_millis(150));
                     }
                     // The first war row from the dialog's own layout when the grid gives no
                     // rect (interface/countrydiplomacyview.gui call_allies, 527x360: the "wars"
@@ -903,14 +903,14 @@ pub(super) fn execute(
                     })?;
                     let (x, y) = rect.center();
                     keys.click(GAME, x, y)?;
-                    std::thread::sleep(std::time::Duration::from_millis(400));
+                    crate::phase::sleep(std::time::Duration::from_millis(400));
                 }
             }
             let (send, enabled) = settled(process, "send button", |r, i| {
                 dialog_button(r, i, "send_button")
             })?;
             // The dialog's texts are rebuilt after the last selection; let them catch up.
-            std::thread::sleep(std::time::Duration::from_millis(400));
+            crate::phase::sleep(std::time::Duration::from_millis(400));
             let texts = dialog_texts(process);
             if !enabled {
                 // The reason (e.g. "Need 48 more Political Power") is in one of the dialog's
@@ -979,7 +979,7 @@ pub(super) fn execute(
                 dialog: texts,
             });
         }
-        std::thread::sleep(std::time::Duration::from_millis(80));
+        crate::phase::sleep(std::time::Duration::from_millis(80));
     }
 }
 
@@ -1010,7 +1010,7 @@ pub(super) fn preview(
         .ok_or_else(|| Error::new("gui_target_unavailable", "Action row not on screen"))?;
     let (x, y) = rect.center();
     keys.click(GAME, x, y)?;
-    std::thread::sleep(std::time::Duration::from_millis(400));
+    crate::phase::sleep(std::time::Duration::from_millis(400));
     let Some((name, _)) = read(process, dialog)? else {
         out["previewed"] = json!(false);
         out["reason"] = json!("no dialog opened");

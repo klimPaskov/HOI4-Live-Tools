@@ -16,7 +16,6 @@ use crate::{
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
-use std::thread;
 use std::time::{Duration, Instant};
 
 const GAME: (u32, u32) = (1920, 1080);
@@ -197,6 +196,7 @@ fn pan_to(
     dir: &Path,
     province: i32,
 ) -> Result<(f64, f64)> {
+    let _phase = crate::phase::enter("camera");
     use crate::platform::game_input::vk;
     let positions = mapdata::positions(dir)?;
     let &(x, z) = positions.get(&province).ok_or_else(|| {
@@ -213,7 +213,7 @@ fn pan_to(
         let p = read(process, |r, i| super::screenmap::to_screen(r, i, x, z))?;
         let Some((sx, sy)) = p else {
             keys.press_code(vk::DOWN)?;
-            thread::sleep(Duration::from_millis(220));
+            crate::phase::sleep(Duration::from_millis(220));
             continue;
         };
         if (MAP_LEFT..1700.0).contains(&sx) && (120.0..900.0).contains(&sy) {
@@ -223,7 +223,7 @@ fn pan_to(
         if far && zooms < 3 {
             keys.scroll(GAME, (1100.0, 540.0), -120)?;
             zooms += 1;
-            thread::sleep(Duration::from_millis(400));
+            crate::phase::sleep(Duration::from_millis(400));
             continue;
         }
         if sx < MAP_LEFT {
@@ -236,7 +236,7 @@ fn pan_to(
         } else if sy >= 900.0 {
             keys.press_code(vk::DOWN)?;
         }
-        thread::sleep(Duration::from_millis(220));
+        crate::phase::sleep(Duration::from_millis(220));
     }
     Err(Error::new(
         "gui_target_unavailable",
@@ -296,7 +296,7 @@ fn aim_both(
             break;
         }
         keys.scroll_burst(GAME, (960.0, 540.0), -240, events)?;
-        thread::sleep(Duration::from_millis(80));
+        crate::phase::sleep(Duration::from_millis(80));
         super::screenmap::wait_camera_still(process, 700);
         left = left.saturating_sub(events);
     }
@@ -313,7 +313,7 @@ fn queue_lines(process: &dyn Process) -> Result<i64> {
         match queue_work(process) {
             Err(e) if e.code == "torn_read" && attempt < 8 => {
                 attempt += 1;
-                thread::sleep(Duration::from_millis(15 * attempt));
+                crate::phase::sleep(Duration::from_millis(15 * attempt));
             }
             result => return result,
         }
@@ -709,7 +709,7 @@ pub(super) fn dispatch(
         no_event_open(process)?;
         clicked.set(true);
         keys.shift_click(GAME, x, y)?;
-        thread::sleep(Duration::from_millis(120));
+        crate::phase::sleep(Duration::from_millis(120));
         // The Find view would end the railway in progress (live 6 Nov 2026: 'Railway must start
         // on a supply node'), so a target still off screen is reached with the arrow keys.
         let (x, y) = match ends {
@@ -744,7 +744,7 @@ pub(super) fn dispatch(
                     ),
                 ));
             }
-            thread::sleep(Duration::from_millis(60));
+            crate::phase::sleep(Duration::from_millis(60));
         }
     })();
     super::construction::leave(process, keys);

@@ -655,15 +655,12 @@ fn a_mobile_formation_gathers_its_templates_from_the_other_armies_but_not_from_a
         .orders()
         .iter()
         .any(|(n, a)| n == "hoi4_army_front" && a["army"] == json!("Army 9")));
-    // and is renamed to the formation's name a quarter day later
+    // and is not renamed by the prepare (a name is cosmetic; the layout's name step renames it
+    // in idle time): the operation keeps ordering it under the game's name
     game.calls.borrow_mut().clear();
     burst(&mut state, &game, &plan, START + DAY / 4 + 1);
-    let renamed = json!({"army": "Army 9", "name": "Schnell"});
-    assert!(game
-        .orders()
-        .iter()
-        .any(|(n, a)| n == "hoi4_army_rename" && *a == renamed));
-    assert_eq!(resolve(&state, "Schnell"), "Schnell");
+    assert!(!game.orders().iter().any(|(n, _)| n == "hoi4_army_rename"));
+    assert_eq!(resolve(&state, "Schnell"), "Army 9");
 }
 
 #[test]

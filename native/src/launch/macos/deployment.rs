@@ -303,7 +303,7 @@ pub(super) fn ensure_open(process: &dyn Process, keys: &dyn GameInput) -> Result
         wait(process, "open deployment", open)?;
         // The panel slides in over about half a second and two reads in one frame look
         // "settled" in mid-slide (seen live: a click aimed at Edit landed on Train).
-        std::thread::sleep(std::time::Duration::from_millis(1100));
+        crate::phase::sleep(std::time::Duration::from_millis(1100));
     }
     Ok(())
 }
@@ -470,7 +470,7 @@ pub(super) fn train(
     if !read(process, open)? {
         keys.press(Key::letter('u')?)?;
         wait(process, "open deployment", open)?;
-        std::thread::sleep(std::time::Duration::from_millis(1100));
+        crate::phase::sleep(std::time::Duration::from_millis(1100));
     }
     let before: Vec<u64> = read(process, conveyors)?.into_iter().map(|c| c.0).collect();
     let rect = settled(process, "train button", |r, i| train_button(r, i, name))?;
@@ -619,7 +619,7 @@ pub(super) fn set_locations(
         // (about 230 px from its left edge); click the field's middle.
         let (x, y) = (f64::from(rect.x) + 115.0, rect.center().1);
         keys.click(GAME, x, y)?;
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        crate::phase::sleep(std::time::Duration::from_millis(300));
         keys.click(GAME, 960.0, 540.0)?;
         wait(process, "deployment location set", |r, i| {
             Ok(unlocated(r, i)? < before)

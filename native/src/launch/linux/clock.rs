@@ -145,7 +145,7 @@ impl Guard {
                         Duration::from_millis(2)
                             .min(until.saturating_duration_since(Instant::now()))
                     });
-                    thread::sleep(delay);
+                    crate::phase::sleep(delay);
                 }
                 result => break result?,
             }

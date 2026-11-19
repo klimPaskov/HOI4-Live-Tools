@@ -99,7 +99,7 @@ pub(crate) fn settle<S>(end: Instant, mut probe: impl FnMut(Instant) -> Seen<S>)
         if now >= end {
             break "target not observed";
         }
-        std::thread::sleep(poll().min(end - now));
+        crate::phase::sleep(poll().min(end - now));
     };
     Settled::Unconfirmed(bounded(
         &format!(

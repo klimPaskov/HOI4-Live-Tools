@@ -777,7 +777,7 @@ mod tests {
         );
         std::thread::scope(|s| {
             let waiter = s.spawn(|| feed.wait(seq, &[], true, Duration::from_secs(5), 50));
-            std::thread::sleep(Duration::from_millis(50));
+            crate::phase::sleep(Duration::from_millis(50));
             feed.push(sample(&["news.1"], &[559], 40.0, 842), Limits::default());
             let v = waiter.join().unwrap();
             assert_eq!(v["woke_because"], "change");

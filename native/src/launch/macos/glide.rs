@@ -10,10 +10,7 @@ use crate::{
     memory::Reader,
     platform::{game_input::GameInput, Process},
 };
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 const GAME: (u32, u32) = (1920, 1080);
 /// Most wheel events in one burst (a burst of 60 lasts about half a second).
@@ -198,7 +195,7 @@ fn rest_after(
             before,
             polls,
             || read(process, position),
-            || thread::sleep(REST_POLL),
+            || crate::phase::sleep(REST_POLL),
         )?;
     }
     rest(process, position)
@@ -215,7 +212,7 @@ fn rest(
         if Instant::now() >= until {
             return Ok(last);
         }
-        thread::sleep(REST_POLL);
+        crate::phase::sleep(REST_POLL);
         let now = read(process, position)?;
         let same = match (last, now) {
             (Some(a), Some(b)) => (a.0 - b.0).abs() < STILL && (a.1 - b.1).abs() < STILL,

@@ -106,7 +106,7 @@ fn actual_terminal_notification_wakes_fifty_second_wait_with_only_historical_sam
             (out, reads)
         });
         rx.recv().unwrap();
-        thread::sleep(Duration::from_millis(10));
+        crate::phase::sleep(Duration::from_millis(10));
         let start = Instant::now();
         events
             .finish(instance, 2, terminal(Disposition::Quarantined))
@@ -257,7 +257,7 @@ fn late_event_or_snapshot_never_becomes_timely_target_and_retirement_prevents_ne
         Instant::now() + Duration::from_millis(5),
         &mut rejected,
         || {
-            thread::sleep(Duration::from_millis(10));
+            crate::phase::sleep(Duration::from_millis(10));
             events
                 .finish(instance, 1, terminal(Disposition::Stopped))
                 .unwrap();

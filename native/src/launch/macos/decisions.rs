@@ -238,7 +238,7 @@ fn ensure_open(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
         keys.click(GAME, x, y)?;
         wait(process, "open decisions", open)?;
         // Entry states are refreshed shortly after the panel opens.
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        crate::phase::sleep(std::time::Duration::from_millis(500));
     }
     Ok(())
 }
@@ -408,7 +408,7 @@ pub(super) fn take(
                 "decision taken: no political power spent, timer or removal observed",
             ));
         }
-        std::thread::sleep(std::time::Duration::from_millis(40));
+        crate::phase::sleep(std::time::Duration::from_millis(40));
     }
 }
 

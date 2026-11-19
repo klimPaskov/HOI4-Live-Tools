@@ -237,7 +237,7 @@ mod lane_tests {
             |m| m["params"]["name"] == "read",
             |m| {
                 if m["params"]["name"] == "act" {
-                    std::thread::sleep(Duration::from_millis(slow_ms));
+                    crate::phase::sleep(Duration::from_millis(slow_ms));
                 }
                 Some(json!({"jsonrpc":"2.0","id":m["id"],"result":{}}))
             },
@@ -273,7 +273,7 @@ mod lane_tests {
         impl io::Read for Slow {
             fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
                 if self.1 == 0 {
-                    std::thread::sleep(Duration::from_millis(150));
+                    crate::phase::sleep(Duration::from_millis(150));
                 }
                 let n = (self.0.len() - self.1).min(buf.len());
                 buf[..n].copy_from_slice(&self.0[self.1..self.1 + n]);
@@ -294,7 +294,7 @@ mod lane_tests {
             || {
                 if steps.fetch_add(1, Ordering::SeqCst) < 3 {
                     order.lock().unwrap().push("idle");
-                    std::thread::sleep(Duration::from_millis(20));
+                    crate::phase::sleep(Duration::from_millis(20));
                     true
                 } else {
                     false

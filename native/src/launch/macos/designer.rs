@@ -557,7 +557,7 @@ fn wait_selection(process: &dyn Process, units_level: bool) -> Result<Selection>
                 "The selection window did not show the expected list",
             ));
         }
-        std::thread::sleep(Duration::from_millis(40));
+        crate::phase::sleep(Duration::from_millis(40));
     }
 }
 /// Which group title a battalion key is listed under first (a hint only; the window decides).
@@ -704,7 +704,7 @@ fn wait_selection_any(process: &dyn Process) -> Result<Selection> {
                 "The selection window listed nothing",
             ));
         }
-        std::thread::sleep(Duration::from_millis(40));
+        crate::phase::sleep(Duration::from_millis(40));
     }
 }
 /// Shift+click a filled slot: the game removes the unit and closes the column up.
@@ -911,7 +911,7 @@ pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) 
         }
         for (dx, y) in tries {
             keys.click(GAME, x - dx, y)?;
-            std::thread::sleep(Duration::from_millis(250));
+            crate::phase::sleep(Duration::from_millis(250));
             keys.press_code(crate::platform::game_input::vk::END)?; // End
             keys.press_code(crate::platform::game_input::vk::DELETE)?;
             if wait(process, "name box focused", |r, i| {
@@ -932,7 +932,7 @@ pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) 
         length -= 1;
     } else {
         keys.click(GAME, x - 110.0, y)?;
-        std::thread::sleep(Duration::from_millis(250));
+        crate::phase::sleep(Duration::from_millis(250));
     }
     while length > 0 {
         keys.press_code(crate::platform::game_input::vk::DELETE)?;
@@ -991,7 +991,7 @@ pub(super) fn save(process: &dyn Process, keys: &dyn GameInput, expect: &Layout5
                 "Save did not change the own template list as requested",
             ));
         }
-        std::thread::sleep(Duration::from_millis(60));
+        crate::phase::sleep(Duration::from_millis(60));
     }
 }
 

@@ -349,11 +349,19 @@ fn drag_path_sequence(
     let mut last = a;
     let result = (|| {
         pause(settle);
-        for leg in path.windows(2) {
+        for (n, leg) in path.windows(2).enumerate() {
             let (a, b) = (leg[0], leg[1]);
-            for step in 1..=steps {
+            // a leg is straight: one dragged event per ~48 px of it is the same stroke as
+            // `steps` events (an 8-state offensive line took 4.2 s at 16 steps a leg, rd1)
+            let length = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
+            let leg_steps = ((length / 48.0).ceil() as u32).clamp(2, steps.max(2));
+            if n > 0 {
+                // the bend: the game reads the cursor once a frame
+                pause(std::time::Duration::from_millis(step_ms));
+            }
+            for step in 1..=leg_steps {
                 check()?;
-                let t = f64::from(step) / f64::from(steps);
+                let t = f64::from(step) / f64::from(leg_steps);
                 let point = Point {
                     x: a.x + (b.x - a.x) * t,
                     y: a.y + (b.y - a.y) * t,
@@ -593,6 +601,7 @@ impl<'p> MacKeys<'p> {
     }
     /// Fresh process, SDL/graphics witnesses and exact OS window before input.
     pub fn preflight(&self) -> Result<()> {
+        let _phase = crate::phase::enter("input.check");
         for check in &self.input_guards {
             check()?;
         }
@@ -635,6 +644,7 @@ impl<'p> MacKeys<'p> {
     /// stack, including nonzero-level overlays. The system cursor exception is
     /// independently typed; a game GUI hit beneath an OS overlay is insufficient.
     fn point_preflight(&self, point: Point) -> Result<()> {
+        let _phase = crate::phase::enter("input.check");
         self.preflight()?;
         let b = self.window.bounds;
         let rest = Point {
@@ -752,7 +762,7 @@ impl<'p> MacKeys<'p> {
         const SHIFT_FLAGS: u64 = 0x2_0002;
         const FLAGS_CHANGED: u32 = 12;
         let point = client_point(self.verified_content(game)?, x, y)?;
-        let pause = |ms: u64| std::thread::sleep(std::time::Duration::from_millis(ms));
+        let pause = |ms: u64| crate::phase::sleep(std::time::Duration::from_millis(ms));
         // SAFETY: a null source is allowed; every event is released after posting.
         unsafe {
             let post = |event: CFTypeRef, flags: u64, pointer: bool| -> Result<()> {
@@ -836,7 +846,7 @@ impl<'p> MacKeys<'p> {
                 CFRelease(event);
                 ready?;
             }
-            std::thread::sleep(std::time::Duration::from_millis(pause));
+            crate::phase::sleep(std::time::Duration::from_millis(pause));
         }
         Ok(point)
     }
@@ -985,7 +995,7 @@ impl<'p> MacKeys<'p> {
             }
             CFRelease(moved);
             ready?;
-            std::thread::sleep(std::time::Duration::from_millis(60));
+            crate::phase::sleep(std::time::Duration::from_millis(60));
             self.preflight()?;
             let wheel = CGEventCreateScrollWheelEvent(std::ptr::null(), 0, 1, pixels);
             if wheel.is_null() {
@@ -998,7 +1008,7 @@ impl<'p> MacKeys<'p> {
             CFRelease(wheel);
             ready?;
         }
-        std::thread::sleep(std::time::Duration::from_millis(120));
+        crate::phase::sleep(std::time::Duration::from_millis(120));
         Ok(())
     }
     /// `count` wheel events in one quick flick at a point: the game eases them into one
@@ -1023,7 +1033,7 @@ impl<'p> MacKeys<'p> {
             }
             CFRelease(moved);
             ready?;
-            std::thread::sleep(std::time::Duration::from_millis(40));
+            crate::phase::sleep(std::time::Duration::from_millis(40));
             self.preflight()?;
             for _ in 0..count.min(64) {
                 let wheel = CGEventCreateScrollWheelEvent(std::ptr::null(), 0, 1, pixels);
@@ -1036,10 +1046,10 @@ impl<'p> MacKeys<'p> {
                 }
                 CFRelease(wheel);
                 ready?;
-                std::thread::sleep(std::time::Duration::from_millis(8));
+                crate::phase::sleep(std::time::Duration::from_millis(8));
             }
         }
-        std::thread::sleep(std::time::Duration::from_millis(250));
+        crate::phase::sleep(std::time::Duration::from_millis(250));
         Ok(())
     }
     /// One key press by ANSI virtual code (digits for the Find view).
@@ -1065,7 +1075,7 @@ impl<'p> MacKeys<'p> {
     fn press_modified(&self, code: u16, modifier_key: u16, modifier_flags: u64) -> Result<()> {
         const FLAGS_CHANGED: u32 = 12;
         self.preflight()?;
-        let pause = |ms: u64| std::thread::sleep(std::time::Duration::from_millis(ms));
+        let pause = |ms: u64| crate::phase::sleep(std::time::Duration::from_millis(ms));
         // SAFETY: a null source is allowed; every event is released after posting.
         unsafe {
             let modifier = |down: bool| -> Result<()> {
@@ -1208,7 +1218,7 @@ impl<'p> MacKeys<'p> {
                     CFRelease(event);
                 }
             }
-            std::thread::sleep(std::time::Duration::from_millis(150));
+            crate::phase::sleep(std::time::Duration::from_millis(150));
             // SAFETY: no pointers; reads the HID system modifier state.
             if unsafe { CGEventSourceFlagsState(1) } & 0x80_0000 != 0 {
                 return Err(Error::new(
@@ -1230,7 +1240,7 @@ impl<'p> MacKeys<'p> {
                 CGEventPost(HID_EVENT_TAP, event);
                 CFRelease(event);
             }
-            std::thread::sleep(std::time::Duration::from_millis(25));
+            crate::phase::sleep(std::time::Duration::from_millis(25));
         }
         Ok(())
     }
@@ -1258,7 +1268,7 @@ impl MacKeys<'static> {
                         );
                         said = true;
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(1000));
+                    crate::phase::sleep(std::time::Duration::from_millis(1000));
                 }
                 Err(e) => return Err(e),
             }
@@ -1336,7 +1346,8 @@ mod tests {
     fn drag_cancellation_releases_at_last_point_and_sends_no_further_motion() {
         use std::cell::RefCell;
         let a = Point { x: 10.0, y: 20.0 };
-        let b = Point { x: 50.0, y: 60.0 };
+        // long enough for all 4 steps (one dragged event per ~48 px)
+        let b = Point { x: 210.0, y: 220.0 };
         for failing_check in 1..=7 {
             let sent = RefCell::new(Vec::new());
             let mut checks = 0;
@@ -1873,15 +1884,19 @@ mod find_digit_tests {
 
 impl GameInput for MacKeys<'_> {
     fn capture(&self, game: (u32, u32)) -> Result<Capture> {
+        let _phase = crate::phase::enter("input.capture");
         MacKeys::capture(self, game)
     }
     fn preflight(&self) -> Result<()> {
+        let _phase = crate::phase::enter("input.preflight");
         MacKeys::preflight(self)
     }
     fn confirm_input_idle(&self) -> Result<()> {
+        let _phase = crate::phase::enter("input.preflight");
         MacKeys::confirm_input_idle(self)
     }
     fn click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        let _phase = crate::phase::enter("input.click");
         MacKeys::click(self, game, x, y)
     }
     fn click_checked(
@@ -1891,12 +1906,15 @@ impl GameInput for MacKeys<'_> {
         y: f64,
         before_down: &dyn Fn() -> Result<()>,
     ) -> Result<Point> {
+        let _phase = crate::phase::enter("input.click");
         MacKeys::click_checked(self, game, x, y, before_down)
     }
     fn confirm_cursor_at(&self, game: (u32, u32), x: f64, y: f64) -> Result<()> {
+        let _phase = crate::phase::enter("input.preflight");
         MacKeys::confirm_cursor_at(self, game, x, y)
     }
     fn drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
+        let _phase = crate::phase::enter("input.drag");
         MacKeys::drag(self, game, from, to)
     }
     fn drag_checked(
@@ -1906,24 +1924,31 @@ impl GameInput for MacKeys<'_> {
         to: (f64, f64),
         before_down: &dyn Fn() -> Result<()>,
     ) -> Result<()> {
+        let _phase = crate::phase::enter("input.drag");
         MacKeys::drag_checked(self, game, from, to, before_down)
     }
     fn shift_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        let _phase = crate::phase::enter("input.click");
         MacKeys::shift_click(self, game, x, y)
     }
     fn right_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        let _phase = crate::phase::enter("input.click");
         MacKeys::right_click(self, game, x, y)
     }
     fn right_drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
+        let _phase = crate::phase::enter("input.drag");
         MacKeys::right_drag(self, game, from, to)
     }
     fn right_drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+        let _phase = crate::phase::enter("input.drag");
         MacKeys::right_drag_path(self, game, points)
     }
     fn drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+        let _phase = crate::phase::enter("input.drag");
         MacKeys::drag_path(self, game, points)
     }
     fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()> {
+        let _phase = crate::phase::enter("input.scroll");
         MacKeys::scroll(self, game, at, pixels)
     }
     fn scroll_burst(
@@ -1933,27 +1958,35 @@ impl GameInput for MacKeys<'_> {
         pixels: i32,
         count: u32,
     ) -> Result<()> {
+        let _phase = crate::phase::enter("input.scroll");
         MacKeys::scroll_burst(self, game, at, pixels, count)
     }
     fn press_code(&self, code: u16) -> Result<()> {
+        let _phase = crate::phase::enter("input.key");
         MacKeys::press_code(self, code)
     }
     fn press_shifted(&self, code: u16) -> Result<()> {
+        let _phase = crate::phase::enter("input.key");
         MacKeys::press_shifted(self, code)
     }
     fn press_control(&self, code: u16) -> Result<()> {
+        let _phase = crate::phase::enter("input.key");
         MacKeys::press_control(self, code)
     }
     fn press_option(&self, code: u16) -> Result<()> {
+        let _phase = crate::phase::enter("input.key");
         MacKeys::press_option(self, code)
     }
     fn press(&self, key: Key) -> Result<()> {
+        let _phase = crate::phase::enter("input.key");
         MacKeys::press(self, key)
     }
     fn press_once(&self, key: Key) -> key_once::Dispatch {
+        let _phase = crate::phase::enter("input.key");
         MacKeys::press_once(self, key)
     }
     fn press_digit_once(&self, digit: char) -> key_once::Dispatch {
+        let _phase = crate::phase::enter("input.key");
         MacKeys::press_digit_once(self, digit)
     }
     fn guarded<'a>(

@@ -68,12 +68,12 @@ pub(super) fn run(keys: &dyn GameInput, want_on: bool) -> Result<Value> {
     );
     let before = brightness(&keys.capture(GAME)?);
     keys.click(GAME, at.0, at.1)?;
-    std::thread::sleep(std::time::Duration::from_millis(1200));
+    crate::phase::sleep(std::time::Duration::from_millis(1200));
     let after = brightness(&keys.capture(GAME)?);
     let (state, back) = judge(want_on, before, after);
     if back {
         keys.click(GAME, at.0, at.1)?;
-        std::thread::sleep(std::time::Duration::from_millis(600));
+        crate::phase::sleep(std::time::Duration::from_millis(600));
     }
     let round = |v: f64| (v * 10.0).round() / 10.0;
     if before == 0.0 && after == 0.0 {

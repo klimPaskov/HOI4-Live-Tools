@@ -71,7 +71,7 @@ impl Watch {
                 self.accept(s)
             }
             None => {
-                std::thread::sleep(until.saturating_duration_since(Instant::now()));
+                crate::phase::sleep(until.saturating_duration_since(Instant::now()));
                 Ok(None)
             }
         }

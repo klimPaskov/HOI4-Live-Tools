@@ -1999,7 +1999,7 @@ impl DailyBackend<'_> {
             return Err(Error::new(error.code, error.message.clone()));
         }
         if retry {
-            std::thread::sleep(backoff);
+            crate::phase::sleep(backoff);
         }
         Ok(retry)
     }

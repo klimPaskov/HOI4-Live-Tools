@@ -259,7 +259,7 @@ impl Attempt for Live<'_, '_> {
         Instant::now()
     }
     fn wait(&mut self, d: Duration) {
-        thread::sleep(d);
+        crate::phase::sleep(d);
     }
 }
 

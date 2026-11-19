@@ -366,7 +366,7 @@ pub(crate) trait Backend {
     fn dispatch_once(&mut self, until: Instant) -> Delivery;
     fn confirm_input_idle(&mut self, until: Instant) -> Result<()>;
     fn wait_readback(&mut self, delay: Duration) {
-        std::thread::sleep(delay);
+        crate::phase::sleep(delay);
     }
 }
 impl Journal {

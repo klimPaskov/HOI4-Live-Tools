@@ -623,7 +623,7 @@ impl OwnedChild {
                     if e.kind() == std::io::ErrorKind::NotFound
                         && matches!(stage, "exe_readlink" | "exe_metadata") =>
                 {
-                    thread::sleep(
+                    crate::phase::sleep(
                         Duration::from_millis(5)
                             .min(deadline.saturating_duration_since(Instant::now())),
                     );
@@ -654,7 +654,7 @@ impl OwnedChild {
                 }
             }
             self.readiness_live(deadline)?;
-            thread::sleep(
+            crate::phase::sleep(
                 Duration::from_millis(5).min(deadline.saturating_duration_since(Instant::now())),
             );
         }
@@ -720,7 +720,7 @@ impl Drop for OwnedChild {
                 Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(error) => {
                     eprintln!("Owned child reap failed: {error}");
-                    thread::sleep(Duration::from_secs(1));
+                    crate::phase::sleep(Duration::from_secs(1));
                 }
             }
         }
@@ -1331,7 +1331,7 @@ fn run_owner(
             let error = std::io::Error::last_os_error();
             if error.kind() != std::io::ErrorKind::Interrupted {
                 eprintln!("Endpoint poll failed: {error}");
-                thread::sleep(Duration::from_millis(25));
+                crate::phase::sleep(Duration::from_millis(25));
             }
             continue;
         }
@@ -1360,7 +1360,7 @@ fn run_owner(
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
             Err(error) => {
                 eprintln!("Endpoint accept failed: {error}");
-                thread::sleep(Duration::from_millis(25));
+                crate::phase::sleep(Duration::from_millis(25));
             }
         }
     }

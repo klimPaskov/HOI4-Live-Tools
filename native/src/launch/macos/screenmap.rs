@@ -66,11 +66,12 @@ pub(super) fn view_matrix(r: &Reader<'_>, image: u64) -> Result<[f64; 16]> {
 /// Wait until the camera has stopped moving: the view matrix is the same in two reads 45 ms
 /// apart (at most `max_ms`). Replaces fixed sleeps after Find, zoom and pan inputs.
 pub(super) fn wait_camera_still(process: &dyn crate::platform::Process, max_ms: u64) {
+    let _phase = crate::phase::enter("camera");
     let started = std::time::Instant::now();
     let read = |p: &dyn crate::platform::Process| super::ui::read(p, view_matrix).ok();
     let mut last = read(process);
     while started.elapsed().as_millis() < u128::from(max_ms) {
-        std::thread::sleep(std::time::Duration::from_millis(45));
+        crate::phase::sleep(std::time::Duration::from_millis(45));
         let now = read(process);
         if now.is_some() && now == last {
             break;
@@ -116,6 +117,7 @@ pub(super) fn restore_zoom(
     process: &dyn crate::platform::Process,
     keys: &dyn crate::platform::game_input::GameInput,
 ) -> Result<()> {
+    let _phase = crate::phase::enter("camera");
     let height = |p: &dyn crate::platform::Process| super::ui::read(p, camera_height);
     let h = height(process)?;
     if h >= CLOSE {
@@ -151,6 +153,7 @@ pub(super) fn zoom_in_to_strategic(
     process: &dyn crate::platform::Process,
     keys: &dyn crate::platform::game_input::GameInput,
 ) -> Result<()> {
+    let _phase = crate::phase::enter("camera");
     let height = |p: &dyn crate::platform::Process| super::ui::read(p, camera_height);
     let h = height(process)?;
     if h <= STRATEGIC * 1.1 {
@@ -187,6 +190,7 @@ pub(super) fn frame_two(
     area: (f64, f64, f64, f64),
     find: impl Fn() -> Result<()>,
 ) -> Result<Option<((f64, f64), (f64, f64))>> {
+    let _phase = crate::phase::enter("camera");
     let inside = |p: (f64, f64)| (area.0..area.2).contains(&p.0) && (area.1..area.3).contains(&p.1);
     let project = || -> Result<(Option<(f64, f64)>, Option<(f64, f64)>)> {
         super::ui::read(process, |r, i| {
@@ -219,7 +223,7 @@ pub(super) fn frame_two(
             break;
         }
         keys.scroll_burst(super::panelkit::GAME, (960.0, 540.0), -240, events)?;
-        std::thread::sleep(std::time::Duration::from_millis(80));
+        crate::phase::sleep(std::time::Duration::from_millis(80));
         wait_camera_still(process, 700);
         left = left.saturating_sub(events);
     }

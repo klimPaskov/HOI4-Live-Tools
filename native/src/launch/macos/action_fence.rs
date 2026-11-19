@@ -359,7 +359,7 @@ mod tests {
                 ReadEffect::Zeros => Ok(vec![0; size]),
                 ReadEffect::Short => Ok(vec![0; size.saturating_sub(1)]),
                 ReadEffect::Until(until) => {
-                    std::thread::sleep(until.saturating_duration_since(Instant::now()));
+                    crate::phase::sleep(until.saturating_duration_since(Instant::now()));
                     Ok(vec![0; size])
                 }
             }

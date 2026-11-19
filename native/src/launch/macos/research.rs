@@ -497,7 +497,7 @@ fn start_inner(process: &dyn Process, keys: &dyn GameInput, key: &str, slot: usi
         // N% progress?"; OK accepts it (Return, the dialog's default button). Seen live
         // 5 November 2026. Return is retried: an event or tooltip can take the first one.
         for _ in 0..3 {
-            std::thread::sleep(std::time::Duration::from_millis(700));
+            crate::phase::sleep(std::time::Duration::from_millis(700));
             if read(process, started)? {
                 break;
             }

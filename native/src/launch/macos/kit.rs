@@ -442,7 +442,7 @@ pub(super) fn answer_confirmation(
         // Linux "Delete task force" OK read at the top-left of the screen); click only a rectangle
         // that reads the same twice.
         if let Some(rect) = read(process, find)? {
-            std::thread::sleep(Duration::from_millis(300));
+            crate::phase::sleep(Duration::from_millis(300));
             if read(process, find)? == Some(rect) {
                 click(keys, rect)?;
                 wait(process, "confirmation closed", |r, i| {
@@ -454,7 +454,7 @@ pub(super) fn answer_confirmation(
         if Instant::now() >= deadline {
             return Ok(false);
         }
-        std::thread::sleep(Duration::from_millis(40));
+        crate::phase::sleep(Duration::from_millis(40));
     }
 }
 

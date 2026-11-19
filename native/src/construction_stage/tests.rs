@@ -4,7 +4,6 @@ use std::{
     collections::VecDeque,
     fs,
     sync::atomic::{AtomicUsize, Ordering},
-    thread,
 };
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -330,7 +329,7 @@ impl Backend for Fake {
             panic!("fixture connection lost after possible dispatch");
         }
         if self.exhaust_on_dispatch {
-            thread::sleep(
+            crate::phase::sleep(
                 deadline.saturating_duration_since(Instant::now()) + Duration::from_millis(1),
             );
         }
@@ -354,7 +353,7 @@ impl Backend for Fake {
         assert!(deadline >= self.deadline.unwrap());
         self.idle_checks += 1;
         if self.exhaust_on_idle {
-            thread::sleep(
+            crate::phase::sleep(
                 deadline.saturating_duration_since(Instant::now()) + Duration::from_millis(1),
             );
         }

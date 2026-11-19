@@ -16,10 +16,7 @@ use crate::{
     },
 };
 use serde_json::{json, Value};
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 pub(super) struct Request<'a> {
     pub id: &'a str,
@@ -157,7 +154,7 @@ impl Live<'_, '_> {
             if let Some(proof) = read()? {
                 return Ok(proof);
             }
-            thread::sleep(
+            crate::phase::sleep(
                 Duration::from_millis(10)
                     .min(self.fence.until.saturating_duration_since(Instant::now())),
             );
