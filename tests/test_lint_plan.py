@@ -1000,6 +1000,19 @@ class CoverageBuildRules(unittest.TestCase):
         f = self.assertHit(over, "production.factories", "error", "military factories allocated")
         self.assertIn(f"has {mils} military factories at the start", f["message"])
 
+    def test_dated_lines_are_held_to_the_forecast_military_factories(self):
+        plan = copy.deepcopy(self.ita)
+        lt = lint_plan.Lint(plan, self.game)
+        lt.run()
+        d = derive.day("1937.6.1")
+        mil = lt.military_on(d)
+        self.assertIsNotNone(mil)
+        used = sum(lt.pool_lines(d)["military"].values())
+        plan["production"].append({"equipment": "infantry_equipment_1", "factories": int(mil) - used + 3,
+                                   "from": "1937.6.1"})
+        f = self.assertHit(plan, "production.factories", "error", "the economy forecast gives")
+        self.assertIn("production_priority", f["message"])
+
     # -------------------------------------------------------------- production remove / replace
     def test_production_remove(self):
         plan = copy.deepcopy(self.ita)

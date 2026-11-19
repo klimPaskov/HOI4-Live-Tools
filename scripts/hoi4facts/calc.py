@@ -75,17 +75,31 @@ def constants(w):
 
 # ---------------------------------------------------------------- build order
 
+def dynamic_modifier_proxies(w, tag):
+    """Start ideas that only display a dynamic modifier of the country's history (the idea's `name =` is the
+    modifier): the modifier is counted from the dynamic modifier, so the proxy is left out."""
+    from hoi4facts.economy import idea_table
+    try:
+        _, effects = derive.history_effects_of(w.game, tag, None)
+    except Exception:  # noqa: BLE001 - advisory
+        return set()
+    dms = {derive.get1(v, "modifier") for k, v in effects if k == "add_dynamic_modifier" and isinstance(v, list)}
+    table = idea_table(w.game)
+    return {f.get("v") for f in w.country(tag)["ideas"] if (table.get(f.get("v")) or {}).get("shown_as") in dms}
+
+
 def consumer_goods(w, tag):
     """Consumer-goods share of factories from the tag's starting ideas (consumer_goods_expected_value,
     else consumer_goods_factor added to it)."""
     mods = derive.idea_modifiers(w.game)
     share, srcs = 0.0, []
-    for f in w.country(tag)["ideas"]:
+    ideas = [f for f in w.country(tag)["ideas"] if f.get("v") not in dynamic_modifier_proxies(w, tag)]
+    for f in ideas:
         m = mods.get(f["v"], {})
         if "consumer_goods_expected_value" in m:
             share += m["consumer_goods_expected_value"]
             srcs.append(f"{f['v']} {m['consumer_goods_expected_value']}")
-    for f in w.country(tag)["ideas"]:
+    for f in ideas:
         m = mods.get(f["v"], {})
         if "consumer_goods_factor" in m:
             share += m["consumer_goods_factor"] * share

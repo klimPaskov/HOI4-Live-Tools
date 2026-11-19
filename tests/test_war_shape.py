@@ -123,7 +123,15 @@ class WarDay(unittest.TestCase):
         last = timeline[-1]
         end = lint_plan.derive.day(last["end"])
         late = lint_plan.derive.fmt(lint_plan.derive.date_of(end - 5))
-        early = lint_plan.derive.fmt(lint_plan.derive.date_of(end + 30))
+        # the slack grows with the years to the war: a live focus path runs behind its dates
+        from hoi4facts import lint_war_shape as ws
+        slack = int(ws.GATE_SLACK + ws.GATE_SLACK_PER_YEAR * (end + 120 - lint_plan.derive.day("1936.1.1")) / 365.0)
+        self.assertGreater(slack, ws.GATE_SLACK)
+        early = lint_plan.derive.fmt(lint_plan.derive.date_of(end + slack + 5))
+        tight = lint_plan.derive.fmt(lint_plan.derive.date_of(end + ws.GATE_SLACK + 5))
+        plan = poland(True)
+        plan["diplomacy"][0]["when"] = {"all": [f"date >= {tight}", f"focus_completed:{last['focus']}"]}
+        self.assertTrue(self.errors(plan, "war.declaration_gate"), tight)
         for when, bad in ((late, True), (early, False)):
             plan = poland(True)
             plan["diplomacy"][0]["when"] = {"all": [f"date >= {when}", f"focus_completed:{last['focus']}"]}

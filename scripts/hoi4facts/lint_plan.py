@@ -66,8 +66,8 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            sends 0 and the railway tool refuses it)
   construction.hub         supply hub in a province or state an enemy still holds when it fires
   production.factories     production lines need more factories than the plan has, each pool on its own:
-                           land and air lines against the military factories, naval lines (ships, convoys)
-                           against the dockyards
+                           land and air lines against the military factories the economy forecast gives on each
+                           line date (the start count on day 0), naval lines (ships, convoys) against the dockyards
   production.equipment     unknown equipment, or equipment no planned tech unlocks
   production.trucks        war.motorization set but no motorized (truck) line
   production.balance       an equipment family the start divisions need (sub-unit `need` x the OOB templates)
@@ -459,7 +459,8 @@ Each war's shape on its first day (lint_war_shape.py):
   war.mobile_axis          an armour or motorised strike formation with no axis, or another formation's axis
   war.recovery_phase       a contingency phase of an offensive war entered on single provinces, or attacking nothing
   war.guarantor            a declaration on a country guaranteed at the start whose guarantor no war of that day has
-  war.declaration_gate     a focus gating a declaration that completes less than 14 days before its date, or never
+  war.declaration_gate     a focus gating a declaration that completes less than 14 days plus 25 a year from the start
+                           before its date (or the war's start), or never
   war.attack_force         on a war day: the layout places under 80% of the forecast army, the formations on the
                            axes carry under attack_ratio (1.0) x the enemy front, or armour is off the axes
   force.template_floor     the main line template without line artillery (or under the AI's on that date), the armour
@@ -1483,12 +1484,24 @@ class Lint:
             for pool, (label, _) in pools.items():
                 n = sum(used[pool].values())
                 cap = have[pool] if d == start else have[pool] + planned[pool]
+                forecast = self.military_on(d) if pool == "military" and d != start and self.tag else None
+                if forecast is not None:
+                    cap = int(forecast)
                 if n > cap:
-                    extra = "" if d == start else f" plus {planned[pool]} planned"
                     what = ", ".join(f"{k} {v}" for k, v in sorted(used[pool].items()))
-                    self.add("error", "production.factories", "production",
-                             f"{n} {label} allocated from {derive.fmt(derive.date_of(d))} ({what}), but {self.tag} "
-                             f"has {have[pool]} {label} at the start{extra}")
+                    if forecast is not None:
+                        cut = self.cut_by_priority(used[pool], n - cap)
+                        self.add("error", "production.factories", "production",
+                                 f"{n} {label} allocated from {derive.fmt(derive.date_of(d))} ({what}), but the "
+                                 f"economy forecast gives {self.tag} {cap} {label} that day: the executor fills the "
+                                 f"lines by production_priority, so {cut} stand short. Size the floors of each date "
+                                 "to the forecast factories (the priority order decides what waits) or date the "
+                                 "step later")
+                    else:
+                        extra = "" if d == start else f" plus {planned[pool]} planned"
+                        self.add("error", "production.factories", "production",
+                                 f"{n} {label} allocated from {derive.fmt(derive.date_of(d))} ({what}), but "
+                                 f"{self.tag} has {have[pool]} {label} at the start{extra}")
         self.facts["military_factories"] = {"start": mils, "planned": planned["military"]}
         self.facts["dockyards"] = {"start": have["dockyards"], "planned": planned["dockyards"]}
         equip = game.equipment()
@@ -3988,6 +4001,20 @@ class Lint:
                         out[eq] = out.get(eq, 0.0) + speed * n * eff / 100.0 / cost
                 self._fed = (d, fed)
         return out
+
+    def cut_by_priority(self, lines, excess):
+        """Text naming the lines that stand short when `excess` factories are missing: the lines last in
+        production_priority (unlisted lines last of all) lose factories first."""
+        order = self.priority_lines(lines)
+        rank = {eq: i for i, eq in enumerate(order)}
+        cuts = []
+        for eq in sorted(lines, key=lambda e: (-rank.get(e, len(order)), e)):
+            if excess <= 0:
+                break
+            take = min(lines[eq], excess)
+            excess -= take
+            cuts.append(f"{eq} {lines[eq] - take} of {lines[eq]}")
+        return ", ".join(cuts) or "none"
 
     def priority_lines(self, planned):
         """The active military lines in production_priority order (an entry is an equipment key or a prefix)."""
