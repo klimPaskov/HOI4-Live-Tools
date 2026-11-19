@@ -1171,6 +1171,13 @@ fn solo_watch(
     at_war: &[String],
     now: GameHour,
 ) {
+    // The war runs on few executed battle plans (the owner's rule, 19 Nov 2026: "Do not create
+    // multiple front lines ... Keep front lines to a minimum"): an army that idles inside its
+    // group's plan is not given a front of its own nor driven as a stack by direct moves any
+    // more; the operation's `solo_armies: true` restores the old behaviour for a test.
+    if op["solo_armies"] != json!(true) {
+        return;
+    }
     if !strings(op, "enemies").iter().any(|e| at_war.contains(e)) {
         return;
     }

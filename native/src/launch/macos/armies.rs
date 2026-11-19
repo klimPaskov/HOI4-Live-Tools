@@ -3355,8 +3355,21 @@ pub(super) fn front(
             "No segment front was placed by a drag along the border",
         ));
     }
+    // An army group's front goes on with Shift+Click: the game's tooltip, "Shift+Click on one of
+    // the borders against another country to set the assigned front without sub-army fronts
+    // along entire border". One group front the field marshal divides among his armies, not a
+    // front per army besides it (the owner's rule, 19 Nov 2026: few front lines, the field
+    // marshal's front always by Shift+Click).
+    let group_front = read(process, |r, i| {
+        Ok(army_groups(r, i)?.contains(&group_named(r, i, army)?))
+    })
+    .unwrap_or(false);
     for (x, y) in candidates {
-        keys.click(GAME, x, y)?;
+        if group_front {
+            keys.shift_click(GAME, x, y)?;
+        } else {
+            keys.click(GAME, x, y)?;
+        }
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(600);
         while std::time::Instant::now() < deadline {
             if read(process, |r, i| orders(r, i, army))? > before {
