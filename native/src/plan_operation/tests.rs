@@ -1089,5 +1089,8 @@ fn by_default_an_idle_line_army_gets_no_front_of_its_own_and_is_not_driven() {
     for day in 0..20 {
         solo_watch(&mut state, "op_pol", op, &roster, &wars, START + day * DAY);
     }
-    assert!(!state.done.keys().any(|k| k.contains("solo:") || k.contains("drive:")));
+    assert!(!state
+        .done
+        .keys()
+        .any(|k| k.contains("solo:") || k.contains("drive:")));
 }
