@@ -2389,13 +2389,20 @@ pub(super) fn select_army_quick(
     // rectangle, and click once more on a fresh read if the selection does not follow.
     shown_card(process, keys, army)?;
     let mut last = None;
-    for _ in 0..2 {
+    for attempt in 0..2 {
         let card = settled(process, "army card", |r, i| {
             card_rect(r, i, army, "portrait_btn")
         })?;
         let (x, y) = card.center();
         keys.click(GAME, x, y)?;
-        match wait(process, "select army", |r, i| {
+        // the first click is tried again on a fresh card read: it need not wait the whole stage
+        // (rd3: a click lost to the card strip's re-layout after a detach waited 3 s, 108 polls)
+        let bound = if attempt == 0 {
+            std::time::Duration::from_millis(900)
+        } else {
+            super::ui::STAGE_WAIT
+        };
+        match super::ui::wait_up_to(process, "select army", bound, |r, i| {
             Ok(selection_size(r, i)? & 0xffff_ffff == size)
         }) {
             Ok(()) => return Ok(card),

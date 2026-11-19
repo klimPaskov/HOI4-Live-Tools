@@ -9,7 +9,7 @@ use crate::{
 };
 use std::time::{Duration, Instant};
 
-const STAGE_WAIT: Duration = Duration::from_secs(3);
+pub(super) const STAGE_WAIT: Duration = Duration::from_secs(3);
 const SETTLE_WAIT: Duration = Duration::from_secs(2);
 
 /// One fresh read bracket; transient UI churn is retried a few times.
@@ -77,15 +77,25 @@ pub(super) fn wait(
     stage: &str,
     f: impl Fn(&Reader<'_>, u64) -> Result<bool>,
 ) -> Result<()> {
+    wait_up_to(process, stage, STAGE_WAIT, f)
+}
+/// `wait` with its own bound (a first try that is retried anyway need not wait the full stage).
+pub(super) fn wait_up_to(
+    process: &dyn Process,
+    stage: &str,
+    bound: Duration,
+    f: impl Fn(&Reader<'_>, u64) -> Result<bool>,
+) -> Result<()> {
     let _phase = crate::phase::enter("wait");
     let started = Instant::now();
-    let deadline = started + STAGE_WAIT;
+    let deadline = started + bound;
     loop {
         if read(process, &f)? {
             trace(stage, started);
             return Ok(());
         }
         if Instant::now() >= deadline {
+            crate::phase::note(&format!("stage {stage} (timed out)"), started.elapsed());
             return Err(Error::new(
                 "input_readback_failed",
                 format!("{stage}: expected game change not observed"),
