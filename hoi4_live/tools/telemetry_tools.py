@@ -77,8 +77,18 @@ def _campaign_change(session, action, raw_version):
         try:
             if action in ("restore", "disable"):
                 if config_session is None:
-                    raise ToolError("no owned configuration backup to restore; refusing legacy playset restore",
-                                    {"error": "config_session_missing"})
+                    # After an MCP restart the journal and its durable lock are still on disk: take them over. The
+                    # game is known closed here (checked above), so an unfinished launch is recorded as exited.
+                    orphans = ConfigSession.find_active(cfg.user_dir, Path(cfg.artifacts_dir) / "config_backups")
+                    if not orphans:
+                        raise ToolError("no owned configuration backup to restore; refusing legacy playset restore",
+                                        {"error": "config_session_missing"})
+                    config_session = ConfigSession.recover(orphans[0], cfg.user_dir,
+                                                           Path(cfg.artifacts_dir) / "config_backups")
+                    game = config_session.manifest.get("game")
+                    if game and game["phase"] != "exited":
+                        config_session.mark_game_exited(game["owner_id"], attest_game_files=True)
+                    session.config_session = config_session
                 # ConfigSession refuses starting/running owned launches and
                 # preserves any unrelated byte changes as recovery conflicts.
                 rep = config_session.restore()

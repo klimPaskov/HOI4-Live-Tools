@@ -120,7 +120,7 @@ class Session:
             raise ToolError("owned launch exit is not verified or another game is running; configuration preserved")
         game = self.config_session.manifest.get("game")
         if game and game["phase"] != "exited":
-            self.config_session.mark_game_exited(self.config_owner_id)
+            self.config_session.mark_game_exited(self.config_owner_id, attest_game_files=True)
         return self.config_session.restore()
 
     @property

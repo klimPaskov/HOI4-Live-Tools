@@ -14,6 +14,9 @@ import uuid
 
 
 CONFIG_FILES = ("dlc_load.json", "settings.txt", "pdx_settings.txt")
+# The game itself creates and rewrites these at startup and exit (first-run creation included). After a
+# verified owned exit the caller may attest their bytes (see mark_game_exited); dlc_load.json is never attested.
+GAME_MANAGED_FILES = ("settings.txt", "pdx_settings.txt")
 
 
 def _digest(data):
@@ -120,6 +123,21 @@ class ConfigSession:
             _sync_directory(backup_root)
             raise
 
+    @classmethod
+    def find_active(cls, user_dir, backup_root):
+        """Session directories whose durable lock for this user folder is still held (an orphaned journal after an
+        MCP restart, for example). Empty when none. Read only."""
+        user_dir = Path(user_dir).resolve(strict=True)
+        backup_root = Path(backup_root).resolve()
+        lock_path = cls._lock_path(backup_root, user_dir)
+        if lock_path.is_symlink() or not lock_path.is_file():
+            return []
+        session_id = lock_path.read_text(encoding="ascii").strip()
+        session_dir = backup_root / session_id
+        if not session_id.isalnum() or not (session_dir / "manifest.json").is_file():
+            return []
+        return [session_dir]
+
     @staticmethod
     def _lock_path(backup_root, user_dir):
         key = _digest(os.path.normcase(str(user_dir)).encode("utf-8"))[:24]
@@ -224,8 +242,13 @@ class ConfigSession:
         game["phase"] = "running"
         self._save()
 
-    def mark_game_exited(self, owner_id, expected_rewrites=None):
-        """Record verified owned exit (or verified failed launch) and known rewrites."""
+    def mark_game_exited(self, owner_id, expected_rewrites=None, attest_game_files=False):
+        """Record verified owned exit (or verified failed launch) and known rewrites.
+
+        ``attest_game_files`` is for the caller that has verified the owned game is gone: the current bytes of
+        ``GAME_MANAGED_FILES`` are then accepted as the game's own writes, kept as ``game-written-<name>`` next to the
+        baseline, and restore puts the baseline back (or removes a file the game created). A later edit by anyone else
+        still differs from the attested bytes and stays a conflict."""
         self._check_owner()
         game = self.manifest["game"]
         if not game or game["owner_id"] != str(owner_id) or game["phase"] not in ("starting", "running"):
@@ -236,6 +259,17 @@ class ConfigSession:
                     (not isinstance(digest, str) or len(digest) != 64 or
                      any(c not in "0123456789abcdef" for c in digest))):
                 raise ValueError("Expected rewrite must be a config filename and SHA-256")
+        if attest_game_files:
+            attested = self.manifest.setdefault("game_attested", [])
+            for name in GAME_MANAGED_FILES:
+                if name in expected_rewrites:
+                    continue
+                data = _read(self.user_dir, name)
+                expected_rewrites[name] = _digest(data) if data is not None else None
+                if data is not None:
+                    _atomic_write(self.session_dir / ("game-written-" + name), data)
+                if name not in attested:
+                    attested.append(name)
         self.manifest["expected_rewrites"] = expected_rewrites
         game["phase"] = "exited"
         self._save()
@@ -273,7 +307,8 @@ class ConfigSession:
             if current_hash not in allowed:
                 conflicts[name] = "Unexpected config change; current bytes preserved"
                 continue
-            if baseline is None and current is not None and name not in self.manifest["created"]:
+            if (baseline is None and current is not None and name not in self.manifest["created"]
+                    and name not in self.manifest.get("game_attested", [])):
                 conflicts[name] = "File did not exist at baseline and was not created by this manager"
                 continue
             if current_hash != baseline_hash:

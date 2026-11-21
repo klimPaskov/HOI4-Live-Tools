@@ -10,7 +10,7 @@ from unittest import mock
 from hoi4_live.game import session_backup as backup
 
 
-class ConfigSessionTests(unittest.TestCase):
+class _ConfigBase(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="hoi4_config_session_")
         self.addCleanup(self.temporary.cleanup)
@@ -35,6 +35,9 @@ class ConfigSessionTests(unittest.TestCase):
     def assert_original(self):
         for name, data in self.original.items():
             self.assertEqual((self.user / name).read_bytes(), data)
+
+
+class ConfigSessionTests(_ConfigBase):
 
     def test_durable_baseline_and_byte_exact_restore(self):
         session = self.begin()
@@ -212,3 +215,80 @@ class ConfigSessionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GameManagedFilesAndOrphanTests(_ConfigBase):
+    """Issue 309: the game's own settings writes and a journal left behind by a restarted MCP session."""
+
+    def run_game(self, session, owner="owned-run"):
+        session.write_telemetry_mod("mod/telemetry.mod")
+        session.mark_game_starting(owner)
+        session.mark_game_started(owner)
+
+    def test_attested_game_settings_rewrites_restore_the_baseline_and_are_archived(self):
+        session = self.begin()
+        self.run_game(session)
+        (self.user / "settings.txt").write_bytes(b"settings written by the game")
+        (self.user / "pdx_settings.txt").write_bytes(b"pdx settings written by the game")
+        session.mark_game_exited("owned-run", attest_game_files=True)
+        result = session.restore()
+        self.assertEqual(result["conflicts"], {})
+        self.assert_original()
+        self.assertEqual((session.session_dir / "game-written-settings.txt").read_bytes(), b"settings written by the game")
+        self.assertEqual((session.session_dir / "game-written-pdx_settings.txt").read_bytes(),
+                         b"pdx settings written by the game")
+        self.assertFalse(session.lock_path.exists())
+
+    def test_without_attestation_a_game_rewrite_is_still_a_conflict(self):
+        session = self.begin()
+        self.run_game(session)
+        (self.user / "settings.txt").write_bytes(b"settings written by the game")
+        session.mark_game_exited("owned-run")
+        self.assertIn("settings.txt", session.restore()["conflicts"])
+        self.assertTrue(session.lock_path.exists())
+
+    def test_game_created_settings_files_are_removed_after_attestation(self):
+        (self.user / "settings.txt").unlink()
+        (self.user / "pdx_settings.txt").unlink()
+        session = self.begin()
+        self.run_game(session)
+        (self.user / "settings.txt").write_bytes(b"first run settings")
+        (self.user / "pdx_settings.txt").write_bytes(b"first run pdx settings")
+        session.mark_game_exited("owned-run", attest_game_files=True)
+        self.assertEqual(session.restore()["conflicts"], {})
+        self.assertFalse((self.user / "settings.txt").exists())
+        self.assertFalse((self.user / "pdx_settings.txt").exists())
+        self.assertEqual((session.session_dir / "game-written-settings.txt").read_bytes(), b"first run settings")
+
+    def test_edit_after_the_attested_exit_and_dlc_load_changes_stay_conflicts(self):
+        session = self.begin()
+        self.run_game(session)
+        (self.user / "settings.txt").write_bytes(b"settings written by the game")
+        session.mark_game_exited("owned-run", attest_game_files=True)
+        (self.user / "settings.txt").write_bytes(b"edited by someone else afterwards")
+        (self.user / "dlc_load.json").write_bytes(b'{"enabled_mods": ["external"]}')
+        result = session.restore()
+        self.assertIn("settings.txt", result["conflicts"])
+        self.assertIn("dlc_load.json", result["conflicts"])
+        self.assertEqual((self.user / "settings.txt").read_bytes(), b"edited by someone else afterwards")
+
+    def test_orphaned_journal_is_found_and_restored_without_the_original_session(self):
+        (self.user / "settings.txt").unlink()
+        (self.user / "pdx_settings.txt").unlink()
+        session = self.begin()
+        self.run_game(session)
+        (self.user / "settings.txt").write_bytes(b"first run settings")
+        directory = session.session_dir
+        del session  # the MCP process that owned it is gone: only the files remain
+        found = backup.ConfigSession.find_active(self.user, self.backups)
+        self.assertEqual(found, [directory])
+        orphan = backup.ConfigSession.recover(found[0], self.user, self.backups)
+        game = orphan.manifest["game"]
+        orphan.mark_game_exited(game["owner_id"], attest_game_files=True)
+        self.assertEqual(orphan.restore()["conflicts"], {})
+        self.assertEqual((self.user / "dlc_load.json").read_bytes(), self.original["dlc_load.json"])
+        self.assertFalse((self.user / "settings.txt").exists())
+        self.assertEqual(backup.ConfigSession.find_active(self.user, self.backups), [])
+
+    def test_no_orphan_when_nothing_is_locked(self):
+        self.assertEqual(backup.ConfigSession.find_active(self.user, self.backups), [])
