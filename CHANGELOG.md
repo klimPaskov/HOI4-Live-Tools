@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixes
+
+- Campaign configuration backup (issue #309): after the owned game has verifiably exited, the files the game writes itself (`settings.txt`, `pdx_settings.txt`, first-run creation included) are accepted as its own writes, kept as `game-written-<name>` beside the baseline, and the baseline is restored (or the created file removed) instead of ending in "Unexpected config change" with the lock held. A later edit by anyone else, and any change to `dlc_load.json`, remain conflicts. A journal left behind by a restarted MCP session is found and taken over by `hoi4_telemetry action=restore|disable` when no game is running.
+
 A campaign through the product, start to report: what the private developer rig did for a run is now in
 `hoi4-live play` and a new `hoi4-live report`.
 

@@ -275,7 +275,7 @@ def hoi4_launch(session, args):
         pid = process.launch(cfg.game_dir, launch_args)
     except (OSError, ToolError):
         if backup:
-            backup.mark_game_exited(session.config_owner_id)
+            backup.mark_game_exited(session.config_owner_id, attest_game_files=True)
             backup.restore()
         if dlc:
             session.restore_dlc_after_exit()
