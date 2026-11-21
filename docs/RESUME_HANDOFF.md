@@ -35,8 +35,8 @@ weak). In the end Haiku should also manage full campaigns.
 
 ### Blocked: Linux 1.19.4.1
 
-Needs the Linux executable and the `.so` files beside it (ZIN's WSL copy:
-`/home/klim/games/hoi4/hoi4`, sha256 `36a69ea4…5da`, GNU build ID `2265e6e7…dc082`)
+Needs the Linux executable and the `.so` files beside it (a Linux copy of the game, for example
+`~/games/hoi4/hoi4`, sha256 `36a69ea4…5da`, GNU build ID `2265e6e7…dc082`)
 copied to `~/Projects/_scratch/hoi4-linux-1.19.4.1/`. Then:
 `scripts/gen_linux_layout.py generate`, set `xlayout::LINUX_TABLE`, migrate the core
 Linux layouts 1.19.3 → 1.19.4.1 (same-platform, like macOS did), live checks in the
