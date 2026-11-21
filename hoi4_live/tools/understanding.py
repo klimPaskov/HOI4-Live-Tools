@@ -142,6 +142,21 @@ def hoi4_briefing(session, args):
     return ToolResult(b["markdown"], data)
 
 
+def classify_with_retry(session, screen_mod, retries=2, pause=0.6):
+    """One unreadable frame (the animated menu background garbles button text now and then, seen on 1.19.5.0) must
+    not turn the screen class into `unknown`: look again on a fresh capture, at most `retries` more times."""
+    import time
+    img = session.grab(focus=False)
+    st = screen_mod.classify(img, session.ocr, session.logs.idle_seconds("game"))
+    for _ in range(retries):
+        if st["screen"] != "unknown":
+            break
+        time.sleep(pause)
+        img = session.grab(focus=False)
+        st = screen_mod.classify(img, session.ocr, session.logs.idle_seconds("game"))
+    return img, st
+
+
 @tool("hoi4_screen",
       "What is on screen, without acting: the screen class (map, esc_menu, main_menu, load_screen, loading, ...), "
       "the open panel or full-screen view on the map (politics, decisions, research, trade, construction, "
@@ -159,8 +174,7 @@ def hoi4_screen(session, args):
     from ..game import popups as game_popups
     from ..perception import screen as screen_mod
     from ..perception import topbar
-    img = session.grab(focus=False)
-    st = screen_mod.classify(img, session.ocr, session.logs.idle_seconds("game"))
+    img, st = classify_with_retry(session, screen_mod)
     data = {"screen": st["screen"], "console_open": st["console_open"]}
     if "date" in st:
         data["date"] = st["date"]["hoi4"]
