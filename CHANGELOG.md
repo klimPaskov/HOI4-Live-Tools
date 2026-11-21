@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixes
+
+- `hoi4_screen` looks again on a fresh capture (twice at most) before answering `unknown`, so one garbled menu frame no longer hides the screen class (issue #311, seen on 1.19.5.0).
+
 A campaign through the product, start to report: what the private developer rig did for a run is now in
 `hoi4-live play` and a new `hoi4-live report`.
 
