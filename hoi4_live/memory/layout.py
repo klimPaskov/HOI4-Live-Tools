@@ -1,6 +1,6 @@
 """Verified Windows offsets, deliberately restricted to the handoff build.
 
-Evidence: docs/handoff_2026-10-11_redesign.md and offline PE disassembly recorded
+Evidence: docs/archive/handoff_2026-10-11_redesign.md and offline PE disassembly recorded
 in the redesign evidence. Unverified Linux fields are not imported. The played
 field is a tag index which must pass through tag_to_country before countries.
 """

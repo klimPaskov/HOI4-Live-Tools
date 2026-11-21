@@ -140,14 +140,14 @@ or the Mac app bundle.
 
 Historical reports (read them in order):
 
-- [Campaign run 3](handoff_2026-10-11_campaign_run3.md): run 2 reached 24 March
+- [Campaign run 3](archive/handoff_2026-10-11_campaign_run3.md): run 2 reached 24 March
   1939 after an Austrian war, armies piled into Vienna, 14 German states lost,
   74% surrender progress. It had a real crash with a dump. Run 3 reached about
   1 September 1936 before the user closed the game; that disappearance is not
   a proven crash. Neither attempt reached the required goals. UI actions often
   took 20–40 seconds; frequent stops, failed unit subset selection, false pixel
   verification and late shortage detection made small-model play impractical.
-- [Redesign spike](handoff_2026-10-11_redesign.md): Windows PE/MSVC RTTI found
+- [Redesign spike](archive/handoff_2026-10-11_redesign.md): Windows PE/MSVC RTTI found
   14,040 classes and 370 command classes; read-only process memory worked.
   Germany's factories read as 35 civilian / 28 military / 10 dockyards, plus
   political power and division strength/organisation. Global roots were found.
@@ -470,7 +470,7 @@ This handoff publication did not change those downstream pins.
 ## First prompt to paste into Codex on the Mac
 
 ```text
-Work autonomously; never ask questions. You are the gpt-6-astra builder for the public HOI4 Live Tools repo https://github.com/klimPaskov/HOI4-Live-Tools. Read AGENTS.md and docs/HANDOFF_MAC.md first (especially "Live speed" and "Two play modes"), then docs/handoff_2026-10-11_campaign_run3.md, docs/handoff_2026-10-11_redesign.md and the WIP static-layout evidence. Inspect git status, branches and history; preserve unrelated work. Create feat/macos-governor from origin/wip/governor-memory. The Windows game is reserved for other mod testing: develop and test on this Mac only.
+Work autonomously; never ask questions. You are the gpt-6-astra builder for the public HOI4 Live Tools repo https://github.com/klimPaskov/HOI4-Live-Tools. Read AGENTS.md and docs/HANDOFF_MAC.md first (especially "Live speed" and "Two play modes"), then docs/archive/handoff_2026-10-11_campaign_run3.md, docs/archive/handoff_2026-10-11_redesign.md and the WIP static-layout evidence. Inspect git status, branches and history; preserve unrelated work. Create feat/macos-governor from origin/wip/governor-memory. The Windows game is reserved for other mod testing: develop and test on this Mac only.
 
 Study the reference MCP https://github.com/smerss/Clausewitz-MCP closely (MIT; clone it into a scratch folder): how it reads live game state from process memory without pausing (RTTI walk, serializer field maps, offset tables), how it posts ordinary player commands through the game's own command queue (CCommandQueue::Post, same legality checks as clicks, batched per attach, read-only guard), its hoi4_wait_for event-driven waiting, per-day micro engine, combat planner and encirclement search. The macOS build uses the Itanium C++ ABI like that project's Linux target, so its discovery approach maps closely to the Mac; still discover Mac Mach-O layouts independently and never assume Linux or Windows offsets. Reuse ideas or code with MIT attribution in NOTICE.
 
