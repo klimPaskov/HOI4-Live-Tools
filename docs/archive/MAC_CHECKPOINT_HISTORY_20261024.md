@@ -8,7 +8,7 @@ bound; no private session expiry remains in source. Returned route diagnostics
 contain numeric counts and booleans without private pointer identities. This
 ports the separately recorded component below; it is not advancing-time,
 construction-worker, full-picker or campaign acceptance. See the
-[controller contract](MAC_CONTROLLER.md#construction-placement-qualification).
+[controller contract](../MAC_CONTROLLER.md#construction-placement-qualification).
 
 All 1,941 Rust tests and 956 Python tests (37 skips), strict checks on four
 targets, release build and unchanged 28-tool unbound stdio checks pass. Another
@@ -113,7 +113,7 @@ camera, cursor and all 18 controller files stayed unchanged; there was zero inpu
 activation, screenshot, worker or observation pause. The preceding resource scan's
 reciprocal-parent refusal remains preserved. Resource geometry, complete GUI
 routing, the strict placement adapter and construction worker remain unfinished.
-See [graphical evidence](CLAUSEWITZ_VALIDATION.md#mac-graphical-metadata-and-pure-envelopes--24-october-2026).
+See [graphical evidence](../CLAUSEWITZ_VALIDATION.md#mac-graphical-metadata-and-pure-envelopes--24-october-2026).
 
 All input grants, leases and recorders remain closed. Germany remains paused on
 1 January 1936, with the previously verified single factory queued. No clean
@@ -230,7 +230,7 @@ the full scene picker, ordinary map-click route, eligibility or placement.
 All 1,761 Rust / 956 Python tests (37 skipped), strict checks on four compilation
 targets, release build and 28-tool stdio smoke pass. The preceding `4a23636`
 checkpoint passed all nine CI jobs. See
-[coordinate and terrain evidence](CLAUSEWITZ_VALIDATION.md#mac-cached-coordinates-and-terrain--24-october-2026).
+[coordinate and terrain evidence](../CLAUSEWITZ_VALIDATION.md#mac-cached-coordinates-and-terrain--24-october-2026).
 
 There were no input calls, cursor movements, screenshots or observation pauses.
 The complete own baseline and all six controller files stayed unchanged, and the
@@ -259,7 +259,7 @@ grouping. Eighteen debug/release fixtures and calculations using the captured
 own-camera matrices pass. All 1,724 Rust / 956 Python tests (37 skipped), strict
 checks on four compilation targets, release build and default 28-tool stdio smoke
 pass. The preceding `ced071d` checkpoint passed all nine CI jobs. See
-[ray evidence](CLAUSEWITZ_VALIDATION.md#mac-passive-map-owners-and-ray-arithmetic--23-october-2026).
+[ray evidence](../CLAUSEWITZ_VALIDATION.md#mac-passive-map-owners-and-ray-arithmetic--23-october-2026).
 
 This adds no MCP action or worker permission. Terrain/bitmap picking, cursor
 window association, map input and placement remain unfinished. The original
@@ -283,7 +283,7 @@ quarantined across reconnects, with no key retry or later settlement. Its strict
 All 1,706 Rust / 956 Python tests (37 skipped), strict checks on four compilation
 targets, release build, default 28-tool protocol smoke and candidate read-only
 preflight pass. The prior `8503075` checkpoint passed all nine CI jobs. See
-[navigation evidence](CLAUSEWITZ_VALIDATION.md#mac-ordinary-find-navigation--23-october-2026).
+[navigation evidence](../CLAUSEWITZ_VALIDATION.md#mac-ordinary-find-navigation--23-october-2026).
 
 The 1920×1108 H.264 recording finalized with 2,012 encoded frames over 69.101667
 seconds. Its independent screen-output counter reported 2,011 complete callbacks;
@@ -308,7 +308,7 @@ observations. The internal retained Find foundation pins original ownership and
 requested own state while explicitly allowing validated window reconstruction.
 All 1,668 Rust / 956 Python tests (37 skipped), strict checks on four compilation
 targets, release build and 28-tool protocol smoke pass. The preceding `6082277`
-checkpoint passed all nine CI jobs. See [Find-focus qualification](CLAUSEWITZ_VALIDATION.md#mac-retained-find-and-visible-focus-qualification--23-october-2026).
+checkpoint passed all nine CI jobs. See [Find-focus qualification](../CLAUSEWITZ_VALIDATION.md#mac-retained-find-and-visible-focus-qualification--23-october-2026).
 
 The F key was sent by a bounded qualification harness with MCP readback; there is
 no released Find action adapter or construction worker permission from this test.
@@ -334,7 +334,7 @@ row and scope. An unchanged queue is Pending. It is not connected to input or th
 worker. All 1,642 Rust / 956 Python tests (37 skipped), strict checks on four
 compilation targets, release build and offline MCP smoke pass. The prior selection
 commit `acd6f6e` passed all nine CI jobs. See
-[Find and queue-delta evidence](CLAUSEWITZ_VALIDATION.md#mac-findcamera-and-placement-readback-foundation--23-october-2026).
+[Find and queue-delta evidence](../CLAUSEWITZ_VALIDATION.md#mac-findcamera-and-placement-readback-foundation--23-october-2026).
 
 The fresh game remains paused at 1 January 1936 12:00 with no input grant,
 controller, worker or active recording. Its menu recording was stopped by macOS
@@ -361,7 +361,7 @@ All 1,611 Rust / 956 Python tests (37 skipped), four strict compilation-target
 checks, release build and 28-tool offline protocol smoke pass. Selection does not
 place construction. Typed state targeting, placement and worker integration are
 next; the clean two-year run and full campaign recordings remain unfinished.
-See [selection evidence](CLAUSEWITZ_VALIDATION.md#mac-ordinary-construction-selection--23-october-2026).
+See [selection evidence](../CLAUSEWITZ_VALIDATION.md#mac-ordinary-construction-selection--23-october-2026).
 
 The user resumed work after the handoff. The previous task-owned game and
 supervisor have exited; their close report confirms unchanged default settings.
@@ -385,7 +385,7 @@ all four supported compilation targets, release build and 28-tool offline
 protocol smoke pass. Next retain typed selection/queue identity across one
 ordinary selection attempt, then implement placement and worker integration.
 The clean two-year Luna run and full Germany/China campaign recordings remain
-unfinished. See [the live geometry evidence](CLAUSEWITZ_VALIDATION.md#mac-requested-construction-geometry--23-october-2026).
+unfinished. See [the live geometry evidence](../CLAUSEWITZ_VALIDATION.md#mac-requested-construction-geometry--23-october-2026).
 
 Earlier checkpoints follow.
 
@@ -409,7 +409,7 @@ release build, 28-tool offline protocol smoke and 26 mocked harness tests pass.
 Next implement typed requested-building geometry and ordinary selection readback,
 then placement and worker integration. The clean two-year run and full
 Germany/China campaign recordings remain unfinished. See
-[the zero-key continuation](CLAUSEWITZ_VALIDATION.md#mac-zero-key-opener-continuation--23-october-2026).
+[the zero-key continuation](../CLAUSEWITZ_VALIDATION.md#mac-zero-key-opener-continuation--23-october-2026).
 
 Earlier checkpoints follow.
 
@@ -425,7 +425,7 @@ types, then finish stationary qualification before one Luna-medium opener gate.
 All 1,519 Rust / 956 Python tests (37 skipped), strict cross-platform checks,
 release build and 28-tool offline protocol smoke pass. The two-year run and full
 campaigns remain unfinished. See
-[the live findings](CLAUSEWITZ_VALIDATION.md#mac-live-construction-alias-and-keyboard-capacity--23-october-2026).
+[the live findings](../CLAUSEWITZ_VALIDATION.md#mac-live-construction-alias-and-keyboard-capacity--23-october-2026).
 
 Earlier checkpoints follow.
 
@@ -438,7 +438,7 @@ No live read/input
 was attempted while the single OS authorization request remains pending. After
 authorization, qualify the stationary observer first, then one bounded
 Luna-medium opener and visible-choice observation. Selection and placement remain
-unqualified. See [callback evidence](CLAUSEWITZ_VALIDATION.md#mac-construction-choice-callback-observation--23-october-2026).
+unqualified. See [callback evidence](../CLAUSEWITZ_VALIDATION.md#mac-construction-choice-callback-observation--23-october-2026).
 
 The Mac opener now distinguishes a proven refusal before key-down from uncertain
 input. Failed checks or allocation post no down/up and remain recorded as
@@ -448,7 +448,7 @@ producer result cannot settle an older uncertain intent. Full validation passes
 the release build. The normal macOS task-port authorization request remains
 pending; no live read/input was retried. Keep the prepared stationary shortcut
 qualification as the next live step, followed by one bounded Luna-medium gate.
-See [key delivery evidence](CLAUSEWITZ_VALIDATION.md#mac-positive-key-refusals-and-unconditional-release--23-october-2026).
+See [key delivery evidence](../CLAUSEWITZ_VALIDATION.md#mac-positive-key-refusals-and-unconditional-release--23-october-2026).
 
 The Mac construction opener now has a typed current-T observer and a default-off
 `hoi4_construction_open` qualification adapter. It retains the original binding,
@@ -462,7 +462,7 @@ completed. Do not duplicate that prompt or retry denied memory reads unchanged.
 After authorization, first run the prepared stationary shortcut observer; only
 then review a bounded one-Luna-medium opener/visible-grid grant. The two-year run
 and full recorded campaigns remain unfinished. See
-[the opener contract and evidence](CLAUSEWITZ_VALIDATION.md#mac-ordinary-t-opener-and-strict-receipts--23-october-2026).
+[the opener contract and evidence](../CLAUSEWITZ_VALIDATION.md#mac-ordinary-t-opener-and-strict-receipts--23-october-2026).
 
 The panel probe now has opt-in typed mouse-route observation: complete bounded
 arrays, exact own renderer/target joins and cursor-factor correlations, with no
@@ -472,7 +472,7 @@ It grants no input or
 atomic delivery authority. The next live step is stationary qualification after
 normal local task-port authorization returns, followed by the journaled panel
 opener and one Luna-medium visible-grid gate. No new game input has occurred.
-See [route evidence and limits](CLAUSEWITZ_VALIDATION.md#mac-opener-mouse-route-observation--23-october-2026).
+See [route evidence and limits](../CLAUSEWITZ_VALIDATION.md#mac-opener-mouse-route-observation--23-october-2026).
 
 The new construction topbar probe passes 1,469 Rust tests and the full Python
 suite, but its first live attempt was refused before reading game memory by
@@ -549,9 +549,9 @@ readiness scans and same-day continuation under the daily budget. It passed
 Clippy, a release build and 25-tool stdio smoke. Live qualification at the normal
 daily action budget is next; revision 2 deliberately used one action per game day.
 
-Use [the current handoff](LINUX_RUST_HANDOFF.md),
-[validation evidence](CLAUSEWITZ_VALIDATION.md) and
-[Mac controller contract](MAC_CONTROLLER.md) for current work.
+Use [the current handoff](../LINUX_RUST_HANDOFF.md),
+[validation evidence](../CLAUSEWITZ_VALIDATION.md) and
+[Mac controller contract](../MAC_CONTROLLER.md) for current work.
 
 ## Preserved earlier checkpoints
 
@@ -563,7 +563,7 @@ checks under one original deadline. Its single economic-growth attempt timed out
 at 5.084 seconds and retained an unresolved intent; the controller now blocks
 further input. Independent reads retained the paused 19 April date and idle Focus.
 The 1920×1108 recording finalized cleanly. No retry or reset occurred. See the
-[latest failed gate and next work](LINUX_RUST_HANDOFF.md); the earlier component
+[latest failed gate and next work](../LINUX_RUST_HANDOFF.md); the earlier component
 successes below remain valid but do not establish clean campaign acceptance.
 
 The current implementation adds a default-off durable Mac worker for ordered
@@ -576,13 +576,13 @@ its continuation retain separate transient-read and full-collection assertion
 failures; all three durable completions and unchanged military allocations were
 independently verified. The game is paused at 19 April 1936 20:00 with no worker,
 lease or recorder. This is component evidence, not a clean campaign gate.
-Follow [the latest handoff](LINUX_RUST_HANDOFF.md) and
-[controller contract](MAC_CONTROLLER.md); older checkpoint text below is
+Follow [the latest handoff](../LINUX_RUST_HANDOFF.md) and
+[controller contract](../MAC_CONTROLLER.md); older checkpoint text below is
 preserved history.
 
 **22 October update:** the user has authorized returning to macOS. Use the
-[current runtime checkpoint](LINUX_RUST_HANDOFF.md) and
-[live qualification record](CLAUSEWITZ_VALIDATION.md). Independent Mac geometry
+[current runtime checkpoint](../LINUX_RUST_HANDOFF.md) and
+[live qualification record](../CLAUSEWITZ_VALIDATION.md). Independent Mac geometry
 and ordinary research/Focus/time actions now pass at native 1920×1080. Continuous
 window recording finalized at about 29.4 FPS. The first advancing gate overshot
 its date bound during a model delay before the test-ending pause; the failure is
@@ -601,11 +601,11 @@ follow the current runtime checkpoint for the recorder lifecycle evidence.
 The controller now also retains its exact epoch across reconnects, shares clock
 and gameplay quarantine, and checks research/production action deadlines through
 nested reads and input. These worker prerequisites passed 1,253 Rust tests and
-956 workspace Python tests. [Controller details](MAC_CONTROLLER.md) distinguish
+956 workspace Python tests. [Controller details](../MAC_CONTROLLER.md) distinguish
 this from the still-unfinished durable Mac worker and mixed-plan restart gate.
 
-**Superseded by the [Linux-first objective](LINUX_RUST_HANDOFF.md) and
-[Linux validation checkpoint](CLAUSEWITZ_VALIDATION.md).** The licensed Linux
+**Superseded by the [Linux-first objective](../LINUX_RUST_HANDOFF.md) and
+[Linux validation checkpoint](../CLAUSEWITZ_VALIDATION.md).** The licensed Linux
 game has since launched and process reads passed; ordinary commands, Luna play
 and the Rust runtime remain unaccepted. Statements below describe the earlier
 Mac checkpoint.
@@ -616,7 +616,7 @@ WIP is preserved; the published version and downstream Windows release pins have
 not moved.
 
 Read this status before the older implementation-status paragraphs in
-[HANDOFF_MAC.md](HANDOFF_MAC.md). Those paragraphs describe the starting point.
+[HANDOFF_MAC.md](../HANDOFF_MAC.md). Those paragraphs describe the starting point.
 The remaining campaign requirements still apply. The latest user steering adds
 **Linux as a required live target alongside Windows and macOS**, and prioritizes
 structured observations, event-driven execution and low screenshot/pause overhead.
@@ -649,7 +649,7 @@ establish a clean live recording or a successful campaign.
 Clausewitz-MCP's pinned MIT source and provenance are now included as the engine
 foundation; shared read primitives are active on all three operating systems.
 The broader structured-state and command integration remains unfinished. See
-[the foundation plan](CLAUSEWITZ_FOUNDATION.md). Linux X11 input/capture has passed
+[the foundation plan](../CLAUSEWITZ_FOUNDATION.md). Linux X11 input/capture has passed
 generated-window tests in Docker, but **Linux HOI4 has not been launched**.
 
 ### Earlier 1.18 smoke checkpoint
@@ -667,7 +667,7 @@ foundations, with unsupported desktop capabilities reported explicitly. Linux
 CI was added alongside Windows and macOS. The local integrated Mac suite passed
 863 tests with 28 skips at this checkpoint; this does not establish Linux game
 control. The isolated Linux runtime and upstream reader were exercised against
-generated processes. See [the measured Clausewitz comparison](CLAUSEWITZ_COMPARISON.md)
+generated processes. See [the measured Clausewitz comparison](../CLAUSEWITZ_COMPARISON.md)
 for latency, Rosetta limitations and outstanding live comparison gates. Linux
 HOI4 has not yet run. No native command adapter is validated on Mac or Linux.
 
@@ -689,7 +689,7 @@ HOI4 has not yet run. No native command adapter is validated on Mac or Linux.
   raw input escape routes and unfiltered enemy information are rejected.
   Direct background handlers also enforce normalized arguments, policy,
   own-country visibility and ownership. Ordinary prelaunch status remains usable.
-- One versioned [policy file](../hoi4_live/game/play_policy.json) defines FAIR and
+- One versioned [policy file](../../hoi4_live/game/play_policy.json) defines FAIR and
   META. Deterministic FAIR land-order review can bind a unique army name to its
   stable owned ID, require public state IDs and complete templates, reject
   leg-infantry/cavalry plus line-armor compositions, and bound target churn.
@@ -722,7 +722,7 @@ HOI4 has not yet run. No native command adapter is validated on Mac or Linux.
 
 ## Playbook and campaign assignment
 
-Use [hoi4-campaign-playbook](../skills/hoi4-campaign-playbook/SKILL.md). Its seven
+Use [hoi4-campaign-playbook](../../skills/hoi4-campaign-playbook/SKILL.md). Its seven
 references cover the explicit house rules, continuous operating loop, economy,
 research, logistics, army planning, encirclements, air/naval support, invasion
 readiness and country objectives. A dated source ledger distinguishes historical

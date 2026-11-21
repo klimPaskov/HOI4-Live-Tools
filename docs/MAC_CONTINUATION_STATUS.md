@@ -252,5 +252,5 @@ Read [the current handoff](LINUX_RUST_HANDOFF.md),
 [validation record](CLAUSEWITZ_VALIDATION.md) and
 [playbook](../skills/hoi4-campaign-playbook/SKILL.md).
 The former long checkpoint is preserved byte-for-byte in
-[the 24 October Mac archive](MAC_CHECKPOINT_HISTORY_20261024.md).
+[the 24 October Mac archive](archive/MAC_CHECKPOINT_HISTORY_20261024.md).
 Earlier stop times and process identities in that archive are historical.

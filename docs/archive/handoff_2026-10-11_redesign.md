@@ -1,7 +1,7 @@
 # Handoff: small-model redesign, memory backend spike (11 October 2026)
 
 Historical report at the original stop time. Later WIP and static corrections
-are summarized in [HANDOFF_MAC.md](HANDOFF_MAC.md). The public NOTICE now
+are summarized in [HANDOFF_MAC.md](../HANDOFF_MAC.md). The public NOTICE now
 acknowledges the consulted reference's ideas; the older attribution assessment
 below records the state before publication.
 

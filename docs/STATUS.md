@@ -30,8 +30,8 @@ The major problems were frequent clock stops, slow UI actions, unreliable unit
 selection/order verification and shortages discovered too late.
 
 Read [HANDOFF_MAC.md](HANDOFF_MAC.md) first. The historical reports are
-[campaign run 3](handoff_2026-10-11_campaign_run3.md) and
-[redesign spike](handoff_2026-10-11_redesign.md). Their original statements about
+[campaign run 3](archive/handoff_2026-10-11_campaign_run3.md) and
+[redesign spike](archive/handoff_2026-10-11_redesign.md). Their original statements about
 what was unfinished describe their own stop times; the WIP branch came later.
 Raw saves, recordings, dumps, private mod content and original history remain
 local and are not published. The fixture text files are minimal parser samples,

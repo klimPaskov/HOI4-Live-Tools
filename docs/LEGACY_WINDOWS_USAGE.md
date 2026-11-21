@@ -17,7 +17,7 @@ going on: a structured state model and a one-page briefing of the player's count
 
 Version 1.1.0: 43 baseline tools, exercised on Windows HOI4 1.19.2, including the telemetry companion mod the
 server generates. Recorded campaign attempts did not meet the showcase goals; see the
-[campaign handoff](handoff_2026-10-11_campaign_run3.md). Raw evidence stays local.
+[campaign handoff](archive/handoff_2026-10-11_campaign_run3.md). Raw evidence stays local.
 See [docs/STATUS.md](STATUS.md) for what
 works, the exit-check evidence and known limits, and [docs/PLAN.md](PLAN.md) for the roadmap.
 

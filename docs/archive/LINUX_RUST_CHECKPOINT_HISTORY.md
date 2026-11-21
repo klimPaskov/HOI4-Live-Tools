@@ -1,8 +1,8 @@
 # Historical Linux migration checkpoints
 
 This is the preserved continuation brief before run049. It contains superseded
-next-step instructions and test counts. Use [the current brief](LINUX_RUST_HANDOFF.md)
-for work order and [the validation report](CLAUSEWITZ_VALIDATION.md) for recorded
+next-step instructions and test counts. Use [the current brief](../LINUX_RUST_HANDOFF.md)
+for work order and [the validation report](../CLAUSEWITZ_VALIDATION.md) for recorded
 results. Historical failures remain evidence; later success does not explain them.
 
 ---
@@ -23,7 +23,7 @@ The target-state wait returned a historical timeout with both technologies assig
 and Focus idle. No second wait, restart or action retry followed. STOP retained
 budget2/3/1, no uncertainty and no time change. Canonical release proof, the
 477-second recording, normal exit0 and exact-process absence passed. No game or
-player input remains active. See the [recorded failure](CLAUSEWITZ_VALIDATION.md#recorded-reverse-worker-run048--15-october-2026).
+player input remains active. See the [recorded failure](../CLAUSEWITZ_VALIDATION.md#recorded-reverse-worker-run048--15-october-2026).
 
 A separately labeled root read-only observation after lease release showed mode5,
 settled research panel, hidden tree, hidden Politics/Focus and zero local blockers.
@@ -244,7 +244,7 @@ unverified. Fresh035 may attempt Start only after supported selected-detail
 callback/geometry proof, then requires exact own canonical active-focus readback.
 Finish economic, army/naval actions
 and independent Windows/macOS live adapters afterward.
-[Live evidence](CLAUSEWITZ_VALIDATION.md) preserves earlier failures and boundaries.
+[Live evidence](../CLAUSEWITZ_VALIDATION.md) preserves earlier failures and boundaries.
 
 ## Ordered acceptance gates
 
@@ -292,7 +292,7 @@ of speed or correctness.
   not prove the upstream command mechanism works.
 - Linux HOI4 has not been launched, and no Luna Linux campaign has occurred.
 
-The subsequent [Linux upstream preflight](CLAUSEWITZ_VALIDATION.md) passed real
+The subsequent [Linux upstream preflight](../CLAUSEWITZ_VALIDATION.md) passed real
 x86_64 register access, generated-child calls and stdio protocol checks. It also
 reproduced write-delegation, scratch-mapping and timeout-recovery failures.
 Two fixes exist only in the disclosed scratch validation branch. These tests do
@@ -321,7 +321,7 @@ The licensed Linux game is installed and has run. One Luna medium player verifie
 focus, four research assignments and unpause, then advanced Germany to
 2 January 1936. The final native pause timed out; that adapter remains quarantined.
 The first Rust read-only stdio runtime in `native/` now reads the actual campaign.
-See [live evidence and the failure](CLAUSEWITZ_VALIDATION.md) before continuing.
+See [live evidence and the failure](../CLAUSEWITZ_VALIDATION.md) before continuing.
 The older “Linux has not launched” paragraph above is historical direction-change
 evidence, superseded by this checkpoint. Next: prove safe ordinary command
 scheduling under a running game, then port commands and durable automation.

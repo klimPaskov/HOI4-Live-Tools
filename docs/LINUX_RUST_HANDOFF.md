@@ -210,9 +210,9 @@ The current paused component tests provide no real-time-per-year measurement.
 [recording contract](MAC_RECORDING.md).
 
 The former long handoff is retained byte-for-byte in
-[the 24 October checkpoint archive](LINUX_RUST_CHECKPOINT_HISTORY_20261024.md).
+[the 24 October checkpoint archive](archive/LINUX_RUST_CHECKPOINT_HISTORY_20261024.md).
 Its earlier process identities, stop times and acceptance statements are
 historical; use this brief and the latest Mac checkpoint for current direction.
-The [earlier archive](LINUX_RUST_CHECKPOINT_HISTORY.md),
+The [earlier archive](archive/LINUX_RUST_CHECKPOINT_HISTORY.md),
 [resume snapshot](RESUME_HANDOFF.md) and [preserved Mac history](HANDOFF_MAC.md)
 also remain intact.

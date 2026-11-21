@@ -30,4 +30,4 @@ Validation on Windows/Python 3.9: stopped WIP 457 tests, 15 skipped; sanitized
 master 328 tests, 15 skipped; WIP compileall and tool listing passed. Skips cover
 omitted/private screenshot fixtures. Mac live support, native command posting,
 Luna two-year acceptance and successful showcase campaigns remain unfinished.
-Read [HANDOFF_MAC.md](HANDOFF_MAC.md) for the continuation.
+Read [HANDOFF_MAC.md](../HANDOFF_MAC.md) for the continuation.
