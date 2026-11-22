@@ -303,10 +303,17 @@ class Timeline:
         limits = []
         end = self.forecast_end()
         day = self.start
+        obs_day, obs = self.observed_army()
         while day <= end:
             for i in range(len(started) - 1, -1, -1):
                 if started[i][0] <= day:
                     count[started[i][1]] += started.pop(i)[2]
+            if obs_day is not None and day >= obs_day:
+                # a plan continued from a save: the army read in that save replaces the forecast to its date
+                # (fielded divisions by template; the divisions in training then are not read and start anew)
+                count = Counter({t: float(n) for t, n in obs.items()})
+                started.clear()
+                obs_day = None
             if stock is not None:
                 for k, units in lt.line_output(day).items():
                     stock[fam(k)] += units * 7
@@ -367,6 +374,17 @@ class Timeline:
                           "limits": limits, "equipment_counted": stock is not None,
                           "manpower_per_division": {t: mp(t) for t in count}}
         return self._forecast[equipment]
+
+    def observed_army(self):
+        """(day, {template: divisions}) of force_design.observed: the army a save of this plan fields on that
+        day, which replaces the forecast from then on; (None, {}) when the plan sets none."""
+        fd = self.lint.plan.get("force_design") if isinstance(self.lint.plan.get("force_design"), dict) else {}
+        ob = fd.get("observed") if isinstance(fd.get("observed"), dict) else {}
+        day = derive.day(ob["date"]) if isinstance(ob.get("date"), str) else None
+        divs = {t: n for t, n in (ob.get("divisions") or {}).items() if isinstance(n, int) and n >= 0}
+        if day is None or not divs or day < self.start:
+            return None, {}
+        return day, divs
 
     def forecast_end(self):
         """Last day the army forecast covers: the plan horizon, extended to the latest declaration date and the

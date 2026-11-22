@@ -3915,6 +3915,36 @@
             "additionalProperties": false
           }
         },
+        "observed": {
+          "type": "object",
+          "x-owner": "lint",
+          "properties": {
+            "date": {
+              "type": "string",
+              "pattern": "^\\d{4}\\.\\d{1,2}\\.\\d{1,2}$",
+              "description": "the game date of the save the plan continues from"
+            },
+            "divisions": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "minProperties": 1,
+              "description": "{template: divisions} fielded in that save (hoi4_armies); the lint's army forecast takes these from that date instead of its own estimate"
+            },
+            "source": {
+              "type": "string",
+              "description": "the save or run the counts were read from"
+            }
+          },
+          "required": [
+            "date",
+            "divisions"
+          ],
+          "additionalProperties": false,
+          "description": "the army a save of this plan fields on a date: for a plan continued from a save, the lint's army forecast (force.readiness, war.attack_force, force.decisive) is reset to it on that date. The executor does not read it"
+        },
         "dominance_margin": {
           "type": "number",
           "minimum": 0,
