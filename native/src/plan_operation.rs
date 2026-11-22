@@ -1116,14 +1116,18 @@ pub(super) fn unready(state: &State, plan: &Value, target: &str) -> Option<Strin
         .map(|(id, _)| id)
 }
 
-/// An operation is prepared (read back as ready) and waits for its war: not executed, not ended.
+/// An operation is prepared (read back as ready, or primed: its attack reads back and only a
+/// march is under way) and waits for its war: not executed, not ended.
 pub(super) fn awaiting_war(state: &State) -> bool {
     state.done.keys().any(|k| {
-        k.starts_with("op:") && k.ends_with(":ready") && {
-            let base = &k[..k.len() - 6];
-            !state.done.contains_key(&format!("{base}:exec"))
-                && !state.done.contains_key(&format!("{base}:end"))
-        }
+        let base = k
+            .strip_suffix(":ready")
+            .or_else(|| k.strip_suffix(":primed"));
+        k.starts_with("op:")
+            && base.is_some_and(|base| {
+                !state.done.contains_key(&format!("{base}:exec"))
+                    && !state.done.contains_key(&format!("{base}:end"))
+            })
     })
 }
 
@@ -1132,7 +1136,8 @@ pub(super) fn awaiting_war_on(state: &State, plan: &Value, target: &str) -> bool
     list(plan, "operations").iter().enumerate().any(|(i, op)| {
         let id = op_id(op, i);
         strings(op, "enemies").iter().any(|e| e == target)
-            && state.done.contains_key(&key(&id, "ready"))
+            && (state.done.contains_key(&key(&id, "ready"))
+                || state.done.contains_key(&key(&id, "primed")))
             && !state.done.contains_key(&key(&id, "exec"))
             && !state.done.contains_key(&key(&id, "end"))
     })
@@ -1217,6 +1222,19 @@ fn one(
     });
     if !resting {
         state.done.entry(key(id, "ready")).or_insert(now);
+    }
+    // PRIMED: the attack itself reads back (no front or arrow rests) while only secondary orders
+    // (a strike formation's march to its start state) are still under way: the declaration's
+    // scheduling (declaration first, air held, the target's diplomacy read ahead) applies from
+    // here, not only once the march is done (b38g, 19 Nov 2026: Panzergruppe Nord's march was
+    // never finished, the operation never read as ready before the declaration's day, the air
+    // batches took the ticks and the war came on 6 September instead of the 1st)
+    let drawing = state
+        .bad
+        .iter()
+        .any(|(k, until)| *until > now && k.starts_with("opdraw:"));
+    if !drawing {
+        state.done.entry(key(id, "primed")).or_insert(now);
     }
     if op["execute_on"].is_null() || !holds(state, tools, &op["execute_on"], now) {
         state.op_notes.insert(

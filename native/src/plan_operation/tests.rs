@@ -1834,3 +1834,40 @@ fn a_stalled_far_line_aims_at_one_place_not_across_the_country() {
     );
     assert!(cluster(&[], &at).is_empty());
 }
+
+#[test]
+fn an_attack_that_reads_back_while_the_armour_still_marches_awaits_its_war() {
+    // b38g: Panzergruppe Nord's march was never finished, the operation never read as ready
+    // before the declaration's day, and the declaration's scheduling never began
+    let game = Game::new();
+    game.roster.borrow_mut()["armies"]
+        .as_array_mut()
+        .unwrap()
+        .push(
+            json!({"army": "Schnell", "army_group": null, "commander": "x", "plan": [],
+                     "exercising": false, "division_count": 6, "states": {"66": 6}}),
+        );
+    let mut plan = plan();
+    plan["operations"][0]["formations"][2] = json!({"army": "Schnell", "role": "mobile",
+        "drive": "strike", "front": {"enemy": "POL", "own_states": [67]}});
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    assert!(game
+        .orders()
+        .iter()
+        .any(|(n, a)| n == "hoi4_army_move" && a["army"] == json!("Schnell")));
+    assert!(
+        !state.done.contains_key("op:op_pol:ready"),
+        "the march rests"
+    );
+    assert!(
+        !prepared_against(&state, &plan, "POL"),
+        "the declaration still waits"
+    );
+    assert!(awaiting_war(&state), "but its scheduling begins");
+    assert!(awaiting_war_on(&state, &plan, "POL"));
+    // the declaration's day: the march no longer holds the war
+    mark_due(&mut state, "op_pol", START + DAY);
+    burst(&mut state, &game, &plan, START + DAY);
+    assert!(prepared_against(&state, &plan, "POL"));
+}
