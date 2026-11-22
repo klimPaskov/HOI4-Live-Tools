@@ -120,6 +120,13 @@ class PlanSchemaCoverage(unittest.TestCase):
         self.assertEqual(set(doc["properties"]) - {"why", "note"},
                          {"id", "folder", "grand_doctrine", "track", "subdoctrine", "xp", "replace"})
 
+    def test_operation_keys_the_executor_reads_are_in_the_schema(self):
+        op = _deref(self.schema["properties"]["operations"], self.schema)["items"]["properties"]
+        self.assertIn("replace_arrows", op)
+        self.assertEqual(op["offensive"]["properties"]["deep"]["type"], "boolean")
+        observed = _deref(self.schema["properties"]["force_design"], self.schema)["properties"]["observed"]
+        self.assertEqual(set(observed["properties"]) >= {"date", "divisions", "economy", "army_xp"}, True)
+
     def test_done_memory_lists_have_a_required_id(self):
         for k in ("construction_plan", "politics", "doctrines", "decision_rules"):
             items = _deref(_deref(self.schema["properties"][k], self.schema)["items"], self.schema)

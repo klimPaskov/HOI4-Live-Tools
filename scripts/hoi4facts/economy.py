@@ -734,9 +734,25 @@ def cg_variables(lint):
     return lint._econ_cg_vars
 
 
+def observed_economy(lint):
+    """(day, civilian, military) of force_design.observed.economy: the factories a save of this plan holds on
+    that day, which replace the forecast's own count from then on; None when the plan sets none."""
+    fd = lint.plan.get("force_design") if isinstance(lint.plan.get("force_design"), dict) else {}
+    ob = fd.get("observed") if isinstance(fd.get("observed"), dict) else {}
+    eco = ob.get("economy") if isinstance(ob.get("economy"), dict) else {}
+    day = _day(ob.get("date")) if isinstance(ob.get("date"), str) else None
+    civ, mil = eco.get("civilian"), eco.get("military")
+    if day is None or not isinstance(civ, int) or not isinstance(mil, int):
+        return None
+    return day, civ, mil
+
+
 def simulate(lint, tl, switch_day, until_day, events=None, dyn=None, sample=()):
-    """Run the construction day by day: {"rows": {day: {...}}, "end": {...}, "slot_bound_days": n}."""
+    """Run the construction day by day: {"rows": {day: {...}}, "end": {...}, "slot_bound_days": n}. A plan
+    continued from a save (force_design.observed.economy) takes the save's factories on its date: the projects
+    under way then are not read and start anew."""
     e = _Econ(lint, tl)
+    seen = observed_economy(lint)
     if dyn:
         e.dyn = dict(dyn)
     e.cg_vars, e.drift = cg_variables(lint)
@@ -778,6 +794,11 @@ def simulate(lint, tl, switch_day, until_day, events=None, dyn=None, sample=()):
                 e.resource_trade = e.import_civs(lines_on(today))
             except Exception:  # noqa: BLE001
                 e.resource_trade = 0
+        if seen is not None and today == max(seen[0], start):
+            e.civ, e.mil = seen[1], seen[2]
+            for pr in projects:
+                e.slots[pr["s"]]["used"] -= 1
+            projects.clear()
         if changed:
             e.snapshot()
         total = e.civ + e.mil
