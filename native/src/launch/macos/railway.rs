@@ -23,7 +23,7 @@ const GAME: (u32, u32) = (1920, 1080);
 const MAP_LEFT: f64 = 740.0;
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_railway_build","description":"Queue ONE railway with the game's railway construction mode: Shift+Click on a start node (a supply hub, naval base or the capital; the game builds the shortest path re-using existing railways) and a click on the target province. Give the start as `from_province` or `from_state` (its supply hub or naval base from the map files) and the target as `to_province` or `to_state` (its supply hub, else its largest victory point). Both ends are checked live before any input: the start must be an own railway node now (a supply hub or naval base read from the game, or the capital) and both ends own-controlled. `from_nearest_node:true` replaces a missing start, or one that is no own node, with the own railway node the network already feeds (capital, port, hub with a railway) nearest to the target over own-controlled land (the game re-uses existing railways, so the line is the same); the result says start_replaced. `to_nearest_node:true` makes the target the own railway node nearest to the given province (a railway feeds a hub, the hub feeds the provinces around it; a railway to a plain province only helps as part of the way to a hub); the result says target_node_for_province. The receipt is journaled under request_id (Verified when the own construction queue holds one more line or one more railway level; a retry of the same id settles, it never clicks again). Typed refusals before input: not_a_railway_node and end_not_controlled (both name the nearest own node), route_not_controlled (own-controlled land does not join the start and the target: names the states on the way the player does not control; with from_nearest_node:true the start is replaced by an own node the target reaches instead), no_node_reachable (no own node reaches the target over own land: use a port, trucks or a hub), no_node_in_state, province_not_in_state, unknown_state. railway_not_queued after the clicks means the game refused the path (often: it already stands or is queued at its highest level). Railways cost 170 per level (+130 per existing level) and are the way to carry supply from the capital to far fronts.","inputSchema":{"type":"object","properties":{"from_province":{"type":"integer","minimum":1,"maximum":99999},"from_state":{"type":"integer","minimum":1,"maximum":4095},"to_province":{"type":"integer","minimum":1,"maximum":99999},"to_state":{"type":"integer","minimum":1,"maximum":4095},"from_nearest_node":{"type":"boolean"},"to_nearest_node":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_railway_build","description":"Queue ONE railway with the game's railway construction mode: Shift+Click on a start node (a supply hub, naval base or the capital; the game builds the shortest path re-using existing railways) and a click on the target province. Give the start as `from_province` or `from_state` (its supply hub or naval base from the map files) and the target as `to_province` or `to_state` (its supply hub, else its largest victory point). Both ends are checked live before any input: the start must be an own railway node now (a supply hub or naval base read from the game, or the capital) and both ends own-controlled. `from_nearest_node:true` replaces a missing start, or one that is no own node, with the own railway node the network already feeds (capital, port, hub with a railway) nearest to the target over own-controlled land (the game re-uses existing railways, so the line is the same); the result says start_replaced. `to_nearest_node:true` makes the target the own railway node nearest to the given province (a railway feeds a hub, the hub feeds the provinces around it; a railway to a plain province only helps as part of the way to a hub); the result says target_node_for_province. `leg:true` (with a start) lets the target lie beyond own control: the way from the start to the target over land is computed from the map files (railways of map/railways.txt preferred, as the game re-uses them) and the railway goes to the last province of its own-controlled run from the start, so a plan names the two ends and the railway follows the front one leg at a time; the result says leg_of; refusals leg_built (every province of the own part of the way already has a railway: the next leg waits for more land), railway_complete (the whole way has one) and no_way. The receipt is journaled under request_id (Verified when the own construction queue holds one more line or one more railway level; a retry of the same id settles, it never clicks again). Typed refusals before input: not_a_railway_node and end_not_controlled (both name the nearest own node), route_not_controlled (own-controlled land does not join the start and the target: names the states on the way the player does not control; with from_nearest_node:true the start is replaced by an own node the target reaches instead), no_node_reachable (no own node reaches the target over own land: use a port, trucks or a hub), no_node_in_state, province_not_in_state, unknown_state. railway_not_queued after the clicks means the game refused the path (often: it already stands or is queued at its highest level). Railways cost 170 per level (+130 per existing level) and are the way to carry supply from the capital to far fronts.","inputSchema":{"type":"object","properties":{"from_province":{"type":"integer","minimum":1,"maximum":99999},"from_state":{"type":"integer","minimum":1,"maximum":4095},"to_province":{"type":"integer","minimum":1,"maximum":99999},"to_state":{"type":"integer","minimum":1,"maximum":4095},"from_nearest_node":{"type":"boolean"},"to_nearest_node":{"type":"boolean"},"leg":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}})
 }
 
 /// Supply hub provinces listed in `map/supply_nodes.txt` (`level province` per line).
@@ -349,6 +349,8 @@ pub(super) struct Route {
     pub replaced: Option<Value>,
     /// The province the caller asked for when its nearest own node became the target.
     pub target_asked: Option<i32>,
+    /// With `leg`: the whole way's target and how much of the way this leg covers.
+    pub leg_of: Option<Value>,
 }
 impl Route {
     pub(super) fn json(&self) -> Value {
@@ -359,6 +361,9 @@ impl Route {
         }
         if let Some(p) = self.target_asked {
             out["target_node_for_province"] = json!(p);
+        }
+        if let Some(leg) = &self.leg_of {
+            out["leg_of"] = leg.clone();
         }
         out
     }
@@ -428,6 +433,121 @@ pub(super) fn land_path(
 
 /// Provinces looked at when searching the nearest own railway node.
 const NODE_SEARCH_LIMIT: usize = 4000;
+/// Provinces looked at when searching the way of a railway with `leg` (a whole theatre).
+const LEG_SEARCH_LIMIT: usize = 20000;
+/// The cost of one step along a railway that stands in the map files, against 10 for a plain step:
+/// the game re-uses existing railways, so a way along them is the way it builds.
+const RAIL_STEP: u32 = 4;
+
+/// The railways of the install's `map/railways.txt` (`level count province...` per line) by
+/// province pair (the lower id first), with the highest level of a line on that pair.
+pub(super) fn parse_railways(text: &str) -> HashMap<(i32, i32), u32> {
+    let mut out: HashMap<(i32, i32), u32> = HashMap::new();
+    for line in text.lines() {
+        let nums: Vec<i64> = line
+            .split_whitespace()
+            .map_while(|t| t.parse::<i64>().ok())
+            .collect();
+        let [level, count, provinces @ ..] = nums.as_slice() else {
+            continue;
+        };
+        let count = usize::try_from(*count).unwrap_or(0).min(provinces.len());
+        for pair in provinces[..count].windows(2) {
+            let (Ok(a), Ok(b)) = (i32::try_from(pair[0]), i32::try_from(pair[1])) else {
+                continue;
+            };
+            let key = (a.min(b), a.max(b));
+            let level = u32::try_from(*level).unwrap_or(0);
+            let slot = out.entry(key).or_insert(0);
+            *slot = (*slot).max(level);
+        }
+    }
+    out
+}
+
+/// The install's railways (map/railways.txt), read once per install.
+pub(super) fn railways(dir: &Path) -> std::sync::Arc<HashMap<(i32, i32), u32>> {
+    use std::sync::{Arc, Mutex, OnceLock};
+    type Cache = Mutex<HashMap<std::path::PathBuf, Arc<HashMap<(i32, i32), u32>>>>;
+    static CACHE: OnceLock<Cache> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().ok().and_then(|c| c.get(dir).cloned()) {
+        return found;
+    }
+    let rails = Arc::new(
+        std::fs::read_to_string(dir.join("map/railways.txt"))
+            .map(|t| parse_railways(&t))
+            .unwrap_or_default(),
+    );
+    if let Ok(mut c) = cache.lock() {
+        c.insert(dir.to_path_buf(), rails.clone());
+    }
+    rails
+}
+
+/// The way a railway takes from `from` to `to` over land (both ends included): the cheapest way
+/// where a step along a railway of the map files costs RAIL_STEP and any other step 10, at most
+/// `limit` provinces looked at; None when `to` is not reached.
+pub(super) fn rail_way(
+    neighbours: &HashMap<i32, Vec<i32>>,
+    rails: &HashMap<(i32, i32), u32>,
+    from: i32,
+    to: i32,
+    limit: usize,
+) -> Option<Vec<i32>> {
+    use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
+    let mut cost: HashMap<i32, u32> = HashMap::from([(from, 0)]);
+    let mut back: HashMap<i32, i32> = HashMap::new();
+    let mut heap = BinaryHeap::from([Reverse((0u32, from))]);
+    let mut seen = 0usize;
+    while let Some(Reverse((c, p))) = heap.pop() {
+        if c > cost.get(&p).copied().unwrap_or(u32::MAX) {
+            continue;
+        }
+        if p == to {
+            let mut way = vec![p];
+            let mut at = p;
+            while at != from {
+                at = back[&at];
+                way.push(at);
+            }
+            way.reverse();
+            return Some(way);
+        }
+        seen += 1;
+        if seen > limit {
+            return None;
+        }
+        for &q in neighbours.get(&p).map(Vec::as_slice).unwrap_or(&[]) {
+            let step = if rails.contains_key(&(p.min(q), p.max(q))) {
+                RAIL_STEP
+            } else {
+                10
+            };
+            let next = c + step;
+            if next < cost.get(&q).copied().unwrap_or(u32::MAX) {
+                cost.insert(q, next);
+                back.insert(q, p);
+                heap.push(Reverse((next, q)));
+            }
+        }
+    }
+    None
+}
+
+/// The leg of `way` the player can lay now: the index of the last province of the run of
+/// own-controlled provinces from the start (0: not even the first step is own).
+pub(super) fn leg_end(way: &[i32], mut own: impl FnMut(i32) -> Result<bool>) -> Result<usize> {
+    let mut last = 0;
+    for (i, p) in way.iter().enumerate().skip(1) {
+        if !own(*p)? {
+            break;
+        }
+        last = i;
+    }
+    Ok(last)
+}
 
 /// Live facts the railway order depends on: the player's tag, the controller of a province and
 /// whether it is a railway node now (a supply hub or naval base on the map, or the capital).
@@ -504,12 +624,13 @@ pub(super) fn resolve(
     to: (Option<i32>, Option<i32>),
     from_nearest: bool,
     to_node: bool,
+    leg: bool,
 ) -> Result<Route> {
     let dir = process
         .identity()
         .and_then(|i| mapdata::game_dir(&i.exe).ok())
         .ok_or_else(|| Error::new("map_data_unavailable", "Game install not found"))?;
-    let (asked_p, asked_s) = end(&dir, to.0, to.1, false)?;
+    let (mut asked_p, mut asked_s) = end(&dir, to.0, to.1, false)?;
     let asked = match (from, from_nearest) {
         ((None, None), true) => None,
         (f, _) => match end(&dir, f.0, f.1, true) {
@@ -519,6 +640,71 @@ pub(super) fn resolve(
         },
     };
     let neighbours = super::wars::province_neighbours(&dir)?;
+    let mut leg_of = None;
+    if leg {
+        let (p, s) = asked.ok_or_else(|| {
+            Error::new(
+                "invalid_arguments",
+                "leg needs the start of the whole way: from_province or from_state",
+            )
+        })?;
+        let rails = railways(&dir);
+        let way = rail_way(&neighbours, &rails, p, asked_p, LEG_SEARCH_LIMIT).ok_or_else(|| {
+            Error::new(
+                "no_way",
+                format!(
+                    "No land way joins start province {p} (state {s}) and target province \
+                     {asked_p} (state {asked_s}) in the map files. Nothing was clicked"
+                ),
+            )
+        })?;
+        let (i, laid) = live(process, &dir, |l| {
+            let i = leg_end(&way, |q| l.own(q))?;
+            let mut laid = true;
+            for q in &way[..=i] {
+                let level = super::supplymem::province_rail(l.r, l.image, &l.sys, *q)?
+                    .map_or(0, |x| x.rail_level);
+                if level == 0 {
+                    laid = false;
+                    break;
+                }
+            }
+            Ok((i, laid))
+        })?;
+        if i == 0 {
+            return Err(Error::new(
+                "route_not_controlled",
+                format!(
+                    "The way from province {p} toward {asked_p} leaves own-controlled land at \
+                     its first step (province {}): no leg can be laid yet. Nothing was clicked",
+                    way.get(1).copied().unwrap_or(asked_p)
+                ),
+            ));
+        }
+        if laid {
+            let whole = i + 1 == way.len();
+            return Err(Error::new(
+                if whole { "railway_complete" } else { "leg_built" },
+                format!(
+                    "Every province of the own part of the way from {p} toward {asked_p} \
+                     ({} of {} provinces, to province {}) already has a railway{}. Nothing was \
+                     clicked",
+                    i + 1,
+                    way.len(),
+                    way[i],
+                    if whole {
+                        ": the railway to the target stands"
+                    } else {
+                        "; the next leg waits for more land"
+                    }
+                ),
+            ));
+        }
+        leg_of = Some(json!({"target_province": asked_p, "target_state": asked_s,
+            "way_provinces": way.len(), "leg_provinces": i + 1}));
+        asked_p = way[i];
+        asked_s = state_of(&dir, asked_p)?;
+    }
     let (to_p, to_own, from_ok, found, cut) = live(process, &dir, |l| {
         if !l.own(asked_p)? {
             return Ok((asked_p, false, None, None, None));
@@ -670,6 +856,7 @@ pub(super) fn resolve(
         to_state: to_s,
         replaced,
         target_asked: (to_p != asked_p).then_some(asked_p),
+        leg_of,
     })
 }
 
@@ -786,6 +973,64 @@ mod tests {
         assert_eq!(railway_levels(&page), 6);
         assert_eq!(railway_levels(&json!({})), 0);
     }
+    #[test]
+    fn railways_parse_by_pair_and_a_way_prefers_them_and_a_leg_stops_at_foreign_land() {
+        let rails = parse_railways("2 3 1 2 3 \n1 2 3 2\n5 2 7 8 junk\n");
+        assert_eq!(rails.get(&(1, 2)), Some(&2));
+        assert_eq!(rails.get(&(2, 3)), Some(&2), "the higher level of two lines");
+        assert_eq!(rails.get(&(7, 8)), Some(&5));
+        // 1 - 2 - 3 - 4 along a railway 1-2-3, and 1 - 9 - 4 with no railway: the railway way
+        // costs 4+4+10 = 18 against 20
+        let n: HashMap<i32, Vec<i32>> = HashMap::from([
+            (1, vec![2, 9]),
+            (2, vec![1, 3]),
+            (3, vec![2, 4]),
+            (4, vec![3, 9]),
+            (9, vec![1, 4]),
+        ]);
+        assert_eq!(rail_way(&n, &rails, 1, 4, 100), Some(vec![1, 2, 3, 4]));
+        assert_eq!(rail_way(&n, &HashMap::new(), 1, 4, 100), Some(vec![1, 9, 4]));
+        assert_eq!(rail_way(&n, &rails, 1, 77, 100), None);
+        let way = [1, 2, 3, 4];
+        assert_eq!(leg_end(&way, |p| Ok(p != 3)).unwrap(), 1);
+        assert_eq!(leg_end(&way, |p| Ok(p != 2)).unwrap(), 0);
+        assert_eq!(leg_end(&way, |_| Ok(true)).unwrap(), 3);
+    }
+
+    /// The ways of an operation's supply axis on the real map files (not in CI: they need an
+    /// install): `HOI4_GAME_DIR=<install> cargo test --lib real_map_railway_ways -- --ignored`.
+    #[test]
+    #[ignore]
+    fn real_map_railway_ways_follow_existing_railways() {
+        let dir = std::path::PathBuf::from(std::env::var("HOI4_GAME_DIR").expect("HOI4_GAME_DIR"));
+        let n = super::super::wars::province_neighbours(&dir).unwrap();
+        let rails = railways(&dir);
+        assert!(rails.len() > 1000, "{} railway pairs", rails.len());
+        // Warsaw -> Minsk, Lwow -> Kiev, Minsk -> Smolensk: start node to target of each state
+        for (a, b) in [(10, 206), (91, 202), (206, 242)] {
+            let from = node_of_state(&dir, a).unwrap();
+            let to = target_of_state(&dir, b).unwrap();
+            let way = rail_way(&n, &rails, from, to, LEG_SEARCH_LIMIT).unwrap();
+            assert_eq!(state_of(&dir, *way.first().unwrap()).unwrap(), a);
+            assert_eq!(state_of(&dir, *way.last().unwrap()).unwrap(), b);
+            let on_rail = way
+                .windows(2)
+                .filter(|w| rails.contains_key(&(w[0].min(w[1]), w[0].max(w[1]))))
+                .count();
+            let plain = land_path(&n, from, to, LEG_SEARCH_LIMIT).unwrap();
+            println!(
+                "{a} -> {b}: {} provinces ({on_rail} steps on a railway), plain way {}",
+                way.len(),
+                plain.len()
+            );
+            assert!(way.len() < 60, "{way:?}");
+            assert!(on_rail * 2 >= way.len() - 1, "mostly on railways: {way:?}");
+            for w in way.windows(2) {
+                assert!(n[&w[0]].contains(&w[1]), "a land step {w:?}");
+            }
+        }
+    }
+
     #[test]
     fn nearest_node_walks_own_land_only_and_never_picks_the_start() {
         // 1 - 2 - 3 (node) and 1 - 4 (enemy) - 5 (node, nearer by straight line)
