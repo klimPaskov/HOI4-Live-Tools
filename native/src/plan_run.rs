@@ -135,6 +135,10 @@
 //!                          war runs first, right after the war step; else just before `construction`).
 //!                          Done-memory is keyed by `id` (stable), else by `order`. A railway item
 //!                          starts at the nearest own railway node when its first province is none.
+//!                          `legs: true` (a railway item with both ends): the target may lie beyond
+//!                          own control; the tool lays the own-controlled part of the way (hoi4_railway_build
+//!                          leg) and the item is sent again every `leg_days` (14) game days until the
+//!                          railway stands to the target (railway_complete); leg_built is a wait.
 //!                          An item that fails 3 times (or with a refusal no retry changes) is given
 //!                          up, kept in plan_state and reported (alarm construction_item_blocked);
 //!                          revising the item sends it again
@@ -1294,7 +1298,9 @@ impl State {
             // and wake the player over a wait.
             Ok((false, why))
                 if why.starts_with("end_not_controlled")
-                    || why.starts_with("route_not_controlled") => {}
+                    || why.starts_with("route_not_controlled")
+                    || why.starts_with("leg_built")
+                    || why.starts_with("railway_complete") => {}
             Ok((false, _)) => {
                 self.failures
                     .entry(signature.clone())
@@ -4433,6 +4439,12 @@ fn construction_plan_step(
             // nearest own node (from_nearest_node); a missing target cannot be guessed.
             let state_of = |k: &str| item[k].as_i64().filter(|s| *s > 0);
             let mut a = json!({"from_nearest_node": true});
+            // `legs: true`: the plan names the two ends of an operation's supply axis; the tool
+            // lays the own-controlled part of the way and the item is sent again every
+            // `leg_days` until the railway reaches the target
+            if item["legs"] == json!(true) {
+                a["leg"] = json!(true);
+            }
             if let (Some(f), Some(t)) = (path.first(), path.last()) {
                 a["from_province"] = json!(f);
                 a["to_province"] = json!(t);
@@ -4463,7 +4475,13 @@ fn construction_plan_step(
             ("hoi4_construction_add", a)
         };
         let (ok, why) = state.act(tools, lease, tool, args, "cp")?;
-        if ok {
+        let legs = item["legs"] == json!(true) && tool == "hoi4_railway_build";
+        let leg_wait = item["leg_days"].as_i64().unwrap_or(LEG_DAYS).max(1) * DAY;
+        if legs && (ok || why.starts_with("leg_built")) {
+            // a leg laid, or the own part of the way already laid: the next leg later
+            state.plan_tries.remove(&key);
+            state.skip(now, "cplan", &key, leg_wait);
+        } else if ok || (legs && why.starts_with("railway_complete")) {
             state.plan_built.insert(key.clone(), now);
             state.plan_tries.remove(&key);
         } else {
@@ -4479,6 +4497,8 @@ fn construction_plan_step(
 
 /// Failed attempts after which a `construction_plan` item is given up and reported.
 const PLAN_ITEM_TRIES: u32 = 3;
+/// Game days between two legs of a `legs` railway item (`leg_days`).
+const LEG_DAYS: i64 = 14;
 
 /// A `construction_plan` order failed. A wait the game will lift by itself (the order held by
 /// the failure ledger, an end or the land between not controlled yet) costs nothing; a refusal that no retry can
@@ -4489,7 +4509,11 @@ const PLAN_ITEM_TRIES: u32 = 3;
 fn item_failed(state: &mut State, item: &Value, key: &str, label: &str, why: &str, now: GameHour) {
     let code = why.split(':').next().unwrap_or("").trim();
     // the land between is not held yet: the item waits for it, the tries are not spent
-    if why.starts_with("skipped:") || matches!(code, "end_not_controlled" | "route_not_controlled")
+    if why.starts_with("skipped:")
+        || matches!(
+            code,
+            "end_not_controlled" | "route_not_controlled" | "leg_built"
+        )
     {
         return;
     }
@@ -14722,6 +14746,50 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn a_railway_item_with_legs_is_sent_again_leg_by_leg_until_the_railway_is_complete() {
+        // answers in turn: a leg laid, the own part already laid (a wait), the whole way laid
+        struct Legs(RefCell<Vec<Value>>);
+        impl Tools for Legs {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                Ok(match name {
+                    "hoi4_overview" => json!({"player": "GER"}),
+                    "hoi4_railway_build" => {
+                        self.0.borrow_mut().push(args.clone());
+                        match self.0.borrow().len() {
+                            1 => json!({"receipt": {"status": "Verified"}}),
+                            2 => return Err(Error::new("leg_built", "waits for more land")),
+                            _ => return Err(Error::new("railway_complete", "stands")),
+                        }
+                    }
+                    _ if args.get("request_id").is_some() => {
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let plan = json!({"construction_plan": [{"id": "east", "building": "rail_way",
+            "from_state": 10, "to_state": 219, "legs": true, "leg_days": 7, "when": ""}]});
+        let tools = Legs(RefCell::new(Vec::new()));
+        let mut state = State::default();
+        let mut now = START;
+        for _ in 0..8 {
+            construction_plan_step(&mut state, &tools, &plan, "l", now).unwrap();
+            state.failures.clear();
+            now += 4 * DAY;
+        }
+        let sent = tools.0.borrow();
+        assert_eq!(sent.len(), 3, "one leg a week, never between: {sent:?}");
+        assert_eq!(sent[0]["leg"], true);
+        assert_eq!(
+            (sent[0]["from_state"].clone(), sent[0]["to_state"].clone()),
+            (json!(10), json!(219))
+        );
+        assert!(state.plan_built.contains_key("id:east"));
+        assert!(state.plan_tries.is_empty() && state.plan_blocked.is_empty());
     }
 
     #[test]

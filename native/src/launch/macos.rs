@@ -3647,6 +3647,7 @@ impl MacClock {
                     "to_province",
                     "to_state",
                     "from_nearest_node",
+                    "leg",
                     "to_nearest_node",
                     "request_id",
                     "lease_token",
@@ -3664,12 +3665,13 @@ impl MacClock {
             };
             let flag = |k: &str| args.get(k).and_then(Value::as_bool).unwrap_or(false);
             let (nearest, to_node) = (flag("from_nearest_node"), flag("to_nearest_node"));
+            let leg = flag("leg");
             // The action is the request as asked (a retry of the same id matches it without new
             // reads); the resolved ends go into the receipt detail.
             let action = json!({"kind":"railway_build",
                 "from_province":int("from_province"),"from_state":int("from_state"),
                 "to_province":int("to_province"),"to_state":int("to_state"),
-                "from_nearest_node":nearest,"to_nearest_node":to_node});
+                "from_nearest_node":nearest,"to_nearest_node":to_node,"leg":leg});
             // A retry of a journaled id only settles; it never resolves or clicks again (a
             // railway order without a receipt was re-sent until its path stood at the highest
             // level and every later order "queued nothing", shakedown sk2, 10 Nov 2026).
@@ -3682,6 +3684,7 @@ impl MacClock {
                     (int("to_province"), int("to_state")),
                     nearest,
                     to_node,
+                    leg,
                 )?;
                 self.keys.preflight()?;
                 Some(route)

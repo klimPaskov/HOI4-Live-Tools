@@ -7013,6 +7013,17 @@
             "$ref": "#/definitions/state_id",
             "x-owner": "executor"
           },
+          "legs": {
+            "type": "boolean",
+            "x-owner": "executor",
+            "description": "railway with both ends (from_state/to_state or path): the target may lie beyond own control; the way between the ends is computed from the map files (existing railways preferred) and each send lays the own-controlled part of it (hoi4_railway_build leg); the item is sent again every leg_days until the railway stands to the target. Default false"
+          },
+          "leg_days": {
+            "type": "integer",
+            "minimum": 1,
+            "x-owner": "executor",
+            "description": "game days between two legs of a `legs` railway (default 14)"
+          },
           "when": {
             "$ref": "#/definitions/trigger",
             "x-owner": "executor"
