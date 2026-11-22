@@ -2416,17 +2416,26 @@
                   "description": "{template: divisions} standing in this army on the war day (templates as in `templates` and training)"
                 },
                 "station": {
-                  "x-owner": "text",
-                  "$ref": "#/definitions/state_id"
+                  "$ref": "#/definitions/state_id",
+                  "description": "the state the army stands in until its release (with reserve_orders: marched to, then held)"
                 },
                 "release_when": {
-                  "x-owner": "text",
-                  "$ref": "#/definitions/predicate"
+                  "$ref": "#/definitions/predicate",
+                  "description": "when the army is released (with reserve_orders)"
                 },
                 "to": {
                   "type": "string",
                   "minLength": 1,
                   "description": "a hold id of this operation, or \"operation\": the front the army takes when released"
+                },
+                "fallback": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/state_id"
+                  },
+                  "minItems": 1,
+                  "maxItems": 8,
+                  "description": "own states of the reserve's fallback line (with reserve_orders), side by side; without it the reserve holds its station by area defence"
                 },
                 "why": {
                   "type": "string",
@@ -2572,6 +2581,39 @@
             "type": "integer",
             "minimum": 1,
             "description": "game days without a province gained on the current line before the next line is drawn (default 7)"
+          },
+          "regroup_at_war": {
+            "type": "boolean",
+            "description": "true: the group is formed again with the line armies outside it (and reserves released to the operation) while the country is at war with someone else, as long as the operation's own enemies are not at war with us; an army in another group joins too; never an army another running operation owns or one standing in contact with an enemy. Default false: the regroup runs only while the country is at war with nobody"
+          },
+          "reserve_orders": {
+            "type": "boolean",
+            "description": "true: the operation owns its `reserve` armies and gives each a standing order: a whole-army march to its station, then a fallback line through the row's `fallback` states, else an area defence of the station; on `release_when` a row `to: \"operation\"` is cleared and joins the group at its next regroup, a row to a hold keeps its standing order. Default false: reserve rows are text"
+          },
+          "redeploy": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "army": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "$ref": "#/definitions/state_id"
+                },
+                "why": {
+                  "type": "string",
+                  "description": "Free text for people and the player; never read by the executor."
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "army",
+                "state"
+              ]
+            },
+            "description": "when every enemy is out: each army (cleared of its orders) moves as one army to `state` (the redeployment to the next theatre); an army standing in contact with an enemy still at war stays. The next operation's prepare draws its fronts and holds with what stands"
           },
           "success": {
             "x-owner": "text",

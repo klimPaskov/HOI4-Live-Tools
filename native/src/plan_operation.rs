@@ -33,8 +33,16 @@
 //!   one is drawn; at war, an arrow that will not delete alone clears the unit's orders once and
 //!   the front and the arrow are drawn again. Without it a changed line adds an arrow, and the
 //!   game gives a second arrow on one front no divisions.
-//! - FINISH: every enemy out of the war: the attack orders are cleared and `on_capitulation.next`
-//!   starts its PREPARE at once.
+//! - REGROUP AT WAR (`regroup_at_war: true`): the group is formed again with the line armies
+//!   outside it while the country fights someone else, as long as the operation's own enemies are
+//!   not at war with us; never with an army another running operation owns or one standing in
+//!   contact with an enemy (see `in_contact`). Without it the regroup runs only at full peace.
+//! - RESERVES (`reserve_orders: true`): each `reserve` row's army is owned and gets a standing
+//!   order (a march to its station, then a fallback line or an area defence there) until its
+//!   release (see `reserves`).
+//! - FINISH: every enemy out of the war: the attack orders are cleared, the `redeploy` rows move
+//!   their armies as whole armies to the next theatre (see `redeploy`), and
+//!   `on_capitulation.next` starts its PREPARE at once.
 //!
 //! State lives in the persisted done-memory (`op:<id>:...` keys), so a restart resumes.
 use super::{ints, item_id, list, strings, text, GameHour, State, Tools, Truth, DAY};
@@ -270,6 +278,7 @@ fn owned_names(state: &State, plan: &Value, op: &Value, roster: &Value) -> Vec<S
                 .map(|a| name_of(state, roster, text(&a["army"]))),
         );
     }
+    armies.extend(reserve_names(state, op, roster));
     armies.retain(|a| !a.is_empty());
     let mut names = armies.clone();
     for a in &armies {
@@ -816,6 +825,41 @@ fn war_tags(wars: &Value) -> Vec<String> {
         .collect()
 }
 
+/// Whether another running operation owns the army or army group `name`.
+fn owned_elsewhere(state: &State, id: &str, name: &str) -> bool {
+    state.op_owned.get(name).is_some_and(|op| op != id)
+}
+
+/// The states where an own army meets a country at war with us: both sides of every border with
+/// such a country (hoi4_wars borders).
+fn contact_states(wars: &Value) -> HashSet<i64> {
+    let fighting = war_tags(wars);
+    list(wars, "borders")
+        .iter()
+        .filter(|b| fighting.iter().any(|t| t == text(&b["neighbour_tag"])))
+        .flat_map(|b| {
+            ints(&b["own_border_states"])
+                .into_iter()
+                .chain(ints(&b["neighbour_states"]))
+        })
+        .collect()
+}
+
+/// Whether an army stands in contact with an enemy (a division in a contact state) or executes a
+/// battle plan: such an army is never taken out of its place by a regroup or a redeployment.
+fn in_contact(roster: &Value, wars: &Value, name: &str) -> bool {
+    let Some(row) = army_row(roster, name) else {
+        return false;
+    };
+    let contact = contact_states(wars);
+    let standing = row["states"].as_object().is_some_and(|at| {
+        at.iter().any(|(s, n)| {
+            n.as_i64().unwrap_or(0) > 0 && s.parse::<i64>().is_ok_and(|s| contact.contains(&s))
+        })
+    });
+    standing || executing(roster, name)
+}
+
 /// Whether the unit's offensive draws ran out (for its line or its one-state line).
 fn drawn_out(state: &State, id: &str, u: &Unit) -> bool {
     let prefix = key(id, &format!("draw:{}:", u.name));
@@ -1193,6 +1237,9 @@ fn one(
         if let Some(line) = strikes(
             state, tools, plan, op, &units, roster, &enemies, &at_war, lease, now,
         )? {
+            return Ok(Some(line));
+        }
+        if let Some(line) = reserves(state, tools, id, op, roster, wars, lease, now)? {
             return Ok(Some(line));
         }
         return advance(
@@ -2118,6 +2165,228 @@ fn assemble(
     Ok(None)
 }
 
+/// Marches a reserve army may take to its station before it takes its standing order where it
+/// stands.
+const RESERVE_MARCHES: i64 = 4;
+/// Tries of a reserve army's standing order.
+const RESERVE_ORDERS: i64 = 2;
+
+/// The reserve rows' army hints released `to: "operation"` (they join the group at its regroup).
+fn released_to_group(state: &State, id: &str, op: &Value) -> Vec<String> {
+    if op["reserve_orders"] != json!(true) {
+        return Vec::new();
+    }
+    list(op, "reserve")
+        .iter()
+        .filter(|r| text(&r["to"]) == "operation")
+        .map(|r| text(&r["army"]).to_string())
+        .filter(|a| !a.is_empty() && state.done.contains_key(&key(id, &format!("rel:{a}"))))
+        .collect()
+}
+
+/// The reserve rows' armies the operation owns (`reserve_orders: true`), as game names.
+fn reserve_names(state: &State, op: &Value, roster: &Value) -> Vec<String> {
+    if op["reserve_orders"] != json!(true) {
+        return Vec::new();
+    }
+    list(op, "reserve")
+        .iter()
+        .map(|r| name_of(state, roster, text(&r["army"])))
+        .filter(|a| !a.is_empty())
+        .collect()
+}
+
+/// Whether an army carries any order of its own (battle plan, fallback or area defence).
+fn has_orders(roster: &Value, name: &str) -> bool {
+    army_row(roster, name).is_some_and(|r| {
+        !list(r, "plan").is_empty()
+            || r["battle_plan_orders"].as_i64().unwrap_or(0) > 0
+            || r["defensive_orders"].as_i64().unwrap_or(0) > 0
+    })
+}
+
+/// RESERVES (`reserve_orders: true`): every reserve row's army gets a real standing order. Before
+/// its release (`release_when`) it marches as one army to its `station` (whole-army move, at most
+/// RESERVE_MARCHES tries, never while it stands in contact with an enemy), then holds there: a
+/// fallback line through the row's `fallback` states, else an area defence of the station. Once
+/// `release_when` holds the row is released: released `to: "operation"` it joins the group at the
+/// group's next regroup; released to a hold it keeps its standing order (one front per border
+/// piece: no second front is drawn for it). One order per call.
+#[allow(clippy::too_many_arguments)]
+fn reserves(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    op: &Value,
+    roster: &Value,
+    wars: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if op["reserve_orders"] != json!(true) {
+        return Ok(None);
+    }
+    for row in list(op, "reserve") {
+        let hint = text(&row["army"]).to_string();
+        let name = name_of(state, roster, &hint);
+        let Some(army) = army_row(roster, &name) else {
+            continue;
+        };
+        let rel = key(id, &format!("rel:{hint}"));
+        if !state.done.contains_key(&rel) {
+            if !row["release_when"].is_null() && holds(state, tools, &row["release_when"], now) {
+                state.done.insert(rel, now);
+                let to = text(&row["to"]);
+                let line = format!(
+                    "operation {id}: reserve {name} released ({})",
+                    if to == "operation" {
+                        "joins the group at its next regroup".to_string()
+                    } else {
+                        format!("keeps its standing order for {to}")
+                    }
+                );
+                state.op_notes.insert(format!("{id}:{name}"), line.clone());
+                if to == "operation" {
+                    // its own orders would keep it out of the group's front
+                    state.done.remove(&key(id, &format!("resord:{name}")));
+                    if has_orders(roster, &name) {
+                        return Ok(Some(order(
+                            state,
+                            tools,
+                            lease,
+                            id,
+                            &format!("reserve {name} released: clear its standing order"),
+                            "hoi4_army_plan",
+                            json!({"army": name, "clear_orders": true}),
+                        )?));
+                    }
+                }
+                return Ok(Some(line));
+            }
+        } else {
+            continue;
+        }
+        if state.skipped(now, "opres", &name) {
+            continue;
+        }
+        let station = row["station"].as_i64();
+        let total = army["division_count"].as_i64().unwrap_or(0).max(1);
+        let there = station.map_or(total, |s| {
+            army["states"][s.to_string()].as_i64().unwrap_or(0)
+        });
+        let marches_key = key(id, &format!("resmarch:{name}"));
+        let marches = state.done.get(&marches_key).copied().unwrap_or(0);
+        if let Some(s) = station.filter(|_| there * 2 < total) {
+            if marches < RESERVE_MARCHES && !in_contact(roster, wars, &name) {
+                state.done.insert(marches_key, marches + 1);
+                state.skip(now, "opres", &name, 2 * DAY);
+                return Ok(Some(order(
+                    state,
+                    tools,
+                    lease,
+                    id,
+                    &format!("reserve {name} marches to its station {s}"),
+                    "hoi4_army_move",
+                    json!({"army": name, "state_id": s}),
+                )?));
+            }
+            if marches < RESERVE_MARCHES {
+                continue;
+            }
+        }
+        let ord_key = key(id, &format!("resord:{name}"));
+        let tries = state.done.get(&ord_key).copied().unwrap_or(0);
+        if has_orders(roster, &name) || tries >= RESERVE_ORDERS {
+            continue;
+        }
+        state.done.insert(ord_key, tries + 1);
+        state.skip(now, "opres", &name, DAY);
+        let fallback = ints(&row["fallback"]);
+        let (what, tool, args) = if !fallback.is_empty() {
+            (
+                format!("reserve {name} holds the fallback line {fallback:?}"),
+                "hoi4_army_fallback",
+                json!({"army": name, "states": fallback}),
+            )
+        } else if let Some(s) = station {
+            (
+                format!("reserve {name} holds its station {s} (area defence)"),
+                "hoi4_army_area_defense",
+                json!({"army": name, "states": [s]}),
+            )
+        } else {
+            continue;
+        };
+        return Ok(Some(order(state, tools, lease, id, &what, tool, args)?));
+    }
+    Ok(None)
+}
+
+/// REDEPLOYMENT (the operation's `redeploy` rows, read when its enemies are out): each row's
+/// army, unless it stands in contact with an enemy still at war, is cleared of its orders and
+/// moved as one army to the row's `state` (Poland to the West, the West to the East). One order
+/// per call; each row is ordered once and never holds the operation's end.
+#[allow(clippy::too_many_arguments)]
+fn redeploy(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    op: &Value,
+    roster: &Value,
+    wars: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    for row in list(op, "redeploy") {
+        let name = name_of(state, roster, text(&row["army"]));
+        let (Some(army), Some(to)) = (army_row(roster, &name), row["state"].as_i64()) else {
+            continue;
+        };
+        let k = key(id, &format!("redeploy:{name}"));
+        if state.done.contains_key(&k) {
+            continue;
+        }
+        let total = army["division_count"].as_i64().unwrap_or(0).max(1);
+        let there = army["states"][to.to_string()].as_i64().unwrap_or(0);
+        if there * 2 >= total || in_contact(roster, wars, &name) {
+            state.done.insert(k, now);
+            let why = if there * 2 >= total {
+                "already there"
+            } else {
+                "stays: in contact with an enemy"
+            };
+            state
+                .op_notes
+                .insert(format!("{id}:{name}"), format!("redeploy {name}: {why}"));
+            continue;
+        }
+        let clear = key(id, &format!("redeploy_clear:{name}"));
+        if has_orders(roster, &name) && !state.done.contains_key(&clear) {
+            state.done.insert(clear, now);
+            return Ok(Some(order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("redeploy {name}: clear its orders first"),
+                "hoi4_army_plan",
+                json!({"army": name, "clear_orders": true}),
+            )?));
+        }
+        state.done.insert(k, now);
+        return Ok(Some(order(
+            state,
+            tools,
+            lease,
+            id,
+            &format!("redeploy {name} to state {to}"),
+            "hoi4_army_move",
+            json!({"army": name, "state_id": to}),
+        )?));
+    }
+    Ok(None)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn prepare(
     state: &mut State,
@@ -2158,32 +2427,61 @@ fn prepare(
     // 1936 of the two line armies that existed, Armee Süd formed later and stood outside it on
     // the group's war day, with no front and no planning bonus). The game keeps the fronts and
     // planning of a regrouped army (probe rp2).
+    // With `regroup_at_war: true` the regroup also runs while the country fights someone else
+    // (Germany stays at war with Britain after Poland: without it the armies that were not in the
+    // group for Poland never join it for France or the USSR): it runs while the OPERATION's
+    // enemies are not at war with us, takes an army standing in another group too, and never
+    // moves an army another running operation owns or one standing in contact with an enemy
+    // (its states on a border with a country at war with us, or across it).
+    let at_war_regroup = op["regroup_at_war"] == json!(true);
     let line_armies: Vec<&Unit> = units.iter().filter(|u| u.role == Role::Line).collect();
+    let movable = |name: &str| -> bool {
+        !at_war_regroup || (!owned_elsewhere(state, id, name) && !in_contact(roster, wars, name))
+    };
+    let outside_of = |r: &Value| -> bool {
+        if at_war_regroup {
+            r["army_group"].as_str() != group
+        } else {
+            r["army_group"].is_null()
+        }
+    };
+    let released: Vec<String> = released_to_group(state, id, op)
+        .iter()
+        .map(|h| resolve(state, h))
+        .collect();
     let outside = line_armies
         .iter()
-        .any(|u| army_row(roster, &u.name).is_some_and(|r| r["army_group"].is_null()));
+        .map(|u| &u.name)
+        .chain(released.iter())
+        .any(|n| army_row(roster, n).is_some_and(outside_of) && movable(n));
     let regroup_key = key(id, "group_again");
     let regroups = state.done.get(&regroup_key).copied().unwrap_or(0);
-    let regroup = group.is_some() && outside && !state.war_active && regroups < 3;
+    let calm = if at_war_regroup {
+        let fighting = war_tags(wars);
+        !strings(op, "enemies").iter().any(|e| fighting.contains(e))
+    } else {
+        !state.war_active
+    };
+    let regroup = group.is_some() && outside && calm && regroups < 3;
     if (group.is_none() || regroup) && line_armies.len() >= 2 && !state.skipped(now, "opgrp", id) {
+        let joins = |n: &str| -> bool {
+            army_row(roster, n).is_some_and(|r| {
+                (outside_of(r) && movable(n)) || (regroup && r["army_group"].as_str() == group)
+            })
+        };
         let mut names: Vec<String> = line_armies.iter().map(|u| u.name.clone()).collect();
         let planned = list(plan, "army_group")
             .iter()
             .find(|g| item_id(g).as_deref() == op["group"].as_str());
-        for hint in planned.map(|g| strings(g, "armies")).unwrap_or_default() {
+        let mut hints = planned.map(|g| strings(g, "armies")).unwrap_or_default();
+        hints.extend(released);
+        for hint in hints {
             let n = resolve(state, &hint);
-            let free = army_row(roster, &n).is_some_and(|r| {
-                r["army_group"].is_null() || (regroup && r["army_group"].as_str() == group)
-            });
-            if free && !names.contains(&n) {
+            if joins(&n) && !names.contains(&n) {
                 names.push(n);
             }
         }
-        names.retain(|n| {
-            army_row(roster, n).is_some_and(|r| {
-                r["army_group"].is_null() || (regroup && r["army_group"].as_str() == group)
-            })
-        });
+        names.retain(|n| joins(n));
         if names.len() >= 2 {
             state.skip(now, "opgrp", id, 2 * DAY);
             if regroup {
@@ -2379,6 +2677,10 @@ fn prepare(
         {
             return Ok(Some(line));
         }
+    }
+    // the reserves' standing orders, after every front
+    if let Some(line) = reserves(state, tools, id, op, roster, wars, lease, now)? {
+        return Ok(Some(line));
     }
     // 5. execution mode, once per attacker
     if let Some(mode) = op["execution"]
@@ -3066,6 +3368,9 @@ fn advance(
                 "hoi4_army_plan",
                 json!({"army": u.name, "clear_orders": true}),
             )?;
+            return Ok(Some(line));
+        }
+        if let Some(line) = redeploy(state, tools, id, op, roster, wars, lease, now)? {
             return Ok(Some(line));
         }
         state.done.insert(key(id, "end"), now);
