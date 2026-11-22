@@ -2594,6 +2594,19 @@
             "type": "boolean",
             "description": "true: the operation owns its `reserve` armies and gives each a standing order: a whole-army march to its station, then a fallback line through the row's `fallback` states, else an area defence of the station; on `release_when` a row `to: \"operation\"` is cleared and joins the group at its next regroup, a row to a hold keeps its standing order. Default false: reserve rows are text"
           },
+          "marshals": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "generals for the operation's army groups: a group without a field marshal (a regroup or the second group of a split forms a new game group, which has none) gets the first of them who leads no other group (hoi4_army_commander; a general is promoted for command power). Absent: the operation gives no group a marshal"
+          },
+          "group_cap": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the line armies one army group takes (the game's field marshal cap is 5). With more line armies than this the operation fights in TWO groups split by geography: the front's own states are halved along the line between the two farthest apart, each half of the line armies (by where they stand) is formed into its own group, and each group draws one front on its own piece of the border (hoi4_army_front from_states) and carries one offensive through its side of the line (and of the far line and every later line). Absent: one group whatever the number"
+          },
           "redeploy": {
             "type": "array",
             "items": {

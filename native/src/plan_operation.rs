@@ -37,6 +37,9 @@
 //!   outside it while the country fights someone else, as long as the operation's own enemies are
 //!   not at war with us; never with an army another running operation owns or one standing in
 //!   contact with an enemy (see `in_contact`). Without it the regroup runs only at full peace.
+//! - TWO GROUPS (`group_cap`): more line armies than one field marshal commands fight in two
+//!   groups split by geography, each with ONE front on its own piece of the border and one
+//!   offensive through its side of every line (see `Split`).
 //! - RESERVES (`reserve_orders: true`): each `reserve` row's army is owned and gets a standing
 //!   order (a march to its station, then a fallback line or an area defence there) until its
 //!   release (see `reserves`).
@@ -144,6 +147,9 @@ struct Unit {
     /// an armour formation on its own front whose attack is the game's spearhead order painted
     /// through `line` (the owner's war model, 19 Nov 2026), not the strike engine's direct moves
     spear: bool,
+    /// one of two army groups of an operation with `group_cap` (true: the low side of the split
+    /// axis): its own piece of the front's states and of every line
+    side: Option<bool>,
 }
 
 fn key(id: &str, what: &str) -> String {
@@ -499,6 +505,7 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
     let mut out = Vec::new();
     let mut group: Option<String> = None;
     let mut lines_in_group = 0;
+    let mut line_names: Vec<String> = Vec::new();
     let (_, op_line) = current_line(state, id, op);
     for f in list(op, "formations") {
         let name = name_of(state, roster, text(&f["army"]));
@@ -534,6 +541,7 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
                 anchor: None,
                 line,
                 spear: false,
+                side: None,
             });
             continue;
         }
@@ -559,11 +567,13 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
                 anchor: line.first().copied(),
                 line,
                 spear: false,
+                side: None,
             });
             continue;
         }
         if role == Role::Line {
             lines_in_group += 1;
+            line_names.push(name.clone());
             if group.is_none() {
                 group = army_row(roster, &name)
                     .and_then(|r| r["army_group"].as_str())
@@ -593,7 +603,15 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
         // every line army fights on its own front: the group has no divisions left to order
         group = None;
     }
-    if let Some(g) = &group {
+    let two = if lines_in_group == 0 {
+        Vec::new()
+    } else {
+        split_groups(state, id, op, roster, &line_names)
+    };
+    if !two.is_empty() {
+        group = two.first().map(|u| u.name.clone());
+        out.extend(two);
+    } else if let Some(g) = &group {
         let mut u = unit(g.clone(), Role::Group, &op["front"], &op["offensive"]);
         let far = deep(state, id);
         if !far.is_empty() {
@@ -651,6 +669,189 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
         out.push(hold);
     }
     (out, group)
+}
+
+/// TWO ARMY GROUPS (`group_cap`, the armies one field marshal commands: 5 in the game's defines):
+/// an operation with more line armies than that splits them in two groups by geography. The
+/// split axis runs between the two front states (`front.own_states`) farthest apart; the cut lies
+/// between the middle two of them, so each group has half of the front's states. Each group draws
+/// ONE front on its own piece of the border (a drag along its own states) and carries its one
+/// offensive through its side of the line (and of the far line, and of every later line).
+#[derive(Clone, Copy, Debug)]
+struct Split {
+    a: (f64, f64),
+    dir: (f64, f64),
+    cut: f64,
+}
+
+impl Split {
+    fn at(&self, p: (f64, f64)) -> f64 {
+        (p.0 - self.a.0) * self.dir.0 + (p.1 - self.a.1) * self.dir.1
+    }
+    fn low(&self, p: (f64, f64)) -> bool {
+        self.at(p) < self.cut
+    }
+}
+
+/// The split axis of an operation with `group_cap` (None without the key or without two front
+/// states whose map centres are known).
+fn split_axis(state: &State, op: &Value) -> Option<Split> {
+    op["group_cap"].as_i64()?;
+    let pts: Vec<(f64, f64)> = ints(&op["front"]["own_states"])
+        .iter()
+        .filter_map(|s| state.centers.get(&(*s as i32)).copied())
+        .collect();
+    type Pair = (f64, (f64, f64), (f64, f64));
+    let mut best: Option<Pair> = None;
+    for (i, p) in pts.iter().enumerate() {
+        for q in &pts[i + 1..] {
+            let d = (q.0 - p.0).hypot(q.1 - p.1);
+            if best.is_none_or(|b| d > b.0) {
+                best = Some((d, *p, *q));
+            }
+        }
+    }
+    let (len, a, b) = best.filter(|b| b.0 > 1e-6)?;
+    let dir = ((b.0 - a.0) / len, (b.1 - a.1) / len);
+    let mut split = Split { a, dir, cut: 0.0 };
+    let mut proj: Vec<f64> = pts.iter().map(|p| split.at(*p)).collect();
+    proj.sort_by(f64::total_cmp);
+    let m = proj.len() / 2;
+    split.cut = (proj[m - 1] + proj[m]) / 2.0;
+    Some(split)
+}
+
+/// The states of `line` on one side of the split (the whole line when none lies there or a
+/// centre is unknown for all).
+fn side_line(state: &State, split: &Split, low: bool, line: &[i64]) -> Vec<i64> {
+    let out: Vec<i64> = line
+        .iter()
+        .copied()
+        .filter(|s| {
+            state
+                .centers
+                .get(&(*s as i32))
+                .is_some_and(|p| split.low(*p) == low)
+        })
+        .collect();
+    if out.is_empty() {
+        line.to_vec()
+    } else {
+        out
+    }
+}
+
+/// Where an army stands on the map: the centre of its states weighted by its divisions there.
+fn army_point(state: &State, roster: &Value, name: &str) -> Option<(f64, f64)> {
+    let at = army_row(roster, name)?["states"].as_object()?;
+    let (mut x, mut z, mut n) = (0.0, 0.0, 0.0);
+    for (sid, count) in at {
+        let Some(p) = sid
+            .parse::<i32>()
+            .ok()
+            .and_then(|s| state.centers.get(&s).copied())
+        else {
+            continue;
+        };
+        let c = count.as_f64().unwrap_or(0.0);
+        x += p.0 * c;
+        z += p.1 * c;
+        n += c;
+    }
+    (n > 0.0).then(|| (x / n, z / n))
+}
+
+/// The line armies in two parts (the low side's first, each sorted along the axis) when there
+/// are more than `group_cap` of them: the half nearer the axis's start to the low side.
+fn split_parts(
+    state: &State,
+    op: &Value,
+    roster: &Value,
+    lines: &[String],
+) -> Option<(Split, Vec<String>, Vec<String>)> {
+    let cap = op["group_cap"].as_i64()?.max(1);
+    if lines.len() as i64 <= cap {
+        return None;
+    }
+    let split = split_axis(state, op)?;
+    let mut by: Vec<(f64, String)> = lines
+        .iter()
+        .map(|n| {
+            let at = army_point(state, roster, n).map_or(split.cut, |p| split.at(p));
+            (at, n.clone())
+        })
+        .collect();
+    by.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let half = by.len().div_ceil(2);
+    let high: Vec<String> = by.split_off(half).into_iter().map(|p| p.1).collect();
+    let low: Vec<String> = by.into_iter().map(|p| p.1).collect();
+    Some((split, low, high))
+}
+
+fn group_of(roster: &Value, name: &str) -> Option<String> {
+    army_row(roster, name)?["army_group"]
+        .as_str()
+        .map(str::to_string)
+}
+
+/// Whether `part` stands in one game group that holds no other line army (its group is formed).
+fn part_formed(roster: &Value, part: &[String], lines: &[String]) -> Option<String> {
+    let g = group_of(roster, part.first()?)?;
+    let all = part
+        .iter()
+        .all(|n| group_of(roster, n).as_deref() == Some(&g));
+    let alone = lines
+        .iter()
+        .filter(|n| !part.contains(n))
+        .all(|n| group_of(roster, n).as_deref() != Some(&g));
+    (all && alone).then_some(g)
+}
+
+/// The two group units of a split operation once both groups are formed (else none: the
+/// operation runs as one group until they are).
+fn split_groups(
+    state: &State,
+    id: &str,
+    op: &Value,
+    roster: &Value,
+    lines: &[String],
+) -> Vec<Unit> {
+    let Some((split, low, high)) = split_parts(state, op, roster, lines) else {
+        return Vec::new();
+    };
+    let (Some(gl), Some(gh)) = (
+        part_formed(roster, &low, lines),
+        part_formed(roster, &high, lines),
+    ) else {
+        return Vec::new();
+    };
+    let far = deep(state, id);
+    [(gl, low, true), (gh, high, false)]
+        .into_iter()
+        .map(|(g, part, is_low)| {
+            let mut u = unit(g, Role::Group, &op["front"], &op["offensive"]);
+            u.click = None;
+            u.own_states = side_line(state, &split, is_low, &u.own_states);
+            let whole = if far.is_empty() {
+                u.line.clone()
+            } else {
+                far.clone()
+            };
+            u.line = side_line(state, &split, is_low, &whole);
+            u.anchor = u
+                .anchor
+                .filter(|a| u.line.contains(a) && far.is_empty())
+                .or_else(|| {
+                    u.line
+                        .get(u.line.len() / 2)
+                        .copied()
+                        .filter(|_| far.is_empty())
+                });
+            u.members = part;
+            u.side = Some(is_low);
+            u
+        })
+        .collect()
 }
 
 /// Objectives of a line army on its own front: the SOLO_STATES states of the operation's line
@@ -718,6 +919,7 @@ fn unit(name: String, role: Role, front: &Value, offensive: &Value) -> Unit {
         line,
         anchor,
         spear: false,
+        side: None,
     }
 }
 
@@ -1013,6 +1215,13 @@ fn front_args(u: &Unit, click: i64, peace: bool) -> Value {
     match (u.role, u.own_states.as_slice()) {
         (Role::Mobile, [own]) if peace => {
             json!({"army": u.name, "state_id": click, "from_state": own})
+        }
+        // one of two groups: its own piece of the border (a drag along its own states only)
+        (Role::Group, [own]) if peace && u.side.is_some() => {
+            json!({"army": u.name, "state_id": click, "from_state": own})
+        }
+        (Role::Group, owns) if peace && u.side.is_some() && owns.len() >= 2 => {
+            json!({"army": u.name, "state_id": click, "from_states": owns})
         }
         _ => json!({"army": u.name, "state_id": click}),
     }
@@ -2433,6 +2642,12 @@ fn prepare(
     // enemies are not at war with us, takes an army standing in another group too, and never
     // moves an army another running operation owns or one standing in contact with an enemy
     // (its states on a border with a country at war with us, or across it).
+    // the split of two groups needs the front states' map centres
+    if op["group_cap"].is_i64() {
+        let mut tags: Vec<String> = units.iter().map(|u| u.enemy.clone()).collect();
+        tags.push(player(tools, plan));
+        learn_centres(state, tools, &tags);
+    }
     let at_war_regroup = op["regroup_at_war"] == json!(true);
     let line_armies: Vec<&Unit> = units.iter().filter(|u| u.role == Role::Line).collect();
     let movable = |name: &str| -> bool {
@@ -2463,7 +2678,45 @@ fn prepare(
         !state.war_active
     };
     let regroup = group.is_some() && outside && calm && regroups < 3;
-    if (group.is_none() || regroup) && line_armies.len() >= 2 && !state.skipped(now, "opgrp", id) {
+    // TWO GROUPS (`group_cap`): each half of the line armies is formed into its own group, one
+    // group order per call; the single-group regroup never runs for a split operation
+    let line_names: Vec<String> = line_armies.iter().map(|u| u.name.clone()).collect();
+    let parts = split_parts(state, op, roster, &line_names);
+    if let Some((_, low, high)) = &parts {
+        let tries_key = key(id, "split_again");
+        let tries = state.done.get(&tries_key).copied().unwrap_or(0);
+        for part in [low, high] {
+            if part.len() < 2 || part_formed(roster, part, &line_names).is_some() {
+                continue;
+            }
+            let fresh = part.iter().all(|n| group_of(roster, n).is_none());
+            if !(calm || fresh)
+                || tries >= 6
+                || !part.iter().all(|n| movable(n))
+                || state.skipped(now, "opgrp", id)
+            {
+                break;
+            }
+            let names = part.clone();
+            state.skip(now, "opgrp", id, 2 * DAY);
+            state.done.insert(tries_key, tries + 1);
+            let line = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("form one of the two groups of {}", names.join(", ")),
+                "hoi4_army_group_create",
+                json!({"armies": names}),
+            )?;
+            return Ok(Some(line));
+        }
+    }
+    if parts.is_none()
+        && (group.is_none() || regroup)
+        && line_armies.len() >= 2
+        && !state.skipped(now, "opgrp", id)
+    {
         let joins = |n: &str| -> bool {
             army_row(roster, n).is_some_and(|r| {
                 (outside_of(r) && movable(n)) || (regroup && r["army_group"].as_str() == group)
@@ -2516,8 +2769,12 @@ fn prepare(
     // 1. a line army, and an army of a hold group, carries no orders of its own (it would
     //    ignore its group's front): cleared once; a group front drawn while one still had its
     //    own orders is cleared too and drawn again with every army on it
-    let mut sets: Vec<(String, Vec<String>)> = Vec::new();
-    if let Some(g) = group {
+    let mut sets: Vec<(String, Vec<String>)> = units
+        .iter()
+        .filter(|u| u.role == Role::Group && u.side.is_some())
+        .map(|u| (u.name.clone(), u.members.clone()))
+        .collect();
+    if let Some(g) = group.filter(|_| sets.is_empty()) {
         sets.push((
             g.to_string(),
             units
@@ -2627,6 +2884,45 @@ fn prepare(
                 &format!("{} marches to its start state {start}", u.name),
                 "hoi4_army_move",
                 json!({"army": u.name, "state_id": start}),
+            )?;
+            return Ok(Some(line));
+        }
+    }
+    // `marshals`: a group of the operation without a field marshal (a regroup or the second group
+    // of a split makes a new game group, and a new group has none) gets the first named general
+    // who leads no other group (hoi4_army_commander promotes him; its command power is waited for)
+    let names = strings(op, "marshals");
+    if !names.is_empty() {
+        let leading: Vec<String> = list(roster, "army_groups")
+            .iter()
+            .filter_map(|g| g["field_marshal"].as_str().map(str::to_string))
+            .collect();
+        for u in units.iter().filter(|u| u.role == Role::Group) {
+            let Some(row) = group_row(roster, &u.name) else {
+                continue;
+            };
+            if !row["field_marshal"].is_null() || state.skipped(now, "opfm", &u.name) {
+                continue;
+            }
+            let Some(general) = names.iter().find(|n| !leading.contains(n)) else {
+                state.op_notes.insert(
+                    format!("{id}:{}", u.name),
+                    format!(
+                        "{}: no field marshal (every name of `marshals` leads a group)",
+                        u.name
+                    ),
+                );
+                continue;
+            };
+            state.skip(now, "opfm", &u.name, 7 * DAY);
+            let line = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("{general} commands {} (field marshal)", u.name),
+                "hoi4_army_commander",
+                json!({"army": u.name, "general": general}),
             )?;
             return Ok(Some(line));
         }
@@ -3538,7 +3834,12 @@ fn advance(
         let own_line_held = u.line.is_empty() || held(tools, &me, &u.line).len() == u.line.len();
         let mut wanted: Vec<i64> = if u.spear {
             spear_line(state, id, roster, u, &me, tools, &op_line, now)
-        } else if u.role == Role::Group || own_line_held {
+        } else if u.role == Role::Group {
+            match (u.side, split_axis(state, op)) {
+                (Some(low), Some(split)) => side_line(state, &split, low, &op_line),
+                _ => op_line.clone(),
+            }
+        } else if own_line_held {
             op_line.clone()
         } else {
             still(&u.line)
