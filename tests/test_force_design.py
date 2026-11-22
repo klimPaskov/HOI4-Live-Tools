@@ -77,6 +77,34 @@ class Classification(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class ObservedArmy(unittest.TestCase):
+    """A plan continued from a save: force_design.observed replaces the army forecast from the save's date."""
+
+    @classmethod
+    def setUpClass(cls):
+        game = lint_plan.load_game(GAME_DIR)
+        plan = germany_at_war()
+        plan["force_design"] = {
+            "wars": [{"id": "war_pol", "enemies": ["POL"], "kind": "offensive", "axes": 1}],
+            "land": [{"template": "Panzer-Division", "role": "breakthrough", "count": 30, "ready": "1939.9.1",
+                      "war": "war_pol"}],
+            "observed": {"date": "1939.8.22", "divisions": {"Infanterie-Division": 150, "Panzer-Division": 30},
+                         "source": "test save"}}
+        cls.lt = lint_plan.Lint(plan, game, lint_plan.FRONT_K, None, None).run()
+
+    def test_the_save_replaces_the_forecast(self):
+        from hoi4facts import conditions
+        tl = conditions.Timeline(self.lt)
+        day, divs = tl.observed_army()
+        self.assertEqual(divs["Panzer-Division"], 30)
+        fc = tl.forecast()
+        i = (day - tl.start) // 7 + 1
+        self.assertEqual(round(fc["by_template"][i].get("Panzer-Division", 0)), 30)
+        ready = [f for f in self.lt.findings if f["rule"] == "force.readiness" and "Panzer-Division" in f["where"]]
+        self.assertFalse(ready, ready)
+
+
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
 class Germany(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
