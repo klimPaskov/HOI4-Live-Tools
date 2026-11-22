@@ -190,6 +190,50 @@ pub(in super::super) fn clear_orders(
     let _ = clear_selection(process, keys);
     Ok(())
 }
+/// The bar's delete tool for the selected `army`: the army's card selects it and a LEFT click on
+/// `btn_order_delete` arms the tool (the right click deletes every order; the left click deletes
+/// the one order clicked on the map next). The caller clicks the order and reads it back.
+pub(in super::super) fn delete_tool(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+) -> Result<Rect> {
+    clear_notices(process, keys)?;
+    select_army_quick(process, keys, army)?;
+    let bar = read(process, bar)?.ok_or_else(|| {
+        Error::new(
+            "gui_target_unavailable",
+            "the battle plan bar (battleplantools_window) was not found",
+        )
+    })?;
+    let deadline = Instant::now() + Duration::from_millis(SLIDE_MS);
+    loop {
+        let shown = read(process, |r, i| {
+            Ok(kit::find_deep(r, i, bar, "btn_order_delete", 6)?.and_then(|w| shown_rect(r, i, w)))
+        })?;
+        if shown.is_some() {
+            break;
+        }
+        if Instant::now() >= deadline {
+            let _ = clear_selection(process, keys);
+            return Err(Error::new(
+                "gui_target_unavailable",
+                "the battle plan bar's delete button (btn_order_delete) is not shown",
+            ));
+        }
+        crate::phase::sleep(Duration::from_millis(60));
+    }
+    let button = settled(process, "delete button", |r, i| {
+        kit::find_deep(r, i, bar, "btn_order_delete", 6)?
+            .and_then(|w| shown_rect(r, i, w))
+            .ok_or_else(|| Error::new("gui_geometry_unavailable", "delete button not shown"))
+    })?;
+    let at = button.center();
+    keys.click(GAME, at.0, at.1)?;
+    crate::phase::sleep(Duration::from_millis(250));
+    Ok(button)
+}
+
 /// The mode controls below the bar's window `bar` (None: the bar was not found).
 fn seen_in(r: &Reader<'_>, image: u64, bar: Option<u64>) -> Result<Seen> {
     let mut seen = Seen::default();

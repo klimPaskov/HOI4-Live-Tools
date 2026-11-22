@@ -1014,6 +1014,19 @@ fn skip_key(kind: &str, key: &str) -> String {
 }
 
 /// Orders of the war itself: the war moves in game hours, so their failures rest hours.
+/// The orders an operation's prepare sends besides the war orders.
+fn op_prepare_order(tool: &str) -> bool {
+    war_order(tool)
+        || matches!(
+            tool,
+            "hoi4_army_group_create"
+                | "hoi4_army_gather"
+                | "hoi4_army_detach"
+                | "hoi4_army_exercise"
+                | "hoi4_army_commander"
+        )
+}
+
 fn war_order(tool: &str) -> bool {
     matches!(
         tool,
@@ -1388,7 +1401,13 @@ impl State {
         // the game refuses is not offered again every few game hours (g17i: 84 refusals)
         let tool = signature.split(' ').next().unwrap_or("");
         let event_at_war = tool == "hoi4_event_choose" && (self.war_active || self.op_events_now);
-        let war = (war_order(tool) && self.war_active) || event_at_war;
+        // an operation's prepare order (its group, fronts, arrows, assembly) goes again within
+        // hours: the war waits for it (g17m bed b38c, 19 Nov 2026: the regroup click failed its
+        // read-back once after 4 s and rested five game days at a time until the war; Armee Süd
+        // fought with no front)
+        let op_prep = self.op_acting && !self.war_active && op_prepare_order(tool);
+        let quick = event_at_war || op_prep;
+        let war = (war_order(tool) && self.war_active) || quick;
         let times = self.failures.get_mut(signature)?;
         times.retain(|t| clock - *t < LEDGER_KEEP);
         let last = times.iter().copied().max();
@@ -1400,7 +1419,7 @@ impl State {
                 ((*n).max(in_window), c.clone())
             });
         let last = last?;
-        let cost = if event_at_war {
+        let cost = if quick {
             0
         } else {
             self.failed_cost.get(signature).copied().unwrap_or(0)
@@ -1408,7 +1427,7 @@ impl State {
         let (mut rest, mut why) = ledger_rest(war, in_row, cost, passing_failure(&cause));
         // until it is given up: an answer that never takes (an event drawn under another, i18b)
         // then rests on the war scale instead of taking every other input
-        if event_at_war && in_row < GIVE_UP_AFTER {
+        if quick && in_row < GIVE_UP_AFTER {
             rest = rest.min(EVENT_WAR_REST);
         }
         if resource_wait(&cause) {
@@ -13413,6 +13432,41 @@ mod tests {
         fail(&mut war, GIVE_UP_AFTER);
         war.clock = START + EVENT_WAR_REST;
         assert!(war.backing_off(sig).is_some());
+    }
+
+    #[test]
+    fn a_failed_order_of_an_operations_prepare_goes_again_within_hours() {
+        // b38c: the regroup click failed its read-back once after ~5 s and rested five game days
+        // at a time until the war
+        let sig = "hoi4_army_group_create {\"armies\":[\"Armee Pommern\",\"Armee Süd\"]}";
+        let fail = |state: &mut State, n: u32| {
+            state.failures.insert(sig.to_string(), vec![START]);
+            state.failed_run.insert(
+                sig.to_string(),
+                (
+                    n,
+                    "input_readback_failed: expected game change not observed".into(),
+                ),
+            );
+            state.failed_cost.insert(sig.to_string(), 5);
+            state.clock = START + 1;
+        };
+        // the same order outside an operation rests on the peace scale
+        let mut layout = State::default();
+        fail(&mut layout, 2);
+        layout.clock = START + EVENT_WAR_REST;
+        assert!(layout.backing_off(sig).is_some());
+        let mut op = State {
+            op_acting: true,
+            ..State::default()
+        };
+        fail(&mut op, 2);
+        op.clock = START + EVENT_WAR_REST;
+        assert_eq!(op.backing_off(sig), None, "{:?}", op.backing_off(sig));
+        // given up after five in a row, it rests and leaves the input to the other orders
+        fail(&mut op, GIVE_UP_AFTER);
+        op.clock = START + EVENT_WAR_REST;
+        assert!(op.backing_off(sig).is_some());
     }
 
     #[test]
