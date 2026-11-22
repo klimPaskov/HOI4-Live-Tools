@@ -2888,6 +2888,42 @@ fn prepare(
             return Ok(Some(line));
         }
     }
+    // `marshals`: a group of the operation without a field marshal (a regroup or the second group
+    // of a split makes a new game group, and a new group has none) gets the first named general
+    // who leads no other group (hoi4_army_commander promotes him; its command power is waited for)
+    let names = strings(op, "marshals");
+    if !names.is_empty() {
+        let leading: Vec<String> = list(roster, "army_groups")
+            .iter()
+            .filter_map(|g| g["field_marshal"].as_str().map(str::to_string))
+            .collect();
+        for u in units.iter().filter(|u| u.role == Role::Group) {
+            let Some(row) = group_row(roster, &u.name) else {
+                continue;
+            };
+            if !row["field_marshal"].is_null() || state.skipped(now, "opfm", &u.name) {
+                continue;
+            }
+            let Some(general) = names.iter().find(|n| !leading.contains(n)) else {
+                state.op_notes.insert(
+                    format!("{id}:{}", u.name),
+                    format!("{}: no field marshal (every name of `marshals` leads a group)", u.name),
+                );
+                continue;
+            };
+            state.skip(now, "opfm", &u.name, 7 * DAY);
+            let line = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("{general} commands {} (field marshal)", u.name),
+                "hoi4_army_commander",
+                json!({"army": u.name, "general": general}),
+            )?;
+            return Ok(Some(line));
+        }
+    }
     // a formation's named commander where none leads
     for f in list(op, "formations") {
         let name = resolve(state, text(&f["army"]));

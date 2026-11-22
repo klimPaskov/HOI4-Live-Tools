@@ -2190,3 +2190,20 @@ fn without_the_group_cap_or_within_it_the_operation_keeps_one_group() {
         .collect();
     assert_eq!(fronts, [&json!({"army": "Army Group 1", "state_id": 86})]);
 }
+
+#[test]
+fn a_group_without_a_field_marshal_gets_the_first_free_name_of_marshals() {
+    let game = split_game();
+    let mut plan = split_plan();
+    plan["operations"][0]["marshals"] = json!(["Bock", "Rundstedt"]);
+    game.unit("Army Group 1", |r| r["field_marshal"] = json!("Bock"));
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let given: Vec<Value> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, _)| n == "hoi4_army_commander")
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(given, [json!({"army": "Army Group 3", "general": "Rundstedt"})]);
+}
