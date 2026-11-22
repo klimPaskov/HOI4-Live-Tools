@@ -2792,7 +2792,6 @@ fn learn_deep(
     if state.done.contains_key(&tried) {
         return None;
     }
-    state.done.insert(tried, 0);
     let own: Vec<(f64, f64)> = ints(&op["front"]["own_states"])
         .iter()
         .filter_map(|s| state.centers.get(&(*s as i32)).copied())
@@ -2823,6 +2822,11 @@ fn learn_deep(
             }
         }
     }
+    if rows.is_empty() {
+        // unread: tried again next time
+        return None;
+    }
+    state.done.insert(tried, 0);
     let line = far_line(origin, &rows);
     if line.len() < 2 {
         return None;
