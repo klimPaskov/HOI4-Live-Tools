@@ -567,6 +567,19 @@ def _constraint_ok(lint, c, fc, day):
     return False, f"{law} is offered and its gate is not shown closed on that date"
 
 
+
+def _seen_mark(v, seen):
+    """A plan mark dated after the save it continues from, raised to what the save already holds."""
+    out = dict(v)
+    _, civ, mil = seen
+    if "civilian_factories" in out:
+        out["civilian_factories"] = max(out["civilian_factories"], civ)
+    if "military_factories" in out:
+        out["military_factories"] = max(out["military_factories"], mil)
+    if "factories" in out:
+        out["factories"] = max(out["factories"], civ + mil)
+    return out
+
 def baseline(lint, tl, table, fc=None, lev=()):
     """plan.ai_baseline: the plan's factory marks (checkpoints, horizon targets) and the forecast of its own
     levers against the game's own AI on the same dates. Factories below BASELINE_SLACK of the AI's are an error
@@ -587,13 +600,19 @@ def baseline(lint, tl, table, fc=None, lev=()):
     horizon_end = max([x for x, _ in lint.horizon()] + list(plan_at) or [None]) if (lint.horizon() or plan_at) else None
     rows = (fc or {}).get("rows") or []
     fc_until = _day((fc or {}).get("war")) if (fc or {}).get("war") else None
+    # a plan continued from a save (force_design.observed.economy): the AI's marks before the save's date are
+    # history, and a plan mark below what the save already holds is met by the save
+    seen = econmod.observed_economy(lint)
     for row in b.get("rows") or []:
         d = _day(row["date"])
         if d is None or (horizon_end is not None and d > horizon_end):
             continue
+        if seen and d < seen[0]:
+            continue
         ai_c, ai_m = row["civilian_factories"], row["military_factories"]
         ai_f = ai_c + ai_m + row.get("naval_factories", 0)
-        near = [(x, v) for x, v in plan_at.items() if d - 31 <= x <= d + 92]
+        near = [(x, _seen_mark(v, seen) if seen and x >= seen[0] else v)
+                for x, v in plan_at.items() if d - 31 <= x <= d + 92]
         # the forecast models the economy the plan builds, not what conquest adds: it is held to the AI only up
         # to the first war day (later marks are the plan's targets, checked above)
         r = econmod.at(rows, d) if rows and (fc_until is None or d <= fc_until) else None

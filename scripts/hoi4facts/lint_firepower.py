@@ -311,9 +311,12 @@ def dominance(ctx, land, facts):
             judge(where, f"{tag} {key} staged over the operation", staged, ai, out, unsure)
         table.append({"war": w["id"], "date": _fmt(day), "rows": out})
     last = max(w["start"] for w in land)
+    # a plan continued from a save: the factories before the save's date are the save's, not the plan's
+    seen = __import__((__package__ or "hoi4facts") + ".economy", fromlist=["observed_economy"]).observed_economy(lint)
+    first = max(tl.start, seen[0]) if seen else tl.start
     for r in rows:
         d = derive.day(r["date"])
-        if d is None or d > last or d < tl.start:
+        if d is None or d > last or d < first:
             continue
         mil = lint.military_on(d)
         fc = getattr(lint, "_econ_fc", None) or {}
@@ -558,7 +561,27 @@ def xp_pool(lint, tl, wars, until):
         d = _date_gate(e.get("when"))
         spends.append([e.get("id"), float(e["cost"]), d if d is not None else tl.start])
     day, bought = tl.start, []
+    # a plan continued from a save: a template the save already fields was paid; the save's army experience
+    # (force_design.observed.army_xp) replaces the pool on its date
+    fd = lint.plan.get("force_design") if isinstance(lint.plan.get("force_design"), dict) else {}
+    ob = fd.get("observed") if isinstance(fd.get("observed"), dict) else {}
+    ob_day = derive.day(ob["date"]) if isinstance(ob.get("date"), str) else None
+    fielded = {t for t, n in (ob.get("divisions") or {}).items() if isinstance(n, int) and n > 0}
+    if ob_day is not None and fielded:
+        names = {}
+        for t in lint.list_of("templates"):
+            if isinstance(t, dict) and t.get("id"):
+                names[t["id"]] = t.get("name") or t["id"]
+        for s in list(spends):
+            e = next((x for x in entries if x.get("id") == s[0]), {})
+            ref = str(e.get("ref") or "")
+            if ref.startswith("template:") and names.get(ref[9:], ref[9:]) in fielded:
+                bought.append(s[0])
+                spends.remove(s)
+    ob_xp = ob.get("army_xp") if isinstance(ob.get("army_xp"), (int, float)) else None
     while day <= until:
+        if ob_xp is not None and ob_day is not None and day == max(ob_day, tl.start):
+            pool = min(cap, float(ob_xp))
         while rewards and rewards[0][0] <= day:
             pool = min(cap, pool + rewards.pop(0)[1])
         if ex is not None and ex <= day:

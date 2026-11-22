@@ -105,6 +105,46 @@ class ObservedArmy(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class ObservedEconomy(unittest.TestCase):
+    """A plan continued from a save: force_design.observed.economy and army_xp anchor the economy and army
+    experience forecasts on the save's date; the AI is compared from that date; a fielded template was paid."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.game = lint_plan.load_game(GAME_DIR)
+
+    def run_plan(self, observed):
+        plan = germany_at_war()
+        plan["force_design"] = {"wars": [{"id": "war_pol", "enemies": ["POL"], "kind": "offensive", "axes": 1}],
+                                "observed": observed}
+        plan["templates"] = [{"id": "t_sich", "name": "Sicherungs-Division", "regiments": [["infantry"] * 4],
+                              "when": "date >= 1938.10.1", "role": "line"}]
+        plan.setdefault("xp_budget", {})["army"] = [
+            {"id": "x_sich", "purpose": "template", "ref": "template:t_sich", "cost": 60,
+             "when": "date >= 1938.10.1"}]
+        return lint_plan.Lint(plan, self.game, lint_plan.FRONT_K, None, None).run()
+
+    def test_the_save_economy_replaces_the_forecast_and_the_past_is_not_judged(self):
+        from hoi4facts import economy
+        lt = self.run_plan({"date": "1939.8.22", "divisions": {"Infanterie-Division": 100},
+                            "economy": {"civilian": 120, "military": 110}})
+        self.assertEqual(economy.observed_economy(lt)[1:], (120, 110))
+        self.assertGreaterEqual(lt.military_on(lint_plan.derive.day("1939.9.1")), 110)
+        past = [f for f in lt.findings if f["rule"] in ("force.dominance", "plan.ai_baseline")
+                and any(y in f["message"] for y in ("1936.", "1937.", "1938."))]
+        self.assertFalse(past, past)
+
+    def test_a_template_the_save_fields_was_paid(self):
+        unpaid = lambda lt: [f for f in lt.findings if f["rule"] == "templates.xp_cost" and "x_sich" in f["message"]]
+        lt = self.run_plan({"date": "1939.8.22", "divisions": {"Sicherungs-Division": 10}, "army_xp": 0})
+        self.assertFalse(unpaid(lt))
+        from hoi4facts import conditions, lint_firepower
+        pool = lint_firepower.xp_pool(lt, conditions.Timeline(lt), [], lint_plan.derive.day("1939.8.22"))
+        self.assertIn("x_sich", pool["bought"])
+        self.assertLess(pool["pool"], 1.0, "the save's experience replaces the pool on its date")
+
+
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
 class Germany(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
