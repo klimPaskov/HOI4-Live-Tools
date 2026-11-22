@@ -2984,7 +2984,11 @@ fn front_border_point(process: &dyn Process, army: &str, state: i32) -> Result<O
 /// The two ends of the border between own state `own` and state `target` (unit positions of the
 /// province pairs that face each other, at their mean height): a segment front is dragged from one
 /// to the other. None when the two states do not touch.
-fn segment_ends(process: &dyn Process, own: i32, target: i32) -> Result<Option<Vec<MapPoint>>> {
+///
+/// Several own states (`from_states`): the border between them and the land of the target
+/// state's controller (every state of that controller touching one of them), so two army groups
+/// each draw their own piece of one long border.
+fn segment_ends(process: &dyn Process, owns: &[i32], target: i32) -> Result<Option<Vec<MapPoint>>> {
     let exe = &process
         .identity()
         .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
@@ -2998,15 +3002,85 @@ fn segment_ends(process: &dyn Process, own: i32, target: i32) -> Result<Option<V
             heights.get(p).copied().unwrap_or(super::screenmap::GROUND),
         ))
     };
-    let mine: Vec<_> = super::mapdata::state_provinces(&dir, own)?
-        .iter()
-        .filter_map(at)
-        .collect();
-    let theirs: Vec<_> = super::mapdata::state_provinces(&dir, target)?
-        .iter()
-        .filter_map(at)
-        .collect();
+    let mut mine = Vec::new();
+    for own in owns {
+        mine.extend(
+            super::mapdata::state_provinces(&dir, *own)?
+                .iter()
+                .filter_map(at),
+        );
+    }
+    let target_provinces = super::mapdata::state_provinces(&dir, target)?;
+    let theirs_provinces = if owns.len() <= 1 {
+        target_provinces
+    } else {
+        let map = super::front_plan::static_map(&dir)?;
+        let near = facing_states(&map.adj, owns, target);
+        let mut provinces = Vec::new();
+        for s in &near {
+            provinces.extend(super::mapdata::state_provinces(&dir, *s)?);
+        }
+        let controllers = read(process, |r, i| {
+            super::states::province_controllers(r, i, &provinces)
+        })?;
+        let enemy = target_provinces
+            .first()
+            .and_then(|p| controllers.iter().find(|(q, _)| q == p))
+            .map(|(_, tag)| tag.clone());
+        controllers
+            .into_iter()
+            .filter(|(_, tag)| Some(tag) == enemy.as_ref())
+            .map(|(p, _)| p)
+            .collect()
+    };
+    let theirs: Vec<_> = theirs_provinces.iter().filter_map(at).collect();
     Ok(segment_path(&mine, &theirs))
+}
+
+/// The states touching any of `owns` (not one of them), with `target` first.
+pub(super) fn facing_states(
+    adj: &BTreeMap<i32, BTreeSet<i32>>,
+    owns: &[i32],
+    target: i32,
+) -> Vec<i32> {
+    let mut out = vec![target];
+    for own in owns {
+        for s in adj.get(own).into_iter().flatten() {
+            if !owns.contains(s) && !out.contains(s) {
+                out.push(*s);
+            }
+        }
+    }
+    out
+}
+
+/// `from_states` of hoi4_army_front: 2-12 distinct own state ids, or None when absent.
+pub(super) fn segment_states(v: Option<&Value>) -> Result<Option<Vec<i32>>> {
+    let Some(v) = v.filter(|v| !v.is_null()) else {
+        return Ok(None);
+    };
+    let bad = || {
+        Error::new(
+            "invalid_arguments",
+            "from_states must be 2-12 distinct state ids 1..4095",
+        )
+    };
+    let items = v.as_array().ok_or_else(bad)?;
+    let mut out = Vec::new();
+    for item in items {
+        let s = item
+            .as_i64()
+            .filter(|s| (1..4096).contains(s))
+            .ok_or_else(bad)? as i32;
+        if out.contains(&s) {
+            return Err(bad());
+        }
+        out.push(s);
+    }
+    if !(2..=12).contains(&out.len()) {
+        return Err(bad());
+    }
+    Ok(Some(out))
 }
 
 /// The border points of `segment_from_points` in order from one end to the other (by their
@@ -3125,7 +3199,7 @@ pub(super) fn front(
     keys: &dyn GameInput,
     army: &str,
     state: i32,
-    segment: Option<i32>,
+    segment: Option<&[i32]>,
 ) -> Result<()> {
     let t0 = std::time::Instant::now();
     clear_notices(process, keys)?;
@@ -3151,7 +3225,7 @@ pub(super) fn front(
         Some(own) => Some(segment_ends(process, own, state)?.ok_or_else(|| {
             Error::new(
                 "invalid_target",
-                format!("Own state {own} does not border state {state}: no segment to draw"),
+                format!("Own state(s) {own:?} do not border state {state}: no segment to draw"),
             )
         })?),
         None => None,
@@ -5294,6 +5368,22 @@ pub(super) fn split(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn several_own_states_face_every_state_beside_them_the_target_first() {
+        let mut adj: BTreeMap<i32, BTreeSet<i32>> = BTreeMap::new();
+        adj.insert(1, BTreeSet::from([2, 10, 11]));
+        adj.insert(2, BTreeSet::from([1, 11, 12]));
+        assert_eq!(facing_states(&adj, &[1, 2], 12), [12, 10, 11]);
+        assert_eq!(
+            segment_states(Some(&json!([1, 2]))).unwrap(),
+            Some(vec![1, 2])
+        );
+        assert_eq!(segment_states(None).unwrap(), None);
+        for bad in [json!([1]), json!([1, 1]), json!([0, 2]), json!("1,2")] {
+            assert!(segment_states(Some(&bad)).is_err(), "{bad}");
+        }
+    }
+
     #[test]
     fn a_segment_runs_between_the_farthest_facing_province_pairs() {
         // own provinces along x = 0, the target's along x = 10; one own province far inland

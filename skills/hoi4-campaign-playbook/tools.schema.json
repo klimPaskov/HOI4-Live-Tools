@@ -686,7 +686,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_front": {
-   "description": "Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border; with from_state (an own state touching state_id) a drag along that stretch of border only, a narrow front for a mobile army. Verified by one more battle-plan order on the army.",
+   "description": "Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border; with from_state (an own state touching state_id) a drag along that stretch of border only, a narrow front for a mobile army; with from_states (2-12 own states side by side) a drag along the border between those states and the land of state_id's controller only: one army group's own piece of a border that two groups share. Verified by one more battle-plan order on the army.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -697,6 +697,16 @@
       "maximum": 4095,
       "minimum": 1,
       "type": "integer"
+     },
+     "from_states": {
+      "items": {
+       "maximum": 4095,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 12,
+      "minItems": 2,
+      "type": "array"
      },
      "lease_token": {
       "type": "string"

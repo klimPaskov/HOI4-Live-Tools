@@ -264,6 +264,21 @@ impl Tools for Game {
                     }
                 }
             }
+            "hoi4_army_group_create" => {
+                let mut roster = self.roster.borrow_mut();
+                let n = roster["army_groups"].as_array().unwrap().len() + 1;
+                let g = format!("Army Group {n}");
+                roster["army_groups"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!({"army_group": g, "plan": []}));
+                let names = strings(args, "armies");
+                for row in roster["armies"].as_array_mut().unwrap() {
+                    if names.iter().any(|a| row["army"] == json!(a)) {
+                        row["army_group"] = json!(g);
+                    }
+                }
+            }
             "hoi4_army_exercise" => {
                 for a in strings(args, "armies") {
                     self.unit(&a, |r| r["exercising"] = args["on"].clone());
@@ -954,6 +969,7 @@ fn a_line_army_without_an_executing_order_fights_on_its_own_front_after_two_days
     });
     game.unit("Sued", |r| r["plan_executing"] = json!(true));
     *game.enemies.borrow_mut() = vec!["POL"];
+    state.war_active = true;
     burst(&mut state, &game, &plan, START + DAY);
     burst(&mut state, &game, &plan, START + DAY + 12);
     assert!(
@@ -2066,4 +2082,111 @@ fn the_end_of_an_operation_redeploys_its_rows_whole_armies_unless_in_contact() {
         ]
     );
     assert!(state.done.contains_key("op:op_pol:end"));
+}
+
+fn split_plan() -> Value {
+    json!({"war": {}, "operations": [
+        {"id": "op_pol", "enemies": ["POL"], "prepare_from": "", "execute_on": "at_war_with:POL",
+         "group": "ag", "group_cap": 3,
+         "front": {"enemy": "POL", "own_states": [1, 2, 3, 4]},
+         "offensive": {"axis": [2, 86, 10], "target_line": [85, 86, 10, 88]},
+         "formations": [
+            {"army": "Mitte", "role": "line"}, {"army": "Sued", "role": "line"},
+            {"army": "Nord", "role": "line"}, {"army": "Panzer", "role": "line"}]}]})
+}
+
+fn split_game() -> Game {
+    let game = Game::new();
+    for (army, s) in [
+        ("Mitte", "1"),
+        ("Sued", "2"),
+        ("Nord", "3"),
+        ("Panzer", "4"),
+    ] {
+        game.unit(army, |r| r["states"] = json!({s: 24}));
+    }
+    *game.own.borrow_mut() = vec![
+        (1, 0.0, 0.0),
+        (2, 0.0, 10.0),
+        (3, 0.0, 20.0),
+        (4, 0.0, 30.0),
+    ];
+    *game.far.borrow_mut() = Some(vec![
+        (85, 10.0, 10.0, 0.0),
+        (86, 10.0, 10.0, 10.0),
+        (10, 10.0, 10.0, 20.0),
+        (88, 10.0, 10.0, 30.0),
+    ]);
+    game
+}
+
+#[test]
+fn more_line_armies_than_the_group_cap_fight_in_two_groups_each_on_its_own_piece() {
+    let game = split_game();
+    let plan = split_plan();
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let sent = game.orders();
+    let groups: Vec<&Value> = sent
+        .iter()
+        .filter(|(n, _)| n == "hoi4_army_group_create")
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(groups, [&json!({"armies": ["Mitte", "Sued"]})], "{sent:?}");
+    let fronts: Vec<&Value> = sent
+        .iter()
+        .filter(|(n, _)| n == "hoi4_army_front")
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(
+        fronts,
+        [
+            &json!({"army": "Army Group 3", "state_id": 86, "from_states": [1, 2]}),
+            &json!({"army": "Army Group 1", "state_id": 86, "from_states": [3, 4]}),
+        ],
+        "one front per group, each on its own states"
+    );
+    let arrows: Vec<(String, Value)> = sent
+        .iter()
+        .filter(|(n, _)| n == "hoi4_army_offensive")
+        .map(|(_, a)| (text(&a["army"]).to_string(), a["states"].clone()))
+        .collect();
+    assert_eq!(
+        arrows,
+        [
+            ("Army Group 3".to_string(), json!([85, 86])),
+            ("Army Group 1".to_string(), json!([10, 88])),
+        ]
+    );
+    // idempotent
+    game.calls.borrow_mut().clear();
+    burst(&mut state, &game, &plan, START + DAY);
+    assert!(game.orders().is_empty(), "{:?}", game.orders());
+    // both groups execute on the war
+    *game.enemies.borrow_mut() = vec!["POL"];
+    burst(&mut state, &game, &plan, START + 2 * DAY);
+    let executed: Vec<String> = game
+        .orders()
+        .iter()
+        .filter(|(_, a)| a["execute"] == json!(true))
+        .map(|(_, a)| text(&a["army"]).to_string())
+        .collect();
+    assert_eq!(executed, ["Army Group 3", "Army Group 1"]);
+}
+
+#[test]
+fn without_the_group_cap_or_within_it_the_operation_keeps_one_group() {
+    let game = split_game();
+    let mut plan = split_plan();
+    plan["operations"][0]["group_cap"] = json!(4);
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let sent = game.orders();
+    assert!(!sent.iter().any(|(n, _)| n == "hoi4_army_group_create"));
+    let fronts: Vec<&Value> = sent
+        .iter()
+        .filter(|(n, _)| n == "hoi4_army_front")
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(fronts, [&json!({"army": "Army Group 1", "state_id": 86})]);
 }
