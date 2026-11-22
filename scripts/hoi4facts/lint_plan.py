@@ -4833,6 +4833,14 @@ class Lint:
                 for _ in range(max(1, r["max"]) if isinstance(r.get("max"), int) else 1):
                     buys.append({"label": f"decision_rules[{i}] {r.get('decision')}", "cost": float(c),
                                  "due": derive.day(max(ds)) if ds else None, "idea": None, "never": False})
+        # a buy dated after the simulated span (the validator's stop date) is a later horizon's: the budget to the
+        # stop date cannot judge it, and it never takes power from the buys before the stop
+        later = [b for b in buys if b["due"] is not None and b["due"] > end]
+        if later:
+            buys = [b for b in buys if b not in later]
+            self.add("info", "politics.pp_budget", "politics",
+                     f"{len(later)} buys dated after {derive.fmt(derive.date_of(end))} (the simulated span) are left "
+                     f"to the later horizons: {', '.join(b['label'] for b in later[:6])}")
         auto = self.plan.get("politics_auto")
         off = auto is False or (isinstance(auto, dict) and auto.get("enabled") is False)
         policy = isinstance(auto, dict) and isinstance(auto.get("order"), list)
