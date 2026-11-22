@@ -307,6 +307,12 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("no division of Guard starts in state 2", text)
         self.assertIn("guard_states_in_order 77 is not a state id", text)
         self.assertNotIn("'E'", text)  # a when-entry only warns about its template
+        self.assertTrue(any("'E'" in w and "'Elite'" in w for w in rep.warnings))
+        # a template the plan creates is not missing from the layout's point of view (as for training)
+        rep2 = self.run_plan(templates=[{"id": "t_elite", "name": "Elite", "regiments": [["infantry"]]}],
+                             army_layout=[{"name_hint": "E", "state": 3, "templates": ["Elite"], "role": "guard",
+                                           "when": "owner:3=AAA", "guard_states_in_order": [3]}])
+        self.assertFalse([w for w in rep2.warnings if "'Elite' is not in the start OOB" in w], rep2.warnings)
         self.assertTrue(any("'C'" in w and "count 3 but only 1" in w for w in rep.warnings))
         self.assertTrue(any("'E'" in w and "Elite" in w for w in rep.warnings))
 

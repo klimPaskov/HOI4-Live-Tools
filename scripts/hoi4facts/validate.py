@@ -881,6 +881,9 @@ def check_army_layout(game, plan, meta, rep, good):
                 per_state[sid][d["template"]] += 1
     if not oobs:
         rep.warn("army_layout: no start OOB found (set _validator.history_file/tag); templates not checked")
+    # a template the plan creates (templates[].name) is as good as one of the start OOB: the training check
+    # accepts it the same way
+    templates |= {t.get("name") for t in plan.get("templates") or [] if isinstance(t, dict) and t.get("name")}
     owners = game.state_owners(ctx, start_of(meta)) if ctx else {}
     hints = set()
     for idx, (i, e) in enumerate(entries):
