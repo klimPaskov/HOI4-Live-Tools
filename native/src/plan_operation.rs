@@ -2833,9 +2833,14 @@ fn learn_deep(
     Some(line)
 }
 
-/// Provinces of the enemies' states the player controls (the war's progress, wherever it is).
-fn enemy_provinces(tools: &dyn Tools, enemies: &[String], me: &str) -> i64 {
-    let mut n = 0;
+/// The war's progress, wherever it is: the enemies' victory points the player holds (each
+/// victory-point province by its controller; a state's whole total by the state's controller when
+/// its provinces are not listed), in tenths of a point. The capitulation counts points, so a war
+/// that takes empty
+/// provinces while every city holds is stalled (b38g, 19 Nov 2026: 109 of 134 points from day 42
+/// to day 56 while the front crept east).
+fn enemy_points(tools: &dyn Tools, enemies: &[String], me: &str) -> i64 {
+    let mut points = 0.0;
     for tag in enemies {
         let Ok(read) = tools.call("hoi4_states", &json!({"query": tag})) else {
             continue;
@@ -2844,13 +2849,19 @@ fn enemy_provinces(tools: &dyn Tools, enemies: &[String], me: &str) -> i64 {
             if text(&row["owner"]) != tag {
                 continue;
             }
-            n += list(row, "provinces")
-                .iter()
-                .filter(|p| text(&p["controller"]) == me)
-                .count() as i64;
+            let vps = list(row, "victory_points");
+            if vps.iter().any(|v| v["controller"].is_string()) {
+                points += vps
+                    .iter()
+                    .filter(|v| text(&v["controller"]) == me)
+                    .map(|v| v["victory_points"].as_f64().unwrap_or(0.0))
+                    .sum::<f64>();
+            } else if text(&row["controller"]) == me {
+                points += row["victory_points_total"].as_f64().unwrap_or(0.0);
+            }
         }
     }
-    n
+    (points * 10.0).round() as i64
 }
 
 /// The operation's current line: 0 = the group offensive, k = phase line k, beyond the phase
@@ -3093,13 +3104,14 @@ fn advance(
                 (now - state.done.get(&key(id, "exec")).copied().unwrap_or(now)) / DAY
             ),
         );
-        // the far line: the war's progress is every enemy province taken, not only the line's
-        // (the line lies behind the whole country and is reached last)
+        // the far line: the war's progress is the enemy's victory points taken anywhere (the line
+        // lies behind the whole country and is reached last); flat points for `stall_days` while
+        // the enemy still holds cities is the stall
         if !deep(state, id).is_empty() {
-            let taken_now = enemy_provinces(tools, enemies, &me);
-            let tk = key(id, "enemy_provinces");
-            if taken_now > state.done.get(&tk).copied().unwrap_or(0) {
-                state.done.insert(tk, taken_now);
+            let points = enemy_points(tools, enemies, &me);
+            let pk = key(id, "enemy_points");
+            if points > state.done.get(&pk).copied().unwrap_or(0) {
+                state.done.insert(pk, points);
                 state.done.insert(key(id, "moved"), now);
             }
         }
