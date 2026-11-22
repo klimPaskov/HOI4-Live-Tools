@@ -23,6 +23,16 @@
 //!   gained for `stall_days` (7) the next line is drawn: the plan's next phase line, else the one
 //!   enemy state with the most victory points per distance. A mobile or wing army follows the
 //!   operation's line once its own line is held.
+//! - FAR LINE (`offensive.deep: true`): the group's one offensive is drawn once, in peace, at the
+//!   far side of what must fall (see `far_line`: behind the states that hold DEEP_SHARE of the
+//!   enemies' victory points), so no second arrow is ever needed; the plan's phase lines are not
+//!   used, the war's progress is every enemy province taken, and a war that took none for
+//!   `stall_days` turns the group's arrow on the touching states with the most points in one place.
+//! - REPLACE, NEVER ADD (`replace_arrows: true`): an arrow that misses its unit's line is deleted
+//!   alone (hoi4_army_plan delete_order: the front and its planning bonus stay) before the new
+//!   one is drawn; at war, an arrow that will not delete alone clears the unit's orders once and
+//!   the front and the arrow are drawn again. Without it a changed line adds an arrow, and the
+//!   game gives a second arrow on one front no divisions.
 //! - FINISH: every enemy out of the war: the attack orders are cleared and `on_capitulation.next`
 //!   starts its PREPARE at once.
 //!
@@ -70,6 +80,15 @@ const ROLL_STALL_DAYS: i64 = 4;
 /// one (qv1, rs5, qv2, 19 Nov 2026: Armee Nord's 17 divisions stood 14-21 days in East Prussia on
 /// the save's arrow at Danzig and Gdynia, none of them in Poland, while the group fought alone).
 const WING_STALL_DAYS: i64 = 5;
+/// The far line (`offensive.deep`): the share of the enemies' victory points the line must lie
+/// behind (the surrender limit, 0.8 at the base, with margin: Poland stood at 0.81 for weeks
+/// without capitulating on the bed, b38f/b38g), the depth band of its states (a share of the
+/// enemy's depth) and the sideways gap under which the nearer of two states gives way.
+const DEEP_SHARE: f64 = 0.95;
+const DEEP_BAND: f64 = 0.3;
+const DEEP_GAP: f64 = 1.0 / 6.0;
+/// Map distance within which the states of a stalled far line's next target lie together.
+const DEEP_CLUSTER: f64 = 45.0;
 /// Game days a strike formation keeps one objective before it turns to the next (qc1: at 4 the
 /// column flipped between Warsaw and Krakow every four days and took neither).
 const STRIKE_MAX_DAYS: f64 = 10.0;
@@ -566,7 +585,13 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
         group = None;
     }
     if let Some(g) = &group {
-        out.push(unit(g.clone(), Role::Group, &op["front"], &op["offensive"]));
+        let mut u = unit(g.clone(), Role::Group, &op["front"], &op["offensive"]);
+        let far = deep(state, id);
+        if !far.is_empty() {
+            u.anchor = None;
+            u.line = far;
+        }
+        out.push(u);
     }
     for hold in list(op, "holds") {
         let armies: Vec<String> = list(hold, "armies")
@@ -746,28 +771,25 @@ fn need(u: &Unit, line: &[i64]) -> usize {
     }
 }
 
+/// Whether one offensive `off` of the unit aims at `line` (see `arrow_executing`).
+fn aims(u: &Unit, off: &Value, line: &[i64]) -> bool {
+    if u.spear {
+        // a spearhead reads back as painted: its path and target reach the line's deepest state
+        let reach: HashSet<i64> = ints(&off["path_states"])
+            .into_iter()
+            .chain(ints(&off["target"]["states"]))
+            .collect();
+        return line.last().is_none_or(|s| reach.contains(s));
+    }
+    let target: HashSet<i64> = ints(&off["target"]["states"]).into_iter().collect();
+    line.is_empty() || line.iter().filter(|s| target.contains(s)).count() >= need(u, line)
+}
+
 /// The executing flag of the unit's offensive that covers `line` (None when none covers it).
 fn arrow_executing(roster: &Value, u: &Unit, line: &[i64]) -> Option<bool> {
-    let need = need(u, line);
     let mut found = None;
     for off in offensives(roster, &u.name) {
-        if u.spear {
-            // a spearhead reads back as painted: its path and target reach the line's deepest state
-            let reach: HashSet<i64> = ints(&off["path_states"])
-                .into_iter()
-                .chain(ints(&off["target"]["states"]))
-                .collect();
-            if line.last().is_none_or(|s| reach.contains(s)) {
-                if off["executing"] == json!(true) {
-                    return Some(true);
-                }
-                found = Some(false);
-            }
-            continue;
-        }
-        let target: HashSet<i64> = ints(&off["target"]["states"]).into_iter().collect();
-        let hit = line.iter().filter(|s| target.contains(s)).count();
-        if line.is_empty() || hit >= need {
+        if aims(u, off, line) {
             if off["executing"] == json!(true) {
                 return Some(true);
             }
@@ -1147,6 +1169,10 @@ fn one(
 ) -> Result<Option<String>> {
     let enemies = strings(op, "enemies");
     let at_war = war_tags(wars);
+    state.done.insert(
+        key(id, "replace_arrows"),
+        i64::from(op["replace_arrows"] == json!(true)),
+    );
     let executed = state.done.contains_key(&key(id, "exec"));
     let (units, group) = units(state, id, op, roster);
     if executed {
@@ -2160,6 +2186,17 @@ fn prepare(
     let mut tags: Vec<String> = units.iter().map(|u| u.enemy.clone()).collect();
     tags.push(player(tools, plan));
     learn_centres(state, tools, &tags);
+    // the group's one offensive at the far side of what must fall, computed once in peace
+    if group.is_some() && war_tags(wars).is_empty() {
+        if let Some(far) = learn_deep(state, tools, id, op, &strings(op, "enemies")) {
+            let line = format!(
+                "operation {id}: the group's one offensive runs at the far line {far:?} (behind {:.0}% of the enemy's victory points)",
+                DEEP_SHARE * 100.0
+            );
+            state.op_notes.insert(id.to_string(), line.clone());
+            return Ok(Some(line));
+        }
+    }
     // 1. a line army, and an army of a hold group, carries no orders of its own (it would
     //    ignore its group's front): cleared once; a group front drawn while one still had its
     //    own orders is cleared too and drawn again with every army on it
@@ -2429,6 +2466,57 @@ fn reconcile(
     let stale = !offensives(roster, &u.name).is_empty();
     let k = key(id, &format!("redraw:{}:{tag}", u.name));
     let redraws = state.done.get(&k).copied().unwrap_or(0);
+    // REPLACE, NEVER ADD (`replace_arrows`): an arrow that misses the line goes on its own (the
+    // bar's delete tool on that arrow), so the front and its planning bonus stay and the new
+    // arrow is the front's only one; the game gives a second arrow on one front no divisions
+    // (spr1; b38g, 19 Nov 2026: the opening arrow kept all 56 divisions for weeks and the phase
+    // line's arrow had none). At war, when the delete does not read back, the unit's orders are
+    // cleared once and the front and the arrow drawn again.
+    if stale && !u.spear && op_replaces(state, id) && redraws < REDRAWS {
+        let miss: Option<i64> = offensives(roster, &u.name)
+            .into_iter()
+            .find(|off| !aims(u, off, line))
+            .and_then(|off| off["id"].as_i64());
+        let nodelete = key(id, &format!("nodelete:{}", u.name));
+        if let Some(oid) = miss {
+            if !state.done.contains_key(&nodelete) {
+                state.done.insert(k, redraws + 1);
+                let out = order(
+                    state,
+                    tools,
+                    lease,
+                    id,
+                    &format!(
+                        "delete the arrow {oid} of {} (it misses the line {tag}); the front stays",
+                        u.name
+                    ),
+                    "hoi4_army_plan",
+                    json!({"army": u.name, "delete_order": oid}),
+                )?;
+                if state.last_ok == Some(false) {
+                    state.done.insert(nodelete, now);
+                    state.skip(now, "opdraw", &u.name, 2);
+                }
+                return Ok(Some(out));
+            }
+            if !peace {
+                state.done.insert(k, redraws + 1);
+                let out = order(
+                    state,
+                    tools,
+                    lease,
+                    id,
+                    &format!(
+                        "clear {} (its arrow misses the line {tag} and would not delete alone): front and arrow drawn again",
+                        u.name
+                    ),
+                    "hoi4_army_plan",
+                    json!({"army": u.name, "clear_orders": true}),
+                )?;
+                return Ok(Some(out));
+            }
+        }
+    }
     // a spearhead's divisions stay on the order they were given (a second arrow on the same front
     // gets none: spr1, 19 Nov 2026): a spear whose order no longer reaches its line is cleared
     // and painted again at war too
@@ -2529,6 +2617,11 @@ fn reconcile(
     Ok(Some(line))
 }
 
+/// The operation replaces an arrow that misses its line instead of adding one (`replace_arrows`).
+fn op_replaces(state: &State, id: &str) -> bool {
+    state.done.get(&key(id, "replace_arrows")) == Some(&1)
+}
+
 /// The states of `ids` the player controls.
 fn held(tools: &dyn Tools, me: &str, ids: &[i64]) -> Vec<i64> {
     control(tools, me, ids).0
@@ -2575,6 +2668,173 @@ fn player(tools: &dyn Tools, plan: &Value) -> String {
         .unwrap_or_default()
 }
 
+/// One enemy state as the far line reads it: id, victory points, map centre.
+#[derive(Clone, Copy, Debug)]
+struct Far {
+    id: i64,
+    vp: f64,
+    x: f64,
+    z: f64,
+}
+
+/// The group's ONE offensive line, at the far side of what must fall (`offensive.deep`): the
+/// enemy states ordered by depth from the group's own front (`origin`) along the way to the
+/// enemy's victory points; the nearest of them that hold DEEP_SHARE of the points must fall;
+/// the line runs through the deepest of those (a band of DEEP_BAND of the enemy's depth), the
+/// nearer of two states side by side giving way to the deeper, listed from one end to the other.
+/// A player draws it once and lets it run; a phase line's second arrow on the same front gets no
+/// divisions from the game (b38g, 19 Nov 2026: Poland stood at 105-109 points for weeks while
+/// the group's opening arrow kept all 56 divisions). Empty when there is nothing to order.
+fn far_line(origin: (f64, f64), states: &[Far]) -> Vec<i64> {
+    let total: f64 = states.iter().map(|s| s.vp.max(0.0)).sum();
+    if states.len() < 2 || total <= 0.0 {
+        return Vec::new();
+    }
+    let (cx, cz) = states.iter().fold((0.0, 0.0), |a, s| {
+        (
+            a.0 + s.x * s.vp.max(0.0) / total,
+            a.1 + s.z * s.vp.max(0.0) / total,
+        )
+    });
+    let (dx, dz) = (cx - origin.0, cz - origin.1);
+    let len = (dx * dx + dz * dz).sqrt();
+    if len < 1e-6 {
+        return Vec::new();
+    }
+    let (ux, uz) = (dx / len, dz / len);
+    let depth = |s: &Far| (s.x - origin.0) * ux + (s.z - origin.1) * uz;
+    let side = |s: &Far| -(s.x - origin.0) * uz + (s.z - origin.1) * ux;
+    let mut order: Vec<&Far> = states.iter().collect();
+    order.sort_by(|a, b| depth(a).total_cmp(&depth(b)).then(a.id.cmp(&b.id)));
+    let mut sum = 0.0;
+    let mut needed: Vec<&Far> = Vec::new();
+    for s in order.iter() {
+        if sum >= DEEP_SHARE * total {
+            break;
+        }
+        sum += s.vp.max(0.0);
+        needed.push(s);
+    }
+    let near = order.first().map_or(0.0, |s| depth(s));
+    let deepest = needed.iter().map(|s| depth(s)).fold(f64::MIN, f64::max);
+    let band = (deepest - near) * DEEP_BAND;
+    let (lo, hi) = states
+        .iter()
+        .map(side)
+        .fold((f64::MAX, f64::MIN), |a, v| (a.0.min(v), a.1.max(v)));
+    let gap = (hi - lo) * DEEP_GAP;
+    let candidates: Vec<&Far> = needed
+        .iter()
+        .copied()
+        .filter(|s| depth(s) >= deepest - band)
+        .collect();
+    let mut line: Vec<&Far> = candidates
+        .iter()
+        .copied()
+        .filter(|s| {
+            !candidates
+                .iter()
+                .any(|o| o.id != s.id && (side(o) - side(s)).abs() < gap && depth(o) > depth(s))
+        })
+        .collect();
+    line.sort_by(|a, b| side(a).total_cmp(&side(b)));
+    line.into_iter().take(12).map(|s| s.id).collect()
+}
+
+/// The far line computed for the operation (empty when none was).
+fn deep(state: &State, id: &str) -> Vec<i64> {
+    (0..12)
+        .map_while(|i| state.done.get(&key(id, &format!("deep:{i}"))).copied())
+        .collect()
+}
+
+/// The operation's phase lines: none once the far line stands (it already lies behind them).
+fn phase_lines<'a>(state: &State, id: &str, op: &'a Value) -> &'a [Value] {
+    if deep(state, id).is_empty() {
+        list(op, "phase_lines")
+    } else {
+        &[]
+    }
+}
+
+/// The far line, computed once in peace from the enemies' states (hoi4_states: controller,
+/// victory_points_total, x, z) and the centre of the group's own front states; kept in the
+/// done-memory so it never moves. None when the operation asks for none or it cannot be read.
+fn learn_deep(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    op: &Value,
+    enemies: &[String],
+) -> Option<Vec<i64>> {
+    if op["offensive"]["deep"] != json!(true) || !deep(state, id).is_empty() {
+        return None;
+    }
+    let tried = key(id, "deep_tried");
+    if state.done.contains_key(&tried) {
+        return None;
+    }
+    state.done.insert(tried, 0);
+    let own: Vec<(f64, f64)> = ints(&op["front"]["own_states"])
+        .iter()
+        .filter_map(|s| state.centers.get(&(*s as i32)).copied())
+        .collect();
+    if own.is_empty() {
+        return None;
+    }
+    let n = own.len() as f64;
+    let origin = own
+        .iter()
+        .fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n));
+    let mut rows = Vec::new();
+    for tag in enemies {
+        let Ok(read) = tools.call("hoi4_states", &json!({"query": tag})) else {
+            continue;
+        };
+        for row in list(&read, "states") {
+            if text(&row["controller"]) != tag {
+                continue;
+            }
+            if let (Some(id), Some(x), Some(z)) = (
+                row["state_id"].as_i64(),
+                row["x"].as_f64(),
+                row["z"].as_f64(),
+            ) {
+                let vp = row["victory_points_total"].as_f64().unwrap_or(0.0);
+                rows.push(Far { id, vp, x, z });
+            }
+        }
+    }
+    let line = far_line(origin, &rows);
+    if line.len() < 2 {
+        return None;
+    }
+    for (i, s) in line.iter().enumerate() {
+        state.done.insert(key(id, &format!("deep:{i}")), *s);
+    }
+    Some(line)
+}
+
+/// Provinces of the enemies' states the player controls (the war's progress, wherever it is).
+fn enemy_provinces(tools: &dyn Tools, enemies: &[String], me: &str) -> i64 {
+    let mut n = 0;
+    for tag in enemies {
+        let Ok(read) = tools.call("hoi4_states", &json!({"query": tag})) else {
+            continue;
+        };
+        for row in list(&read, "states") {
+            if text(&row["owner"]) != tag {
+                continue;
+            }
+            n += list(row, "provinces")
+                .iter()
+                .filter(|p| text(&p["controller"]) == me)
+                .count() as i64;
+        }
+    }
+    n
+}
+
 /// The operation's current line: 0 = the group offensive, k = phase line k, beyond the phase
 /// lines one state chosen at the time (kept as `auto:<k>`).
 fn current_line(state: &State, id: &str, op: &Value) -> (i64, Vec<i64>) {
@@ -2586,8 +2846,11 @@ fn current_line(state: &State, id: &str, op: &Value) -> (i64, Vec<i64>) {
     if !roll.is_empty() {
         return (k, roll);
     }
-    let phases = list(op, "phase_lines");
-    let line = if k == 0 {
+    let phases = phase_lines(state, id, op);
+    let far = deep(state, id);
+    let line = if k == 0 && !far.is_empty() {
+        far
+    } else if k == 0 {
         ints(&op["offensive"]["target_line"])
     } else if let Some(p) = phases.get(k as usize - 1) {
         ints(&p["target_line"])
@@ -2680,6 +2943,64 @@ fn contact_line(tools: &dyn Tools, wars: &Value, enemies: &[String], me: &str) -
     rows.into_iter().take(ROLL_STATES).map(|(_, s)| s).collect()
 }
 
+/// A stalled far line's next target: the enemy state the front touches with the most victory
+/// points, with the touching states that hold points within DEEP_CLUSTER of it (one place, so
+/// the one arrow drawn through them does not run across the country: b38g's [85, 93, 97], Danzig
+/// to Volhynia, read back Diverged). Empty when no touching state holds a point.
+fn vp_cluster(
+    state: &State,
+    tools: &dyn Tools,
+    wars: &Value,
+    enemies: &[String],
+    me: &str,
+) -> Vec<i64> {
+    let touching: HashSet<i64> = list(wars, "borders")
+        .iter()
+        .filter(|b| enemies.iter().any(|e| e == text(&b["neighbour_tag"])))
+        .flat_map(|b| ints(&b["neighbour_states"]))
+        .collect();
+    let mut rows: Vec<(f64, i64)> = Vec::new();
+    for tag in enemies {
+        let Ok(read) = tools.call("hoi4_states", &json!({"query": tag})) else {
+            continue;
+        };
+        for row in list(&read, "states") {
+            let Some(sid) = row["state_id"].as_i64() else {
+                continue;
+            };
+            let vp = row["victory_points_total"].as_f64().unwrap_or(0.0);
+            if touching.contains(&sid) && text(&row["controller"]) != me && vp > 0.0 {
+                rows.push((vp, sid));
+            }
+        }
+    }
+    cluster(&rows, &|s| state.centers.get(&(s as i32)).copied())
+}
+
+/// The state with the most points and those of `rows` (points, state) within DEEP_CLUSTER of it,
+/// most points first, at most ROLL_STATES.
+fn cluster(rows: &[(f64, i64)], at: &dyn Fn(i64) -> Option<(f64, f64)>) -> Vec<i64> {
+    let mut rows = rows.to_vec();
+    rows.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+    let Some(&(_, top)) = rows.first() else {
+        return Vec::new();
+    };
+    let centre = at(top);
+    rows.into_iter()
+        .filter(|(_, s)| {
+            *s == top
+                || match (centre, at(*s)) {
+                    (Some(c), Some(p)) => {
+                        ((c.0 - p.0).powi(2) + (c.1 - p.1).powi(2)).sqrt() <= DEEP_CLUSTER
+                    }
+                    _ => false,
+                }
+        })
+        .take(ROLL_STATES)
+        .map(|(_, s)| s)
+        .collect()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn advance(
     state: &mut State,
@@ -2743,10 +3064,8 @@ fn advance(
             state.done.insert(key(id, "held"), provinces as i64);
             state.done.insert(key(id, "moved"), now);
         }
-        let moved = state.done.get(&key(id, "moved")).copied().unwrap_or(now);
         let stall = op["stall_days"].as_i64().unwrap_or(STALL_DAYS) * DAY;
         let taken = !line.is_empty() && got.len() == line.len();
-        let stalled = now - moved >= stall;
         state.op_notes.insert(
             id.to_string(),
             format!(
@@ -2756,13 +3075,23 @@ fn advance(
                 (now - state.done.get(&key(id, "exec")).copied().unwrap_or(now)) / DAY
             ),
         );
-        let due = list(op, "phase_lines")
-            .get(k as usize)
-            .is_some_and(|p| !p["when"].is_null())
-            && {
-                let when = list(op, "phase_lines")[k as usize]["when"].clone();
-                holds(state, tools, &when, now)
-            };
+        // the far line: the war's progress is every enemy province taken, not only the line's
+        // (the line lies behind the whole country and is reached last)
+        if !deep(state, id).is_empty() {
+            let taken_now = enemy_provinces(tools, enemies, &me);
+            let tk = key(id, "enemy_provinces");
+            if taken_now > state.done.get(&tk).copied().unwrap_or(0) {
+                state.done.insert(tk, taken_now);
+                state.done.insert(key(id, "moved"), now);
+            }
+        }
+        let moved = state.done.get(&key(id, "moved")).copied().unwrap_or(now);
+        let stalled = now - moved >= stall;
+        let phases = phase_lines(state, id, op).to_vec();
+        let due = phases.get(k as usize).is_some_and(|p| !p["when"].is_null()) && {
+            let when = phases[k as usize]["when"].clone();
+            holds(state, tools, &when, now)
+        };
         // ROLLING CONTACT LINE: a line taken or stalled with no phase line due goes on to the
         // enemy states the front touches, the most victory points first (pb1/qb1, 19 Nov 2026:
         // the group's stalled country-wide line jumped to the far eastern border, which did not
@@ -2771,7 +3100,11 @@ fn advance(
         let rolling = state.done.contains_key(&key(id, "roll:0"));
         let roll_stalled = rolling && now - moved >= roll_stall;
         if !due && (taken || stalled || roll_stalled) {
-            let next = contact_line(tools, wars, enemies, &me);
+            let next = if deep(state, id).is_empty() {
+                contact_line(tools, wars, enemies, &me)
+            } else {
+                vp_cluster(state, tools, wars, enemies, &me)
+            };
             if !next.is_empty() && next != line {
                 for i in 0..ROLL_STATES as i64 {
                     state.done.remove(&key(id, &format!("roll:{i}")));
@@ -2800,7 +3133,6 @@ fn advance(
         // a rolling line whose contact states have not changed keeps attacking them (the far
         // phase line is drawn only when it is due)
         if (taken || stalled || due || line.is_empty()) && (due || !rolling) {
-            let phases = list(op, "phase_lines");
             let mut next = k + 1;
             let mut chosen: Option<Vec<i64>> = None;
             while (next as usize) <= phases.len() {

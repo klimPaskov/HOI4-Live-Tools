@@ -3556,6 +3556,135 @@ pub(super) fn orders_left(r: &Reader<'_>, image: u64, army: &str) -> Result<Stri
     Ok(orders::summary(&orders::group_orders(r, image, group)?))
 }
 
+/// Every order id of `army` (fronts, their arrows and targets, defensive lists).
+pub(super) fn order_ids(r: &Reader<'_>, image: u64, army: &str) -> Result<Vec<i32>> {
+    let group = group_named(r, image, army)?;
+    let mut out = Vec::new();
+    let mut stack: Vec<orders::OrderNode> = orders::group_orders(r, image, group)?
+        .into_iter()
+        .map(|(_, n)| n)
+        .collect();
+    while let Some(n) = stack.pop() {
+        out.push(n.id);
+        stack.extend(n.children);
+    }
+    Ok(out)
+}
+
+/// The order `id` of `army` and the front it hangs on (None when the army has no such order).
+fn find_order(
+    r: &Reader<'_>,
+    image: u64,
+    army: &str,
+    id: i32,
+) -> Result<Option<(orders::OrderNode, Option<i32>)>> {
+    let group = group_named(r, image, army)?;
+    for (_, top) in orders::group_orders(r, image, group)? {
+        if top.id == id {
+            return Ok(Some((top, None)));
+        }
+        for c in &top.children {
+            if c.id == id || c.children.iter().any(|t| t.id == id) {
+                return Ok(Some((c.clone(), Some(top.id))));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Where to click an order: the map point (x, z), its province, and the order's two ends.
+type OrderPoint = ((f64, f64), i32, (f64, f64), (f64, f64));
+
+/// The point to click on an order: the middle of its arrow (the arrow's provinces in drawing
+/// order), else the middle of its target line (map x, z) and the province there.
+pub(super) fn order_click_point(
+    node: &orders::OrderNode,
+    pos: &dyn Fn(i32) -> Option<(f64, f64)>,
+) -> Option<OrderPoint> {
+    let pick = |provinces: &[i32]| -> Option<OrderPoint> {
+        let pts: Vec<(i32, (f64, f64))> = provinces
+            .iter()
+            .filter_map(|p| pos(*p).map(|xz| (*p, xz)))
+            .collect();
+        let (p, mid) = *pts.get(pts.len() / 2)?;
+        Some((mid, p, pts.first()?.1, pts.last()?.1))
+    };
+    pick(&node.provinces).or_else(|| {
+        node.children
+            .iter()
+            .find(|t| t.kind == 2)
+            .and_then(|t| pick(&t.provinces))
+    })
+}
+
+/// Delete ONE battle-plan order of `army` (an offensive arrow, by its read-back id) the way a
+/// player does: the bar's delete tool (left click), then a click on the arrow's middle on the
+/// map. The front and every other order stay (the planning bonus of the front's divisions with
+/// them). Verified by the id gone; the caller reads what else is left.
+pub(super) fn delete_order(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    game_dir: &std::path::Path,
+    army: &str,
+    id: i32,
+) -> Result<Value> {
+    clear_notices(process, keys)?;
+    let Some((node, front)) = read(process, |r, i| find_order(r, i, army, id))? else {
+        return Err(Error::new(
+            "invalid_target",
+            format!("{army} has no battle-plan order {id}"),
+        ));
+    };
+    let pos = super::mapdata::positions(game_dir)?;
+    let Some((mid, province, a, b)) = order_click_point(&node, &|p| pos.get(&p).copied()) else {
+        return Err(Error::new(
+            "invalid_target",
+            format!("order {id} of {army} has no province on the map to click"),
+        ));
+    };
+    let state = read(process, |r, i| {
+        Ok(orders::state_of_province(r, i, province))
+    })?;
+    let area = (420.0, 140.0, 1700.0, 880.0);
+    let framed = super::screenmap::frame_two(process, keys, a, b, area, || match state {
+        Some(s) => find_state(process, keys, s),
+        None => Ok(()),
+    })?;
+    let inside =
+        |p: &(f64, f64)| (area.0..area.2).contains(&p.0) && (area.1..area.3).contains(&p.1);
+    let at = match framed {
+        None => None,
+        Some(_) => read(process, |r, i| {
+            super::screenmap::to_screen(r, i, mid.0, mid.1)
+        })?
+        .filter(inside),
+    };
+    let Some(at) = at else {
+        let _ = keys.press(Key::Escape);
+        return Err(Error::new(
+            "input_geometry_unverified",
+            format!("the middle of order {id} (province {province}) is not on the screen"),
+        ));
+    };
+    let button = mode::delete_tool(process, keys, army)?;
+    keys.click(GAME, at.0, at.1)?;
+    let gone = wait(process, "order deleted", |r, i| {
+        Ok(!order_ids(r, i, army)?.contains(&id))
+    });
+    let _ = keys.press(Key::Escape);
+    let _ = clear_selection(process, keys);
+    let left = read(process, |r, i| order_ids(r, i, army)).unwrap_or_default();
+    let detail = json!({"army": army, "order": id, "front": front, "province": province,
+        "clicked": [at.0, at.1], "delete_button": [button.x, button.y, button.w, button.h],
+        "front_kept": front.map(|f| left.contains(&f)), "orders_left": left.len()});
+    gone.map(|_| detail.clone()).map_err(|_| {
+        Error::new(
+            "input_readback_failed",
+            format!("the delete tool clicked on order {id} of {army} at {at:?} (province {province}) and the order stayed: {detail}"),
+        )
+    })
+}
+
 /// Draw an offensive line for `army` (which must already hold a front line)
 /// into state `state`: the army card selects the army, X enters offensive-line
 /// drawing, the Find view centres the state and one right-button drag runs
@@ -5225,6 +5354,38 @@ mod tests {
         // and one in the far row
         let (a, b) = super::offensive_span(&own, &target, Some((0.0, 70.0))).unwrap();
         assert_eq!((a.1, b.1), (70.0, 70.0));
+    }
+
+    #[test]
+    fn the_delete_tool_clicks_the_middle_of_the_arrow_else_of_its_target_line() {
+        let pos = |p: i32| (p != 99).then(|| (f64::from(p), 2.0 * f64::from(p)));
+        let line = |provinces: Vec<i32>| orders::OrderNode {
+            kind: 2,
+            provinces,
+            ..Default::default()
+        };
+        let arrow = orders::OrderNode {
+            kind: 1,
+            id: 41,
+            provinces: vec![10, 11, 99, 12, 13],
+            children: vec![line(vec![20, 21, 22])],
+            ..Default::default()
+        };
+        // the provinces with a map position: 10 11 12 13, the middle one 12
+        let (at, province, a, b) = order_click_point(&arrow, &pos).unwrap();
+        assert_eq!((at, province), ((12.0, 24.0), 12));
+        assert_eq!((a, b), ((10.0, 20.0), (13.0, 26.0)));
+        // an arrow with no province on the map: the middle of its target line
+        let bare = orders::OrderNode {
+            provinces: vec![99],
+            ..arrow.clone()
+        };
+        assert_eq!(order_click_point(&bare, &pos).unwrap().1, 21);
+        let none = orders::OrderNode {
+            children: vec![],
+            ..bare
+        };
+        assert!(order_click_point(&none, &pos).is_none());
     }
 
     #[test]
