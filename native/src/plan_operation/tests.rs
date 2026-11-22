@@ -1579,6 +1579,32 @@ fn a_line_army_outside_the_group_before_the_war_forms_the_group_again_with_it() 
 }
 
 #[test]
+fn a_plan_group_army_this_operation_holds_with_never_joins_its_group() {
+    // bed c41d: the plan's group listed the five armies of a later operation; the pre-war regroup
+    // took the Westwall hold's army into the Polish group and the hold front kept no division
+    let game = Game::new();
+    game.unit("Sued", |r| r["army_group"] = json!(null));
+    game.unit("WestA", |r| r["army_group"] = json!(null));
+    game.unit("Nord", |r| r["army_group"] = json!(null));
+    let mut plan = plan();
+    plan["army_group"] =
+        json!([{"id": "ag", "armies": ["Mitte", "Sued", "Nord", "WestA", "WestB"]}]);
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let groups: Vec<Value> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, _)| n == "hoi4_army_group_create")
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(
+        groups.first(),
+        Some(&json!({"armies": ["Mitte", "Sued"]})),
+        "{groups:?}"
+    );
+}
+
+#[test]
 fn a_hold_whose_second_army_was_never_formed_fronts_with_the_army_it_has() {
     // g17m: Armee West Süd never existed; the hold waited for a group of two and the West
     // stood without a front
