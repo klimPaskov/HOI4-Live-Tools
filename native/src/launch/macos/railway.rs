@@ -684,7 +684,11 @@ pub(super) fn resolve(
         if laid {
             let whole = i + 1 == way.len();
             return Err(Error::new(
-                if whole { "railway_complete" } else { "leg_built" },
+                if whole {
+                    "railway_complete"
+                } else {
+                    "leg_built"
+                },
                 format!(
                     "Every province of the own part of the way from {p} toward {asked_p} \
                      ({} of {} provinces, to province {}) already has a railway{}. Nothing was \
@@ -977,7 +981,11 @@ mod tests {
     fn railways_parse_by_pair_and_a_way_prefers_them_and_a_leg_stops_at_foreign_land() {
         let rails = parse_railways("2 3 1 2 3 \n1 2 3 2\n5 2 7 8 junk\n");
         assert_eq!(rails.get(&(1, 2)), Some(&2));
-        assert_eq!(rails.get(&(2, 3)), Some(&2), "the higher level of two lines");
+        assert_eq!(
+            rails.get(&(2, 3)),
+            Some(&2),
+            "the higher level of two lines"
+        );
         assert_eq!(rails.get(&(7, 8)), Some(&5));
         // 1 - 2 - 3 - 4 along a railway 1-2-3, and 1 - 9 - 4 with no railway: the railway way
         // costs 4+4+10 = 18 against 20
@@ -989,7 +997,10 @@ mod tests {
             (9, vec![1, 4]),
         ]);
         assert_eq!(rail_way(&n, &rails, 1, 4, 100), Some(vec![1, 2, 3, 4]));
-        assert_eq!(rail_way(&n, &HashMap::new(), 1, 4, 100), Some(vec![1, 9, 4]));
+        assert_eq!(
+            rail_way(&n, &HashMap::new(), 1, 4, 100),
+            Some(vec![1, 9, 4])
+        );
         assert_eq!(rail_way(&n, &rails, 1, 77, 100), None);
         let way = [1, 2, 3, 4];
         assert_eq!(leg_end(&way, |p| Ok(p != 3)).unwrap(), 1);

@@ -14784,7 +14784,10 @@ mod tests {
         let sent = tools.0.borrow();
         assert_eq!(sent.len(), 3, "one leg a week, never between: {sent:?}");
         assert_eq!(sent[0]["leg"], true);
-        assert_eq!((sent[0]["from_state"].clone(), sent[0]["to_state"].clone()), (json!(10), json!(219)));
+        assert_eq!(
+            (sent[0]["from_state"].clone(), sent[0]["to_state"].clone()),
+            (json!(10), json!(219))
+        );
         assert!(state.plan_built.contains_key("id:east"));
         assert!(state.plan_tries.is_empty() && state.plan_blocked.is_empty());
     }
