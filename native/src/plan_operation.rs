@@ -2726,7 +2726,23 @@ fn prepare(
         let planned = list(plan, "army_group")
             .iter()
             .find(|g| item_id(g).as_deref() == op["group"].as_str());
-        let mut hints = planned.map(|g| strings(g, "armies")).unwrap_or_default();
+        // a plan group may list armies a LATER operation adds (op_sov's five line armies): one
+        // that this operation orders in another role (a hold, a wing, a mobile formation) keeps
+        // that role (bed c41d, 23 Nov 2026: the Westwall hold's army joined the Polish group, the
+        // hold front kept no division and France walked in)
+        let other_role: HashSet<&str> = units
+            .iter()
+            .filter(|u| !matches!(u.role, Role::Line | Role::Group))
+            .flat_map(|u| {
+                std::iter::once(u.name.as_str()).chain(u.members.iter().map(String::as_str))
+            })
+            .collect();
+        let mut hints: Vec<String> = planned
+            .map(|g| strings(g, "armies"))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|h| !other_role.contains(resolve(state, h).as_str()))
+            .collect();
         hints.extend(released);
         for hint in hints {
             let n = resolve(state, &hint);
