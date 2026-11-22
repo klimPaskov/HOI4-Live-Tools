@@ -2205,5 +2205,8 @@ fn a_group_without_a_field_marshal_gets_the_first_free_name_of_marshals() {
         .filter(|(n, _)| n == "hoi4_army_commander")
         .map(|(_, a)| a)
         .collect();
-    assert_eq!(given, [json!({"army": "Army Group 3", "general": "Rundstedt"})]);
+    assert_eq!(
+        given,
+        [json!({"army": "Army Group 3", "general": "Rundstedt"})]
+    );
 }

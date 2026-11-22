@@ -2907,7 +2907,10 @@ fn prepare(
             let Some(general) = names.iter().find(|n| !leading.contains(n)) else {
                 state.op_notes.insert(
                     format!("{id}:{}", u.name),
-                    format!("{}: no field marshal (every name of `marshals` leads a group)", u.name),
+                    format!(
+                        "{}: no field marshal (every name of `marshals` leads a group)",
+                        u.name
+                    ),
                 );
                 continue;
             };
