@@ -3668,6 +3668,10 @@ pub(super) fn delete_order(
     };
     let button = mode::delete_tool(process, keys, army)?;
     keys.click(GAME, at.0, at.1)?;
+    // the game asks "Are you sure you want to DELETE ... order?" (CONFIRM_DELETE_ORDER_TEXT)
+    let _ = super::ui::accept_command_until(process, keys, |r, i| {
+        Ok(!order_ids(r, i, army)?.contains(&id))
+    });
     let gone = wait(process, "order deleted", |r, i| {
         Ok(!order_ids(r, i, army)?.contains(&id))
     });
