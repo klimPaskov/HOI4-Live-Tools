@@ -1563,6 +1563,12 @@ class TacticsRules(unittest.TestCase):
         self.assertNoHit(plan, "politics.pp_budget", "error", "politics[1]")  # 300 PP by the end of the year
         f = self.assertHit(plan, "politics.pp_budget", "warning", "politics[0]")
         self.assertIn("114 days after its date", f["message"])
+        # a buy dated after the simulated span is a later horizon's: the budget to the stop date does not judge it
+        plan = self.plan()
+        plan["politics"].append({"id": "pol_late", "category": "government", "slot": 7, "idea": "free_trade",
+                                 "cost": 150, "when": "date >= 1950.1.1"})
+        self.assertNoHit(plan, "politics.pp_budget", "error", "free_trade")
+        self.assertHit(plan, "politics.pp_budget", "info", "left to the later horizons")
 
     def test_stability_owner(self):
         plan = self.plan()
