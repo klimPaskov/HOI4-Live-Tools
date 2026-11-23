@@ -867,7 +867,8 @@ fn order_base_mission(
     let all_bit = {
         let names = names.clone();
         move |r: &crate::memory::Reader<'_>, i: u64| -> Result<bool> {
-            let own = fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
+            let own =
+                fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
             let (_, wings) = airread::bases_and_wings(r, i, own)?;
             Ok(names.iter().all(|n| {
                 wings
@@ -916,7 +917,8 @@ fn order_base_mission(
     let assigned = {
         let names = names.clone();
         move |r: &crate::memory::Reader<'_>, i: u64| -> Result<bool> {
-            let own = fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
+            let own =
+                fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
             let (_, wings) = airread::bases_and_wings(r, i, own)?;
             Ok(names.iter().all(|n| {
                 wings.iter().any(|w| {
@@ -979,8 +981,7 @@ pub(super) fn missions_by_base(
     let (_, want_region) = air::target_region(process, state, region);
     let flying = |w: &Wing| {
         w.mission_mask & bit != 0
-            && (mission == "training"
-                || want_region.map_or(w.region_id > 0, |r| w.region_id == r))
+            && (mission == "training" || want_region.map_or(w.region_id > 0, |r| w.region_id == r))
     };
     let result = (|| -> Result<(Vec<(String, Option<Error>)>, Vec<Value>)> {
         let mut bulk = Vec::new();
@@ -994,13 +995,17 @@ pub(super) fn missions_by_base(
                 .collect();
             let rows: Vec<(String, Option<i32>)> =
                 all.iter().map(|w| (w.name.clone(), w.base_state)).collect();
-            let Some(group) = clean_bases(wings, &pending, &rows, &tried).into_iter().next()
+            let Some(group) = clean_bases(wings, &pending, &rows, &tried)
+                .into_iter()
+                .next()
             else {
                 break;
             };
             tried.push(group.state);
             match order_base_mission(process, keys, &group, mission, state, region) {
-                Ok(()) => bulk.push(json!({"base_state": group.state, "wings": group.wings, "ok": true})),
+                Ok(()) => {
+                    bulk.push(json!({"base_state": group.state, "wings": group.wings, "ok": true}))
+                }
                 Err(e) if fatal(&e) => return Err(e),
                 Err(e) => bulk.push(json!({"base_state": group.state, "wings": group.wings,
                     "ok": false, "code": e.code, "message": e.message})),
@@ -1054,7 +1059,9 @@ pub(super) fn rebase_by_base(
                 .collect();
             let rows: Vec<(String, Option<i32>)> =
                 all.iter().map(|w| (w.name.clone(), w.base_state)).collect();
-            let Some(group) = clean_bases(&asked, &pending, &rows, &tried).into_iter().next()
+            let Some(group) = clean_bases(&asked, &pending, &rows, &tried)
+                .into_iter()
+                .next()
             else {
                 break;
             };
@@ -1072,12 +1079,17 @@ pub(super) fn rebase_by_base(
                 keys.right_click(GAME, x, y)?;
                 let names = group.wings.clone();
                 wait(process, "base rebase accepted", move |r, i| {
-                    let own = fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
+                    let own = fleetmem::own_strategic(
+                        r,
+                        i,
+                        fleetmem::GS_AIR_MANAGER,
+                        fleetmem::AIR_BY_COUNTRY,
+                    )?;
                     let (_, wings) = airread::bases_and_wings(r, i, own)?;
                     Ok(names.iter().all(|n| {
-                        wings.iter().any(|w| {
-                            &w.name == n && (w.base_id == to || w.transfer_base_id == to)
-                        })
+                        wings
+                            .iter()
+                            .any(|w| &w.name == n && (w.base_id == to || w.transfer_base_id == to))
                     }))
                 })
                 .map_err(|_| {
@@ -1089,7 +1101,9 @@ pub(super) fn rebase_by_base(
             })();
             let _ = air::deselect(process, keys);
             match ordered {
-                Ok(()) => bulk.push(json!({"base_state": group.state, "wings": group.wings, "ok": true})),
+                Ok(()) => {
+                    bulk.push(json!({"base_state": group.state, "wings": group.wings, "ok": true}))
+                }
                 Err(e) if fatal(&e) => return Err(e),
                 Err(e) => bulk.push(json!({"base_state": group.state, "wings": group.wings,
                     "ok": false, "code": e.code, "message": e.message})),

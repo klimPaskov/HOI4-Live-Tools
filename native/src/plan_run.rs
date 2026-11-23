@@ -10881,11 +10881,23 @@ mod tests {
             .unwrap();
         state.bulk = bulk_paths(&json!({"manage": {"bulk": ["all"]}}));
         state
-            .act(&f, "l", "hoi4_production_add", json!({"equipment": "x", "factories": 3}), "pa")
+            .act(
+                &f,
+                "l",
+                "hoi4_production_add",
+                json!({"equipment": "x", "factories": 3}),
+                "pa",
+            )
             .unwrap();
         // a tool without a bulk path never gets the flag
         state
-            .act(&f, "l", "hoi4_research_start", json!({"slot": 0, "technology": "t"}), "rs")
+            .act(
+                &f,
+                "l",
+                "hoi4_research_start",
+                json!({"slot": 0, "technology": "t"}),
+                "rs",
+            )
             .unwrap();
         let calls = f.calls.borrow();
         let bulk: Vec<Option<bool>> = calls
@@ -11773,7 +11785,10 @@ mod tests {
             "construction": [{"building": "arms_factory", "states": [60], "count": 3}]});
         let mut state = State::default();
         let first = acted(tick(&mut state, &b, &plan, "l", START).unwrap());
-        assert!(first.starts_with("construct arms_factory 60: true"), "{first}");
+        assert!(
+            first.starts_with("construct arms_factory 60: true"),
+            "{first}"
+        );
         assert_eq!(b.added.borrow().as_slice(), &[(60, 3)]);
         assert_eq!(b.filled.borrow().as_slice(), &[60]);
         // off (the default): the same count by single clicks
@@ -11782,7 +11797,8 @@ mod tests {
             b.slots = [(60, 3)].into();
             b
         };
-        let plan = json!({"construction": [{"building": "arms_factory", "states": [60], "count": 3}]});
+        let plan =
+            json!({"construction": [{"building": "arms_factory", "states": [60], "count": 3}]});
         let mut state = State::default();
         acted(tick(&mut state, &b, &plan, "l", START).unwrap());
         assert_eq!(b.added.borrow().as_slice(), &[(60, 3)]);

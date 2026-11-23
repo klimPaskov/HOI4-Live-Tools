@@ -1671,7 +1671,15 @@ fn mio_traits_many(
         let flags = |entries: &[TraitEntry]| -> Vec<(usize, bool, bool, bool, bool)> {
             entries
                 .iter()
-                .map(|e| (e.index, e.enabled, !e.queue.is_empty(), e.state == 2, e.rect.is_some()))
+                .map(|e| {
+                    (
+                        e.index,
+                        e.enabled,
+                        !e.queue.is_empty(),
+                        e.state == 2,
+                        e.rect.is_some(),
+                    )
+                })
                 .collect()
         };
         let mut wanted: Vec<usize> = asked.to_vec();
@@ -1689,8 +1697,10 @@ fn mio_traits_many(
                 .collect()
         };
         if wanted.is_empty() {
-            return Ok(json!({"nothing_to_queue": true, "changed": 0, "entries": summary(&entries),
-                "verification": "gui_only"}));
+            return Ok(
+                json!({"nothing_to_queue": true, "changed": 0, "entries": summary(&entries),
+                "verification": "gui_only"}),
+            );
         }
         let mut queued: Vec<usize> = Vec::new();
         let mut unchanged: Vec<Value> = Vec::new();
@@ -1715,7 +1725,9 @@ fn mio_traits_many(
                 trait_entries(r, i)?
                     .get(index)
                     .and_then(|e| e.rect)
-                    .ok_or_else(|| Error::new("gui_target_unavailable", "Trait icon left the window"))
+                    .ok_or_else(|| {
+                        Error::new("gui_target_unavailable", "Trait icon left the window")
+                    })
             })?;
             accept_command(process, keys)?;
             let deadline = std::time::Instant::now() + Duration::from_millis(2000);
@@ -1899,7 +1911,10 @@ pub(super) fn call(
             let auto = match args.get("auto") {
                 None => None,
                 Some(v) => Some(v.as_u64().filter(|n| (1..=5).contains(n)).ok_or_else(|| {
-                    Error::new("invalid_arguments", "auto must be 1..5 (traits waiting in the queue)")
+                    Error::new(
+                        "invalid_arguments",
+                        "auto must be 1..5 (traits waiting in the queue)",
+                    )
                 })? as usize),
             };
             if !many.is_empty() || auto.is_some() {
@@ -1925,16 +1940,22 @@ pub(super) fn call(
                             "changed": seen.and_then(|v| v.get("changed")).cloned().unwrap_or(json!(0)),
                             "unchanged": seen.and_then(|v| v.get("unchanged")).cloned().unwrap_or(json!([]))});
                         let flag = |k: &str| seen.and_then(|v| v.get(k)).and_then(Value::as_bool);
-                        Ok(if flag("nothing_to_queue") == Some(true) || flag("trait_queued") == Some(true) {
-                            super::journal::Outcome::Reached(detail)
-                        } else if flag("some_queued") == Some(true) {
-                            super::journal::Outcome::Diverged(detail)
-                        } else {
-                            ui_action::effect(seen, "trait_queued", detail)
-                        })
+                        Ok(
+                            if flag("nothing_to_queue") == Some(true)
+                                || flag("trait_queued") == Some(true)
+                            {
+                                super::journal::Outcome::Reached(detail)
+                            } else if flag("some_queued") == Some(true) {
+                                super::journal::Outcome::Diverged(detail)
+                            } else {
+                                ui_action::effect(seen, "trait_queued", detail)
+                            },
+                        )
                     }),
                 };
-                return ui_action::run_bounded(job, 150, id, token, process, keys, guard, authority, actions);
+                return ui_action::run_bounded(
+                    job, 150, id, token, process, keys, guard, authority, actions,
+                );
             }
             let list_only = mgmt::flag(args, "list")?;
             let index =
@@ -2080,7 +2101,10 @@ mod tests {
         ];
         assert_eq!(super::auto_picks(&tree, 3), vec![4, 5]);
         assert_eq!(super::auto_picks(&tree, 2), vec![4]);
-        assert!(super::auto_picks(&tree, 1).is_empty(), "one enabled trait waits already");
+        assert!(
+            super::auto_picks(&tree, 1).is_empty(),
+            "one enabled trait waits already"
+        );
     }
 
     fn row(name: &str, organisation: bool) -> super::RosterRow {

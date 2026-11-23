@@ -2692,7 +2692,9 @@ fn mio_plan(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             } else {
                 mio_refused(state, now, "mio", &org, &why);
             }
-            return Ok(Some(format!("mio {org} traits {rest:?} in one visit: {ok} {why}")));
+            return Ok(Some(format!(
+                "mio {org} traits {rest:?} in one visit: {ok} {why}"
+            )));
         }
         if let Some(index) = next {
             args["trait_index"] = json!(index);
@@ -2948,7 +2950,9 @@ fn mio_auto_traits(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             if !ok {
                 mio_refused(state, now, "mio", &org, &why);
             }
-            return Ok(Some(format!("mio {org} traits (auto, one visit): {ok} {why}")));
+            return Ok(Some(format!(
+                "mio {org} traits (auto, one visit): {ok} {why}"
+            )));
         }
         let listing = tools.call(
             "hoi4_mio_trait",
@@ -5062,11 +5066,15 @@ mod tests {
             Some("mio GER_krupp_organization traits [3, 5, 7] in one visit: true Verified")
         );
         for i in [3, 5, 7] {
-            assert!(state.done.contains_key(&format!("mio:GER_krupp_organization:t{i}")));
+            assert!(state
+                .done
+                .contains_key(&format!("mio:GER_krupp_organization:t{i}")));
         }
         // the auto organisation: one visit lists and queues (no separate listing call)
         let out = step(&mut state, &tools, &plan, "l", START + 2).unwrap();
-        assert!(out.unwrap().contains("GER_mauser_organization traits (auto, one visit)"));
+        assert!(out
+            .unwrap()
+            .contains("GER_mauser_organization traits (auto, one visit)"));
         let calls = tools.calls.borrow();
         let mio: Vec<&Value> = calls
             .iter()

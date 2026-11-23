@@ -9630,7 +9630,10 @@ mod tests {
         let line = step(&mut state, &tools, &plan, "l", START)
             .unwrap()
             .unwrap_or_default();
-        assert!(line.contains("3 wings air_superiority over region 5 in one order"), "{line}");
+        assert!(
+            line.contains("3 wings air_superiority over region 5 in one order"),
+            "{line}"
+        );
         let sent = actions(&tools);
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].1["wings"], json!(["JG 1", "JG 2", "JG 3"]));

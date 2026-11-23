@@ -4871,7 +4871,14 @@ impl MacClock {
                 "hoi4_air_rebase" => {
                     allowed(
                         args,
-                        &["wing", "wings", "state_id", "bulk", "request_id", "lease_token"],
+                        &[
+                            "wing",
+                            "wings",
+                            "state_id",
+                            "bulk",
+                            "request_id",
+                            "lease_token",
+                        ],
                     )?;
                     let wings = match args.get("wings") {
                         Some(list) => {
@@ -5165,9 +5172,14 @@ impl MacClock {
                         ..
                     } if wings.len() > 1 => {
                         let (outcomes, by_base) = if bulk {
-                            airact::missions_by_base(process, keys, wings, mission, *state, *region)?
+                            airact::missions_by_base(
+                                process, keys, wings, mission, *state, *region,
+                            )?
                         } else {
-                            (airact::missions(process, keys, wings, mission, *state, *region)?, Vec::new())
+                            (
+                                airact::missions(process, keys, wings, mission, *state, *region)?,
+                                Vec::new(),
+                            )
                         };
                         let failed: Vec<Value> = outcomes
                             .iter()
@@ -5199,7 +5211,10 @@ impl MacClock {
                         let (outcomes, by_base) = if bulk {
                             airact::rebase_by_base(process, keys, &rebase_plans)?
                         } else {
-                            (airact::rebase_many(process, keys, &rebase_plans)?, Vec::new())
+                            (
+                                airact::rebase_many(process, keys, &rebase_plans)?,
+                                Vec::new(),
+                            )
                         };
                         let failed: Vec<Value> = outcomes
                             .iter()
