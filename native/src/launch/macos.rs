@@ -64,6 +64,7 @@ mod invasion;
 mod journal;
 mod kit;
 mod leader_act;
+mod learn_tools;
 #[cfg(test)]
 mod live_designer;
 #[cfg(test)]
@@ -883,6 +884,7 @@ pub fn mac_tool_list() -> Vec<Value> {
     .chain(operation_act::tools())
     .chain(mio_act::tools())
     .chain(leader_act::tools())
+    .chain(learn_tools::tools())
     .chain(std::iter::once(doctrine_act::officer_tool()))
     .collect()
 }
@@ -897,6 +899,9 @@ impl Commands for MacClock {
     fn supports(&self, name: &str) -> bool {
         fleetops::handles(name)
             || leader_act::TOOLS.contains(&name)
+            || learn_tools::READS.contains(&name)
+            || name == learn_tools::ACT
+            || name == learn_tools::RUN
             || faction::handles(name)
             || name == invasion::TOOL
             || matches!(
@@ -1058,6 +1063,17 @@ impl Commands for MacClock {
         json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_assign","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","template_create","template_edit","template_rename","template_delete","template_options","design_options","design_create","design_obsolete","design_set_production","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"construction_panel":{"enabled":self.construction_panel,"qualification_only":true,"ordinary_key":"t","live_delivery_verified":false,"input_retry":false},"construction_selection":{"enabled":self.construction_selection,"qualification_only":true,"ordinary_clicks_max":1,"input_retry":false,"placement":false},"construction_placement":{"enabled":self.construction_placement,"qualification_only":true,"ordinary_clicks_max":1,"full_picker_verified":false,"atomic_event_verified":false},"construction_cancellation":{"enabled":self.construction_cancellation,"qualification_only":true,"ordinary_key":"escape","ordinary_key_presses_max":1,"input_retry":false,"worker":false},"construction_find_open":{"enabled":self.construction_find_open,"qualification_only":true,"transport":"ordinary_left_click","ordinary_clicks_max":1,"cursor_moves_max":1,"ordinary_key_presses":0,"input_retry":false,"worker":false},"construction_navigation":{"enabled":self.construction_navigation,"qualification_only":true,"already_open_only":true,"input_retry":false,"placement":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
+        // A learned skill runs its steps through this same entry, one ordinary tool call each.
+        if name == learn_tools::RUN {
+            let listed = self.tools();
+            return learn_tools::skill_run(
+                &self.directory,
+                process,
+                &listed,
+                &|tool, args| self.call(process, tool, args),
+                arguments,
+            );
+        }
         // Plan role names (army_layout name_hint) stand for the army bound to the role; a
         // settlement of an earlier dispatch resolves the same way, so its action still matches.
         let (resolved_arguments, resolved) = self.resolve_army_roles(process, name, arguments);
@@ -1531,6 +1547,9 @@ impl MacClock {
         let args = arguments
             .as_object()
             .ok_or_else(|| Error::new("invalid_arguments", "Input arguments must be an object"))?;
+        if learn_tools::READS.contains(&name) {
+            return learn_tools::store_call(name, args, process, &self.directory);
+        }
         if name == "hoi4_daily_governor" {
             return self.daily.call(self, args);
         }
@@ -1991,6 +2010,9 @@ impl MacClock {
             } else {
                 faction::call(name, args, env)
             };
+        }
+        if name == learn_tools::ACT {
+            return learn_tools::act(args, process, &self.keys, guard, authority, actions);
         }
         if mio_act::TOOLS.contains(&name) {
             return mio_act::call(name, args, process, &self.keys, guard, authority, actions);

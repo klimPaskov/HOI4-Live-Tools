@@ -27,6 +27,10 @@ Your agent can test mods without you sitting at the keyboard: it launches the ga
 loads a save, fires events, answers popups, runs time forward and reads the error
 log. It can also play campaigns through the real game interface, from focuses,
 research and production to construction, politics, diplomacy and armies.
+In a mod it has never seen, even a total conversion, it can learn: it reads what the
+mod adds, inspects the mod's own panels, tries a button and sees what changed, and
+keeps what worked as a skill for later games ([Playing a mod the tools have never
+seen](docs/LEARNING.md)).
 
 Part of the HOI4 modding toolkit: [HOI4 Mod Setup](https://github.com/klimPaskov/HOI4-Mod-Setup)
 installs it for you, [Agentic HOI4 Modding](https://github.com/klimPaskov/Agentic-HOI4-Modding)

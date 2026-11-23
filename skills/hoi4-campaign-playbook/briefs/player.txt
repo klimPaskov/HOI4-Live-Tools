@@ -89,6 +89,15 @@ READS (exact calls; no other arguments exist — never guess one):
     game keeps the war open (a government in exile). A country_capitulated event can be about ANY country:
     read its text for the name before you log anything about your war.
 
+NO TOOL FOR IT (a mod's own panel or mechanic, an alert nothing names): learn it, never guess.
+    {CALL} hoi4_skill_list '{}'              what earlier sessions learned; run one with hoi4_skill_run
+    {CALL} hoi4_ui_inspect '{"window":"<window id>"}'   the open panel's widgets with stable ids and what
+                                             the files say each button does (script: effect, spends, irreversible)
+    {CALL} hoi4_ui_act '{"widget":"<widget id>"}'   one click; `changed` and `state_changed` show what it did.
+                                             A click that spends something or cannot be undone needs
+                                             confirm_irreversible:true: only when the plan or the goal wants it
+    It worked: hoi4_skill_save (its steps, a verify check, the cost) and hoi4_fact_save for what you found out.
+
 ONE ACTION, ONE TRY: if an action returns action_unconfirmed (its effect was not observed; the request is
 closed and blocks nothing), do not resend it blindly: re-read the state and act only if the effect is missing.
 

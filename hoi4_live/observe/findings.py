@@ -448,6 +448,14 @@ def game_flags(snap, already):
         out.append(F(f"game_alert:{name}", "low", f"the game flags {name}: {a.get('todo') or ''}".strip(),
                      subject=name, owner="game alert row"))
         seen.add(name)
+    # Alert icons no tool names (a mod's own alerts, a new DLC's): something no typed tool manages.
+    unknown = sorted({a.get("frame") for a in snap.get("alerts") or [] if not a.get("alert") and a.get("frame")
+                      is not None}, key=str)
+    if unknown and "game_alert_unknown" not in seen:
+        out.append(F("game_alert_unknown", "low",
+                     "alert icons no tool names (frames %s): hover one for its text (hoi4_ui_act action hover), "
+                     "inspect the panel it opens (hoi4_ui_inspect) and learn what it wants (hoi4_skill_save)"
+                     % ", ".join(str(f) for f in unknown[:6]), owner="game alert row", frames=len(unknown)))
     if snap.get("events_open"):
         out.append(F("events_open", "low", f"open events: {', '.join(snap['events_open'][:4])}"))
     if snap.get("peace_conference_open"):

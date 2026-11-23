@@ -1,0 +1,320 @@
+[
+{
+"path": "/officer_core_view/army_spirits_view",
+"rect": null,
+"shown": true
+},
+{
+"path": "/officer_core_view/navy_spirits_view",
+"rect": null,
+"shown": true
+},
+{
+"path": "/officer_core_view/air_spirits_view",
+"rect": null,
+"shown": true
+},
+{
+"path": "/officer_core_view/air_spirits_view/spirit_grid",
+"rect": null,
+"shown": true
+},
+{
+"button_state": 0,
+"path": "/officer_core_view/air_spirits_view/spirit_grid/#1/button",
+"rect": [
+272,
+849,
+168,
+70
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/air_spirits_view/spirit_grid/#1/air_force_command_spirit_glow",
+"rect": [
+304,
+829,
+159,
+115
+],
+"shown": false
+},
+{
+"path": "/officer_core_view/air_spirits_view/spirit_grid/#1/icon_background",
+"rect": [
+310,
+805,
+109,
+115
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/air_spirits_view/spirit_grid/#1/spirit_icon",
+"rect": null,
+"shown": false
+},
+{
+"button_state": 0,
+"path": "/officer_core_view/air_spirits_view/spirit_grid/#0/button",
+"rect": [
+86,
+849,
+168,
+70
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/air_spirits_view/spirit_grid/#0/air_force_spirit_glow",
+"rect": [
+98,
+829,
+159,
+115
+],
+"shown": false
+},
+{
+"path": "/officer_core_view/air_spirits_view/spirit_grid/#0/icon_background",
+"rect": [
+125,
+807,
+109,
+115
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/air_spirits_view/spirit_grid/#0/spirit_icon",
+"rect": null,
+"shown": false
+},
+{
+"path": "/officer_core_view/navy_spirits_view/spirit_grid",
+"rect": null,
+"shown": true
+},
+{
+"button_state": 0,
+"path": "/officer_core_view/navy_spirits_view/spirit_grid/#2/button",
+"rect": [
+354,
+589,
+168,
+70
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/navy_spirits_view/spirit_grid/#2/naval_command_spirit_glow",
+"rect": [
+396,
+573,
+159,
+115
+],
+"shown": false
+},
+{
+"path": "/officer_core_view/navy_spirits_view/spirit_grid/#2/icon_background",
+"rect": [
+393,
+545,
+109,
+115
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/navy_spirits_view/spirit_grid/#2/spirit_icon",
+"rect": null,
+"shown": false
+},
+{
+"button_state": 0,
+"path": "/officer_core_view/navy_spirits_view/spirit_grid/#1/button",
+"rect": [
+189,
+589,
+168,
+70
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/navy_spirits_view/spirit_grid/#1/navy_spirit_glow",
+"rect": [
+212,
+573,
+159,
+115
+],
+"shown": false
+},
+{
+"path": "/officer_core_view/navy_spirits_view/spirit_grid/#1/icon_background",
+"rect": [
+228,
+545,
+109,
+115
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/navy_spirits_view/spirit_grid/#1/spirit_icon",
+"rect": null,
+"shown": false
+},
+{
+"button_state": 0,
+"path": "/officer_core_view/navy_spirits_view/spirit_grid/#0/button",
+"rect": [
+23,
+589,
+168,
+70
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/navy_spirits_view/spirit_grid/#0/naval_academy_spirit_glow",
+"rect": [
+28,
+573,
+159,
+115
+],
+"shown": false
+},
+{
+"path": "/officer_core_view/navy_spirits_view/spirit_grid/#0/icon_background",
+"rect": [
+62,
+546,
+109,
+115
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/navy_spirits_view/spirit_grid/#0/spirit_icon",
+"rect": null,
+"shown": false
+},
+{
+"path": "/officer_core_view/army_spirits_view/spirit_grid",
+"rect": null,
+"shown": true
+},
+{
+"button_state": 2,
+"path": "/officer_core_view/army_spirits_view/spirit_grid/#2/button",
+"rect": [
+354,
+328,
+168,
+70
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/army_spirits_view/spirit_grid/#2/division_command_spirit_glow",
+"rect": [
+396,
+311,
+159,
+115
+],
+"shown": false
+},
+{
+"path": "/officer_core_view/army_spirits_view/spirit_grid/#2/icon_background",
+"rect": [
+393,
+284,
+109,
+115
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/army_spirits_view/spirit_grid/#2/spirit_icon",
+"rect": null,
+"shown": false
+},
+{
+"button_state": 0,
+"path": "/officer_core_view/army_spirits_view/spirit_grid/#1/button",
+"rect": [
+189,
+328,
+168,
+70
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/army_spirits_view/spirit_grid/#1/army_spirit_glow",
+"rect": [
+212,
+311,
+159,
+115
+],
+"shown": false
+},
+{
+"path": "/officer_core_view/army_spirits_view/spirit_grid/#1/icon_background",
+"rect": [
+228,
+286,
+109,
+115
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/army_spirits_view/spirit_grid/#1/spirit_icon",
+"rect": null,
+"shown": false
+},
+{
+"button_state": 0,
+"path": "/officer_core_view/army_spirits_view/spirit_grid/#0/button",
+"rect": [
+23,
+328,
+168,
+70
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/army_spirits_view/spirit_grid/#0/academy_spirit_glow",
+"rect": [
+28,
+311,
+159,
+115
+],
+"shown": false
+},
+{
+"path": "/officer_core_view/army_spirits_view/spirit_grid/#0/icon_background",
+"rect": [
+62,
+286,
+109,
+115
+],
+"shown": true
+},
+{
+"path": "/officer_core_view/army_spirits_view/spirit_grid/#0/spirit_icon",
+"rect": null,
+"shown": false
+}
+]

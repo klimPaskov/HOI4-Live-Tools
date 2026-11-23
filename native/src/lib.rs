@@ -17,6 +17,7 @@ mod gui_registry;
 pub(crate) mod gui_tree;
 pub mod input_lease;
 pub mod launch;
+pub mod learn;
 pub mod memory;
 pub mod operation_rules;
 pub mod own_focus;

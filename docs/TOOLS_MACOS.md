@@ -181,6 +181,8 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_alerts` (R): Read-only:
 - `hoi4_auto_import` (A): HOI4 1.19.4 Automatic Importing (Trade view):
 - `hoi4_autopilot` (A): Turn the resident executor on or off:
+- `hoi4_fact_list` (R): Read-only:
+- `hoi4_fact_save` (R): Keep one fact learned about this game or mod (a statement and where it comes from:
 - `hoi4_general_trait` (A): Live-verified: give an own army general an assignable trait for command power (NDefines UNIT_LEADER_ASSIGN_TRAIT_COST, read from the game's defines;
 - `hoi4_input_geometry` (R): Read-only own GUI dimensions and scale diagnostics.
 - `hoi4_map_daynight` (A): Turn the map's day/night shading off (on:false, the default) or on:
@@ -201,9 +203,16 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_province_graph` (R): Land provinces of the given states and the provinces each one touches, from the install's map files (provinces.bmp, definition.csv, history/states):
 - `hoi4_railway_build` (A): Queue ONE railway with the game's railway construction mode:
 - `hoi4_save` (A): Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games.
+- `hoi4_skill_list` (R): Read-only:
+- `hoi4_skill_retire` (R): Mark a saved skill retired (kept on disk, never run again) with the reason.
+- `hoi4_skill_run` (A): Run a saved skill:
+- `hoi4_skill_save` (R): Keep something that worked as a named skill (a plain JSON file in the learned/skills folder, one per skill, readable and editable):
+- `hoi4_skill_show` (R): Read-only:
 - `hoi4_state_snapshot` (R): Everything the pure reads can see, in one call:
 - `hoi4_states` (R): States in one memory read (no interface input).
 - `hoi4_stockpile` (R): Own equipment stockpile from game memory (no input, no lease, never pauses).
+- `hoi4_ui_act` (A): One ordinary input on a widget by its id from hoi4_ui_inspect, then what changed:
+- `hoi4_ui_inspect` (R): Read-only:
 - `hoi4_wait_change` (R): Block until a change after `since` arrives (optionally only given kinds or urgent ones), or until timeout_seconds (1-30) pass;
 - `hoi4_war_risk` (R): Read-only, before justifying or declaring war on `country`:
 - `hoi4_war_stats` (R): Read-only (memory, no input, no pause):

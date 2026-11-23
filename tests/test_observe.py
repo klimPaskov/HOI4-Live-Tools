@@ -162,6 +162,16 @@ class FindingFixtures(unittest.TestCase):
 
 
 class MoreFindings(unittest.TestCase):
+    def test_alert_icons_no_tool_names_are_something_to_learn(self):
+        now = snap("1940.06.01.00", alerts=[{"alert": "decisions_available", "frame": 3},
+                                            {"alert": None, "frame": 41}, {"alert": None, "frame": 41}])
+        hit = [f for f in F.findings(now, []) if f["code"] == "game_alert_unknown"]
+        self.assertEqual(len(hit), 1)
+        self.assertIn("frames 41", hit[0]["text"])
+        self.assertIn("hoi4_ui_inspect", hit[0]["text"])
+        named = snap("1940.06.01.00", alerts=[{"alert": "decisions_available", "frame": 3}])
+        self.assertNotIn("game_alert_unknown", codes(F.findings(named, [])))
+
     def test_losing_exchange_and_flat_victory_points(self):
         prev = [snap("1940.05.18.00", wars={"per_enemy": {"BEL": {"at_war": True, "casualties_own": 10000,
                                                                   "casualties_enemy": 9000,

@@ -2060,6 +2060,54 @@
       "x-owner": "executor",
       "description": "guarded decisions tried before `decisions`: when, target (targeted row), max takes, never (blocks it everywhere)"
     },
+    "learned": {
+      "type": "array",
+      "x-owner": "executor",
+      "description": "learned skills (hoi4_skill_save) the executor runs with hoi4_skill_run: when it holds, at most max runs, at most once every every_days; a skill that cannot be undone runs only with confirm_irreversible. Off unless the plan lists one; review each listed skill first (hoi4_skill_show).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "skill": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]{3,64}$"
+          },
+          "args": {
+            "type": "object",
+            "description": "the skill's parameters by name"
+          },
+          "when": {
+            "$ref": "#/definitions/predicate"
+          },
+          "max": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "every_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "confirm_irreversible": {
+            "type": "boolean"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "required": [
+          "skill"
+        ],
+        "additionalProperties": false
+      }
+    },
     "army_group": {
       "type": "array",
       "items": {
