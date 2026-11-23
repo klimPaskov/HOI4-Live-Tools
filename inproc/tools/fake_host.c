@@ -7,8 +7,9 @@
 #include <unistd.h>
 
 int main(int argc, char **argv) {
-    const char *e = getenv("DYLD_INSERT_LIBRARIES");
-    printf("{\"dyld_insert_libraries_after_load\":%s%s%s}\n", e ? "\"" : "", e ? e : "null", e ? "\"" : "");
+    const char *e = getenv("DYLD_INSERT_LIBRARIES"), *p = getenv("HOI4_INPROC_POST"), *s = getenv("HOI4_INPROC_SOCK");
+    printf("{\"dyld_insert_libraries_after_load\":%s%s%s,\"stage1_switches_after_load\":%s}\n", e ? "\"" : "",
+           e ? e : "null", e ? "\"" : "", p || s ? "\"present\"" : "null");
     fflush(stdout);
     sleep(argc > 1 ? (unsigned)atoi(argv[1]) : 4);
     return 0;

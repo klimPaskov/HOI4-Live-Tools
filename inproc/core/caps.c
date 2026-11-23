@@ -33,6 +33,24 @@ int caps_resolve(const scan_image *im, caps_table *t) {
     f->ok = t->fields != NULL;
     snprintf(f->evidence, sizeof f->evidence, "%s", f->ok ? t->fields->version : "no field table for this build: reads off");
     ok += f->ok;
+    scan_cap *c = &t->cap[CAP_POST_LAYOUT];
+    c->name = "post_layout"; snprintf(c->source, sizeof c->source, "scan");
+    c->ok = scan_post_layout(im, t->cap[CAP_POST].ok ? t->cap[CAP_POST].value : 0, &t->post);
+    c->value = t->post.auth_slot; c->extra = t->post.sender_src;
+    snprintf(c->evidence, sizeof c->evidence, "%.159s", t->post.evidence);
+    ok += c->ok;
+    c = &t->cap[CAP_SPEED_CMD];
+    c->name = "speed_command"; snprintf(c->source, sizeof c->source, "export+rtti+scan");
+    c->ok = scan_speed_command(im, &t->post, &t->speed);
+    c->value = t->speed.type_id; c->extra = t->speed.payload_off;
+    snprintf(c->evidence, sizeof c->evidence, "%.159s", t->speed.evidence);
+    ok += c->ok;
+    c = &t->cap[CAP_FORBID_TLV];
+    c->name = "forbid_tlv"; snprintf(c->source, sizeof c->source, "scan");
+    c->ok = scan_forbid_tlv(im, &t->forbid);
+    c->value = t->forbid.accessor; c->extra = t->forbid.desc;
+    snprintf(c->evidence, sizeof c->evidence, "%.159s", t->forbid.evidence);
+    ok += c->ok;
     return ok;
 }
 
@@ -42,6 +60,17 @@ const char *caps_json(const scan_image *im, const caps_table *t, char *buf, size
         char one[512];
         at += (size_t)snprintf(buf + at, n - at, "%s%s", i ? "," : "", scan_cap_json(&t->cap[i], one, sizeof one));
     }
-    if (at < n) snprintf(buf + at, n - at, "]}");
+    if (at < n)
+        at += (size_t)snprintf(buf + at, n - at,
+                 "],\"speed_command\":{\"ok\":%s,\"factory\":\"0x%llx\",\"vtable\":\"0x%llx\",\"type_id\":%u,"
+                 "\"size\":%u,\"slots\":%u,\"payload_off\":%u,\"range_max\":%u,\"field_id\":%u,\"required_sender\":%u,"
+                 "\"speed_field\":%u,\"gs_global\":\"0x%llx\"},\"post_layout\":{\"ok\":%s,\"gate_flag_off\":%u,"
+                 "\"gate_slot\":%u,\"sender_src\":%u,\"server_off\":%u,\"send_slot\":%u,\"auth_slot\":%u}}",
+                 t->speed.ok ? "true" : "false", (unsigned long long)t->speed.factory,
+                 (unsigned long long)t->speed.vtable, t->speed.type_id, t->speed.size, t->speed.slots,
+                 t->speed.payload_off, t->speed.range_max, t->speed.field_id, t->speed.required_sender,
+                 t->speed.speed_field, (unsigned long long)t->speed.gs_global, t->post.ok ? "true" : "false",
+                 t->post.gate_flag_off, t->post.gate_slot, t->post.sender_src, t->post.server_off, t->post.send_slot,
+                 t->post.auth_slot);
     return buf;
 }

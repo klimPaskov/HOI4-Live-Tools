@@ -1,10 +1,10 @@
-/* HOI4 Live Tools in-process module: the capability table (stage 0).
+/* HOI4 Live Tools in-process module: the capability table (stage 0 reads, stage 1 command layer).
  * One entry per capability, resolved at load by scanning (or, for object field offsets that no scan derives yet,
  * from a per-build table keyed by the image UUID). A capability that does not resolve is off; nothing that depends
  * on it runs, and the external runtime keeps serving that need. */
 #ifndef HOI4_INPROC_CAPS_H
 #define HOI4_INPROC_CAPS_H
-#include "scan.h"
+#include "cmd.h"
 
 enum {
     CAP_POST,            /* CCommandQueue::Post (not called in stage 0) */
@@ -15,6 +15,10 @@ enum {
     CAP_GAMESTATE_VTABLE,/* RTTI 17CCurrentGameState: finds the game-state root by dynamic type */
     CAP_IDLER_VTABLE,    /* RTTI 12CInGameIdler */
     CAP_FIELDS,          /* per-build field offsets for the three stage-0 reads */
+    /* stage 1: what posting ONE command the UI's way needs, each proven from the game's code (core/cmd.c) */
+    CAP_POST_LAYOUT,     /* what Post checks and stamps: gate slot, sender source, server, auth slot */
+    CAP_SPEED_CMD,       /* CSetGameSpeedCommand: layout, range, Post's gate and auth for it, the read-back field */
+    CAP_FORBID_TLV,      /* the game's thread-local _ThreadForbidCount accessor */
     CAP_COUNT
 };
 
@@ -29,6 +33,9 @@ typedef struct {
 typedef struct {
     scan_cap cap[CAP_COUNT];
     const caps_fields *fields;          /* NULL: unknown build, reads off */
+    post_layout post;
+    speed_cmd speed;
+    forbid_tlv forbid;
 } caps_table;
 
 /* Resolve every capability on an image view. Returns the number resolved. */

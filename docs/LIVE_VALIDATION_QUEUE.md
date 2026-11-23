@@ -130,18 +130,18 @@ The owner lifted the "no memory writes" rule for this module only (23 Nov). Stag
 nothing in the game: the module scans the game's image in memory, finds the game-state and idler roots by their
 RTTI type, and logs three reads. It is loaded only through the opt-in `HOI4_INPROC` switch of the harness launcher
 `launch-probe-cont.py` (default off: every other run is unaffected); no game file is changed. Design, evidence and
-the later stages: `~/Projects/_scratch/hoi4-macos-native/INPROCESS-FEASIBILITY-1123.md`; code: `inproc/` on branch
+the later stages: `INPROCESS-FEASIBILITY-1123.md` in the harness folder; code: `inproc/` on branch
 `research/inproc-feasibility` (build `inproc/build.sh`, offline proof `inproc/test_offline.sh`).
 
 Needs: the game slot, no game running, Steam closed, a run folder that saved (`PREV/userdata/continue_game.json`).
 
 Part A (automatic, about 5 minutes):
 
-    cd ~/Projects/_scratch/hoi4-macos-native
+    cd <harness folder>
     ./inproc_stage0.sh PREV s0a      # optional 3rd argument: the module dylib (default: the branch's build)
 
-Pass when `s0a/stage0-result.json` has `"pass_": true`: the module loaded and did not go inert; 8 of 8 capabilities
-resolved; dlsym finds the same research-command factory as the scan; the idler root found by RTTI is the global the
+Pass when `s0a/stage0-result.json` has `"pass_": true`: the module loaded and did not go inert; every capability
+resolved (8 at stage 0, 11 with the stage-1 build); dlsym finds the same research-command factory as the scan; the idler root found by RTTI is the global the
 UI posts commands through; the save loaded; and the module's date (raw and text), speed, pause and player equal the
 external runtime's `hoi4_overview` on the paused game. Also look at the main menu and the loaded save on screen: both
 must look and behave as usual (the module draws nothing).
@@ -164,3 +164,91 @@ finding, not a retry: record it in NOTES-1116.md and leave stage 1 closed. Kill 
 
 After a pass: tick here, record the numbers in NOTES-1116.md ("stage 0 passed"), and stage 1 (one harmless command
 through the game's own command queue, with read-back) may be built.
+
+- [x] S0 PASSED 23 Nov (run s0a): 8/8 capabilities, scan 81 ms, reads equal hoi4_overview, 30-minute soak at speed 5
+  over 3.7 game years clean, exit clean.
+
+## Session S1: the in-process module, stage 1 (ONE command: set_game_speed; about 6 minutes, then two 15-minute soaks)
+
+Stage 1 posts exactly one command type, `CSetGameSpeedCommand` (the game's speed, index 0..4 = speeds 1..5), through
+the game's own command path, the way the UI's speed keys do: the module queues a job onto the process main thread
+(the thread whose event pump delivers the UI's input), checks there the game's own thread rule
+(`_ThreadForbidCount == 0`), that the session is single player (server `CDummyServer`) and that Post will stamp the
+sender this command's authorisation requires, creates the command with the game's exported factory, fills its one
+field, and calls the game's Post. The game stamps the sender and executes the command on its next command step; the
+module never writes game state. Posting is OFF unless the launcher passes the explicit opt-in
+(`HOI4_INPROC_CHANNEL=1 HOI4_INPROC_POST=set_game_speed`, set only by `inproc_stage1.sh`) AND every stage-1 capability
+resolved on the running build. Allow-list: one command. Rate limit: 200 ms apart, 60 a minute, one in flight. Every
+post is logged in `RUN/inproc.log` (`"event":"post"`: type id, fields, result, timings). Any refusal the module cannot
+explain switches posting off for the rest of the process (`"event":"posting_off"`). The local channel is a Unix
+socket in the 0700 run folder, owner-only, peer-uid checked, plus a per-process token file. Design and evidence:
+`INPROCESS-FEASIBILITY-1123.md` section 8; the offline proof `inproc/test_offline.sh` (ALL PASS) covers the scans on
+1.19.4.1, 1.20.0.0 and 1.19.3, the channel and policy against a mock game, and the main-thread route in an
+SDL-style Cocoa event pump.
+
+Needs: the game slot, no game running, Steam closed, a run folder that saved, the branch's module built
+(`inproc/build.sh`; the scripts check it is the stage-1 build). Python client: `inproc/tools/inproc_client.py`
+(copied into the run by the script).
+
+Part A (automatic, about 6 minutes; the game loads PAUSED):
+
+    cd <harness folder>
+    ./inproc_stage1.sh PREV s1a
+
+It prints the module's capability, policy and channel lines, then runs: hello; probe (no post); one post (speed
+index 2, or 1 if already 2) read back by the module AND by the external runtime's `hoi4_overview`; a screenshot
+`s1a/stage1-after-post.png`; the undo (back to the starting speed) checked the same way + `stage1-after-undo.png`;
+20 repetitions of post + undo (40 posts) with timings. Pass when `s1a/stage1-result.json` has `"pass_": true`:
+posting enabled with an allow-list of one; the probe ran on the main thread with the session `8CSession` and the
+server `12CDummyServer`; every post `executed` with `speed_after` equal to the request; the external read equal after
+the post and after the undo; 40 of 40 repetitions; the module's read-back median within one frame-time budget
+(33 ms: two frames at 60 fps); the speed restored. Look at both screenshots: the top bar's speed indicator shows the
+posted speed, then the original one (record what you see in the notes). Record from `timing`: `post_us` (the
+game's Post call, microseconds), `main_wait_ms` (queue to main thread), `readback_ms`, `total_ms`, against today's
+1.3-10 s per GUI order.
+
+Part B, first soak (15 minutes, same game):
+
+    zsh inproc_stage1_soak.sh s1a 15 7
+
+Speed 5, unpaused; once a minute the module posts speed index 3 then 4, each read back; at minute 7 a manual save
+through `hoi4_save`; at the end pause and a second manual save (the file the reload uses). Then `./endrun.sh s1a`.
+Pass when `s1a/stage1-soak-result.json` has `"pass_": true` (about 30 posts, none failed), the watch lines show the
+date advancing and the overview's speed 4 between posts, a manual save appeared, no `posting_off`/`inert`.
+
+Reload in the middle (with the module): `./inproc_stage1.sh s1a s1b quick` (loads s1a's last save, the one made with
+the module; probe + one post + undo: `s1b/stage1-quick.json` `"pass_": true`), then the second soak
+`zsh inproc_stage1_soak.sh s1b 15 7` (the monthly autosave must appear in `s1b/userdata/save games`), then
+`./endrun.sh s1b`.
+
+The save loads in an UNMODIFIED game: `./inproc_stage1.sh s1b s1c plain` launches WITHOUT the module (no
+`HOI4_INPROC`; the script checks no `inproc.json`/`inproc.log` exists in `s1c`) from s1b's last save (made with the
+module after 30 minutes of module posts) and reads `hoi4_overview`. Pass when `s1c/plain-result.json` has
+`"pass_": true` (the save loaded, the date and player read, no load error in the game log). Look at the screen: a
+normal game. Then `./endrun.sh s1c`. (The module never writes game state and changes no data file, so the save
+holds only what the game's own speed command wrote; this proves it on a clean process.)
+
+STOP at once (`./endrun.sh RUN`) on: any check false; `posting_off` or `inert` in `RUN/inproc.log`; a crash, hang or
+frozen date while unpaused; anything on screen that differs from a normal run (the module draws nothing). A stop is
+a finding: record the module log's last `post`/`probe` lines in NOTES-1116.md and leave stage 2 closed. Kill switch
+without closing the game: `touch RUN/inproc.log.off` (no new posts, the channel closes, within 2 s).
+
+After a pass: tick here, record the numbers in NOTES-1116.md ("stage 1 passed"); the multiplayer check (Session S1-MP)
+and stage 2 (INPROCESS-COMMANDS-1123.md) may follow.
+
+## Session S1-MP (later; needs two clients on two machines): the in-process module in multiplayer
+
+Not tonight. Stage 1's module REFUSES to post unless the server is `CDummyServer` (single player), so this session
+first needs a build with the multiplayer gate opened for the host role only (same allow-list; speed is host-only in
+the game: "only the host may change the game speed").
+Roles: HOST = the Mac with the module (opt-in as S1), CLIENT = a second machine with an unmodified game (Linux VM or
+a second Mac; its own licence), same version and checksum (the game's lobby shows both). Steps: host starts a
+multiplayer game from a save; client joins in the lobby; play at speed 3 for 10 minutes with the module posting
+speed 3 -> 2 -> 3 once a minute; then the client leaves and HOT-JOINS again while the game runs (the module must hold
+posts while "ongoing hotjoin": a post refused by the game is logged, never retried blindly); then 60 minutes more.
+Proof of no desync: the game's own out-of-sync indicator never appears on either screen; both `game.log`s show the
+hourly checksum (`CClientChecksumCommand`) accepted and no "NOT in sync", "Validity of command changed
+non-deterministically", "COMMAND LOST" or "Dropped" lines; the host never flags the client modified
+(`CMarkModifiedClientCommand`); the speed changes appear on BOTH clients' top bars at the same game hour. Then the
+client role with the module (its speed posts must be refused by the host's game, exactly like a client pressing
+the speed keys: "only the host may change the game speed").

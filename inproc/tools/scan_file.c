@@ -63,6 +63,13 @@ int main(int argc, char **argv) {
         *eq = 0;
         uint64_t want = strtoull(eq + 1, NULL, 0), got = 0; int found = 1;
         if (!strcmp(argv[a], "queue_slot")) got = t.cap[CAP_QUEUE_ROOT].extra;
+        else if (!strcmp(argv[a], "auth_slot")) got = t.post.ok ? t.post.auth_slot : 0;
+        else if (!strcmp(argv[a], "speed_type_id")) got = t.speed.ok ? t.speed.type_id : 0;
+        else if (!strcmp(argv[a], "speed_payload")) got = t.speed.ok ? t.speed.payload_off : 0;
+        else if (!strcmp(argv[a], "speed_field")) got = t.speed.ok ? t.speed.speed_field : 0;
+        else if (!strcmp(argv[a], "speed_range")) got = t.speed.ok ? t.speed.range_max : 0;
+        else if (!strcmp(argv[a], "speed_gs_global")) got = t.speed.ok ? t.speed.gs_global : 0;
+        else if (!strcmp(argv[a], "forbid_desc")) got = t.forbid.ok ? t.forbid.desc : 0;
         else if (!strcmp(argv[a], "fields")) got = t.fields != NULL;
         else {
             found = 0;
