@@ -256,7 +256,8 @@ pub(crate) trait GameInput: Send + Sync {
             )),
         }
     }
-    /// Wheel scroll at a point; positive `pixels` scrolls content up.
+    /// Wheel scroll at a point; positive `pixels` scrolls content up. Zero `pixels` only moves
+    /// the cursor there (a hover): no wheel event is sent.
     fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()>;
     /// `count` wheel events in one quick flick (one smooth camera movement in the game).
     fn scroll_burst(
