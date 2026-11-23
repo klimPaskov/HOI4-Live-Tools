@@ -150,6 +150,9 @@ struct Unit {
     /// one of two army groups of an operation with `group_cap` (true: the low side of the split
     /// axis): its own piece of the front's states and of every line
     side: Option<bool>,
+    /// the side names its own enemy (`front.low`/`front.high`): the plain click takes that
+    /// country's whole border piece, no drag along the own states
+    own_enemy: bool,
 }
 
 fn key(id: &str, what: &str) -> String {
@@ -542,6 +545,7 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
                 line,
                 spear: false,
                 side: None,
+                own_enemy: false,
             });
             continue;
         }
@@ -568,6 +572,7 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
                 line,
                 spear: false,
                 side: None,
+                own_enemy: false,
             });
             continue;
         }
@@ -774,6 +779,28 @@ fn split_parts(
         return None;
     }
     let split = split_axis(state, op)?;
+    // the sides once chosen stay (`side:<army>` 1 low, 2 high, recorded when the first group is
+    // formed): sorted afresh by where the armies stand, the halves changed as the armies walked
+    // west and every group was formed again four times, its front lost each time (w42t, 23 Nov 2026)
+    let id = text(&op["id"]);
+    let kept: Vec<Option<i64>> = lines
+        .iter()
+        .map(|n| state.done.get(&key(id, &format!("side:{n}"))).copied())
+        .collect();
+    if kept.iter().all(Option::is_some) {
+        let pick = |want: i64| -> Vec<String> {
+            lines
+                .iter()
+                .zip(&kept)
+                .filter(|(_, k)| **k == Some(want))
+                .map(|(n, _)| n.clone())
+                .collect()
+        };
+        let (low, high) = (pick(1), pick(2));
+        if !low.is_empty() && !high.is_empty() {
+            return Some((split, low, high));
+        }
+    }
     let mut by: Vec<(f64, String)> = lines
         .iter()
         .map(|n| {
@@ -855,6 +882,7 @@ fn split_groups(
             let side = &op["front"][if is_low { "low" } else { "high" }];
             if let Some(e) = side["enemy"].as_str().filter(|e| !e.is_empty()) {
                 u.enemy = e.to_string();
+                u.own_enemy = true;
             }
             if let Some(c) = side["click_state"].as_i64() {
                 u.click = Some(c);
@@ -944,6 +972,7 @@ fn unit(name: String, role: Role, front: &Value, offensive: &Value) -> Unit {
         anchor,
         spear: false,
         side: None,
+        own_enemy: false,
     }
 }
 
@@ -1246,6 +1275,9 @@ fn front_args(u: &Unit, click: i64, peace: bool) -> Value {
         (Role::Mobile, [own]) if peace => {
             json!({"army": u.name, "state_id": click, "from_state": own})
         }
+        // a side on its own country's border: the plain click takes that country's whole piece
+        // (the drag along the own states did not read back at the map zoom: w42t, 23 Nov 2026)
+        (Role::Group, _) if u.own_enemy => json!({"army": u.name, "state_id": click}),
         // one of two groups: its own piece of the border (a drag along its own states only)
         (Role::Group, [own]) if peace && u.side.is_some() => {
             json!({"army": u.name, "state_id": click, "from_state": own})
@@ -2699,6 +2731,15 @@ fn prepare(
     }
     let at_war_regroup = op["regroup_at_war"] == json!(true);
     let line_armies: Vec<&Unit> = units.iter().filter(|u| u.role == Role::Line).collect();
+    let line_names: Vec<String> = line_armies.iter().map(|u| u.name.clone()).collect();
+    let parts = split_parts(state, op, roster, &line_names);
+    if let Some((_, low, high)) = &parts {
+        for (part, side) in [(low, 1), (high, 2)] {
+            for n in part {
+                state.done.insert(key(id, &format!("side:{n}")), side);
+            }
+        }
+    }
     let movable = |name: &str| -> bool {
         !at_war_regroup || (!owned_elsewhere(state, id, name) && !in_contact(roster, wars, name))
     };
@@ -2729,8 +2770,6 @@ fn prepare(
     let regroup = group.is_some() && outside && calm && regroups < 3;
     // TWO GROUPS (`group_cap`): each half of the line armies is formed into its own group, one
     // group order per call; the single-group regroup never runs for a split operation
-    let line_names: Vec<String> = line_armies.iter().map(|u| u.name.clone()).collect();
-    let parts = split_parts(state, op, roster, &line_names);
     if let Some((_, low, high)) = &parts {
         let tries_key = key(id, "split_again");
         let tries = state.done.get(&tries_key).copied().unwrap_or(0);

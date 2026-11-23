@@ -2274,3 +2274,40 @@ fn a_strike_formation_marches_while_only_a_holds_enemy_is_at_war() {
         .collect();
     assert_eq!(marches, [json!({"army": "Panzer", "state_id": 67})]);
 }
+
+#[test]
+fn a_side_on_its_own_countrys_border_is_clicked_plainly() {
+    let mut u = unit(
+        "Army Group 3".into(),
+        Role::Group,
+        &json!({"enemy": "HOL", "own_states": [56, 57]}),
+        &json!({}),
+    );
+    u.side = Some(true);
+    assert_eq!(
+        front_args(&u, 35, true),
+        json!({"army": "Army Group 3", "state_id": 35, "from_states": [56, 57]})
+    );
+    u.own_enemy = true;
+    assert_eq!(
+        front_args(&u, 35, true),
+        json!({"army": "Army Group 3", "state_id": 35})
+    );
+}
+
+#[test]
+fn the_sides_once_recorded_stay_while_the_armies_walk() {
+    let mut state = State::default();
+    for (s, p) in [(56, (2930.0, 1575.0)), (42, (2919.0, 1511.0))] {
+        state.centers.insert(s, p);
+    }
+    let op =
+        json!({"id": "op_w", "group_cap": 2, "front": {"enemy": "BEL", "own_states": [56, 42]}});
+    let lines: Vec<String> = ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect();
+    for (n, side) in [("A", 1), ("B", 2), ("C", 1), ("D", 2)] {
+        state.done.insert(format!("op:op_w:side:{n}"), side);
+    }
+    let (_, low, high) = split_parts(&state, &op, &json!({"armies": []}), &lines).unwrap();
+    assert_eq!(low, ["A", "C"]);
+    assert_eq!(high, ["B", "D"]);
+}
