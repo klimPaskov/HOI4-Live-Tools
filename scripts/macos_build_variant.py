@@ -57,10 +57,10 @@ def plan(src_root, mapping):
     edits, sites, problems = {}, [], []
     src = pathlib.Path(src_root) / 'src'
     for f in sorted(src.rglob('*.rs')):
-        rel = 'native/' + str(f.relative_to(src_root))
+        rel = 'native/' + f.relative_to(src_root).as_posix()
         if is_test_path(f.relative_to(src_root)) or rel == 'native/src/builds.rs':
             continue
-        lines = f.read_text().split('\n')
+        lines = read(f).split('\n')
         test = False
         for i, line in enumerate(lines):
             if line.startswith('#[cfg(test)]'):
@@ -102,6 +102,16 @@ def plan(src_root, mapping):
     return edits, sites, problems
 
 
+def read(path):
+    with open(path, encoding='utf-8', newline='') as f:
+        return f.read()
+
+
+def write(path, text):
+    with open(path, 'w', encoding='utf-8', newline='') as f:
+        f.write(text)
+
+
 def builds_disabled(text, disabled, build_id):
     entries = ''.join(f'\n    ("{f}", "{r}"),' for f, r in sorted(disabled.items()))
     return re.sub(r'pub const DISABLED: &\[\(&str, &str\)\] = &\[[^\]]*\];',
@@ -117,7 +127,7 @@ def main(argv=None):
     p.add_argument('--report')
     p.add_argument('--check', action='store_true')
     a = p.parse_args(argv)
-    mapping = json.loads(pathlib.Path(a.map).read_text())
+    mapping = json.loads(read(a.map))
     edits, sites, problems = plan(a.src, mapping)
     kinds = {}
     for s in sites:
@@ -126,7 +136,7 @@ def main(argv=None):
     summary = dict(build=mapping['to'], sites=kinds, problems=len(problems),
                    disabled=mapping.get('variant', {}).get('disabled', {}))
     if a.report:
-        pathlib.Path(a.report).write_text(json.dumps(dict(summary=summary, sites=sites, problems=problems), indent=1) + '\n')
+        write(a.report, json.dumps(dict(summary=summary, sites=sites, problems=problems), indent=1) + '\n')
     print(json.dumps(summary, indent=1))
     for x in problems[:40]:
         print(f"UNMAPPED {x['old']} ({x['confidence']}) {x['site']}: {x['text']}", file=sys.stderr)
@@ -140,15 +150,15 @@ def main(argv=None):
     shutil.copytree(a.src, out, ignore=shutil.ignore_patterns('target'))
     for f, changed in edits.items():
         g = out / f.relative_to(a.src)
-        lines = g.read_text().split('\n')
+        lines = read(g).split('\n')
         for i, text in changed.items():
             lines[i] = text
-        g.write_text('\n'.join(lines))
+        write(g, '\n'.join(lines))
     b = out / 'src' / 'builds.rs'
-    b.write_text(builds_disabled(b.read_text(), mapping.get('variant', {}).get('disabled', {}), mapping['to']['build_id'])
+    write(b, builds_disabled(read(b), mapping.get('variant', {}).get('disabled', {}), mapping['to']['build_id'])
                  .replace('pub const READER_BUILD: &str = "' + mapping['from']['build_id'],
                           'pub const READER_BUILD: &str = "' + mapping['to']['build_id']))
-    (pathlib.Path(a.out) / 'VARIANT.json').write_text(json.dumps(summary, indent=1) + '\n')
+    write(pathlib.Path(a.out) / 'VARIANT.json', json.dumps(summary, indent=1) + '\n')
     print(f'wrote {out} ({sum(len(c) for c in edits.values())} lines in {len(edits)} files)')
     return 0
 

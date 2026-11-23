@@ -46,33 +46,33 @@ class VariantTest(unittest.TestCase):
         for rel, text in {**CRATE, **(extra or {})}.items():
             p = root / rel
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(text)
+            p.write_text(text, encoding='utf-8')
         return root, pathlib.Path(d.name)
 
     def generate(self, m, extra=None):
         root, tmp = self.crate(extra)
         mp = tmp / 'map.json'
-        mp.write_text(json.dumps(m))
+        mp.write_text(json.dumps(m), encoding='utf-8')
         rc = V.main([str(mp), '--src', str(root), '--out', str(tmp / 'out'), '--report', str(tmp / 'r.json')])
-        return rc, tmp / 'out' / 'native', json.loads((tmp / 'r.json').read_text())
+        return rc, tmp / 'out' / 'native', json.loads((tmp / 'r.json').read_text(encoding='utf-8'))
 
     def test_rewrites_macos_literals_and_identity_only(self):
         rc, out, report = self.generate(mapping())
         self.assertEqual(rc, 0)
-        kit = (out / 'src/launch/macos/kit.rs').read_text()
+        kit = (out / 'src/launch/macos/kit.rs').read_text(encoding='utf-8')
         self.assertIn('Class::new("CInGameIdler", 0x350ce78)', kit)
         self.assertIn('base + 0x3730150 > 0x10000', kit)            # not_image keeps the pointer floor
         self.assertIn('// 0x35089d8 in a comment stays', kit)
         self.assertIn('const T: u64 = 0x35089d8', kit)               # test code is not rewritten
-        game = (out / 'src/game.rs').read_text()
+        game = (out / 'src/game.rs').read_text(encoding='utf-8')
         self.assertIn('LINUX: Layout = Layout { gs: 0x35089d8 }', game)  # Linux layout untouched
         self.assertIn(f'gs: 0x3730150, build_id: "{NEW}"', game)
-        self.assertIn('LINE: u64 = 0x350ce78', (out / 'src/shared.rs').read_text())
-        mac = (out / 'src/platform/macos.rs').read_text()
+        self.assertIn('LINE: u64 = 0x350ce78', (out / 'src/shared.rs').read_text(encoding='utf-8'))
+        mac = (out / 'src/platform/macos.rs').read_text(encoding='utf-8')
         self.assertIn(NEW, mac)
         self.assertIn(NEW_SHA, mac)
-        self.assertIn(f'READER_BUILD: &str = "{NEW}"', (out / 'src/builds.rs').read_text())
-        self.assertIn('0x35089d8', (out / 'tests/fixture.rs').read_text())
+        self.assertIn(f'READER_BUILD: &str = "{NEW}"', (out / 'src/builds.rs').read_text(encoding='utf-8'))
+        self.assertIn('0x35089d8', (out / 'tests/fixture.rs').read_text(encoding='utf-8'))
         self.assertEqual(report['summary']['sites']['image:high'], 2)
         self.assertEqual(report['summary']['sites']['image:medium'], 2)
         self.assertEqual(report['problems'], [])
@@ -89,8 +89,8 @@ class VariantTest(unittest.TestCase):
         extra = {'src/gui/macos.rs': 'fn g(base: u64) -> u64 { base + 0x2460fb0 }\n'}
         rc, out, report = self.generate(mapping(disabled={'native/src/gui/macos.rs': 'Cocoa callbacks unresolved'}), extra)
         self.assertEqual(rc, 0)
-        self.assertIn(hex(V.POISON + 0x2460fb0), (out / 'src/gui/macos.rs').read_text())
-        builds = (out / 'src/builds.rs').read_text()
+        self.assertIn(hex(V.POISON + 0x2460fb0), (out / 'src/gui/macos.rs').read_text(encoding='utf-8'))
+        builds = (out / 'src/builds.rs').read_text(encoding='utf-8')
         self.assertIn('("native/src/gui/macos.rs", "Cocoa callbacks unresolved")', builds)
         self.assertEqual(report['summary']['sites']['disabled'], 1)
 
@@ -98,7 +98,7 @@ class VariantTest(unittest.TestCase):
 class CommittedMapTest(unittest.TestCase):
     def test_every_macos_literal_of_the_sources_maps_to_1_20(self):
         root = pathlib.Path(__file__).resolve().parents[1]
-        m = json.loads((root / 'native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json').read_text())
+        m = json.loads((root / 'native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json').read_text(encoding='utf-8'))
         _, sites, problems = V.plan(root / 'native', m)
         self.assertEqual(problems, [], 'a macOS game address in native/src has no 1.20 entry in '
                          'native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json: find it with scripts/macos_resolve.py '
