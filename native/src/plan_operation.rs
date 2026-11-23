@@ -1469,6 +1469,12 @@ pub(super) fn unready(state: &State, plan: &Value, target: &str) -> Option<Strin
         .find(|(id, op)| {
             started(state, id)
                 && !state.done.contains_key(&key(id, "ready"))
+                // an operation already executing against another enemy of the same war holds
+                // no declaration: the war is one opening blow, declared together (w47r1, 23
+                // Nov 2026: Luxembourg's declaration waited 10 days on Panzergruppe Ost's new
+                // front while Holland and Belgium were at war; the wing holds until the blow
+                // is ready anyway)
+                && !state.done.contains_key(&key(id, "exec"))
                 && strings(op, "enemies").iter().any(|e| e == target)
         })
         .map(|(id, _)| id)
@@ -3077,7 +3083,35 @@ fn assault_guarded(
     // the odds an assault needs (w47c1, 23 Nov 2026: at 21 days it attacked 7 against the French
     // standing in Luxembourg and lost 17.4k men to none in a week); otherwise it keeps holding
     // and its note says what it waits for (a second direction or the odds), never silently
+    // NOT ALONE: an army of this operation executing an offensive into the same target states
+    // (the armour leading through the same piece) makes one blow with the wing; it attacks at
+    // once when the two together have the odds (owner, 23 Nov 2026: Luxembourg is always taken
+    // in the opening, armour leading, never by a weak wing alone; w47r1: Armee West Süd held
+    // ten days behind Panzergruppe Ost's attack on the same state)
+    let beside: Vec<(String, i64)> = state
+        .op_owned
+        .iter()
+        .filter(|(army, owner)| {
+            **army != u.name
+                && owner.as_str() == id
+                && executing(roster, army)
+                && offensives(roster, army).iter().any(|o| {
+                    ints(&o["target_states"])
+                        .iter()
+                        .any(|t| targets.contains(t))
+                })
+        })
+        .map(|(army, _)| {
+            let n = army_row(roster, army)
+                .and_then(|r| r["division_count"].as_i64())
+                .unwrap_or(0);
+            (army.clone(), n)
+        })
+        .collect();
+    let together = ours + beside.iter().map(|(_, n)| n).sum::<i64>();
+    let one_blow = !beside.is_empty() && theirs.is_none_or(|t| together >= ASSAULT_SUPERIORITY * t);
     let hard = match joint_days {
+        _ if one_blow => false,
         None => true,
         Some(days) => second.is_empty() && (days < JOINT_MAX_WAIT / DAY || weak),
     };
@@ -3090,6 +3124,14 @@ fn assault_guarded(
             "operation {id}: {} ({ours} divisions) {} {:?}: {} way(s) in, the best {} from {} at {:+.2} ({}); {} enemy division(s) stand there; there: {}",
             u.name,
             match (joint_days, hard) {
+                _ if one_blow => format!(
+                    "ATTACKS in one blow with {} ({together} divisions together)",
+                    beside
+                        .iter()
+                        .map(|(a, _)| a.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
                 (None, _) => "HOLDS (never alone: no attack of the same war executes)".to_string(),
                 (Some(d), true) => format!(
                     "HOLDS (no second direction yet{}; the joint attack of {} runs {d} of {} days)",

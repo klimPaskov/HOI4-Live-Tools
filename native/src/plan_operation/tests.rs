@@ -778,6 +778,12 @@ fn a_declaration_waits_for_an_operation_still_preparing() {
     assert_eq!(unready(&state, &plan, "FRA"), None, "another enemy");
     state.done.insert(key("op_poland", "ready"), START);
     assert_eq!(unready(&state, &plan, "POL"), None);
+    // an operation executing against another enemy of the war holds no declaration (w47r1)
+    let mut low = State::default();
+    let plan = json!({"operations": [{"id": "op_low", "enemies": ["HOL", "LUX"]}]});
+    low.done.insert(key("op_low", "prep"), START);
+    low.done.insert(key("op_low", "exec"), START);
+    assert_eq!(unready(&low, &plan, "LUX"), None);
 }
 
 #[test]
@@ -3072,6 +3078,60 @@ fn a_guarded_wing_never_attacks_alone_and_never_waits_forever() {
         &roster,
         &wars(15),
         START + 2 * DAY
+    ));
+}
+
+#[test]
+fn a_wing_attacks_at_once_in_one_blow_with_the_armour_into_the_same_state() {
+    // w47r1 (23 Nov 2026): Armee West Süd held ten days behind Panzergruppe Ost's attack on
+    // Luxembourg; the owner: Luxembourg is taken in the opening, never by a weak wing alone
+    let game = Game::new();
+    *game.graph.borrow_mut() = Some(lux_graph());
+    game.unit("Nord", |r| r["division_count"] = json!(7));
+    game.unit("Panzer", |r| {
+        r["division_count"] = json!(9);
+        r["plan_executing"] = json!(true);
+        r["plan"] = json!([{"kind": "front", "executing": true,
+            "offensives": [{"target_states": [8], "executing": true}]}]);
+    });
+    let plan = json!({"war": {"me": "GER"}, "operations": [
+        {"id": "op_lux", "war": "w", "enemies": ["LUX"]}]});
+    let op = plan["operations"][0].clone();
+    let mut u = unit("Nord".into(), Role::Wing, &Value::Null, &Value::Null);
+    u.enemy = "LUX".into();
+    u.line = vec![8];
+    let wars = |french: i64| {
+        json!({"wars": {"enemies": ["LUX", "FRA"]}, "borders": [
+        {"neighbour_tag": "LUX", "neighbour_states": [8], "own_border_states": [42],
+         "neighbour_divisions_in_border_states": 1, "hostile_divisions_in_border_states": french}]})
+    };
+    let mut state = State::default();
+    state.op_owned.insert("Panzer".into(), "op_lux".into());
+    let roster = game.roster.borrow().clone();
+    // 7 + 9 against 4: one blow at once
+    assert!(!assert_guard(
+        &mut state,
+        &game,
+        &plan,
+        &op,
+        &u,
+        &roster,
+        &wars(4),
+        START
+    ));
+    assert!(state.op_notes["op_lux:guard:Nord"].contains("one blow with Panzer"));
+    // 16 against 10: still never a weak attack
+    let mut later = State::default();
+    later.op_owned.insert("Panzer".into(), "op_lux".into());
+    assert!(assert_guard(
+        &mut later,
+        &game,
+        &plan,
+        &op,
+        &u,
+        &roster,
+        &wars(10),
+        START
     ));
 }
 

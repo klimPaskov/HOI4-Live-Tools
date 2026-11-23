@@ -1853,7 +1853,17 @@ fn declare(
         if code(&why) == "war_goal_required" {
             state.done.remove(&ready_key);
         }
-        state.skip(now, "dip", key, 3 * DAY);
+        // a declaration the game simply did not take (NotApplied: no dialog, nothing refused)
+        // is tried again within the day: a war declared with others is one opening blow
+        // (w47r1, 23 Nov 2026: Luxembourg's declaration came back NotApplied beside Holland's
+        // and Belgium's and waited three days while the armour stood on its border); a typed
+        // refusal keeps the three days
+        let wait = if why.starts_with("NotApplied") || why.starts_with("Diverged") {
+            DAY / 4
+        } else {
+            3 * DAY
+        };
+        state.skip(now, "dip", key, wait);
     }
     Ok(Some(format!("diplomacy declare_war {target}: {ok} {why}")))
 }
@@ -4360,6 +4370,37 @@ mod tests {
             declare_due_step(&mut fresh, &tools, &quiet, "l", START).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn a_declaration_the_game_did_not_take_is_tried_again_within_the_day() {
+        // w47r1 (23 Nov 2026): Luxembourg's declaration came back NotApplied and waited 3 days
+        let tools = fake(vec![
+            ("hoi4_diplomacy", declare_rows(true)),
+            (
+                "hoi4_war_risk",
+                json!({"country": "POL", "would_join": [], "borders_not_held": []}),
+            ),
+        ]);
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_diplomacy_act".into(), "NotApplied");
+        let plan = json!({"diplomacy": [{"id": "dow", "action": "declare", "target": "POL"}]});
+        let mut state = State::default();
+        let out = declare_due_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out.unwrap().contains("declare_war POL: false"));
+        // the declaration's own wait is a quarter day, not three days
+        assert!(state.skipped(START + DAY / 8, "dip", "dip:id:dow"));
+        assert!(!state.skipped(START + DAY / 2, "dip", "dip:id:dow"));
+        // a typed refusal keeps its three days
+        let mut typed = State::default();
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_diplomacy_act".into(), "action_disabled");
+        declare_due_step(&mut typed, &tools, &plan, "l", START).unwrap();
+        assert!(typed.skipped(START + 2 * DAY, "dip", "dip:id:dow"));
     }
 
     #[test]

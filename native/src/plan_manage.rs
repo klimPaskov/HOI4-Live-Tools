@@ -2906,6 +2906,42 @@ fn roomiest_base(bases: &[Value], region: &Value, except: Option<i64>, planes: i
         .and_then(|b| b["state_id"].as_i64())
 }
 
+/// When every base of the wanted region is full: the base with room nearest to that region's
+/// bases (state centres), only when it lies nearer than the wing's own base, so the wing closes
+/// the distance and never moves away (w47r1, 23 Nov 2026: Western Germany's bases were full and
+/// eight old CAS wings kept flying over Poland from Silesia through the western war).
+fn nearest_room_base(
+    bases: &[Value],
+    want: &Value,
+    here: Option<i64>,
+    planes: i64,
+    centers: &HashMap<i32, (f64, f64)>,
+) -> Option<i64> {
+    let at = |s: Option<i64>| s.and_then(|s| centers.get(&(s as i32)).copied());
+    let anchors: Vec<(f64, f64)> = bases
+        .iter()
+        .filter(|b| region_matches(want, &b["region"]))
+        .filter_map(|b| at(b["state_id"].as_i64()))
+        .collect();
+    if anchors.is_empty() || want.is_null() {
+        return None;
+    }
+    let dist = |p: (f64, f64)| {
+        anchors
+            .iter()
+            .map(|a| ((a.0 - p.0).powi(2) + (a.1 - p.1).powi(2)).sqrt())
+            .fold(f64::MAX, f64::min)
+    };
+    let own = at(here).map(dist).unwrap_or(f64::MAX);
+    bases
+        .iter()
+        .filter(|b| b["state_id"].as_i64() != here && b["free"].as_i64().unwrap_or(0) >= planes)
+        .filter_map(|b| Some((dist(at(b["state_id"].as_i64())?), b["state_id"].as_i64()?)))
+        .filter(|(d, _)| *d < own)
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, s)| s)
+}
+
 /// Whether the wing's own base lies in `region` and is not over capacity.
 fn based_in(wing: &Value, bases: &[Value], region: &Value) -> bool {
     bases
@@ -3259,11 +3295,20 @@ pub(super) fn air_plan_step(
             let refused_here = region_arg.as_ref().is_some_and(|r| {
                 state.done.get(&format!("airref:{name}:{r}")).copied() == here.or(Some(-1))
             });
+            let want = &entry["base_region"];
             let target = rebase_target(entry, region, wing, &open)
                 .or_else(|| {
                     refused_here
                         .then(|| roomiest_base(&open, region, here, planes))
                         .flatten()
+                })
+                .or_else(|| {
+                    (entry["base_state"].is_null()
+                        && !want.is_null()
+                        && !based_in(wing, &open, want)
+                        && wing["transfer_to_base_id"].as_i64().is_none())
+                    .then(|| nearest_room_base(&open, want, here, planes, &state.centers))
+                    .flatten()
                 })
                 .filter(|_| !state.skipped(now, "airrebase", &name));
             if let Some(base) = target {
@@ -9081,6 +9126,46 @@ mod tests {
             .filter(|(n, _)| n == "hoi4_air_rebase")
             .count();
         assert_eq!(rebases, 2);
+    }
+
+    #[test]
+    fn with_the_wanted_region_full_a_wing_moves_to_the_nearest_base_with_room_never_away() {
+        let centers: HashMap<i32, (f64, f64)> = [
+            (57, (0.0, 0.0)),
+            (56, (1.0, 0.0)),
+            (50, (3.0, 0.0)),
+            (66, (9.0, 0.0)),
+            (80, (12.0, 0.0)),
+        ]
+        .into_iter()
+        .collect();
+        let bases = vec![
+            json!({"state_id": 57, "region": {"id": 7}, "free": 0}),
+            json!({"state_id": 56, "region": {"id": 7}, "free": 0}),
+            json!({"state_id": 50, "region": {"id": 6}, "free": 300}),
+            json!({"state_id": 80, "region": {"id": 9}, "free": 900}),
+            json!({"state_id": 66, "region": {"id": 8}, "free": 0}),
+        ];
+        // from Silesia (66): the base with room nearest Western Germany's bases
+        assert_eq!(
+            nearest_room_base(&bases, &json!(7), Some(66), 100, &centers),
+            Some(50)
+        );
+        // never to a base farther than its own
+        assert_eq!(
+            nearest_room_base(&bases[..2], &json!(7), Some(66), 100, &centers),
+            None
+        );
+        let far = vec![bases[0].clone(), bases[3].clone()];
+        assert_eq!(
+            nearest_room_base(&far, &json!(7), Some(66), 100, &centers),
+            None
+        );
+        // no centres known: no guess
+        assert_eq!(
+            nearest_room_base(&bases, &json!(7), Some(66), 100, &HashMap::new()),
+            None
+        );
     }
 
     #[test]
