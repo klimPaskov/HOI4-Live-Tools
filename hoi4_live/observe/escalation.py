@@ -29,6 +29,7 @@ import subprocess
 import time
 
 from . import issue_rules as R
+from . import answer
 from .runlogs import game_days
 
 ESCALATIONS_PER_YEAR = 24
@@ -102,9 +103,12 @@ def validate_answer(text, issue):
 
 
 class Escalator:
-    def __init__(self, out_dir, per_year=ESCALATIONS_PER_YEAR, answer_cmd=None, lessons=None, run_name=""):
+    def __init__(self, out_dir, per_year=ESCALATIONS_PER_YEAR, answer_cmd=None, lessons=None, run_name="",
+                 live=True):
         self.out = out_dir
         self.per_year = per_year
+        # live: a model may be asked (a replay never asks one: it would spend money on the past)
+        self.live = live
         self.answer_cmd = answer_cmd or os.environ.get("MONITOR_ANSWER_CMD")
         self.lessons = lessons
         self.run_name = run_name
@@ -173,10 +177,37 @@ class Escalator:
         rec = {"date": date, "id": issue["id"], "key": issue["key"], "tier": 1, "why": why,
                "packet_chars": len(packet), "packet_tokens_est": len(packet) // 4, "lessons": [x["id"] for x in lessons],
                "delivered": "player wake (issues_open.json packet)"}
-        if self.answer_cmd:
+        if self.live and self.answer_cmd:
             rec.update(self._ask(packet, issue))
+        elif self.live and answer.available() is None:
+            rec.update(self._ask_api(packet, issue))
         self._write(rec)
+        if rec.get("tokens") and rec.get("delivered") != "api":
+            self._cost_row(rec)  # the run's own cost file (the API path wrote its row already)
         return rec
+
+    def _ask_api(self, packet, issue):
+        """Tier 1 on the API key (answer.py: budget checked first, usage written to the ledger)."""
+        out = answer.ask(packet, tier=1, run=self.run_name)
+        if "error" in out:
+            return {"answered": False, "error": out["error"], "seconds": out.get("seconds")}
+        ans, why = validate_answer(out["result"], issue)
+        u = out["usage"]
+        self._cost_row({"tokens": {"input": u["input_tokens"], "output": u["output_tokens"],
+                                   "cache_read": u["cache_read_input_tokens"],
+                                   "cache_write": u["cache_creation_input_tokens"], "cost_usd": out["usd"]},
+                        "model": out["model"], "seconds": out["seconds"]})
+        return {"answered": ans is not None, "answer": ans, "check": why, "model": out["model"],
+                "tokens": {"input": u["input_tokens"], "output": u["output_tokens"], "cost_usd": out["usd"]},
+                "seconds": out["seconds"], "delivered": "api", "ledger": True}
+
+    def _cost_row(self, rec):
+        t = rec.get("tokens") or {}
+        row = {"role": "escalation", "model": rec.get("model") or "answer_cmd", "input": t.get("input"),
+               "output": t.get("output"), "cache_read": t.get("cache_read"), "cache_write": t.get("cache_write"),
+               "seconds": rec.get("seconds"), "usd": t.get("cost_usd")}
+        with open(os.path.join(self.out, "escalation_costs.jsonl"), "a", encoding="utf-8") as f:
+            f.write(json.dumps(row) + "\n")
 
     def _ask(self, packet, issue):
         t0 = time.time()
@@ -187,6 +218,7 @@ class Escalator:
         except (OSError, subprocess.SubprocessError) as ex:
             return {"answered": False, "error": str(ex)[:200], "seconds": round(time.time() - t0, 1)}
         tokens = None
+        ledger = False
         try:  # a command printing a JSON envelope with usage (claude -p --output-format json)
             env = json.loads(out)
             if isinstance(env, dict) and "result" in env:
@@ -194,11 +226,12 @@ class Escalator:
                 tokens = {"input": u.get("input_tokens"), "output": u.get("output_tokens"),
                           "cache_read": u.get("cache_read_input_tokens"), "cost_usd": env.get("total_cost_usd")}
                 out = env.get("result") or ""
+                ledger = bool(env.get("ledger"))
         except ValueError:
             pass
         ans, why = validate_answer(out, issue)
         return {"answered": ans is not None, "answer": ans, "check": why, "tokens": tokens,
-                "seconds": round(time.time() - t0, 1), "delivered": "answer_cmd"}
+                "seconds": round(time.time() - t0, 1), "delivered": "answer_cmd", "ledger": ledger}
 
     def _write(self, rec):
         self.log.append(rec)
@@ -226,11 +259,13 @@ def gate_kind(prev_date, snap, failure=None):
     return None
 
 
-def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness=""):
+def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", budget_line=""):
     """One page: what happened, issues opened and closed since the last gate, overdue, counters, costs."""
     w = snap.get("wars") or {}
     per = w.get("per_enemy") or {}
     lines = [f"# GATE {kind} at {snap.get('date')} ({snap.get('trigger') or ''})", ""]
+    if budget_line:
+        lines += [budget_line, ""]
     lines.append(f"At war: {bool(w.get('at_war'))}; enemies {', '.join(sorted(w.get('enemies') or [])[:10]) or '-'}; "
                  f"own states lost: {len(w.get('own_states_lost') or [])}")
     for tag, e in sorted(per.items(), key=lambda kv: -(kv[1].get('casualties_own') or 0))[:6]:

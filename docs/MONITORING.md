@@ -92,6 +92,46 @@ At each gate (war declared, capitulation, new year, failure, run end) a one-page
 up the issues since the last gate, the run's cleanliness, and the costs so far, for a review by a
 stronger model or a person.
 
+## Model calls and the budget
+
+The monitor calls a model only for Tier 1 escalations and Tier 2 gate reviews, and only when an API
+key is configured. Put your own key in a file readable only by you and point the monitor at it:
+
+```sh
+export HOI4_LIVE_ANTHROPIC_KEY_FILE=/path/to/anthropic.key   # chmod 600; never committed
+```
+
+The key is read from that file for each call only; it is never printed, logged or put in the
+environment of other processes. Without the file no model is called and everything else works the
+same. Calls need the `anthropic` Python package (`pip install anthropic`).
+
+- Tier 1: `MONITOR_TIER1_MODEL` (default `claude-haiku-5-5`), low effort, at most 2,000 output
+  tokens, 24 a game year.
+- Tier 2: `MONITOR_TIER2_MODEL` (default `claude-opus-5-5`), medium effort, at most 6,000 output
+  tokens, at a declaration of war, a capitulation, a new year, a failure or the run's end, at most 8
+  a game year. The review is written beside the gate packet (`gates/<date>-<kind>-review.md`).
+- A replay (`observe.py monitor`) never calls a model.
+- `MONITOR_ANSWER_CMD` replaces the Tier 1 call with your own command (packet on stdin);
+  `python -m hoi4_live.observe.answer --tier 1 --run NAME` is the built-in one in that form.
+
+Every call billed to the key is written to a ledger beside the key file (`api-ledger.json`, or the
+folder `HOI4_LIVE_API_LEDGER` names): per run, role (player, escalation, review) and model, the
+tokens the response reports and the money at the list prices in `costs.py` (dated, to be verified
+against your billing). An optional `budget.json` in the same folder sets the caps:
+
+```json
+{"total": 200, "run_cap": 15, "day_cap": 40, "floor": 20}
+```
+
+Before every call the monitor checks them: a run that has spent `run_cap`, or a day that has spent
+`day_cap`, stops calling models and goes on with the executor only; when the remaining total falls
+under `floor`, nothing more is called on the key. The player's spend is read from its own stream
+log every five minutes; when a cap is reached the monitor writes `RUN/budget_stop.json` for the
+launcher that runs the player. `observe.py budget status`, `observe.py budget check --run NAME`
+(exit 0 allowed, 3 at a run or day cap, 4 under the floor) and `observe.py budget sync RUN` give the
+same answers to scripts. The first line of `COSTS.md` and of every gate packet is the budget line:
+spent this run, today, in all runs, and what remains.
+
 ## Lessons
 
 Lessons live in the learned store beside the skills: `learned/lessons/<id>.json` (the store is
