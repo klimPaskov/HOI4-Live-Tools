@@ -2538,3 +2538,67 @@ fn in_peace_a_mobile_army_whose_front_stands_off_its_start_state_is_drawn_again(
         && a["army"] == json!("Panzer")
         && a["clear_orders"] == json!(true)));
 }
+
+#[test]
+fn a_reserve_left_on_its_groups_front_is_cleared_and_marches_back_from_the_border() {
+    let game = Game::new();
+    let op = json!({"id": "op_pol", "reserve_orders": true,
+        "reserve": [{"army": "Other", "station": 55}]});
+    game.unit("Other", |r| {
+        r["states"] = json!({"42": 20});
+        r["army_group"] = json!("Group");
+        r["plan"] = json!([{"kind": "front", "executing": false, "offensives": [],
+                            "line": {"states": [42]}}]);
+    });
+    let roster = game.roster.borrow().clone();
+    let wars = json!({"wars": {"enemies": ["FRA"]},
+        "borders": [{"neighbour_tag": "FRA", "neighbour_states": [28], "own_border_states": [42]}]});
+    let mut state = State::default();
+    let line = reserves(&mut state, &game, "op_pol", &op, &roster, &wars, "l", START)
+        .unwrap()
+        .unwrap();
+    assert!(line.contains("clear its orders"), "{line}");
+    let line = reserves(
+        &mut state,
+        &game,
+        "op_pol",
+        &op,
+        &roster,
+        &wars,
+        "l",
+        START + 1,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(line.contains("marches to its station 55"), "{line}");
+    let orders = game.orders();
+    assert!(orders.iter().any(|(n, a)| n == "hoi4_army_plan"
+        && a["army"] == json!("Other")
+        && a["clear_orders"] == json!(true)));
+    assert!(orders
+        .iter()
+        .any(|(n, a)| n == "hoi4_army_move" && a["state_id"] == json!(55)));
+}
+
+#[test]
+fn a_reserve_inside_the_operations_group_is_left_out_when_the_group_is_formed_again() {
+    // w43n1 (23 Nov 2026): the reserve's own orders cleared and its march read back, its
+    // divisions stayed on the group's front: only a group of the line armies frees it
+    let mut plan = plan();
+    plan["operations"][0]["regroup_at_war"] = json!(true);
+    plan["operations"][0]["reserve_orders"] = json!(true);
+    plan["operations"][0]["formations"] =
+        json!([{"army": "Mitte", "role": "line"}, {"army": "Nord", "role": "line"}]);
+    plan["operations"][0]["reserve"] = json!([{"army": "Sued", "station": 55}]);
+    let game = Game::new();
+    *game.enemies.borrow_mut() = vec!["ENG"];
+    let mut state = State {
+        war_active: true,
+        ..State::default()
+    };
+    burst(&mut state, &game, &plan, START);
+    assert_eq!(
+        group_creates(&game).first(),
+        Some(&json!({"armies": ["Mitte", "Nord"]}))
+    );
+}

@@ -2657,7 +2657,27 @@ fn reserves(
         let marches_key = key(id, &format!("resmarch:{name}"));
         let marches = state.done.get(&marches_key).copied().unwrap_or(0);
         if let Some(s) = station.filter(|_| there * 2 < total) {
-            if marches < RESERVE_MARCHES && !in_contact(roster, wars, &name) {
+            // a SECOND ECHELON: a reserve the source left inside a group, on the group's front:
+            // its orders are cleared first (else the group's front pulls it back onto the line)
+            // and it marches back even from the border (w43l1, 23 Nov 2026: Armee Süd's march
+            // to its station read back three times while its 20 divisions stayed on the Dutch
+            // border, 23 divisions in one province)
+            let clear_key = key(id, &format!("resclear:{name}"));
+            let cleared = state.done.contains_key(&clear_key);
+            let echelon = cleared || (!army["army_group"].is_null() && has_orders(roster, &name));
+            if echelon && !cleared && marches < RESERVE_MARCHES {
+                state.done.insert(clear_key, now);
+                return Ok(Some(order(
+                    state,
+                    tools,
+                    lease,
+                    id,
+                    &format!("reserve {name} stands on its group's front: clear its orders"),
+                    "hoi4_army_plan",
+                    json!({"army": name, "clear_orders": true}),
+                )?));
+            }
+            if marches < RESERVE_MARCHES && (echelon || !in_contact(roster, wars, &name)) {
                 state.done.insert(marches_key, marches + 1);
                 state.skip(now, "opres", &name, 2 * DAY);
                 return Ok(Some(order(
@@ -2879,6 +2899,19 @@ fn prepare(
         .map(|u| &u.name)
         .chain(released.iter())
         .any(|n| army_row(roster, n).is_some_and(outside_of) && movable(n));
+    // a reserve row's army (not yet released) the source left inside the operation's group: the
+    // group's front holds it on the line whatever its own orders say (w43n1, 23 Nov 2026: Armee
+    // Süd's 20 divisions stayed on the Dutch border in Army Group 1 after its orders were cleared
+    // and its march read back), so the group is formed again from the line armies alone
+    let held_back: Vec<String> = reserve_names(state, op, roster)
+        .into_iter()
+        .filter(|n| !released.contains(n))
+        .collect();
+    let reserve_inside = group.is_some()
+        && held_back
+            .iter()
+            .any(|n| army_row(roster, n).is_some_and(|r| r["army_group"].as_str() == group));
+    let outside = outside || reserve_inside;
     let regroup_key = key(id, "group_again");
     let regroups = state.done.get(&regroup_key).copied().unwrap_or(0);
     let calm = if at_war_regroup {
@@ -2932,9 +2965,10 @@ fn prepare(
         && !state.skipped(now, "opgrp", id)
     {
         let joins = |n: &str| -> bool {
-            army_row(roster, n).is_some_and(|r| {
-                (outside_of(r) && movable(n)) || (regroup && r["army_group"].as_str() == group)
-            })
+            !held_back.iter().any(|h| h == n)
+                && army_row(roster, n).is_some_and(|r| {
+                    (outside_of(r) && movable(n)) || (regroup && r["army_group"].as_str() == group)
+                })
         };
         let mut names: Vec<String> = line_armies.iter().map(|u| u.name.clone()).collect();
         let planned = list(plan, "army_group")
