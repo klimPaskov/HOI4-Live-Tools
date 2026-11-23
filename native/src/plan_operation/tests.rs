@@ -2906,3 +2906,40 @@ fn a_reserve_left_on_its_old_groups_front_has_that_front_cleared_once() {
     .unwrap();
     assert!(!line.contains("clear Army Group 1"), "{line}");
 }
+
+#[test]
+fn only_infantry_of_the_line_goes_back_never_the_armour() {
+    let mut read = supply_read(&[(
+        9522,
+        51,
+        4.0,
+        24.0,
+        vec![
+            ("p1", "Panzer", 10.0),
+            ("p2", "Panzer", 10.0),
+            ("m1", "Mitte", 20.0),
+            ("m2", "Mitte", 30.0),
+            ("m3", "Mitte", 40.0),
+            ("m4", "Mitte", 50.0),
+        ],
+    )]);
+    // m1 attacks (an executing plan's division heads for its battle): it may go back too
+    read["divisions"][2]["heading_province"] = json!(6500);
+    let line: HashSet<String> = ["Mitte".to_string(), "Panzer".to_string()].into();
+    let pick: HashSet<String> = ["Mitte".to_string()].into();
+    let seen = stack_read(&read, &line, &pick, STACK_MAX);
+    // 6 divisions, carry 1: 5 over, but only the four Mitte divisions may go, most worn first
+    assert_eq!(seen.total, 4);
+    assert_eq!(
+        seen.surplus,
+        vec![(
+            "Mitte".to_string(),
+            vec![
+                "m1".to_string(),
+                "m2".to_string(),
+                "m3".to_string(),
+                "m4".to_string()
+            ]
+        )]
+    );
+}

@@ -3072,13 +3072,15 @@ fn stack_read(read: &Value, line: &HashSet<String>, pick: &HashSet<String>, max:
             continue;
         }
         // the divisions that may go back: of an infantry line or wing army (the armour keeps its
-        // concentration), standing (a marching division is not where it goes)
+        // concentration). At war a division of an executing plan always heads somewhere (its
+        // attack), so the heading is not asked (w46c1: one echelon in 17 days while 17-19
+        // divisions stood at 16-29% supply in two provinces)
         let mut ours: Vec<(&String, f64, &str)> = ids
             .iter()
             .filter_map(|id| {
                 let d = rows.get(id)?;
                 let army = text(&d["army"]);
-                (pick.contains(army) && d["heading_province"].is_null())
+                pick.contains(army)
                     .then(|| (id, d["organisation"].as_f64().unwrap_or(0.0), army))
             })
             .collect();
