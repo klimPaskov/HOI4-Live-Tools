@@ -2798,6 +2798,10 @@
           "switch_when": {
             "$ref": "#/definitions/predicate"
           },
+          "until": {
+            "$ref": "#/definitions/predicate",
+            "description": "the entry is over once this holds: it claims no wing and its wings go to the other entries (the next war's)"
+          },
           "then_region": {
             "type": [
               "integer",
