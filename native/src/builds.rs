@@ -38,7 +38,7 @@ pub const WINDOWS: &str =
     "the native runtime's Windows adapter is unfinished; on Windows the Python server is the supported path and has no build check";
 
 /// What works while the installed game is a build this runtime cannot read.
-pub const MEANWHILE: &str = "Until a release supports your build: (1) `hoi4-live update` installs a newer HOI4 Live Tools when one exists; (2) Steam can keep the game on an earlier version (Properties > Betas) when Paradox offers it; (3) the Python server (hoi4-live-tools) reads the screen instead of memory and has no build check: full on Windows, limited on macOS, not available on Linux.";
+pub const MEANWHILE: &str = "Until a release supports your build: (1) `hoi4-live update` installs a newer HOI4 Live Tools when one exists; (2) Steam can keep the game on an earlier version (Properties > Betas) when Paradox offers it; (3) the Python server (hoi4-live-tools) reads the screen instead of memory and has no build check: full on Windows, limited on macOS, not available on Linux; (4) a copy of a supported game kept outside Steam's folder keeps working (launch it with Steam closed; docs/GAME_VERSIONS.md).";
 
 fn list() -> String {
     SUPPORTED
@@ -94,6 +94,7 @@ mod tests {
         }
         assert!(text.contains("hoi4-live update"));
         assert!(text.contains("Python server"));
+        assert!(text.contains("GAME_VERSIONS.md"));
         assert!(text.contains(env!("CARGO_PKG_VERSION")));
     }
 

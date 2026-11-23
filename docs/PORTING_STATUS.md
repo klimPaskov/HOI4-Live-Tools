@@ -5,7 +5,13 @@ platform, which of its tools exist, compile, have a memory layout for the curren
 and were last proven against the running game, and what is left to finish each port. It is kept
 current by hand; the check in `tests/test_xlayout_coverage.py` keeps the Linux layout list honest.
 
-Game version: HOI4 1.19.4.1 on macOS and Linux. The tool catalogue has 189 `hoi4_*` names (about
+Game version: HOI4 1.19.4.1 on macOS and Linux. Steam's current release is newer (Windows Steam had
+1.19.4.2 in November 2026); a newer build needs its own layout table, made with
+`scripts/game_migrate.py` ([Game versions](GAME_VERSIONS.md) has the steps, the measured accuracy and
+what a user gets on an unsupported build). Every port must be on the same game version as the macOS
+keys' build or have its own table for its build. When the macOS sources move to a new build, re-key the Linux and Windows tables with
+the committed migration map: `python3 scripts/game_migrate.py rekey TABLE native/layouts/migrations/macos-<from>-to-<to>.json --write`
+(1.19.4.1 to 1.20.0.0: `macos-DFA875A5-to-ED135FE5.json`). The tool catalogue has 189 `hoi4_*` names (about
 181 player tools plus debug tools; `hoi4-live-native --list-tools` prints them).
 
 ## Summary
@@ -94,8 +100,8 @@ Steps to finish, in order:
    (`scripts/data/windows-1.19.5.0-vtables.json`, report beside it). RTTI names do not change
    between versions, so these hold for 1.19.5.0 even though the keys come from 1.19.4.1; a
    class whose fields changed in 1.19.5.0 still needs its fields checked live. The mapper
-   (`scripts/cross_platform_map.py`)
-   (`scripts/cross_platform_map.py`) reads Mach-O and ELF only. For a PE executable it can be
+   (`scripts/cross_platform_map.py`) reads Mach-O and ELF only; `scripts/game_migrate.py identify`
+   reads a PE's build id (CodeView GUID and age). For a PE executable it can be
    extended for vtables (MSVC RTTI names translate from Itanium names) and for globals reached
    through matched functions, but MSVC code differs from clang code far more than gcc code does,
    so field offsets will mostly come from live reads: MSVC `std::string` is 32 bytes like
