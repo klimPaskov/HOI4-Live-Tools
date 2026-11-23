@@ -15,7 +15,7 @@ Game version: HOI4 1.19.4.1 on macOS and Linux. The tool catalogue has 189 `hoi4
 | Tools in the build | all | all (the same modules) | all compiled and unit-tested; none reachable (no Windows game attachment or input yet) |
 | Compiles in CI | yes | yes (x86_64 and aarch64) | yes (the code compiled there) |
 | Memory layout for 1.19.4.1 | native (the canonical values) | generated table: 82 of 94 image keys, 527 of 617 field keys | vtables only, for Windows 1.19.5.0: 181 of 182 vtable keys by RTTI; no globals or fields |
-| Input | CGEvent | X11 XTEST | none in the native runtime |
+| Input | CGEvent | X11 XTEST | `SendInput` backend written and unit-tested, not bound or live-tested |
 | Last proven live | continuously | 5 November 2026: 104 tools verified, 11 refusal-only, 8 not reached | native: never; the separate Python runtime: November 2026 on 1.19.4.2 |
 
 ## Linux
@@ -69,7 +69,8 @@ Two runtimes exist:
   with ordinary input. It is the supported Windows path for mod testing and was last run on
   Windows HOI4 1.19.4.2. It has no memory reads and is not a campaign runtime.
 - The native runtime has a read-only Windows process reader (`native/src/platform/windows/`) with
-  an empty build allowlist. It attaches to no game, sends no input, has no launcher and no layout.
+  an empty build allowlist. It attaches to no game, has no launcher and no layout; its input backend (step 4) is not bound
+  to anything.
   The management tools are compiled and unit-tested on Windows, but nothing binds them there yet.
   Their journals hold the exclusive lock on a sibling `<journal>.lock` file on Windows (a Windows
   lock on the journal itself would stop every other reader); the daily plan store still refuses on
@@ -81,8 +82,22 @@ Steps to finish, in order:
    instead of POSIX modes.
 3. A `Process` for an owned Windows game on top of the existing reader, and a launcher that starts
    the game without Steam variables in a private user folder, like the Linux launcher.
-4. A `GameInput` for Windows (`SendInput` to the owned, foreground window; client geometry, DPI,
-   keyboard layout), with the modifier timing the Linux backend needed.
+4. Written, not live-tested: `WinInput` (`native/src/platform/windows/input.rs`), the Windows
+   `GameInput`. It binds a top-level window that belongs to the owned game PID, is visible, not
+   minimised, at 100% scaling (`GetDpiForWindow` 96; this process does not change its DPI
+   awareness) and has exactly the bound client size, and re-checks all of that plus "is the
+   foreground window" before every input (`input_target_not_frontmost` otherwise; it never calls
+   `SetForegroundWindow`). Before a press, `WindowFromPoint` at the target must be the owned window
+   (`input_point_occluded`), and no key or button may be held (`input_busy`). Input is `SendInput`:
+   absolute moves normalised over the virtual desktop to the pixel centre, buttons, wheel (one
+   notch of 120 per 120 pixels), and keys as scan codes (`KEYEVENTF_SCANCODE`, US layout, `wVk`
+   filled too) as the Python runtime drove the game. Modifiers are held 150 ms around a key or
+   click and presses last 60 ms, as on Linux; Ctrl+click, path drags and Alt (`press_option`, no
+   dead keys on Windows) are built, Command+click refuses, and shell chords (Alt+F4, Alt+Tab,
+   Alt+Space, Alt+Escape, Alt+Return, Ctrl+Escape) are refused. Capture is
+   `PrintWindow(PW_CLIENTONLY | PW_RENDERFULLCONTENT)` with a `BitBlt` fallback; a black frame is
+   refused. The key table, coordinate maths and event sequences are unit-tested as data; nothing
+   has sent input to the game, and no launcher binds it yet.
 5. A layout table for the Windows build. Started: `scripts/pe_rtti_map.py MACHO PE` maps every
    vtable key the sources use (the `Class` tags, the `img()` vtables and the `*vtable*` values of
    the hand-written core layouts) to the PE by RTTI name: the Itanium typeinfo name of the macOS

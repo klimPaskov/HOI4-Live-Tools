@@ -6,6 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 mod pe;
 pub(crate) use pe::PeIdentity;
 #[cfg(target_os = "windows")]
+pub(crate) mod input;
+#[cfg(target_os = "windows")]
 pub(crate) mod native;
 #[cfg(test)]
 mod tests;
