@@ -18,6 +18,12 @@
   "CArmyDivisionView+0x10": [
    "launch/macos/armies.rs"
   ],
+  "CCombatManager+0x8": [
+   "launch/macos/battles.rs"
+  ],
+  "CCombatTactic+0x10": [
+   "launch/macos/battles.rs"
+  ],
   "CConvoys+0x10": [
    "launch/macos/naval.rs"
   ],
@@ -76,6 +82,42 @@
   ],
   "CFindView+0xd58": [
    "launch/macos/construction_place/point.rs"
+  ],
+  "CLandCombat+0x1c": [
+   "launch/macos/battles.rs"
+  ],
+  "CLandCombat+0x28": [
+   "launch/macos/battles.rs"
+  ],
+  "CLandCombat+0x30": [
+   "launch/macos/battles.rs"
+  ],
+  "CLandCombat+0x38": [
+   "launch/macos/battles.rs"
+  ],
+  "CLandCombat+0x40": [
+   "launch/macos/battles.rs"
+  ],
+  "CLandCombat+0x48": [
+   "launch/macos/battles.rs"
+  ],
+  "CLandCombatant+0x128": [
+   "launch/macos/battles.rs"
+  ],
+  "CLandCombatant+0x170": [
+   "launch/macos/battles.rs"
+  ],
+  "CLandCombatant+0x178": [
+   "launch/macos/battles.rs"
+  ],
+  "CLandCombatant+0x20": [
+   "launch/macos/battles.rs"
+  ],
+  "CLandCombatant+0xe0": [
+   "launch/macos/battles.rs"
+  ],
+  "CLandCombatant+0xf8": [
+   "launch/macos/battles.rs"
   ],
   "COccupationLaw+0x10": [
    "launch/macos/occupation.rs"
@@ -190,6 +232,15 @@
    "launch/macos/decisions.rs",
    "launch/macos/deployment.rs",
    "launch/macos/design_ui.rs"
+  ],
+  "CTerrainType+0x10": [
+   "launch/macos/battles.rs"
+  ],
+  "CTerrainType+0x58": [
+   "launch/macos/battles.rs"
+  ],
+  "CTerrainType+0x60": [
+   "launch/macos/battles.rs"
   ],
   "CWarRelation+0x50": [
    "launch/macos/war_stats.rs"
