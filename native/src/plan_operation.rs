@@ -2987,6 +2987,39 @@ fn prepare(
             return Ok(Some(line));
         }
     }
+    // a wing or mobile army still standing in a game group of its own (left over from an older
+    // group) fights on that group's front, its own front gets no division: the old group's
+    // orders are cleared once (w42x, 23 Nov 2026: Armee Pommern's wing front held 0 divisions,
+    // its 23 stood on its old group's front, which had no arrow)
+    for u in units
+        .iter()
+        .filter(|u| matches!(u.role, Role::Wing | Role::Mobile))
+    {
+        let Some(g) = army_row(roster, &u.name)
+            .and_then(|r| r["army_group"].as_str())
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        let k = key(id, &format!("wingclr:{g}"));
+        if Some(g.as_str()) == group || !has_front(roster, &g) || state.done.contains_key(&k) {
+            continue;
+        }
+        state.done.insert(k, now);
+        let line = order(
+            state,
+            tools,
+            lease,
+            id,
+            &format!(
+                "clear {g} (its army {} fights as a wing on its own front)",
+                u.name
+            ),
+            "hoi4_army_plan",
+            json!({"army": g, "clear_orders": true}),
+        )?;
+        return Ok(Some(line));
+    }
     // 2. the group's front and its offensive FIRST, before any assembly, march or commander: the
     // planning bonus grows only while the line stands (PLANNING_GAIN 0.02 a day, the cap 0.3
     // and more from doctrines and the marshal), and the attack is the battle plan executed
@@ -3198,6 +3231,37 @@ fn reconcile(
             state.skip(now, "opdraw", &u.name, 2);
         }
         return Ok(Some(line));
+    }
+    // an army's front no division stands on (its divisions were bound to an older group's front,
+    // w42x, 23 Nov 2026) is cleared and drawn again, at most REDRAWS times
+    if peace && army_row(roster, &u.name).is_some() {
+        let total = army_row(roster, &u.name)
+            .and_then(|r| r["division_count"].as_i64())
+            .unwrap_or(0);
+        let counts: Vec<Option<i64>> = orders(roster, &u.name)
+            .iter()
+            .filter(|o| o["kind"] == json!("front"))
+            .map(|o| o["divisions"].as_i64())
+            .collect();
+        let empty = !counts.is_empty() && counts.iter().all(|c| *c == Some(0));
+        let ek = key(id, &format!("emptyfront:{}", u.name));
+        let n = state.done.get(&ek).copied().unwrap_or(0);
+        if total > 0 && empty && n < REDRAWS {
+            state.done.insert(ek, n + 1);
+            let out = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!(
+                    "clear {} (no division stands on its front): drawn again",
+                    u.name
+                ),
+                "hoi4_army_plan",
+                json!({"army": u.name, "clear_orders": true}),
+            )?;
+            return Ok(Some(out));
+        }
     }
     // a side on its own country's border whose front stands on another piece (a group kept from
     // before the split, its front on the other country's border: w42u, 23 Nov 2026) is cleared
