@@ -2647,7 +2647,7 @@ pub(super) const LANE_WEIGHT: [(&str, bool, &str); 48] = [
     ("politics", true, "a law, advisor or idea: one pick"),
     ("officer_corps", true, "one officer-corps pick"),
     ("decisions", true, "one decision: one click"),
-    ("learned", false, "a learned skill: up to twelve steps of any tool"),
+    ("learned", false, "a learned skill: up to twelve steps"),
     ("extras", true, "a doctrine or a special project: one pick"),
     ("mio", true, "a design company assigned: one pick"),
     ("mio_traits", true, "a design company trait: one pick"),
