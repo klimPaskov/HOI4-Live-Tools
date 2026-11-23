@@ -7,6 +7,49 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
+
+/// The state recorder's reads (key, tool, arguments): the same list as
+/// hoi4_live/observe/reads.py READS, taken by `hoi4_state_snapshot` in one call.
+const STATE_READS: [(&str, &str, &str); 30] = [
+    ("overview", "hoi4_overview", "{}"),
+    ("country_status", "hoi4_country_status", "{}"),
+    ("economy", "hoi4_economy", "{}"),
+    ("economy_detail", "hoi4_economy_detail", "{}"),
+    ("resources", "hoi4_resources", "{}"),
+    (
+        "production_lines",
+        "hoi4_production_lines",
+        r#"{"limit":128}"#,
+    ),
+    ("production_shortages", "hoi4_production_shortages", "{}"),
+    ("stockpile", "hoi4_stockpile", "{}"),
+    (
+        "construction_queue",
+        "hoi4_construction_queue",
+        r#"{"limit":128,"include_location":true}"#,
+    ),
+    ("research_extras", "hoi4_research_extras", "{}"),
+    ("doctrines", "hoi4_doctrines", "{}"),
+    ("commanders", "hoi4_commanders", "{}"),
+    ("armies", "hoi4_armies", r#"{"threat":false}"#),
+    ("supply", "hoi4_supply", r#"{"summary":false}"#),
+    ("wars", "hoi4_wars", "{}"),
+    ("war_stats", "hoi4_war_stats", "{}"),
+    ("diplomacy", "hoi4_diplomacy_state", "{}"),
+    ("air", "hoi4_air", "{}"),
+    ("air_regions", "hoi4_air_regions", "{}"),
+    ("fleets", "hoi4_fleets", "{}"),
+    ("convoys", "hoi4_convoys", "{}"),
+    ("occupation", "hoi4_occupation", "{}"),
+    ("intelligence", "hoi4_intelligence", "{}"),
+    ("mios", "hoi4_mios", "{}"),
+    ("special_projects", "hoi4_special_projects", "{}"),
+    ("templates", "hoi4_division_templates", "{}"),
+    ("alerts", "hoi4_alerts", "{}"),
+    ("events", "hoi4_events", "{}"),
+    ("focus_completed", "hoi4_focus_completed", r#"{"limit":1}"#),
+    ("observe", "hoi4_observe", r#"{"since":0,"limit":200}"#),
+];
 mod assignment_wait;
 pub mod worker_events;
 mod worker_wait;
@@ -134,6 +177,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         list.push(json!({"name":"hoi4_operations","description":"Read-only: intelligence operations against a target and whether each can be prepared now, decided without opening the agency. Definitions come from the running game's content (common/operations and common/operation_phases with mods layered): days, network strength, operatives, equipment and civilian factories, required and awarded tokens, allowed targets and the phase choices with their extra costs. Each operation is judged against the own state read from memory (network strength in the target = its strongest covered state, recruited operatives not on an operation, collaboration, ruling ideology and its rules, wars, the equipment stockpile, the install's DLCs): verdict.visible and verdict.ready are true | false | unknown; false lists every failing piece with a code (network_too_weak, not_enough_operatives, missing_token, not_allowed, unavailable, requirements_unmet, not_visible, not_a_target); waits_for lists equipment the stockpile lacks now (missing_equipment: Prepare still works and the preparation takes it as it arrives, so it delays the commencement); unknown names the triggers the server cannot read (flags, focuses, national coverage, other countries' affairs). target = a tag (default: every country with an own network); operations = keys to judge; include_hidden lists operations whose visible conditions fail. No input, no lease, never pauses.","inputSchema":{"type":"object","properties":{"target":{"type":"string","minLength":3,"maxLength":3},"operations":{"type":"array","items":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"maxItems":32},"include_hidden":{"type":"boolean"}},"additionalProperties":false},"annotations":{"readOnlyHint":true}}));
         list.push(json!({"name":"hoi4_focus_available","description":"Read-only: whether own national focuses can be started now, decided without opening the focus tree. The rules come from the focus files of the running game's content (the install with the enabled mods layered over it): prerequisites, mutually exclusive focuses and the available, bypass and allow_branch triggers, with scripted triggers expanded. They are judged against the own state read from memory: completed focuses, the loaded tree's keys, wars, the date, state owners and controllers, stability, war support, political power, manpower, factory counts, faction, overlord and subjects, researched technologies, and the install's DLCs. Each focus answers state available | unavailable | unknown: unavailable is certain and comes with why (the failing requirement in the game's own script words); unknown lists the triggers that cannot be read (ideas, flags, the ruling ideology, variables, leaders, other countries' affairs, any_/all_ scopes), and then only hoi4_focus_start can tell; bypass:true means taking the focus completes it at once without its reward. No input, no lease, never pauses.","inputSchema":{"type":"object","properties":{"focuses":{"type":"array","items":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_-]+$"},"minItems":1,"maxItems":32}},"required":["focuses"],"additionalProperties":false},"annotations":{"readOnlyHint":true}}));
         list.push(json!({"name":"hoi4_observe","description":"What changed since your last look, from the server's watcher (it samples your own situation a few times a second): typed changes with a sequence number (event_opened, own_state_lost, war_started, army_moved, army_organisation_low, army_supply_low, army_plan_stopped, army_gone, alert_raised, research_slot_idle, focus_finished, peace_conference_opened ...; urgent ones marked) plus a short brief of now. Pass `since` = the `seq` of your previous reply; 0 gives the brief and the current seq. Optional kinds filter, urgent_only, limit. Pure read; answers at once even while an action runs.","inputSchema":{"type":"object","properties":{"since":{"type":"integer","minimum":0},"kinds":{"type":"array","items":{"type":"string"},"maxItems":32},"urgent_only":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":200}},"additionalProperties":false}}));
+        list.push(json!({"name":"hoi4_state_snapshot","description":"Everything the pure reads can see, in one call: the bodies of every read tool that takes no lease (overview, country status, economy and its detail, resources, production lines and shortages, stockpile, construction queue, research bonuses, doctrines, commanders, armies with their orders, supply per division, province and state, wars, war statistics, diplomacy, air wings and regions, fleets, convoys, occupation, intelligence, MIOs, special projects, division templates, the game's alert row, open events, completed focuses and the watcher's brief with its open omissions), each under reads.<key> with its read time in read_ms.<key>; a read that fails answers {error} in its place. `since` is passed to the watcher (hoi4_observe) so its typed changes since that sequence come too; `skip` leaves keys out. The state recorder takes one per game week. Pure read: no lease, no input, no panel, never pauses.","inputSchema":{"type":"object","properties":{"since":{"type":"integer","minimum":0},"skip":{"type":"array","items":{"type":"string","maxLength":64},"maxItems":64}},"additionalProperties":false},"annotations":{"readOnlyHint":true}}));
         list.push(json!({"name":"hoi4_autopilot","description":"Turn the resident executor on or off: while on, the server runs one standing-plan step (the same rules as hoi4_plan_run) whenever no request of yours is waiting, so routine play (events, research, focus, construction, production, armies, war rules) goes on between your turns without blocking you; your requests always go first. What it did appears in hoi4_observe as autopilot_action. An army you order yourself (any hoi4_army_* action) is left to you by its war rules for war.player_claim_seconds (default 300); release:[names] hands armies back at once. {enabled:false} stops it; {} returns its status.","inputSchema":{"type":"object","properties":{"enabled":{"type":"boolean"},"interval_ms":{"type":"integer","minimum":250,"maximum":10000},"release":{"type":"array","items":{"type":"string"},"maxItems":64},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}));
         list.push(json!({"name":"hoi4_wait_change","description":"Block until a change after `since` arrives (optionally only given kinds or urgent ones), or until timeout_seconds (1-30) pass; then reply like hoi4_observe with woke_because change|timeout. `now.omissions` lists what the game marks actionable and is still open (item, days_open, the game's todo, the executor rule that owns it, that rule's dated note, note_contradicts_read), longest open first, so a wake needs no alert read. Use it instead of polling: the reply comes within a few hundred milliseconds of the change. Pure read; never pauses.","inputSchema":{"type":"object","properties":{"since":{"type":"integer","minimum":0},"kinds":{"type":"array","items":{"type":"string"},"maxItems":32},"urgent_only":{"type":"boolean"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":30},"limit":{"type":"integer","minimum":1,"maximum":200}},"required":["since"],"additionalProperties":false}}));
     }
@@ -518,6 +562,7 @@ impl Server {
             "hoi4_capabilities" if object.is_empty() => Ok(
                 json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_production_controls","own_construction_controls","own_construction_queue","own_equipment_production_lines","public_research_folder_catalog","own_research_category_associations","own_research_slot_callback_diagnostics","own_division_snapshot_identifiers","own_economy_trigger_counts","own_focus","own_research","clock","bounded_wait","technology_definitions","gui_input_diagnostics","own_research_ui_diagnostics","own_current_research_nodes","own_research_node_detail_diagnostics","own_focus_catalog_ui","own_focus_selected_detail","own_focus_completion_membership","own_focus_search_selection"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"unverified_observations":["own_production_controls","own_construction_controls","own_construction_queue","own_equipment_production_lines","own_research_category_associations"],"bounded_observation_validation":{"own_construction_queue":"run071: one dockyard identity and produced-work advancement; run072: state56 and stored UI label, late-lease deviation. Selection, province, railway and precise numeric UI comparison unverified","own_focus_completion_membership":"run052: actual Rhineland completion on the supported Linux build","own_focus_search_selection":"run068: exact query, six canonical matches, three ordinary Tab steps and View"},"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
             ),
+            "hoi4_state_snapshot" => self.state_snapshot(object, commands),
             "hoi4_overview" if object.is_empty() => self.overview(),
             "hoi4_autopilot" => {
                 let known = [
@@ -1624,6 +1669,75 @@ impl Server {
             )),
         }
     }
+    /// `hoi4_state_snapshot`: every recorder read (STATE_READS) through this server, each body
+    /// or its error under its key. Only tools listed without a lease parameter are called (the
+    /// read lane: they send no input and open no panel); any other is answered not_a_pure_read.
+    fn state_snapshot(
+        &self,
+        args: &serde_json::Map<String, Value>,
+        commands: Option<&dyn Commands>,
+    ) -> Result<Value> {
+        if args.keys().any(|k| k != "since" && k != "skip") {
+            return Err(Error::new(
+                "invalid_arguments",
+                "hoi4_state_snapshot takes since and skip only",
+            ));
+        }
+        let since = match args.get("since") {
+            None => 0,
+            Some(v) => v.as_u64().ok_or_else(|| {
+                Error::new("invalid_arguments", "since must be a non-negative integer")
+            })?,
+        };
+        let skip: Vec<&str> = args
+            .get("skip")
+            .and_then(Value::as_array)
+            .map(|v| v.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default();
+        let listed = tools(commands);
+        let pure: std::collections::HashSet<&str> = listed["tools"]
+            .as_array()
+            .map(|t| {
+                t.iter()
+                    .filter(|t| t["inputSchema"]["properties"].get("lease_token").is_none())
+                    .filter_map(|t| t["name"].as_str())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let began = Instant::now();
+        let mut reads = serde_json::Map::new();
+        let mut ms = serde_json::Map::new();
+        for (key, tool, raw) in STATE_READS {
+            if skip.contains(&key) {
+                continue;
+            }
+            if !pure.contains(tool) || tool == "hoi4_state_snapshot" {
+                reads.insert(
+                    key.into(),
+                    json!({"error": Error::new("not_a_pure_read", format!("{tool} is not listed as a lease-free read in this server"))}),
+                );
+                continue;
+            }
+            let mut a: Value = serde_json::from_str(raw).unwrap_or_else(|_| json!({}));
+            if key == "observe" {
+                a["since"] = json!(since);
+            }
+            let t = Instant::now();
+            let body = match self.call(tool, &a, commands) {
+                Ok(v) => v,
+                Err(e) => json!({ "error": e }),
+            };
+            ms.insert(
+                key.into(),
+                json!((t.elapsed().as_secs_f64() * 10000.0).round() / 10.0),
+            );
+            reads.insert(key.into(), body);
+        }
+        Ok(json!({"reads": reads, "read_ms": ms,
+            "elapsed_ms": (began.elapsed().as_secs_f64() * 10000.0).round() / 10.0,
+            "source": "every lease-free read of this server in one pass",
+            "input_authorized": false, "observation_paused_game": false}))
+    }
     pub fn handle(&self, msg: Value) -> Option<Value> {
         self.handle_with_commands(msg, None)
     }
@@ -1699,6 +1813,39 @@ impl Server {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn state_snapshot_is_a_lease_free_read_of_lease_free_reads() {
+        let listing = tools(None);
+        let tool = listing["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "hoi4_state_snapshot")
+            .unwrap();
+        assert!(tool["inputSchema"]["properties"]
+            .get("lease_token")
+            .is_none());
+        assert_eq!(tool["annotations"]["readOnlyHint"], true);
+        let server = Server {
+            process: None,
+            unavailable: None,
+        };
+        let v = server
+            .call("hoi4_state_snapshot", &json!({"skip": ["supply"]}), None)
+            .unwrap();
+        assert_eq!(v["reads"].as_object().unwrap().len(), STATE_READS.len() - 1);
+        assert!(v["reads"].get("supply").is_none());
+        // no process: each read answers its own error, the snapshot itself still answers
+        assert!(v["reads"]["overview"].get("error").is_some());
+        assert_eq!(v["input_authorized"], false);
+        assert!(server
+            .call("hoi4_state_snapshot", &json!({"lease_token": "x"}), None)
+            .is_err());
+        assert!(server
+            .call("hoi4_state_snapshot", &json!({"since": -1}), None)
+            .is_err());
+    }
 
     #[test]
     fn focus_input_probe_is_read_only_and_validates_before_process_access() {
