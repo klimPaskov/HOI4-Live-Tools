@@ -3394,6 +3394,9 @@ fn reconcile(
             return Ok(Some(out));
         }
     }
+    // (a mobile army too: a plan that moves the armour's start state redraws its front there,
+    // w43g1, 23 Nov 2026: Panzergruppe Ost kept its Rheinland front after the plan moved it to
+    // Emsland)
     // a side on its own country's border whose front stands on another piece (a group kept from
     // before the split, its front on the other country's border: w42u, 23 Nov 2026) is cleared
     // and drawn again on its own piece, at most REDRAWS times. Any group or wing with own states
@@ -3402,7 +3405,7 @@ fn reconcile(
     // was refused (w42y/w42za, 23 Nov 2026)
     if peace
         && !u.own_states.is_empty()
-        && (u.own_enemy || matches!(u.role, Role::Group | Role::Wing))
+        && (u.own_enemy || matches!(u.role, Role::Group | Role::Wing | Role::Mobile))
     {
         let fronts: Vec<&Value> = orders(roster, &u.name)
             .iter()

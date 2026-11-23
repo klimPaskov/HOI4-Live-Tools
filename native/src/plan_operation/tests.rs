@@ -2492,3 +2492,22 @@ fn in_peace_a_stroke_that_will_not_draw_is_drawn_one_state_at_a_time_from_the_cl
         && a["state_id"] == json!(86)
         && a.get("states").is_none()));
 }
+
+#[test]
+fn in_peace_a_mobile_army_whose_front_stands_off_its_start_state_is_drawn_again() {
+    let game = Game::new();
+    let mut plan = plan();
+    plan["operations"][0]["formations"][2] = json!({"army": "Panzer", "role": "mobile",
+        "front": {"enemy": "POL", "own_states": [67], "click_state": 86},
+        "offensive": {"axis": [67, 86], "target_line": [86]}});
+    game.unit("Panzer", |r| {
+        r["army_group"] = Value::Null;
+        r["plan"] = json!([{"kind": "front", "executing": false, "offensives": [],
+                            "line": {"states": [51]}}])
+    });
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    assert!(game.orders().iter().any(|(n, a)| n == "hoi4_army_plan"
+        && a["army"] == json!("Panzer")
+        && a["clear_orders"] == json!(true)));
+}
