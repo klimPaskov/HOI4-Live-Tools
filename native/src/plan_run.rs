@@ -339,6 +339,9 @@ mod plan_omissions;
 mod plan_divisions;
 #[path = "plan_logistics.rs"]
 mod plan_logistics;
+// the run monitor's open issues and lessons (docs/MONITORING.md)
+#[path = "plan_issues.rs"]
+mod plan_issues;
 // Game speed by the war the country manages (peace 3, a war to manage 2; a human's choice kept).
 #[path = "plan_speed.rs"]
 mod plan_speed;
@@ -408,8 +411,9 @@ pub fn arg_built(tool: &str, arg: &str) -> bool {
 /// without receipts repeats each success until the game refuses it (railway and construction
 /// orders, shakedown sk2). `act` refuses any tool not listed here; a test checks every tool
 /// named at an `act` call is listed. Add a tool only once its handler journals a receipt.
-/// The tools with a bulk path and the `manage.bulk` name that turns it on. Every path is off
-/// until its live probe passes (docs/LIVE_VALIDATION_QUEUE.md, BATCHING PROBES).
+/// The tools with a bulk path and the `manage.bulk` name that turns it on. A path is off until
+/// its live probe passes (docs/LIVE_VALIDATION_QUEUE.md, BATCHING PROBES); a passed path is on
+/// by default (`BULK_DEFAULT`).
 pub const BULK_PATHS: &[(&str, &str)] = &[
     ("hoi4_production_set", "production_chords"),
     ("hoi4_production_add", "production_chords"),
@@ -418,21 +422,35 @@ pub const BULK_PATHS: &[(&str, &str)] = &[
     ("hoi4_mio_trait", "mio_queue_many"),
     ("hoi4_construction_add", "construction_fill"),
 ];
+/// The bulk paths on unless a plan turns them off: their live probes passed (v60a, 23 Nov 2026:
+/// a line moved 23 factories in 5 clicks, 2.1-2.6 s against about 8 s; nine wings took their
+/// mission at 0.9 s a wing against 5.3 s; four wings rebased in 1.35 s against 2.4 s a wing).
+pub const BULK_DEFAULT: &[&str] = &["production_chords", "air_base_select"];
 /// The `manage.bulk` name of a tool's bulk path.
 fn bulk_path_of(tool: &str) -> Option<&'static str> {
     BULK_PATHS.iter().find(|(t, _)| *t == tool).map(|(_, p)| *p)
 }
-/// The bulk paths a plan turns on (`manage.bulk`: names, or "all").
+/// The bulk paths a plan runs: `BULK_DEFAULT`, plus the names `manage.bulk` lists (or "all"),
+/// less each name it lists as "-name".
 fn bulk_paths(plan: &Value) -> HashSet<String> {
-    plan["manage"]["bulk"]
+    let mut on: HashSet<String> = BULK_DEFAULT.iter().map(|s| s.to_string()).collect();
+    for name in plan["manage"]["bulk"]
         .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(Value::as_str)
-                .map(|s| s.trim().to_string())
-                .collect()
-        })
-        .unwrap_or_default()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::trim)
+    {
+        match name.strip_prefix('-') {
+            Some(off) => {
+                on.remove(off.trim());
+            }
+            None => {
+                on.insert(name.to_string());
+            }
+        }
+    }
+    on
 }
 pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_skill_run",
@@ -622,6 +640,9 @@ pub struct State {
     act_seconds: Option<u64>,
     /// Whether the last `act` worked (None: no act since the caller reset it).
     last_ok: Option<bool>,
+    /// The `result` of the last act's reply (per-item outcomes of a batched order, e.g. the
+    /// wings of one air mission call and the ones that did not take); Null otherwise.
+    last_result: Value,
 
     boot: u64,
     bad: HashMap<String, GameHour>,
@@ -652,6 +673,8 @@ pub struct State {
     war_since: HashMap<String, (i32, Option<i32>, GameHour)>,
     /// The lanes' last turns (the digest's `scheduler`).
     sched: Sched,
+    /// The run monitor's open issues and the lessons (read from files; never persisted).
+    issues: plan_issues::Issues,
     /// The pass scheduler (`lanes_tick`).
     round: Round,
     /// armies on direct move orders (their battle plan did not advance)
@@ -858,6 +881,7 @@ impl Default for State {
             wall: None,
             act_seconds: None,
             last_ok: None,
+            last_result: Value::Null,
             boot: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs()),
@@ -878,6 +902,7 @@ impl Default for State {
             war_cool: HashMap::new(),
             war_since: HashMap::new(),
             sched: Sched::default(),
+            issues: plan_issues::Issues::default(),
             round: Round::default(),
             war_move: HashSet::new(),
             war_rest: HashMap::new(),
@@ -1364,6 +1389,7 @@ impl State {
             object.insert("lease_token".into(), json!(lease));
         }
         let began = std::time::Instant::now();
+        self.last_result = Value::Null;
         let result = self.dispatch(tools, name, &args);
         let lasted = self
             .act_seconds
@@ -1390,10 +1416,27 @@ impl State {
                     Ok((_, why)) => why.clone(),
                     Err(_) => String::new(),
                 };
+                self.issues.refresh();
+                let lesson = self.issues.advice(name, &cause);
                 let run = self.failed_run.entry(signature.clone()).or_default();
                 run.0 += 1;
                 run.1 = cause.clone();
-                if run.0 == GIVE_UP_AFTER {
+                let treat = lesson.as_ref().map(|a| a.treat.clone());
+                if let (Some(plan_issues::Treat::Permanent), Some(adv), 1) =
+                    (&treat, &lesson, run.0)
+                {
+                    // a lesson says this refusal does not pass unchanged: the player hears it at
+                    // the first refusal, with what to do instead
+                    let mut shown = args.clone();
+                    if let Some(object) = shown.as_object_mut() {
+                        object.remove("request_id");
+                        object.remove("lease_token");
+                    }
+                    self.gave_up.push(json!({"code": "wake_player", "rule": "lesson",
+                        "reason": format!("order_given_up:{signature}"),
+                        "message": format!("{name} was refused ({cause}); lesson {}: {}. The executor does not send it unchanged again for a long time", adv.id, adv.advice),
+                        "evidence": {"tool": name, "args": shown, "failures": 1, "last_refusal": cause, "lesson": adv.id}}));
+                } else if run.0 == GIVE_UP_AFTER && treat != Some(plan_issues::Treat::Transient) {
                     // Diagnosed once: the order, how often it failed and the game's last
                     // answer go to the player; the executor stops sending it.
                     let mut shown = args.clone();
@@ -1520,6 +1563,25 @@ impl State {
             rest = rest.min(RESOURCE_WAIT);
             why = Rest::Repeated;
         }
+        // what the run's lessons say about this refusal (docs/MONITORING.md): a transient cause
+        // rests briefly and is never given up, a permanent one rests as given up, a wait its days
+        self.issues.refresh();
+        if let Some(adv) = self.issues.advice(tool, &cause) {
+            match adv.treat {
+                plan_issues::Treat::Transient => {
+                    rest = rest.min(plan_issues::TRANSIENT_REST);
+                    why = Rest::Repeated;
+                }
+                plan_issues::Treat::Permanent => {
+                    rest = rest.max(ledger_rest(war, GIVE_UP_AFTER, 0, false).0);
+                    why = Rest::GivenUp;
+                }
+                plan_issues::Treat::Wait(hours) => {
+                    rest = rest.max(hours);
+                    why = Rest::Repeated;
+                }
+            }
+        }
         if rest <= 0 {
             return None;
         }
@@ -1584,6 +1646,7 @@ impl State {
                 Ok((false, text))
             }
             Ok(body) => {
+                self.last_result = body["result"].clone();
                 let status = body["receipt"]["status"].as_str().unwrap_or("").to_string();
                 match status.as_str() {
                     "Verified" => Ok((true, status)),
@@ -1603,6 +1666,17 @@ impl State {
                                 heading_count(&body)
                             ),
                         ))
+                    }
+                    // an offensive the game drew to other states names them (the tool's
+                    // `missed`): the plan step does not send the same stroke again at once
+                    "Diverged" if body["receipt"]["detail"]["missed"].is_object() => {
+                        let to: Vec<String> = body["receipt"]["detail"]["missed"]["arrows"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .map(|a| a["target_states"].to_string())
+                            .collect();
+                        Ok((false, format!("Diverged: drawn to {}", to.join(" "))))
                     }
                     "NotApplied" | "Diverged" => Ok((false, status)),
                     _ => Err(Error::new(
@@ -1953,6 +2027,15 @@ fn lanes_tick_inner(
             return Ok(Tick::Acted(line));
         }
     }
+    // Lanes that own an open issue of the run monitor go before the routine pass, each at most
+    // once a game day (`scheduler.issues_due: false` turns it off). On by default: the monitor's
+    // issues are rule findings with a deadline, and the offer costs nothing when the lane has
+    // nothing to do (it hands the tick back at once).
+    if plan["scheduler"]["issues_due"] != json!(false) {
+        if let Some(line) = issue_lanes(state, tools, plan, lease, now, &lanes)? {
+            return Ok(Tick::Acted(line));
+        }
+    }
     let mut restarted = false;
     loop {
         if state.round.cursor >= lanes.len() {
@@ -2002,6 +2085,40 @@ fn lanes_tick_inner(
         }
     }
     Ok(Tick::Nothing)
+}
+
+/// The lanes the run monitor's open issues name, offered ahead of the pass (see `plan_issues`).
+fn issue_lanes(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    lanes: &[Lane],
+) -> Result<Option<String>> {
+    state.issues.refresh();
+    for (lane, id) in state.issues.due_lanes() {
+        let Some(&(name, step)) = lanes.iter().find(|(n, _)| *n == lane) else {
+            continue;
+        };
+        if lane_waits_for_attack(
+            name,
+            plan_operation::executing_any(state),
+            state.sched.turns.get(name).copied(),
+            now,
+        ) || (name.starts_with("air") && air_waits_for_war(state, tools, plan, now))
+            || !state.issues.take_turn(name, now)
+        {
+            continue;
+        }
+        state.sched.turns.insert(name, now);
+        state.last_ok = None;
+        if let Some(line) = step(state, tools, plan, lease, now)? {
+            state.round.lane_acted(name, now);
+            return Ok(Some(format!("{line} (monitor issue {id})")));
+        }
+    }
+    Ok(None)
 }
 
 /// The war-first block's turn: hold posts bound first (a holding army is never sent elsewhere by
@@ -3855,6 +3972,20 @@ fn gather_takes_loose(tools: &dyn Tools, plan: &Value) -> bool {
         })
 }
 
+/// Divisions one army may hold: its commander's limit from the roster (`division_limit`: the
+/// game's base plus his traits), never above the plan's `armies.max`; the plan's max may exceed
+/// the commander's limit only with `armies.over_limit_reason` (an over-limit army lowers its
+/// leader's bonuses; worth it only for a stated reason such as experience).
+fn command_cap(limit: &Value, plan_max: u64, cfg: &Value) -> u64 {
+    let reason = cfg["over_limit_reason"]
+        .as_str()
+        .is_some_and(|s| !s.trim().is_empty());
+    match limit.as_u64() {
+        Some(l) if l > 0 && !reason => l.min(plan_max),
+        _ => plan_max,
+    }
+}
+
 /// 9. every division in an army of sensible size, generals only for real armies. At war it runs
 ///    right after the war step: the war cannot start before its armies exist (w15: the opening's
 ///    armies came a month late behind research, production and construction ticks).
@@ -4088,13 +4219,16 @@ fn armies_step(
         for army in list(&roster, "armies") {
             let name = text(&army["army"]);
             let count = army["division_count"].as_u64().unwrap_or(0);
-            if count > max && !state.skipped(now, "armysplit", name) {
-                let chunk = (count - max).clamp(1, 19);
+            // the commander's own limit (the game's base plus his traits) unless the plan allows
+            // more with a reason (`armies.over_limit_reason`, e.g. experience for one general)
+            let cap = command_cap(&army["division_limit"], max, cfg);
+            if count > cap && !state.skipped(now, "armysplit", name) {
+                let chunk = (count - cap).clamp(1, 19);
                 let (ok, why) = state.act(
                     tools,
                     lease,
                     "hoi4_army_split",
-                    json!({"army": name, "count": chunk}),
+                    json!({"army": name, "count": chunk, "over_limit": true}),
                     "sp",
                 )?;
                 if !ok {
@@ -10313,6 +10447,9 @@ pub fn run(
     state.stages.fallback_used.clear();
     state.strategy.unknown.clear();
     state.strategy.news.clear();
+    if let Some(dir) = plan_path.parent() {
+        state.issues.set_run_dir(dir);
+    }
     let reason = loop {
         let plan = read_plan(plan_path)?;
         let now = game_hour(state, tools);
@@ -10928,12 +11065,26 @@ mod tests {
         }
     }
     #[test]
+    fn the_bulk_paths_whose_probes_passed_are_on_by_default() {
+        let none = bulk_paths(&json!({}));
+        assert!(none.contains("production_chords") && none.contains("air_base_select"));
+        assert!(!none.contains("mio_queue_many") && !none.contains("construction_fill"));
+        let some =
+            bulk_paths(&json!({"manage": {"bulk": ["-air_base_select", "construction_fill"]}}));
+        assert!(!some.contains("air_base_select"));
+        assert!(some.contains("construction_fill") && some.contains("production_chords"));
+        for p in BULK_DEFAULT {
+            assert!(BULK_PATHS.iter().any(|(_, q)| q == p), "{p} is a bulk path");
+        }
+    }
+
+    #[test]
     fn a_bulk_path_the_plan_turns_on_reaches_the_tool_and_stays_off_otherwise() {
         let f = fake(vec![]);
         let args = json!({"line": 2, "equipment": "infantry_equipment_1", "factories": 14});
-        // off (the default): the single form
+        // off by the plan: the single form
         let mut state = State {
-            bulk: bulk_paths(&json!({})),
+            bulk: bulk_paths(&json!({"manage": {"bulk": ["-production_chords"]}})),
             ..State::default()
         };
         state
@@ -19990,6 +20141,29 @@ mod tests {
         assert_eq!(option_index(&options, "deal"), Some(0));
         assert_eq!(option_index(&options, "e"), None, "ambiguous");
         assert_eq!(option_index(&options, ""), None);
+    }
+
+    #[test]
+    fn an_army_is_capped_at_its_commanders_limit_unless_the_plan_gives_a_reason() {
+        let cfg = json!({"max": 24});
+        assert_eq!(command_cap(&json!(24), 24, &cfg), 24);
+        assert_eq!(
+            command_cap(&json!(30), 24, &cfg),
+            24,
+            "never above the plan's max"
+        );
+        assert_eq!(
+            command_cap(&json!(6), 24, &cfg),
+            6,
+            "a politically connected general"
+        );
+        assert_eq!(
+            command_cap(&Value::Null, 24, &cfg),
+            24,
+            "unread: the plan's max"
+        );
+        let farm = json!({"max": 30, "over_limit_reason": "experience for one general"});
+        assert_eq!(command_cap(&json!(24), 30, &farm), 30);
     }
 
     #[test]

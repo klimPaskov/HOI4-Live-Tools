@@ -193,6 +193,16 @@ impl Scope<'_> {
     fn before(&self) -> Option<bool> {
         self.before.map(|clock| clock.paused)
     }
+    /// Close the bracket of a call that sent no input: read the state, act on nothing (a menu
+    /// or a pause seen now belongs to another lane or to the player).
+    pub(crate) fn untouched(self) -> Verdict {
+        Verdict {
+            before: self.before(),
+            after: (self.watch.probe)().map(|clock| clock.paused),
+            ours: false,
+            restored: None,
+        }
+    }
     /// Wait out a key still pending (see [`Watch::settle`]).
     pub(crate) fn settle(&self) {
         self.watch.settle();
@@ -289,6 +299,20 @@ pub(crate) fn escape_close<T: PartialEq>(
     Ok(pressed)
 }
 
+thread_local! {
+    /// Inputs (keys, clicks, drags, cursor moves) this thread has sent through a watched binding.
+    static SENT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+/// How many inputs this thread has sent so far. A call that sent none cannot have opened the
+/// game menu or changed the pause, so its pause bracket must not act: the resident watcher's
+/// reads ran beside hoi4_save and closed the menu the save had opened (v65g trace, 23 Nov 2026).
+pub(crate) fn sent_on_this_thread() -> u64 {
+    SENT.with(|c| c.get())
+}
+fn note_sent() {
+    SENT.with(|c| c.set(c.get() + 1));
+}
+
 /// The input binding with the pause watch on every key.
 pub(crate) struct Watched<'a> {
     inner: Box<dyn GameInput + 'a>,
@@ -300,6 +324,7 @@ impl<'a> Watched<'a> {
         Self { inner, watch }
     }
     fn key<R>(&self, code: u16, send: impl FnOnce() -> R) -> R {
+        note_sent();
         let before = self.watch.before_key(code);
         let result = send();
         self.watch.after_key(code, before);
@@ -318,6 +343,7 @@ impl GameInput for Watched<'_> {
         self.inner.confirm_input_idle()
     }
     fn click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        note_sent();
         self.watch.judge();
         self.inner.click(game, x, y)
     }
@@ -328,6 +354,7 @@ impl GameInput for Watched<'_> {
         y: f64,
         before_down: &dyn Fn() -> Result<()>,
     ) -> Result<Point> {
+        note_sent();
         self.watch.judge();
         self.inner.click_checked(game, x, y, before_down)
     }
@@ -335,6 +362,7 @@ impl GameInput for Watched<'_> {
         self.inner.confirm_cursor_at(game, x, y)
     }
     fn drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
+        note_sent();
         self.watch.judge();
         self.inner.drag(game, from, to)
     }
@@ -345,38 +373,47 @@ impl GameInput for Watched<'_> {
         to: (f64, f64),
         before_down: &dyn Fn() -> Result<()>,
     ) -> Result<()> {
+        note_sent();
         self.watch.judge();
         self.inner.drag_checked(game, from, to, before_down)
     }
     fn shift_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        note_sent();
         self.watch.judge();
         self.inner.shift_click(game, x, y)
     }
     fn ctrl_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        note_sent();
         self.watch.judge();
         self.inner.ctrl_click(game, x, y)
     }
     fn cmd_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        note_sent();
         self.watch.judge();
         self.inner.cmd_click(game, x, y)
     }
     fn right_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        note_sent();
         self.watch.judge();
         self.inner.right_click(game, x, y)
     }
     fn right_drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
+        note_sent();
         self.watch.judge();
         self.inner.right_drag(game, from, to)
     }
     fn right_drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+        note_sent();
         self.watch.judge();
         self.inner.right_drag_path(game, points)
     }
     fn drag_path(&self, game: (u32, u32), points: &[(f64, f64)]) -> Result<()> {
+        note_sent();
         self.watch.judge();
         self.inner.drag_path(game, points)
     }
     fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()> {
+        note_sent();
         self.inner.scroll(game, at, pixels)
     }
     fn scroll_burst(
@@ -386,6 +423,7 @@ impl GameInput for Watched<'_> {
         pixels: i32,
         count: u32,
     ) -> Result<()> {
+        note_sent();
         self.inner.scroll_burst(game, at, pixels, count)
     }
     fn press_code(&self, code: u16) -> Result<()> {
@@ -404,6 +442,7 @@ impl GameInput for Watched<'_> {
         self.key(key.code(), || self.inner.press(key))
     }
     fn press_clock(&self, key: Key) -> Result<()> {
+        note_sent();
         self.watch.deliberate();
         self.inner.press_clock(key)
     }
@@ -411,6 +450,7 @@ impl GameInput for Watched<'_> {
         self.key(key.code(), || self.inner.press_once(key))
     }
     fn press_digit_once(&self, digit: char) -> key_once::Dispatch {
+        note_sent();
         self.inner.press_digit_once(digit)
     }
     fn guarded<'b>(

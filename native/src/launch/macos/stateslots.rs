@@ -205,8 +205,7 @@ const VIEW_WAIT: std::time::Duration = std::time::Duration::from_millis(1300);
 /// Open the state view of state `id` (plain map mode, Find, click) and return its root.
 pub(super) fn open_state_view(process: &dyn Process, keys: &dyn GameInput, id: i32) -> Result<u64> {
     clear_notices(process, keys)?;
-    keys.press_code(crate::platform::game_input::vk::F1)?;
-    crate::phase::sleep(std::time::Duration::from_millis(400));
+    super::ui::leave_strategic_modes(process, keys)?;
     find_state(process, keys, id)?;
     crate::phase::sleep(std::time::Duration::from_millis(600));
     click_open(process, keys)?;
@@ -230,10 +229,9 @@ pub(super) fn read_states(
     ids: &[i32],
 ) -> Result<Value> {
     clear_notices(process, keys)?;
-    // F1 returns the map to its plain mode (an air or construction map mode
-    // would turn the click on a state into a different action).
-    keys.press_code(crate::platform::game_input::vk::F1)?;
-    crate::phase::sleep(std::time::Duration::from_millis(500));
+    // the plain map (an air or navy map mode would turn the click on a state into a different
+    // action): each mode read and pressed off by its own key, never a blind F1
+    super::ui::leave_strategic_modes(process, keys)?;
     let mut rows = Vec::new();
     // One queue read for every state: queued shared-slot buildings hold their slots.
     let queued_by_state = read(process, |r, i| {

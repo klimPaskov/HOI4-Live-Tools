@@ -933,6 +933,15 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
     // what the game has no alert for but the executor's reads see open (unassigned field
     // marshals, banked power, open doctrine tracks...), longest open first with the rest
     omissions.extend(super::plan_omissions::derived(state, tools, plan, now));
+    // the run monitor's open issues that no executor lane acts on (a plan decision, a tool fault,
+    // an escalated issue with its packet) go to the player with the rest (docs/MONITORING.md)
+    state.issues.refresh();
+    let names: Vec<&str> = super::lanes(plan, true)
+        .iter()
+        .map(|(n, _)| *n)
+        .chain(["research", "focus", "war"])
+        .collect();
+    omissions.extend(state.issues.wake_rows(&names, Some(now)));
     omissions.sort_by_key(|r| -r["days_open"].as_i64().unwrap_or(0));
     // what the executor could act on now: a row with its owner's written reason to wait is not,
     // nor an alert frame no label names (nothing tells what it asks for)
@@ -3705,9 +3714,9 @@ fn wing_owners(entries: &[Value], active: &[bool], wings: &[Value]) -> HashMap<S
     owner
 }
 
-/// Rebases the air plan sends in one call at most (a rebase is one quick order; missions and new
-/// wings stay one per call).
-const AIR_REBASE_BATCH: usize = 6;
+/// Rebases the air plan queues in one step at most (sent one call per base with every wing going
+/// there; missions go one call per entry, new wings one per call).
+const AIR_REBASE_BATCH: usize = 12;
 
 pub(super) fn air_plan_step(
     state: &mut State,
@@ -3771,6 +3780,7 @@ pub(super) fn air_plan_step(
     let mut flying = 0;
     let mut deploy_notes: Vec<String> = Vec::new();
     let mut moved: Vec<String> = Vec::new();
+    let mut rebases: Vec<(String, i64)> = Vec::new();
     // the bases' free room as the batch fills them: six wings sent to the one roomiest base in
     // one call overfilled it and the game refused the rest (w43a1, 23 Nov 2026: six fighter wings
     // to Westfalen 57 NotApplied, the start wings stayed over Poland on the war day)
@@ -3860,35 +3870,12 @@ pub(super) fn air_plan_step(
                         b["free"] = json!(free - planes);
                     }
                 }
-                let (ok, why) = state.act(
-                    tools,
-                    lease,
-                    "hoi4_air_rebase",
-                    json!({"wing": name, "state_id": base}),
-                    "ab",
-                )?;
-                if why.contains("rebase_refused") {
-                    state.skip(now, "airrebase", &format!("{name}|{base}"), 30 * DAY);
-                    note(
-                        state,
-                        "air_plan",
-                        format!("{name}: the game refused the base in state {base} (full, or out of reach); another base with room is tried"),
-                    );
-                } else if !ok {
-                    // a rebase that did not take (NotApplied: the transfer never started) leaves
-                    // that base out for this wing as a refusal does; the next try picks another
-                    // base with room (w47c1, 23 Nov 2026: 15 rebases of Polish wings to state 57
-                    // came back NotApplied and were sent again unchanged every week, and the old
-                    // wings flew over Poland for 45 days of the western war)
-                    state.skip(now, "airrebase", &format!("{name}|{base}"), 30 * DAY);
-                    state.skip(now, "airplan", &name, DAY);
-                }
-                // rebases go out together (one per call kept the Polish wings over Poland for
-                // months: g17o, 23 Nov 2026, 13 air orders from October to mid-December)
-                moved.push(format!(
-                    "air_plan {name} rebase to state {base}: {ok} {why}"
-                ));
-                if moved.len() >= AIR_REBASE_BATCH {
+                // rebases go out together, one call per base (one per call kept the Polish wings
+                // over Poland for months: g17o, 23 Nov 2026, 13 air orders from October to
+                // mid-December; one call per wing cost 69 calls in the 23 Nov runs)
+                rebases.push((name, base));
+                if rebases.len() >= AIR_REBASE_BATCH {
+                    send_rebases(state, tools, lease, now, &mut rebases, &mut moved)?;
                     return Ok(Some(moved.join("; ")));
                 }
                 continue;
@@ -3901,7 +3888,8 @@ pub(super) fn air_plan_step(
                 flying += 1;
                 continue;
             }
-            if !moved.is_empty() {
+            if !moved.is_empty() || !rebases.is_empty() {
+                send_rebases(state, tools, lease, now, &mut rebases, &mut moved)?;
                 return Ok(Some(moved.join("; ")));
             }
             // refused from this very base before, and no base with room in the region: not sent
@@ -3959,7 +3947,8 @@ pub(super) fn air_plan_step(
                 "air_plan {name} {mission} over region {region_arg}: {ok} {why}"
             )));
         }
-        if !moved.is_empty() {
+        if !moved.is_empty() || !rebases.is_empty() {
+            send_rebases(state, tools, lease, now, &mut rebases, &mut moved)?;
             return Ok(Some(moved.join("; ")));
         }
         if let (false, Some(mission), Some(region_arg)) =
@@ -3999,7 +3988,8 @@ pub(super) fn air_plan_step(
             ));
             continue;
         };
-        if !moved.is_empty() {
+        if !moved.is_empty() || !rebases.is_empty() {
+            send_rebases(state, tools, lease, now, &mut rebases, &mut moved)?;
             return Ok(Some(moved.join("; ")));
         }
         let (ok, why) = state.act(
@@ -4016,7 +4006,8 @@ pub(super) fn air_plan_step(
             "air_plan {key}: new wing of {planes} {aircraft} from reserve at state {base}: {ok} {why}"
         )));
     }
-    if !moved.is_empty() {
+    if !moved.is_empty() || !rebases.is_empty() {
+        send_rebases(state, tools, lease, now, &mut rebases, &mut moved)?;
         return Ok(Some(moved.join("; ")));
     }
     state.skip(now, "mair", "x", 3 * DAY);
@@ -7759,6 +7750,104 @@ fn balance_once(
     Ok(Some(format!("production balance: {what}: {ok} {why}")))
 }
 
+fn batch_failures(
+    state: &State,
+    names: &[String],
+    ok: bool,
+    why: &str,
+) -> BTreeMap<String, String> {
+    if ok {
+        return BTreeMap::new();
+    }
+    let failed = list(&state.last_result, "failed");
+    if failed.is_empty() {
+        return names.iter().map(|n| (n.clone(), why.to_string())).collect();
+    }
+    failed
+        .iter()
+        .filter_map(|f| {
+            let wing = text(&f["wing"]);
+            (!wing.is_empty()).then(|| {
+                (
+                    wing.to_string(),
+                    format!("{}: {}", text(&f["code"]), text(&f["message"])),
+                )
+            })
+        })
+        .collect()
+}
+
+/// Order the queued rebases: one call per base with every wing going there (`wings`), so the air
+/// mode, the camera and the base are found once. A base the game refused is left out for that
+/// wing for 30 days as before (another base with room is tried next).
+fn send_rebases(
+    state: &mut State,
+    tools: &dyn Tools,
+    lease: &str,
+    now: GameHour,
+    rebases: &mut Vec<(String, i64)>,
+    moved: &mut Vec<String>,
+) -> Result<()> {
+    let mut order: Vec<i64> = Vec::new();
+    for (_, base) in rebases.iter() {
+        if !order.contains(base) {
+            order.push(*base);
+        }
+    }
+    for base in order {
+        let names: Vec<String> = rebases
+            .iter()
+            .filter(|(_, b)| *b == base)
+            .map(|(n, _)| n.clone())
+            .take(24)
+            .collect();
+        let args = if names.len() == 1 {
+            json!({"wing": names[0], "state_id": base})
+        } else {
+            json!({"wings": names, "state_id": base})
+        };
+        let (ok, why) = state.act(tools, lease, "hoi4_air_rebase", args, "ab")?;
+        let failed = batch_failures(state, &names, ok, &why);
+        for name in &names {
+            match failed.get(name) {
+                Some(cause) if cause.contains("rebase_refused") => {
+                    state.skip(now, "airrebase", &format!("{name}|{base}"), 30 * DAY);
+                    note(
+                        state,
+                        "air_plan",
+                        format!("{name}: the game refused the base in state {base} (full, or out of reach); another base with room is tried"),
+                    );
+                }
+                Some(_) => {
+                    // a rebase that did not take (NotApplied: the transfer never started) leaves
+                    // that base out for this wing as a refusal does; the next try picks another
+                    // base with room (w47c1, 23 Nov 2026: 15 rebases of Polish wings to state 57
+                    // came back NotApplied and were sent again unchanged every week)
+                    state.skip(now, "airrebase", &format!("{name}|{base}"), 30 * DAY);
+                    state.skip(now, "airplan", name, DAY);
+                }
+                None => {}
+            }
+            let (wing_ok, wing_why) = match failed.get(name) {
+                Some(c) => (false, c.as_str()),
+                None => (
+                    true,
+                    if ok {
+                        why.as_str()
+                    } else {
+                        "Verified in the batch"
+                    },
+                ),
+            };
+            moved.push(format!(
+                "air_plan {name} rebase to state {base}: {wing_ok} {wing_why}"
+            ));
+        }
+    }
+    rebases.clear();
+    Ok(())
+}
+
 /// Wings of one air plan entry ordered together (one hoi4_air_mission call).
 const AIR_PLAN_BATCH: usize = 12;
 
@@ -9659,6 +9748,14 @@ mod tests {
             .unwrap()
             .unwrap_or_default();
         assert_eq!(line.matches("rebase to state 57").count(), 3, "{line}");
+        // one call for the base, every wing in it (69 single-wing calls in the 23 Nov runs)
+        let sent: Vec<(String, Value)> = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_air_rebase")
+            .collect();
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!(sent[0].1["wings"], json!(["JG 1", "JG 2", "JG 3"]));
+        assert_eq!(sent[0].1["state_id"], 57);
     }
 
     #[test]

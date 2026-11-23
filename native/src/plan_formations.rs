@@ -549,7 +549,8 @@ fn straggler_step(
                     && lines.contains(tn)
                     && t["defensive_orders"].as_u64().unwrap_or(0) == 0
                     && !reserved.contains(tn)
-                    && t["division_count"].as_u64().unwrap_or(0) + n <= max
+                    && t["division_count"].as_u64().unwrap_or(0) + n
+                        <= super::command_cap(&t["division_limit"], max, &plan["armies"])
             })
             .map(|t| {
                 let there = t["main_state"]
@@ -769,7 +770,12 @@ fn merge_and_lead(
                         text(&x["army"]) == target
                             && x["defensive_orders"].as_u64().unwrap_or(0) > 0
                     });
-                    let room = max.saturating_sub(size(&target));
+                    // the target's own commander limit (the game's base plus his traits)
+                    let cap = armies
+                        .iter()
+                        .find(|x| text(&x["army"]) == target)
+                        .map_or(max, |x| super::command_cap(&x["division_limit"], max, cfg));
+                    let room = cap.saturating_sub(size(&target));
                     (target != name && !reserve.contains(&target) && !defended && room > 0)
                         .then(|| (h.clone(), target, room))
                 })

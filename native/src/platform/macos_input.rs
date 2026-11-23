@@ -1013,6 +1013,13 @@ impl<'p> MacKeys<'p> {
             }
             CFRelease(moved);
             ready?;
+            // Zero pixels is a hover: no wheel event at all. A zero-delta wheel over the map
+            // closed the open game menu before the Save click (v65c frame bursts, 23 Nov 2026:
+            // menu drawn at 0.50 s, gone at 0.82 s with the cursor still at the hover point).
+            if pixels == 0 {
+                crate::phase::sleep(std::time::Duration::from_millis(120));
+                return Ok(());
+            }
             crate::phase::sleep(std::time::Duration::from_millis(60));
             self.preflight()?;
             let wheel = CGEventCreateScrollWheelEvent(std::ptr::null(), 0, 1, pixels);

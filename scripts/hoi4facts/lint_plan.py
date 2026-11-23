@@ -317,6 +317,11 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
   army.width_terrain       a plan template (not garrison), or the start templates army_layout fields, whose
                            width fills the theatre's battles (terrain mix of war.theatre, axes and target
                            states; over-width and stacking penalties) 0.05 below the best width (error at 0.10)
+  army.width_stack         (warning) a line or armour template whose full stack (the divisions the game feeds into
+                           one battle up to the over-width cap) passes the main terrain's battle width (combat
+                           width + combat support width per extra direction) by half the over-width cap (16%) or
+                           more at 1 or 2 directions, while an operation lets more divisions than fit stand on one
+                           province
   war.counter_attack       (warning) a defender (war.posture defend) with no reachable phase that has axes
   disband.locked           a disband template the history locks (is_locked), or disband.consolidate when every start
                            division uses a locked template: the game refuses to disband them
@@ -601,7 +606,7 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              "predicates.unreadable", "conquest.neutral_land", "alarms.silenced",
              # tactics research rules
              "production.mature_switch", "production.cull", "production.day0", "production.in_progress",
-             "production.naval_cap", "army.width_terrain", "war.supply_floor", "war.planning_wait",
+             "production.naval_cap", "army.width_terrain", "army.width_stack", "war.supply_floor", "war.planning_wait",
              "war.pocket_threshold", "war.encircle", "politics.unneeded_conscription", "politics.pp_budget", "intelligence.operations", "politics.available", "research.ahead",
              "navy.invasion_prep", "navy.sea_control", "construction.war_civs", "navy.strike_without_patrol",
              "peace.order", "construction.railway_node", "supply.axis_reach", "production.balance",
@@ -4566,6 +4571,58 @@ class Lint:
                      f"start templates the armies field fill the theatre's battles poorly: {'; '.join(bad)}; {tail}: "
                      f"plan templates near the best width (templates[] with base) or merge the small divisions")
 
+    def army_width_stack(self):
+        """Line and armour template widths against the battle width of the theatre's main terrain at 1 and 2
+        attack directions (combat_width + combat_support_width per extra direction, common/terrain), at the stack
+        the game builds: an army with more divisions than one battle holds keeps feeding divisions in while the
+        over-width stays within COMBAT_OVER_WIDTH_PENALTY_MAX, and every division in it then attacks at the
+        over-width penalty (COMBAT_OVER_WIDTH_PENALTY per 1% over). A width whose full stack passes the battle by
+        half the over-width cap or more warns, unless every operation caps the stack per province at the divisions
+        that fit."""
+        g = self.game
+        mix = derive.terrain_mix(g, self.theatre_states())
+        if not mix:
+            return
+        main = max(mix, key=lambda t: (mix[t], t))
+        tw = derive.terrain_widths(g).get(main)
+        if not tw:
+            return
+        k = derive._width_defines(g)
+        per = abs(k["COMBAT_OVER_WIDTH_PENALTY"]) or 1.0
+        over_max = abs(k["COMBAT_OVER_WIDTH_PENALTY_MAX"]) / per   # the over-width share at the cap
+        caps = []
+        for o in self.list_of("operations"):
+            st = o.get("stacking")
+            on = st is not False and not (isinstance(st, dict) and st.get("enabled") is False)
+            caps.append(st.get("max_per_province", 11) if on and isinstance(st, dict) else (11 if on else None))
+        for i, t in enumerate(self.list_of("templates")):
+            if t.get("role") not in ("line", "armour", "assault", "mobile", None):
+                continue
+            width = derive.template_width(g, template_columns(t.get("regiments")) or [])
+            if not width:
+                continue
+            rows, worst, fits = [], 0.0, []
+            for d in (1, 2):
+                battle = tw["width"] + tw["support"] * (d - 1)
+                fit = max(1, int(battle // width))
+                full = max(fit, int((battle * (1 + over_max) + 0.5) // width))
+                over = full * width / battle - 1
+                worst = max(worst, over)
+                fits.append(fit)
+                rows.append(f"{d} direction{'s' if d > 1 else ''}: battle {battle:g}, {fit} fit "
+                            f"({fit * width / battle:.0%}), the full stack {full} x {width:g} = {full * width:g} "
+                            f"({over:+.0%})")
+            if worst < over_max / 2 - 1e-9:
+                continue
+            if caps and all(c is not None and c <= min(fits) for c in caps):
+                continue
+            self.add("warning", "army.width_stack", f"templates[{i}] {t.get('id', t.get('name'))}",
+                     f"width {width:g} on {main} (the theatre's main terrain, {mix[main]:.0%}; combat width "
+                     f"{tw['width']:g} + {tw['support']:g} per extra direction): " + "; ".join(rows) + ": the game "
+                     f"feeds divisions in up to {over_max:.0%} over width and each then attacks "
+                     f"{per:g}% weaker per 1% over; cap the stack per battle at {min(fits)} (operations[].stacking "
+                     f"max_per_province) or pick a width that divides the battle width")
+
     # ------------------------------------------------------------------ war (tactics)
     def war_blocks(self):
         """[(label, war object)]: war, war_by_phase entries and phases / contingencies overrides.war."""
@@ -6095,7 +6152,7 @@ class Lint:
                  # timeline)
                  self.production_mature_switch, self.production_cull, self.production_day0,
                  self.production_in_progress, self.production_naval_cap, self.production_balance,
-                 self.army_width_terrain,
+                 self.army_width_terrain, self.army_width_stack,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.war_encircle,
                  self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.defend_posture, self.disband_locked, self.focus_reach, self.decision_reach, self.construction_idle, self.politics_open_seat, self.politics_known_ideas, self.alert_owners,
                  self.idle_wings,
@@ -6254,6 +6311,18 @@ def lint(plan, game, k=FRONT_K, schema=None, hand=None, decisions=None):
             "findings": lt.findings, "facts": lt.facts}
 
 
+def add_lessons(out, plan, store):
+    """The lessons a plan row contradicts, as warnings (hoi4_live/observe/lessons.py)."""
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    from hoi4_live.observe.lessons import LessonStore
+    meta = plan.get("_meta") if isinstance(plan.get("_meta"), dict) else {}
+    for w in LessonStore(store).lint_plan(plan, meta.get("country") or meta.get("tag")):
+        out["findings"].append({"severity": "warning", "rule": f"lesson:{w['lesson']}", "where": w["where"],
+                                "message": f"{w['text']} (lesson confidence {w['confidence']})"})
+        out["warnings"] += 1
+    return out
+
+
 def load_game(game_dir, userdir=None, mod_args=()):
     mods = content.mods_from_userdir(userdir) if userdir else []
     for arg in mod_args:
@@ -6276,6 +6345,9 @@ def main(argv=None):
                     help="hand-written plan: report the coverage-build rules as warnings (as _meta.source hand)")
     ap.add_argument("--decisions", default=None,
                     help="the run's decision table (default: decisions.md beside the plan, when it exists)")
+    ap.add_argument("--lessons", default=os.environ.get("HOI4_LIVE_LEARNED"),
+                    help="a learned store (learned/): lessons of scope plan/country/any that a plan row contradicts "
+                         "are warnings (rule lesson:<id>)")
     args = ap.parse_args(argv)
     try:
         with open(args.plan, encoding="utf-8") as fh:
@@ -6299,6 +6371,8 @@ def main(argv=None):
         return 2
     out = lint(plan, load_game(args.game, args.userdir, args.mod), args.front_distance, hand=args.hand or None,
                decisions=decisions)
+    if args.lessons:
+        out = add_lessons(out, plan, args.lessons)
     if args.json:
         print(json.dumps(out, indent=2, default=sorted))
     else:

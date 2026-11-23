@@ -39,12 +39,15 @@ hoi4_special_project_unassign.
    in an enemy state, the agency view watched; `hoi4_intelligence` two game days later; `hoi4_operations` and,
    when ready, `hoi4_operation_start` (collaboration government). Question: which click or read-back fails.
 3. Design companies (10 min): `hoi4_mios`, `hoi4_mio_policy` on one organisation with the view watched,
+    OPEN v65i/v65j (23 Nov 2026): hoi4_mio_policy fails input_readback_failed "open policy window": the Policies window draws (burst, 3 s) but neither the CPolicyWindow class path (primary vtable 0x362de58 confirmed by RTTI) nor a depth-6 search below the detail window finds it, and hoi4_ui_inspect lists no MIO window among its roots; finding Mauser took 47 s (detail windows opened one by one).
    `hoi4_mio_design_team` once. Question: where the organisation list lives on 1.19.4.1.
 4. Templates (8 min): `hoi4_template_create` one infantry template with the designer watched. Question: why the
+    DONE v65i (23 Nov 2026): 6 infantry + artillery + engineer Verified, layout_saved true, 13.3 s, 65 army XP.
    layout is not saved.
 5. Special-forces doctrine (5 min): `hoi4_doctrines`, then `hoi4_doctrine_adopt special_forces_quantity` with
    the doctrine window watched. Question: where the folder's slot is.
 6. Command power (5 min): the top bar's command power tooltip (value and cap) beside `hoi4_country_status`;
+    DONE v65i (23 Nov 2026): tooltip cap 210 = base 80 + 130 allocated to six leaders; at the cap the 0.81 daily gain is wasted (hoi4_general_trait base_max 80 is the define only). No trait pickable for Manstein, Hoth, Heinrici: general traits need an earned parent, field marshal traits a field marshal.
    `hoi4_general_trait {general, list:true}` for three generals. Question: the real cap; whether any trait can be
    picked.
 7. Defensive orders (10 min): `hoi4_army_fallback`, `hoi4_army_area_defense`, `hoi4_army_halt` on three armies,
@@ -55,6 +58,7 @@ hoi4_special_project_unassign.
 10. Events left open (5 min, speed 2): when a news event opens, `hoi4_event_choose` with the window watched.
 11. Saves (10 min, speed 2): ten `hoi4_save` calls a game day apart while events arrive; first-try successes and
     each failure's code.
+    DONE v65h (23 Nov 2026): 10/10 paused and 10/10 running at speed 1, every other try from the naval map mode, all first try, 3.2-8.7 s. Causes fixed: every call (reads included) closed a shown game menu at the end of its pause bracket, so the resident watcher shut the menu the save had opened; a hover sent a zero wheel event.
 12. Focus (10 min): executor on with only the focus lane for a game week; when a start is not applied, read
     `hoi4_focus_available` for it and look at the tree.
 
@@ -88,15 +92,18 @@ The May 1940 Germany bed source (1 May 1940, paused, executor off unless said):
     timing shows the click count), no trace "chords off". Before: 1.3 s + about 0.3 s a factory (23 factories
     about 8 s); after about 2.5 s. When a chord moves the line by one only, the game on macOS reads another
     modifier: note which (Ctrl or Command) and leave `production_chords` off.
+    DONE v60a (23 Nov 2026): anti_air line 1 -> 24 -> 1 Verified both ways, 5 clicks each, 2.56 s and 2.13 s. production_chords on by default.
 17. Air missions by base (10 min): `hoi4_air`; a base whose wings are all fighters (three or more) and one
     fighter at a base it shares with another type. `hoi4_air_mission {wings: [the base's wings and the shared
     one], mission: "air_superiority", region, bulk: true}` with the map watched. Expected: Verified; the result's
     `by_base` row for the clean base ok, the shared base's wing ordered by the single path; one base click, one
     mission click and one region click for the clean base. Before: 2.5-5 s a wing; after about 4 s a base. The
     same call again clicks nothing (every wing flies it already).
+    DONE v60a: 9 wings (8 of one base, 1 of a mixed base) air_superiority Verified in 7.9 s (0.88 s a wing), 9 clicks; the same call again 1.2 s, no click. air_base_select on by default.
 18. Air rebase by base (5 min): `hoi4_air_rebase {wings: [every wing of one base], state_id: another own base
     with room, bulk: true}`. Expected: each wing's transfer_to_base_id is the target; one base click and one
     right click. Before: 1.8-3.4 s a wing; after about 3 s a base.
+    DONE v60a: 4 wings of one base rebased Verified in 1.35 s, 3 clicks.
 19. Selection questions for the next step (5 min, by hand, nothing kept): in air mode, Shift+Click a second
     base circle while one base is selected (are its wings added?), and Shift+Click (then Ctrl+Click) a wing row
     of the selection view (`airwing_selection_item`): is that wing taken out of the selection? Either answer lets
@@ -107,6 +114,7 @@ The May 1940 Germany bed source (1 May 1940, paused, executor off unless said):
     three traits read queue numbers in the result's `entries`, the second organisation has two enabled traits
     queued. Before: 8.3 s a trait plus 8 s for a listing visit; after about 10 s a visit. Note how often the
     detail window had to be opened again after a click.
+    RUN v60a, NOT FASTER: three traits Verified in 26 s (8.7 s a trait, 40 clicks): after each queued trait the detail window closes and the organisation is found again row by row. mio_queue_many stays off until the found row is reopened directly.
 21. Executor bed with every bulk path (25 min): a STUDY bed of 7 war days from the same source with the plan's
     `manage.bulk: ["all"]`, hands off; compare its cleanliness table with a bed of the same plan without it
     (air_mission, air_rebase, production_set, mio_trait: calls, elements changed, s per element). Expected: air
@@ -118,6 +126,7 @@ A 1936 start (Germany, paused unless said):
     `hoi4_construction_add {building: "arms_factory", state_id, count: <free slots>, fill: true, bulk: true}`.
     Expected: Verified, the state's queue grew by the free slots after one Shift+Click. Before: about 1 s a
     building after the first (a 600 ms settle and a read); after one click.
+    DONE v65i (23 Nov 2026): 4 arms factories in Oberbayern Verified 0 -> 4 in one call, 2.86 s.
 23. Peace years with every bulk path (20 min): executor on with `manage.bulk: ["all"]` for 60 game days at speed
     3; the cleanliness table against the 1936 campaign baseline (production_set about 1.3 s a line, mio_trait
     8.3 s a trait, construction_add 2.9 s a state).
@@ -129,6 +138,7 @@ and province flows) and `stockpile.rs` (the country's equipment stockpile) were:
 search the country object for it, confirm on a second value, then read it without opening the view.
 
 24. Hub motorisation, first (10 min, executor off): `hoi4_army_motorization` level 2 on an army at the front (never
+    PARTIAL v65i (23 Nov 2026): Panzergruppe Ost 1 -> 2 Verified, hoi4_armies reads 2; trucks 179 -> 82 in 2 game days. Per-hub range not read.
    set live above 1), read it back in `hoi4_armies`, then open the supply map mode and read the supply range of
    the hubs it draws from before and after (screenshot and `hoi4_supply` province supply/headroom of the
    provinces 2-4 beyond the hub); note the trucks taken from the stockpile (`hoi4_stockpile` motorized_equipment
@@ -168,3 +178,5 @@ search the country object for it, confirm on a second value, then read it withou
    an in-place layout edit when the weak template has other uses.
 
 Total: about 325 minutes in five sessions.
+34. Air wings attached to an army (5 min): `hoi4_air_attach {wings, army}`.
+    DONE v65m (23 Nov 2026): 2/2 CAS wings attached to Armee West Nord in 5.3 s, Verified from the wing's attached-army link (+0x950); the repeat call already:true in 19 ms, no input. Wings in pilot exercises are refused by the game.

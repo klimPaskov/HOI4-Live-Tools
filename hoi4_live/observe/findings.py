@@ -71,7 +71,8 @@ def from_omissions(snap):
             text += " (the rule's note contradicts the read)"
         sev = "high" if (days or 0) >= 14 else "medium"
         out.append(F(o.get("item") or "omission", sev, text, owner="server omissions",
-                     days_open=days))
+                     days_open=days, owner_rule=o.get("owner"),
+                     owner_note=str(o["owner_note"])[:300] if o.get("owner_note") else None))
         seen[sig] = out[-1]
     return out
 
@@ -199,8 +200,22 @@ def doctrines(snap, have):
 # --- force distribution --------------------------------------------------------
 
 
+# The game's base command limits (common/defines CORPS_COMMANDER_DIVISIONS_CAP and
+# FIELD_MARSHAL_ARMIES_CAP), used only when the roster read gives no limit of its own.
+ARMY_DIVISIONS_BASE = 24
+GROUP_ARMIES_BASE = 5
+
+
 def land(snap, prev):
     out = []
+    for grp in g(snap, "land", "groups", default=[]):
+        armies = grp.get("armies") or []
+        cap = grp.get("army_limit") or GROUP_ARMIES_BASE
+        if len(armies) > cap:
+            out.append(F("group_over_limit", "medium",
+                         f"army group {grp.get('group')} holds {len(armies)} armies, over its field marshal's "
+                         f"limit of {cap}: the armies past it lower his bonuses; form a second group under a "
+                         f"free marshal", subject=grp.get("group"), armies=len(armies), limit=cap))
     at_war = g(snap, "wars", "at_war")
     controlled = set(g(snap, "wars", "states_controlled", default=[]))
     divs = g(snap, "land", "divisions", default=[])
@@ -212,6 +227,13 @@ def land(snap, prev):
         n = a.get("divisions") or 0
         if not n:
             continue
+        cap = a.get("division_limit") or ARMY_DIVISIONS_BASE
+        if n > cap:
+            out.append(F("army_over_limit", "medium",
+                         f"army {a['army']} holds {n} divisions, over its commander's limit of {cap}: every "
+                         f"division past it lowers the army's leadership bonuses; the excess belongs in another "
+                         f"army of the same role with room or a new army under a free general",
+                         subject=a["army"], divisions=n, limit=cap))
         orders = a.get("orders") or []
         if not orders and not a.get("executing") and not group_orders.get(a.get("group")):
             top = sorted((a.get("states") or {}).items(), key=lambda x: -x[1])[:3]

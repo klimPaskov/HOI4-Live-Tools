@@ -449,6 +449,16 @@ pub(super) fn guard(
     tool: &str,
     args: &mut Value,
 ) -> Option<String> {
+    // an army over its commander's limit gives its excess away (the split-off army joins a line
+    // army with room: the straggler rule); an operation keeps the army and its orders (s55a, 23
+    // Nov 2026: Armee West Nord held 35 divisions the whole war, every split of the owned army
+    // refused here). The marker is the executor's own and never reaches the tool.
+    if tool == "hoi4_army_split" && args["over_limit"] == json!(true) {
+        if let Some(o) = args.as_object_mut() {
+            o.remove("over_limit");
+        }
+        return None;
+    }
     if owned.is_empty() {
         return None;
     }
@@ -3564,10 +3574,16 @@ fn stacking(
             (Some(a), Some(b)) => *b > 0.0 && *a < STACK_TIRED * *b,
             _ => false,
         };
-        let src_size = army_row(roster, src)
+        let src_row = army_row(roster, src);
+        let src_size = src_row
             .and_then(|r| r["division_count"].as_i64())
             .unwrap_or(24);
-        let army_room = (24 - src_size).max(0);
+        // the army's own commander limit (the game's base plus his traits), 24 when unread
+        let src_cap = src_row
+            .and_then(|r| r["division_limit"].as_i64())
+            .filter(|l| *l > 0)
+            .unwrap_or(24);
+        let army_room = (src_cap - src_size).max(0);
         // whole when it fits the line and the army, else the part both take
         let part = size
             .min(army_room)
@@ -4730,7 +4746,22 @@ fn reconcile(
         },
     )?;
     if state.last_ok == Some(false) {
-        state.skip(now, "opdraw", &u.name, 2);
+        // the game drew the stroke to other states: the line is out of this front's reach as it
+        // stands; the same stroke waits until the front has moved (s55a, 23 Nov 2026: Panzergruppe
+        // Ost's stroke into state 34 went out five times in two weeks, each arrow standing over
+        // 18 or 980, five arrows on one front)
+        if line.contains("Diverged: drawn to") {
+            state.skip(now, "opdraw", &u.name, 2 * DAY);
+            state.op_notes.insert(
+                format!("{id}:{}", u.name),
+                format!(
+                    "{}: the stroke {tag} is drawn elsewhere by the game ({line}); held 2 days",
+                    u.name
+                ),
+            );
+        } else {
+            state.skip(now, "opdraw", &u.name, 2);
+        }
     }
     Ok(Some(line))
 }
