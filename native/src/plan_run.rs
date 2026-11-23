@@ -402,6 +402,7 @@ pub const BULK_PATHS: &[(&str, &str)] = &[
     ("hoi4_production_add", "production_chords"),
     ("hoi4_air_mission", "air_base_select"),
     ("hoi4_air_rebase", "air_base_select"),
+    ("hoi4_mio_trait", "mio_queue_many"),
 ];
 /// The `manage.bulk` name of a tool's bulk path.
 fn bulk_path_of(tool: &str) -> Option<&'static str> {
@@ -1221,6 +1222,10 @@ impl State {
             }
             _ => true,
         }
+    }
+    /// Whether the plan turns on the bulk path `path` (`manage.bulk`).
+    fn bulk_on(&self, path: &str) -> bool {
+        self.bulk.contains(path) || self.bulk.contains("all")
     }
     /// Army `old` now carries the name `new`: everything kept by army name follows it (role
     /// bindings, war rules, done-memory and skip timers ending in the name, military memory).

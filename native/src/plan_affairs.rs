@@ -2609,13 +2609,23 @@ fn mio_plan(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             && !state.done.contains_key(&policy_key)
             && !state.skipped(now, "miopol", &org);
         let mut next: Option<u64> = None;
+        // with manage.bulk mio_queue_many: every listed trait still to queue, in ONE visit
+        let mut rest: Vec<u64> = Vec::new();
         let mut bad: Option<String> = None;
         for t in list(entry, "traits") {
             match trait_index(t) {
                 Some(i) if state.done.contains_key(&format!("mio:{org}:t{i}")) => {}
+                Some(i) if next.is_some() => {
+                    if rest.len() < 16 {
+                        rest.push(i);
+                    }
+                }
                 Some(i) => {
                     next = Some(i);
-                    break;
+                    rest.push(i);
+                    if !state.bulk_on("mio_queue_many") {
+                        break;
+                    }
                 }
                 None => {
                     bad = Some(t.to_string());
@@ -2661,6 +2671,18 @@ fn mio_plan(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
                 mio_refused(state, now, "miopol", &org, &why);
             }
             return Ok(Some(format!("mio {org} policy {policy}: {ok} {why}")));
+        }
+        if next.is_some() && rest.len() > 1 {
+            args["trait_indices"] = json!(rest);
+            let (ok, why) = state.act(tools, run.lease, "hoi4_mio_trait", args, "mi")?;
+            if ok {
+                for i in &rest {
+                    state.done.insert(format!("mio:{org}:t{i}"), now);
+                }
+            } else {
+                mio_refused(state, now, "mio", &org, &why);
+            }
+            return Ok(Some(format!("mio {org} traits {rest:?} in one visit: {ok} {why}")));
         }
         if let Some(index) = next {
             args["trait_index"] = json!(index);
@@ -2903,6 +2925,21 @@ fn mio_auto_traits(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         // with a trait point and nothing queued)
         let open = state.manage.alert_since.contains_key("mio_traits");
         state.skip(now, "mioauto", &org, if open { 3 * DAY } else { 30 * DAY });
+        // with manage.bulk mio_queue_many: one visit lists the tree and keeps two enabled traits
+        // queued (the listing visit and the queue visit were two GUI visits of ~8 s each)
+        if state.bulk_on("mio_queue_many") {
+            let (ok, why) = state.act(
+                tools,
+                run.lease,
+                "hoi4_mio_trait",
+                json!({"organization": org, "auto": 2}),
+                "mq",
+            )?;
+            if !ok {
+                mio_refused(state, now, "mio", &org, &why);
+            }
+            return Ok(Some(format!("mio {org} traits (auto, one visit): {ok} {why}")));
+        }
         let listing = tools.call(
             "hoi4_mio_trait",
             &json!({"organization": org, "list": true,
@@ -4999,6 +5036,37 @@ mod tests {
         assert_eq!(sent.len(), 3);
         assert_eq!(sent[0].1["trait_index"], 3);
         assert_eq!(sent[0].1["slot"], 1);
+    }
+
+    #[test]
+    fn with_the_bulk_path_one_visit_queues_every_listed_trait_and_keeps_two_waiting() {
+        let tools = fake(vec![]);
+        let plan = json!({"manage": {"bulk": ["mio_queue_many"]},
+            "mio": [{"organisation": "GER_krupp_organization", "traits": [3, 5, 7]},
+                    {"organisation": "GER_mauser_organization", "traits": []}]});
+        let mut state = State::default();
+        state.bulk = super::super::bulk_paths(&plan);
+        let out = step(&mut state, &tools, &plan, "l", START + 1).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("mio GER_krupp_organization traits [3, 5, 7] in one visit: true Verified")
+        );
+        for i in [3, 5, 7] {
+            assert!(state.done.contains_key(&format!("mio:GER_krupp_organization:t{i}")));
+        }
+        // the auto organisation: one visit lists and queues (no separate listing call)
+        let out = step(&mut state, &tools, &plan, "l", START + 2).unwrap();
+        assert!(out.unwrap().contains("GER_mauser_organization traits (auto, one visit)"));
+        let calls = tools.calls.borrow();
+        let mio: Vec<&Value> = calls
+            .iter()
+            .filter(|(n, _)| n == "hoi4_mio_trait")
+            .map(|(_, a)| a)
+            .collect();
+        assert_eq!(mio.len(), 2, "two visits for both organisations");
+        assert_eq!(mio[0]["trait_indices"], json!([3, 5, 7]));
+        assert_eq!(mio[1]["auto"], 2);
+        assert!(mio.iter().all(|a| a["bulk"] == true));
     }
 
     #[test]
