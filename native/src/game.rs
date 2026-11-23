@@ -9,7 +9,7 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-pub const BUILD_ID: &str = "2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082";
+pub const BUILD_ID: &str = "71806afa707a46fb72f0738a719c3f1c3f5e2e42";
 /// Overview offsets of one inspected build. Image offsets are relative to the
 /// verified image base; the rest are object field offsets.
 #[derive(Debug)]
@@ -49,8 +49,9 @@ pub(crate) struct Layout {
     pub(crate) build_id: &'static str,
     source: &'static str,
 }
-/// Linux ELF 2265e6e7 (HOI4 1.19.4.1, libstdc++), migrated from ELF a4971c9e (1.19.3) by
-/// scripts/linux_build_migrate.py: image addresses moved, own-country fields did not.
+/// Linux ELF 71806afa (HOI4 1.20.0.0, libstdc++), migrated from ELF 2265e6e7 (1.19.4.1), itself
+/// migrated from a4971c9e (1.19.3), by scripts/linux_build_migrate.py: image addresses moved,
+/// own-country fields did not.
 pub(crate) const LINUX: Layout = Layout {
     gs_global: 0x459e9f0,
     idler_global: 0x459e908,
@@ -136,7 +137,7 @@ pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
         crate::memory::StringAbi::LibCxx => &MACOS,
     }
 }
-pub const SHA256: &str = "36a69ea446df3903baa0d1b2dec1331cfd2fe16eacee482d84cc36e5b6f9b5da";
+pub const SHA256: &str = "f8fe17fb1047cc94a64e7cc8f13780494e8eb111b9c3a3468256bfbc4f499874";
 /// Additional own-campaign context for ordinary clock input. The persisted
 /// playthrough ID distinguishes campaigns, but is not a load-generation token.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
