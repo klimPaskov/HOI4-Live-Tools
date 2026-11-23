@@ -1262,8 +1262,37 @@ fn line_tag(line: &[i64]) -> String {
         .join("-")
 }
 
+/// An enemy out of the operation hands its units to `next` (the first enemy at war, in list
+/// order). THE ARMOUR JOINS THE MAIN WEIGHT: an armoured formation goes instead to the enemy the
+/// operation's group (its main weight) still fights (w53a, 23 Nov 2026: Panzergruppe Ost took
+/// Luxembourg on day 4 and then went alone through the Ardennes at Belgium, 0 of 86 points in
+/// 28 days, while the group's attack on Holland stalled at 14 of 91 without it; the fast w46a1
+/// had it in the Dutch core on day 15). Pure.
+fn hand_over_out(
+    units: &mut [Unit],
+    out: &[String],
+    beaten: &[String],
+    at_war: &[String],
+    next: &str,
+) {
+    let main = units
+        .iter()
+        .find(|u| u.role == Role::Group)
+        .map(|g| g.enemy.clone())
+        .filter(|e| at_war.contains(e) && !beaten.contains(e) && !out.contains(e));
+    for u in units.iter_mut() {
+        if out.contains(&u.enemy) {
+            let armour = u.role == Role::Strike || u.spear || u.role == Role::Mobile;
+            u.enemy = match &main {
+                Some(m) if armour => m.clone(),
+                _ => next.to_string(),
+            };
+        }
+    }
+}
+
 /// Map centres of the operation's enemies' states (read once per enemy).
-fn learn_centres(state: &mut State, tools: &dyn Tools, tags: &[String]) {
+pub(super) fn learn_centres(state: &mut State, tools: &dyn Tools, tags: &[String]) {
     for tag in tags {
         // the centres live in this server life: a tag is read once per life (the done key a
         // continued campaign carries in plan_state said "read" while this life had read only the
@@ -1641,14 +1670,12 @@ fn one(
         }
     }
     if let Some(next) = next {
-        for u in units.iter_mut() {
-            if out.contains(&u.enemy) {
-                u.enemy = next.clone();
-            }
-        }
+        hand_over_out(&mut units, &out, &beaten, &at_war, &next);
     }
     if executed {
-        if state.centers.is_empty() {
+        // every tag is read once per server life (learn_centres keeps the tags it read): the air
+        // plan's own-state centres in peace must not stop the enemies' from being read here
+        if enemies.iter().any(|t| !state.centre_tags.contains(t)) {
             let mut tags = enemies.clone();
             tags.push(player(tools, plan));
             learn_centres(state, tools, &tags);
@@ -4749,7 +4776,7 @@ fn control(tools: &dyn Tools, me: &str, ids: &[i64]) -> (Vec<i64>, usize) {
     (states, provinces)
 }
 
-fn player(tools: &dyn Tools, plan: &Value) -> String {
+pub(super) fn player(tools: &dyn Tools, plan: &Value) -> String {
     if let Some(me) = plan["war"]["me"].as_str() {
         return me.to_string();
     }

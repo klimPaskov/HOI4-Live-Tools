@@ -3750,6 +3750,23 @@ pub(super) fn air_plan_step(
                 && when_holds(state, tools, &e["when"], now) == Truth::True
         })
         .collect();
+    // the nearest base with room needs the own states' map centres: learned here when an active
+    // entry names a base region and an own base has no centre yet (w47r2, 23 Nov 2026: the
+    // centres came only from an executing operation, so in the peace prepare the fallback found
+    // nothing and 400 old wings still stood in Silesia on the western war's tenth day)
+    let wants_region = entries
+        .iter()
+        .zip(&active)
+        .any(|(e, a)| *a && e["base_state"].is_null() && !e["base_region"].is_null());
+    let unknown = bases.iter().any(|b| {
+        b["state_id"]
+            .as_i64()
+            .is_some_and(|s| !state.centers.contains_key(&(s as i32)))
+    });
+    if wants_region && unknown {
+        let me = super::plan_operation::player(tools, plan);
+        super::plan_operation::learn_centres(state, tools, &[me]);
+    }
     let owners = wing_owners(entries, &active, all_wings);
     let mut flying = 0;
     let mut deploy_notes: Vec<String> = Vec::new();
@@ -3912,7 +3929,15 @@ pub(super) fn air_plan_step(
                 json!({"wing": name, "mission": mission, "region": region_arg}),
                 "ap",
             )?;
-            if !ok {
+            // an order held by something outside the mission (an open event, the selection lost
+            // while the map moved) says nothing about the wing's reach: it is tried again, never
+            // remembered as a region refused from this base (s53a, 23 Nov 2026: nine He 51 wings
+            // refused once with "events_open: germany.14" were marked refused over Benelux, never
+            // asked again and trained at their western bases through the whole winter)
+            let transient = why.contains("events_open") || why.contains("selection_lost");
+            if !ok && transient {
+                state.skip(now, "airplan", &name, DAY / 4);
+            } else if !ok {
                 state.skip(now, "airplan", &name, DAY);
                 state
                     .done
@@ -9871,6 +9896,63 @@ mod tests {
             .filter(|(n, _)| n == "hoi4_air_rebase")
             .count();
         assert_eq!(rebases, 2);
+    }
+
+    #[test]
+    fn a_mission_held_by_an_open_event_is_sent_again_not_marked_refused_from_the_base() {
+        let air = json!({"wings": [
+            {"wing": "JG 1", "aircraft_type": "small_plane_airframe_0", "aircraft": 100,
+             "air_base": {"base_id": 3, "state_id": 550}, "standing_by": true, "missions": []}],
+            "air_bases": [{"base_id": 3, "state_id": 550, "region": {"id": 273}, "free": 100}]});
+        let tools = fake(vec![("hoi4_air", air)]);
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_air_mission".into(), "events_open");
+        let plan = json!({"air_plan": [
+            {"airframe": "small_plane_airframe_0", "base_region": 273,
+             "mission": "air_superiority", "region": 273}]});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out
+            .unwrap()
+            .contains("air_superiority over region 273: false"));
+        assert!(!state.done.keys().any(|k| k.starts_with("airref:")));
+        tools.refuse.borrow_mut().clear();
+        let out = step(&mut state, &tools, &plan, "l", START + DAY / 2).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("air_plan JG 1 air_superiority over region 273: true Verified")
+        );
+    }
+
+    #[test]
+    fn in_peace_the_own_state_centres_are_learned_so_a_wing_leaves_a_full_region_for_the_nearest_room(
+    ) {
+        // w47r2: the centres came only from an executing operation; before the war the fallback
+        // found nothing and the old wings stayed in Silesia
+        let air = json!({"wings": [
+            {"wing": "Stuka 1", "aircraft_type": "small_plane_cas_airframe_0", "aircraft": 100,
+             "air_base": {"base_id": 66, "state_id": 66}, "standing_by": true, "missions": []}],
+            "air_bases": [
+                {"base_id": 57, "state_id": 57, "region": {"id": 7}, "free": 0},
+                {"base_id": 50, "state_id": 50, "region": {"id": 6}, "free": 300},
+                {"base_id": 80, "state_id": 80, "region": {"id": 9}, "free": 900},
+                {"base_id": 66, "state_id": 66, "region": {"id": 8}, "free": 0}]});
+        let states = json!({"states": [
+            {"state_id": 57, "x": 0.0, "z": 0.0}, {"state_id": 50, "x": 3.0, "z": 0.0},
+            {"state_id": 66, "x": 9.0, "z": 0.0}, {"state_id": 80, "x": 12.0, "z": 0.0}]});
+        let tools = fake(vec![("hoi4_air", air), ("hoi4_states", states)]);
+        let plan = json!({"war": {"me": "GER"}, "air_plan": [
+            {"airframe": "small_plane_cas_airframe_0", "base_region": 7, "mission": "cas",
+             "region": 5}]});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(
+            out.as_deref().unwrap_or("").contains("rebase to state 50"),
+            "{out:?}"
+        );
+        assert!(state.centre_tags.contains("GER"));
     }
 
     #[test]
