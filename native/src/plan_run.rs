@@ -6686,6 +6686,11 @@ fn air_war_step(
         }
         return air_war_missions(state, tools, plan, lease, now);
     }
+    // wings to the attacking armies before the air plan and the default missions take the rest (once a game day: the
+    // rule skips itself; as a plain lane it first ran on war day 14 in w69a/w69b, 24 Nov 2026, behind the other lanes)
+    if let Some(line) = plan_military::air_attach_rule(state, tools, plan, lease, now)? {
+        return Ok(Some(line));
+    }
     if let Some(line) = plan_manage::air_plan_step(state, tools, plan, lease, now)? {
         return Ok(Some(line));
     }
