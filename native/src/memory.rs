@@ -12,6 +12,12 @@ pub fn validate_read_batch(requests: &[(u64, usize)]) -> Result<usize> {
         total = total
             .checked_add(size)
             .ok_or_else(|| Error::new("read_bound", "Batch byte overflow"))?;
+        if address >> 40 == DISABLED_BASE >> 40 {
+            return Err(Error::new(
+                "layout_disabled",
+                crate::builds::disabled_message(),
+            ));
+        }
         if size > 1 << 20
             || total > 32 << 20
             || !(0x10000..=0x7fff_ffff_0000).contains(&address)
@@ -53,6 +59,10 @@ pub trait ReadMemory {
         Ok(results)
     }
 }
+/// Base of the address range a generated runtime gives a game address its migration map could not
+/// resolve (`scripts/macos_build_variant.py`): a read there is refused as `layout_disabled` with the
+/// module's reason instead of reaching another build's address.
+pub const DISABLED_BASE: u64 = 0x00de_ad00_0000_0000;
 pub struct Reader<'a> {
     memory: &'a dyn ReadMemory,
     abi: StringAbi,
@@ -303,6 +313,16 @@ mod tests {
             torn,
             calls: Cell::new(0),
         })
+    }
+    #[test]
+    fn a_disabled_module_address_is_refused_before_any_read() {
+        let memory = cxx(b"", b"", false);
+        let r = Reader::new(&memory);
+        // The generator writes DISABLED_BASE + the old address; the image base is added at the call site.
+        let e = r.u64(0x1_0000_0000 + DISABLED_BASE + 0x384b760).unwrap_err();
+        assert_eq!(e.code, "layout_disabled");
+        assert!(e.message.contains("GAME_VERSIONS"));
+        assert_eq!(memory.0.calls.get(), 0);
     }
     #[test]
     fn libcxx_short_and_long_strings_decode_and_bound() {
