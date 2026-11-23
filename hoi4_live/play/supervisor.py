@@ -58,7 +58,7 @@ import tempfile
 import threading
 import time
 
-from . import game, reconcile, report, runs
+from . import clockfile, game, reconcile, report, runs
 from .native import Native
 
 IDLE_PAUSE_MINUTES = runs.IDLE_PAUSE_MINUTES
@@ -385,7 +385,19 @@ class Supervisor:
         self.last_player = self.clock()
         # The status turns "ready" once the endpoint exists (main), so nobody is told to play before it can.
         self.state = "ready"
+        self.start_clock_file()
         return True
+
+    def start_clock_file(self):
+        """Publish the game clock to a file while the run lasts, when the run's settings or the environment
+        name one (clockfile.py; off by default). Reads only; the file is removed when the run stops."""
+        if getattr(self, "clock_file", None) is not None:
+            return
+        user_dir = (runs.read_json(os.path.join(self.run, "user-files.json")) or {}).get("user_dir")
+        self.clock_file = clockfile.ClockPublisher(
+            self.run, lambda name, args: self.native.call(name, args), user_dir=user_dir,
+            ready=lambda: self.state == "ready" and self.native is not None and self.native.alive())
+        self.clock_file.start(self.stopped)
 
     def reconcile_day_one(self):
         """The plan's names against the live game, once per run, before the executor starts: a name that
