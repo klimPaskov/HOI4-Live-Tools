@@ -123,3 +123,44 @@ A 1936 start (Germany, paused unless said):
     8.3 s a trait, construction_add 2.9 s a state).
 
 Total: about 240 minutes in four sessions.
+
+## Session S0: the in-process module, stage 0 (read-only; about 5 minutes, then a 30-minute soak)
+
+The owner lifted the "no memory writes" rule for this module only (23 Nov). Stage 0 writes nothing and calls
+nothing in the game: the module scans the game's image in memory, finds the game-state and idler roots by their
+RTTI type, and logs three reads. It is loaded only through the opt-in `HOI4_INPROC` switch of the harness launcher
+`launch-probe-cont.py` (default off: every other run is unaffected); no game file is changed. Design, evidence and
+the later stages: `~/Projects/_scratch/hoi4-macos-native/INPROCESS-FEASIBILITY-1123.md`; code: `inproc/` on branch
+`research/inproc-feasibility` (build `inproc/build.sh`, offline proof `inproc/test_offline.sh`).
+
+Needs: the game slot, no game running, Steam closed, a run folder that saved (`PREV/userdata/continue_game.json`).
+
+Part A (automatic, about 5 minutes):
+
+    cd ~/Projects/_scratch/hoi4-macos-native
+    ./inproc_stage0.sh PREV s0a      # optional 3rd argument: the module dylib (default: the branch's build)
+
+Pass when `s0a/stage0-result.json` has `"pass_": true`: the module loaded and did not go inert; 8 of 8 capabilities
+resolved; dlsym finds the same research-command factory as the scan; the idler root found by RTTI is the global the
+UI posts commands through; the save loaded; and the module's date (raw and text), speed, pause and player equal the
+external runtime's `hoi4_overview` on the paused game. Also look at the main menu and the loaded save on screen: both
+must look and behave as usual (the module draws nothing).
+
+Part B (soak, 30 minutes, by hand, same game): start the broker as usual (`./deploybin.sh s0a bins/<build>`), then
+`macplay.py s0a call hoi4_time '{"speed":4}'` (the game's speed 5) and `'{"paused":false}'`. Let it run 30 minutes
+with no orders; the game's monthly autosave must happen (a new autosave in `s0a/userdata/save games`). Every few
+minutes compare `tail -1 s0a/inproc.log` with `macplay.py s0a call hoi4_overview` (dates within a few game days at
+speed 5). Then `./endrun.sh s0a`.
+
+Pass when: no crash or hang, the date kept advancing, an autosave was written, `inproc.log` ends without an
+`inert` event and is under 8 MiB, `s0a/closed.json` shows the game exited and settings restored, and no new
+`hoi4` crash report appeared (`ls -t ~/Library/Logs/DiagnosticReports | head`; the game's own crash folder in
+`s0a/userdata` is empty).
+
+STOP at once (`./endrun.sh s0a`) on: any Part A check false; the game freezing, stuttering or crashing; the date
+not advancing while unpaused; an `inert` event; anything on screen that differs from a normal run. A stop is a
+finding, not a retry: record it in NOTES-1116.md and leave stage 1 closed. Kill switch without closing the game:
+`touch s0a/inproc.log.off` (the module goes inert within 2 s).
+
+After a pass: tick here, record the numbers in NOTES-1116.md ("stage 0 passed"), and stage 1 (one harmless command
+through the game's own command queue, with read-back) may be built.
