@@ -1798,6 +1798,7 @@ fn lanes_tick(
     // declaration came on 7-9 September behind air batches and economy ticks).
     if war_first
         && (plan_operation::awaiting_war(state)
+            || state.done.contains_key("declnext")
             || (plan_operation::executing_any(state)
                 && plan_affairs::declaration_near(state, tools, plan, now, 0)))
     {
@@ -3005,7 +3006,12 @@ fn declare_first(
     // waits for that war executes in the same tick (e1h1, 18 Nov 2026: the executor declared and
     // the groups executed a day later).
     state.last_ok = None;
-    if let Some(declared) = plan_affairs::declare_due_step(state, tools, plan, lease, now)? {
+    let declared = plan_affairs::declare_due_step(state, tools, plan, lease, now)?;
+    if declared.is_none() {
+        state.done.remove("declnext");
+    }
+    if let Some(declared) = declared {
+        state.done.remove("declnext");
         if state.last_ok == Some(false) {
             state.last_ok = None;
         } else {
@@ -3022,6 +3028,13 @@ fn declare_first(
                 state.op_events_now = true;
                 state.war_active = true;
                 state.last_ok = Some(true);
+                // another declaration due now goes out right after the events, before any burst
+                // (w43r1, 23 Nov 2026: Belgium's declaration opened events, the next tick ran a
+                // 30-second war burst and Luxembourg came eleven game days later)
+                state.done.remove("declnear:at");
+                if plan_affairs::declaration_near(state, tools, plan, now, 0) {
+                    state.done.insert("declnext".to_string(), now);
+                }
                 return Ok(Some(format!(
                     "{declared}; events open: answered before the attack is executed"
                 )));

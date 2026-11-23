@@ -1101,6 +1101,25 @@ fn contact_states(wars: &Value) -> HashSet<i64> {
         .collect()
 }
 
+/// The countries at war with us whose border states (either side) the army stands in.
+fn contact_tags(roster: &Value, wars: &Value, name: &str) -> Vec<String> {
+    let Some(at) = army_row(roster, name).and_then(|r| r["states"].as_object()) else {
+        return Vec::new();
+    };
+    let fighting = war_tags(wars);
+    list(wars, "borders")
+        .iter()
+        .filter(|b| fighting.iter().any(|t| t == text(&b["neighbour_tag"])))
+        .filter(|b| {
+            ints(&b["own_border_states"])
+                .into_iter()
+                .chain(ints(&b["neighbour_states"]))
+                .any(|s| at.get(&s.to_string()).and_then(Value::as_i64).unwrap_or(0) > 0)
+        })
+        .map(|b| text(&b["neighbour_tag"]).to_string())
+        .collect()
+}
+
 /// Whether an army stands in contact with an enemy (a division in a contact state) or executes a
 /// battle plan: such an army is never taken out of its place by a regroup or a redeployment.
 fn in_contact(roster: &Value, wars: &Value, name: &str) -> bool {
@@ -1183,6 +1202,24 @@ fn click_state(state: &State, wars: &Value, u: &Unit) -> Option<i64> {
         .copied()
         .or_else(|| u.own_states.first().copied())
         .or_else(|| u.line.first().copied())
+}
+
+/// The own border state facing `enemy` (hoi4_wars borders) where the army stands with the most
+/// divisions; None when it stands in none of them.
+fn standing_border_state(roster: &Value, wars: &Value, enemy: &str, name: &str) -> Option<i64> {
+    let ours: HashSet<i64> = list(wars, "borders")
+        .iter()
+        .filter(|b| text(&b["neighbour_tag"]) == enemy)
+        .flat_map(|b| ints(&b["own_border_states"]))
+        .collect();
+    let row = army_row(roster, name)?;
+    row["states"]
+        .as_object()?
+        .iter()
+        .filter_map(|(s, n)| Some((s.parse::<i64>().ok()?, n.as_i64().unwrap_or(0))))
+        .filter(|(s, n)| *n > 0 && ours.contains(s))
+        .max_by_key(|(s, n)| (*n, -*s))
+        .map(|(s, _)| s)
 }
 
 /// At war: the enemy state across the contact line (hoi4_wars borders) nearest the middle of
@@ -1499,8 +1536,8 @@ fn one(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    let enemies = strings(op, "enemies");
-    let at_war = war_tags(wars);
+    let all_enemies = strings(op, "enemies");
+    let mut at_war = war_tags(wars);
     state.done.insert(
         key(id, "replace_arrows"),
         i64::from(op["replace_arrows"] == json!(true)),
@@ -1510,18 +1547,48 @@ fn one(
     // an enemy of the operation that was fought and is no longer at war (it capitulated) hands
     // its units to the operation's next enemy at war: their fronts are clicked at that enemy's
     // contact line (the Dutch side's group goes on into Belgium over Brabant)
-    for e in &enemies {
+    for e in &all_enemies {
         if at_war.contains(e) {
             state.done.insert(key(id, &format!("fought:{e}")), now);
         }
     }
-    if let Some(next) = enemies.iter().find(|e| at_war.contains(e)) {
+    // OUT: an enemy fought and no longer at war, or left with a remnant across the sea
+    // (capitulated:<TAG> holds: at most a twentieth of its victory points). It counts as out of
+    // this operation for good: its units go on to the next enemy and no line aims at it (w42g2,
+    // 23 Nov 2026: the Netherlands kept Suriname and Curacao, stayed "at war", the group and both
+    // Panzergruppen kept Holland as their enemy and attacked Dutch Brabant 35, already ours, for
+    // 15 days after Belgium was declared)
+    let mut out: Vec<String> = Vec::new();
+    for e in &all_enemies {
+        let fought = state.done.contains_key(&key(id, &format!("fought:{e}")));
+        let ok = key(id, &format!("out:{e}"));
+        if !fought {
+            continue;
+        }
+        if !at_war.contains(e)
+            || state.done.contains_key(&ok)
+            || holds(state, tools, &json!(format!("capitulated:{e}")), now)
+        {
+            state.done.entry(ok).or_insert(now);
+            out.push(e.clone());
+        }
+    }
+    let enemies: Vec<String> = all_enemies
+        .iter()
+        .filter(|e| !out.contains(e))
+        .cloned()
+        .collect();
+    at_war.retain(|t| !out.contains(t));
+    // the next enemy: the first one at war, else the first one not yet fought (its war is
+    // declared next: the units' fronts and arrows are drawn against it before the declaration)
+    let next = enemies
+        .iter()
+        .find(|e| at_war.contains(e))
+        .or_else(|| enemies.first())
+        .cloned();
+    if let Some(next) = next {
         for u in units.iter_mut() {
-            if !at_war.contains(&u.enemy)
-                && state
-                    .done
-                    .contains_key(&key(id, &format!("fought:{}", u.enemy)))
-            {
+            if out.contains(&u.enemy) {
                 u.enemy = next.clone();
             }
         }
@@ -2597,6 +2664,36 @@ fn reserves(
                     json!({"army": name, "state_id": s}),
                 )?));
             }
+            // a reserve that cannot march because it stands on a hold's border (in contact with
+            // the hold's enemy) simply joins that hold's front: its own front clicked where the
+            // hold's is (w42s2, 23 Nov 2026: Armee Pommern touched France in Saarland 42 and stood
+            // the whole war on its old front)
+            if marches < RESERVE_MARCHES && !has_orders(roster, &name) {
+                let facing: Vec<String> = contact_tags(roster, wars, &name);
+                let hold = list(op, "holds").iter().find(|h| {
+                    strings(h, "facing").iter().any(|t| facing.contains(t))
+                        && h["click_state"].is_i64()
+                });
+                let jk = key(id, &format!("resjoin:{name}"));
+                let joins = state.done.get(&jk).copied().unwrap_or(0);
+                if let Some(h) = hold.filter(|_| joins < RESERVE_ORDERS) {
+                    state.done.insert(jk, joins + 1);
+                    state.skip(now, "opres", &name, DAY);
+                    let click = h["click_state"].as_i64().unwrap_or(0);
+                    return Ok(Some(order(
+                        state,
+                        tools,
+                        lease,
+                        id,
+                        &format!(
+                            "reserve {name} stands on the border of hold {}: joins its front at {click}",
+                            text(&h["id"])
+                        ),
+                        "hoi4_army_front",
+                        json!({"army": name, "state_id": click}),
+                    )?));
+                }
+            }
             if marches < RESERVE_MARCHES {
                 continue;
             }
@@ -3229,14 +3326,31 @@ fn reconcile(
         state
             .done
             .insert(key(id, &format!("fronts:{}", u.name)), fronts + 1);
+        // at war a mobile or wing army's front is the segment of the own border state it stands
+        // in, facing its line (a spearhead's short front), not the plain click that takes the
+        // whole border (w43r1, 23 Nov 2026: both Panzergruppen and the Belgian wing each drew a
+        // front over the whole Belgian border, 16 divisions in one Ardennes province); a segment
+        // refused twice gives way to the plain click
+        let stand = (!peace && matches!(u.role, Role::Mobile | Role::Wing))
+            .then(|| standing_border_state(roster, wars, &u.enemy, &u.name))
+            .flatten()
+            .filter(|_| fronts < 2);
+        let args = match stand {
+            Some(own) => json!({"army": u.name, "state_id": click, "from_state": own}),
+            None => front_args(u, click, peace),
+        };
         let line = order(
             state,
             tools,
             lease,
             id,
-            &format!("front of {} near state {click}", u.name),
+            &format!(
+                "front of {} near state {click}{}",
+                u.name,
+                stand.map_or(String::new(), |s| format!(" from {s}"))
+            ),
             "hoi4_army_front",
-            front_args(u, click, peace),
+            args,
         )?;
         if state.last_ok == Some(false) {
             state.skip(now, "opdraw", &u.name, 2);
@@ -3439,6 +3553,26 @@ fn reconcile(
         let line = format!(
             "operation {id}: the line {tag} does not draw for {}: one state at a time, {} first",
             u.name, line[0]
+        );
+        state.op_notes.insert(id.to_string(), line.clone());
+        return Ok(Some(line));
+    }
+    if peace && line.len() >= 2 && n >= REDRAWS {
+        // in peace too a stroke that will not draw is drawn one state at a time, first the state
+        // the front was clicked at (it borders the front): a front with no arrow gains no planning
+        // (w43a1, 23 Nov 2026: both Panzergruppen and the Belgian wing stood on the line from
+        // October with planning 0.0, their strokes 36-7, 35-977-6 and 34-6 refused four times
+        // each; every front with an arrow read 0.36-0.43)
+        let first = u
+            .click
+            .filter(|c| !u.own_states.contains(c))
+            .unwrap_or(line[0]);
+        state
+            .done
+            .insert(key(id, &format!("one:{}:{tag}", u.name)), first);
+        let line = format!(
+            "operation {id}: the line {tag} does not draw for {} in peace: one state at a time, {first} first",
+            u.name
         );
         state.op_notes.insert(id.to_string(), line.clone());
         return Ok(Some(line));
@@ -3891,8 +4025,9 @@ fn advance(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    // FINISH: every enemy out of the war
-    if !enemies.is_empty() && !enemies.iter().any(|e| at_war.contains(e)) {
+    // FINISH: every enemy out of the war (`enemies` holds the ones not out yet: an enemy not yet
+    // declared keeps the operation going, its war comes next)
+    if enemies.is_empty() {
         for u in units.iter().filter(|u| attacker(u)) {
             let k = key(id, &format!("fin:{}", u.name));
             if state.done.contains_key(&k) || orders(roster, &u.name).is_empty() {
@@ -3921,7 +4056,7 @@ fn advance(
         state.op_owned_at = None;
         let line = format!(
             "operation {id}: done ({} out of the war){}",
-            enemies.join(", "),
+            strings(op, "enemies").join(", "),
             if next.is_empty() {
                 String::new()
             } else {
@@ -3932,8 +4067,20 @@ fn advance(
         return Ok(Some(line));
     }
     let (k, line) = current_line(state, id, op);
-    // ADVANCE: count the line every CHECK_HOURS
-    if !state.skipped(now, "opweek", id) {
+    // ADVANCE: count the line every CHECK_HOURS, and at once when the whole line is held (once a
+    // line): the next line is drawn the hour the last one falls, not up to CHECK_HOURS later
+    // while the fronts attack states already taken (w42g2, 23 Nov 2026: the group's arrow stayed
+    // on Dutch Brabant and Holland, both ours, while Belgium was at war)
+    let held_now = !line.is_empty() && {
+        let me = player(tools, plan);
+        held(tools, &me, &line).len() == line.len()
+    };
+    let once = key(id, &format!("heldcheck:{k}:{}", line_tag(&line)));
+    let check_now = held_now && !state.done.contains_key(&once);
+    if check_now {
+        state.done.insert(once, now);
+    }
+    if check_now || !state.skipped(now, "opweek", id) {
         state.skip(now, "opweek", id, CHECK_HOURS);
         let me = player(tools, plan);
         let (got, provinces) = control(tools, &me, &line);
@@ -4074,7 +4221,12 @@ fn advance(
         }
     };
     let op_line = still(&line);
-    for u in units.iter().filter(|u| attacker(u)) {
+    // the group first: it holds most of the divisions and its front and arrow carry the attack
+    // (w43a1, 23 Nov 2026: after Holland the group's Belgian front came 14 game days after the
+    // armour's and the wing's, behind their redraws and an air batch)
+    let mut attackers: Vec<&Unit> = units.iter().filter(|u| attacker(u)).collect();
+    attackers.sort_by_key(|u| u.role != Role::Group);
+    for u in attackers {
         let own_line_held = u.line.is_empty() || held(tools, &me, &u.line).len() == u.line.len();
         let mut wanted: Vec<i64> = if u.spear {
             spear_line(state, id, roster, u, &me, tools, &op_line, now)

@@ -3142,6 +3142,10 @@ pub(super) fn air_plan_step(
     let mut flying = 0;
     let mut deploy_notes: Vec<String> = Vec::new();
     let mut moved: Vec<String> = Vec::new();
+    // the bases' free room as the batch fills them: six wings sent to the one roomiest base in
+    // one call overfilled it and the game refused the rest (w43a1, 23 Nov 2026: six fighter wings
+    // to Westfalen 57 NotApplied, the start wings stayed over Poland on the war day)
+    let mut room: Vec<Value> = bases.to_vec();
     for (index, entry) in entries.iter().enumerate() {
         let owned: Vec<&Value> = all_wings
             .iter()
@@ -3179,9 +3183,16 @@ pub(super) fn air_plan_step(
             // A base the game refused (full, or out of the wing's reach) is not asked again for
             // 30 days; the wing flies its mission from where it stands meanwhile (n1, 16 Nov 2026:
             // the same refused rebase every 15 days and no mission in between).
-            let target = rebase_target(entry, region, wing, bases)
+            let target = rebase_target(entry, region, wing, &room)
                 .filter(|_| !state.skipped(now, "airrebase", &name));
             if let Some(base) = target {
+                let planes = wing["aircraft"].as_i64().unwrap_or(0);
+                for b in room.iter_mut() {
+                    if b["state_id"].as_i64() == Some(base) {
+                        let free = b["free"].as_i64().unwrap_or(0);
+                        b["free"] = json!(free - planes);
+                    }
+                }
                 let (ok, why) = state.act(
                     tools,
                     lease,
@@ -8605,6 +8616,31 @@ mod tests {
             .unwrap()
             .unwrap_or_default();
         assert_eq!(line.matches("rebase to state 57").count(), 3, "{line}");
+    }
+
+    #[test]
+    fn a_batch_of_rebases_spreads_over_the_bases_with_room() {
+        // w43a1 (23 Nov 2026): six wings sent to one base in one call, the game refused the rest
+        let wing = |n: &str| {
+            json!({"wing": n, "aircraft_type": "small_plane_airframe_1", "aircraft": 100,
+                   "region": {"id": 38}, "air_base": {"base_id": 3, "state_id": 66},
+                   "missions": ["air_superiority"]})
+        };
+        let read = json!({"air_bases": [
+            {"base_id": 3, "state_id": 66, "free": 0, "region": {"id": 38}},
+            {"base_id": 9, "state_id": 57, "free": 150, "region": {"id": 6}},
+            {"base_id": 8, "state_id": 56, "free": 120, "region": {"id": 6}}],
+            "wings": [wing("JG 1"), wing("JG 2"), wing("JG 3")]});
+        let tools = fake(vec![("hoi4_air", read)]);
+        let plan = json!({"air_plan": [
+            {"airframe": "small_plane_airframe_1", "region": 5, "base_region": 6,
+             "mission": "air_superiority"}]});
+        let mut state = State::default();
+        let line = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap_or_default();
+        assert_eq!(line.matches("rebase to state 57").count(), 1, "{line}");
+        assert_eq!(line.matches("rebase to state 56").count(), 1, "{line}");
     }
 
     #[test]
