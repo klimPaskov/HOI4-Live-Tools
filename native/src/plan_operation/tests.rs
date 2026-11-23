@@ -30,6 +30,8 @@ struct Game {
     own: RefCell<Vec<(i64, f64, f64)>>,
     /// every delete of one order refused
     refuse_delete: RefCell<bool>,
+    /// what hoi4_states POL lists, when set (victory points per state and their controllers)
+    pol_rows: RefCell<Option<Value>>,
     calls: RefCell<Vec<(String, Value)>>,
 }
 
@@ -65,6 +67,7 @@ impl Game {
             far: RefCell::new(None),
             own: RefCell::new(vec![]),
             refuse_delete: RefCell::new(false),
+            pol_rows: RefCell::new(None),
             calls: RefCell::new(vec![]),
         }
     }
@@ -117,6 +120,9 @@ impl Tools for Game {
                 };
                 return Ok(json!({"states": [{"state_id": s, "controller": c,
                     "provinces": [{"controller": c}]}]}));
+            }
+            "hoi4_states" if args["query"] == json!("POL") && self.pol_rows.borrow().is_some() => {
+                return Ok(json!({"states": self.pol_rows.borrow().clone().unwrap()}));
             }
             "hoi4_encirclement_candidates" => return Ok(self.pockets.borrow().clone()),
             "hoi4_army_detach" if *self.refuse_detach.borrow() => {
@@ -2371,4 +2377,38 @@ fn a_sides_front_off_its_own_piece_is_cleared_and_drawn_again() {
         game.orders().last().unwrap().1,
         json!({"army": "Army Group 1", "clear_orders": true})
     );
+}
+
+#[test]
+fn an_enemy_left_with_a_remnant_hands_its_units_on_and_the_operation_waits_for_the_next_war() {
+    // w42g2 (23 Nov 2026): the Netherlands kept Suriname and Curacao (2 of 91 points), stayed at
+    // war, and the group and the armour kept attacking Dutch Brabant, already ours, for 15 days
+    // after Belgium was declared
+    let game = Game::new();
+    let mut plan = plan();
+    plan["operations"][0]["enemies"] = json!(["POL", "LIT"]);
+    let mut state = State::default();
+    *game.enemies.borrow_mut() = vec!["POL"];
+    burst(&mut state, &game, &plan, START);
+    burst(&mut state, &game, &plan, START + DAY);
+    assert!(state.done.contains_key(&key("op_pol", "fought:POL")));
+    // Poland holds one point of a hundred, across the sea: out of this operation
+    *game.pol_rows.borrow_mut() = Some(json!([
+        {"state_id": 10, "controller": "GER", "victory_points": [
+            {"province": 1, "victory_points": 99.0, "controller": "GER"}]},
+        {"state_id": 300, "controller": "POL", "victory_points": [
+            {"province": 2, "victory_points": 1.0, "controller": "POL"}]}]));
+    burst(&mut state, &game, &plan, START + 3 * DAY);
+    assert!(state.done.contains_key(&key("op_pol", "out:POL")));
+    assert!(
+        !state.done.contains_key(&key("op_pol", "end")),
+        "Lithuania is not fought yet: the operation goes on"
+    );
+    // Lithuania declared, fought, then out: the operation ends
+    *game.enemies.borrow_mut() = vec!["POL", "LIT"];
+    burst(&mut state, &game, &plan, START + 4 * DAY);
+    assert!(state.done.contains_key(&key("op_pol", "fought:LIT")));
+    *game.enemies.borrow_mut() = vec!["POL"];
+    burst(&mut state, &game, &plan, START + 6 * DAY);
+    assert!(state.done.contains_key(&key("op_pol", "end")));
 }

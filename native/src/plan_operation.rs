@@ -1499,8 +1499,8 @@ fn one(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    let enemies = strings(op, "enemies");
-    let at_war = war_tags(wars);
+    let all_enemies = strings(op, "enemies");
+    let mut at_war = war_tags(wars);
     state.done.insert(
         key(id, "replace_arrows"),
         i64::from(op["replace_arrows"] == json!(true)),
@@ -1510,18 +1510,48 @@ fn one(
     // an enemy of the operation that was fought and is no longer at war (it capitulated) hands
     // its units to the operation's next enemy at war: their fronts are clicked at that enemy's
     // contact line (the Dutch side's group goes on into Belgium over Brabant)
-    for e in &enemies {
+    for e in &all_enemies {
         if at_war.contains(e) {
             state.done.insert(key(id, &format!("fought:{e}")), now);
         }
     }
-    if let Some(next) = enemies.iter().find(|e| at_war.contains(e)) {
+    // OUT: an enemy fought and no longer at war, or left with a remnant across the sea
+    // (capitulated:<TAG> holds: at most a twentieth of its victory points). It counts as out of
+    // this operation for good: its units go on to the next enemy and no line aims at it (w42g2,
+    // 23 Nov 2026: the Netherlands kept Suriname and Curacao, stayed "at war", the group and both
+    // Panzergruppen kept Holland as their enemy and attacked Dutch Brabant 35, already ours, for
+    // 15 days after Belgium was declared)
+    let mut out: Vec<String> = Vec::new();
+    for e in &all_enemies {
+        let fought = state.done.contains_key(&key(id, &format!("fought:{e}")));
+        let ok = key(id, &format!("out:{e}"));
+        if !fought {
+            continue;
+        }
+        if !at_war.contains(e)
+            || state.done.contains_key(&ok)
+            || holds(state, tools, &json!(format!("capitulated:{e}")), now)
+        {
+            state.done.entry(ok).or_insert(now);
+            out.push(e.clone());
+        }
+    }
+    let enemies: Vec<String> = all_enemies
+        .iter()
+        .filter(|e| !out.contains(e))
+        .cloned()
+        .collect();
+    at_war.retain(|t| !out.contains(t));
+    // the next enemy: the first one at war, else the first one not yet fought (its war is
+    // declared next: the units' fronts and arrows are drawn against it before the declaration)
+    let next = enemies
+        .iter()
+        .find(|e| at_war.contains(e))
+        .or_else(|| enemies.first())
+        .cloned();
+    if let Some(next) = next {
         for u in units.iter_mut() {
-            if !at_war.contains(&u.enemy)
-                && state
-                    .done
-                    .contains_key(&key(id, &format!("fought:{}", u.enemy)))
-            {
+            if out.contains(&u.enemy) {
                 u.enemy = next.clone();
             }
         }
@@ -3891,8 +3921,9 @@ fn advance(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    // FINISH: every enemy out of the war
-    if !enemies.is_empty() && !enemies.iter().any(|e| at_war.contains(e)) {
+    // FINISH: every enemy out of the war (`enemies` holds the ones not out yet: an enemy not yet
+    // declared keeps the operation going, its war comes next)
+    if enemies.is_empty() {
         for u in units.iter().filter(|u| attacker(u)) {
             let k = key(id, &format!("fin:{}", u.name));
             if state.done.contains_key(&k) || orders(roster, &u.name).is_empty() {
@@ -3921,7 +3952,7 @@ fn advance(
         state.op_owned_at = None;
         let line = format!(
             "operation {id}: done ({} out of the war){}",
-            enemies.join(", "),
+            strings(op, "enemies").join(", "),
             if next.is_empty() {
                 String::new()
             } else {
@@ -3932,8 +3963,20 @@ fn advance(
         return Ok(Some(line));
     }
     let (k, line) = current_line(state, id, op);
-    // ADVANCE: count the line every CHECK_HOURS
-    if !state.skipped(now, "opweek", id) {
+    // ADVANCE: count the line every CHECK_HOURS, and at once when the whole line is held (once a
+    // line): the next line is drawn the hour the last one falls, not up to CHECK_HOURS later
+    // while the fronts attack states already taken (w42g2, 23 Nov 2026: the group's arrow stayed
+    // on Dutch Brabant and Holland, both ours, while Belgium was at war)
+    let held_now = !line.is_empty() && {
+        let me = player(tools, plan);
+        held(tools, &me, &line).len() == line.len()
+    };
+    let once = key(id, &format!("heldcheck:{k}:{}", line_tag(&line)));
+    let check_now = held_now && !state.done.contains_key(&once);
+    if check_now {
+        state.done.insert(once, now);
+    }
+    if check_now || !state.skipped(now, "opweek", id) {
         state.skip(now, "opweek", id, CHECK_HOURS);
         let me = player(tools, plan);
         let (got, provinces) = control(tools, &me, &line);
