@@ -4440,6 +4440,7 @@
               "air_reserve",
               "casualties",
               "air_superiority",
+              "air_attach",
               "overdrawn",
               "convoys",
               "fuel",
@@ -4649,6 +4650,18 @@
           "default": 30,
           "minimum": 0,
           "description": "at war, days of fuel left at the rate sampled over 30 game days below which wings on rear missions are held one at a time (training, strategic bombing, port and logistics strike, patrol, recon, mines, air supply; superiority, CAS, interception and naval strike stay); fuel_floor does the same"
+        },
+        "air_attach": {
+          "type": "object",
+          "x-rule": "air_attach",
+          "additionalProperties": false,
+          "default": {},
+          "description": "at war, once a game day: the CAS wings are shared among the armies that attack (an executing battle plan or a war assignment), nearest base first, and the armies named in fighters_for get fighters_per_army fighter wings as their cover; a wing stays with its army (the game's own attachment), the air plan and the default missions take the rest",
+          "properties": {
+            "fighters_for": {"type": "array", "items": {"type": "string"}, "description": "armies (or army_layout name hints) that get fighter cover, e.g. the armour"},
+            "fighters_per_army": {"type": "integer", "minimum": 0, "default": 1, "description": "fighter wings per army in fighters_for"},
+            "why": {"type": "string"}
+          }
         },
         "air_reserve_min": {
           "type": "integer",
