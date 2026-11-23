@@ -1786,6 +1786,14 @@ fn lanes_tick(
     let war_first = war_on && plan["war"]["first"] != json!(false);
     state.sched.war_ran = war_first;
     let lanes = lanes(plan, war_first);
+    // the speed rule ahead of the war lane: it reads every 6 game hours and acts only when the
+    // phase changes, and behind a war lane that acts every tick it never ran once an operation
+    // prepared (w46f1, 23 Nov 2026: its last read on the third day, the whole war at speed 3)
+    state.last_ok = None;
+    if let Some(line) = plan_speed::step(state, tools, plan, lease, now)? {
+        state.sched.turns.insert("speed", now);
+        return Ok(Tick::Acted(line));
+    }
     // `scheduler.war_every_tick`: the war-first block takes every tick it has an order for
     // While an operation executes, the war lane is offered first in every tick (it gives the
     // tick back at once when nothing is due): pb1 (19 Nov 2026) sent about 25 army orders in 56
@@ -2574,11 +2582,7 @@ fn lane_of(list: &[Lane], name: &str) -> Lane {
 /// air, navy, intelligence and the rest. Each manage, military and affairs rule is its own lane,
 /// so a rule with work every pass never holds back the rules behind it.
 /// The lanes checked every tick ahead of the pass (see `lanes_tick`).
-const FAST_LANES: [Lane; 3] = [
-    ("speed", plan_speed::step),
-    ("research", research_lane),
-    ("focus", focus_lane),
-];
+const FAST_LANES: [Lane; 2] = [("research", research_lane), ("focus", focus_lane)];
 /// Lanes that wait while an operation executes: slow GUI listings (a design-company trait read
 /// took 54 s of a war's input in pb1) whose work keeps until the war is won.
 const WAR_DEFERRED_LANES: [&str; 4] = ["mio_lines", "mio", "mio_traits", "intelligence"];
