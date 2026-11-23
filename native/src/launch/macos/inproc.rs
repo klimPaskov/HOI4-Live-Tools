@@ -97,7 +97,9 @@ impl Channel {
         Ok(v)
     }
 
-    /// One family op over up to 32 own objects (one command each, one main-thread job).
+    /// One family op over up to 32 own objects (one command each, one main-thread job). Requests are spaced
+    /// `POST_GAP` apart in this process (the module refuses a stage-2 request within 50 ms of the last one, for
+    /// every connection); a rate-limit reply is tried once more after the gap.
     pub(super) fn post(
         &mut self,
         op: &str,
@@ -106,8 +108,45 @@ impl Channel {
         obj2: Option<u64>,
         flag: Option<i64>,
     ) -> Result<Value> {
-        self.call(post_request(op, objs, vals, obj2, flag)?)
+        let req = post_request(op, objs, vals, obj2, flag)?;
+        for attempt in 0..2 {
+            space_posts();
+            let reply = self.call(req.clone())?;
+            if attempt == 0 && rate_limited(&reply) {
+                continue;
+            }
+            return Ok(reply);
+        }
+        unreachable!()
     }
+}
+
+/// The module's minimum gap between stage-2 requests is 50 ms; 60 leaves room for clock skew.
+const POST_GAP: Duration = Duration::from_millis(60);
+static LAST_POST: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+/// Wait until `POST_GAP` has passed since the last request this process sent, and mark this one.
+fn space_posts() {
+    let Ok(mut last) = LAST_POST.lock() else {
+        return;
+    };
+    if let Some(t) = *last {
+        let since = t.elapsed();
+        if since < POST_GAP {
+            std::thread::sleep(POST_GAP - since);
+        }
+    }
+    *last = Some(std::time::Instant::now());
+}
+
+/// The module's rate-limit refusal (nothing was posted): `"error":"rate limit: ..."`.
+pub(super) fn rate_limited(reply: &Value) -> bool {
+    reply["ok"].as_bool() != Some(true)
+        && ["error", "reason"].iter().any(|k| {
+            reply[*k]
+                .as_str()
+                .is_some_and(|e| e.starts_with("rate limit"))
+        })
 }
 
 /// The module's parser takes one flat object of at most 8 members, strings without escapes or integers, one line
@@ -465,6 +504,20 @@ mod tests {
         assert!(!bits_executed(&now, &[0x10, 0x20], 1));
         assert!(!bits_executed(&now, &[0x40], 1));
         assert!(bits_executed(&now, &[0x30], 2));
+    }
+
+    #[test]
+    fn a_rate_limit_reply_is_retried_and_requests_are_spaced() {
+        assert!(rate_limited(&json!({"ok":false,
+            "error":"rate limit: 12 ms since the last request (minimum 50)"})));
+        assert!(!rate_limited(
+            &json!({"ok":false,"error":"objs: 1 to 32 comma-separated object addresses"})
+        ));
+        assert!(!rate_limited(&json!({"ok":true,"posted":1,"objects":1})));
+        let t = std::time::Instant::now();
+        space_posts();
+        space_posts();
+        assert!(t.elapsed() >= POST_GAP);
     }
 
     #[test]
