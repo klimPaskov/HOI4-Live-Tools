@@ -545,6 +545,7 @@ pub(super) enum Chord {
     Ten,
 }
 impl Chord {
+    #[cfg(test)]
     pub(super) fn size(self) -> i32 {
         match self {
             Chord::One => 1,
@@ -568,7 +569,8 @@ pub(super) fn next_chord(current: i32, target: i32, chords: bool) -> Option<(boo
     };
     Some((target > current, chord))
 }
-/// The clicks a change takes: (with chords, single steps). Pure; for the receipt.
+/// The clicks a change takes: (with chords, single steps). Pure.
+#[cfg(test)]
 pub(super) fn clicks_needed(current: i32, target: i32) -> (u32, u32) {
     let mut now = current;
     let mut n = 0;

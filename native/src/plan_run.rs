@@ -10868,9 +10868,11 @@ mod tests {
     fn a_bulk_path_the_plan_turns_on_reaches_the_tool_and_stays_off_otherwise() {
         let f = fake(vec![]);
         let args = json!({"line": 2, "equipment": "infantry_equipment_1", "factories": 14});
-        let mut state = State::default();
         // off (the default): the single form
-        state.bulk = bulk_paths(&json!({}));
+        let mut state = State {
+            bulk: bulk_paths(&json!({})),
+            ..State::default()
+        };
         state
             .act(&f, "l", "hoi4_production_set", args.clone(), "pf")
             .unwrap();

@@ -770,6 +770,9 @@ pub(super) fn rebase_many(
 // back from the selection view's own array); wings at mixed bases, and any wing the bulk order
 // did not reach, take the single path (the Air Forces Overview row) in the same call.
 
+/// Each wing's outcome (None = done) and what each bulk base order did.
+pub(super) type ByBase = (Vec<(String, Option<Error>)>, Vec<Value>);
+
 /// The wings at one air base that one base click orders.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct BaseGroup {
@@ -972,7 +975,7 @@ pub(super) fn missions_by_base(
     mission: &str,
     state: i32,
     region: Option<i32>,
-) -> Result<(Vec<(String, Option<Error>)>, Vec<Value>)> {
+) -> Result<ByBase> {
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
     let frame = air::mission_frame(mission)
@@ -983,7 +986,7 @@ pub(super) fn missions_by_base(
         w.mission_mask & bit != 0
             && (mission == "training" || want_region.map_or(w.region_id > 0, |r| w.region_id == r))
     };
-    let result = (|| -> Result<(Vec<(String, Option<Error>)>, Vec<Value>)> {
+    let result = (|| -> Result<ByBase> {
         let mut bulk = Vec::new();
         let mut tried: Vec<i32> = Vec::new();
         for _ in 0..12 {
@@ -1038,7 +1041,7 @@ pub(super) fn rebase_by_base(
     process: &dyn Process,
     keys: &dyn GameInput,
     plans: &[RebasePlan],
-) -> Result<(Vec<(String, Option<Error>)>, Vec<Value>)> {
+) -> Result<ByBase> {
     let Some(first) = plans.first() else {
         return Ok((Vec::new(), Vec::new()));
     };
@@ -1047,7 +1050,7 @@ pub(super) fn rebase_by_base(
     let moving = |w: &Wing| w.base_id == to || w.transfer_base_id == to;
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
-    let result = (|| -> Result<(Vec<(String, Option<Error>)>, Vec<Value>)> {
+    let result = (|| -> Result<ByBase> {
         let mut bulk = Vec::new();
         let mut tried: Vec<i32> = vec![to_state];
         for _ in 0..12 {

@@ -5058,8 +5058,10 @@ mod tests {
         let plan = json!({"manage": {"bulk": ["mio_queue_many"]},
             "mio": [{"organisation": "GER_krupp_organization", "traits": [3, 5, 7]},
                     {"organisation": "GER_mauser_organization", "traits": []}]});
-        let mut state = State::default();
-        state.bulk = super::super::bulk_paths(&plan);
+        let mut state = State {
+            bulk: super::super::bulk_paths(&plan),
+            ..State::default()
+        };
         let out = step(&mut state, &tools, &plan, "l", START + 1).unwrap();
         assert_eq!(
             out.as_deref(),
