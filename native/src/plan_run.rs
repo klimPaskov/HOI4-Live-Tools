@@ -2641,12 +2641,13 @@ const LANE_MAX_WAIT: GameHour = DAY;
 /// choosin a research, spending pp, etc"). HEAVY: many inputs or reads, or orders whose timing
 /// matters within a day: speed 3 from its first action until it has been quiet for a while.
 /// A lane not listed is heavy. (lane, minor, why)
-pub(super) const LANE_WEIGHT: [(&str, bool, &str); 47] = [
+pub(super) const LANE_WEIGHT: [(&str, bool, &str); 48] = [
     ("research", true, "one pick in the research view"),
     ("focus", true, "one pick in the focus tree"),
     ("politics", true, "a law, advisor or idea: one pick"),
     ("officer_corps", true, "one officer-corps pick"),
     ("decisions", true, "one decision: one click"),
+    ("learned", false, "a learned skill: up to twelve steps of any tool"),
     ("extras", true, "a doctrine or a special project: one pick"),
     ("mio", true, "a design company assigned: one pick"),
     ("mio_traits", true, "a design company trait: one pick"),
