@@ -3002,21 +3002,6 @@ fn burst_refused(events_now: bool, executed: Option<&str>) -> bool {
     events_now || executed.is_some_and(|l| l.contains(": false "))
 }
 
-#[cfg(test)]
-#[test]
-fn a_refused_attack_order_holds_the_opening_air_burst() {
-    assert!(burst_refused(true, None));
-    assert!(burst_refused(
-        false,
-        Some("war burst of 2 orders in 3 s: operation op: execute Army Group 1: false action_not_applied")
-    ));
-    assert!(!burst_refused(
-        false,
-        Some("operation op: execute Army Group 1: true Verified")
-    ));
-    assert!(!burst_refused(false, None));
-}
-
 /// A due declaration of war, then (same tick) the execution of the operations that wait for
 /// it and the opening air burst; None when no declaration is due or it was refused.
 fn declare_first(
@@ -10254,6 +10239,20 @@ fn war_mission(kind: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_refused_attack_order_holds_the_opening_air_burst() {
+        assert!(super::burst_refused(true, None));
+        assert!(super::burst_refused(
+            false,
+            Some("war burst of 2 orders in 3 s: operation op: execute Army Group 1: false action_not_applied")
+        ));
+        assert!(!super::burst_refused(
+            false,
+            Some("operation op: execute Army Group 1: true Verified")
+        ));
+        assert!(!super::burst_refused(false, None));
+    }
+
     #[test]
     fn a_march_some_divisions_took_reads_as_heading() {
         use serde_json::json;
