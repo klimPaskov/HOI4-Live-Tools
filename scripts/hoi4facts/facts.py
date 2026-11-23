@@ -1378,6 +1378,96 @@ def cmd_projects(args):
     return emit(args, data, text)
 
 
+# Equipment and buildings the support facts follow (game keys; a mod's own appear through the same reads).
+SUPPORT_EQUIPMENT = ("train_equipment", "railway_gun_equipment", "super_heavy_railway_gun_equipment",
+                     "motorized_equipment")
+SUPPORT_BUILDINGS = ("radar_station", "rail_way", "supply_node", "naval_base", "anti_air_building", "air_base",
+                     "land_facility", "air_facility", "naval_facility", "nuclear_facility")
+SUPPORT_DEFINES = ("RAILWAY_BASE_FLOW", "RAILWAY_FLOW_PER_LEVEL", "RAILWAY_FLOW_PENALTY_PER_DAMAGED", "RAILWAY_MIN_FLOW",
+                   "NODE_INITIAL_SUPPLY_FLOW", "NAVAL_BASE_INITIAL_SUPPLY_FLOW", "CAPITAL_INITIAL_SUPPLY_FLOW",
+                   "NODE_FLOW_BONUS_PER_RAIL_LEVEL", "SUPPLY_HUB_FULL_MOTORIZATION_BONUS",
+                   "SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST", "SUPPLY_POINTS_PER_TRAIN", "NUM_RAILWAYS_TRAIN_FACTOR",
+                   "MIN_TRAIN_SUPPLY_FACTOR", "MIN_TRAIN_REQUIREMENT", "DEFAULT_STARTING_TRAIN_RATIO",
+                   "DEFAULT_STARTING_TRUCK_RATIO", "SUPPLY_DISRUPTION_DAILY_RECOVERY", "TRAIN_ANTI_AIR_HIT_CHANCE",
+                   "AIR_WING_ATTACK_LOGISTICS_TRAIN_DAMAGE_FACTOR", "AIR_WING_ATTACK_LOGISTICS_TRUCK_MAX_FACTOR",
+                   "AIR_WING_ATTACK_LOGISTICS_RAILWAY_DAMAGE_SPILL_FACTOR", "RADAR_RANGE_MIN", "RADAR_RANGE_MAX",
+                   "RADAR_INTEL_EFFECT", "DETECT_CHANCE_FROM_RADARS", "RADAR_DOMINANCE_FACTOR",
+                   "BASE_SPOTTING_FROM_RADAR", "DAYS_TO_REMOVE_SCIENTIST", "DISMANTLE_FACILITY_DAYS",
+                   "RECRUIT_SCIENTIST_COST")
+
+
+def support_facts(w, tag):
+    """The facts a plan needs for supply, trains, radar and special projects: which technology unlocks each
+    support building and equipment and whether the tag holds it at the start, building costs, the
+    supply/train/radar/project defines, and the project count per specialisation against the facilities the
+    tag starts with."""
+    start = set(researchmod.start_techs(w, tag)) if tag else set()
+    gates = w.building_unlocks()
+    from hoi4facts import derive
+    blds = derive.building_costs(w.game)
+    buildings = {}
+    for b in SUPPORT_BUILDINGS:
+        rows = sorted(gates.get(b, []), key=lambda r: (r["level"], r["year"]))
+        row = blds.get(b) or {}
+        buildings[b] = {"unlocks": rows, "held_levels": sorted({r["level"] for r in rows if r["tech"] in start}),
+                        # level 1 is gated only when a technology enables it (anti_air_building: level 5 only);
+                        # any held unlock permits building up to its level
+                        "needs_tech": any(r["level"] <= 1 for r in rows) and not any(r["tech"] in start for r in rows),
+                        "cost": row.get("cost"), "per_level": row.get("per_level"),
+                        "per_owned": row.get("per_controlled")}
+    eq_unlocks = {}
+    for p in w.game.files("common/technologies"):
+        txt = open(p, encoding="utf-8-sig", errors="replace").read()
+        for m in re.finditer(r"\n\t(\w+) = \{(.*?)\n\t\}", txt, re.S):
+            for e in re.findall(r"enable_equipments = \{([^}]*)\}", m.group(2)):
+                for key in e.split():
+                    if key.startswith(SUPPORT_EQUIPMENT) and not key.startswith("motorized"):
+                        eq_unlocks.setdefault(key, []).append({"tech": m.group(1), "held": m.group(1) in start})
+    projects = w.projects(tag) if tag else {"projects": [], "facilities_at_start": []}
+    for b, r in (projects.get("facility_buildings") or {}).items():
+        if b in buildings:
+            buildings[b]["per_owned"] = r.get("per_controlled_cost")
+    per_spec = {}
+    for pr in projects.get("projects", []):
+        sp = (pr.get("specialization") or "").replace("specialization_", "")
+        per_spec[sp] = per_spec.get(sp, 0) + 1
+    defines = {}
+    for d in SUPPORT_DEFINES:
+        v, src = w.define(d, None)
+        if v is not None:
+            defines[d] = {"value": v, "src": src}
+    return {"tag": tag, "buildings": buildings, "equipment_unlocks": eq_unlocks, "defines": defines,
+            "projects_per_specialization": per_spec,
+            "facilities_at_start": projects.get("facilities_at_start", []),
+            "d": "enable_building / enable_equipments of common/technologies against the tag's start technologies "
+                 "(history set_technology; a tech a special project grants in history, e.g. GER 1939 radar, is "
+                 "not seen); buildings from common/buildings; defines from common/defines"}
+
+
+def cmd_support(args):
+    w = world(args, args.TAG)
+    data = support_facts(w, args.TAG)
+
+    def text(x):
+        out = [f"{x['tag']} support facts (supply, trains, radar, special projects)"]
+        for b, r in x["buildings"].items():
+            gate = ", ".join(f"L{u['level']} {u['tech']}" for u in r["unlocks"][:6])
+            out.append(f"- {b}: cost {r['cost']}" + (f" +{r['per_level']}/level" if r["per_level"] else "")
+                       + (f" +{r['per_owned']}/owned" if r["per_owned"] else "")
+                       + (f"; unlocked by {gate}" if gate else "; no technology gate")
+                       + (f"; levels held at start {r['held_levels']}" if r["held_levels"] else "")
+                       + ("; NOT buildable at start: a construction_plan item needs `requires`" if r["needs_tech"] else ""))
+        for e, rows in sorted(x["equipment_unlocks"].items()):
+            out.append(f"- {e}: " + ", ".join(f"{r['tech']}{' (held)' if r['held'] else ''}" for r in rows))
+        out.append("projects per specialisation: " + ", ".join(f"{k} {v}" for k, v in sorted(x["projects_per_specialization"].items())))
+        out.append("facilities at start: " + (", ".join(f"{f['building']} st {f['state']}" for f in x["facilities_at_start"]) or "none"))
+        out.append("defines: " + "; ".join(f"{k} {v['value']}" for k, v in x["defines"].items()))
+        out.append("method: " + x["d"])
+        return out
+
+    return emit(args, data, text)
+
+
 def cmd_diplomacy(args):
     w = world(args, args.TAG)
     data = w.diplomacy(args.TAG)
@@ -1629,6 +1719,7 @@ def parser():
                    help="the tag's war support as read in the game (0.3 = 30%%): gives the surrender limit that "
                         "holds at it (default: the start value)")
     add("oob", cmd_oob, "TAG")
+    add("support", cmd_support, "TAG")
     p = add("characters", cmd_characters, "TAG")
     p.add_argument("--role", choices=("general", "marshal", "admiral", "advisor", "leader"))
     add("laws", cmd_laws, "TAG")
