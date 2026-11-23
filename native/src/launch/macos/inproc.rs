@@ -275,6 +275,19 @@ pub(super) fn bits_executed(wings: &[super::airread::Wing], addresses: &[u64], m
     })
 }
 
+/// True when every wing at these addresses is assigned to `region` in `wings`.
+pub(super) fn regions_executed(
+    wings: &[super::airread::Wing],
+    addresses: &[u64],
+    region: i32,
+) -> bool {
+    addresses.iter().all(|a| {
+        wings
+            .iter()
+            .any(|w| w.address == *a && w.region_id == region)
+    })
+}
+
 /// Missions in process: one request for the wings lacking the bit, one for the wings not in the region. The game's
 /// check for the region command reads the wing's mission, so the region request waits until the game has executed
 /// the mission commands (one frame; read back from memory by `reread`), as a player's region click always comes a
@@ -361,6 +374,21 @@ pub(super) fn air_mission(
             return Routed::Gui;
         }
         replies.push(r);
+        // the call's read-back follows at once: return only once the game has executed the region (a read right
+        // after the post saw the old region and the call closed NotApplied, s2d 24 Nov 2026)
+        if let Some(want) = region {
+            let start = std::time::Instant::now();
+            let mut seen = false;
+            while start.elapsed() < MISSION_BIT_WAIT {
+                if reread().is_some_and(|now| regions_executed(&now, &need_region, want)) {
+                    seen = true;
+                    break;
+                }
+                std::thread::sleep(MISSION_BIT_POLL);
+            }
+            let waited = start.elapsed().as_millis() as u64;
+            replies.push(json!({"region_executed":seen,"waited_ms":waited}));
+        }
     }
     Routed::Done(json!({"backend":"inprocess","wings":names,"module":replies}))
 }
@@ -504,6 +532,14 @@ mod tests {
         assert!(!bits_executed(&now, &[0x10, 0x20], 1));
         assert!(!bits_executed(&now, &[0x40], 1));
         assert!(bits_executed(&now, &[0x30], 2));
+        let mut there = wing(0x10, 1);
+        there.region_id = 7;
+        assert!(regions_executed(
+            &[there.clone(), wing(0x20, 1)],
+            &[0x10],
+            7
+        ));
+        assert!(!regions_executed(&[there, wing(0x20, 1)], &[0x10, 0x20], 7));
     }
 
     #[test]
