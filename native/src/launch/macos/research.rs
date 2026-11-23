@@ -301,6 +301,25 @@ pub(super) fn assignments(process: &dyn Process) -> Result<Assignments> {
     })
 }
 
+/// The slot a research start without `slot` uses: the slot already holding the technology (a
+/// retry settles there), else the first empty one; every slot busy is refused with the slots
+/// listed (a switch needs a named slot and replace:true). Players left `slot` out 62 times in the
+/// runs of 11-19 Nov; pure.
+pub(super) fn default_slot(before: &Assignments, key: &str) -> Result<usize> {
+    if let Some(i) = before.slots.iter().position(|s| s.as_deref() == Some(key)) {
+        return Ok(i);
+    }
+    before.slots.iter().position(Option::is_none).ok_or_else(|| {
+        Error::new(
+            "invalid_target",
+            format!(
+                "Every research slot is busy ({:?}): name a slot and pass replace:true to switch it",
+                before.slots.iter().map(|s| s.as_deref().unwrap_or("")).collect::<Vec<_>>()
+            ),
+        )
+    })
+}
+
 /// Refusals that need no input: unknown/finished/assigned technology, busy slot.
 pub(super) fn check(before: &Assignments, key: &str, slot: usize, replace: bool) -> Result<()> {
     if before.completed.contains(key) {
@@ -531,6 +550,26 @@ pub(super) fn close_tree(process: &dyn Process, keys: &dyn GameInput) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_start_without_a_slot_takes_the_first_empty_one_or_its_own() {
+        let a = super::Assignments {
+            slots: vec![Some("radio".into()), None, None],
+            completed: Default::default(),
+        };
+        assert_eq!(
+            super::default_slot(&a, "electronic_mechanical_engineering").unwrap(),
+            1
+        );
+        assert_eq!(super::default_slot(&a, "radio").unwrap(), 0);
+        let full = super::Assignments {
+            slots: vec![Some("radio".into()), Some("radar".into())],
+            completed: Default::default(),
+        };
+        let e = super::default_slot(&full, "rocketry").unwrap_err();
+        assert_eq!(e.code, "invalid_target");
+        assert!(e.message.contains("radar"), "{}", e.message);
+    }
+
     use super::*;
     fn own(slots: &[Option<&str>]) -> Vec<Option<String>> {
         slots.iter().map(|s| s.map(String::from)).collect()

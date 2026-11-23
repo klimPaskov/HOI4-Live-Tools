@@ -6,6 +6,9 @@ HOI4 1.19.4.1 (f584), and what must be run before the campaigns. Written from do
 only; the game was not touched for this inventory. `[?]` marks a result recorded only in the session notes of a test
 round, with no commit message or document that states it.
 
+Newer count (23 November 2026, from the receipts of every recorded run since 31 October): see the proof table
+at the top of `LIVE_VALIDATION_QUEUE.md`, which also holds the ordered probes still to run.
+
 Active content now: No Step Back (NSB), By Blood Alone (BBA), Arms Against Tyranny (AAT), No Compromise No Surrender
 (NCNS), La Resistance (LaR), Gotterdammerung, Anniversary Pack, Poland United and Ready, Rocket Launcher, Historical
 German Portraits, plus Waking the Tiger, Man the Guns, Together for Victory and Death or Dishonor (integrated). Before 1

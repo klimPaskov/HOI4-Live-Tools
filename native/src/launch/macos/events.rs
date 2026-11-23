@@ -534,6 +534,59 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
         "option_points":e.centres.as_ref().map(|c| c.iter().map(|(x, y)| [x.round(), y.round()]).collect::<Vec<_>>())})).collect::<Vec<_>>()}),
     )
 }
+/// The 0-based option of open event `event` that `wanted` names, from a `list` reply: the
+/// option's script key (`option_keys`, e.g. "germany.14.a", or its last part "a"), its shown text
+/// (case and surrounding spaces ignored), or a number written as text. Players pass the key the
+/// events read shows (the index-only argument was refused 18 times in the runs of 11-23 Nov); pure.
+pub(super) fn option_index(listed: &Value, event: &str, wanted: &str) -> Result<usize> {
+    let wanted = wanted.trim();
+    let Some(open) = listed["events"]
+        .as_array()
+        .and_then(|a| a.iter().find(|e| e["event"] == event))
+    else {
+        return Err(Error::new(
+            "invalid_target",
+            format!("Event {event} is not open"),
+        ));
+    };
+    let texts: Vec<&str> = open["options"]
+        .as_array()
+        .map(|a| a.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    let keys: Vec<Option<&str>> = open["option_keys"]
+        .as_array()
+        .map(|a| a.iter().map(Value::as_str).collect())
+        .unwrap_or_default();
+    if let Ok(n) = wanted.parse::<usize>() {
+        if n < texts.len().max(keys.len()) {
+            return Ok(n);
+        }
+    }
+    let short = |k: &str| k.rsplit('.').next().unwrap_or(k).to_string();
+    let found = keys
+        .iter()
+        .position(|k| *k == Some(wanted))
+        .or_else(|| {
+            keys.iter()
+                .position(|k| k.is_some_and(|k| short(k).eq_ignore_ascii_case(wanted)))
+        })
+        .or_else(|| {
+            texts
+                .iter()
+                .position(|t| t.trim().eq_ignore_ascii_case(wanted))
+        });
+    found.filter(|i| *i < 8).ok_or_else(|| {
+        Error::new(
+            "invalid_arguments",
+            format!(
+                "Event {event} has no option {wanted:?}: give its 0-based index or one of the keys {:?} (texts {:?})",
+                keys.iter().map(|k| k.unwrap_or("?")).collect::<Vec<_>>(),
+                texts
+            ),
+        )
+    })
+}
+
 /// The event drawn on top when it offers exactly one option (news events: "OK"-style
 /// acknowledgements with nothing to decide).
 pub(super) fn single_option_top(r: &Reader<'_>, image: u64) -> Result<Option<String>> {
@@ -983,5 +1036,30 @@ mod text_tests {
             super::plain_text("The §Ylast§! stand at £army_experience£ Wello.\nNow."),
             "The last stand at Wello.\nNow."
         );
+    }
+
+    #[test]
+    fn an_option_is_found_by_its_key_its_letter_its_text_or_its_number() {
+        let listed = serde_json::json!({"events": [{"event": "germany.14",
+            "options": ["Honour the treaty", "Demand more"],
+            "option_keys": ["germany.14.a", "germany.14.b"]}]});
+        assert_eq!(
+            super::option_index(&listed, "germany.14", "germany.14.b").unwrap(),
+            1
+        );
+        assert_eq!(super::option_index(&listed, "germany.14", "a").unwrap(), 0);
+        assert_eq!(
+            super::option_index(&listed, "germany.14", " demand more ").unwrap(),
+            1
+        );
+        assert_eq!(super::option_index(&listed, "germany.14", "1").unwrap(), 1);
+        let e = super::option_index(&listed, "germany.14", "germany.14.c").unwrap_err();
+        assert_eq!(e.code, "invalid_arguments");
+        assert!(e.to_string().contains("germany.14.a"), "{e}");
+        let e = super::option_index(&listed, "news.1", "a").unwrap_err();
+        assert_eq!(e.code, "invalid_target");
+        // keys unknown (no content folder): the text still works
+        let bare = serde_json::json!({"events": [{"event": "x.1", "options": ["OK"], "option_keys": [null]}]});
+        assert_eq!(super::option_index(&bare, "x.1", "ok").unwrap(), 0);
     }
 }
