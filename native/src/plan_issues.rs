@@ -274,7 +274,11 @@ fn usable_treat(le: &Value) -> Option<Treat> {
     if !version.is_empty()
         && le["version_independent"] != json!(true)
         && !crate::builds::current().map_or_else(
-            || crate::builds::SUPPORTED.iter().any(|b| b.game_version == version),
+            || {
+                crate::builds::SUPPORTED
+                    .iter()
+                    .any(|b| b.game_version == version)
+            },
             |b| b.game_version == version,
         )
     {

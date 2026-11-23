@@ -325,7 +325,9 @@ mod tests {
         let memory = cxx(b"", b"", false);
         let r = Reader::new(&memory);
         // The generator writes DISABLED_BASE + the old address; the image base is added at the call site.
-        let e = r.u64(0x1_0000_0000 + DISABLED_BASE + 0x384b760).unwrap_err();
+        let e = r
+            .u64(0x1_0000_0000 + DISABLED_BASE + 0x384b760)
+            .unwrap_err();
         assert_eq!(e.code, "layout_disabled");
         assert!(e.message.contains("GAME_VERSIONS"));
         assert_eq!(memory.0.calls.get(), 0);
