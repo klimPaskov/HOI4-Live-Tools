@@ -376,7 +376,13 @@ mod tests {
     fn msvc_inline_and_heap_strings_decode_and_bound() {
         let r = msvc(b"GER", 3, 15, b"", false);
         assert_eq!(Reader::new(&r).string(0x10000).unwrap(), "GER");
-        let r = msvc(&0x10040u64.to_le_bytes(), 18, 31, b"generic_infantry_2", false);
+        let r = msvc(
+            &0x10040u64.to_le_bytes(),
+            18,
+            31,
+            b"generic_infantry_2",
+            false,
+        );
         assert_eq!(
             Reader::new(&r).string(0x10000).unwrap(),
             "generic_infantry_2"
@@ -385,14 +391,26 @@ mod tests {
         assert_eq!(Reader::new(&r).string(0x10000).unwrap(), "");
         // size beyond capacity, beyond the caller's bound, or a changed header
         let r = msvc(b"GER", 16, 15, b"", false);
-        assert_eq!(Reader::new(&r).string(0x10000).unwrap_err().code, "invalid_string");
-        let r = msvc(&0x10040u64.to_le_bytes(), 18, 31, b"generic_infantry_2", false);
+        assert_eq!(
+            Reader::new(&r).string(0x10000).unwrap_err().code,
+            "invalid_string"
+        );
+        let r = msvc(
+            &0x10040u64.to_le_bytes(),
+            18,
+            31,
+            b"generic_infantry_2",
+            false,
+        );
         assert_eq!(
             Reader::new(&r).string_bounded(0x10000, 8).unwrap_err().code,
             "invalid_string"
         );
         let r = msvc(b"GER", 3, 15, b"", true);
-        assert_eq!(Reader::new(&r).string(0x10000).unwrap_err().code, "torn_read");
+        assert_eq!(
+            Reader::new(&r).string(0x10000).unwrap_err().code,
+            "torn_read"
+        );
     }
     #[test]
     fn msvc_wide_strings_are_utf16() {
@@ -402,13 +420,19 @@ mod tests {
             .collect();
         // 6 units do not fit inline (7 units do, capacity 7): stored on the heap here
         let r = msvc(&0x10040u64.to_le_bytes(), 6, 15, &text, false);
-        assert_eq!(Reader::new(&r).wstring_bounded(0x10000, 64).unwrap(), "Berlin");
+        assert_eq!(
+            Reader::new(&r).wstring_bounded(0x10000, 64).unwrap(),
+            "Berlin"
+        );
         let short: Vec<u8> = "Rom".encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
         let r = msvc(&short, 3, 7, b"", false);
         assert_eq!(Reader::new(&r).wstring_bounded(0x10000, 64).unwrap(), "Rom");
         let r = msvc(&0x10041u64.to_le_bytes(), 6, 15, &text, false);
         assert_eq!(
-            Reader::new(&r).wstring_bounded(0x10000, 64).unwrap_err().code,
+            Reader::new(&r)
+                .wstring_bounded(0x10000, 64)
+                .unwrap_err()
+                .code,
             "invalid_string"
         );
     }

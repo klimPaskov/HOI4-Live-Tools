@@ -99,7 +99,10 @@ pub fn restore(run_directory: &Path) -> Result<Value> {
         .ok_or_else(|| Error::new("invalid_backup", "Backup has no original text"))?;
     let sha = backup["sha256"].as_str().unwrap_or_default();
     if sha256_hex(text.as_bytes()) != sha {
-        return Err(Error::new("invalid_backup", "Backup bytes differ from their hash"));
+        return Err(Error::new(
+            "invalid_backup",
+            "Backup bytes differ from their hash",
+        ));
     }
     if game_running()? {
         return Err(Error::new(
@@ -238,17 +241,17 @@ fn run(config: &Config, exe: &Path) -> Result<()> {
         config.run_directory.join("session.json"),
         serde_json::to_string_pretty(&record).unwrap(),
     )?;
-    let (process, unavailable) = match crate::platform::windows::process::WindowsProcess::open(session)
-    {
-        Ok(p) => (
-            Some(Box::new(p) as Box<dyn crate::platform::Process + Send + Sync>),
-            None,
-        ),
-        Err(e) => {
-            eprintln!("{e}");
-            (None, Some(e))
-        }
-    };
+    let (process, unavailable) =
+        match crate::platform::windows::process::WindowsProcess::open(session) {
+            Ok(p) => (
+                Some(Box::new(p) as Box<dyn crate::platform::Process + Send + Sync>),
+                None,
+            ),
+            Err(e) => {
+                eprintln!("{e}");
+                (None, Some(e))
+            }
+        };
     let server = crate::protocol::Server {
         process,
         unavailable,
@@ -322,9 +325,7 @@ mod tests {
             redirect_settings("{\"x\": 1}", "C:/u").unwrap_err().code,
             "invalid_settings"
         );
-        let twice = format!(
-            "{{\"a\": {{\"gameDataPath\": \"p\"}}, \"gameDataPath\": \"p\"}}"
-        );
+        let twice = String::from("{{\"a\": {{\"gameDataPath\": \"p\"}}, \"gameDataPath\": \"p\"}}");
         assert_eq!(
             redirect_settings(&twice, "C:/u").unwrap_err().code,
             "invalid_settings"
