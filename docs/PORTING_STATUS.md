@@ -69,7 +69,14 @@ Two runtimes exist:
   with ordinary input. It is the supported Windows path for mod testing and was last run on
   Windows HOI4 1.19.4.2. It has no memory reads and is not a campaign runtime.
 - The native runtime has a read-only Windows process reader (`native/src/platform/windows/`) with
-  an empty build allowlist. It attaches to no game, sends no input, has no launcher and no layout.
+  an empty build allowlist, a `Process` for a game it started itself (`WindowsProcess`: the game's
+  parent must be the running server, identities by creation time, SID and file ID) and a launcher
+  (`hoi4-live-native --windows-serve CONFIG`) that starts `hoi4.exe` without Steam variables in a
+  private user folder, refuses while a game or the Steam client runs, and restores the launcher
+  settings it redirected when the game exits (`--windows-restore RUN` repairs an interrupted run).
+  Windows strings are MSVC `std::string`/`std::wstring`. It sends no input and has no layout yet: a
+  development build (`--features dev-table`) reads a table from `HOI4_LIVE_DEV_TABLE` and accepts
+  the executable named by `HOI4_LIVE_DEV_WINDOWS_SHA256`; release builds attach to nothing.
   The management tools are compiled and unit-tested on Windows, but nothing binds them there yet.
   Their journals hold the exclusive lock on a sibling `<journal>.lock` file on Windows (a Windows
   lock on the journal itself would stop every other reader); the daily plan store still refuses on
@@ -79,8 +86,8 @@ Steps to finish, in order:
 1. Done: the tool modules compile on Windows and Windows CI runs their unit tests.
 2. The private-file checks (controller state, daily plan store) for Windows: owner-only ACLs
    instead of POSIX modes.
-3. A `Process` for an owned Windows game on top of the existing reader, and a launcher that starts
-   the game without Steam variables in a private user folder, like the Linux launcher.
+3. Done (not yet run against the game): a `Process` for an owned Windows game and a launcher that
+   starts it without Steam variables in a private user folder, like the Linux launcher.
 4. A `GameInput` for Windows (`SendInput` to the owned, foreground window; client geometry, DPI,
    keyboard layout), with the modifier timing the Linux backend needed.
 5. A layout table for the Windows build. Started: `scripts/pe_rtti_map.py MACHO PE` maps every
