@@ -590,3 +590,40 @@ fn late_full_owner_failure_discards_every_previously_read_batch_value() {
     assert_eq!(f.reads(), 2);
     assert!(r.check().is_err());
 }
+
+#[test]
+fn relocated_image_base_is_the_only_header_difference_accepted() {
+    let mut pinned = vec![0u8; 0x200];
+    pinned[0x3c..0x40].copy_from_slice(&0x80u32.to_le_bytes());
+    let field = 0x80 + 48;
+    pinned[field..field + 8].copy_from_slice(&0x1_4000_0000u64.to_le_bytes());
+    pinned[0x150] = 7;
+    // mapped at the preferred base: identical bytes
+    assert!(super::loaded_headers_match(&pinned, &pinned, 0x1_4000_0000));
+    // relocated: the loader wrote the actual base into ImageBase
+    let mut loaded = pinned.clone();
+    loaded[field..field + 8].copy_from_slice(&0x7ff6_1234_0000u64.to_le_bytes());
+    assert!(super::loaded_headers_match(
+        &loaded,
+        &pinned,
+        0x7ff6_1234_0000
+    ));
+    // ImageBase not the actual base, or any other byte changed: refused
+    assert!(!super::loaded_headers_match(
+        &loaded,
+        &pinned,
+        0x7ff6_5555_0000
+    ));
+    let mut other = loaded.clone();
+    other[0x150] = 8;
+    assert!(!super::loaded_headers_match(
+        &other,
+        &pinned,
+        0x7ff6_1234_0000
+    ));
+    assert!(!super::loaded_headers_match(
+        &loaded[..0x100],
+        &pinned,
+        0x7ff6_1234_0000
+    ));
+}

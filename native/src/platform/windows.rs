@@ -301,12 +301,11 @@ impl<A: Api> OwnedReader<A> {
         reader.check()?;
         // Only a cfg(test) approved profile can currently reach any VM read.
         let loaded = reader.read(reader.original.image_base, pe.header_size as usize)?;
-        if loaded
-            != image
-                .header
-                .get(..pe.header_size as usize)
-                .ok_or_else(|| error("invalid_pe", "Truncated on-disk headers"))?
-        {
+        let pinned = image
+            .header
+            .get(..pe.header_size as usize)
+            .ok_or_else(|| error("invalid_pe", "Truncated on-disk headers"))?;
+        if !loaded_headers_match(&loaded, pinned, reader.original.image_base) {
             return Err(error(
                 "unsupported_build",
                 "Loaded executable headers differ from pinned image",
@@ -427,6 +426,24 @@ impl<A: Api> OwnedReader<A> {
         })();
         self.keep(result)
     }
+}
+/// The mapped headers equal the file's, except the optional header's ImageBase, which the
+/// loader rewrites to the address it mapped the image at (ASLR): that field must hold exactly
+/// the actual base.
+fn loaded_headers_match(loaded: &[u8], pinned: &[u8], actual_base: u64) -> bool {
+    if loaded.len() != pinned.len() || pinned.len() < 0x40 {
+        return false;
+    }
+    let pe = u32::from_le_bytes(pinned[0x3c..0x40].try_into().unwrap()) as usize;
+    let Some(field) = pe.checked_add(24 + 24) else {
+        return false;
+    };
+    if field + 8 > pinned.len() {
+        return false;
+    }
+    loaded[..field] == pinned[..field]
+        && loaded[field + 8..] == pinned[field + 8..]
+        && u64::from_le_bytes(loaded[field..field + 8].try_into().unwrap()) == actual_base
 }
 fn range(address: u64, size: usize) -> Result<u64> {
     if size == 0 || size > MAX_READ || address < 0x10000 {
