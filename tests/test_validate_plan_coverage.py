@@ -271,7 +271,8 @@ class CoverageTests(unittest.TestCase):
                       text)
         self.assertIn("unknown building bunker", text)
         self.assertIn("state 9 is not a state id", text)
-        self.assertIn('schema: construction_plan[5].when: "province_controlled:x" does not match', text)
+        # `when` is a trigger or any predicate: the schema names the nearest branch it misses
+        self.assertIn('construction_plan[5].when: "province_controlled:x" does not match', text)
         self.assertIn("id c1 is used by entries", text)
 
     def test_railway_ends_must_be_in_their_states(self):
