@@ -978,6 +978,11 @@
           "description": "retired, read by nothing: the force spends (political power, template edits, officer corps spirits, designs) are lanes of every pass",
           "x-owner": "text"
         },
+        "issues_due": {
+          "type": "boolean",
+          "default": true,
+          "description": "true offers the lanes that own an open issue of the run monitor (RUN/issues_open.json, docs/MONITORING.md) ahead of the routine pass, each at most once a game day; false leaves the pass order alone"
+        },
         "war_every_tick": {
           "type": "boolean",
           "default": false,
