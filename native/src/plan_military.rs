@@ -94,7 +94,27 @@
 //!                held; list them in `war.reserve` too), the navy step its fleet, and the rests
 //!                below its armies. Done-memory `inv:<id>:start`, `:move:<army>`,
 //!                `:ordered:<army>`, `:exec:<army>`, `:tf:<task force>`, `:fleet`, `:landed`,
-//!                `:aborted`
+//!                `:aborted`.
+//!                The sea landing as an operation (never run live: each key is off
+//!                when absent, an entry without them runs exactly as above):
+//!                `route_regions` [sea regions the transports cross, as navy missions write them]
+//!                go into `fleet`'s area before its invasion support (hoi4_fleet_region, one a tick;
+//!                `inv:<id>:reg:<region>`, `inv:<id>:route` when all are in); `execute_when` (a
+//!                predicate, e.g. at_war_with:NOR) holds the prepared landing until it is true
+//!                (the order is drawn and prepared before the declaration; the execute_days clock
+//!                then runs from the declaration); `gates` {"convoys_per_division" (6, the game's
+//!                ESTIMATED_CONVOYS_PER_DIVISION), "patrol_days" (50: dominance grows 2% of its
+//!                target a day), "when" (e.g. naval_dominance:<region> >= 0.6 per route region,
+//!                air superiority)} hold the execute while transports are short (the need is
+//!                reserved for the convoy rule from the start, `manage.convoy_reserve`), while
+//!                `gates.when` is false (dominance or cover lost: hold), and while it is unknown
+//!                and the route has been patrolled less than patrol_days; `follow_up`
+//!                {"reinforce":[armies],"watch_days" (30),"on_cut_off":"reinforce"|"withdraw"|
+//!                "wake"} sends the reinforcements through the taken state once landed, and for
+//!                watch_days a lost beachhead reinforces again, withdraws the landing armies to
+//!                `from_state`, or wakes the player (always woken). The front on the beachhead
+//!                is the plan's own: an operations[] entry whose `when` is
+//!                controls_state:<target_state> takes the landed armies like any land operation
 //!   hold_targets [{"id","army","provinces":[province ids along the corridor, rear first],"when"?,
 //!                "until"?,"state"?}] (lesson L01: Somaliland, Jubaland, Afar and Wello were lost
 //!                behind the strike armies): `army` (an army name, or an army_layout name_hint:
@@ -647,6 +667,31 @@ fn landed(tools: &dyn Tools, target: i64, province: Option<i64>, me: &str) -> Tr
     }
 }
 
+/// The transports a sea operation with gates or a route needs (divisions x
+/// `gates.convoys_per_division`, default 6), reserved for the convoy rule from the operation's
+/// start: (need, per division).
+fn reserve_convoys(state: &mut State, id: &str, entry: &Value, divisions: i64) -> (f64, f64) {
+    let per = entry["gates"]["convoys_per_division"]
+        .as_f64()
+        .filter(|v| *v >= 0.0)
+        .unwrap_or(CONVOYS_PER_DIVISION);
+    let need = (per * divisions as f64).ceil();
+    state.manage.convoy_reserve = Some((need, id.to_string()));
+    (need, per)
+}
+
+/// The convoys an ended operation reserved go back to the convoy rule's ordinary floor.
+fn release_convoys(state: &mut State, id: &str) {
+    if state
+        .manage
+        .convoy_reserve
+        .as_ref()
+        .is_some_and(|(_, owner)| owner == id)
+    {
+        state.manage.convoy_reserve = None;
+    }
+}
+
 /// Abort the invasion: no more input for it, the player decides.
 fn abort_invasion(
     state: &mut State,
@@ -658,6 +703,7 @@ fn abort_invasion(
     evidence: Value,
 ) {
     state.done.insert(format!("inv:{id}:aborted"), now);
+    release_convoys(state, id);
     for army in armies {
         state.war_cool.remove(army);
     }
@@ -753,6 +799,323 @@ fn invasion_fleet(
     Ok(None)
 }
 
+/// The game's own estimate of convoys one invading division needs (NAI
+/// ESTIMATED_CONVOYS_PER_DIVISION 6; the exact need is the army card's "Reserved Convoys
+/// VAL/NEED"): the default of `gates.convoys_per_division`.
+const CONVOYS_PER_DIVISION: f64 = 6.0;
+/// Days of patrol before the dominance on a route is full: dominance grows 2% of its target a day
+/// (NNavy DOMINANCE_DAILY_GAIN_FACTOR 0.02), so about 50 days; the default of `gates.patrol_days`
+/// while no tool reads the dominance itself.
+const PATROL_DAYS: i64 = 50;
+
+/// `route_regions` of a sea operation: every sea region the transports cross is added to the
+/// invasion fleet's area (hoi4_fleet_region, one order per tick) before its task forces get
+/// invasion_support, so the fleet patrols and supports over the whole route (control is
+/// needed in every region of the path, and the transports are spotted x10). Each
+/// region once per operation (`inv:<id>:reg:<region>`); `inv:<id>:route` records when the last
+/// one was in place: the start of the patrol-days proxy for the dominance. A region the game
+/// cannot find from its coastal state wakes the player; the operation waits for it.
+fn invasion_route(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    id: &str,
+    entry: &Value,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let regions = list(entry, "route_regions");
+    let Some(fleet) = entry["fleet"].as_str().filter(|f| !f.trim().is_empty()) else {
+        return Ok(None);
+    };
+    if regions.is_empty() || state.done.contains_key(&format!("inv:{id}:route")) {
+        return Ok(None);
+    }
+    if state.skipped(now, "invroute", id) {
+        return Ok(None);
+    }
+    let Ok(read) = tools.call("hoi4_fleets", &json!({})) else {
+        state.skip(now, "invroute", id, DAY);
+        return Ok(None);
+    };
+    let Some(row) = list(&read, "fleets")
+        .iter()
+        .find(|f| same_name(fleet, text(&f["fleet"])))
+        .cloned()
+    else {
+        note(
+            state,
+            &format!("invasion:{id}"),
+            format!("fleet {fleet} not found (hoi4_fleets): route regions wait"),
+        );
+        state.skip(now, "invroute", id, 7 * DAY);
+        return Ok(None);
+    };
+    let assigned: Vec<String> = list(&row, "assigned_regions")
+        .iter()
+        .flat_map(|r| [text(&r["key"]).to_string(), text(&r["name"]).to_string()])
+        .collect();
+    let home = row["home_port"]["state_id"].as_i64();
+    let from = entry["from_state"].as_i64();
+    for spec in regions {
+        let Some((region, sid)) = region_spec(spec) else {
+            continue;
+        };
+        let key = format!("inv:{id}:reg:{region}");
+        if state.done.contains_key(&key) || assigned.iter().any(|a| same_name(a, &region)) {
+            state.done.entry(key).or_insert(now);
+            continue;
+        }
+        let Some(sid) = sid.or(from).or(home) else {
+            continue;
+        };
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_fleet_region",
+            json!({"fleet": fleet, "region": region, "state_id": sid}),
+            "ir",
+        )?;
+        if ok || code(&why) == "already_assigned" {
+            state.done.insert(key, now);
+        } else {
+            state.skip(now, "invroute", id, 7 * DAY);
+            wake(
+                state,
+                plan,
+                now,
+                json!("H16"),
+                &format!("invasion_route:{id}"),
+                format!("invasion {id}: sea region {region} of the route could not be given to {fleet}: {why}"),
+                json!({"fleet": fleet, "region": region, "state_id": sid, "refusal": why}),
+            );
+        }
+        return Ok(Some(format!(
+            "invasion {id}: {fleet} route region {region}: {ok} {why}"
+        )));
+    }
+    state.done.insert(format!("inv:{id}:route"), now);
+    note(
+        state,
+        &format!("invasion:{id}"),
+        format!("route regions in {fleet}'s area"),
+    );
+    Ok(None)
+}
+
+/// Whether a sea operation may execute now: None = go, Some(reason) = hold. Only what the entry
+/// asks for is checked (an entry without `execute_when`, `gates` or `route_regions` executes as
+/// soon as it is prepared, as before):
+///   `execute_when`  a predicate that must hold (e.g. "at_war_with:NOR": the order is drawn and
+///                   prepared before, the landing goes in at the declaration);
+///   convoys         `gates.convoys_per_division` (default 6, the game's estimate) times the
+///                   landing armies' divisions free (hoi4_convoys); the need is reserved for the
+///                   convoy rule meanwhile (`State::manage.convoy_reserve`), so idle dockyards
+///                   build toward it;
+///   dominance       `gates.when` (e.g. "naval_dominance:<region> >= 0.6" per route region,
+///                   NNavy DOMINANCE_CONTROLLED_THRESHOLD_RATIO 0.6): false holds; unknown (no
+///                   tool reads the dominance yet) passes once the route has been patrolled
+///                   `gates.patrol_days` (default 50: 2% of the target a day) since its regions
+///                   were in the fleet's area (`inv:<id>:route`); without `gates.when` the same
+///                   patrol-days proxy applies when the entry has route_regions.
+/// The game still refuses an execute without dominance or transports (plan_not_executable); this
+/// keeps the executor from asking before the means are there and says which one is missing.
+fn invasion_gates(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    entry: &Value,
+    divisions: i64,
+    now: GameHour,
+) -> Option<String> {
+    let gates = &entry["gates"];
+    if !entry["execute_when"].is_null() {
+        match when_holds(state, tools, &entry["execute_when"], now) {
+            Truth::True => {
+                state
+                    .done
+                    .entry(format!("inv:{id}:declared"))
+                    .or_insert(now);
+            }
+            t => return Some(format!("execute_when {}", t.label())),
+        }
+    }
+    if gates.is_object() || !list(entry, "route_regions").is_empty() {
+        let (need, per) = reserve_convoys(state, id, entry, divisions);
+        if need > 0.0 {
+            match tools
+                .call("hoi4_convoys", &json!({}))
+                .ok()
+                .and_then(|r| r["convoys"]["free"].as_f64())
+            {
+                Some(free) if free < need => {
+                    return Some(format!(
+                        "convoys {free} free of {need} needed ({divisions} divisions x {per})"
+                    ))
+                }
+                None => return Some("convoys unread (hoi4_convoys)".into()),
+                _ => {}
+            }
+        }
+        let patrol = gates["patrol_days"].as_i64().unwrap_or(PATROL_DAYS) * DAY;
+        let route_since = state.done.get(&format!("inv:{id}:route")).copied();
+        let patrolled = |since: Option<GameHour>| match since {
+            Some(t) if now - t >= patrol => None,
+            Some(t) => Some(format!(
+                "route patrolled {} of {} days (dominance proxy: no tool reads the dominance)",
+                (now - t) / DAY,
+                patrol / DAY
+            )),
+            None => Some("route regions not yet in the fleet's area".to_string()),
+        };
+        if gates["when"].is_null() {
+            if !list(entry, "route_regions").is_empty() {
+                if let Some(wait) = patrolled(route_since) {
+                    return Some(wait);
+                }
+            }
+        } else {
+            match when_holds(state, tools, &gates["when"], now) {
+                Truth::True => {}
+                Truth::False => {
+                    return Some("gates.when false (dominance or cover lost: hold)".into())
+                }
+                Truth::Unknown => {
+                    if let Some(wait) = patrolled(route_since) {
+                        return Some(format!("gates.when unknown; {wait}"));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// After a landing (`follow_up`): `reinforce` armies cross to the taken state once
+/// (hoi4_army_move; with a port held the game ships them by convoy without dominance, research
+/// I9), and for `watch_days` (default 30) the beachhead is checked once a game day: lost (the
+/// target state and province held by nobody of ours) means `on_cut_off`: "reinforce" (the
+/// reinforcement is sent again), "withdraw" (the landing armies go back to `from_state`), or
+/// "wake" (default: the player decides). The front on the beachhead is the plan's: an
+/// operations[] entry whose `when` is controls_state:<target_state> takes the landed armies, the
+/// same model as on land. One action per tick; done-memory `inv:<id>:reinf:<army>`,
+/// `inv:<id>:cut`.
+fn invasion_follow_up(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    for (i, entry) in list(plan, "invasions").iter().enumerate() {
+        let follow = &entry["follow_up"];
+        if !follow.is_object() {
+            continue;
+        }
+        let id = invasion_key(entry, i);
+        let Some(&landed_at) = state.done.get(&format!("inv:{id}:landed")) else {
+            continue;
+        };
+        let watch = days(&follow["watch_days"], 30) * DAY;
+        if now - landed_at > watch || state.skipped(now, "invfollow", &id) {
+            continue;
+        }
+        let Some(target) = entry["target_state"].as_i64() else {
+            continue;
+        };
+        let label = format!("invasion:{id}");
+        for army in strings(follow, "reinforce") {
+            let key = format!("inv:{id}:reinf:{army}");
+            if state.done.contains_key(&key) {
+                continue;
+            }
+            let army = resolve(state, &army);
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_army_move",
+                json!({"army": army, "state_id": target}),
+                "if",
+            )?;
+            if ok {
+                state.done.insert(key, now);
+            } else {
+                state.skip(now, "invfollow", &id, DAY);
+            }
+            note(
+                state,
+                &label,
+                format!("reinforcement {army} to state {target}: {ok}"),
+            );
+            return Ok(Some(format!(
+                "invasion {id}: reinforcement {army} through the beachhead {target}: {ok} {why}"
+            )));
+        }
+        let how = text(&follow["on_cut_off"]).to_string();
+        if state.done.contains_key(&format!("inv:{id}:cut")) {
+            // withdrawing: every landing army back to the port it sailed from, one a tick
+            if how == "withdraw" {
+                if let Some(from) = entry["from_state"].as_i64() {
+                    for planned_army in strings(entry, "armies") {
+                        let army = landing_army(state, &id, &planned_army);
+                        let key = format!("inv:{id}:wd:{army}");
+                        if state.done.contains_key(&key) {
+                            continue;
+                        }
+                        let (ok, why) = state.act(
+                            tools,
+                            lease,
+                            "hoi4_army_move",
+                            json!({"army": army, "state_id": from}),
+                            "iw",
+                        )?;
+                        if ok {
+                            state.done.insert(key, now);
+                        } else {
+                            state.skip(now, "invfollow", &id, DAY);
+                        }
+                        note(
+                            state,
+                            &label,
+                            format!("beachhead lost: {army} withdraws to {from}: {ok}"),
+                        );
+                        return Ok(Some(format!(
+                            "invasion {id}: beachhead lost, {army} withdraws to state {from}: {ok} {why}"
+                        )));
+                    }
+                }
+            }
+            continue;
+        }
+        state.skip(now, "invfollow", &id, DAY);
+        let me = tools
+            .call("hoi4_overview", &json!({}))
+            .map(|o| text(&o["player"]).to_string())
+            .unwrap_or_default();
+        if landed(tools, target, entry["target_province"].as_i64(), &me) != Truth::False {
+            continue;
+        }
+        state.done.insert(format!("inv:{id}:cut"), now);
+        if how == "reinforce" {
+            for army in strings(follow, "reinforce") {
+                state.done.remove(&format!("inv:{id}:reinf:{army}"));
+            }
+            state.skip(now, "invfollow", &id, 0);
+            note(state, &label, "beachhead lost: reinforcing again");
+        }
+        wake(
+            state,
+            plan,
+            now,
+            json!("H16"),
+            &format!("invasion_cut:{id}"),
+            format!("invasion {id}: the beachhead in state {target} was lost ({}): reinforce, withdraw or hold", if how.is_empty() { "wake" } else { how.as_str() }),
+            json!({"target_state": target, "landed_at_hour": landed_at, "on_cut_off": how}),
+        );
+    }
+    Ok(None)
+}
+
 fn invasion_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -763,6 +1126,9 @@ fn invasion_step(
     let entries = list(plan, "invasions");
     if entries.is_empty() {
         return Ok(None);
+    }
+    if let Some(line) = invasion_follow_up(state, tools, plan, lease, now)? {
+        return Ok(Some(line));
     }
     let (id, entry) = match active_invasion(state, plan) {
         Some(active) => active,
@@ -853,12 +1219,21 @@ fn invasion_step(
         note(state, &label, "hoi4_armies unreadable");
         return Ok(None);
     };
+    if entry["gates"].is_object() || !list(&entry, "route_regions").is_empty() {
+        let divisions: i64 = armies
+            .iter()
+            .filter_map(|a| army_row(&roster, a))
+            .filter_map(|r| r["division_count"].as_i64())
+            .sum();
+        reserve_convoys(state, &id, &entry, divisions);
+    }
     let exec_at =
         |state: &State, army: &str| state.done.get(&format!("inv:{id}:exec:{army}")).copied();
     let landing = landed(tools, target, province, &me);
     let any_exec = armies.iter().any(|a| exec_at(state, a).is_some());
     if landing == Truth::True {
         state.done.insert(format!("inv:{id}:landed"), now);
+        release_convoys(state, &id);
         for army in &armies {
             state.war_cool.remove(army);
         }
@@ -922,7 +1297,24 @@ fn invasion_step(
                 state.skip(now, "inv", &id, (at + prepare - now).min(DAY));
                 return Ok(None);
             }
-            if now - at > prepare + execute_days {
+            // the operation's gates: the declaration, convoys, the route's dominance; the abort
+            // clock runs from the declaration when the entry waits for one
+            let divisions: i64 = armies
+                .iter()
+                .filter_map(|a| army_row(&roster, a))
+                .filter_map(|r| r["division_count"].as_i64())
+                .sum();
+            let hold = invasion_gates(state, tools, &id, &entry, divisions, now);
+            let declared = state.done.get(&format!("inv:{id}:declared")).copied();
+            let ready_from = (at + prepare).max(declared.unwrap_or(0));
+            if let Some(wait) = &hold {
+                if !entry["execute_when"].is_null() && declared.is_none() {
+                    note(state, &label, format!("{army} prepared; holds: {wait}"));
+                    state.skip(now, "inv", &id, DAY);
+                    return Ok(None);
+                }
+            }
+            if now - ready_from > execute_days {
                 abort_invasion(
                     state,
                     plan,
@@ -935,6 +1327,11 @@ fn invasion_step(
                     ),
                     json!({"army": army, "ordered_at_hour": at, "fleet": entry["fleet"]}),
                 );
+                return Ok(None);
+            }
+            if let Some(wait) = hold {
+                note(state, &label, format!("{army} prepared; holds: {wait}"));
+                state.skip(now, "inv", &id, DAY);
                 return Ok(None);
             }
             if state.skipped(now, "invexec", army) {
@@ -1037,6 +1434,9 @@ fn invasion_step(
                 "invasion {id}: {} divisions of {army} into their own army ({hint}): {ok} {why}",
                 pick.len()
             )));
+        }
+        if let Some(line) = invasion_route(state, tools, plan, lease, &id, &entry, now)? {
+            return Ok(Some(line));
         }
         if let Some(line) = invasion_fleet(state, tools, plan, lease, &id, &entry, now)? {
             return Ok(Some(line));
@@ -4697,6 +5097,119 @@ mod tests {
             out.as_deref(),
             Some("invasion sealion: Army 9 executes: true Verified")
         );
+    }
+
+    #[test]
+    fn a_sea_operation_sets_its_route_waits_for_its_gates_and_follows_up() {
+        let tools = fake(vec![
+            ("hoi4_overview", json!({"player": "GER"})),
+            ("hoi4_armies", invader(59, false)),
+            ("hoi4_states", landing("ENG")),
+            ("hoi4_convoys", json!({"convoys": {"free": 10.0}})),
+            (
+                "hoi4_fleets",
+                json!({"fleets": [{"fleet": "Hochseeflotte", "assigned_regions": [],
+                "home_port": {"state_id": 59}, "task_forces": [
+                {"task_force": "TF 1", "mission": {"name": "hold"}, "strength_percent": 100.0}]}]}),
+            ),
+        ]);
+        let plan = json!({"invasions": [
+            {"id": "weser", "from_state": 59, "target_state": 120, "target_province": 3320,
+             "armies": ["Seelöwe"], "fleet": "Hochseeflotte", "prepare_days": 10,
+             "route_regions": ["Skagerrak"],
+             "gates": {"convoys_per_division": 6, "patrol_days": 50},
+             "execute_when": "date >= 1950.1.1",
+             "follow_up": {"reinforce": ["Armee Nord"], "on_cut_off": "withdraw"}}]});
+        let mut state = State::default();
+        let at = |state: &mut State, d: i64| {
+            let now = START + d * DAY;
+            invasion_step(clocked(state, now), &tools, &plan, "l", now).unwrap()
+        };
+        // the route's region into the fleet's area first, then invasion support, then the order
+        assert_eq!(
+            at(&mut state, 0).as_deref(),
+            Some("invasion weser: Hochseeflotte route region Skagerrak: true Verified")
+        );
+        // 4 divisions x 6 convoys are reserved for the convoy rule from the start
+        assert_eq!(
+            state.manage.convoy_reserve,
+            Some((24.0, "weser".to_string()))
+        );
+        assert!(at(&mut state, 0)
+            .unwrap()
+            .contains("TF 1 invasion_support: true"));
+        assert!(at(&mut state, 0)
+            .unwrap()
+            .contains("Seelöwe from 59 to state 120: true"));
+        // prepared but the declaration has not come: hold, no abort however long it takes
+        assert_eq!(at(&mut state, 11), None);
+        assert!(state.military.notes["invasion:weser"].contains("holds: execute_when false"));
+        assert_eq!(at(&mut state, 200), None);
+        assert!(!state.done.contains_key("inv:weser:aborted"));
+        // declared: the convoys are short
+        let mut declared = plan.clone();
+        declared["invasions"][0]["execute_when"] = json!("");
+        let at = |state: &mut State, d: i64| {
+            let now = START + d * DAY;
+            invasion_step(clocked(state, now), &tools, &declared, "l", now).unwrap()
+        };
+        assert_eq!(at(&mut state, 201), None);
+        assert!(state.military.notes["invasion:weser"].contains("convoys 10 free of 24 needed"));
+        // convoys there; the route was patrolled long enough (route since day 0): execute
+        tools.reply("hoi4_convoys", json!({"convoys": {"free": 30.0}}));
+        assert_eq!(
+            at(&mut state, 202).as_deref(),
+            Some("invasion weser: Seelöwe executes: true Verified")
+        );
+        // landed: the convoys are released, the reinforcement crosses through the beachhead
+        tools.reply("hoi4_states", landing("GER"));
+        assert_eq!(at(&mut state, 203), None);
+        assert!(state.done.contains_key("inv:weser:landed"));
+        assert_eq!(state.manage.convoy_reserve, None);
+        assert_eq!(
+            at(&mut state, 204).as_deref(),
+            Some(
+                "invasion weser: reinforcement Armee Nord through the beachhead 120: true Verified"
+            )
+        );
+        // the beachhead is lost within the watch: the landing army withdraws to its port
+        tools.reply("hoi4_states", landing("ENG"));
+        assert_eq!(at(&mut state, 206), None);
+        assert!(state.done.contains_key("inv:weser:cut"));
+        assert_eq!(
+            at(&mut state, 207).as_deref(),
+            Some("invasion weser: beachhead lost, Seelöwe withdraws to state 59: true Verified")
+        );
+        let wakes = take_alarms(&mut state);
+        assert!(wakes
+            .iter()
+            .any(|w| w["reason"] == json!("invasion_cut:weser")));
+    }
+
+    #[test]
+    fn a_sea_operation_holds_while_its_dominance_gate_is_false() {
+        let tools = fake(vec![
+            ("hoi4_overview", json!({"player": "GER"})),
+            ("hoi4_armies", invader(59, false)),
+            ("hoi4_states", landing("ENG")),
+            ("hoi4_convoys", json!({"convoys": {"free": 100.0}})),
+        ]);
+        let plan = json!({"invasions": [
+            {"id": "op", "from_state": 59, "target_state": 120, "armies": ["Seelöwe"],
+             "prepare_days": 10, "gates": {"when": "date >= 1950.1.1"}}]});
+        let mut state = State::default();
+        let at = |state: &mut State, d: i64| {
+            let now = START + d * DAY;
+            invasion_step(clocked(state, now), &tools, &plan, "l", now).unwrap()
+        };
+        assert!(at(&mut state, 0)
+            .unwrap()
+            .contains("from 59 to state 120: true"));
+        assert_eq!(at(&mut state, 11), None);
+        assert!(state.military.notes["invasion:op"].contains("gates.when false"));
+        // held past execute_days: the ordinary abort with a wake (supremacy never came)
+        assert_eq!(at(&mut state, 80), None);
+        assert!(state.done.contains_key("inv:op:aborted"));
     }
 
     #[test]

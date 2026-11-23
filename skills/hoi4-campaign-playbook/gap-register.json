@@ -2395,7 +2395,16 @@
     "trade.deals",
     "trade.deals[].resource",
     "trade.deals[].amount",
-    "trade.deals[].partner"
+    "trade.deals[].partner",
+    "trade.judge",
+    "trade.judge.names",
+    "trade.judge.avoid",
+    "trade.judge.prefer",
+    "trade.judge.discounts",
+    "trade.judge.sea_unsafe_when",
+    "trade.judge.min_delivery",
+    "trade.judge.civ_worth",
+    "trade.judge.accept"
    ],
    "tools": [
     "hoi4_trade",
@@ -2405,7 +2414,7 @@
    "payoff": "medium",
    "why": "needed when auto-import is off or a faction partner must be the seller",
    "closing": "live",
-   "owner": "run a plan with `trade` (auto_import off) through the executor; verify a purchase and a cancel (amount 0)"
+   "owner": "run a plan with `trade` (auto_import off) through the executor; verify a purchase and a cancel (amount 0); trade.judge (never run live: ranks sellers by reach, rivalry, discount and convoys, re-sources raided contracts, leaves cheap deficits): verify the digest's seller and reason after a game week"
   },
   {
    "id": "trade.resource_balance_read",
@@ -5747,17 +5756,23 @@
     "invasions[].fleet",
     "invasions[].when",
     "invasions[].with_harbor",
-    "manage.invasion_techs"
+    "manage.invasion_techs",
+    "invasions[].route_regions",
+    "invasions[].execute_when",
+    "invasions[].gates",
+    "invasions[].follow_up"
    ],
    "tools": [
-    "hoi4_naval_invasion",
+    "hoi4_army_detach",
     "hoi4_army_plan",
-    "hoi4_army_detach"
+    "hoi4_convoys",
+    "hoi4_fleet_region",
+    "hoi4_naval_invasion"
    ],
    "payoff": "high",
    "why": "The only way to open overseas fronts (Britain, Ethiopia coast, Pacific)",
    "closing": "live",
-   "owner": "Live run of the executor invasions step end to end (detach, move, order, prepare, execute, landed) and drop UNVALIDATED from the descriptor",
+   "owner": "Live run of the executor invasions step end to end (detach, move, order, prepare, execute, landed) and drop UNVALIDATED from the descriptor; then the sea-operation keys (route_regions, execute_when, gates, follow_up; never run live): the sea-landing live probe (tool alone, operation step, a real case)",
    "priority": 7
   },
   {
@@ -5845,7 +5860,7 @@
    "payoff": "high",
    "why": "Overseas supply, trade and transfers all draw on convoys",
    "closing": "live",
-   "owner": "live: the manage convoy rule (plan_manage.rs convoy_rule, lint manage.convoys) puts idle dockyards on the convoy line or a new convoy line when free convoys fall below manage.convoys_free; validate it once and the convoy flag of hoi4_naval_production_options"
+   "owner": "live: the manage convoy rule (plan_manage.rs convoy_rule, lint manage.convoys) puts idle dockyards on the convoy line or a new convoy line when free convoys fall below manage.convoys_free; validate it once and the convoy flag of hoi4_naval_production_options; convoy lines stop at the 15-dockyard cap (a new line beyond it) and landings add their reserve (6 a division): verify after a game week"
   },
   {
    "id": "navy.ship_production",
@@ -5861,7 +5876,11 @@
     "production[].design",
     "production[].factories",
     "production[].remove",
-    "production_priority"
+    "production_priority",
+    "navy.programme",
+    "navy.programme[].role",
+    "navy.programme[].dockyards",
+    "navy.programme[].when"
    ],
    "tools": [
     "hoi4_production_add",
@@ -5872,7 +5891,7 @@
    "payoff": "medium",
    "why": "A navy for GER/ITA/UK/JAP is built here; land powers need little",
    "closing": "live",
-   "owner": "Live-verify a ship_hull_* line add and set under AAT (only convoy_1 seen live)"
+   "owner": "Live-verify a ship_hull_* line add and set under AAT (only convoy_1 seen live); the dockyard rule now matches hull families against the designs the panel offers and rests a refused family 30 days (g17n/g17o: ship_hull_submarine_1 refused 13 times): verify every dockyard on a line after a game week"
   },
   {
    "id": "navy.ship_design",

@@ -67,8 +67,13 @@ CONSTRUCTION (civilian to military switch, dockyards, infrastructure, supply), D
 missions), PRODUCTION (lines by date and factory count), MIO (design companies), DESIGN (tank, plane and ship
 designs), TEMPLATE (templates and widths), FORCE (the army by date against each enemy), OFFICER (officer corps),
 COMMAND (command power, generals, promotions), EXERCISE, INTEL (agency, operatives, collaboration), WAR (each
-war: date, operation, force, the surrender arithmetic), NAVY, AIR, DOCTRINE, ORDER (the order of campaigns and the
-mode's rules), GOAL (what completes the goal, as arithmetic).
+war: date, operation, force, the surrender arithmetic), NAVY, AIR, DOCTRINE, RESOURCES (each strategic resource the
+planned lines need by date against its sources: own states, states the wars take by a date chosen for their
+resources, synthetic refineries with their techs, trade, or a temporary deficit with its reason;
+`facts.py resource-states <TAG> --resource <r>` lists the states, owners, land or sea reach, our discounts and the
+refinery), TRADE (the sellers by reach, never an enemy, not a coming enemy while another sells, discounts first,
+convoys and raiding on sea routes, the trade law), ORDER (the order of campaigns and the mode's rules), GOAL (what
+completes the goal, as arithmetic).
 
 Format of `RUN/decisions.md`:
 

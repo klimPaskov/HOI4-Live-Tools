@@ -306,6 +306,9 @@ class HandPlans(unittest.TestCase):
             ("construction.railway_node", "construction_plan[4] cp07_rail_way_271"),
             ("construction.railway_node", "construction_plan[5] cp08_rail_way_843"),
             ("construction.railway_node", "construction_plan[6] cp09_rail_way_835"),
+            # the truck and ship lines need rubber and tungsten Italy has not, and the plan names no source
+            ("economy.resource_source", "resource_sources.rubber"),
+            ("economy.resource_source", "resource_sources.tungsten"),
             ("manage.thresholds", "manage"),
             ("navy.overseas", "navy"),  # East Africa is supplied by sea, no convoy or port plan
             ("navy.required", "navy"),
@@ -382,6 +385,8 @@ class HandPlans(unittest.TestCase):
         warnings = [w for w in warnings if w[0] not in ENGINEER_KEY_RULES | FORCE_RULES]
         gaps = [("coverage.checklist", f"_coverage.c{n}") for n in (3, 5, 6, 9, 12, 14, 15, 17, 22, 23, 25)]
         self.assertEqual(warnings, sorted(gaps + [
+            # the start lines need 4 steel Ethiopia does not produce, and the plan names no source
+            ("economy.resource_source", "resource_sources.steel"),
             *[("alerts.owner", "manage.alerts_ignore")] * 4,  # dockyards, admiral, officer corps, garrison
             ("army.generals", "army_group[0].marshal[0]"),  # Ethiopia's marshals are hidden at the start
             ("army.generals", "army_group[0].marshal[1]"),
