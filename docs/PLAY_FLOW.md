@@ -117,6 +117,11 @@ whole campaign. It does what the developer rig's broker, plan loop and monitor d
   ends the run as `system_dialog` when it is still there after five minutes;
 - brings the game to the front once just before the executor starts (an order sent while another window is in
   front is refused);
+- **publishes the game clock to a file** when asked (off by default): with `clock_file` in the run's
+  `settings.json` or `HOI4_LIVE_CLOCK_FILE` set to a path (a relative one lands in the game's user folder), it
+  writes `{"paused", "speed" (1-5), "speed_internal" (0-4), "date", "at", "by"}` there about once a second from
+  `hoi4_overview` (reads only), replaced in one step and removed when the run ends, for local programs that want
+  the real pause and speed without reading the game themselves (`hoi4_live/play/clockfile.py`);
 - notes the machine's load and swap at the start (a machine short of memory plays at half its pace or less)
   and **ends the run with a plain message** when the game's memory passes `HOI4_LIVE_GAME_MEMORY_GB` (default
   10) or its date stands still for `HOI4_LIVE_STALL_MINUTES` (default 5) while it is not paused (reasons

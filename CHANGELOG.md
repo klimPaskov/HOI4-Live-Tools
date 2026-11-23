@@ -19,6 +19,9 @@ A campaign through the product, start to report: what the private developer rig 
 - The supervisor keeps the whole feed (`feed.jsonl`) and a production sample every five minutes, brings the game to
   the front before the executor's first input, watches for a system prompt on screen (ends the run if it stays
   five minutes) and removes a plan's `stop_on_date` (a run never pauses itself).
+- Publish the game clock to a file (opt-in, off by default): `clock_file` in the run's `settings.json` or
+  `HOI4_LIVE_CLOCK_FILE` names a file the supervisor rewrites about once a second with the pause flag, the speed
+  and the date (reads only), and removes when the run ends.
 - docs/CAMPAIGN_GUIDE.md: a campaign walk-through for players (what to type and see, time and cost, segments, the
   report, what to do when something stops); `scripts/live_checks/product_campaign.py`: the acceptance check of
   this path on a live game.
