@@ -1871,6 +1871,8 @@ mod tests {
             province: 1,
             capacity,
             region_id: None,
+            address: 0,
+            region_address: 0,
         }
     }
     fn wing(name: &str, planes: i32, base_id: i32, state: i32) -> Wing {
