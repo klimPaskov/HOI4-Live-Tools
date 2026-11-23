@@ -237,5 +237,55 @@ class PruneExtras(unittest.TestCase):
         self.assertNotIn('0x118', conf['fields']['CDecision'])
 
 
+def synthetic_pe_rtti():
+    """PE32+ with one .rdata section: an MSVC type descriptor, its complete object locator and a vtable."""
+    pe, opt_size, raw, rva = 0x80, 112 + 16 * 8, 0x200, 0x1000
+    data = bytearray(raw + 0x100)
+    data[:2] = b'MZ'
+    struct.pack_into('<I', data, 0x3c, pe)
+    data[pe:pe + 4] = b'PE\0\0'
+    struct.pack_into('<HHIIIHH', data, pe + 4, 0x8664, 1, 0, 0, 0, opt_size, 0x22)
+    struct.pack_into('<H', data, pe + 24, 0x20b)
+    struct.pack_into('<Q', data, pe + 24 + 24, 0x140000000)
+    so = pe + 24 + opt_size
+    data[so:so + 8] = b'.rdata\0\0'
+    struct.pack_into('<IIII', data, so + 8, 0x100, rva, 0x100, raw)
+    data[raw + 0x10:raw + 0x1b] = b'.?AVCFoo@@\0'
+    struct.pack_into('<IIIIII', data, raw + 0x40, 1, 0, 0, rva, 0, rva + 0x40)
+    struct.pack_into('<Q', data, raw + 0x80, 0x140000000 + rva + 0x40)
+    return bytes(data)
+
+
+class WindowsRtti(unittest.TestCase):
+    def test_itanium_names_translate_to_msvc(self):
+        self.assertEqual(gm.msvc_name('17CCurrentGameState'), '.?AVCCurrentGameState@@')
+        self.assertEqual(gm.msvc_name('N23NIndustrialOrganisation11CTraitBonusE'),
+                         '.?AVCTraitBonus@NIndustrialOrganisation@@')
+
+    def test_the_vtable_follows_the_slot_holding_the_object_locator(self):
+        self.assertEqual(dict(gm.pe_vtables(synthetic_pe_rtti())), {'.?AVCFoo@@': [(0, 0x1088)]})
+
+
+class Rekey(unittest.TestCase):
+    def test_keys_move_values_stay_and_unknown_keys_drop(self):
+        table = {'build_id': 'L', 'image': {'0x100': '0x900', '0x200': '0x910'},
+                 'fields': {'C': {'0x10': '0x18', '0x20': '0x28'}},
+                 'confidence': {'image': {'0x100': 'high'}, 'fields': {'C': {'0x10': 'live'}}}}
+        mig = {'image': {'0x100': {'new': '0x180', 'confidence': 'high'}},
+               'fields': {'C': {'0x10': {'new': '0x10'}, '0x20': {'new': '0x30'}}}}
+        new, dropped = gm.rekey(table, mig)
+        self.assertEqual(new['image'], {'0x180': '0x900'})
+        self.assertEqual(new['fields'], {'C': {'0x10': '0x18', '0x30': '0x28'}})
+        self.assertEqual(new['confidence'], {'image': {'0x180': 'high'}, 'fields': {'C': {'0x10': 'live'}}})
+        self.assertEqual(new['build_id'], 'L')
+        self.assertEqual(dropped, ['image 0x200'])
+
+    def test_identity_default_keeps_unlisted_field_keys(self):
+        table = {'image': {}, 'fields': {'C': {'0x10': '0x18'}, 'D': {'0x8': '0x8'}}}
+        new, dropped = gm.rekey(table, {'fields_default': 'identity', 'fields': {'C': {'0x10': {'new': '0x20'}}}})
+        self.assertEqual(new['fields'], {'C': {'0x20': '0x18'}, 'D': {'0x8': '0x8'}})
+        self.assertEqual(dropped, [])
+
+
 if __name__ == '__main__':
     unittest.main()

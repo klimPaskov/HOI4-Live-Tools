@@ -9,7 +9,9 @@ Game version: HOI4 1.19.4.1 on macOS and Linux. Steam's current release is newer
 1.19.4.2 in November 2026); a newer build needs its own layout table, made with
 `scripts/game_migrate.py` ([Game versions](GAME_VERSIONS.md) has the steps, the measured accuracy and
 what a user gets on an unsupported build). Every port must be on the same game version as the macOS
-keys' build or have its own table for its build. The tool catalogue has 189 `hoi4_*` names (about
+keys' build or have its own table for its build. When the macOS sources move to a new build, re-key the Linux and Windows tables with
+the committed migration map: `python3 scripts/game_migrate.py rekey TABLE native/layouts/migrations/macos-<from>-to-<to>.json --write`
+(1.19.4.1 to 1.20.0.0: `macos-DFA875A5-to-ED135FE5.json`). The tool catalogue has 189 `hoi4_*` names (about
 181 player tools plus debug tools; `hoi4-live-native --list-tools` prints them).
 
 ## Summary

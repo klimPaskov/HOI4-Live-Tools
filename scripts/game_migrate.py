@@ -28,6 +28,10 @@ usage:
       the static check of every committed table whose executable is in the private reference folder
       (DIR/<system>-<build id>/ holding the game executable); tables without a reference are listed as
       skipped, so the command also runs where no game file may be kept (CI)
+  game_migrate.py rekey TABLE MIGRATION.json [--write]
+      when the canonical build moves (the macOS sources are rewritten to a new build), give another
+      system's table the new keys: every image key and field key goes through the migration map
+      (native/layouts/migrations/<from>-to-<to>.json); a key the map lacks is dropped and listed
   game_migrate.py score TABLE TRUTH.json
       compare a table with known answers {"0xkey": {"0xvalue": n}} (e.g. a hand-made migration)
 
@@ -45,6 +49,7 @@ import pathlib
 import re
 import struct
 import sys
+from array import array
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -106,6 +111,94 @@ def pe_identity(data):
             guid = f'{d1:08X}{d2:04X}{d3:04X}{g[8:].hex().upper()}'
             return machine, f'{guid}{age:X}'
     return machine, None
+
+
+def pe_sections(data):
+    """(image base, [(name, rva, size, file offset)]) of a PE32+ image."""
+    pe = struct.unpack_from('<I', data, 0x3c)[0]
+    nsect, optsize = struct.unpack_from('<H', data, pe + 6)[0], struct.unpack_from('<H', data, pe + 20)[0]
+    base = struct.unpack_from('<Q', data, pe + 24 + 24)[0]
+    so = pe + 24 + optsize
+    out = []
+    for k in range(nsect):
+        name = data[so + 40 * k:so + 40 * k + 8].rstrip(b'\0').decode(errors='replace')
+        vsize, va, rawsize, rawptr = struct.unpack_from('<IIII', data, so + 40 * k + 8)
+        out.append((name, va, min(vsize, rawsize) if rawsize else 0, rawptr))
+    return base, out
+
+
+def msvc_name(itanium):
+    """'17CCurrentGameState' -> '.?AVCCurrentGameState@@'; 'N3Foo3BarE' -> '.?AVBar@Foo@@' (None if not simple)."""
+    s = itanium[1:-1] if itanium.startswith('N') and itanium.endswith('E') else itanium
+    parts = []
+    while s:
+        m = re.match(r'(\d+)', s)
+        if not m:
+            return None
+        k, s = int(m.group(1)), s[len(m.group(1)):]
+        parts.append(s[:k])
+        s = s[k:]
+    return '.?AV' + '@'.join(reversed(parts)) + '@@' if parts else None
+
+
+def pe_vtables(data):
+    """MSVC RTTI of a PE32+ image: {type name: [(this offset, vtable rva)]}. A complete object locator
+    (signature 1, type descriptor rva, self rva) is found for each type descriptor; the vtable starts one
+    pointer after the slot holding the locator's address."""
+    base, sects = pe_sections(data)
+    rd = [s for s in sects if s[0] in ('.rdata', '.data') and s[2]]
+    tds = {}
+    for name, va, size, off in sects:
+        if not size:
+            continue
+        blob = data[off:off + size]
+        for m in re.finditer(rb'\.\?A[VU][^\0]{1,400}?@@\0', blob):
+            tds[va + m.start() - 0x10] = m.group(0)[:-1].decode(errors='replace').replace('.?AU', '.?AV', 1)
+    cols = {}
+    for name, va, size, off in rd:
+        words = array('I', data[off:off + size - size % 4])
+        for i in range(len(words) - 5):
+            if words[i] == 1 and words[i + 5] == va + 4 * i and words[i + 3] in tds:
+                cols[base + va + 4 * i] = (tds[words[i + 3]], words[i + 1])
+    out = collections.defaultdict(list)
+    for name, va, size, off in rd:
+        q = array('Q', data[off:off + size - size % 8])
+        for i, v in enumerate(q):
+            hit = cols.get(v)
+            if hit:
+                out[hit[0]].append((hit[1], va + 8 * i + 8))
+    return out
+
+
+def pe_table(new_exe, canonical, src):
+    """The part of a Windows table that needs no disassembler: every vtable key whose class has an MSVC
+    RTTI vtable at this offset 0 (primary address points only). Globals, functions and fields stay
+    unresolved until the matcher reads PE code (x64 MSVC: the object is in rcx)."""
+    data = pathlib.Path(new_exe).read_bytes()
+    vt = pe_vtables(data)
+    mac = xmap.load_image(canonical)
+    _, mindex = xmap.vtables(mac)
+    sc = gen.scan(src)
+    keys = set(sc['image']) | {v for v in sc['classes'].values() if v}
+    table, report = dict(image={}, fields={}), dict(image={}, classes={})
+    for k in sorted(keys):
+        hit = mindex.get(mac.absolute(k))
+        if hit is None:
+            report['image'][hex(k)] = dict(kind='other', status='unresolved', notes=['not a vtable: needs PE code matching'])
+            continue
+        rtti, ordinal, top = hit
+        ms = msvc_name(rtti)
+        prim = [v for off, v in vt.get(ms, []) if off == 0]
+        if ordinal == 0 and top == 0 and len(prim) == 1:
+            table['image'][hex(k)] = hex(prim[0])
+            report['image'][hex(k)] = dict(kind='vtable', rtti=rtti, status='mapped', confidence='high',
+                                          notes=[f'MSVC RTTI {ms}'])
+        else:
+            why = 'secondary vtable' if ordinal or top else f'{len(prim)} primary MSVC vtables for {ms}'
+            report['image'][hex(k)] = dict(kind='vtable', rtti=rtti, status='unresolved', notes=[why])
+    report['summary'] = dict(image_keys=len(keys), image_mapped=len(table['image']),
+                             field_keys=sum(len(v) for v in sc['fields'].values()), field_keys_mapped=0)
+    return table, report
 
 
 def game_version(exe):
@@ -321,11 +414,25 @@ def score(table, truth):
 def migrate(new_exe, canonical, src, hints=None, live=None, out_dir='native/layouts', cache=None, log=print,
             previous=None):
     ident = identify(new_exe)
-    if ident['format'] == 'pe':
-        raise SystemExit('PE executables are identified but not mapped yet: the matcher reads Mach-O and ELF '
-                         '(docs/GAME_VERSIONS.md, "Windows").')
     if identify(canonical)['build_id'] != CANONICAL:
         raise SystemExit(f'{canonical} is not the canonical macOS build {CANONICAL}')
+    if ident['format'] == 'pe':
+        # vtables by MSVC RTTI only; the static check below needs the matcher's image model, so it is skipped
+        table, report = pe_table(new_exe, canonical, src)
+        table.update(build_id=ident['build_id'], system='windows', sha256=ident['sha256'],
+                     game_version=ident['game_version'])
+        table['confidence'] = confidence(table, report)
+        keys = gen.keys_document(gen.scan(src))
+        mods = modules(table, keys)
+        report.update(target=dict(ident, file=os.path.basename(ident['file'])), modules=mods,
+                      static_check=dict(passed=True, problems=[], checked={}, note='PE: not implemented'))
+        report['summary'].update(modules=len(mods), modules_enabled=sum(1 for m in mods.values() if m['enabled']))
+        out = pathlib.Path(out_dir) / f'{table_name(ident)}.json'
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(table, indent=1, sort_keys=True) + '\n')
+        rep = out.with_name(f'{table_name(ident)}.coverage.json')
+        rep.write_text(json.dumps(report, indent=1) + '\n')
+        return out, rep, report
     table, report = gen.generate(canonical, new_exe, src, hints, False, cache, log=log)
     if live:
         report['live'] = gen.apply_live(table, live)
@@ -360,6 +467,42 @@ def migrate(new_exe, canonical, src, hints=None, live=None, out_dir='native/layo
     return out, rep, report
 
 
+def rekey(table, migration):
+    """(new table, dropped keys): `table`'s keys translated through a migration map
+    {"image": {"0xold": {"new": "0xnew", ...}}, "fields": {"Class": {"0xold": {"new": ...}}}}. Values and
+    per-entry confidence stay; the confidence block is re-keyed with them. With "fields_default": "identity"
+    a field key the map does not list keeps its value as key (a build whose structures did not move)."""
+    out = {k: v for k, v in table.items() if k not in ('image', 'fields', 'confidence')}
+    out['image'], out['fields'], dropped = {}, {}, []
+    conf = table.get('confidence') or {}
+    nconf = dict(image={}, fields={})
+    img = migration.get('image', {})
+    for k, v in table.get('image', {}).items():
+        e = img.get(k)
+        if not e or not e.get('new'):
+            dropped.append(f'image {k}')
+            continue
+        out['image'][e['new']] = v
+        if k in conf.get('image', {}):
+            nconf['image'][e['new']] = conf['image'][k]
+    for cls, m in table.get('fields', {}).items():
+        fm = migration.get('fields', {}).get(cls, {})
+        for k, v in m.items():
+            e = fm.get(k)
+            if (not e or not e.get('new')) and migration.get('fields_default') == 'identity':
+                e = dict(new=k)     # the migration found the structures unchanged
+            if not e or not e.get('new'):
+                dropped.append(f'{cls}+{k}')
+                continue
+            out['fields'].setdefault(cls, {})[e['new']] = v
+            c = conf.get('fields', {}).get(cls, {}).get(k)
+            if c:
+                nconf['fields'].setdefault(cls, {})[e['new']] = c
+    if conf:
+        out['confidence'] = nconf
+    return out, dropped
+
+
 def reference_dir():
     return pathlib.Path(os.environ.get('HOI4_REFERENCE_DIR') or pathlib.Path.home() / '.cache' / 'hoi4-live' / 'reference')
 
@@ -389,6 +532,9 @@ def refcheck(tables, refs, canonical=None):
         ident = identify(exe)
         if ident['build_id'] != table.get('build_id') or table.get('sha256') not in (None, ident['sha256']):
             out.append(dict(table=path.name, status='failed', problems=[f'{exe} is build {ident["build_id"]}']))
+            continue
+        if ident['format'] == 'pe':
+            out.append(dict(table=path.name, status='skipped', reason='the static check reads Mach-O and ELF only'))
             continue
         rp = path.with_name(path.stem + '.coverage.json')
         report = json.loads(rp.read_text()) if rp.exists() else {}
@@ -420,6 +566,10 @@ def main(argv=None):
     s = sub.add_parser('modules')
     s.add_argument('table')
     s.add_argument('--src', default='native/src')
+    s = sub.add_parser('rekey')
+    s.add_argument('table')
+    s.add_argument('migration')
+    s.add_argument('--write', action='store_true')
     s = sub.add_parser('refcheck')
     s.add_argument('--tables', default='native/layouts')
     s.add_argument('--refs', default=str(reference_dir()))
@@ -440,6 +590,14 @@ def main(argv=None):
                               static_check=dict(passed=report['static_check']['passed'],
                                                 problems=report['static_check']['problems'][:20])), indent=1))
         return 0 if report['static_check']['passed'] else 1
+    if a.cmd == 'rekey':
+        new, dropped = rekey(json.loads(pathlib.Path(a.table).read_text()),
+                             json.loads(pathlib.Path(a.migration).read_text()))
+        if a.write:
+            pathlib.Path(a.table).write_text(json.dumps(new, indent=1, sort_keys=True) + '\n')
+        print(json.dumps(dict(image=len(new['image']), fields=sum(len(m) for m in new['fields'].values()),
+                              dropped=dropped), indent=1))
+        return 0 if not dropped else 1
     if a.cmd == 'refcheck':
         res = refcheck(a.tables, a.refs, a.canonical)
         print(json.dumps(res, indent=1))

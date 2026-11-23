@@ -11,6 +11,8 @@ reading the game compare.
 | macOS | 1.19.4.1 (checksum f584) | Mach-O UUID `DFA875A5-25BA-35E0-9736-627F8A5C4396` | supported (the canonical build) | any version, limited |
 | Linux | 1.19.4.1 | GNU build ID `2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082` | supported (generated table) | not available |
 | Windows | any | | not yet (see [Windows](#windows)) | supported, last run on 1.19.4.2 |
+| Windows | 1.20.0.0 (checksum 0c4f) | CodeView `3A4878DC2F3A481EA5375E5943C5541C1` | vtables only (164 of 168); no attachment yet | supported |
+| macOS | 1.20.0.0 (checksum 0c4f) | Mach-O UUID `ED135FE5-CDA8-38E8-8835-3F7381B79974` | table generated, not yet proven live or used by the runtime | |
 | Linux | 1.20.0.0 (checksum 0c4f) | GNU build ID `71806afa707a46fb72f0738a719c3f1c3f5e2e42` | table generated, not yet proven live or used by the runtime | not available |
 
 `hoi4-live-native --supported-builds` prints the same list as JSON.
@@ -100,6 +102,9 @@ macOS 1.19.4.1 keys, with the Linux 1.19.4.1 table as the previous build (`--pre
 | Image addresses | 212 of 216 (208 high, 4 medium) | every one moved (180 of 180 comparable entries), by about 0x7000 to 0x8000 |
 | Field offsets | 389 of 617 from the matcher alone; 476 of 617 with the previous build's values carried into 47 classes whose mapped fields did not move | of 2,827 field entries both builds map, 2,821 are identical; 5 of the 6 others are the previous table's live corrections |
 
+On macOS 1.20.0.0 (same system as the keys): image addresses 214 of 216 (213 high, 1 medium),
+field offsets 503 of 617, and all 5,714 field entries the matcher wrote are unchanged.
+
 So 1.20 moved the code and data, not the structures. The remaining keys are the ones the 1.19.4.1
 table had from live measurement or owner hints for classes without a vtable. The static check also
 found five static entries in the 1.19.4.1 Linux table that contradict its own live corrections
@@ -107,6 +112,21 @@ found five static entries in the 1.19.4.1 Linux table that contradict its own li
 
 A patch release (for example 1.19.4.1 to 1.19.4.2) moves every image address but usually few struct
 members, as 1.20 shows.
+
+## When the canonical build moves
+
+The keys are the canonical macOS build's values, so when the macOS sources move to a new build
+(their constants rewritten, as on every macOS update until the runtime selects tables by build),
+every other system's table must be re-keyed. Each such move commits a migration map,
+`native/layouts/migrations/macos-<from>-to-<to>.json`: for every image key and field key the old
+value, the new value and the confidence, the literals no method resolved (`unresolved_image`), and
+`fields_default: identity` when the structures did not move. One command applies it to a table:
+
+    python3 scripts/game_migrate.py rekey native/layouts/linux-<build id>.json native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json --write
+
+The keys are not yet build-independent names. Naming them (for example `CCurrentGameState.date`
+instead of `0x460`) would end re-keying for good; it touches every tool's source and is planned
+together with the runtime change below.
 
 ## Planned: unknown builds on a user's machine
 
@@ -146,9 +166,12 @@ The Python runtime is the supported Windows path today. For the native runtime o
   module's base address (ASLR moves it every launch, so all reads are base-relative, as on macOS and
   Linux), 64-bit pointers, `ReadProcessMemory` in bounded chunks.
 - Identification: the PE CodeView GUID and age (`game_migrate.py identify` prints it) plus SHA-256.
-- A layout table: the matcher reads Mach-O and ELF. For a PE it needs MSVC RTTI (vtables by class
-  name translate from the Itanium names), PE sections and imports, and x64 calling-convention
-  differences (the object is in `rcx`, not `rdi`). MSVC lays out standard containers differently
+- A layout table: `game_migrate.py migrate` maps the vtable keys of a PE by MSVC RTTI (the Itanium
+  class names translate to MSVC type descriptors; the vtable follows the slot holding the complete
+  object locator). On the Windows 1.20.0.0 executable that gives 164 of the 168 vtable keys (the 4
+  others are secondary vtables), each with code in its first slot; 258 of the 259 classes the tools
+  name exist there. Globals, functions and field offsets need the matcher to read PE code: PE
+  sections and imports, and the x64 Windows calling convention (the object is in `rcx`, not `rdi`). MSVC lays out standard containers differently
   (`std::map`, lists, hash tables), so many field offsets will come from live reads.
 - Input (`SendInput` to the owned window) and a launcher that starts the game without Steam, as
   in [Porting status](PORTING_STATUS.md).
