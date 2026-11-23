@@ -26,7 +26,9 @@ SETUP (game is PAUSED on day one; at most 3 batches, then unpause):
     research, production, construction): keep waiting. As soon as a reply lists a change whose "kind"
     is "setup_complete", or after 12 replies in a row that list no change at all, batch ["hoi4_time",{"paused":false,"speed":{SPEED_ARG}}]
     (the tool counts speeds from 0: {SPEED_ARG} is the game's speed {SPEED}).
-    From then on never pause.
+    From then on never pause. The executor sets the game's speed 2 while the country has a war to manage
+    (a bordering enemy or an operation's enemy) and speed 3 in peace, once per change; a speed you or a
+    human set inside a phase is kept (it says once that it prefers its speed and plays on).
 
 THE LOOP (every turn). You add what a plan cannot: judgement at decision points, noticing what the executor
 missed, and asking for a revision with evidence. Polling adds nothing: never call hoi4_overview, and never

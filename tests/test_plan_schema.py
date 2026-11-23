@@ -422,7 +422,7 @@ class CoverageKeys(unittest.TestCase):
                                                           "casualties", "air_superiority", "overdrawn", "convoys", "fuel",
                                                           "balance", "dockyards", "doctrines", "exercises",
                                                           "cp_spend", "mio_lines", "mio_traits",
-                                                          "air_idle", "air_reserve", "group_marshals"})
+                                                          "air_idle", "air_reserve", "group_marshals", "speed"})
         want = {"wake_repeat_days": 7, "alert_persist_days": 14, "manpower_months": 2, "stability_floor": 0.5,
                 "equipment_fill_floor": 0.8, "stockpile_days_critical": 7, "stockpile_days_warning": 30,
                 "trucks_ratio": 1.5, "deficit_wake_days": 14,

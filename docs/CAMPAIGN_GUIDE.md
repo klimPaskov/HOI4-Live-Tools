@@ -57,7 +57,9 @@ The run is live: Italy on 1936.01.01.12, the plan's executor is on, the supervis
 ```
 
 Give that last line to your coding client. The agent reads its brief, does the opening while the game is paused,
-then unpauses at speed 3 and plays. The game keeps running from then on: the agent never pauses it to think. You
+then unpauses at speed 3 and plays: speed 3 while it builds in peace, speed 2 while it manages a war (it sets this
+when a war begins and ends; a speed you choose yourself is kept). The game keeps running from then on: the agent
+never pauses it to think. You
 can watch, or leave the computer alone. Do not click inside the game while the agent plays; it moves the mouse.
 
 Useful options:

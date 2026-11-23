@@ -36,6 +36,6 @@ come from `python3 scripts/hoi4facts/tool_schemas.py show <tool>`; numbers below
 * Never pause the game. Never reassign a general who already has an army.
 
 **On `plan_revised`.** Re-read this brief once (`RUN/plan.brief.md`); drop items the new brief no longer
-lists; keep playing at speed 3.
+lists; keep playing (the executor keeps speed 3 in peace and 2 while a war is managed).
 
 **If stuck.** `hoi4_plan {"op":"request_revision","reason":"<one line>"}` and continue the current plan.
