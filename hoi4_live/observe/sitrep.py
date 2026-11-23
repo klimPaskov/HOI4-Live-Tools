@@ -116,6 +116,23 @@ def render(snap, prev=None, run=None, findings=None):
     if w.get("own_states_lost"):
         L.append(f"  OWN STATES HELD BY OTHERS: {w['own_states_lost']}")
     L.append("")
+    bt = snap.get("battles") or {}
+    if bt.get("readable") and bt.get("list"):
+        sm = bt.get("summary") or {}
+        L.append(f"BATTLES {bt.get('count')} (attacking {sm.get('attacking')}, defending {sm.get('defending')}; "
+                 f"our divisions in the line {sm.get('divisions_engaged')}, in reserve {sm.get('divisions_in_reserve')})")
+        for x in sorted(bt["list"], key=lambda x: -((x.get("our_engaged") or 0) + (x.get("our_reserve") or 0)))[:12]:
+            extra = [f"{ln['line']} {ln.get('value', ln.get('level', ''))}".strip() for ln in x.get("lines") or []
+                     if ln.get("line") in ("terrain", "fort", "supply")]
+            extra += [f"river {c.get('river')} {c.get('value')}" for ln in x.get("lines") or []
+                      if ln.get("line") == "river" for c in (ln.get("crossings") or [])[:1]]
+            L.append(f"  {x.get('province')} ({x.get('terrain')}, st {x.get('state')}) we {x.get('we')} vs "
+                     f"{'/'.join(x.get('enemy') or [])} {x.get('hours')}h: line {x.get('our_engaged')}+"
+                     f"{x.get('our_reserve')} reserve vs {x.get('their_engaged')}+{x.get('their_reserve')}, "
+                     f"width {x.get('width_engaged')}/{x.get('width_max')}, org {x.get('our_org')} vs "
+                     f"{x.get('their_org')}, planning {x.get('our_planning')}, winning {x.get('winning')}"
+                     + (f" | {', '.join(extra)}" if extra else ""))
+        L.append("")
     air = snap.get("air") or {}
     L.append(f"AIR {air.get('aircraft_total')} planes in {len(air.get('wings') or [])} wings")
     for rid, r in sorted((air.get("regions") or {}).items(), key=lambda x: -(x[1].get("aircraft") or 0)):

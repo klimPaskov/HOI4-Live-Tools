@@ -514,6 +514,13 @@ pub(super) fn template_data(r: &Reader<'_>, image: u64, data: u64) -> Result<Lay
         priority: r.i32(data + l.data_priority)?,
     })
 }
+/// Name and layout of the division template object `template` (any country's:
+/// `CArmy` +0x3b0 points at it), through its data object.
+pub(super) fn division_template(r: &Reader<'_>, image: u64, template: u64) -> Result<Layout5> {
+    let l = layout(r)?;
+    exact(r, image, template, l.template_vtable, "division template")?;
+    template_data(r, image, template + l.data_in_template)
+}
 /// The own templates' layouts in list order (the same data object the designer edits a copy of).
 pub(super) fn template_layouts(r: &Reader<'_>, image: u64) -> Result<Vec<Layout5>> {
     let l = layout(r)?;

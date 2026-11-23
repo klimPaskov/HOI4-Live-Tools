@@ -534,6 +534,40 @@ def _misc(raw):
     }
 
 
+def _battles(raw):
+    """The player's battles from hoi4_battles: per battle the side we fight on, width, reserves, who wins."""
+    b = raw.get("battles") or {}
+    if not b or "list" not in b:
+        return {"readable": False,
+                "missing": ["battles: hoi4_battles not answered (older server or no war)"]}
+    rows = []
+    for x in b.get("list") or []:
+        ours = x.get("our_side")
+        if ours not in ("attacker", "defender"):
+            continue
+        theirs = "defender" if ours == "attacker" else "attacker"
+        me, them = x.get(ours) or {}, x.get(theirs) or {}
+        width = x.get("width") or {}
+        rows.append({
+            "id": x.get("id"), "province": x.get("province"), "state": x.get("state"),
+            "terrain": x.get("terrain"), "hours": x.get("hours"), "since": g(x, "since", "iso"),
+            "we": ours, "enemy": sorted(them.get("tags") or []), "winning": x.get("winning"),
+            "our_engaged": me.get("engaged"), "our_reserve": me.get("reserve"),
+            "their_engaged": them.get("engaged"), "their_reserve": them.get("reserve"),
+            "our_org": me.get("org_engaged_mean"), "their_org": them.get("org_engaged_mean"),
+            "our_planning": me.get("planning_mean"), "our_supply": me.get("supply_mean"),
+            "our_tactic": me.get("tactic"), "their_tactic": them.get("tactic"),
+            "width_max": width.get("attacker_max"), "width_engaged": width.get("attacker_engaged"),
+            "width_terrain": width.get("terrain"), "directions": width.get("directions"),
+            "our_hours_left": me.get("hours_until_broken"), "their_hours_left": them.get("hours_until_broken"),
+            "lines": x.get("lines") or [],
+            "our_templates": sorted({d.get("template") for d in me.get("engaged_divisions") or []
+                                     if d.get("template")}),
+        })
+    return {"readable": True, "count": b.get("battles"), "summary": b.get("summary") or {},
+            "list": rows, "not_read": (b.get("list") or [{}])[0].get("not_read") if b.get("list") else []}
+
+
 def build(raw, states_by_tag=None, executor=None, player_calls=None, trigger=None, read_ms=None,
           utc=None):
     """One snapshot from the raw read bodies (key -> body)."""
@@ -557,8 +591,7 @@ def build(raw, states_by_tag=None, executor=None, player_calls=None, trigger=Non
         "land": _land(raw),
         "stacking": _stacking(raw),
         "wars": _wars(raw, states_by_tag or {}, player),
-        "battles": {"readable": False,
-                    "missing": ["battles in progress: no read maps combat objects (see GAPS)"]},
+        "battles": _battles(raw),
         "air": _air(raw),
         "navy": _navy(raw),
         "occupation": _occupation(raw),

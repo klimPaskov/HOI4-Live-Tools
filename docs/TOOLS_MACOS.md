@@ -181,6 +181,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_alerts` (R): Read-only:
 - `hoi4_auto_import` (A): HOI4 1.19.4 Automatic Importing (Trade view):
 - `hoi4_autopilot` (A): Turn the resident executor on or off:
+- `hoi4_battles` (R): Read-only (memory, no input, no pause):
 - `hoi4_fact_list` (R): Read-only:
 - `hoi4_fact_save` (R): Keep one fact learned about this game or mod (a statement and where it comes from:
 - `hoi4_general_trait` (A): Live-verified: give an own army general an assignable trait for command power (NDefines UNIT_LEADER_ASSIGN_TRAIT_COST, read from the game's defines;

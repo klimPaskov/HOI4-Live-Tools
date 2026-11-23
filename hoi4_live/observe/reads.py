@@ -28,6 +28,7 @@ READS = (
     ("supply", "hoi4_supply", {"summary": False}, 1),
     ("wars", "hoi4_wars", {}, 1),
     ("war_stats", "hoi4_war_stats", {}, 1),
+    ("battles", "hoi4_battles", {"limit": 40}, 1),
     ("diplomacy", "hoi4_diplomacy_state", {}, 1),
     ("air", "hoi4_air", {}, 1),
     ("air_regions", "hoi4_air_regions", {}, 1),
@@ -77,11 +78,14 @@ GAPS = (
      "proxy": "leaders listed with rank null",
      "live_step": "find the unit-leader's rank field (CUnitLeader role flags) by diffing one "
                   "promotion (hoi4_army_commander on a group promotes a general)"},
-    {"what": "battles in progress (attacker and defender divisions, width, every modifier line)",
-     "why": "the combat objects are not mapped; no tool reads them",
-     "proxy": "divisions losing organisation in a province next to the enemy",
-     "live_step": "probe plan in the notes (battle read): CCombat list from a province, then its "
-                  "two sides, width and the modifier table"},
+    {"what": "battle modifier lines beyond terrain, river, history forts, planning and supply "
+             "(air superiority and CAS, night, entrenchment, leader, stacking/over-width, encirclement, "
+             "experience, the live fort level)",
+     "why": "the game computes them for the combat view on demand; hoi4_battles reads sides, divisions, "
+            "width, reserves, damage and tactic from memory but not these lines",
+     "proxy": "hoi4_battles: width used against the maximum, reserves waiting, org lost per hour",
+     "live_step": "open one battle's combat view in a study session and read its "
+                  "31CCombatantSideModifierIconEntry rows with the GUI walker"},
     {"what": "supply hub capacity, railway throughput per node, trucks and trains in stock, attrition",
      "why": "hoi4_supply lists them as unavailable (structures not mapped)",
      "proxy": "province supply, demand, headroom and flows (read)",
