@@ -179,7 +179,7 @@ fn train_line_step(
     state.skip(now, "logi", "trains", DAY);
     let read = tools.call("hoi4_stockpile", &json!({"equipment": "train_equipment"}))?;
     let Some(row) = list(&read, "equipment")
-        .into_iter()
+        .iter()
         .find(|r| text(&r["archetype"]).starts_with("train_equipment"))
     else {
         return Ok(None);
@@ -227,7 +227,7 @@ fn hubs_step(
         "hoi4_stockpile",
         &json!({"equipment": "motorized_equipment"}),
     )?;
-    let mut stock = trucks(&stock_read).unwrap_or(0.0);
+    let stock = trucks(&stock_read).unwrap_or(0.0);
     let mut short = Vec::new();
     for w in wants {
         if state.skipped(now, "logi-army", &w.army) {
@@ -248,7 +248,6 @@ fn hubs_step(
             "lg",
         )?;
         state.skip(now, "logi-army", &w.army, if ok { 7 * DAY } else { DAY });
-        stock -= w.trucks;
         if !short.is_empty() {
             super::plan_manage::note(state, "logistics", short.join("; "));
         }
@@ -339,9 +338,10 @@ mod tests {
             .collect();
         // Sud starves (30% < 50%): full; Ost: its operation is under way; West is quiet and
         // goes back to the standing level; Nord attacks and keeps its trucks
-        assert_eq!(got, vec![("Sud", 0, 2), ("Ost", 1, 2), ("West", 2, 1)]);
-        assert_eq!(wants[0].trucks, 60.0);
-        assert_eq!(wants[1].trucks, 60.0, "two states, half a hub's cost each");
+        // (raises before lowerings; equal truck needs keep the roster order)
+        assert_eq!(got, vec![("Ost", 1, 2), ("Sud", 0, 2), ("West", 2, 1)]);
+        assert_eq!(wants[0].trucks, 60.0, "two states, half a hub's cost each");
+        assert_eq!(wants[1].trucks, 60.0, "one state, two levels");
         // an ended operation asks nothing
         state.done.insert("op:op_east:end".into(), START);
         let ops = operation_armies(&state, &plan);

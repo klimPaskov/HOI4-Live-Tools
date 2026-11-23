@@ -243,7 +243,7 @@ pub(super) fn trains_falling(read: &Value) -> Option<String> {
 /// front adds and every train a logistics strike kills is a shortage nothing replaces.
 pub(super) fn trains_no_line(read: &Value) -> Option<String> {
     let row = list(read, "equipment")
-        .into_iter()
+        .iter()
         .find(|r| text(&r["archetype"]) == "train_equipment")?;
     if row["lines"].as_u64().unwrap_or(0) > 0
         || row["produced_per_day"].as_f64().unwrap_or(0.0) > 0.0
