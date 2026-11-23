@@ -336,6 +336,7 @@ fn cp_spend_step(
         );
         return Ok(None);
     };
+    super::plan_omissions::record_cp(state, now, cp);
     let max = command_power_max(tools, plan);
     if !cp_should_spend(cp, max) {
         note(

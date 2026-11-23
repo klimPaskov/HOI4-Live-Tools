@@ -203,8 +203,9 @@ pub(super) struct Memory {
     pub(super) alert_since: HashMap<String, GameHour>,
     /// What the executor's own reads find open (plan_omissions.rs), item -> first seen.
     pub(super) derived_since: HashMap<String, GameHour>,
-    /// The last command power read (game hour, value): unchanged a day later = at its cap.
-    pub(super) cp_last: Option<(GameHour, f64)>,
+    /// The cp_spend rule's last two command power readings a game day or more apart (game
+    /// hour, value): the same value twice = at its cap.
+    pub(super) cp_samples: Vec<(GameHour, f64)>,
     /// The decisions step's last hoi4_decisions_list read (that read opens the panel, so the
     /// omissions read uses this copy and never opens it itself).
     pub(super) decisions_seen: Option<(GameHour, Value)>,

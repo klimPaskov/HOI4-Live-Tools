@@ -153,6 +153,29 @@ pub(super) fn affordable_doctrines(read: &Value) -> Vec<String> {
     out
 }
 
+/// Keep a command power reading of the cp_spend rule: the last two a game day or more apart.
+pub(super) fn record_cp(state: &mut State, now: GameHour, cp: f64) {
+    let samples = &mut state.manage.cp_samples;
+    match samples.last() {
+        Some((at, _)) if now - at < DAY => {
+            samples.pop();
+        }
+        _ => {}
+    }
+    samples.push((now, cp));
+    if samples.len() > 2 {
+        samples.remove(0);
+    }
+}
+
+/// The command power when the last two readings, a day or more apart, are the same; pure.
+pub(super) fn cp_stuck(samples: &[(GameHour, f64)]) -> Option<f64> {
+    match samples {
+        [.., (a, x), (b, y)] if b - a >= DAY && (x - y).abs() < 0.01 && *y > 0.0 => Some(*y),
+        _ => None,
+    }
+}
+
 /// The rows of this read with their first-seen days.
 pub(super) fn derived(
     state: &mut State,
@@ -174,34 +197,18 @@ pub(super) fn derived(
             }
         }
     }
-    // command power: a reading unchanged a game day later sits at its cap (the cap itself is
-    // not read reliably: g17n read 210 of 80), so every day's gain is lost
-    if let Some(cp) = tools
-        .call("hoi4_country_status", &json!({}))
-        .ok()
-        .and_then(|r| r["fields"]["command_power"]["value"].as_f64())
-    {
-        let stuck = state
-            .manage
-            .cp_last
-            .is_some_and(|(at, last)| now - at >= DAY && (cp - last).abs() < 0.01 && cp > 0.0);
-        if stuck {
-            open.push((
-                "command_power_at_cap".to_string(),
-                format!(
-                    "command power {cp:.0} gains nothing: a group without a field marshal, a general's assignable trait (hoi4_general_trait list:true), or a preferred tactic or army ability (no tool yet) would use it"
-                ),
-                "cp_spend",
-                super::plan_seams::note_of(state, "cp_spend").map(String::from),
-            ));
-        }
-        if state
-            .manage
-            .cp_last
-            .is_none_or(|(at, last)| now - at >= DAY || (cp - last).abs() >= 0.01)
-        {
-            state.manage.cp_last = Some((now, cp));
-        }
+    // command power: the cp_spend rule's own readings (no read of its own here); two readings
+    // a game day or more apart with the same value sit at the cap (the cap itself is not read
+    // reliably: g17n read 210 of 80), so every day's gain is lost
+    if let Some(cp) = cp_stuck(&state.manage.cp_samples) {
+        open.push((
+            "command_power_at_cap".to_string(),
+            format!(
+                "command power {cp:.0} gains nothing: a group without a field marshal, a general's assignable trait (hoi4_general_trait list:true), or a preferred tactic or army ability (no tool yet) would use it"
+            ),
+            "cp_spend",
+            super::plan_seams::note_of(state, "cp_spend").map(String::from),
+        ));
     }
     // political power: an enabled decision the power pays now that nothing in the plan takes,
     // while the standing politics order has nothing to buy (power saved for a pick is no row)
@@ -357,6 +364,29 @@ mod tests {
             ]
         );
         assert!(affordable_decisions(&read, 40.0, &plan).is_empty());
+    }
+
+    #[test]
+    fn command_power_read_twice_a_day_apart_unchanged_sits_at_its_cap() {
+        let mut st = State::default();
+        record_cp(&mut st, 100, 80.0);
+        record_cp(&mut st, 110, 80.0);
+        assert_eq!(
+            cp_stuck(&st.manage.cp_samples),
+            None,
+            "less than a day apart"
+        );
+        record_cp(&mut st, 100 + DAY, 80.0);
+        assert_eq!(
+            cp_stuck(&st.manage.cp_samples),
+            None,
+            "the sample at 110 replaced 100"
+        );
+        record_cp(&mut st, 110 + DAY, 80.0);
+        record_cp(&mut st, 110 + 2 * DAY, 80.0);
+        assert_eq!(cp_stuck(&st.manage.cp_samples), Some(80.0));
+        record_cp(&mut st, 110 + 3 * DAY, 60.0);
+        assert_eq!(cp_stuck(&st.manage.cp_samples), None, "spent");
     }
 
     #[test]
