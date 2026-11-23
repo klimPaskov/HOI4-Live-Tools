@@ -199,5 +199,25 @@ class GermanyConditions(unittest.TestCase):
         self.assertIn("army_forecast", self.out["facts"])
 
 
+class AdvisorRolesTest(unittest.TestCase):
+    """A character id names all of its advisor roles, even when one role's idea_token equals the id."""
+
+    class World:
+        def characters(self, tag, kind):
+            return [{"id": "GER_hermann_goring", "roles": [
+                {"role": "advisor", "slot": "political_advisor", "idea_token": "GER_hermann_goring"},
+                {"role": "advisor", "slot": "air_chief", "idea_token": "goering"}]},
+                {"id": "GER_other", "roles": [{"role": "advisor", "slot": "theorist", "idea_token": "other_token"}]}]
+
+    def test_character_id_takes_every_role(self):
+        roles = cond.advisor_conditions(self.World(), "GER", "GER_hermann_goring")
+        self.assertEqual(sorted(r["slot"] for r in roles), ["air_chief", "political_advisor"])
+
+    def test_token_takes_its_role(self):
+        self.assertEqual([r["slot"] for r in cond.advisor_conditions(self.World(), "GER", "goering")], ["air_chief"])
+        self.assertEqual([r["character"] for r in cond.advisor_conditions(self.World(), "GER", "other_token")],
+                         ["GER_other"])
+
+
 if __name__ == "__main__":
     unittest.main()
