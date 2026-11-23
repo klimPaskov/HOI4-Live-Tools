@@ -6,6 +6,9 @@
 //! Coordinates are game-logical pixels inside the client area of size `game`.
 //! Key codes are platform-neutral [`vk`] values (numerically the macOS ANSI
 //! virtual key codes); each backend translates them to its own key codes.
+// Windows has no input backend yet, so nothing binds the management tools there: this code is
+// compiled and unit-tested on Windows but not reachable (docs/PORTING_STATUS.md).
+#![cfg_attr(windows, allow(dead_code))]
 use super::{key_once, Process};
 use crate::error::{Error, Result};
 

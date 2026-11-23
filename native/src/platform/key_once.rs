@@ -1,5 +1,8 @@
 //! One preallocated ordinary key pair. Delivery knowledge comes from the
 //! producer's position relative to down, never from an error code or UI state.
+// Windows has no input backend yet, so nothing binds the management tools there: this code is
+// compiled and unit-tested on Windows but not reachable (docs/PORTING_STATUS.md).
+#![cfg_attr(windows, allow(dead_code))]
 use crate::error::{Error, Result};
 use std::time::Duration;
 
