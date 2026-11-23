@@ -1272,6 +1272,18 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
                         return Ok(Reading::Flag(true));
                     }
                 }
+                // a remnant still holding land on our border fights on: out only across the sea
+                // (w43c1, 23 Nov 2026: 2 of 91 points held in Zeeland, Holland retook 20)
+                let touching = ctx.read("hoi4_wars", &json!({})).is_some_and(|w| {
+                    w["borders"].as_array().is_some_and(|bs| {
+                        bs.iter().any(|b| {
+                            b["neighbour_tag"].as_str() == Some(tag.as_str())
+                                && b["neighbour_states"]
+                                    .as_array()
+                                    .is_some_and(|n| !n.is_empty())
+                        })
+                    })
+                });
                 let read = ctx
                     .read("hoi4_states", &json!({"query": tag}))
                     .ok_or("hoi4_states unreadable")?;
@@ -1285,7 +1297,9 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
                                 .any(|v| v["controller"].as_str() == Some(tag.as_str()))
                         })
                 });
-                return Ok(Reading::Flag(landless || remnant(rows, &tag)));
+                return Ok(Reading::Flag(
+                    landless || (!touching && remnant(rows, &tag)),
+                ));
             }
             let conference = ctx
                 .read("hoi4_events", &json!({}))
@@ -1595,6 +1609,14 @@ mod tests {
             json!({"HOL": {"states": [{"state_id": 7, "owner": "HOL", "controller": "HOL",
                 "victory_points": [{"province": 391, "victory_points": 40.0, "controller": "HOL"},
                                    {"province": 9498, "victory_points": 49.0, "controller": "GER"}]}]}}),
+        );
+        assert_eq!(eval(&f, json!("capitulated:HOL")), Truth::False);
+        // the remnant on our border (Zeeland, not a colony): it fights on, not out
+        f.replies.insert("hoi4_states", states("HOL"));
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": true, "enemies": ["HOL"], "wars_won": []},
+                   "borders": [{"neighbour_tag": "HOL", "neighbour_states": [309]}]}),
         );
         assert_eq!(eval(&f, json!("capitulated:HOL")), Truth::False);
     }
