@@ -6096,6 +6096,13 @@ fn air_war_step(
         if !plan_operation::active(state) {
             return Ok(None);
         }
+        // the plan's own air entries (their `when` gates them) before the default missions: the
+        // wings of a finished war rebase to the next one before its declaration (w42s1, 23 Nov
+        // 2026: the air plan never ran in the prepare and 2,099 planes stood in Poland on the
+        // war day in the West)
+        if let Some(line) = plan_manage::air_plan_step(state, tools, plan, lease, now)? {
+            return Ok(Some(line));
+        }
         return air_war_missions(state, tools, plan, lease, now);
     }
     if let Some(line) = plan_manage::air_plan_step(state, tools, plan, lease, now)? {
