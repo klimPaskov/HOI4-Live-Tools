@@ -95,7 +95,7 @@ Steps to finish, in order:
 
 | Workflow | macOS | Linux | Windows |
 |---|---|---|---|
-| Native Rust | fmt, clippy `-D warnings`, `cargo test` | the same, plus aarch64 clippy, the Yama-gated reader test and an Xvfb input fixture | the same full set (six daily-store tests ignored with the reason), plus the owned reader fixture |
+| Native Rust | fmt, clippy `-D warnings`, `cargo test` | the same, plus aarch64 clippy, the Yama-gated reader test and an Xvfb input fixture | the same full set (nine tests ignored there with the reason: the daily plan store and three that read a locked journal), plus the owned reader fixture |
 | Python | unit tests on 3.9 and 3.13, plan-key check, protocol smoke | the same | the same |
 
 `tests/test_xlayout_coverage.py` (Python workflow, every platform) fails when the sources use a
