@@ -2412,3 +2412,70 @@ fn an_enemy_left_with_a_remnant_hands_its_units_on_and_the_operation_waits_for_t
     burst(&mut state, &game, &plan, START + 6 * DAY);
     assert!(state.done.contains_key(&key("op_pol", "end")));
 }
+
+#[test]
+fn at_war_a_mobile_army_fronts_from_the_border_state_it_stands_in() {
+    // w43r1 (23 Nov 2026): each Panzergruppe's plain-click front took the whole Belgian border
+    let roster = json!({"armies": [{"army": "Panzer", "states": {"35": 12, "7": 3, "51": 0}}]});
+    let wars = json!({"borders": [
+        {"neighbour_tag": "BEL", "neighbour_states": [6, 977], "own_border_states": [35, 51, 42]},
+        {"neighbour_tag": "FRA", "neighbour_states": [28], "own_border_states": [7, 42]}]});
+    assert_eq!(
+        standing_border_state(&roster, &wars, "BEL", "Panzer"),
+        Some(35)
+    );
+    assert_eq!(
+        standing_border_state(&roster, &wars, "FRA", "Panzer"),
+        Some(7)
+    );
+    assert_eq!(standing_border_state(&roster, &wars, "LUX", "Panzer"), None);
+}
+
+#[test]
+fn a_reserve_standing_on_a_holds_border_joins_that_holds_front() {
+    let game = Game::new();
+    let op = json!({"id": "op_pol", "reserve_orders": true,
+        "holds": [{"id": "west", "facing": ["FRA"], "armies": [{"army": "WestA"}], "states": [42],
+                   "click_state": 28}],
+        "reserve": [{"army": "Other", "station": 55}]});
+    game.unit("Other", |r| r["states"] = json!({"42": 20}));
+    let roster = game.roster.borrow().clone();
+    let wars = json!({"wars": {"enemies": ["FRA"]},
+        "borders": [{"neighbour_tag": "FRA", "neighbour_states": [28], "own_border_states": [42]}]});
+    let mut state = State::default();
+    let line = reserves(&mut state, &game, "op_pol", &op, &roster, &wars, "l", START)
+        .unwrap()
+        .unwrap();
+    assert!(line.contains("joins its front"), "{line}");
+    let fronts: Vec<Value> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, _)| n == "hoi4_army_front")
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(fronts, vec![json!({"army": "Other", "state_id": 28})]);
+}
+
+#[test]
+fn in_peace_a_stroke_that_will_not_draw_is_drawn_one_state_at_a_time_from_the_click() {
+    // w43a1 (23 Nov 2026): a front with no arrow gains no planning; the armour's strokes were
+    // refused four times in peace and the Panzergruppen attacked with planning 0
+    let game = Game::new();
+    *game.refuse_multi.borrow_mut() = true;
+    let mut plan = plan();
+    plan["operations"][0]["formations"][2] = json!({"army": "Panzer", "role": "mobile",
+        "front": {"enemy": "POL", "own_states": [67], "click_state": 86},
+        "offensive": {"axis": [67, 86, 10], "target_line": [10, 92]}});
+    let mut state = State::default();
+    for h in 0..6 {
+        burst(&mut state, &game, &plan, START + h * 3);
+    }
+    assert_eq!(
+        state.done.get(&key("op_pol", "one:Panzer:10-92")),
+        Some(&86)
+    );
+    assert!(game.orders().iter().any(|(n, a)| n == "hoi4_army_offensive"
+        && a["army"] == json!("Panzer")
+        && a["state_id"] == json!(86)
+        && a.get("states").is_none()));
+}
