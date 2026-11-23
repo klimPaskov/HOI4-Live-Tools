@@ -556,7 +556,10 @@ mod tests {
             slots: vec![Some("radio".into()), None, None],
             completed: Default::default(),
         };
-        assert_eq!(super::default_slot(&a, "electronic_mechanical_engineering").unwrap(), 1);
+        assert_eq!(
+            super::default_slot(&a, "electronic_mechanical_engineering").unwrap(),
+            1
+        );
         assert_eq!(super::default_slot(&a, "radio").unwrap(), 0);
         let full = super::Assignments {
             slots: vec![Some("radio".into()), Some("radar".into())],

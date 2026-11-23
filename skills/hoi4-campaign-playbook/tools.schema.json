@@ -102,8 +102,17 @@
       "type": "string"
      },
      "region": {
-      "maxLength": 96,
-      "type": "string"
+      "anyOf": [
+       {
+        "maxLength": 96,
+        "type": "string"
+       },
+       {
+        "maximum": 4095,
+        "minimum": 1,
+        "type": "integer"
+       }
+      ]
      },
      "request_id": {
       "type": "string"
@@ -186,8 +195,17 @@
       "type": "string"
      },
      "region": {
-      "maxLength": 96,
-      "type": "string"
+      "anyOf": [
+       {
+        "maxLength": 96,
+        "type": "string"
+       },
+       {
+        "maximum": 4095,
+        "minimum": 1,
+        "type": "integer"
+       }
+      ]
      },
      "state_id": {
       "maximum": 4095,
@@ -914,6 +932,10 @@
      "request_id": {
       "type": "string"
      },
+     "spearhead": {
+      "description": "Draw the game's spearhead order (battle-plan bar, Shift+X) instead of an offensive line: it takes the provinces as painted without adjusting, for encirclements and narrow thrusts (armour)",
+      "type": "boolean"
+     },
      "state_id": {
       "maximum": 4095,
       "minimum": 1,
@@ -952,6 +974,11 @@
      "clear_orders": {
       "description": "true deletes every battle-plan order of the army or army group (the bar's delete button, right click, confirmed); goes alone; verified by no order left",
       "type": "boolean"
+     },
+     "delete_order": {
+      "description": "deletes ONE battle-plan order by its id from the plan read-back (hoi4_armies plan: a front's offensives[].id): the bar's delete tool (left click), then a click on the order's arrow on the map; the front and every other order stay, so the front's divisions keep their planning bonus. Goes alone; verified by the id gone",
+      "minimum": 1,
+      "type": "integer"
      },
      "execute": {
       "description": "true executes the plan, false stops it; may be left out only when mode is given",
@@ -2207,7 +2234,7 @@
    "source": "--list-tools"
   },
   "hoi4_event_choose": {
-   "description": "Choose an option (0-based, in listed order) of an open event by clicking it (the list order is not the stacking order: single-option windows over it are acknowledged first; a choice window over it is named in event_covered). Verified when exactly that event window closes.",
+   "description": "Choose an option of an open event by clicking it: `option` is the 0-based index in listed order, or the option's script key as hoi4_events lists it in option_keys (\"germany.14.a\", or just \"a\"), or its shown text (the list order is not the stacking order: single-option windows over it are acknowledged first; a choice window over it is named in event_covered). Verified when exactly that event window closes.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -2218,9 +2245,18 @@
       "type": "string"
      },
      "option": {
-      "maximum": 7,
-      "minimum": 0,
-      "type": "integer"
+      "anyOf": [
+       {
+        "maximum": 7,
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+       }
+      ]
      },
      "request_id": {
       "type": "string"
@@ -4054,7 +4090,7 @@
    "source": "--list-tools"
   },
   "hoi4_province_graph": {
-   "description": "Land provinces of the given states and the provinces each one touches, from the install's map files (provinces.bmp, definition.csv, history/states): per province its id, its state and its land neighbours. Use it to see which provinces an objective can be attacked from and to find a way over land; who holds a province is in hoi4_states (a state id query lists its provinces with their controllers). Pure read; no lease, no game memory.",
+   "description": "Land provinces of the given states and the provinces each one touches, from the install's map files (provinces.bmp, definition.csv, history/states): per province its id, its state and its land neighbours; its terrain with the terrain's combat width, support width, attack modifier, movement cost and attrition (common/terrain), whether it is coastal, and the bunker levels its state history sets (forts_in_history: start or the dated block; live levels are not read here); per border (borders[]) the river that draws it (small or large, with the attack penalty of the river defines; touches = a river meets the border only at a point, estimate) and special crossings of adjacencies.csv (sea strait with the sea province, impassable, canal rule). Use it to see which provinces an objective can be attacked from and to find a way over land; who holds a province is in hoi4_states (a state id query lists its provinces with their controllers). Pure read; no lease, no game memory.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -4248,7 +4284,7 @@
    "source": "--list-tools"
   },
   "hoi4_research_start": {
-   "description": "Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).",
+   "description": "Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology; without `slot` the first empty slot is used) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -4273,7 +4309,6 @@
     },
     "required": [
      "technology",
-     "slot",
      "request_id",
      "lease_token"
     ],
@@ -4489,6 +4524,28 @@
      "state_ids",
      "lease_token"
     ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_state_snapshot": {
+   "description": "Everything the pure reads can see, in one call: the bodies of every read tool that takes no lease (overview, country status, economy and its detail, resources, production lines and shortages, stockpile, construction queue, research bonuses, doctrines, commanders, armies with their orders, supply per division, province and state, wars, war statistics, diplomacy, air wings and regions, fleets, convoys, occupation, intelligence, MIOs, special projects, division templates, the game's alert row, open events, completed focuses and the watcher's brief with its open omissions), each under reads.<key> with its read time in read_ms.<key>; a read that fails answers {error} in its place. `since` is passed to the watcher (hoi4_observe) so its typed changes since that sequence come too; `skip` leaves keys out. The state recorder takes one per game week. Pure read: no lease, no input, no panel, never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "since": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "skip": {
+      "items": {
+       "maxLength": 64,
+       "type": "string"
+      },
+      "maxItems": 64,
+      "type": "array"
+     }
+    },
     "type": "object"
    },
    "source": "--list-tools"

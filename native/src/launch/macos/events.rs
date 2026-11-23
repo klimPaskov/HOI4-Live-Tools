@@ -1043,9 +1043,15 @@ mod text_tests {
         let listed = serde_json::json!({"events": [{"event": "germany.14",
             "options": ["Honour the treaty", "Demand more"],
             "option_keys": ["germany.14.a", "germany.14.b"]}]});
-        assert_eq!(super::option_index(&listed, "germany.14", "germany.14.b").unwrap(), 1);
+        assert_eq!(
+            super::option_index(&listed, "germany.14", "germany.14.b").unwrap(),
+            1
+        );
         assert_eq!(super::option_index(&listed, "germany.14", "a").unwrap(), 0);
-        assert_eq!(super::option_index(&listed, "germany.14", " demand more ").unwrap(), 1);
+        assert_eq!(
+            super::option_index(&listed, "germany.14", " demand more ").unwrap(),
+            1
+        );
         assert_eq!(super::option_index(&listed, "germany.14", "1").unwrap(), 1);
         let e = super::option_index(&listed, "germany.14", "germany.14.c").unwrap_err();
         assert_eq!(e.code, "invalid_arguments");

@@ -1436,7 +1436,10 @@ mod tests {
     #[test]
     fn a_region_id_may_come_as_a_number() {
         let args = |v: Value| v.as_object().unwrap().clone();
-        assert_eq!(region_arg(&args(serde_json::json!({"region": 5}))).unwrap(), "5");
+        assert_eq!(
+            region_arg(&args(serde_json::json!({"region": 5}))).unwrap(),
+            "5"
+        );
         assert_eq!(
             region_arg(&args(serde_json::json!({"region": "Western Poland"}))).unwrap(),
             "Western Poland"

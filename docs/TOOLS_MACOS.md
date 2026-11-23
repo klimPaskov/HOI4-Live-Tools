@@ -201,6 +201,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_province_graph` (R): Land provinces of the given states and the provinces each one touches, from the install's map files (provinces.bmp, definition.csv, history/states):
 - `hoi4_railway_build` (A): Queue ONE railway with the game's railway construction mode:
 - `hoi4_save` (A): Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games.
+- `hoi4_state_snapshot` (R): Everything the pure reads can see, in one call:
 - `hoi4_states` (R): States in one memory read (no interface input).
 - `hoi4_stockpile` (R): Own equipment stockpile from game memory (no input, no lease, never pauses).
 - `hoi4_wait_change` (R): Block until a change after `since` arrives (optionally only given kinds or urgent ones), or until timeout_seconds (1-30) pass;

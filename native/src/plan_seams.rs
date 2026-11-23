@@ -1982,7 +1982,11 @@ mod tests {
         let mut state = State::default();
         assert!(step(&mut state, &f, &cap, "l", START).unwrap().is_some());
         // no tool reads the cap: nothing asks a tool the server does not have
-        assert!(f.calls.borrow().iter().all(|(n, _)| n.as_str() != "hoi4_tooltip"));
+        assert!(f
+            .calls
+            .borrow()
+            .iter()
+            .all(|(n, _)| n.as_str() != "hoi4_tooltip"));
         // the plan's cap without a tooltip
         let f = cp_game(50.0);
         let plan = json!({"manage": {"command_power_max": 60}});

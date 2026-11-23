@@ -3069,7 +3069,7 @@ impl MacClock {
             let slot = match args.get("slot") {
                 // no slot named: the first empty one (or the one already holding it, for a retry)
                 None | Some(Value::Null) if !replace => {
-                    research::default_slot(&research::assignments(process)?, &key)?
+                    research::default_slot(&research::assignments(process)?, key)?
                 }
                 given => given
                     .and_then(Value::as_u64)
@@ -7349,8 +7349,14 @@ mod argument_tests {
     }
     #[test]
     fn politics_categories_take_the_words_players_used_and_name_the_right_place() {
-        assert_eq!(politics_category(&args(json!({"category": "government"}))).unwrap(), "government");
-        assert_eq!(politics_category(&args(json!({"category": "advisor"}))).unwrap(), "government");
+        assert_eq!(
+            politics_category(&args(json!({"category": "government"}))).unwrap(),
+            "government"
+        );
+        assert_eq!(
+            politics_category(&args(json!({"category": "advisor"}))).unwrap(),
+            "government"
+        );
         assert_eq!(
             politics_category(&args(json!({"category": "High Command"}))).unwrap(),
             "military_staff"
