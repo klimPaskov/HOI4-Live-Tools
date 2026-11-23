@@ -8,6 +8,8 @@
  * (the game's own getter functions and serializer) is stage-1 work; until then an unknown build has reads off. */
 static const caps_fields FIELDS[] = {
     {"DFA875A5-25BA-35E0-9736-627F8A5C4396", "1.19.4.1 f584 macOS", 0x428, 0x47c, 0x4d8, 0x679, 0x103717d50, 24},
+    /* 1.20.0.0 0c4f: every field unchanged, the tag array root moved (build migration map, matcher:global, high) */
+    {"ED135FE5-CDA8-38E8-8835-3F7381B79974", "1.20.0.0 0c4f macOS", 0x428, 0x47c, 0x4d8, 0x679, 0x10371ced0, 24},
 };
 
 int caps_resolve(const scan_image *im, caps_table *t) {

@@ -29,9 +29,9 @@ echo "== 1.19.3 c01a ($OLD): same scans, different addresses; no field table (re
 [ ${pipestatus[1]} = 0 ] || fail=1
 echo "   (1.19.3's Post has no authorisation step: post_layout and speed_command stay OFF there, by design)"
 if [ -f "$V120" ]; then
-  echo "== 1.20.0.0 macOS ($V120): every scan incl. stage 1 resolves; no field table yet (reads: speed only)"
+  echo "== 1.20.0.0 macOS ($V120): every scan incl. stage 1 resolves; the field table (fields unchanged, tag array root moved)"
   ./build/scan_file $V120 command_post=0x1028505d0 queue_root=0x103730150 queue_slot=0x90 research_factory=0x10022c2b0 \
-    research_vtable=0x1034bc180 research_type_id=0x2f70 gamestate_vtable=0x103508988 idler_vtable=0x10350cea0 fields=0 \
+    research_vtable=0x1034bc180 research_type_id=0x2f70 gamestate_vtable=0x103508988 idler_vtable=0x10350cea0 fields=1 \
     auth_slot=0xa0 speed_type_id=0x2f42 speed_payload=0x24 speed_field=0x47c speed_range=5 speed_gs_global=0x1037301d0 \
     forbid_desc=0x10371a988 $S2 | grep -E "^expect|resolved" || fail=1
   [ ${pipestatus[1]} = 0 ] || fail=1
