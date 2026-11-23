@@ -443,6 +443,9 @@ fn save_retryable(e: &Error) -> bool {
         "input_readback_failed" | "invalid_gui" | "gui_target_unavailable"
     )
 }
+/// The game menu's fade-in (ingamemenu.gui fade_time 500) and a frame of margin.
+const MENU_FADE_MS: u64 = 600;
+
 fn save_game_once(
     process: &dyn Process,
     keys: &dyn GameInput,
@@ -497,6 +500,11 @@ fn save_game_once(
     }
     // Any failure from here closes the game menu again (it was left open on the error path,
     // and the next action then met a paused game behind a menu).
+    // The game menu fades in (interface/ingamemenu.gui `ingamemenu` fade_time = 500 ms) and its
+    // rectangle reads settled from the first frame: a click before the fade ends went through to
+    // the map and closed the menu (v55t, 23 Nov 2026: 5 of 10 paused saves "The Save click went
+    // through to the map", the menu read open and its button settled each time).
+    crate::phase::sleep(Duration::from_millis(MENU_FADE_MS));
     let result = (|| -> Result<String> {
         let button = settled(process, "save button", |r, i| {
             map_clear(r, i)?;
@@ -504,11 +512,13 @@ fn save_game_once(
             let b = gui_tree::child(r, i, root, "menu_save_button")?
                 .ok_or_else(|| Error::new("gui_target_unavailable", "Save button not found"))?;
             let rect = gui_tree::rect(r, i, b, (1920, 1080))?;
-            drawn_inside(
-                rect,
-                gui_tree::rect(r, i, root, (1920, 1080))?,
-                "Save button",
-            )?;
+            // the window's own rectangle when the layout gives one (some window classes have
+            // no reviewed renderer: then only the button's own rectangle is checked)
+            match gui_tree::rect(r, i, root, (1920, 1080)) {
+                Ok(window) => drawn_inside(rect, window, "Save button")?,
+                Err(_) if rect.w > 0 && rect.h > 0 => {}
+                Err(e) => return Err(e),
+            }
             Ok(rect)
         })?;
         // These buttons are drawn by a text sprite whose width is the text texture's (864 px for
@@ -552,11 +562,13 @@ fn save_game_once(
                 Error::new("gui_target_unavailable", "Save confirm button not found")
             })?;
             let rect = gui_tree::rect(r, i, b, (1920, 1080))?;
-            drawn_inside(
-                rect,
-                gui_tree::rect(r, i, root, (1920, 1080))?,
-                "Save confirm",
-            )?;
+            // the window's own rectangle when the layout gives one (some window classes have
+            // no reviewed renderer: then only the button's own rectangle is checked)
+            match gui_tree::rect(r, i, root, (1920, 1080)) {
+                Ok(window) => drawn_inside(rect, window, "Save confirm")?,
+                Err(_) if rect.w > 0 && rect.h > 0 => {}
+                Err(e) => return Err(e),
+            }
             Ok(rect)
         })?;
         let (x, y) = near_left(confirm);
@@ -583,6 +595,16 @@ fn save_game_once(
                 keys.click((1920, 1080), x, y)?;
                 let _ = accept_command(process, keys);
             }
+            // a save of the same name (paused saves within one game hour share the name the game
+            // proposes) asks to overwrite: that dialog may come after accept_command's 1.2 s
+            // (v55t, 23 Nov 2026: paused4 after paused3's save, nothing written in 30 s)
+            if read(process, |r, i| command_dialog(r, i, "accept_button"))
+                .ok()
+                .flatten()
+                .is_some()
+            {
+                let _ = accept_command(process, keys);
+            }
             if Instant::now() >= deadline {
                 return Err(Error::new(
                     "input_readback_failed",
@@ -607,13 +629,18 @@ fn save_game_once(
 }
 /// Leave what the navy and air tools may leave over the map before the game menu opens: a
 /// strategic-region panel, the fleet panel and the naval map mode (the navy tools' own tidy-up),
-/// then the default map mode (F1; the air map mode too). With the North Sea region panel open in
+/// then, only when the naval mode stays, the default map mode (F1). With the North Sea region panel open in
 /// the naval map mode the Save clicks went through onto the map (w53a/saveprobe/paused3.jpg, 23
 /// Nov 2026: 14 of 27 save calls failed first time).
 fn tidy_map(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     let _phase = crate::phase::enter("tidy");
-    if read(process, map_clear).is_err() {
-        super::navalact::release(process, keys);
+    // a clear map takes no input at all
+    if read(process, map_clear).is_ok() {
+        return Ok(());
+    }
+    super::navalact::release(process, keys);
+    if read(process, map_clear).is_ok() {
+        return Ok(());
     }
     keys.press_code(crate::platform::game_input::vk::F1)?;
     crate::phase::sleep(Duration::from_millis(250));
