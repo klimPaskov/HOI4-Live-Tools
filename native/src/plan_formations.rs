@@ -440,7 +440,9 @@ pub(super) fn command_step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    if (state.war_active || super::plan_operation::active(state))
+    // (only while an operation runs: a war the war step manages directly gives idle armies
+    // their jobs itself)
+    if super::plan_operation::active(state)
         && !state.skipped(now, "command", "stragglers")
         && !super::plan_strike::owns_armies(state, plan)
     {
@@ -470,7 +472,7 @@ fn mobile(row: &Value) -> bool {
 }
 
 /// An army with no order at all that no operation names (formation, hold or reserve row) is a
-/// straggler while a war or an operation runs: it joins the nearest army of the same kind
+/// straggler while an operation runs: it joins the nearest army of the same kind
 /// (mobile or not) that has an order and room (hoi4_army_merge), so no division waits a war out
 /// and no new front is drawn (w46e1/f1, w47p1, 23 Nov 2026: Mitte Brandenburg and Army 1 stood
 /// with no order for the whole war; the plan's `armies.concentrate: false` kept the formation
@@ -1059,7 +1061,7 @@ mod tests {
                 {"army": "Mitte Brandenburg", "division_count": 2, "battle_plan_orders": 0, "motorization": 0, "main_state": 64}]}),
         )]);
         let mut state = State::default();
-        state.war_active = true;
+        state.done.insert("op:op:prep".into(), 900);
         let out = command_step(&mut state, &tools, &plan, "l", 1000)
             .unwrap()
             .unwrap();
@@ -1069,7 +1071,7 @@ mod tests {
                 && out.contains("joins Armee Mitte"),
             "{out}"
         );
-        // at peace with no operation: nothing
+        // no operation running: nothing
         let mut calm = State::default();
         let out = command_step(&mut calm, &tools, &plan, "l", 1000).unwrap();
         assert!(out.is_none_or(|o| !o.contains("no order")));
