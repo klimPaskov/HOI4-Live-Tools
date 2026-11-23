@@ -852,8 +852,8 @@ pub fn mac_tool_list() -> Vec<Value> {
         doctrine_act::tool(),
         json!({"name":"hoi4_army_commander","description":"Assign a general (exact name as listed by hoi4_commanders) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list. Verified when the army's commander is that general. Refused before any click with army_unknown (lists valid armies/groups), unknown_commander (5 closest names) or commander_unavailable (already leads another army/group; pass reassign: true to move them).","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"general":{"type":"string"},"reassign":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","general","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wings","description":"Own air wings with air base, assigned region and missions, from the Air Forces Overview (opens it). Changes nothing in the game.","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_air_mission","description":"Give an own air wing (exact name) a mission over a strategic air region with the game's ordinary controls: wing row of the Air Forces Overview (L), the mission button, the Find view centres `state_id` (any state inside the wanted region) and a right click assigns. Pass `region` (region id or display name, e.g. 'Eastern Germany') instead of or with `state_id`: the state is then chosen from the game's files and the result is verified to be that region; a sea region (no state in it, e.g. 'English Channel') is reached by centring the nearest state and clicking the region's own sea provinces on screen. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (unknown mission), region_unknown, region_state_mismatch; the game's own disabling (mission not offered / needs more planes) surfaces as invalid_target. Verified from the wing's mission mask and region id in memory (hoi4_air). No percent or intensity control exists in the game's air UI; aggressiveness and day/night are per-wing cycle buttons not driven by this tool.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) given the same mission over the same region in one input sequence: selected together in the overview (a click, then Shift+clicks), one mission click, one region click; a wing the selection does not take is ordered alone. The receipt is Verified when all fly it, Diverged when some do (detail.wings names each, result.failed says why)"},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"anyOf":[{"type":"string","maxLength":96},{"type":"integer","minimum":1,"maximum":4095}]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["mission","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_air_rebase","description":"Rebase one own air wing to the air base of a state with ordinary input: strategic air map (F3), the wing's row of the Air Forces Overview, the Find view centres `state_id`, the base's circle is located from the game's own map icon objects and right clicked. The wing flies a transfer (status 'To <base>'); verified from the wing's transfer destination in memory (hoi4_air `transfer_to_base_id`), the base id changes on arrival. Typed refusals before any input: wing_unknown, wing_ambiguous, air_base_unknown (state without an own air base; lists own base states), nothing_to_change (already based or already flying there), air_base_full (capacity minus wings stationed or incoming). The game set no range limit on a transfer in the test (a 570 km fighter wing was accepted 207 map units away); if it refuses anyway the tool reports rebase_refused. Map mode is restored afterwards.","inputSchema":{"type":"object","properties":{"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) to the same base in one call: one air mode, each selected and right-clicked onto the base in turn (the camera stays on the base). Verified when all transfer, Diverged when some do (detail.wings, result.failed)"},"wing":{"type":"string","maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_air_mission","description":"Give an own air wing (exact name) a mission over a strategic air region with the game's ordinary controls: wing row of the Air Forces Overview (L), the mission button, the Find view centres `state_id` (any state inside the wanted region) and a right click assigns. Pass `region` (region id or display name, e.g. 'Eastern Germany') instead of or with `state_id`: the state is then chosen from the game's files and the result is verified to be that region; a sea region (no state in it, e.g. 'English Channel') is reached by centring the nearest state and clicking the region's own sea provinces on screen. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (unknown mission), region_unknown, region_state_mismatch; the game's own disabling (mission not offered / needs more planes) surfaces as invalid_target. Verified from the wing's mission mask and region id in memory (hoi4_air). No percent or intensity control exists in the game's air UI; aggressiveness and day/night are per-wing cycle buttons not driven by this tool.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) given the same mission over the same region in one input sequence: selected together in the overview (a click, then Shift+clicks), one mission click, one region click; a wing the selection does not take is ordered alone. The receipt is Verified when all fly it, Diverged when some do (detail.wings names each, result.failed says why)"},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"anyOf":[{"type":"string","maxLength":96},{"type":"integer","minimum":1,"maximum":4095}]},"bulk":{"type":"boolean","description":"With wings: the bases whose every wing is listed are ordered by one click on the base circle (it selects all its wings), one mission or rebase order for all, read back at the end; the other wings and any the base order missed take the single path in the same call. Off until its live probe passes."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["mission","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_air_rebase","description":"Rebase one own air wing to the air base of a state with ordinary input: strategic air map (F3), the wing's row of the Air Forces Overview, the Find view centres `state_id`, the base's circle is located from the game's own map icon objects and right clicked. The wing flies a transfer (status 'To <base>'); verified from the wing's transfer destination in memory (hoi4_air `transfer_to_base_id`), the base id changes on arrival. Typed refusals before any input: wing_unknown, wing_ambiguous, air_base_unknown (state without an own air base; lists own base states), nothing_to_change (already based or already flying there), air_base_full (capacity minus wings stationed or incoming). The game set no range limit on a transfer in the test (a 570 km fighter wing was accepted 207 map units away); if it refuses anyway the tool reports rebase_refused. Map mode is restored afterwards.","inputSchema":{"type":"object","properties":{"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) to the same base in one call: one air mode, each selected and right-clicked onto the base in turn (the camera stays on the base). Verified when all transfer, Diverged when some do (detail.wings, result.failed)"},"wing":{"type":"string","maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"bulk":{"type":"boolean","description":"With wings: the bases whose every wing is listed are ordered by one click on the base circle (it selects all its wings), one mission or rebase order for all, read back at the end; the other wings and any the base order missed take the single path in the same call. Off until its live probe passes."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_create","description":"Found a new air wing from reserve aircraft at an own air base: strategic air map, Find view centres `state_id`, left click on the base circle, the N shortcut ('Add new Air Wing'), the reserve row of `aircraft` (variant name such as 'Ju 86' or class name such as 'Inter-War Fighter', case-insensitive) moves up to 100 planes of that variant into the wing (the game's own limit per click), Ok. Reserve aircraft come from production or from disbanding a wing. Typed refusals: air_base_unknown, air_base_full (before input); no_reserve_aircraft (the game refuses the window when the reserve is empty), aircraft_not_in_reserve (lists what is in reserve), aircraft_ambiguous, create_unavailable (Ok disabled, e.g. no manpower) while driving; nothing is created in those cases. Verified from the new wing's name appearing at that base in memory (hoi4_air). The wing gets the game's default name and 'Deploying from Reserves' status.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"aircraft":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","aircraft","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_disband","description":"Disband one own air wing (row of the Air Forces Overview, toolbar Disband, OK of the confirmation); all its equipment returns to the reserve. Typed refusals before input: wing_unknown, wing_ambiguous; disband_unavailable if the game disables the button. Verified from the wing's absence in memory (hoi4_air).","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_split","description":"Split one own air wing in two halves with the toolbar's Split button (shortcut D) after selecting it in the Air Forces Overview: the original keeps half of its aircraft, a new wing of the same type, base and orders takes the rest and gets the game's default name. Typed refusals before input: wing_unknown, wing_ambiguous, wing_in_transfer, nothing_to_change (fewer than 2 aircraft); split_unavailable if the game disables the button. Verified from memory: one more wing at the base and fewer aircraft in the original. This and hoi4_air_wing_create (up to 100 aircraft per click) are the ways to size wings; hoi4_air_wing_merge joins them again.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","request_id","lease_token"],"additionalProperties":false}}),
@@ -4781,6 +4781,9 @@ impl MacClock {
                     with: Option<String>,
                 },
             }
+            // The bulk path (a base click selects every wing at the base; airact::missions_by_base,
+            // airact::rebase_by_base), the single path its fallback in the same call.
+            let bulk = args.get("bulk").and_then(Value::as_bool).unwrap_or(false);
             let op = match name {
                 "hoi4_air_mission" => {
                     allowed(
@@ -4791,6 +4794,7 @@ impl MacClock {
                             "mission",
                             "state_id",
                             "region",
+                            "bulk",
                             "request_id",
                             "lease_token",
                         ],
@@ -4867,7 +4871,7 @@ impl MacClock {
                 "hoi4_air_rebase" => {
                     allowed(
                         args,
-                        &["wing", "wings", "state_id", "request_id", "lease_token"],
+                        &["wing", "wings", "state_id", "bulk", "request_id", "lease_token"],
                     )?;
                     let wings = match args.get("wings") {
                         Some(list) => {
@@ -5044,7 +5048,9 @@ impl MacClock {
                         let rows: Vec<(String, Option<airact::WingSnap>)> =
                             wings.iter().map(|w| (w.clone(), snap_of(w))).collect();
                         let reached = rows.iter().filter(|(_, n)| n.as_ref().is_some_and(on)).count();
-                        let detail = json!({"wings": rows.iter().map(|(w, n)| json!({"wing": w,
+                        let detail = json!({"changed": reached,
+                            "unchanged": rows.iter().filter(|(_, n)| !n.as_ref().is_some_and(on)).map(|(w, _)| w).collect::<Vec<_>>(),
+                            "wings": rows.iter().map(|(w, n)| json!({"wing": w,
                             "flying": n.as_ref().is_some_and(on),
                             "mission_mask": n.as_ref().map(|n| n.mission_mask),
                             "region_id": n.as_ref().map(|n| n.region_id)})).collect::<Vec<_>>()});
@@ -5075,7 +5081,9 @@ impl MacClock {
                             wings.iter().map(|w| (w.clone(), snap_of(w))).collect();
                         let moving = |n: &airact::WingSnap| n.base_id == to || n.transfer_base_id == to;
                         let reached = rows.iter().filter(|(_, n)| n.as_ref().is_some_and(moving)).count();
-                        let detail = json!({"wings": rows.iter().map(|(w, n)| json!({"wing": w,
+                        let detail = json!({"changed": reached,
+                            "unchanged": rows.iter().filter(|(_, n)| !n.as_ref().is_some_and(moving)).map(|(w, _)| w).collect::<Vec<_>>(),
+                            "wings": rows.iter().map(|(w, n)| json!({"wing": w,
                             "moving": n.as_ref().is_some_and(moving),
                             "base_id": n.as_ref().map(|n| n.base_id),
                             "transfer_to_base_id": n.as_ref().map(|n| n.transfer_base_id)})).collect::<Vec<_>>()});
@@ -5156,8 +5164,11 @@ impl MacClock {
                         region,
                         ..
                     } if wings.len() > 1 => {
-                        let outcomes =
-                            airact::missions(process, keys, wings, mission, *state, *region)?;
+                        let (outcomes, by_base) = if bulk {
+                            airact::missions_by_base(process, keys, wings, mission, *state, *region)?
+                        } else {
+                            (airact::missions(process, keys, wings, mission, *state, *region)?, Vec::new())
+                        };
                         let failed: Vec<Value> = outcomes
                             .iter()
                             .filter_map(|(w, e)| {
@@ -5171,7 +5182,7 @@ impl MacClock {
                                 return Err(e);
                             }
                         }
-                        json!({"wings":wings,"mission":mission,"state_id":state,"failed":failed})
+                        json!({"wings":wings,"mission":mission,"state_id":state,"failed":failed,"by_base":by_base})
                     }
                     Air::Mission {
                         wings,
@@ -5185,7 +5196,11 @@ impl MacClock {
                         json!({"wing":wing,"mission":mission,"state_id":state})
                     }
                     Air::Rebase { wings, state } if wings.len() > 1 => {
-                        let outcomes = airact::rebase_many(process, keys, &rebase_plans)?;
+                        let (outcomes, by_base) = if bulk {
+                            airact::rebase_by_base(process, keys, &rebase_plans)?
+                        } else {
+                            (airact::rebase_many(process, keys, &rebase_plans)?, Vec::new())
+                        };
                         let failed: Vec<Value> = outcomes
                             .iter()
                             .filter_map(|(w, e)| {
@@ -5199,7 +5214,7 @@ impl MacClock {
                                 return Err(e);
                             }
                         }
-                        json!({"wings":wings,"to_state":state,"failed":failed})
+                        json!({"wings":wings,"to_state":state,"failed":failed,"by_base":by_base})
                     }
                     Air::Rebase { .. } => airact::rebase(
                         process,

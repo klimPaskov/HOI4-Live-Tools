@@ -761,6 +761,362 @@ pub(super) fn rebase_many(
     Ok(out)
 }
 
+// ---- bulk: a base click selects every wing at the base -----------------------------------------
+// In the strategic air map a left click on an air base circle selects every wing stationed there
+// (the selection view lists them: airselectionview.gui airbase_selection_item,
+// airwing_selection_item); the mission toolbar then gives the mission to every selected wing and
+// one right click on the region (or on another base's circle) orders them all. A base is used
+// only when every wing at it is asked for (the selection is then exactly the wanted wings, read
+// back from the selection view's own array); wings at mixed bases, and any wing the bulk order
+// did not reach, take the single path (the Air Forces Overview row) in the same call.
+
+/// The wings at one air base that one base click orders.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct BaseGroup {
+    pub state: i32,
+    /// every wing stationed at the base (the selection a click on its circle makes)
+    pub wings: Vec<String>,
+}
+/// The bases whose wings are all asked for and at least one still pending, fewest moves first
+/// (most pending wings first); `rows` = (wing, base state) of every own wing; `skip` = base
+/// states not to use (the target base of a rebase, bases already tried). Pure.
+pub(super) fn clean_bases(
+    asked: &[String],
+    pending: &[String],
+    rows: &[(String, Option<i32>)],
+    skip: &[i32],
+) -> Vec<BaseGroup> {
+    let mut states: Vec<i32> = rows
+        .iter()
+        .filter(|(n, _)| pending.contains(n))
+        .filter_map(|(_, s)| *s)
+        .filter(|s| !skip.contains(s))
+        .collect();
+    states.sort_unstable();
+    states.dedup();
+    let mut out: Vec<(usize, BaseGroup)> = states
+        .into_iter()
+        .filter_map(|state| {
+            let wings: Vec<String> = rows
+                .iter()
+                .filter(|(_, s)| *s == Some(state))
+                .map(|(n, _)| n.clone())
+                .collect();
+            let clean = wings.iter().all(|w| asked.contains(w));
+            let waiting = wings.iter().filter(|w| pending.contains(*w)).count();
+            (clean && waiting > 1).then_some((waiting, BaseGroup { state, wings }))
+        })
+        .collect();
+    out.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.state.cmp(&b.1.state)));
+    out.into_iter().map(|(_, g)| g).collect()
+}
+/// The same wings, any order. Pure.
+pub(super) fn same_wings(a: &[String], b: &[String]) -> bool {
+    let mut a: Vec<&String> = a.iter().collect();
+    let mut b: Vec<&String> = b.iter().collect();
+    a.sort();
+    a.dedup();
+    b.sort();
+    b.dedup();
+    a == b
+}
+/// Select every wing at `group`'s base with one click on its circle; the selection read back
+/// must be exactly the group's wings.
+fn select_base(process: &dyn Process, keys: &dyn GameInput, group: &BaseGroup) -> Result<()> {
+    air::deselect(process, keys)?;
+    let (x, y) = base_point(process, keys, group.state)?;
+    click(keys, x, y)?;
+    wait(process, "air base selected", air::selection_open)?;
+    let wanted = group.wings.clone();
+    if wait(process, "base wings selected", move |r, i| {
+        Ok(same_wings(&airui::selected_wings(r, i)?, &wanted))
+    })
+    .is_err()
+    {
+        let seen = read(process, airui::selected_wings).unwrap_or_default();
+        let _ = air::deselect(process, keys);
+        return Err(Error::new(
+            "selection_not_the_base",
+            format!(
+                "The base click selected {} wing(s), not the base's {} ({})",
+                seen.len(),
+                group.wings.len(),
+                seen.join(", ")
+            ),
+        ));
+    }
+    Ok(())
+}
+/// The selected wings (the group) given `mission` over `region` (the state's): one mission
+/// button click for all (a second when the first toggled a mixed selection off), one right click.
+fn order_base_mission(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    group: &BaseGroup,
+    mission: &str,
+    state: i32,
+    named: Option<i32>,
+) -> Result<()> {
+    let frame = air::mission_frame(mission)
+        .ok_or_else(|| Error::new("invalid_arguments", "Unknown mission"))?;
+    let bit = 1 << (frame - 1);
+    let regionless = mission == "training";
+    let (dir, region) = air::target_region(process, state, named);
+    select_base(process, keys, group)?;
+    let names = group.wings.clone();
+    let all_bit = {
+        let names = names.clone();
+        move |r: &crate::memory::Reader<'_>, i: u64| -> Result<bool> {
+            let own = fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
+            let (_, wings) = airread::bases_and_wings(r, i, own)?;
+            Ok(names.iter().all(|n| {
+                wings
+                    .iter()
+                    .any(|w| &w.name == n && w.mission_mask & bit != 0)
+            }))
+        }
+    };
+    let buttons = settled(process, "mission buttons", air::mission_buttons)?;
+    let Some((_, button, enabled, _)) = buttons.iter().find(|(f, _, _, _)| *f == frame).cloned()
+    else {
+        let _ = air::deselect(process, keys);
+        return Err(Error::new(
+            "invalid_target",
+            "Mission not offered for the base's wings",
+        ));
+    };
+    if !enabled {
+        let _ = air::deselect(process, keys);
+        return Err(Error::new(
+            "invalid_target",
+            format!("The game disables {mission} for the base's wings"),
+        ));
+    }
+    let (bx, by) = button.center();
+    for _ in 0..2 {
+        if read(process, &all_bit)? {
+            break;
+        }
+        click(keys, bx, by)?;
+        let _ = wait(process, "mission chosen for the base", &all_bit);
+    }
+    if !read(process, &all_bit)? {
+        let _ = air::deselect(process, keys);
+        return Err(Error::new(
+            "action_not_applied",
+            "The mission button did not give every wing of the base the mission",
+        ));
+    }
+    if regionless {
+        let _ = air::deselect(process, keys);
+        return Ok(());
+    }
+    let targets = air::region_targets(process, keys, dir.as_deref(), state, region)?;
+    super::screenmap::wait_camera_still(process, 600);
+    let assigned = {
+        let names = names.clone();
+        move |r: &crate::memory::Reader<'_>, i: u64| -> Result<bool> {
+            let own = fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
+            let (_, wings) = airread::bases_and_wings(r, i, own)?;
+            Ok(names.iter().all(|n| {
+                wings.iter().any(|w| {
+                    &w.name == n
+                        && w.mission_mask & bit != 0
+                        && region.map_or(w.region_id > 0, |want| w.region_id == want)
+                })
+            }))
+        }
+    };
+    let mut done = false;
+    for target in targets {
+        keys.right_click(GAME, target.0, target.1)?;
+        let deadline = std::time::Instant::now() + Duration::from_millis(1200);
+        while std::time::Instant::now() < deadline {
+            if read(process, &assigned)? {
+                done = true;
+                break;
+            }
+            crate::phase::sleep(Duration::from_millis(40));
+        }
+        if done {
+            break;
+        }
+    }
+    let _ = air::deselect(process, keys);
+    if done {
+        Ok(())
+    } else {
+        Err(Error::new(
+            "input_readback_failed",
+            "Not every wing of the base took the region",
+        ))
+    }
+}
+/// A refusal that ends the whole call (no input can follow it).
+fn fatal(e: &Error) -> bool {
+    matches!(
+        e.code,
+        "system_dialog_open" | "input_target_not_frontmost" | "action_deadline"
+    )
+}
+/// The bulk mission (bulk: true): the bases whose every wing is asked take one base click, one
+/// mission click and one region click each; the wings left (mixed bases, any the bulk order did
+/// not reach) take the single path. Returns each wing's outcome (None = it flies the mission
+/// over the region) and what the bulk orders did (base state, wings, ok or why).
+pub(super) fn missions_by_base(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    wings: &[String],
+    mission: &str,
+    state: i32,
+    region: Option<i32>,
+) -> Result<(Vec<(String, Option<Error>)>, Vec<Value>)> {
+    clear_notices(process, keys)?;
+    let entered = enter_air_mode(process, keys)?;
+    let frame = air::mission_frame(mission)
+        .ok_or_else(|| Error::new("invalid_arguments", "Unknown mission"))?;
+    let bit = 1 << (frame - 1);
+    let (_, want_region) = air::target_region(process, state, region);
+    let flying = |w: &Wing| {
+        w.mission_mask & bit != 0
+            && (mission == "training"
+                || want_region.map_or(w.region_id > 0, |r| w.region_id == r))
+    };
+    let result = (|| -> Result<(Vec<(String, Option<Error>)>, Vec<Value>)> {
+        let mut bulk = Vec::new();
+        let mut tried: Vec<i32> = Vec::new();
+        for _ in 0..12 {
+            let (_, all) = own(process)?;
+            let pending: Vec<String> = wings
+                .iter()
+                .filter(|n| all.iter().any(|w| &w.name == *n && !flying(w)))
+                .cloned()
+                .collect();
+            let rows: Vec<(String, Option<i32>)> =
+                all.iter().map(|w| (w.name.clone(), w.base_state)).collect();
+            let Some(group) = clean_bases(wings, &pending, &rows, &tried).into_iter().next()
+            else {
+                break;
+            };
+            tried.push(group.state);
+            match order_base_mission(process, keys, &group, mission, state, region) {
+                Ok(()) => bulk.push(json!({"base_state": group.state, "wings": group.wings, "ok": true})),
+                Err(e) if fatal(&e) => return Err(e),
+                Err(e) => bulk.push(json!({"base_state": group.state, "wings": group.wings,
+                    "ok": false, "code": e.code, "message": e.message})),
+            }
+        }
+        let mut out = Vec::new();
+        for name in wings {
+            let (_, all) = own(process)?;
+            if all.iter().any(|w| &w.name == name && flying(w)) {
+                out.push((name.clone(), None));
+                continue;
+            }
+            let result = air::assign(process, keys, name, mission, state, region);
+            if let Err(e) = &result {
+                if fatal(e) {
+                    return Err(result.unwrap_err());
+                }
+            }
+            out.push((name.clone(), result.err()));
+        }
+        Ok((out, bulk))
+    })();
+    leave_air_mode(process, keys, entered);
+    result
+}
+/// The bulk rebase (bulk: true): the bases whose every wing is asked take one base click and one
+/// right click on the target base's circle each; the wings left take the single path. Returns
+/// each wing's outcome (None = its transfer started) and what the bulk orders did.
+pub(super) fn rebase_by_base(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    plans: &[RebasePlan],
+) -> Result<(Vec<(String, Option<Error>)>, Vec<Value>)> {
+    let Some(first) = plans.first() else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+    let (to_state, to) = (first.state, first.to_base_id);
+    let asked: Vec<String> = plans.iter().map(|p| p.wing.clone()).collect();
+    let moving = |w: &Wing| w.base_id == to || w.transfer_base_id == to;
+    clear_notices(process, keys)?;
+    let entered = enter_air_mode(process, keys)?;
+    let result = (|| -> Result<(Vec<(String, Option<Error>)>, Vec<Value>)> {
+        let mut bulk = Vec::new();
+        let mut tried: Vec<i32> = vec![to_state];
+        for _ in 0..12 {
+            let (_, all) = own(process)?;
+            let pending: Vec<String> = asked
+                .iter()
+                .filter(|n| all.iter().any(|w| &w.name == *n && !moving(w)))
+                .cloned()
+                .collect();
+            let rows: Vec<(String, Option<i32>)> =
+                all.iter().map(|w| (w.name.clone(), w.base_state)).collect();
+            let Some(group) = clean_bases(&asked, &pending, &rows, &tried).into_iter().next()
+            else {
+                break;
+            };
+            tried.push(group.state);
+            let ordered = (|| -> Result<()> {
+                select_base(process, keys, &group)?;
+                let (x, y) = base_point(process, keys, to_state)?;
+                let wanted = group.wings.clone();
+                if !same_wings(&read(process, airui::selected_wings)?, &wanted) {
+                    return Err(Error::new(
+                        "selection_lost",
+                        "The base selection changed while the target base was brought on screen",
+                    ));
+                }
+                keys.right_click(GAME, x, y)?;
+                let names = group.wings.clone();
+                wait(process, "base rebase accepted", move |r, i| {
+                    let own = fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
+                    let (_, wings) = airread::bases_and_wings(r, i, own)?;
+                    Ok(names.iter().all(|n| {
+                        wings.iter().any(|w| {
+                            &w.name == n && (w.base_id == to || w.transfer_base_id == to)
+                        })
+                    }))
+                })
+                .map_err(|_| {
+                    Error::new(
+                        "rebase_refused",
+                        "Not every wing of the base started a transfer",
+                    )
+                })
+            })();
+            let _ = air::deselect(process, keys);
+            match ordered {
+                Ok(()) => bulk.push(json!({"base_state": group.state, "wings": group.wings, "ok": true})),
+                Err(e) if fatal(&e) => return Err(e),
+                Err(e) => bulk.push(json!({"base_state": group.state, "wings": group.wings,
+                    "ok": false, "code": e.code, "message": e.message})),
+            }
+        }
+        let mut out = Vec::new();
+        for plan in plans {
+            let (_, all) = own(process)?;
+            if all.iter().any(|w| w.name == plan.wing && moving(w)) {
+                out.push((plan.wing.clone(), None));
+                continue;
+            }
+            let result = rebase_one(process, keys, plan);
+            let _ = air::deselect(process, keys);
+            if let Err(e) = &result {
+                if fatal(e) {
+                    return Err(result.unwrap_err());
+                }
+            }
+            out.push((plan.wing.clone(), result.err()));
+        }
+        Ok((out, bulk))
+    })();
+    leave_air_mode(process, keys, entered);
+    result
+}
+
 /// Select the base (left click on its circle), N, pick the reserve row, Ok.
 pub(super) fn create_wing(
     process: &dyn Process,
@@ -1432,6 +1788,49 @@ pub(super) fn state_arg(args: &serde_json::Map<String, Value>, key: &str) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn names(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn a_base_click_is_used_only_where_every_wing_of_the_base_is_asked() {
+        // Germany May 1940 shape: fighters at 57 (all asked), a mixed base 64 (a CAS wing
+        // there is not asked), one fighter alone at 66
+        let rows: Vec<(String, Option<i32>)> = vec![
+            ("JG 1".into(), Some(57)),
+            ("JG 2".into(), Some(57)),
+            ("JG 3".into(), Some(57)),
+            ("JG 26".into(), Some(64)),
+            ("StG 1".into(), Some(64)),
+            ("JG 27".into(), Some(66)),
+            ("JG 51".into(), Some(66)),
+            ("JG 52".into(), None),
+        ];
+        let asked = names(&["JG 1", "JG 2", "JG 3", "JG 26", "JG 27", "JG 51", "JG 52"]);
+        let groups = clean_bases(&asked, &asked, &rows, &[]);
+        assert_eq!(
+            groups,
+            vec![
+                BaseGroup { state: 57, wings: names(&["JG 1", "JG 2", "JG 3"]) },
+                BaseGroup { state: 66, wings: names(&["JG 27", "JG 51"]) },
+            ],
+            "most pending wings first; the mixed base 64 and the wing with no base are left to the single path"
+        );
+        // a base whose wings already fly the order (not pending) is not clicked again
+        let pending = names(&["JG 27", "JG 51", "JG 26"]);
+        assert_eq!(clean_bases(&asked, &pending, &rows, &[]).len(), 1);
+        // a base tried already (or the rebase target) is skipped; one pending wing is not a batch
+        assert!(clean_bases(&asked, &pending, &rows, &[66]).is_empty());
+        assert!(clean_bases(&asked, &names(&["JG 1"]), &rows, &[]).is_empty());
+    }
+
+    #[test]
+    fn the_selection_read_back_compares_the_wings_in_any_order() {
+        assert!(same_wings(&names(&["b", "a"]), &names(&["a", "b"])));
+        assert!(!same_wings(&names(&["a"]), &names(&["a", "b"])));
+        assert!(!same_wings(&names(&["a", "c"]), &names(&["a", "b"])));
+    }
 
     #[test]
     fn a_region_id_may_come_as_a_number() {

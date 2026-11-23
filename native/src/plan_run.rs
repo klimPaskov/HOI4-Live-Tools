@@ -400,6 +400,8 @@ pub fn arg_built(tool: &str, arg: &str) -> bool {
 pub const BULK_PATHS: &[(&str, &str)] = &[
     ("hoi4_production_set", "production_chords"),
     ("hoi4_production_add", "production_chords"),
+    ("hoi4_air_mission", "air_base_select"),
+    ("hoi4_air_rebase", "air_base_select"),
 ];
 /// The `manage.bulk` name of a tool's bulk path.
 fn bulk_path_of(tool: &str) -> Option<&'static str> {

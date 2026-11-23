@@ -3804,6 +3804,10 @@ pub(super) fn air_plan_step(
         };
         // Before its `when` holds an entry flies nothing and moves nothing, but the planes made
         // for it still become its wings (below) and train in peace (air_idle_step).
+        // the wings of this entry that need its mission over its region, from where they stand:
+        // ONE order for all of them (one air mode, one camera; with manage.bulk air_base_select
+        // one base click for every wing of a base); one wing alone keeps the single order
+        let mut batch: Vec<(String, Option<i64>)> = Vec::new();
         for wing in owned.iter().copied().filter(|_| active[index]) {
             let name = text(&wing["wing"]).to_string();
             if name.is_empty() || state.skipped(now, "airplan", &name) {
@@ -3906,6 +3910,12 @@ pub(super) fn air_plan_step(
                 .as_i64()
                 .map(|n| n.to_string())
                 .or_else(|| entry["fallback_region"].as_str().map(str::to_string));
+            if !refused_here {
+                if batch.len() < AIR_PLAN_BATCH {
+                    batch.push((name, here));
+                }
+                continue;
+            }
             let region_arg = if refused_here {
                 match fallback {
                     Some(f) if &f != region_arg => f,
@@ -3948,6 +3958,14 @@ pub(super) fn air_plan_step(
             return Ok(Some(format!(
                 "air_plan {name} {mission} over region {region_arg}: {ok} {why}"
             )));
+        }
+        if !moved.is_empty() {
+            return Ok(Some(moved.join("; ")));
+        }
+        if let (false, Some(mission), Some(region_arg)) =
+            (batch.is_empty(), mission, region_arg.as_ref())
+        {
+            return air_plan_batch(state, tools, lease, now, &batch, mission, region_arg).map(Some);
         }
         // reserve planes of the entry's airframe become a new wing (W: air.deploy_new_wings)
         let key = item_id(entry).unwrap_or_else(|| index.to_string());
@@ -7741,6 +7759,68 @@ fn balance_once(
     Ok(Some(format!("production balance: {what}: {ok} {why}")))
 }
 
+/// Wings of one air plan entry ordered together (one hoi4_air_mission call).
+const AIR_PLAN_BATCH: usize = 12;
+
+/// One mission order for the wings of an air plan entry (`batch`: wing, its base state): a single
+/// wing keeps the single order; several go in one `wings` call, each judged afterwards by what it
+/// flies now (a batch can be partly taken): a wing that did not take it is handled as a refused
+/// single order (an order held by an open event or a lost selection is tried again soon; any
+/// other refusal marks the region refused from the wing's base).
+fn air_plan_batch(
+    state: &mut State,
+    tools: &dyn Tools,
+    lease: &str,
+    now: GameHour,
+    batch: &[(String, Option<i64>)],
+    mission: &str,
+    region_arg: &str,
+) -> Result<String> {
+    let names: Vec<String> = batch.iter().map(|(n, _)| n.clone()).collect();
+    let args = match names.as_slice() {
+        [one] => json!({"wing": one, "mission": mission, "region": region_arg}),
+        _ => json!({"wings": names, "mission": mission, "region": region_arg}),
+    };
+    let (ok, why) = state.act(tools, lease, "hoi4_air_mission", args, "ap")?;
+    let transient = why.contains("events_open") || why.contains("selection_lost");
+    let flying: HashSet<String> = if ok {
+        names.iter().cloned().collect()
+    } else if names.len() == 1 {
+        HashSet::new()
+    } else {
+        let air = tools.call("hoi4_air", &json!({})).unwrap_or_default();
+        list(&air, "wings")
+            .iter()
+            .filter(|w| {
+                w["standing_by"] != json!(true)
+                    && strings(w, "missions").iter().any(|m| m == mission)
+                    && region_matches(&json!(region_arg), &w["region"])
+            })
+            .map(|w| text(&w["wing"]).to_string())
+            .collect()
+    };
+    for (name, here) in batch {
+        if flying.contains(name) {
+            state.done.remove(&format!("airref:{name}:{region_arg}"));
+        } else if transient {
+            state.skip(now, "airplan", name, DAY / 4);
+        } else {
+            state.skip(now, "airplan", name, DAY);
+            state
+                .done
+                .insert(format!("airref:{name}:{region_arg}"), here.unwrap_or(-1));
+        }
+    }
+    Ok(match names.as_slice() {
+        [one] => format!("air_plan {one} {mission} over region {region_arg}: {ok} {why}"),
+        _ => format!(
+            "air_plan {} wings {mission} over region {region_arg} in one order ({} flying): {ok} {why}",
+            names.len(),
+            flying.len()
+        ),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::{date_hour, extras_step, tick};
@@ -9529,6 +9609,31 @@ mod tests {
              "region": {"id": 38}, "air_base": {"base_id": 4, "state_id": 551}, "missions": ["air_superiority"]}));
         let owners = wing_owners(entries, &[false, true], list(&read, "wings"));
         assert_eq!(owners["JG 4"], 1);
+    }
+
+    #[test]
+    fn the_air_plan_gives_its_wings_their_mission_in_one_order() {
+        // one order per wing cost ~5 s each (g17n: 81 air orders for 90 wings); the wings of an
+        // entry that need its mission now go in one call
+        let wing = |n: &str| {
+            json!({"wing": n, "aircraft_type": "small_plane_airframe_1", "aircraft": 100,
+                   "standing_by": true, "air_base": {"base_id": 9, "state_id": 57},
+                   "missions": []})
+        };
+        let read = json!({"air_bases": [
+            {"base_id": 9, "state_id": 57, "free": 1000, "region": {"id": 5}}],
+            "wings": [wing("JG 1"), wing("JG 2"), wing("JG 3")]});
+        let tools = fake(vec![("hoi4_air", read)]);
+        let plan = json!({"air_plan": [
+            {"airframe": "small_plane_airframe_1", "region": 5, "mission": "air_superiority"}]});
+        let mut state = State::default();
+        let line = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap_or_default();
+        assert!(line.contains("3 wings air_superiority over region 5 in one order"), "{line}");
+        let sent = actions(&tools);
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].1["wings"], json!(["JG 1", "JG 2", "JG 3"]));
     }
 
     #[test]
