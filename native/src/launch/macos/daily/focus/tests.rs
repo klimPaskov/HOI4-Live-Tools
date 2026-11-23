@@ -195,6 +195,10 @@ impl core::Backend for Actor {
     }
 }
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "the daily plan store refuses on Windows until it is verified there"
+)]
 fn successive_queue_keeps_receipts_across_reopen_and_waits_without_poll_writes() {
     let directory = super::super::tests::dir();
     let path = directory.join("daily-plan.json");

@@ -450,7 +450,7 @@ mod tests {
     use std::{
         fs::{self, DirBuilder},
         io::Write,
-        os::unix::fs::{symlink, DirBuilderExt, PermissionsExt},
+        os::unix::fs::{symlink, DirBuilderExt, OpenOptionsExt, PermissionsExt},
         sync::atomic::{AtomicU64, Ordering},
     };
 
