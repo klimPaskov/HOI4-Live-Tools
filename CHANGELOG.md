@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+Decide only (`python -m hoi4_live.play.decide`, opt-in): the executor's lanes judged on a supplied snapshot, in the
+executor's order and with its lane weights, and the actions they would take returned as data instead of input
+(tool, arguments, the plan's reason, minor or heavy, from the state or from the plan alone), with the phase in force,
+items waiting on unreadable predicates, lanes that cannot decide without a missing snapshot block, the speed rule's
+workload (fighting, heavy, minor, idle) and the findings. Nothing attaches to a game or sends input. For planning
+tools, tests and programs that carry decisions out another way.
+
 The agent can learn what no tool defines, a total-conversion mod above all ([guide](docs/LEARNING.md)):
 
 - `hoi4_ui_inspect` reads every open window from the game's interface memory: each widget's stable id (its
