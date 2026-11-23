@@ -32,6 +32,8 @@ struct Game {
     refuse_delete: RefCell<bool>,
     /// what hoi4_states POL lists, when set (victory points per state and their controllers)
     pol_rows: RefCell<Option<Value>>,
+    /// Poland's land touches ours (hoi4_wars borders list it)
+    pol_border: RefCell<bool>,
     calls: RefCell<Vec<(String, Value)>>,
 }
 
@@ -68,6 +70,7 @@ impl Game {
             own: RefCell::new(vec![]),
             refuse_delete: RefCell::new(false),
             pol_rows: RefCell::new(None),
+            pol_border: RefCell::new(true),
             calls: RefCell::new(vec![]),
         }
     }
@@ -106,9 +109,14 @@ impl Tools for Game {
         match name {
             "hoi4_armies" => return Ok(self.roster.borrow().clone()),
             "hoi4_wars" => {
+                let pol = if *self.pol_border.borrow() {
+                    json!([86])
+                } else {
+                    json!([])
+                };
                 return Ok(json!({"wars": {"enemies": *self.enemies.borrow()},
-                    "borders": [{"neighbour_tag": "POL", "neighbour_states": [86]},
-                                {"neighbour_tag": "FRA", "neighbour_states": [28]}]}))
+                    "borders": [{"neighbour_tag": "POL", "neighbour_states": pol},
+                                {"neighbour_tag": "FRA", "neighbour_states": [28]}]}));
             }
             "hoi4_overview" => return Ok(json!({"player": "GER"})),
             "hoi4_states" if text(&args["query"]).parse::<i64>().is_ok() => {
@@ -2398,6 +2406,11 @@ fn an_enemy_left_with_a_remnant_hands_its_units_on_and_the_operation_waits_for_t
             {"province": 1, "victory_points": 99.0, "controller": "GER"}]},
         {"state_id": 300, "controller": "POL", "victory_points": [
             {"province": 2, "victory_points": 1.0, "controller": "POL"}]}]));
+    // a remnant on our border fights on
+    burst(&mut state, &game, &plan, START + 2 * DAY);
+    assert!(!state.done.contains_key(&key("op_pol", "out:POL")));
+    // across the sea: out
+    *game.pol_border.borrow_mut() = false;
     burst(&mut state, &game, &plan, START + 3 * DAY);
     assert!(state.done.contains_key(&key("op_pol", "out:POL")));
     assert!(

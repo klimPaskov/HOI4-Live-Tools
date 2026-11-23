@@ -1565,9 +1565,15 @@ fn one(
         if !fought {
             continue;
         }
+        // a remnant still holding land on our border fights on (w43c1, 23 Nov 2026: the
+        // Netherlands kept 2 of 91 points in Zeeland, the units left for Belgium and Holland
+        // retook 20 points): out only with no state touching ours
+        let touching = list(wars, "borders")
+            .iter()
+            .any(|b| text(&b["neighbour_tag"]) == e && !ints(&b["neighbour_states"]).is_empty());
         if !at_war.contains(e)
             || state.done.contains_key(&ok)
-            || holds(state, tools, &json!(format!("capitulated:{e}")), now)
+            || (!touching && holds(state, tools, &json!(format!("capitulated:{e}")), now))
         {
             state.done.entry(ok).or_insert(now);
             out.push(e.clone());
