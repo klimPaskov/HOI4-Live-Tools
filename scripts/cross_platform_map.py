@@ -1122,10 +1122,17 @@ class Matcher:
         return users, {a} | {s for s, n in self.mac.slot_names.items() if name and n == name}
 
     def elf_data_target(self, t):
-        """An ELF RIP target, seen through a .got slot when the slot holds a local address."""
+        """A target-side RIP target, seen through a GOT slot when the slot holds a local address (ELF .got
+        with a relative relocation; Mach-O __got holding a rebased pointer into a data section), so a
+        global maps to the global itself and not to the slot its users load it through."""
         s = self.elf.section_of(t)
-        if s is not None and s.name == '.got' and t in self.elf.relative:
+        if s is not None and s.name == '.got' and t in getattr(self.elf, 'relative', {}):
             return self.elf.relative[t]
+        if s is not None and s.name == '__got':
+            p = self.elf.ptr(t)
+            ps = self.elf.section_of(p) if p else None
+            if ps is not None and ps.kind in ('data', 'bss') and ps.name != '__got':
+                return p
         return t
 
     def field_jobs(self, cls=None, anchors=(), context=(), via=None, callees=True):
