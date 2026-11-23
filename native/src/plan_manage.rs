@@ -3093,6 +3093,10 @@ fn wing_owners(entries: &[Value], active: &[bool], wings: &[Value]) -> HashMap<S
     owner
 }
 
+/// Rebases the air plan sends in one call at most (a rebase is one quick order; missions and new
+/// wings stay one per call).
+const AIR_REBASE_BATCH: usize = 6;
+
 pub(super) fn air_plan_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -3137,6 +3141,7 @@ pub(super) fn air_plan_step(
     let owners = wing_owners(entries, &active, all_wings);
     let mut flying = 0;
     let mut deploy_notes: Vec<String> = Vec::new();
+    let mut moved: Vec<String> = Vec::new();
     for (index, entry) in entries.iter().enumerate() {
         let owned: Vec<&Value> = all_wings
             .iter()
@@ -3194,9 +3199,15 @@ pub(super) fn air_plan_step(
                 } else if !ok {
                     state.skip(now, "airplan", &name, 7 * DAY);
                 }
-                return Ok(Some(format!(
+                // rebases go out together (one per call kept the Polish wings over Poland for
+                // months: g17o, 23 Nov 2026, 13 air orders from October to mid-December)
+                moved.push(format!(
                     "air_plan {name} rebase to state {base}: {ok} {why}"
-                )));
+                ));
+                if moved.len() >= AIR_REBASE_BATCH {
+                    return Ok(Some(moved.join("; ")));
+                }
+                continue;
             }
             let (Some(mission), Some(region_arg)) = (mission, region_arg.as_ref()) else {
                 continue;
@@ -3205,6 +3216,9 @@ pub(super) fn air_plan_step(
             if region_matches(region, &wing["region"]) && missions.iter().any(|m| m == mission) {
                 flying += 1;
                 continue;
+            }
+            if !moved.is_empty() {
+                return Ok(Some(moved.join("; ")));
             }
             let (ok, why) = state.act(
                 tools,
@@ -3252,6 +3266,9 @@ pub(super) fn air_plan_step(
             ));
             continue;
         };
+        if !moved.is_empty() {
+            return Ok(Some(moved.join("; ")));
+        }
         let (ok, why) = state.act(
             tools,
             lease,
@@ -3265,6 +3282,9 @@ pub(super) fn air_plan_step(
         return Ok(Some(format!(
             "air_plan {key}: new wing of {planes} {aircraft} from reserve at state {base}: {ok} {why}"
         )));
+    }
+    if !moved.is_empty() {
+        return Ok(Some(moved.join("; ")));
     }
     state.skip(now, "mair", "x", 3 * DAY);
     let mut line = format!("{flying} wing(s) on their planned mission");
@@ -8563,6 +8583,28 @@ mod tests {
         assert_eq!(owners["JG 3"], 1);
         let owners = wing_owners(entries, &[false, false], list(&read, "wings"));
         assert!(!owners.contains_key("JG 3"));
+    }
+
+    #[test]
+    fn the_air_plan_rebases_several_wings_in_one_call() {
+        let wing = |n: &str| {
+            json!({"wing": n, "aircraft_type": "small_plane_airframe_1", "aircraft": 100,
+                   "region": {"id": 38}, "air_base": {"base_id": 3, "state_id": 66},
+                   "missions": ["air_superiority"]})
+        };
+        let read = json!({"air_bases": [
+            {"base_id": 3, "state_id": 66, "free": 0, "region": {"id": 38}},
+            {"base_id": 9, "state_id": 57, "free": 1000, "region": {"id": 6}}],
+            "wings": [wing("JG 1"), wing("JG 2"), wing("JG 3")]});
+        let tools = fake(vec![("hoi4_air", read)]);
+        let plan = json!({"air_plan": [
+            {"airframe": "small_plane_airframe_1", "region": 5, "base_region": 6,
+             "mission": "air_superiority"}]});
+        let mut state = State::default();
+        let line = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap_or_default();
+        assert_eq!(line.matches("rebase to state 57").count(), 3, "{line}");
     }
 
     #[test]
