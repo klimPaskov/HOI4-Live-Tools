@@ -2480,6 +2480,10 @@ fn army_groups(r: &Reader<'_>, image: u64) -> Result<BTreeSet<u64>> {
     Ok(out)
 }
 /// The own army or army group named `army` (names must be unique).
+/// The army (or army group) of this name exists among the own formations (a refusal before input).
+pub(super) fn card_exists(process: &dyn Process, army: &str) -> Result<()> {
+    read(process, |r, i| group_named(r, i, army)).map(|_| ())
+}
 fn group_named(r: &Reader<'_>, image: u64, army: &str) -> Result<u64> {
     let mut groups: BTreeSet<u64> = membership(r, image)?
         .into_values()

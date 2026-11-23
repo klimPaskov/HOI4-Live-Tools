@@ -55,6 +55,7 @@ hoi4_special_project_unassign.
 10. Events left open (5 min, speed 2): when a news event opens, `hoi4_event_choose` with the window watched.
 11. Saves (10 min, speed 2): ten `hoi4_save` calls a game day apart while events arrive; first-try successes and
     each failure's code.
+    DONE v65h (23 Nov 2026): 10/10 paused and 10/10 running at speed 1, every other try from the naval map mode, all first try, 3.2-8.7 s. Causes fixed: every call (reads included) closed a shown game menu at the end of its pause bracket, so the resident watcher shut the menu the save had opened; a hover sent a zero wheel event.
 12. Focus (10 min): executor on with only the focus lane for a game week; when a start is not applied, read
     `hoi4_focus_available` for it and look at the tree.
 
