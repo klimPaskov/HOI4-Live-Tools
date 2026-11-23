@@ -38,6 +38,8 @@ struct Game {
     commanders: RefCell<Value>,
     /// what hoi4_supply answers, when set (provinces and divisions)
     supply: RefCell<Option<Value>>,
+    /// what hoi4_province_graph answers, when set
+    graph: RefCell<Option<Value>>,
     calls: RefCell<Vec<(String, Value)>>,
 }
 
@@ -77,6 +79,7 @@ impl Game {
             pol_border: RefCell::new(true),
             commanders: RefCell::new(json!({})),
             supply: RefCell::new(None),
+            graph: RefCell::new(None),
             calls: RefCell::new(vec![]),
         }
     }
@@ -243,6 +246,9 @@ impl Tools for Game {
                         }
                     }
                 })
+            }
+            "hoi4_province_graph" if self.graph.borrow().is_some() => {
+                return Ok(self.graph.borrow().clone().unwrap());
             }
             "hoi4_supply" if self.supply.borrow().is_some() => {
                 return Ok(self.supply.borrow().clone().unwrap());
@@ -2643,9 +2649,10 @@ fn ids(prefix: &str, n: usize) -> Vec<String> {
 #[test]
 fn a_province_carries_what_its_supply_feeds_and_never_more_than_the_battle_width() {
     // w43n1 (1 July 1940): 28 divisions draw 33.0 where province 9444 gives 3.4
-    assert_eq!(stack_carry(28, 3.4, 33.0, STACK_MAX), 2);
+    // (fed at half supply: 28 x 3.4 / 16.5)
+    assert_eq!(stack_carry(28, 3.4, 33.0, STACK_MAX), 5);
     // fed in full but a battle takes no more than STACK_MAX
-    assert_eq!(stack_carry(12, 30.0, 12.0, STACK_MAX), 8);
+    assert_eq!(stack_carry(12, 30.0, 12.0, STACK_MAX), STACK_MAX);
     // starving: still one
     assert_eq!(stack_carry(3, 0.0, 9.0, STACK_MAX), 1);
     let a = ids("a", 12);
@@ -2674,13 +2681,14 @@ fn a_province_carries_what_its_supply_feeds_and_never_more_than_the_battle_width
     ]);
     let line: HashSet<String> = ["Mitte".to_string(), "Sued".to_string()].into();
     let seen = stack_read(&read, &line, &line, STACK_MAX);
-    // 9444 carries 4 of 12: 8 over; 6500 carries 8 (fed for 9, width 8) and holds 3: room 5
-    assert_eq!(seen.total, 8);
-    assert_eq!(seen.room, 5);
-    assert_eq!(seen.top, (12, 9444, 4));
+    // 9444 starves (a third of its need) and carries 8 of 12 at half supply: 4 over; 6500
+    // carries 11 (the width) and holds 3: room 8
+    assert_eq!(seen.total, 4);
+    assert_eq!(seen.room, 8);
+    assert_eq!(seen.top, (12, 9444, 8));
     assert_eq!(seen.surplus.len(), 1);
     assert_eq!(seen.surplus[0].0, "Mitte");
-    assert_eq!(seen.surplus[0].1.len(), 8);
+    assert_eq!(seen.surplus[0].1.len(), 4);
     assert_eq!(
         &seen.surplus[0].1[..2],
         &["a00".to_string(), "a01".to_string()]
@@ -2735,7 +2743,8 @@ fn an_overstacked_line_forms_a_second_echelon_on_an_empty_border_state_and_feeds
     )
     .unwrap();
     assert!(first.is_none(), "{first:?}");
-    // second read half a day later: 16 over the carry, half the army (10) at once, most worn first
+    // second read half a day later: over the carry at half supply, half the stack at most, a
+    // third of the army (6) at once, most worn first
     let line = stacking(
         &mut state,
         &game,
@@ -2757,7 +2766,7 @@ fn an_overstacked_line_forms_a_second_echelon_on_an_empty_border_state_and_feeds
         .find(|(n, _)| n == "hoi4_army_detach")
         .unwrap();
     let moved = strings(&det.1, "divisions");
-    assert_eq!(moved.len(), 10);
+    assert_eq!(moved.len(), 6);
     assert_eq!(moved[0], "a05");
     assert_eq!(
         state.layout.get("echelon:op_low:Mitte").map(String::as_str),
@@ -2769,9 +2778,10 @@ fn an_overstacked_line_forms_a_second_echelon_on_an_empty_border_state_and_feeds
     assert!(owned_names(&state, &full_plan, &op, &roster).contains(&"Army 9".to_string()));
     // it takes a real order: an area defence of the border state no division holds
     game.unit("Army 9", |r| {
-        r["division_count"] = json!(16);
-        r["states"] = json!({"980": 16});
+        r["division_count"] = json!(6);
+        r["states"] = json!({"980": 6});
     });
+    game.unit("Mitte", |r| r["division_count"] = json!(14));
     let roster = game.roster.borrow().clone();
     let line = stacking(
         &mut state,
@@ -2928,18 +2938,182 @@ fn only_infantry_of_the_line_goes_back_never_the_armour() {
     let line: HashSet<String> = ["Mitte".to_string(), "Panzer".to_string()].into();
     let pick: HashSet<String> = ["Mitte".to_string()].into();
     let seen = stack_read(&read, &line, &pick, STACK_MAX);
-    // 6 divisions, carry 1: 5 over, but only the four Mitte divisions may go, most worn first
-    assert_eq!(seen.total, 4);
+    // 6 divisions starving, carry 2: 4 over, half the stack (3) at most, Mitte's most worn first
+    assert_eq!(seen.total, 3);
     assert_eq!(
         seen.surplus,
         vec![(
             "Mitte".to_string(),
-            vec![
-                "m1".to_string(),
-                "m2".to_string(),
-                "m3".to_string(),
-                "m4".to_string()
-            ]
+            vec!["m1".to_string(), "m2".to_string(), "m3".to_string()]
         )]
     );
+}
+
+/// Luxembourg as the province graph reads it (w46d1, live): two forest provinces; from Moselland
+/// 42 one border over the Sauer (small river) and one dry, from the Belgian Ardennes 980 dry.
+fn lux_graph() -> Value {
+    json!({"provinces": [
+        {"province": 6583, "state_id": 8, "terrain": "forest", "attack_modifier": -0.15,
+         "forts_in_history": [],
+         "borders": [{"province": 9418, "river": null, "river_share": 0.0},
+                     {"province": 9575, "river": "small", "river_share": 1.0, "river_attack_penalty": -0.3},
+                     {"province": 11435, "river": null, "river_share": 0.0}]},
+        {"province": 11435, "state_id": 42, "terrain": "hills", "attack_modifier": -0.25, "borders": []},
+        {"province": 9575, "state_id": 42, "terrain": "hills", "attack_modifier": -0.25, "borders": []},
+        {"province": 9418, "state_id": 980, "terrain": "forest", "attack_modifier": -0.15, "borders": []}]})
+}
+
+#[test]
+fn a_crossing_counts_the_river_the_ground_and_the_forts() {
+    let ways = crossings(&lux_graph(), &[8], &[42]);
+    assert_eq!(ways.len(), 2);
+    let over = ways.iter().find(|w| w.1 == 9575).unwrap();
+    assert!((over.2 - -0.45).abs() < 1e-9, "{over:?}");
+    let dry = ways.iter().find(|w| w.1 == 11435).unwrap();
+    assert!((dry.2 - -0.15).abs() < 1e-9, "{dry:?}");
+    assert!(over.3.contains("small river"), "{over:?}");
+    let fort =
+        json!({"attack_modifier": 0.0, "forts_in_history": [{"building": "bunker", "level": 2}]});
+    assert!((crossing_penalty(&fort, &json!({})) - -0.3).abs() < 1e-9);
+}
+
+#[test]
+fn a_weak_wing_holds_against_the_divisions_standing_there_and_attacks_once_strong_enough() {
+    let game = Game::new();
+    *game.graph.borrow_mut() = Some(lux_graph());
+    game.unit("Nord", |r| r["division_count"] = json!(7));
+    let roster = game.roster.borrow().clone();
+    let plan = json!({"war": {"me": "GER"}});
+    let op = json!({"id": "op_lux", "enemies": ["LUX"]});
+    let mut u = unit("Nord".into(), Role::Wing, &Value::Null, &Value::Null);
+    u.enemy = "LUX".into();
+    u.line = vec![8];
+    // four French divisions stand in Luxembourg: 7 is under two for each
+    let wars = json!({"wars": {"enemies": ["LUX", "FRA"]}, "borders": [
+        {"neighbour_tag": "LUX", "neighbour_states": [8], "own_border_states": [42],
+         "neighbour_divisions_in_border_states": 1, "hostile_divisions_in_border_states": 4}]});
+    let mut state = State::default();
+    assert!(assault_guarded(
+        &mut state, &game, &plan, "op_lux", &op, &u, &roster, &wars, START
+    ));
+    let note = state.op_notes["op_lux:guard:Nord"].clone();
+    assert!(
+        note.contains("too weak") && note.contains("4 enemy division(s)"),
+        "{note}"
+    );
+    // read once a game day
+    assert!(assault_guarded(
+        &mut state,
+        &game,
+        &plan,
+        "op_lux",
+        &op,
+        &u,
+        &roster,
+        &wars,
+        START + 1
+    ));
+    // the French left: one division, a dry way in: it attacks
+    let wars = json!({"wars": {"enemies": ["LUX"]}, "borders": [
+        {"neighbour_tag": "LUX", "neighbour_states": [8], "own_border_states": [42],
+         "neighbour_divisions_in_border_states": 1, "hostile_divisions_in_border_states": 1}]});
+    assert!(!assault_guarded(
+        &mut state,
+        &game,
+        &plan,
+        "op_lux",
+        &op,
+        &u,
+        &roster,
+        &wars,
+        START + DAY
+    ));
+    // armour is never held
+    let mut panzer = u.clone();
+    panzer.spear = true;
+    assert!(!assault_guarded(
+        &mut state,
+        &game,
+        &plan,
+        "op_lux",
+        &op,
+        &panzer,
+        &roster,
+        &wars,
+        START + 2 * DAY
+    ));
+}
+
+#[test]
+fn a_reserve_released_at_war_goes_forward_in_parts_into_the_line_army_with_room() {
+    // w46c1: Armee Süd (20) was released while the war ran and stood at its station all war
+    let game = Game::new();
+    for (name, n) in [("Mitte", 14), ("Sued", 20)] {
+        game.unit(name, |r| {
+            r["division_count"] = json!(n);
+            r["plan"] = json!([]);
+        });
+    }
+    game.unit("Sued", |r| r["army_group"] = Value::Null);
+    let s_ids = ids("s", 20);
+    let mut rows: Vec<SupplyRow<'_>> = (0..7)
+        .map(|i| {
+            (
+                100 + i as i64,
+                35,
+                20.0,
+                1.0,
+                vec![(["m0", "m1", "m2", "m3", "m4", "m5", "m6"][i], "Mitte", 50.0)],
+            )
+        })
+        .collect();
+    rows.push((
+        900,
+        55,
+        50.0,
+        20.0,
+        s_ids.iter().map(|d| (d.as_str(), "Sued", 60.0)).collect(),
+    ));
+    *game.supply.borrow_mut() = Some(supply_read(&rows));
+    let op = json!({"id": "op_low", "enemies": ["HOL"], "reserve_orders": true,
+        "reserve": [{"army": "Sued", "station": 55, "to": "operation"}]});
+    let mut grp = unit(
+        "Army Group 1".into(),
+        Role::Group,
+        &Value::Null,
+        &Value::Null,
+    );
+    grp.members = vec!["Mitte".into()];
+    let units = vec![grp];
+    let mut state = State::default();
+    state.done.insert(key("op_low", "exec"), START - DAY);
+    state.done.insert(key("op_low", "rel:Sued"), START - DAY);
+    let roster = game.roster.borrow().clone();
+    let wars = json!({"wars": {"enemies": ["HOL"]}, "borders": []});
+    let line = stacking(
+        &mut state,
+        &game,
+        &json!({"war": {"me": "GER"}}),
+        "op_low",
+        &op,
+        &units,
+        &roster,
+        &wars,
+        "l",
+        START,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(
+        line.contains("echelon Sued fed forward into Mitte"),
+        "{line}"
+    );
+    // Mitte takes 10 more (to 24): ten of Sued's divisions, never a merge of all 20
+    let det = game
+        .orders()
+        .into_iter()
+        .find(|(n, a)| n == "hoi4_army_detach" && a["into"] == json!("Mitte"))
+        .unwrap();
+    assert_eq!(strings(&det.1, "divisions").len(), 10);
+    assert!(!game.orders().iter().any(|(n, _)| n == "hoi4_army_merge"));
 }

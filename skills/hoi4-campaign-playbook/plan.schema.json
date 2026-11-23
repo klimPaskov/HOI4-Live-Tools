@@ -2666,7 +2666,7 @@
             "description": "game days without a province gained on the current line before the next line is drawn (default 7)"
           },
           "stacking": {
-            "description": "default on; false (or {enabled: false}) turns it off. Once the attack executes, no province holds more of the operation's line, wing and group divisions than its supply feeds and a battle's width takes (max_per_province, default 8); a surplus of at least min_surplus (3) seen in two supply reads goes, most worn standing infantry first and at most half an army at once, into one second echelon army per line army with an area defence of its station (an empty state of the enemy border, else the nearest state behind the line; station overrides); it is fed forward when the line has room or its army is worn, and rejoins its army when the operation ends",
+            "description": "default on; false (or {enabled: false}) turns it off. Once the attack executes, no province holds more of the operation's line, wing and group divisions than its supply feeds and a battle's width takes (max_per_province, default 11); a starving province (supply below 35%) seen in two supply reads is thinned to what feeds its divisions at 50% supply (at most half of them), most worn infantry first and at most a third of an army at once, into one second echelon army per line army with an area defence of its station (an empty state of the enemy border, else the nearest state behind the line; station overrides); it is fed forward when the line has room or its army is worn, and rejoins its army when the operation ends",
             "type": [
               "boolean",
               "object"

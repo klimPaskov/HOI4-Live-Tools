@@ -623,10 +623,24 @@ fn analyse(input: &Input<'_>) -> Value {
             }),
             Err(_) => Value::Null,
         };
+        // every enemy's divisions there (an ally's army standing in the neighbour's land: the
+        // French in Luxembourg or Belgium)
+        let hostile_held: Value = match &input.foreign {
+            Ok(f) => json!(f
+                .values()
+                .map(|per| b
+                    .theirs
+                    .iter()
+                    .map(|id| per.get(id).copied().unwrap_or(0))
+                    .sum::<usize>())
+                .sum::<usize>()),
+            Err(_) => Value::Null,
+        };
         border_rows.push((
             bad,
             json!({"neighbour_tag":tag,"hostile":bad,
                 "neighbour_divisions_in_border_states":theirs_held,
+                "hostile_divisions_in_border_states":hostile_held,
                 "hostile_basis":hostile.get(*tag).cloned().unwrap_or_default(),
                 "own_border_states":own,
                 "neighbour_states":b.theirs.iter().collect::<Vec<_>>(),
@@ -1112,8 +1126,11 @@ mod tests {
         let war = BTreeSet::from(["POL".to_string()]);
         let wars = json!({"at_war":true,"count":1});
         // two Polish divisions in the border state 2, one deep inside Poland (state 9)
-        let foreign: BTreeMap<String, BTreeMap<i32, usize>> =
-            BTreeMap::from([("POL".to_string(), BTreeMap::from([(2, 2), (9, 1)]))]);
+        let foreign: BTreeMap<String, BTreeMap<i32, usize>> = BTreeMap::from([
+            ("POL".to_string(), BTreeMap::from([(2, 2), (9, 1)])),
+            // an ally's three divisions standing in the Polish border state
+            ("FRA".to_string(), BTreeMap::from([(2, 3)])),
+        ]);
         let v = analyse(&Input {
             player: "GER",
             states: &states,
@@ -1129,6 +1146,7 @@ mod tests {
         });
         assert_eq!(v["enemies_source"], "war_relations");
         assert_eq!(v["borders"][0]["neighbour_divisions_in_border_states"], 2);
+        assert_eq!(v["borders"][0]["hostile_divisions_in_border_states"], 5);
         assert_eq!(v["wars"]["count"], 1);
         assert_eq!(v["borders"][0]["hostile"], true);
         assert_eq!(v["borders"][0]["hostile_basis"][0], "war_relation");

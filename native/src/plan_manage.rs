@@ -3120,6 +3120,26 @@ fn wing_owners(entries: &[Value], active: &[bool], wings: &[Value]) -> HashMap<S
             owner.insert(name.to_string(), i);
         }
     }
+    // a wing no entry claims (its own entry is over, or it flies an older model than the active
+    // entries name) joins an active entry of its airframe: no wing stays on a finished war's
+    // region (w46c1, 23 Nov 2026: 800 planes over Western Poland for the whole western war after
+    // the Polish entries had ended)
+    for w in wings {
+        let name = text(&w["wing"]);
+        if name.is_empty() || owner.contains_key(name) {
+            continue;
+        }
+        let airframe_only = |e: &Value| {
+            e["wing"].as_str().is_none_or(str::is_empty)
+                && e["airframe"]
+                    .as_str()
+                    .filter(|a| !a.is_empty())
+                    .is_some_and(|a| text(&w["aircraft_type"]).starts_with(a))
+        };
+        if let Some(i) = (0..entries.len()).find(|i| active[*i] && airframe_only(&entries[*i])) {
+            owner.insert(name.to_string(), i);
+        }
+    }
     owner
 }
 
@@ -8676,6 +8696,12 @@ mod tests {
         assert_eq!(owners["JG 3"], 1);
         let owners = wing_owners(entries, &[false, false], list(&read, "wings"));
         assert!(!owners.contains_key("JG 3"));
+        // an older model no active entry names (its own entry is over) joins one of its airframe
+        read["wings"].as_array_mut().unwrap().push(json!(
+            {"wing": "JG 4", "aircraft_type": "small_plane_airframe_1", "variant": "Bf 109 B", "aircraft": 100,
+             "region": {"id": 38}, "air_base": {"base_id": 4, "state_id": 551}, "missions": ["air_superiority"]}));
+        let owners = wing_owners(entries, &[false, true], list(&read, "wings"));
+        assert_eq!(owners["JG 4"], 1);
     }
 
     #[test]
