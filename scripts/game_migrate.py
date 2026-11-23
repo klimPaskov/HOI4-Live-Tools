@@ -17,6 +17,9 @@ usage:
       the object register), then run the static check. Writes <system>-<build id>.json (the table, with a
       confidence per entry) and <system>-<build id>.coverage.json (evidence, unresolved keys with reasons,
       modules). Same-system targets (a new macOS build) match far better than cross-system ones.
+      --previous TABLE (the same system's table for the build before, with its .coverage.json) carries its
+      field values forward into classes whose mapped fields did not move between the two builds
+      (confidence "carried"), and its live-measured entries over static votes in such classes.
   game_migrate.py check TABLE NEW_EXE [--canonical MACHO] [--src native/src]
       static self-check of a table against its executable (sections, vtables, code, field order)
   game_migrate.py modules TABLE [--src native/src]
@@ -58,7 +61,7 @@ gen = _load('gen_linux_layout', 'gen_linux_layout.py')
 
 # The build whose values are the layout keys (native/src/platform/macos.rs BUILD_UUID).
 CANONICAL = 'DFA875A5-25BA-35E0-9736-627F8A5C4396'
-CONFIDENCE_RANK = {'high': 3, 'medium': 2, 'filled': 1, 'low': 0, 'live': 4}
+CONFIDENCE_RANK = {'high': 3, 'medium': 2, 'carried': 2, 'filled': 1, 'low': 0, 'live': 4}
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +222,60 @@ def confidence(table, report):
     return out
 
 
+def carry_forward(table, conf, prev, prev_live=(), keys=None):
+    """Carry the previous build's field values into the new table, class by class, where the evidence says
+    the class did not change: every field both tables map (live-measured previous entries aside) has the same
+    value, and at least two do. Then a previous live entry replaces the new static vote, and a field the new
+    run left unmapped takes the previous value (confidence "carried"). With `keys`, only needed fields are
+    carried. Returns {class: {"agree": n, "carried": [...], "live": [...]}} for the classes carried."""
+    live = set(prev_live)
+    need = None
+    if keys is not None:
+        need = {(c, o) for c, d in keys['classes'].items() for o in d['offsets']}
+    out = {}
+    for cls, old in sorted(prev.get('fields', {}).items()):
+        new = table.get('fields', {}).get(cls, {})
+        shared = [k for k in old if k in new and f'{cls}+{k}' not in live]
+        if len(shared) < 2 or any(old[k] != new[k] for k in shared):
+            continue
+        row = dict(agree=len(shared), carried=[], live=[])
+        for k, v in sorted(old.items()):
+            if need is not None and (cls, k) not in need:
+                continue
+            if f'{cls}+{k}' in live:
+                if new.get(k) != v:
+                    row['live'].append(k)
+                new[k] = v
+                conf['fields'].setdefault(cls, {})[k] = 'live'
+            elif k not in new:
+                new[k] = v
+                conf['fields'].setdefault(cls, {})[k] = 'carried'
+                row['carried'].append(k)
+        if row['carried'] or row['live']:
+            table.setdefault('fields', {})[cls] = new
+            out[cls] = row
+    return out
+
+
+def prune_extras(table, conf, keys):
+    """Drop field entries no tool reads (extra displacements the matcher saw) where they break member order
+    with an entry a tool does read: a live-corrected key and a wrong static extra cannot both stand, and the
+    key is the one with evidence. Returns ["Class+0x..", ...] removed."""
+    need = {(c, o) for c, d in keys['classes'].items() for o in d['offsets']}
+    removed = []
+    for cls, m in table.get('fields', {}).items():
+        kept = [(int(k, 16), int(v, 16)) for k, v in m.items() if (cls, k) in need]
+        for k, v in list(m.items()):
+            if (cls, k) in need:
+                continue
+            x, y = int(k, 16), int(v, 16)
+            if any((a < x and b >= y) or (a > x and b <= y) or a == x for a, b in kept):
+                del m[k]
+                conf.get('fields', {}).get(cls, {}).pop(k, None)
+                removed.append(f'{cls}+{k}')
+    return sorted(removed)
+
+
 def modules(table, keys):
     """Per source file: how many of its keys the table maps; a module is enabled when all are."""
     need = collections.defaultdict(lambda: [set(), set()])
@@ -261,7 +318,8 @@ def score(table, truth):
 # migrate
 # ---------------------------------------------------------------------------
 
-def migrate(new_exe, canonical, src, hints=None, live=None, out_dir='native/layouts', cache=None, log=print):
+def migrate(new_exe, canonical, src, hints=None, live=None, out_dir='native/layouts', cache=None, log=print,
+            previous=None):
     ident = identify(new_exe)
     if ident['format'] == 'pe':
         raise SystemExit('PE executables are identified but not mapped yet: the matcher reads Mach-O and ELF '
@@ -273,11 +331,23 @@ def migrate(new_exe, canonical, src, hints=None, live=None, out_dir='native/layo
         report['live'] = gen.apply_live(table, live)
     table.update(system=ident['system'], sha256=ident['sha256'], game_version=ident['game_version'])
     table['confidence'] = confidence(table, report)
+    keys = gen.keys_document(gen.scan(src))
+    if previous:
+        prev = json.loads(pathlib.Path(previous).read_text())
+        if prev.get('system', ident['system']) != ident['system']:
+            raise SystemExit(f'{previous} is a {prev.get("system")} table, the executable is {ident["system"]}')
+        rp = pathlib.Path(re.sub(r'\.json$', '', str(previous)) + '.coverage.json')
+        prev_live = [c[0] for c in json.loads(rp.read_text()).get('live', [])] if rp.exists() else []
+        report['carried'] = dict(previous=pathlib.Path(previous).name,
+                                 classes=carry_forward(table, table['confidence'], prev, prev_live, keys))
+        need = {(c, o) for c, d in keys['classes'].items() for o in d['offsets']}
+        report['summary']['field_keys_mapped_with_previous'] = sum(
+            1 for c, o in need if o in table.get('fields', {}).get(c, {}))
+    report['pruned_extras'] = prune_extras(table, table['confidence'], keys)
     new = xmap.load_image(new_exe)
     problems, counts = static_check(table, report, new, xmap.load_image(canonical))
-    keys = gen.keys_document(gen.scan(src))
     mods = modules(table, keys)
-    report.update(target=ident, static_check=dict(problems=problems, checked=dict(counts),
+    report.update(target=dict(ident, file=os.path.basename(ident['file'])), static_check=dict(problems=problems, checked=dict(counts),
                                                  passed=not problems), modules=mods)
     report['summary']['modules_enabled'] = sum(1 for m in mods.values() if m['enabled'])
     report['summary']['modules'] = len(mods)
@@ -339,6 +409,7 @@ def main(argv=None):
     s.add_argument('--src', default='native/src')
     s.add_argument('--hints', default=str(HERE / 'data' / 'xlayout-hints-1.19.4.1.json'))
     s.add_argument('--live')
+    s.add_argument('--previous', help='the same system\'s table for the previous build (carry unchanged classes)')
     s.add_argument('--out-dir', default='native/layouts')
     s.add_argument('--cache', default=os.environ.get('XMAP_CACHE', str(pathlib.Path.home() / '.cache' / 'hoi4-xmap')))
     s = sub.add_parser('check')
@@ -364,7 +435,7 @@ def main(argv=None):
         hints = json.loads(pathlib.Path(a.hints).read_text()) if a.hints else None
         live = json.loads(pathlib.Path(a.live).read_text()) if a.live else None
         out, rep, report = migrate(a.new, a.canonical, a.src, hints, live, a.out_dir, a.cache,
-                                   log=lambda m: print(m, file=sys.stderr))
+                                   log=lambda m: print(m, file=sys.stderr), previous=a.previous)
         print(json.dumps(dict(table=str(out), report=str(rep), summary=report['summary'],
                               static_check=dict(passed=report['static_check']['passed'],
                                                 problems=report['static_check']['problems'][:20])), indent=1))

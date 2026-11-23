@@ -11,6 +11,7 @@ reading the game compare.
 | macOS | 1.19.4.1 (checksum f584) | Mach-O UUID `DFA875A5-25BA-35E0-9736-627F8A5C4396` | supported (the canonical build) | any version, limited |
 | Linux | 1.19.4.1 | GNU build ID `2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082` | supported (generated table) | not available |
 | Windows | any | | not yet (see [Windows](#windows)) | supported, last run on 1.19.4.2 |
+| Linux | 1.20.0.0 (checksum 0c4f) | GNU build ID `71806afa707a46fb72f0738a719c3f1c3f5e2e42` | table generated, not yet proven live or used by the runtime | not available |
 
 `hoi4-live-native --supported-builds` prints the same list as JSON.
 
@@ -64,7 +65,10 @@ Everything below reads the game files as data; nothing runs the game until the l
    `python3 scripts/layout_selfcheck.py SAVE TAG MEMORY.json`. A module that disagrees with the save
    stays disabled. Then the live validation queue (`docs/LIVE_VALIDATION_QUEUE.md`) is the regression
    suite for the tools.
-5. Unresolved keys get an owner hint (`scripts/data/xlayout-hints-*.json`) or a live entry with its
+5. With the same system's table for the previous build, `--previous TABLE` carries its values into
+   classes whose mapped fields did not move, and its live-measured entries with them (confidence
+   `carried` or `live`).
+6. Unresolved keys get an owner hint (`scripts/data/xlayout-hints-*.json`) or a live entry with its
    evidence, and the table is regenerated.
 
 `game_migrate.py refcheck` repeats the static check for every committed table whose executable is in
@@ -88,8 +92,21 @@ vtable or owner hint; per source file, 8 of 53 have every key. A tool whose key 
 that read (`layout_unmapped`); it never guesses. The hand migration of the same update took about
 two working days plus live sessions.
 
+The pipeline then ran on HOI4 1.20.0.0 (the "To The Bitter End" update) for Linux, from the
+macOS 1.19.4.1 keys, with the Linux 1.19.4.1 table as the previous build (`--previous`):
+
+| | Mapped | Notes |
+|---|---|---|
+| Image addresses | 212 of 216 (208 high, 4 medium) | every one moved (180 of 180 comparable entries), by about 0x7000 to 0x8000 |
+| Field offsets | 389 of 617 from the matcher alone; 476 of 617 with the previous build's values carried into 47 classes whose mapped fields did not move | of 2,827 field entries both builds map, 2,821 are identical; 5 of the 6 others are the previous table's live corrections |
+
+So 1.20 moved the code and data, not the structures. The remaining keys are the ones the 1.19.4.1
+table had from live measurement or owner hints for classes without a vtable. The static check also
+found five static entries in the 1.19.4.1 Linux table that contradict its own live corrections
+(unused by any tool); `migrate` now drops such entries.
+
 A patch release (for example 1.19.4.1 to 1.19.4.2) moves every image address but usually few struct
-members, so more of its fields map than in this minor-version case.
+members, as 1.20 shows.
 
 ## Planned: unknown builds on a user's machine
 

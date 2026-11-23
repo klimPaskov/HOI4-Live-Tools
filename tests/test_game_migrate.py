@@ -200,5 +200,42 @@ class RefCheck(unittest.TestCase):
         self.assertNotIn('linux-abc.coverage.json', res)
 
 
+class CarryForward(unittest.TestCase):
+    def test_only_unchanged_classes_carry_and_live_entries_win(self):
+        prev = {'fields': {
+            'Same': {'0x10': '0x18', '0x20': '0x28', '0x30': '0x40', '0x40': '0x50'},
+            'Moved': {'0x10': '0x18', '0x20': '0x28', '0x30': '0x38'},
+            'Thin': {'0x10': '0x18', '0x30': '0x38'}}}
+        table = {'fields': {'Same': {'0x10': '0x18', '0x20': '0x28', '0x30': '0x38'},
+                            'Moved': {'0x10': '0x20', '0x20': '0x30'},
+                            'Thin': {'0x10': '0x18'}}}
+        conf = {'fields': {}}
+        got = gm.carry_forward(table, conf, prev, prev_live=['Same+0x30'])
+        self.assertEqual(sorted(got), ['Same'])
+        self.assertEqual(got['Same'], {'agree': 2, 'carried': ['0x40'], 'live': ['0x30']})
+        self.assertEqual(table['fields']['Same'], {'0x10': '0x18', '0x20': '0x28', '0x30': '0x40', '0x40': '0x50'})
+        self.assertEqual(conf['fields']['Same'], {'0x30': 'live', '0x40': 'carried'})
+        self.assertNotIn('0x30', table['fields']['Moved'])
+        self.assertNotIn('0x30', table['fields']['Thin'])
+
+    def test_keys_limit_carrying_to_needed_fields(self):
+        prev = {'fields': {'C': {'0x10': '0x10', '0x20': '0x20', '0x30': '0x30', '0x40': '0x40'}}}
+        table = {'fields': {'C': {'0x10': '0x10', '0x20': '0x20'}}}
+        keys = {'classes': {'C': {'offsets': ['0x30']}}}
+        got = gm.carry_forward(table, {'fields': {}}, prev, keys=keys)
+        self.assertEqual(got['C']['carried'], ['0x30'])
+        self.assertNotIn('0x40', table['fields']['C'])
+
+
+class PruneExtras(unittest.TestCase):
+    def test_an_extra_entry_that_contradicts_a_read_key_is_dropped(self):
+        table = {'fields': {'CDecision': {'0x108': '0x118', '0x118': '0x118', '0x200': '0x210'}}}
+        conf = {'fields': {'CDecision': {'0x108': 'live', '0x118': 'high', '0x200': 'high'}}}
+        keys = {'classes': {'CDecision': {'offsets': ['0x108']}}}
+        self.assertEqual(gm.prune_extras(table, conf, keys), ['CDecision+0x118'])
+        self.assertEqual(table['fields']['CDecision'], {'0x108': '0x118', '0x200': '0x210'})
+        self.assertNotIn('0x118', conf['fields']['CDecision'])
+
+
 if __name__ == '__main__':
     unittest.main()
