@@ -70,7 +70,7 @@ class Monitor:
             rec = self.esc.consider(event, issue, self.det.date, self.det.at_war)
             if rec:
                 self.det._emit("escalated", issue, tier=1, why=rec.get("why"))
-        if event in ("resolved", "recurred", "overdue"):
+        if event in ("resolved", "recurred", "overdue", "repeated"):
             le = lessons_from_issue(self.lessons, issue, event, self.name, self.plan_name, self.country)
             if le:
                 self.lesson_events += 1
@@ -133,8 +133,25 @@ class Monitor:
         if kind:
             self.gate(kind, snap)
 
+    def _outcomes(self):
+        """New lines of RUN/issue_outcomes.jsonl (the executor's typed answers to offered issues)."""
+        path = os.path.join(self.run, "issue_outcomes.jsonl")
+        try:
+            with open(path, encoding="utf-8") as f:
+                f.seek(getattr(self, "outcome_pos", 0))
+                lines = f.readlines()
+                self.outcome_pos = f.tell()
+        except OSError:
+            return
+        for line in lines:
+            try:
+                self.det.outcome(json.loads(line))
+            except ValueError:
+                continue
+
     def poll(self):
         t0 = time.perf_counter()
+        self._outcomes()
         polled = self.logs.poll()
         for r in polled["rss"]:
             self.det.rss(r)
@@ -157,6 +174,7 @@ class Monitor:
         for i in range(0, len(rows), 200):
             self.feed(rows[i:i + 200])
             self.det.flush()
+        self._outcomes()
         for r in polled["rss"]:
             self.det.rss(r)
         self.det.flush()

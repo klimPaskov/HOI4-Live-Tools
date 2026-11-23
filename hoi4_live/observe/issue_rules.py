@@ -71,6 +71,55 @@ RULES = {
     "outdated_equipment_in_production": ("idling", "designs", 30, 60,
                                          "old equipment produced while a newer design exists"),
     "missing_equipment_production": ("idling", "production", 14, 30, "equipment the army needs has no line"),
+    # --- sinks and slots (sinks.py and the server's derived omission rows; engineer 66) --------
+    "experience_unspent": ("idling", "officer_corps", 14, 30,
+                           "experience buys nothing until spent and every day at the pool's cap (defines "
+                           "MAX_*_EXPERIENCE) is lost; two weeks at war cover saving for a costlier named spend"),
+    "doctrine_track_complete": ("idling", "extras", 30, 60,
+                                "a track past its last reward reserves only a quarter of its mastery up to a "
+                                "cap; a month is long enough to choose its next subdoctrine"),
+    "doctrine_track_no_mastery": ("gameplay", "extras", 60, 90,
+                                  "a subdoctrine whose arm never fights gives nothing; two months show the arm "
+                                  "is not coming"),
+    "manpower_idle": ("gameplay", "training", 30, 60,
+                      "men no row trains add nothing; a month covers a training row's wait for its stock"),
+    "manpower_surplus": ("gameplay", "training", 30, 60,
+                         "men no row trains add nothing; a month covers a training row's wait for its stock"),
+    "fleet_training_at_war": ("idling", "navy", 3, 3,
+                              "at war a task force on exercise raids, patrols and escorts nothing; ordering "
+                              "the war mission is one call once its region is held"),
+    "reserve_fleet_ships": ("idling", "navy", 14, 30,
+                            "ships in a reserve fleet have no admiral and no mission"),
+    "operatives_home_only": ("idling", "intelligence", 30, 60,
+                             "operatives at home build no network abroad; a month covers a network's start"),
+    "decryption_unread": ("technical", "intelligence", 30, 30,
+                          "cipher progress per enemy is not read: decryption cannot be judged"),
+    "decryption_idle": ("idling", "intelligence", 7, 30,
+                        "at war a cipher left unbroken gives the enemy its full intelligence"),
+    "mio_state_unread": ("technical", "mio_traits", 7, 7,
+                         "MIO orders that cannot be read back are re-sent blind; the read is the cause"),
+    "special_project_kind_without_facility": ("gameplay", "extras", 90, 90,
+                                              "a project kind with no facility is a plan judgement (a facility's "
+                                              "cost against the project); a quarter is long for an unsaid one"),
+    "conscription_above_need": ("gameplay", "politics", 30, 60,
+                                "a law's penalties paid for men nobody trains; a month covers the training rows' "
+                                "catch-up"),
+    "lane_wait_outlived": ("idling", None, 0, 0,
+                           "the owning rule has said the same thing past the row's own deadline: the wait "
+                           "outlived its reason"),
+    "officer_corps_slot_empty": ("idling", "officer_corps", 14, 30, "an empty spirit slot gives no bonus"),
+    "weak_formation_fielded": ("gameplay", "war", 30, 60,
+                               "a weak formation takes width, supply and a place in an army; a month covers "
+                               "converting it"),
+    "train_line_missing": ("gameplay", "war", 30, 60,
+                           "the start trains cover only the start network; fronts and strikes eat them"),
+    "trains_falling": ("gameplay", "war", 14, 30, "short trains cut supply up to half"),
+    "starving_hubs_low": ("gameplay", "war", 7, 14,
+                          "an army under its supply floor with hubs not motorised loses strength daily"),
+    "special_project_facility_idle": ("idling", "extras", 7, 14,
+                                      "a facility without a project wastes its scientist's days"),
+    "no_national_focus": ("idling", "focus", 1, 1, "a day without a focus is a day of focus lost"),
+    "unassigned_divisions": ("idling", "war", 3, 30, "divisions in no army take no orders"),
     # --- gameplay ---------------------------------------------------------------------------
     "province_overstacked": ("gameplay", "war", 3, 14,
                              "divisions beyond what the province supplies lose organisation and strength daily"),
@@ -167,14 +216,14 @@ LANE_TOOLS = {
     "dockyards": ["hoi4_production_add", "hoi4_production_set"], "convoys": ["hoi4_production_add"],
     "command": ["hoi4_army_commander"], "seams": ["hoi4_general_trait", "hoi4_army_commander"],
     "politics": ["hoi4_politics_choose"], "decisions": ["hoi4_decision_take"],
-    "extras": ["hoi4_doctrine_adopt", "hoi4_special_project_assign"], "mio_traits": ["hoi4_mio_trait"],
+    "extras": ["hoi4_doctrine_adopt", "hoi4_special_project_assign"], "mio_traits": ["hoi4_mio_trait", "hoi4_mio_policy"],
     "officer_corps": ["hoi4_officer_corps"], "air_plan": ["hoi4_air_mission", "hoi4_air_rebase"],
-    "navy": ["hoi4_fleet_mission", "hoi4_fleet_region"],
+    "navy": ["hoi4_fleet_mission", "hoi4_fleet_region", "hoi4_fleet_assign", "hoi4_fleet_admiral"],
     "war": ["hoi4_army_front", "hoi4_army_offensive", "hoi4_army_plan", "hoi4_army_move",
             "hoi4_army_fallback"],
     "intelligence": ["hoi4_operative_assign"], "designs": ["hoi4_design_set_production"],
     "trade": ["hoi4_trade"], "occupation": ["hoi4_occupation_law"], "events": ["hoi4_event_choose"],
-    "training": ["hoi4_train"], "saves": ["hoi4_save"],
+    "training": ["hoi4_train"], "saves": ["hoi4_save"], "focus": ["hoi4_focus_start"],
 }
 
 # judgement calls: the named alternatives a rule cannot rank (the escalation offers them)

@@ -57,8 +57,13 @@ def build_packet(issue, recent=(), lessons=(), trend=None, date=None):
         f"STATE: {issue.get('state')}; owner lane {issue.get('lane') or '-'}; actions of that lane since: "
         f"{issue.get('acts', 0)}; recurrences {issue.get('recurrences', 0)}",
     ]
+    if issue.get("lane_reason") or issue.get("lane_outcome"):
+        out = issue.get("lane_outcome") or {}
+        lines.append(f"LANE SAYS ({out.get('outcome') or 'its rule note'}): "
+                     f"{(issue.get('lane_reason') or out.get('reason') or '')[:400]}")
     if issue.get("numbers"):
-        lines.append("NUMBERS: " + json.dumps(issue["numbers"], ensure_ascii=False)[:300])
+        lines.append("NUMBERS: " + json.dumps({k: v for k, v in issue["numbers"].items() if k != "owner_note"},
+                                              ensure_ascii=False)[:300])
     if trend:
         lines.append("TREND: " + str(trend)[:300])
     if issue.get("tried"):
@@ -116,6 +121,7 @@ class Escalator:
         self.last_by_code = {}   # issue code -> game days of its last escalation
         self.log = []
         self.recent = []         # recent refusals and actions for packets
+        self.lane_packets = {}   # lane -> (game days, first issue id, packet path) of its open review
 
     def note(self, line):
         self.recent.append(line)
@@ -131,6 +137,15 @@ class Escalator:
             # a flicker (a slot idle for an hour at a read) recurs too; a recurrence that also
             # outlived its deadline is a remedy that does not hold
             return "recurring after resolution"
+        if event == "overdue" and issue.get("code") in R.ALTERNATIVES and issue.get("severity") == "high":
+            return "a judgement between named alternatives"
+        if event == "overdue" and issue["class"] in ("idling", "gameplay") and (
+                issue.get("lane_outcome") or issue.get("lane_reason") or issue.get("acts")
+                or any(R.LANE_KINDS.get(issue.get("lane") or "", ()))):
+            # offered to its lane (a turn, an order, or a written reason to wait) and still open past
+            # its deadline: the loop notice -> act did not close; whatever the severity, a model
+            # weighs the lane's own reason against the allowed responses
+            return "offered to its lane and still open past its deadline"
         if issue.get("severity") != "high" and event != "stale":
             return None
         if event == "overdue":
@@ -153,6 +168,20 @@ class Escalator:
         code = R.family(issue.get("code"))
         last = self.last_by_code.get(code)
         days = game_days(date) if date else None
+        lane = issue.get("lane") or ""
+        if why.startswith("offered to its lane") and lane in self.lane_packets and days is not None and \
+                days - self.lane_packets[lane][0] < COOLDOWN_DAYS:
+            # the lane's open packet takes this issue too: one model answer per lane review, so a
+            # backlog of a lane's overdue issues is weighed together inside the yearly budget
+            first, path = self.lane_packets[lane][1], self.lane_packets[lane][2]
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(f"ALSO {issue['id']} {issue.get('code')}: {issue['text'][:240]}\n"
+                        f"  LANE SAYS: {(issue.get('lane_reason') or '-')[:240]}\n")
+            issue["packet"] = f"bundled into {first}"
+            rec = {"date": date, "id": issue["id"], "key": issue["key"], "tier": 1, "why": why,
+                   "bundled_into": first}
+            self._write(rec)
+            return rec
         if last is not None and days is not None and days - last < COOLDOWN_DAYS:
             return None  # the same kind was escalated lately: its answer covers this one too
         if self.used.get(year, 0) >= self.per_year:
@@ -174,6 +203,8 @@ class Escalator:
         path = os.path.join(self.out, "escalations", f"{issue['id']}-{(date or '').replace('.', '')}.md")
         with open(path, "w", encoding="utf-8") as f:
             f.write(packet + "\n")
+        if why.startswith("offered to its lane") and days is not None:
+            self.lane_packets[issue.get("lane") or ""] = (days, issue["id"], path)
         rec = {"date": date, "id": issue["id"], "key": issue["key"], "tier": 1, "why": why,
                "packet_chars": len(packet), "packet_tokens_est": len(packet) // 4, "lessons": [x["id"] for x in lessons],
                "delivered": "player wake (issues_open.json packet)"}
