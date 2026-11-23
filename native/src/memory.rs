@@ -84,6 +84,12 @@ impl<'a> Reader<'a> {
             .get()
             .checked_add(size)
             .ok_or_else(|| Error::new("read_bound", "Size overflow"))?;
+        if address >> 40 == DISABLED_BASE >> 40 {
+            return Err(Error::new(
+                "layout_disabled",
+                crate::builds::disabled_message(),
+            ));
+        }
         if size > 1 << 20
             || total > 32 << 20
             || !(0x10000..=0x7fff_ffff_0000).contains(&address)
