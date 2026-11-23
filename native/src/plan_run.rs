@@ -339,6 +339,9 @@ mod plan_omissions;
 mod plan_divisions;
 #[path = "plan_logistics.rs"]
 mod plan_logistics;
+// the run monitor's open issues and lessons (docs/MONITORING.md)
+#[path = "plan_issues.rs"]
+mod plan_issues;
 // Game speed by the war the country manages (peace 3, a war to manage 2; a human's choice kept).
 #[path = "plan_speed.rs"]
 mod plan_speed;
@@ -652,6 +655,8 @@ pub struct State {
     war_since: HashMap<String, (i32, Option<i32>, GameHour)>,
     /// The lanes' last turns (the digest's `scheduler`).
     sched: Sched,
+    /// The run monitor's open issues and the lessons (read from files; never persisted).
+    issues: plan_issues::Issues,
     /// The pass scheduler (`lanes_tick`).
     round: Round,
     /// armies on direct move orders (their battle plan did not advance)
@@ -878,6 +883,7 @@ impl Default for State {
             war_cool: HashMap::new(),
             war_since: HashMap::new(),
             sched: Sched::default(),
+            issues: plan_issues::Issues::default(),
             round: Round::default(),
             war_move: HashSet::new(),
             war_rest: HashMap::new(),
@@ -1390,10 +1396,27 @@ impl State {
                     Ok((_, why)) => why.clone(),
                     Err(_) => String::new(),
                 };
+                self.issues.refresh();
+                let lesson = self.issues.advice(name, &cause);
                 let run = self.failed_run.entry(signature.clone()).or_default();
                 run.0 += 1;
                 run.1 = cause.clone();
-                if run.0 == GIVE_UP_AFTER {
+                let treat = lesson.as_ref().map(|a| a.treat.clone());
+                if let (Some(plan_issues::Treat::Permanent), Some(adv), 1) =
+                    (&treat, &lesson, run.0)
+                {
+                    // a lesson says this refusal does not pass unchanged: the player hears it at
+                    // the first refusal, with what to do instead
+                    let mut shown = args.clone();
+                    if let Some(object) = shown.as_object_mut() {
+                        object.remove("request_id");
+                        object.remove("lease_token");
+                    }
+                    self.gave_up.push(json!({"code": "wake_player", "rule": "lesson",
+                        "reason": format!("order_given_up:{signature}"),
+                        "message": format!("{name} was refused ({cause}); lesson {}: {}. The executor does not send it unchanged again for a long time", adv.id, adv.advice),
+                        "evidence": {"tool": name, "args": shown, "failures": 1, "last_refusal": cause, "lesson": adv.id}}));
+                } else if run.0 == GIVE_UP_AFTER && treat != Some(plan_issues::Treat::Transient) {
                     // Diagnosed once: the order, how often it failed and the game's last
                     // answer go to the player; the executor stops sending it.
                     let mut shown = args.clone();
@@ -1519,6 +1542,25 @@ impl State {
             // 240 days and never made at 273)
             rest = rest.min(RESOURCE_WAIT);
             why = Rest::Repeated;
+        }
+        // what the run's lessons say about this refusal (docs/MONITORING.md): a transient cause
+        // rests briefly and is never given up, a permanent one rests as given up, a wait its days
+        self.issues.refresh();
+        if let Some(adv) = self.issues.advice(tool, &cause) {
+            match adv.treat {
+                plan_issues::Treat::Transient => {
+                    rest = rest.min(plan_issues::TRANSIENT_REST);
+                    why = Rest::Repeated;
+                }
+                plan_issues::Treat::Permanent => {
+                    rest = rest.max(ledger_rest(war, GIVE_UP_AFTER, 0, false).0);
+                    why = Rest::GivenUp;
+                }
+                plan_issues::Treat::Wait(hours) => {
+                    rest = rest.max(hours);
+                    why = Rest::Repeated;
+                }
+            }
         }
         if rest <= 0 {
             return None;
@@ -1953,6 +1995,15 @@ fn lanes_tick_inner(
             return Ok(Tick::Acted(line));
         }
     }
+    // Lanes that own an open issue of the run monitor go before the routine pass, each at most
+    // once a game day (`scheduler.issues_due: false` turns it off). On by default: the monitor's
+    // issues are rule findings with a deadline, and the offer costs nothing when the lane has
+    // nothing to do (it hands the tick back at once).
+    if plan["scheduler"]["issues_due"] != json!(false) {
+        if let Some(line) = issue_lanes(state, tools, plan, lease, now, &lanes)? {
+            return Ok(Tick::Acted(line));
+        }
+    }
     let mut restarted = false;
     loop {
         if state.round.cursor >= lanes.len() {
@@ -2002,6 +2053,40 @@ fn lanes_tick_inner(
         }
     }
     Ok(Tick::Nothing)
+}
+
+/// The lanes the run monitor's open issues name, offered ahead of the pass (see `plan_issues`).
+fn issue_lanes(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    lanes: &[Lane],
+) -> Result<Option<String>> {
+    state.issues.refresh();
+    for (lane, id) in state.issues.due_lanes() {
+        let Some(&(name, step)) = lanes.iter().find(|(n, _)| *n == lane) else {
+            continue;
+        };
+        if lane_waits_for_attack(
+            name,
+            plan_operation::executing_any(state),
+            state.sched.turns.get(name).copied(),
+            now,
+        ) || (name.starts_with("air") && air_waits_for_war(state, tools, plan, now))
+            || !state.issues.take_turn(name, now)
+        {
+            continue;
+        }
+        state.sched.turns.insert(name, now);
+        state.last_ok = None;
+        if let Some(line) = step(state, tools, plan, lease, now)? {
+            state.round.lane_acted(name, now);
+            return Ok(Some(format!("{line} (monitor issue {id})")));
+        }
+    }
+    Ok(None)
 }
 
 /// The war-first block's turn: hold posts bound first (a holding army is never sent elsewhere by
@@ -10313,6 +10398,9 @@ pub fn run(
     state.stages.fallback_used.clear();
     state.strategy.unknown.clear();
     state.strategy.news.clear();
+    if let Some(dir) = plan_path.parent() {
+        state.issues.set_run_dir(dir);
+    }
     let reason = loop {
         let plan = read_plan(plan_path)?;
         let now = game_hour(state, tools);

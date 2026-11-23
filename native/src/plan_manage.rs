@@ -933,6 +933,15 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
     // what the game has no alert for but the executor's reads see open (unassigned field
     // marshals, banked power, open doctrine tracks...), longest open first with the rest
     omissions.extend(super::plan_omissions::derived(state, tools, plan, now));
+    // the run monitor's open issues that no executor lane acts on (a plan decision, a tool fault,
+    // an escalated issue with its packet) go to the player with the rest (docs/MONITORING.md)
+    state.issues.refresh();
+    let names: Vec<&str> = super::lanes(plan, true)
+        .iter()
+        .map(|(n, _)| *n)
+        .chain(["research", "focus", "war"])
+        .collect();
+    omissions.extend(state.issues.wake_rows(&names, Some(now)));
     omissions.sort_by_key(|r| -r["days_open"].as_i64().unwrap_or(0));
     // what the executor could act on now: a row with its owner's written reason to wait is not,
     // nor an alert frame no label names (nothing tells what it asks for)
