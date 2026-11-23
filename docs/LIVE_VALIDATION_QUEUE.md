@@ -252,3 +252,75 @@ non-deterministically", "COMMAND LOST" or "Dropped" lines; the host never flags 
 (`CMarkModifiedClientCommand`); the speed changes appear on BOTH clients' top bars at the same game hour. Then the
 client role with the module (its speed posts must be refused by the host's game, exactly like a client pressing
 the speed keys: "only the host may change the game speed").
+
+## Session S2: the in-process module, stage 2 (production and air families; about 70 minutes plus a 30-minute soak)
+
+Stage 2 posts the commands that carry real play the way the game's own UI posts them: the command type's factory
+(or the UI's own constructor for payloads with lists), the game's own "can do" check (the vtable slot the UI's post
+helpers call before posting; refused = the module deletes the command, as the UI does), then `Post(session, cmd, 0)`
+from the main thread. Before any command is made, every object the tool names must round-trip through the command's
+own typed resolver (a live object of the right class) and belong to the player by the command's own owner getter
+(both read from the command's authorisation slot). Five types: `production.add_factories`
+(`CAddProductionLineFactoriesCommand`), `production.remove_line` (`CRemoveProductionLineCommand`), `air.transfer`
+(`CStratAirTransferCommand`), `air.set_mission` (`CStratAirSetMissionCommand`), `air.enable_mission`
+(`CStratAirEnableMissionCommand`). The MCP tools keep their names, schemas and Verified read-backs; the reader's
+switch `HOI4_BACKEND=auto|inprocess|gui` picks the route (`auto` uses a family only once it is marked live-passed in
+the module; until this session passes, only `inprocess` uses it). A refused or unanswered in-process request hands the
+same call to the GUI path. Design and evidence: `INPROCESS-COMMANDS-1123.md` (stage 2 built) and
+`INPROCESS-FEASIBILITY-1123.md` section 10; offline proof `inproc/test_offline.sh` ALL PASS (stage-2 scans 5/5 on
+1.19.4.1 and 1.20.0.0 macOS, off on 1.19.3) and `cargo test --lib inproc` (the switch).
+
+Needs: the game slot, no game running, Steam closed; the module built from the branch (`inproc/build.sh`, version
+`stage2-1`); the READER built from the branch (it carries the switch) and named by `HOI4_BIN`; two saves: PREV-1940 (the
+May 1940 Germany bed of Session 1) and PREV-1936 (any 1936 start that saved, a few days in).
+
+Start (each bed): `./inproc_stage2.sh PREV s2a` (s2b for the 1936 bed). It launches with the opt-in
+`HOI4_INPROC_POST=set_game_speed,production,air`, checks the hello (both families on), and writes `s2a/tool.sh`:
+`zsh s2a/tool.sh gui|inprocess TOOL 'JSON-ARGS'` runs one tool with that backend and logs its body and wall time to
+`s2a/tools.jsonl`. Take an input lease as usual (`hoi4_input_lease`) for the GUI calls; the in-process calls still go
+through the same lease and journal.
+
+P1 production, paused (10 min). Read the lines (`hoi4_production_lines`). For three lines of different equipment: `inprocess`
+`hoi4_production_set` to requested+3, then back; then to 0 on a spare line (removes it). Each call must return
+Verified (the line's factories in memory) and the module's `post2` lines in `s2a/inproc.log` must show
+`"result":"posted"` and `"executed"` equal to `"posted"` (the module reads the line's factories itself; while paused it
+reports "not executed yet (game paused)": then unpause one hour and read again). Then the same three changes with
+`gui`. Record both wall times per call.
+P2 production refusals (5 min): a delta that would go below 0 or above the line's cap must come back
+`refused_by_game_check` (the game's own check), never posted, and the GUI path then refuses the same way; an address
+that is not an own line (another country's line, if the reads expose one) must come back `not_own`.
+P3 air rebase, paused (10 min): three own wings at one base: `inprocess` `hoi4_air_rebase` (`wings` = the three,
+`state_id` = another own state with an air base) must be Verified (transfer base in memory); then back with `gui`.
+A wing already at the target must be skipped (no command). A target state with no own base must be refused before
+posting (the reads plan it).
+P4 air missions, running at speed 3 (15 min): `inprocess` `hoi4_air_mission` with three fighter wings, `mission`
+`air_superiority`, a region that holds an own base: one `air.set_mission` request (3 commands) then one
+`air.enable_mission` request (3 commands), Verified (mask and region in memory); then the same wings to
+`cas` in another region; then `gui` for the reverse. A region with no own base goes through the GUI
+by design (the region object is only known from an own base); check that it does.
+P5 timings (5 min): 20 alternating `hoi4_production_set` calls per backend, and 10 `hoi4_air_rebase` calls of 6 wings per
+backend; report the median and the 90th percentile of the tool's wall time and the module's `total_ms`.
+P6 war, 20 game days twice (20 min): from PREV-1940 at speed 3, the usual war loop for 20 game days with
+`HOI4_BACKEND=inprocess` for production and air, then reload the same save and run the same 20 days with `gui`.
+Compare: tool wall time per production/air call, calls per game day, the casualty ratio and territory change.
+P7 soak (30 min): speed 3, once a minute one production change and one air mission change in process, each Verified;
+one manual save in the middle and a reload of it (the channel must come back and the families must be on again).
+P8 save without the module: `./inproc_stage2.sh s2a s2p plain` (the save made in P7) must load and read in an
+unmodified game.
+
+Stop at once (`endrun.sh RUN`) on: a crash or hang; any `posting_off`, `family_off` or `inert` event; a `post2` result
+`unexplained`; an in-process call whose Verified read-back fails while the GUI path's succeeds; any "Dropped command"
+or "posted during command execution" line in the game's `game.log`; a save that does not load in P8.
+
+Pass: P1-P8 clean on both beds. Then set `IPC_LIVE_PASSED` for production and air in `inproc/core/ipc.c` (that turns
+`auto` on for them), record the numbers in NOTES-1116.md ("stage 2 passed: production, air"), and the next families
+follow (MIO, construction, training, air wing creation: INPROCESS-COMMANDS-1123.md).
+
+## Session S2-MP (later; two clients on two machines): stage 2 in multiplayer
+
+Not before S1-MP and S2 pass. The module still refuses every stage-2 post unless the server is `CDummyServer`; this
+session needs a build with that gate opened for the CLIENT role too (a player's production and air orders are not
+host-only). Same roles and checks as S1-MP (no out-of-sync indicator, the hourly `CClientChecksumCommand` accepted,
+no "NOT in sync", "Validity of command changed non-deterministically", "COMMAND LOST" or "Dropped" lines, never flagged
+by `CMarkModifiedClientCommand`), with the module on the client: P1 and P4 above, each change seen on BOTH machines
+(the host's reads of the client's country) at the same game hour.
