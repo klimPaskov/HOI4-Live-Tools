@@ -105,6 +105,10 @@ class Budget:
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(d, f, indent=1, sort_keys=True)
+        try:
+            os.chmod(tmp, 0o600)  # beside the key: readable by its owner only
+        except OSError:
+            pass
         os.replace(tmp, self.path)
 
     # --- reading -------------------------------------------------------------------------------
