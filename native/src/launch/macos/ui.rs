@@ -58,6 +58,16 @@ pub(super) fn read<T>(
 /// HOI4_TRACE=1: every named wait and settle logs its duration to stderr (finding where an
 /// action spends its time).
 /// A free-form trace line (HOI4_TRACE).
+/// A save step for HOI4_TRACE runs, stamped with wall-clock milliseconds (to line up with frames).
+fn save_step(text: &str) {
+    if std::env::var_os("HOI4_TRACE").is_some() {
+        let ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        eprintln!("[trace] save {ms} {text}");
+    }
+}
 pub(super) fn trace_text(text: &str) {
     if std::env::var_os("HOI4_TRACE").is_some() {
         eprintln!("[trace] {text}");
@@ -527,11 +537,13 @@ fn click_proven(
             ),
         )
     };
+    save_step(&format!("{what}: cursor away"));
     keys.scroll((1920, 1080), away, 0)?;
     let deadline = Instant::now() + Duration::from_millis(600);
     loop {
         let s = read(process, &state)?;
         if !hovered(s) {
+            save_step(&format!("{what}: normal beside it ({s})"));
             break;
         }
         if Instant::now() >= deadline {
@@ -545,6 +557,7 @@ fn click_proven(
         loop {
             let s = read(process, &state)?;
             if hovered(s) {
+                save_step(&format!("{what}: hovered ({s}), press"));
                 return Ok(());
             }
             if Instant::now() >= deadline {
@@ -583,8 +596,11 @@ fn save_game_once(
             .max()
     };
     let before = newest().map(|(t, _)| t);
+    save_step("start");
     clear_notices(process, keys)?;
+    save_step("notices cleared");
     tidy_map(process, keys)?;
+    save_step("map tidy");
     // The menu's shown flag is no proof that the menu is on screen: it read open while the
     // screen showed only the map (v55w, 23 Nov 2026), and it read open before the fade-in let a
     // click through. So the Save button is clicked only once it takes the cursor; an Escape is
@@ -596,6 +612,7 @@ fn save_game_once(
     let result = (|| -> Result<String> {
         let (button, (x, y)) = loop {
             if read(process, menu_open)? {
+                save_step("menu reads open");
                 let (rect, _) = settled(process, "save button", menu_save_button)?;
                 let at = near_left(rect);
                 let away = (f64::from(rect.x) - 8.0, at.1);
@@ -607,8 +624,14 @@ fn save_game_once(
                     at,
                     |r, i| Ok(menu_save_button(r, i)?.1),
                 ) {
-                    Ok(()) => break (rect, at),
-                    Err(e) if e.code == "gui_target_unavailable" => why = Some(e),
+                    Ok(()) => {
+                        save_step("save button clicked");
+                        break (rect, at);
+                    }
+                    Err(e) if e.code == "gui_target_unavailable" => {
+                        save_step(&format!("save button not proven: {}", e.message));
+                        why = Some(e)
+                    }
                     Err(e) => return Err(e),
                 }
             }
@@ -618,6 +641,7 @@ fn save_game_once(
             if menu_clicks == 0 {
                 if let Ok(rect) = read(process, |r, i| topbar_rect(r, i, "menu_button")) {
                     let (bx, by) = rect.center();
+                    save_step("menu button click");
                     keys.click((1920, 1080), bx, by)?;
                     menu_clicks += 1;
                     let _ =
@@ -636,6 +660,7 @@ fn save_game_once(
                 }));
             }
             let was = read(process, menu_open)?;
+            save_step(&format!("escape (menu reads open {was})"));
             keys.press(Key::Escape)?;
             escapes += 1;
             let deadline = Instant::now() + Duration::from_millis(900);
@@ -882,6 +907,7 @@ pub(super) fn close_menu(process: &dyn Process, keys: &dyn GameInput) -> Result<
     let _phase = crate::phase::enter("close");
     if read(process, menu_open)? {
         MENUS_CLOSED.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        save_step("close_menu escape (menu reads open)");
         keys.press(crate::platform::game_input::Key::Escape)?;
         wait(process, "game menu closed", |r, i| Ok(!menu_open(r, i)?))?;
     }

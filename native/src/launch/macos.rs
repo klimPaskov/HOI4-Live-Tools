@@ -1167,6 +1167,7 @@ impl MacClock {
             && process.identity() == self.process.identity();
         let scope = guard_pause.then(|| self.pause.begin());
         let menus_before = ui::menus_closed();
+        let sent_before = crate::pause_guard::sent_on_this_thread();
         let started = std::time::Instant::now();
         // A direct player order on an army takes it from the executor's war rules for a while.
         if name.starts_with("hoi4_army_") && !crate::autopilot::autopilot().in_step() {
@@ -1216,7 +1217,11 @@ impl MacClock {
         let Some(scope) = scope else {
             return result;
         };
-        let verdict = end_pause_scope(self.process.as_ref(), &*self.keys, scope, menus_before);
+        let verdict = if crate::pause_guard::sent_on_this_thread() == sent_before {
+            scope.untouched()
+        } else {
+            end_pause_scope(self.process.as_ref(), &*self.keys, scope, menus_before)
+        };
         // One context line per action for the run report: which actions changed the pause
         // state, whether the change was our own input and whether it was put back.
         eprintln!(
