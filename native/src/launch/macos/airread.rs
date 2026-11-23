@@ -54,6 +54,11 @@ const REGION_FILE: u64 = 0x40;
 /// -> null, air superiority over North-West Germany -> pointer, Hold -> null again); the mission mask
 /// at +0x98 and the province list at +0xc0 stay stale after a Hold, so only the pointer counts.
 const WING_REGION_PTR: u64 = 0xb8;
+/// The army a wing is attached to: pointer to the army's unit-group object at +0x950, written by
+/// the right click on an army card (read live 23 November 2026, 1.19.4.1: SKG 1 0 -> Armee West
+/// Nord's object, then -> Panzergruppe Ost's; the army's own object gained a one-entry array at
+/// +0x70/+0x78 each time). A wing loaded attached from a save can read 0 until it is attached again.
+pub(super) const WING_ATTACHED_ARMY: u64 = 0x950;
 /// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables).
 const STRATEGIC_AIR: xlayout::Class = xlayout::Class::new("CStrategicAir", STRATEGIC_AIR_VTABLE);
 const BASE: xlayout::Class = xlayout::Class::new("CAirBase", BASE_VTABLE);
