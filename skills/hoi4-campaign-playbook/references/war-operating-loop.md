@@ -177,7 +177,7 @@ weak defender whose victory points lie far apart, use objective strikes instead 
 5. Use what the enemy gives you: an enemy salient (an enemy-held state sticking into your
    line) is a pocket for you; check `hoi4_encirclement_candidates` every week even in defence.
 
-## 4. Every war tick (every 3-5 game days, speed 3, never paused)
+## 4. Every war tick (every 3-5 game days, speed 2 while a war is managed, never paused)
 
 0. `hoi4_alerts` : the game's own alert row; each alert names the tool that fixes it.
 1. Answer events at once (`hoi4_events`, `hoi4_event_choose`): an open event blocks every action.

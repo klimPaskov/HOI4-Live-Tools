@@ -321,6 +321,9 @@ pub(crate) use plan_operation::guard_outside as operation_guard_outside;
 // What the executor's reads find assignable and unassigned, beyond the game's alerts.
 #[path = "plan_omissions.rs"]
 mod plan_omissions;
+// Game speed by the war the country manages (peace 3, a war to manage 2; a human's choice kept).
+#[path = "plan_speed.rs"]
+mod plan_speed;
 // One spending order per experience pool (plan key `xp_budget`).
 #[path = "plan_xp.rs"]
 mod plan_xp;
@@ -2571,7 +2574,11 @@ fn lane_of(list: &[Lane], name: &str) -> Lane {
 /// air, navy, intelligence and the rest. Each manage, military and affairs rule is its own lane,
 /// so a rule with work every pass never holds back the rules behind it.
 /// The lanes checked every tick ahead of the pass (see `lanes_tick`).
-const FAST_LANES: [Lane; 2] = [("research", research_lane), ("focus", focus_lane)];
+const FAST_LANES: [Lane; 3] = [
+    ("speed", plan_speed::step),
+    ("research", research_lane),
+    ("focus", focus_lane),
+];
 /// Lanes that wait while an operation executes: slow GUI listings (a design-company trait read
 /// took 54 s of a war's input in pb1) whose work keeps until the war is won.
 const WAR_DEFERRED_LANES: [&str; 4] = ["mio_lines", "mio", "mio_traits", "intelligence"];

@@ -381,6 +381,19 @@ fn wake(
     );
 }
 
+/// A note and a one-time `wake_player` alarm for another module's rule (plan_speed.rs).
+pub(super) fn tell_player(
+    state: &mut State,
+    plan: &Value,
+    now: GameHour,
+    rule: &str,
+    reason: &str,
+    message: String,
+) {
+    note(state, rule, message.clone());
+    wake(state, plan, now, 0, reason, message, json!({"rule": rule}));
+}
+
 /// Clear the skip timers of these kinds so their step runs on the next tick.
 fn nudge(state: &mut State, kinds: &[&str]) -> usize {
     let before = state.bad.len();
