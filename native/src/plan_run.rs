@@ -2993,6 +2993,15 @@ fn air_waits_for_war(state: &mut State, tools: &dyn Tools, plan: &Value, now: Ga
         && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD)
 }
 
+/// Wall seconds the operations' burst may take between two declarations due the same day.
+const BETWEEN_DECLARATIONS_SECONDS: u64 = 6;
+
+/// Whether the operations' burst after a declaration had an order refused (an open event holds
+/// them, or an order line reads `: false`): the opening air burst then waits a tick.
+fn burst_refused(events_now: bool, executed: Option<&str>) -> bool {
+    events_now || executed.is_some_and(|l| l.contains(": false "))
+}
+
 /// A due declaration of war, then (same tick) the execution of the operations that wait for
 /// it and the opening air burst; None when no declaration is due or it was refused.
 fn declare_first(
@@ -3044,14 +3053,48 @@ fn declare_first(
             // days and Holland, whose war the operation executes on, came nine days later)
             state.done.remove("declnear:at");
             if plan_affairs::declaration_near(state, tools, plan, now, 0) {
+                // the operations that wait for this war execute now (a short burst: their
+                // execute orders take a few seconds); only the air waits for the last
+                // declaration (w43i1, 23 Nov 2026: three declarations one after another held
+                // the attack on Holland three and a half game days)
+                let executed = war_burst_for(
+                    state,
+                    tools,
+                    plan,
+                    lease,
+                    now,
+                    plan_operation::step,
+                    BETWEEN_DECLARATIONS_SECONDS,
+                )?;
                 state.war_active = true;
                 state.last_ok = Some(true);
+                let line = [Some(declared), executed]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join("; ");
                 return Ok(Some(format!(
-                    "{declared}; another declaration is due: it goes out first"
+                    "{line}; another declaration is due: it goes out next"
                 )));
             }
             let executed = war_burst(state, tools, plan, lease, now, plan_operation::step)?;
             state.war_active = true;
+            // an attack order the game refused in the burst (an event the declarations opened)
+            // goes again in the next tick, before the opening air burst (w43e1, 23 Nov 2026: the
+            // group's execute was refused, the 30-second air burst came first and the group's
+            // 53 divisions began the war seven game days late)
+            let refused = burst_refused(state.op_events_now, executed.as_deref());
+            if refused {
+                state.last_ok = Some(true);
+                let line = [Some(declared), executed]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                return Ok(Some(format!(
+                    "{line}; an attack order was refused: it goes again before the air burst"
+                )));
+            }
             let air = war_burst_for(
                 state,
                 tools,
@@ -10196,6 +10239,20 @@ fn war_mission(kind: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_refused_attack_order_holds_the_opening_air_burst() {
+        assert!(super::burst_refused(true, None));
+        assert!(super::burst_refused(
+            false,
+            Some("war burst of 2 orders in 3 s: operation op: execute Army Group 1: false action_not_applied")
+        ));
+        assert!(!super::burst_refused(
+            false,
+            Some("operation op: execute Army Group 1: true Verified")
+        ));
+        assert!(!super::burst_refused(false, None));
+    }
+
     #[test]
     fn a_march_some_divisions_took_reads_as_heading() {
         use serde_json::json;
