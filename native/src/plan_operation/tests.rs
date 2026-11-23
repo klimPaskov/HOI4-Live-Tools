@@ -3222,3 +3222,44 @@ fn a_reserve_released_at_war_goes_forward_in_parts_into_the_line_army_with_room(
     assert_eq!(strings(&det.1, "divisions").len(), 10);
     assert!(!game.orders().iter().any(|(n, _)| n == "hoi4_army_merge"));
 }
+
+#[test]
+fn the_armour_of_an_enemy_out_joins_the_groups_enemy_the_wing_goes_to_the_next() {
+    // w53a: Panzergruppe Ost took Luxembourg and went alone at Belgium while the group's
+    // attack on Holland stalled without it
+    let mk = |name: &str, role: Role, enemy: &str| {
+        let mut u = unit(
+            name.into(),
+            role,
+            &json!({"enemy": enemy, "own_states": [42], "click_state": 8}),
+            &json!({}),
+        );
+        u.enemy = enemy.into();
+        u
+    };
+    let mut units = vec![
+        mk("Army Group 1", Role::Group, "HOL"),
+        mk("Panzer Ost", Role::Mobile, "LUX"),
+        mk("West Sued", Role::Wing, "LUX"),
+    ];
+    let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+    hand_over_out(&mut units, &s(&["LUX"]), &[], &s(&["BEL", "HOL"]), "BEL");
+    assert_eq!(units[1].enemy, "HOL", "the armour joins the group's enemy");
+    assert_eq!(
+        units[2].enemy, "BEL",
+        "the wing goes to the next enemy at war"
+    );
+    // the group's enemy beaten: the armour goes on to the next
+    let mut units = vec![
+        mk("Army Group 1", Role::Group, "HOL"),
+        mk("Panzer Ost", Role::Mobile, "LUX"),
+    ];
+    hand_over_out(
+        &mut units,
+        &s(&["LUX"]),
+        &s(&["HOL"]),
+        &s(&["BEL", "HOL"]),
+        "BEL",
+    );
+    assert_eq!(units[1].enemy, "BEL");
+}
