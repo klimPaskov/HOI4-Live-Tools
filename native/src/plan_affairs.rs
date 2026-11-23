@@ -2667,6 +2667,16 @@ fn mio_plan(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             let (ok, why) = state.act(tools, run.lease, "hoi4_mio_policy", args, "mp")?;
             if ok {
                 state.done.insert(policy_key, now);
+            } else if why.starts_with("Diverged") {
+                // the click went through but the window shows no readable mark of an attached
+                // policy (receipt "unverified"): sending it again only repeats the same clicks
+                // (g17m, 23 Nov 2026: Henschel's policy sent 14 times, each Diverged unverified)
+                state.done.insert(policy_key, now);
+                note(
+                    state,
+                    "mio",
+                    format!("{org}: policy {policy} clicked, not readable back (unverified); not sent again"),
+                );
             } else {
                 mio_refused(state, now, "miopol", &org, &why);
             }
