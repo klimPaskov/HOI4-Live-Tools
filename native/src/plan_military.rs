@@ -1849,6 +1849,178 @@ pub(super) fn army_group_step(
     Ok(None)
 }
 
+/// The field-marshal names the plan gives for a game army group: the `army_group` entries whose
+/// armies stand in it (their `marshal`), then every operation's `marshals`; in order, once each.
+fn planned_marshals(state: &State, plan: &Value, roster: &Value, group: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for entry in list(plan, "army_group") {
+        let inside = strings(entry, "armies").iter().any(|h| {
+            army_row(roster, &resolve(state, h))
+                .is_some_and(|r| r["army_group"].as_str() == Some(group))
+        });
+        if inside {
+            out.extend(marshals(entry));
+        }
+    }
+    for op in list(plan, "operations") {
+        out.extend(strings(op, "marshals"));
+    }
+    let mut seen = HashSet::new();
+    out.retain(|n| seen.insert(n.clone()));
+    out
+}
+
+/// The game army groups that lead something and have no field marshal: (group, divisions).
+/// A group with no army and no plan is an empty shell the game keeps and is left alone; pure.
+pub(super) fn groups_without_marshal(roster: &Value) -> Vec<(String, u64)> {
+    list(roster, "army_groups")
+        .iter()
+        .filter(|g| {
+            g["field_marshal"]
+                .as_str()
+                .is_none_or(|m| m.trim().is_empty())
+        })
+        .filter_map(|g| {
+            let name = text(&g["army_group"]);
+            if name.is_empty() {
+                return None;
+            }
+            let in_armies: u64 = list(roster, "armies")
+                .iter()
+                .filter(|a| a["army_group"].as_str() == Some(name))
+                .map(|a| a["division_count"].as_u64().unwrap_or(0))
+                .sum();
+            let in_plan: u64 = list(g, "plan")
+                .iter()
+                .map(|p| p["divisions"].as_u64().unwrap_or(0))
+                .max()
+                .unwrap_or(0);
+            let divisions = in_armies.max(in_plan);
+            (divisions > 0).then(|| (name.to_string(), divisions))
+        })
+        .collect()
+}
+
+/// The pick for a group without a field marshal, from a commander read: (general, promotes).
+/// Order (value judgement, owner 23 Nov 2026): a free field marshal the plan names, then the
+/// best free field marshal the country has, and only when no field marshal is free a general
+/// the plan names, then the best free general (hoi4_army_commander promotes him for
+/// PROMOTE_LEADER_CP_COST command power). `skip` drops refused names; pure.
+pub(super) fn marshal_pick(
+    rows: &[Value],
+    tag: &str,
+    named: &[String],
+    skip: &dyn Fn(&str) -> bool,
+) -> Option<(String, bool)> {
+    let free = super::plan_formations::free_commanders(rows, tag);
+    let free_named = |fm: bool| {
+        named.iter().find(|n| {
+            !skip(n)
+                && free.iter().any(|c| {
+                    text(&c["name"]) == n.as_str()
+                        && super::plan_formations::is_field_marshal(c) == fm
+                })
+        })
+    };
+    if let Some(n) = free_named(true) {
+        return Some((n.clone(), false));
+    }
+    let best = super::plan_formations::best_marshal_of(rows, tag, skip)?;
+    let promotes = !free
+        .iter()
+        .any(|c| text(&c["name"]) == best && super::plan_formations::is_field_marshal(c));
+    if !promotes {
+        return Some((best, false));
+    }
+    if let Some(n) = free_named(false) {
+        return Some((n.clone(), true));
+    }
+    Some((best, true))
+}
+
+/// Rule (manage.off "group_marshals"; on by default: it only fills a vacancy, never moves a
+/// leader, and hoi4_army_commander on a group is live-verified, g17o 23 Nov 2026): every game
+/// army group that leads divisions and has no field marshal gets one, once (no churn: a group
+/// with a marshal is never touched). Value judgement: a field marshal lends half his traits and
+/// skills to every army of the group (FIELD_MARSHAL_ARMY_BONUS_RATIO 0.5) and gains experience
+/// from them (FIELD_MARSHAL_XP_RATIO 0.3); a group without one gets neither. The pick follows
+/// [`marshal_pick`]: an existing free field marshal before any promotion. Root cause it closes:
+/// g17n and g17o fought Poland and the West with "Army Group 2" (63 divisions) leaderless, because
+/// the `army_group` entry's once-only memory `agfm` was kept from an earlier run whose group the
+/// pre-war regroup replaced, and op_poland named no `marshals`. Exception path: short command
+/// power for a promotion waits for it; a refused name rests 30 days; no free commander notes it
+/// (the omissions read names it for the player).
+pub(super) fn group_marshal_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let key = "group_marshals";
+    if off(plan, key) || state.skipped(now, "gfm", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "gfm", "x", DAY);
+    let Ok(roster) = tools.call("hoi4_armies", &json!({"threat": false})) else {
+        return Ok(None);
+    };
+    let vacant: Vec<(String, u64)> = groups_without_marshal(&roster)
+        .into_iter()
+        .filter(|(g, _)| !state.skipped(now, "gfmg", g))
+        .collect();
+    if vacant.is_empty() {
+        note(
+            state,
+            key,
+            "every army group with divisions has a field marshal",
+        );
+        return Ok(None);
+    }
+    let Ok(read) = tools.call("hoi4_commanders", &json!({})) else {
+        note(state, key, "hoi4_commanders unreadable");
+        return Ok(None);
+    };
+    let tag = super::plan_formations::country_tag(state, tools, plan);
+    let rows = list(&read, "commanders");
+    for (group, divisions) in vacant {
+        let named = planned_marshals(state, plan, &roster, &group);
+        let skip = |n: &str| state.skipped(now, "gfmc", &format!("{group}|{n}"));
+        let Some((general, promotes)) = marshal_pick(rows, &tag, &named, &skip) else {
+            note(
+                state,
+                key,
+                format!("{group} ({divisions} divisions): no free field marshal or general"),
+            );
+            continue;
+        };
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_army_commander",
+            json!({"army": group, "general": general}),
+            "gfm",
+        )?;
+        if !ok {
+            match code(&why) {
+                "insufficient_command_power" | "promotion_unavailable" => {
+                    state.skip(now, "gfmg", &group, cp_wait_days(&why).max(1) * DAY)
+                }
+                _ => state.skip(now, "gfmc", &format!("{group}|{general}"), 30 * DAY),
+            }
+        }
+        let how = if promotes {
+            "promoted general"
+        } else {
+            "field marshal"
+        };
+        let line = format!("{group} ({divisions} divisions) led by {how} {general}: {ok} {why}");
+        note(state, key, line.clone());
+        return Ok(Some(format!("army group without a field marshal: {line}")));
+    }
+    Ok(None)
+}
+
 // ---------------------------------------------------------------------------------------------
 // W2-4, rule 31: fleets, regions, missions, admirals, repair.
 

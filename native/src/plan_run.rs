@@ -318,6 +318,9 @@ mod plan_encircle;
 #[path = "plan_operation.rs"]
 mod plan_operation;
 pub(crate) use plan_operation::guard_outside as operation_guard_outside;
+// What the executor's reads find assignable and unassigned, beyond the game's alerts.
+#[path = "plan_omissions.rs"]
+mod plan_omissions;
 // One spending order per experience pool (plan key `xp_budget`).
 #[path = "plan_xp.rs"]
 mod plan_xp;
@@ -1859,8 +1862,13 @@ fn lanes_tick(
         }
         let (name, step) = lanes[state.round.cursor];
         state.round.cursor += 1;
-        // slow GUI lanes that do not decide a running war wait for its end
-        if op_war && WAR_DEFERRED_LANES.contains(&name) {
+        // slow GUI lanes that do not decide a running war wait while an operation's attack
+        // executes (its orders need the input; a design company's monthly trait keeps a few
+        // weeks). Value judgement: they do not wait for the whole war. Deferred for every war day
+        // (an operation active at war or preparing counted too), the design companies were never
+        // assigned or given a trait and no network was built from September 1939 on (g17n,
+        // g17o, 23 Nov 2026: Germany is at war with Britain from the Polish war to the end).
+        if lane_waits_for_attack(name, plan_operation::executing_any(state)) {
             continue;
         }
         // the air lanes wait while a prepared operation's declaration is near (see
@@ -2567,6 +2575,12 @@ const FAST_LANES: [Lane; 2] = [("research", research_lane), ("focus", focus_lane
 /// Lanes that wait while an operation executes: slow GUI listings (a design-company trait read
 /// took 54 s of a war's input in pb1) whose work keeps until the war is won.
 const WAR_DEFERRED_LANES: [&str; 4] = ["mio_lines", "mio", "mio_traits", "intelligence"];
+
+/// Whether a lane waits this pass: a WAR_DEFERRED_LANES lane waits only while an operation's
+/// attack executes, never for a war or a prepare as such; pure.
+fn lane_waits_for_attack(name: &str, executing: bool) -> bool {
+    executing && WAR_DEFERRED_LANES.contains(&name)
+}
 
 fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
     let manage = &plan_manage::LANES;
@@ -9259,6 +9273,7 @@ fn decisions_step(
         {
             state.skip(now, "decnote", "x", 30 * DAY);
             if let Ok(offered) = tools.call("hoi4_decisions_list", &json!({"lease_token": lease})) {
+                state.manage.decisions_seen = Some((now, offered.clone()));
                 let line = decisions_left_note(plan, &offered, &[]);
                 plan_manage::note(state, "decisions", line);
             }
@@ -9266,6 +9281,7 @@ fn decisions_step(
         return Ok(None);
     }
     let offered = tools.call("hoi4_decisions_list", &json!({"lease_token": lease}))?;
+    state.manage.decisions_seen = Some((now, offered.clone()));
     let pending: Vec<String> = rules
         .iter()
         .map(|r| r.1.clone())
@@ -10251,6 +10267,16 @@ mod tests {
             Some("operation op: execute Army Group 1: true Verified")
         ));
         assert!(!super::burst_refused(false, None));
+    }
+
+    #[test]
+    fn design_companies_and_the_agency_wait_only_while_an_attack_executes() {
+        for lane in ["mio_lines", "mio", "mio_traits", "intelligence"] {
+            assert!(super::lane_waits_for_attack(lane, true));
+            // at war, an operation preparing or holding: they run (g17n/g17o never ran them)
+            assert!(!super::lane_waits_for_attack(lane, false));
+        }
+        assert!(!super::lane_waits_for_attack("politics", true));
     }
 
     #[test]

@@ -34,6 +34,8 @@ struct Game {
     pol_rows: RefCell<Option<Value>>,
     /// Poland's land touches ours (hoi4_wars borders list it)
     pol_border: RefCell<bool>,
+    /// what hoi4_commanders lists, when set
+    commanders: RefCell<Value>,
     calls: RefCell<Vec<(String, Value)>>,
 }
 
@@ -71,6 +73,7 @@ impl Game {
             refuse_delete: RefCell::new(false),
             pol_rows: RefCell::new(None),
             pol_border: RefCell::new(true),
+            commanders: RefCell::new(json!({})),
             calls: RefCell::new(vec![]),
         }
     }
@@ -108,6 +111,7 @@ impl Tools for Game {
         let army = text(&args["army"]).to_string();
         match name {
             "hoi4_armies" => return Ok(self.roster.borrow().clone()),
+            "hoi4_commanders" => return Ok(self.commanders.borrow().clone()),
             "hoi4_wars" => {
                 let pol = if *self.pol_border.borrow() {
                     json!([86])
@@ -2254,6 +2258,29 @@ fn a_group_without_a_field_marshal_gets_the_first_free_name_of_marshals() {
         given,
         [json!({"army": "Army Group 3", "general": "Rundstedt"})]
     );
+}
+
+#[test]
+fn a_new_group_takes_a_free_field_marshal_before_a_named_general_is_promoted() {
+    // owner, 23 Nov 2026: Germany has enough field marshals; promotion only when none is free
+    let game = split_game();
+    let mut plan = split_plan();
+    plan["operations"][0]["marshals"] = json!(["Bock", "Hoepner"]);
+    game.unit("Army Group 1", |r| r["field_marshal"] = json!("Bock"));
+    *game.commanders.borrow_mut() = json!({"commanders": [
+        {"name": "Hoepner", "assigned_to": null, "available": true,
+         "listed_in_panel_or_assigned": true, "promotion_needed_for_group": true, "skill": 4},
+        {"name": "Leeb", "assigned_to": null, "available": true,
+         "listed_in_panel_or_assigned": true, "promotion_needed_for_group": false, "skill": 3}]});
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let given: Vec<Value> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, _)| n == "hoi4_army_commander")
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(given, [json!({"army": "Army Group 3", "general": "Leeb"})]);
 }
 
 #[test]

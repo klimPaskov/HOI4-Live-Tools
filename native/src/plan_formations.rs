@@ -376,8 +376,20 @@ fn general_score(c: &Value, strike: bool) -> i64 {
     num(c, "skill") * 10 + main * 3 + second * 2 + fit - if has_marshal_trait(c) { 6 } else { 0 }
 }
 
-/// The best free field marshal of the country (field-marshal traits first, then skill and
-/// planning), outside `skip`.
+/// Whether a commander row is a field marshal already: the commander list showed his row
+/// without the Promote button (the button is drawn only for a general a group would need
+/// promoted). A row the list has not shown is not known to be one.
+pub(super) fn is_field_marshal(c: &Value) -> bool {
+    c["rank"] == json!("field_marshal")
+        || (c["listed_in_panel_or_assigned"] == json!(true)
+            && c["promotion_needed_for_group"] == json!(false))
+}
+
+/// The best free field marshal of the country, outside `skip`: a field marshal the country
+/// already has before any general who would have to be promoted (value judgement: promotion
+/// costs PROMOTE_LEADER_CP_COST command power, game fact 40 in 1.19, while a field marshal
+/// left unassigned earns nothing; owner, 23 Nov 2026: Germany starts with enough field
+/// marshals), then field-marshal traits, skill and planning plus logistics.
 pub(super) fn best_marshal(
     state: &State,
     tools: &dyn Tools,
@@ -386,11 +398,21 @@ pub(super) fn best_marshal(
 ) -> Option<String> {
     let tag = own_tag(state, tools, plan);
     let read = tools.call("hoi4_commanders", &json!({})).ok()?;
-    pickable(list(&read, "commanders"), &tag)
+    best_marshal_of(list(&read, "commanders"), &tag, skip)
+}
+
+/// [`best_marshal`] over a commander read; pure.
+pub(super) fn best_marshal_of(
+    rows: &[Value],
+    tag: &str,
+    skip: &dyn Fn(&str) -> bool,
+) -> Option<String> {
+    pickable(rows, tag)
         .into_iter()
         .filter(|c| !skip(text(&c["name"])))
         .max_by_key(|c| {
             (
+                is_field_marshal(c),
                 has_marshal_trait(c),
                 num(c, "skill"),
                 num(c, "planning") + num(c, "logistics"),
@@ -398,6 +420,16 @@ pub(super) fn best_marshal(
         })
         .map(|c| text(&c["name"]).to_string())
         .filter(|n| !n.is_empty())
+}
+
+/// The free commanders of the country (own, leading nothing, offered by the list); pure.
+pub(super) fn free_commanders<'a>(rows: &'a [Value], tag: &str) -> Vec<&'a Value> {
+    pickable(rows, tag)
+}
+
+/// The country tag commanders must belong to.
+pub(super) fn country_tag(state: &State, tools: &dyn Tools, plan: &Value) -> String {
+    own_tag(state, tools, plan)
 }
 
 /// One action at most: merges into formations, generals, army groups (see the module text).
@@ -417,7 +449,10 @@ pub(super) fn command_step(
             return Ok(Some(done));
         }
     }
-    plan_military::army_group_step(state, tools, plan, lease, now)
+    if let Some(done) = plan_military::army_group_step(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    plan_military::group_marshal_step(state, tools, plan, lease, now)
 }
 
 fn merge_and_lead(
@@ -721,7 +756,15 @@ fn merge_and_lead(
             .into_iter()
             .filter(|c| !marshals.contains(text(&c["name"])))
             .collect();
-        pool.sort_by_key(|c| std::cmp::Reverse(general_score(c, strike)));
+        // a field marshal is kept for an army group: plain generals first (value judgement; the
+        // game's own AI scores a field marshal on a plain army at -500,
+        // ARMY_LEADER_ASSIGN_FIELD_MARSHAL_TO_ARMY), a field marshal only when no general is free
+        pool.sort_by_key(|c| {
+            (
+                is_field_marshal(c),
+                std::cmp::Reverse(general_score(c, strike)),
+            )
+        });
         wanted.extend(pool.iter().map(|c| text(&c["name"]).to_string()));
         let Some(general) = wanted.into_iter().find(|g| usable(state, g)) else {
             state.skip(now, "cgen", &army, 7 * DAY);
@@ -1216,5 +1259,91 @@ mod tests {
             (name.as_str(), &args["army"]),
             ("hoi4_army_commander", &json!("Army Group 1"))
         );
+    }
+
+    fn leader(name: &str, promote: bool, skill: i64, traits: &[&str]) -> Value {
+        json!({"name": name, "id": format!("GER_{name}"), "assigned_to": null,
+            "listed_in_panel_or_assigned": true, "available": true,
+            "promotion_needed_for_group": promote, "skill": skill, "traits": traits})
+    }
+
+    #[test]
+    fn a_leaderless_group_gets_a_free_field_marshal_before_any_promotion_and_once() {
+        // g17n/g17o: "Army Group 2" (63 divisions) fought Poland and the West without a field
+        // marshal; the plan's army_group entry was marked led by an earlier run
+        let plan = json!({"war": {"me": "GER"},
+            "army_group": [{"id": "ag_ost", "armies": ["A", "B"], "marshal": ["Hoepner", "Bock"]}]});
+        let mut st = State::default();
+        st.done.insert("agrp:ag_ost".into(), 1);
+        st.done.insert("agfm:ag_ost".into(), 1);
+        let tools = game(vec![
+            (
+                "hoi4_armies",
+                json!({
+                "armies": [
+                    {"army": "A", "division_count": 30, "commander": "x", "army_group": "Army Group 2"},
+                    {"army": "B", "division_count": 33, "commander": "y", "army_group": "Army Group 2"}],
+                "army_groups": [{"army_group": "Army Group 2", "field_marshal": null}]}),
+            ),
+            (
+                "hoi4_commanders",
+                json!({"commanders": [
+                    // a plain general the plan names first, and two field marshals
+                    leader("Hoepner", true, 5, &[]),
+                    leader("Leeb", false, 4, &[]),
+                    leader("Bock", false, 3, &["offensive_doctrine"])]}),
+            ),
+        ]);
+        let out = command_step(&mut st, &tools, &plan, "l", 1000)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("led by field marshal Bock: true"), "{out}");
+        let (name, args) = tools.actions.borrow().last().cloned().unwrap();
+        assert_eq!(name, "hoi4_army_commander");
+        assert_eq!(args["army"], json!("Army Group 2"));
+        assert!(args.get("reassign").is_none(), "never moves a leader");
+        // read once a game day
+        assert!(command_step(&mut st, &tools, &plan, "l", 1001)
+            .unwrap()
+            .is_none());
+        // the switch
+        let off = json!({"manage": {"off": ["group_marshals"]}, "war": {"me": "GER"}});
+        let mut fresh = State::default();
+        assert!(
+            plan_military::group_marshal_step(&mut fresh, &tools, &off, "l", 1000)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn a_promotion_comes_only_when_no_field_marshal_is_free() {
+        let skip = |_: &str| false;
+        let named = vec!["Hoepner".to_string()];
+        let both = [
+            leader("Hoepner", true, 5, &[]),
+            leader("Leeb", false, 2, &[]),
+        ];
+        assert_eq!(
+            plan_military::marshal_pick(&both, "GER", &named, &skip),
+            Some(("Leeb".to_string(), false))
+        );
+        let gens = [
+            leader("Hoepner", true, 2, &[]),
+            leader("Hoth", true, 5, &[]),
+        ];
+        assert_eq!(
+            plan_military::marshal_pick(&gens, "GER", &named, &skip),
+            Some(("Hoepner".to_string(), true)),
+            "the plan's named general before the best one"
+        );
+        let refused = |n: &str| n == "Hoepner";
+        assert_eq!(
+            plan_military::marshal_pick(&gens, "GER", &named, &refused),
+            Some(("Hoth".to_string(), true))
+        );
+        // armies take plain generals; a field marshal is kept for the groups
+        let fm = leader("Leeb", false, 9, &[]);
+        assert!(is_field_marshal(&fm) && !is_field_marshal(&leader("Hoth", true, 1, &[])));
     }
 }
