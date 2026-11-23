@@ -219,6 +219,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_operations",
             "hoi4_focus_available",
             "hoi4_observe",
+            "hoi4_state_snapshot",
             "hoi4_autopilot",
             "hoi4_wait_change",
             "hoi4_focus_input_probe",

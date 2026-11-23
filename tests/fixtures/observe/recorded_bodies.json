@@ -1,0 +1,1856 @@
+{
+"overview": {
+"capabilities_unverified": [
+"native_commands",
+"production",
+"construction",
+"army",
+"diplomacy",
+"progress_days",
+"daily_governor"
+],
+"country": "German Reich",
+"date": {
+"day": 26,
+"display_hour": 8,
+"month": 7,
+"raw": 60799351,
+"text": "1940.07.26.08",
+"year": 1940
+},
+"default_mode": "FAIR",
+"difficulty": 2,
+"focus": null,
+"historical_ai": true,
+"observation_paused_game": false,
+"owned": true,
+"paused": false,
+"player": "GER",
+"research": [
+{
+"days_remaining": null,
+"progress": null,
+"researching": null,
+"slot": 0
+},
+{
+"days_remaining": null,
+"progress": null,
+"researching": "computing_machine",
+"slot": 1
+},
+{
+"days_remaining": null,
+"progress": null,
+"researching": null,
+"slot": 2
+},
+{
+"days_remaining": null,
+"progress": null,
+"researching": null,
+"slot": 3
+},
+{
+"days_remaining": null,
+"progress": null,
+"researching": "mtg_landing_craft",
+"slot": 4
+}
+],
+"speed": 2
+},
+"armies": {
+"armies": [
+{
+"army": "Panzergruppe Ost",
+"army_group": null,
+"battle_plan_orders": 1,
+"commander": "Erich von Manstein",
+"defensive_orders": 0,
+"division_count": 9,
+"divisions": [
+"00000033:00000006",
+"00000033:00000007"
+],
+"exercise_stop_at_max": false,
+"exercising": false,
+"main_state": 6,
+"motorization": 1,
+"plan": [
+{
+"divisions": 9,
+"executing": true,
+"id": 56,
+"kind": "front",
+"line": {
+"divisions_on_line": 9,
+"ends": [
+6537,
+6446
+],
+"most_in_one_province": 2,
+"provinces": 6,
+"states": [
+980,
+34,
+977,
+6
+]
+},
+"offensives": [
+{
+"divisions": 0,
+"executing": true,
+"id": 115,
+"path_provinces": 4,
+"path_states": [
+977,
+34,
+980
+],
+"target": {
+"ends": [
+11407,
+11407
+],
+"provinces": 1,
+"states": [
+980
+]
+}
+}
+]
+}
+],
+"plan_executing": true,
+"planning": {
+"max": 0.4,
+"mean": 0.341,
+"min": 0.28
+},
+"states": {
+"34": 2,
+"6": 4,
+"977": 2,
+"980": 1
+}
+},
+{
+"army": "Mitte Brandenburg",
+"army_group": null,
+"battle_plan_orders": 0,
+"commander": "Albert Kesselring",
+"defensive_orders": 0,
+"division_count": 4,
+"divisions": [
+"00001269:00003b68",
+"00001269:00004c52"
+],
+"exercise_stop_at_max": false,
+"exercising": false,
+"main_state": 64,
+"motorization": 0,
+"plan": [],
+"plan_executing": false,
+"planning": {
+"max": 0.0,
+"mean": 0.0,
+"min": 0.0
+},
+"states": {
+"64": 3,
+"92": 1
+}
+},
+{
+"army": "Army 1",
+"army_group": null,
+"battle_plan_orders": 0,
+"commander": "Erwin von Witzleben",
+"defensive_orders": 0,
+"division_count": 1,
+"divisions": [
+"00000033:0000001d"
+],
+"exercise_stop_at_max": false,
+"exercising": false,
+"main_state": 53,
+"motorization": 0,
+"plan": [],
+"plan_executing": false,
+"planning": {
+"max": 0.0,
+"mean": 0.0,
+"min": 0.0
+},
+"states": {
+"53": 1
+}
+},
+{
+"army": "Armee Nord",
+"army_group": "Army Group 1",
+"battle_plan_orders": 0,
+"commander": "Georg von Küchler",
+"defensive_orders": 0,
+"division_count": 13,
+"divisions": [
+"00000033:00000009",
+"00000033:0000000a"
+],
+"exercise_stop_at_max": false,
+"exercising": false,
+"main_state": 6,
+"motorization": 0,
+"plan": [],
+"plan_executing": false,
+"planning": {
+"max": 0.38,
+"mean": 0.339,
+"min": 0.19
+},
+"states": {
+"34": 2,
+"6": 7,
+"977": 2,
+"980": 2
+}
+}
+],
+"army_groups": [
+{
+"army_group": "Army Group 2",
+"field_marshal": null,
+"plan": []
+},
+{
+"army_group": "Army Group 1",
+"field_marshal": "Gerd von Rundstedt",
+"plan": [
+{
+"divisions": 53,
+"executing": true,
+"id": 50,
+"kind": "front",
+"line": {
+"divisions_on_line": 53,
+"ends": [
+6537,
+6446
+],
+"most_in_one_province": 11,
+"provinces": 6,
+"states": [
+980,
+34,
+977,
+6
+]
+},
+"offensives": [
+{
+"divisions": 53,
+"executing": true,
+"id": 106,
+"path_provinces": 4,
+"path_states": [
+977,
+34,
+980
+],
+"target": {
+"ends": [
+6537,
+11407
+],
+"provinces": 2,
+"states": [
+980
+]
+}
+}
+]
+}
+]
+}
+],
+"unassigned": [
+"00001269:00005e5a",
+"00001269:00005e5b"
+],
+"unassigned_by_state": [
+{
+"division_ids": [
+"00001269:00005e5a",
+"00001269:00005e5b"
+],
+"divisions": 2,
+"shared_with": {},
+"state_id": 53
+},
+{
+"division_ids": [
+"00001269:00005f8a"
+],
+"divisions": 1,
+"shared_with": {
+"Mitte Brandenburg": 1
+},
+"state_id": 64
+}
+]
+},
+"supply": {
+"armies": [
+{
+"army": "Armee Mitte",
+"divisions": 20,
+"equipment_fill_min": 0.867,
+"hp_percent_mean": 0.913,
+"organisation_mean": 51.394,
+"states": {
+"34": 3,
+"6": 11,
+"977": 3,
+"980": 3
+},
+"supply_percent_lowest": 16.8,
+"supply_percent_mean": 30.5
+},
+{
+"army": "Armee Nord",
+"divisions": 13,
+"equipment_fill_min": 0.967,
+"hp_percent_mean": 0.92,
+"organisation_mean": 52.414,
+"states": {
+"34": 2,
+"6": 7,
+"977": 2,
+"980": 2
+},
+"supply_percent_lowest": 16.8,
+"supply_percent_mean": 32.1
+},
+{
+"army": "Armee Pommern",
+"divisions": 23,
+"equipment_fill_min": 0.7,
+"hp_percent_mean": 0.889,
+"organisation_mean": 48.003,
+"states": {
+"34": 4,
+"6": 9,
+"8": 3,
+"977": 2,
+"980": 5
+},
+"supply_percent_lowest": 16.8,
+"supply_percent_mean": 42.1
+},
+{
+"army": "Armee Süd",
+"divisions": 20,
+"equipment_fill_min": 0.85,
+"hp_percent_mean": 0.884,
+"organisation_mean": 46.987,
+"states": {
+"34": 6,
+"6": 10,
+"977": 2,
+"980": 2
+},
+"supply_percent_lowest": 16.8,
+"supply_percent_mean": 31.3
+}
+],
+"divisions": [
+{
+"army": "Panzergruppe Nord",
+"equipment_fill_min": 0.917,
+"equipment_readable": true,
+"heading_province": 11407,
+"hp": 67.88,
+"hp_max": 67.2,
+"hp_percent": 1.01,
+"id": "00000033:00000005",
+"infrastructure": 3,
+"manpower": 5500.0,
+"manpower_max": 5500.0,
+"organisation": 36.8,
+"province_demand": 34.317,
+"province_headroom": -22.368,
+"province_id": 516,
+"province_supply": 11.948,
+"short_equipment": [
+"artillery_equipment",
+"infantry_equipment",
+"motorized_equipment"
+],
+"state_id": 6,
+"supply_band": "very_low",
+"supply_need": 1.3307,
+"supply_percent": 22.0,
+"supply_ratio": 0.21959,
+"supply_received": 0.2922,
+"template": "Panzer-Division"
+},
+{
+"army": "Armee Mitte",
+"equipment_fill_min": 0.933,
+"equipment_readable": true,
+"heading_province": null,
+"hp": 212.83,
+"hp_max": 230.39999999999998,
+"hp_percent": 0.924,
+"id": "00001269:00001636",
+"infrastructure": 3,
+"manpower": 10600.0,
+"manpower_max": 10600.0,
+"organisation": 32.49,
+"province_demand": 34.317,
+"province_headroom": -22.368,
+"province_id": 516,
+"province_supply": 11.948,
+"short_equipment": [
+"artillery_equipment",
+"infantry_equipment",
+"support_equipment"
+],
+"state_id": 6,
+"supply_band": "very_low",
+"supply_need": 1.2241,
+"supply_percent": 22.0,
+"supply_ratio": 0.21959,
+"supply_received": 0.2688,
+"template": "Infanterie-Division"
+},
+{
+"army": "Armee Mitte",
+"equipment_fill_min": 0.991,
+"equipment_readable": true,
+"heading_province": null,
+"hp": 212.66,
+"hp_max": 230.39999999999998,
+"hp_percent": 0.923,
+"id": "00001269:000016f0",
+"infrastructure": 3,
+"manpower": 10600.0,
+"manpower_max": 10600.0,
+"organisation": 23.18,
+"province_demand": 34.317,
+"province_headroom": -22.368,
+"province_id": 516,
+"province_supply": 11.948,
+"short_equipment": [
+"infantry_equipment"
+],
+"state_id": 6,
+"supply_band": "very_low",
+"supply_need": 1.2255,
+"supply_percent": 22.0,
+"supply_ratio": 0.21959,
+"supply_received": 0.2691,
+"template": "Infanterie-Division"
+},
+{
+"army": "Armee Nord",
+"equipment_fill_min": 1.0,
+"equipment_readable": true,
+"heading_province": null,
+"hp": 204.97,
+"hp_max": 230.39999999999998,
+"hp_percent": 0.89,
+"id": "00001269:0000174e",
+"infrastructure": 3,
+"manpower": 9430.0,
+"manpower_max": 10600.0,
+"organisation": 47.35,
+"province_demand": 34.317,
+"province_headroom": -22.368,
+"province_id": 516,
+"province_supply": 11.948,
+"short_equipment": [],
+"state_id": 6,
+"supply_band": "very_low",
+"supply_need": 1.0649,
+"supply_percent": 22.0,
+"supply_ratio": 0.21958,
+"supply_received": 0.2338,
+"template": "Infanterie-Division"
+},
+{
+"army": "Armee Süd",
+"equipment_fill_min": 0.85,
+"equipment_readable": true,
+"heading_province": null,
+"hp": 190.8,
+"hp_max": 230.39999999999998,
+"hp_percent": 0.828,
+"id": "00001269:000017ec",
+"infrastructure": 3,
+"manpower": 8778.0,
+"manpower_max": 10600.0,
+"organisation": 3.01,
+"province_demand": 34.317,
+"province_headroom": -22.368,
+"province_id": 516,
+"province_supply": 11.948,
+"short_equipment": [
+"artillery_equipment",
+"infantry_equipment"
+],
+"state_id": 6,
+"supply_band": "very_low",
+"supply_need": 1.0384,
+"supply_percent": 22.0,
+"supply_ratio": 0.21957,
+"supply_received": 0.228,
+"template": "Infanterie-Division"
+},
+{
+"army": "Armee Süd",
+"equipment_fill_min": 0.998,
+"equipment_readable": true,
+"heading_province": null,
+"hp": 227.82,
+"hp_max": 230.39999999999998,
+"hp_percent": 0.989,
+"id": "00001269:00001de7",
+"infrastructure": 3,
+"manpower": 10600.0,
+"manpower_max": 10600.0,
+"organisation": 60.17,
+"province_demand": 34.317,
+"province_headroom": -22.368,
+"province_id": 516,
+"province_supply": 11.948,
+"short_equipment": [
+"infantry_equipment"
+],
+"state_id": 6,
+"supply_band": "very_low",
+"supply_need": 1.254,
+"supply_percent": 22.0,
+"supply_ratio": 0.21957,
+"supply_received": 0.2754,
+"template": "Infanterie-Division"
+},
+{
+"army": "Armee West Nord",
+"equipment_fill_min": 1.0,
+"equipment_readable": true,
+"heading_province": null,
+"hp": 230.4,
+"hp_max": 230.39999999999998,
+"hp_percent": 1.0,
+"id": "00000033:00000001",
+"infrastructure": 3,
+"manpower": 10600.0,
+"manpower_max": 10600.0,
+"organisation": 66.42,
+"province_demand": 4.371,
+"province_headroom": -1.764,
+"province_id": 11640,
+"province_supply": 2.608,
+"short_equipment": [],
+"state_id": 978,
+"supply_band": "low",
+"supply_need": 1.2255,
+"supply_percent": 57.6,
+"supply_ratio": 0.5758,
+"supply_received": 0.7057,
+"template": "Infanterie-Division"
+},
+{
+"army": "Armee West Nord",
+"equipment_fill_min": 1.0,
+"equipment_readable": true,
+"heading_province": null,
+"hp": 230.4,
+"hp_max": 230.39999999999998,
+"hp_percent": 1.0,
+"id": "00000033:00000002",
+"infrastructure": 4,
+"manpower": 10600.0,
+"manpower_max": 10600.0,
+"organisation": 66.42,
+"province_demand": 5.208,
+"province_headroom": -0.955,
+"province_id": 9575,
+"province_supply": 4.253,
+"short_equipment": [],
+"state_id": 42,
+"supply_band": "ok",
+"supply_need": 1.2255,
+"supply_percent": 72.8,
+"supply_ratio": 0.72753,
+"supply_received": 0.8916,
+"template": "Infanterie-Division"
+}
+],
+"overdrawn_provinces": [
+{
+"demand": 34.317,
+"division_ids": [
+"00000033:00000005",
+"00001269:00001636",
+"00001269:000016f0",
+"00001269:0000174e",
+"00001269:000017ec",
+"00001269:00001de7",
+"00001269:00001e36",
+"00001269:00001e37",
+"00001269:00001f92",
+"00001269:00002136",
+"00001269:000024cd",
+"00001269:000029b6",
+"00001269:00003658",
+"00001269:00003820",
+"00001269:00003a71",
+"00001269:00003bd2",
+"00001269:00003c0b",
+"00001269:00003c95",
+"00001269:00003e0c",
+"00001269:00003e73",
+"00001269:00004062",
+"00001269:000042c2",
+"00001269:0000436c",
+"00001269:000043c4"
+],
+"province_id": 516,
+"shortfall": 22.368,
+"supply": 11.948
+}
+],
+"provinces": [
+{
+"demand": 34.317,
+"division_ids": [
+"00000033:00000005",
+"00001269:00001636",
+"00001269:000016f0"
+],
+"divisions": 24,
+"flows": [
+{
+"flow": 5.855,
+"node": 66,
+"node_kind": null,
+"node_province": null
+},
+{
+"flow": 6.046,
+"node": 67,
+"node_kind": null,
+"node_province": null
+},
+{
+"flow": 3.169,
+"node": 69,
+"node_kind": null,
+"node_province": null
+},
+{
+"flow": 1.147,
+"node": 71,
+"node_kind": null,
+"node_province": null
+},
+{
+"flow": 6.273,
+"node": 75,
+"node_kind": null,
+"node_province": null
+}
+],
+"headroom": -22.368,
+"naval_base_level": 0,
+"province_id": 516,
+"railway_level": 2,
+"state_id": 6,
+"supply": 11.948,
+"supply_hub": true
+},
+{
+"demand": 2.47,
+"division_ids": [
+"00001269:00002c89",
+"00001269:00002de8",
+"00000033:000003ef"
+],
+"divisions": 3,
+"flows": [
+{
+"flow": 0.998,
+"node": 89,
+"node_kind": null,
+"node_province": null
+},
+{
+"flow": 3.33,
+"node": 93,
+"node_kind": null,
+"node_province": null
+},
+{
+"flow": 3.169,
+"node": 102,
+"node_kind": null,
+"node_province": null
+},
+{
+"flow": 5.846,
+"node": 110,
+"node_kind": null,
+"node_province": null
+}
+],
+"headroom": 1.028,
+"naval_base_level": 0,
+"province_id": 563,
+"railway_level": 2,
+"state_id": 42,
+"supply": 3.498,
+"supply_hub": false
+},
+{
+"demand": 0.0,
+"division_ids": [
+"00000033:0000001d"
+],
+"divisions": 1,
+"flows": [
+{
+"flow": 1.206,
+"node": 79,
+"node_kind": null,
+"node_province": null
+},
+{
+"flow": 1.922,
+"node": 85,
+"node_kind": null,
+"node_province": null
+},
+{
+"flow": 5.009,
+"node": 87,
+"node_kind": null,
+"node_province": null
+},
+{
+"flow": 3.209,
+"node": 101,
+"node_kind": null,
+"node_province": null
+},
+{
+"flow": 3.578,
+"node": 111,
+"node_kind": null,
+"node_province": null
+},
+{
+"flow": 5.135,
+"node": 112,
+"node_kind": null,
+"node_province": null
+}
+],
+"headroom": 3.728,
+"naval_base_level": 0,
+"province_id": 586,
+"railway_level": 0,
+"state_id": 53,
+"supply": 3.728,
+"supply_hub": false
+}
+],
+"states": [
+{
+"buildings": {
+"air_base": 2,
+"arms_factory": 8,
+"fuel_silo": 1,
+"industrial_complex": 9,
+"infrastructure": 3
+},
+"divisions": 52,
+"divisions_with_problems": 52,
+"infrastructure": 3,
+"local_supply": 3.159,
+"province_ids": [
+516,
+3576,
+6446,
+6560
+],
+"railway_level_max": 2,
+"state_id": 6
+},
+{
+"buildings": {
+"air_base": 4,
+"arms_factory": 6,
+"industrial_complex": 2,
+"infrastructure": 3
+},
+"divisions": 3,
+"divisions_with_problems": 1,
+"infrastructure": 3,
+"local_supply": 1.45,
+"province_ids": [
+13375
+],
+"railway_level_max": 0,
+"state_id": 8
+}
+],
+"strength_below": 0.7,
+"summary": {
+"bands": {
+"full": 5,
+"low": 5,
+"ok": 43,
+"very_low": 93
+},
+"divisions": 146,
+"overdrawn_provinces": 9,
+"supply_percent_lowest": 16.8,
+"supply_percent_mean": 43.9
+},
+"supply_available": true,
+"supply_error": null,
+"supply_nodes": [],
+"unavailable": {
+"fields": [
+"hub_capacity",
+"railway_throughput",
+"trucks_and_trains_in_stock",
+"stored_supply_buffer",
+"attrition",
+"supply_after_planned_construction"
+],
+"reason": "the throughput, stock and attrition structures of the supply system were not mapped; null, not guessed. Local state supply, province supply, demand and flows, hub and railway levels and the division supply status are read."
+},
+"unvalidated_fields": [
+"supply_percent/supply_ratio/supply_need/supply_received (consistent, no on-screen comparison)",
+"province_supply/province_demand/flows (the only division group below 100 percent stands in the one overdrawn province)"
+],
+"validated_fields": [
+"id",
+"state_id",
+"hp",
+"manpower",
+"equipment have/need (matched the templates on every division)",
+"infrastructure (matched history/states for 4 of 5 buildings of state 64; infrastructure was one level higher, built in the run)",
+"local_supply (state): equals 0.3 x infrastructure + max(0.1, 0.18e-6 x manpower) + 0.2 x local_supplies + sum(0.2 + 0.05 x vp) for 700 of 1081 states within 0.001; the rest differ by multiples of 0.3 (infrastructure built since 1936)",
+"supply_nodes (31 pool records equal the used count; every hub province has a supply_node building, every port a naval_base)",
+"railway_level (province rail_way building: 2786 of 3213 equal the highest link level in map/railways.txt)"
+]
+},
+"air_regions": {
+"enemy_air": "Not in memory: hoi4_air_region_probe {state_id} opens the air map's region window and reads what it shows (active aircraft by type, detection and efficiency)",
+"regions": [
+{
+"air_bases_here": [
+{
+"aircraft_stationed": 0,
+"capacity": 1000,
+"free": 1000,
+"state_id": 7,
+"wings": []
+},
+{
+"aircraft_stationed": 0,
+"capacity": 200,
+"free": 200,
+"state_id": 977,
+"wings": []
+}
+],
+"aircraft_assigned": 2096,
+"enemy_air_superiority": null,
+"enemy_air_superiority_reason": "not_mapped: the enemy's air superiority per region is not located in memory yet",
+"name": "Benelux Region",
+"region_id": 5,
+"wings": [
+{
+"air_base_state": 42,
+"aircraft": 100,
+"aircraft_type": "small_plane_cas_airframe_0",
+"missions": [
+"cas"
+],
+"wing": "Sturzkampfgeschwader 2"
+},
+{
+"air_base_state": 56,
+"aircraft": 100,
+"aircraft_type": "small_plane_airframe_1",
+"missions": [
+"air_superiority"
+],
+"wing": "JG 302 'Wilde Sau'"
+},
+{
+"air_base_state": 56,
+"aircraft": 98,
+"aircraft_type": "small_plane_airframe_0",
+"missions": [
+"air_superiority"
+],
+"wing": "JG 77 'Herz As'"
+},
+{
+"air_base_state": 56,
+"aircraft": 100,
+"aircraft_type": "small_plane_airframe_0",
+"missions": [
+"air_superiority"
+],
+"wing": "JG 6 'Horst Wessel'"
+}
+],
+"wings_assigned": 21
+},
+{
+"air_bases_here": [],
+"aircraft_assigned": 100,
+"enemy_air_superiority": null,
+"enemy_air_superiority_reason": "not_mapped: the enemy's air superiority per region is not located in memory yet",
+"name": "Northern France",
+"region_id": 19,
+"wings": [
+{
+"air_base_state": 978,
+"aircraft": 100,
+"aircraft_type": "small_plane_cas_airframe_1",
+"missions": [
+"cas"
+],
+"wing": "Stukageschwader 2"
+}
+],
+"wings_assigned": 1
+},
+{
+"air_bases_here": [
+{
+"aircraft_stationed": 0,
+"capacity": 1000,
+"free": 1000,
+"state_id": 10,
+"wings": []
+},
+{
+"aircraft_stationed": 0,
+"capacity": 600,
+"free": 600,
+"state_id": 86,
+"wings": []
+}
+],
+"aircraft_assigned": 700,
+"enemy_air_superiority": null,
+"enemy_air_superiority_reason": "not_mapped: the enemy's air superiority per region is not located in memory yet",
+"name": "Western Poland",
+"region_id": 38,
+"wings": [
+{
+"air_base_state": 66,
+"aircraft": 100,
+"aircraft_type": "small_plane_cas_airframe_0",
+"missions": [
+"cas"
+],
+"wing": "Schlachtgeschwader 1"
+},
+{
+"air_base_state": 66,
+"aircraft": 100,
+"aircraft_type": "small_plane_cas_airframe_0",
+"missions": [
+"cas"
+],
+"wing": "Stukageschwader 1"
+},
+{
+"air_base_state": 763,
+"aircraft": 100,
+"aircraft_type": "small_plane_airframe_0",
+"missions": [
+"air_superiority"
+],
+"wing": "Jagdgeschwader 232"
+},
+{
+"air_base_state": 763,
+"aircraft": 100,
+"aircraft_type": "small_plane_cas_airframe_0",
+"missions": [
+"cas"
+],
+"wing": "SKG 2 'Immelmann'"
+}
+],
+"wings_assigned": 7
+}
+],
+"wings_without_region": [
+"Kampfgeschwader 154",
+"Sturzkampfgeschwader 162"
+]
+},
+"wars": {
+"alerts": [
+{
+"code": "threatened_state_undefended",
+"fix": {
+"args_hint": {
+"army": "<army>",
+"state_id": 51
+},
+"tool": "hoi4_army_move"
+},
+"message": "1 own state(s) next to hostile-held states have no own division: 51",
+"severity": "medium"
+}
+],
+"borders": [
+{
+"covered": true,
+"heuristic": true,
+"hostile": true,
+"hostile_basis": [
+"war_relation"
+],
+"neighbour_states": [
+980
+],
+"neighbour_tag": "BEL",
+"own_border_states": [
+34,
+35,
+42,
+51
+],
+"own_divisions_in_border_states": 41,
+"uncovered_own_border_states": [
+51
+]
+},
+{
+"covered": true,
+"heuristic": true,
+"hostile": true,
+"hostile_basis": [
+"war_relation"
+],
+"neighbour_states": [
+18,
+28,
+29,
+785
+],
+"neighbour_tag": "FRA",
+"own_border_states": [
+6,
+34,
+42,
+978
+],
+"own_divisions_in_border_states": 107,
+"uncovered_own_border_states": []
+},
+{
+"covered": true,
+"heuristic": true,
+"hostile": true,
+"hostile_basis": [
+"war_relation"
+],
+"neighbour_states": [
+8
+],
+"neighbour_tag": "LUX",
+"own_border_states": [
+42
+],
+"own_divisions_in_border_states": 23,
+"uncovered_own_border_states": []
+}
+],
+"capital_land": {
+"basis": "capital",
+"capital_state": 64,
+"states": [
+4,
+5,
+6,
+7,
+9,
+10,
+34,
+35,
+36,
+42,
+50,
+51,
+52,
+53,
+54,
+55,
+56,
+57,
+58,
+59,
+60,
+61,
+62,
+63,
+64,
+65,
+66,
+67,
+68,
+69,
+72,
+74,
+75,
+85,
+86,
+87,
+88,
+90,
+92,
+98,
+152,
+153,
+188,
+762,
+763,
+807,
+848,
+909,
+972,
+975,
+976,
+977,
+978
+]
+},
+"enemies_source": "war_relations",
+"enemy_held_adjacent_states": [
+{
+"adjacent_own_states": [
+42
+],
+"controller": "LUX",
+"name": "Luxembourg",
+"own_divisions_in_adjacent_states": 23,
+"owner": "LUX",
+"state_id": 8
+},
+{
+"adjacent_own_states": [
+34
+],
+"controller": "FRA",
+"name": "Champagne",
+"own_divisions_in_adjacent_states": 17,
+"owner": "FRA",
+"state_id": 18
+}
+],
+"enemy_held_adjacent_states_truncated": false,
+"hostile_tags": [
+{
+"basis": [
+"war_relation"
+],
+"tag": "AST"
+},
+{
+"basis": [
+"war_relation"
+],
+"tag": "BEL"
+},
+{
+"basis": [
+"war_relation"
+],
+"tag": "BRM"
+}
+],
+"input_authorized": false,
+"observation_paused_game": false,
+"occupied_own_states": [],
+"occupied_own_states_truncated": false,
+"own_divisions_in_transit": 0,
+"player": "GER",
+"threatened_own_states": [
+{
+"adjacent_hostile_states": [
+29
+],
+"defended": true,
+"hostile_tags": [
+"FRA"
+],
+"name": "Flanders",
+"own_divisions": 52,
+"owner": "BEL",
+"state_id": 6
+},
+{
+"adjacent_hostile_states": [
+18,
+29,
+785,
+980
+],
+"defended": true,
+"hostile_tags": [
+"BEL",
+"FRA"
+],
+"name": "Wallonia",
+"own_divisions": 17,
+"owner": "BEL",
+"state_id": 34
+},
+{
+"adjacent_hostile_states": [
+980
+],
+"defended": true,
+"hostile_tags": [
+"BEL"
+],
+"name": "Brabant",
+"own_divisions": 1,
+"owner": "HOL",
+"state_id": 35
+},
+{
+"adjacent_hostile_states": [
+8,
+28,
+980
+],
+"defended": true,
+"hostile_tags": [
+"BEL",
+"FRA",
+"LUX"
+],
+"name": "Moselland",
+"own_divisions": 23,
+"owner": "GER",
+"state_id": 42
+},
+{
+"adjacent_hostile_states": [
+980
+],
+"defended": false,
+"hostile_tags": [
+"BEL"
+],
+"name": "Rhineland",
+"own_divisions": 0,
+"owner": "GER",
+"state_id": 51
+},
+{
+"adjacent_hostile_states": [
+28
+],
+"defended": true,
+"hostile_tags": [
+"FRA"
+],
+"name": "Baden",
+"own_divisions": 15,
+"owner": "GER",
+"state_id": 978
+}
+],
+"threatened_own_states_truncated": false,
+"wars": {
+"allies_at_war": [],
+"at_war": true,
+"count": 21,
+"enemies": [
+"AST",
+"BEL",
+"BRM",
+"CAN",
+"COG",
+"ENG",
+"FRA",
+"HOL",
+"INS",
+"JOR",
+"KUW",
+"LEB",
+"LUX",
+"MAL",
+"NZL",
+"OMA",
+"PAL",
+"POL",
+"RAJ",
+"SAF",
+"SYR"
+],
+"fighting": [
+"ENG",
+"FRA",
+"AST",
+"CAN",
+"NZL",
+"SAF",
+"OMA",
+"RAJ",
+"LEB",
+"JOR",
+"SYR",
+"PAL",
+"MAL",
+"BRM",
+"KUW",
+"HOL",
+"INS",
+"BEL",
+"LUX",
+"COG"
+],
+"leaders": null,
+"leaders_reason": "offset_not_validated",
+"own_surrender_progress": null,
+"own_surrender_progress_reason": "not_mapped: the country's surrender progress is not located in memory yet",
+"wars": [
+{
+"attacker": null,
+"defender": null,
+"enemy": {
+"name": "Poland",
+"tag": "POL"
+},
+"enemy_land": {
+"states_controlled": 0,
+"states_owned": 11
+},
+"enemy_surrender_progress": null,
+"enemy_surrender_progress_reason": "not_mapped: the country's surrender progress is not located in memory yet",
+"own_naval_intel": null,
+"own_naval_intel_reason": "not_mapped: the player's naval intel against the country is not located in memory yet",
+"result": "WON: POL controls none of its 11 state(s) (it has capitulated); a peace conference or annexation follows",
+"sides_reason": "offset_not_validated",
+"started": {
+"iso": "1939-09-02 08:00",
+"raw": 60791503
+},
+"war_goals_involving_enemy": [],
+"war_score": null,
+"war_score_reason": "offset_not_validated"
+},
+{
+"attacker": null,
+"defender": null,
+"enemy": {
+"name": "Netherlands",
+"tag": "HOL"
+},
+"enemy_land": {
+"states_controlled": 2,
+"states_owned": 5
+},
+"enemy_surrender_progress": null,
+"enemy_surrender_progress_reason": "not_mapped: the country's surrender progress is not located in memory yet",
+"own_naval_intel": null,
+"own_naval_intel_reason": "not_mapped: the player's naval intel against the country is not located in memory yet",
+"result": "ongoing: HOL owns 5 and controls 2 state(s)",
+"sides_reason": "offset_not_validated",
+"started": {
+"iso": "1940-05-11 21:00",
+"raw": 60797540
+},
+"war_goals_involving_enemy": [],
+"war_score": null,
+"war_score_reason": "offset_not_validated"
+},
+{
+"attacker": null,
+"defender": null,
+"enemy": {
+"name": "Belgium",
+"tag": "BEL"
+},
+"enemy_land": {
+"states_controlled": 1,
+"states_owned": 4
+},
+"enemy_surrender_progress": null,
+"enemy_surrender_progress_reason": "not_mapped: the country's surrender progress is not located in memory yet",
+"own_naval_intel": null,
+"own_naval_intel_reason": "not_mapped: the player's naval intel against the country is not located in memory yet",
+"result": "ongoing: BEL owns 4 and controls 1 state(s)",
+"sides_reason": "offset_not_validated",
+"started": {
+"iso": "1940-05-14 04:00",
+"raw": 60797595
+},
+"war_goals_involving_enemy": [],
+"war_score": null,
+"war_score_reason": "offset_not_validated"
+}
+],
+"wars_won": [
+"POL"
+]
+},
+"wars_reason": null
+},
+"war_stats": {
+"count": 1,
+"date": {
+"iso": "1940-07-26 17:00",
+"raw": 60799360
+},
+"input_authorized": false,
+"observation_paused_game": false,
+"player": {
+"name": "German Reich",
+"tag": "GER"
+},
+"scope": "player",
+"skipped_reason": "war relations not held by exactly two listed countries (countries created in game, e.g. civil war sides)",
+"skipped_relations": 0,
+"units": "men (plain count; the game's casualties_k is this / 1000)",
+"wars": [
+{
+"includes_player": true,
+"relations": [
+{
+"attributed": true,
+"countries": [
+{
+"casualties": 42834,
+"extra": 0,
+"name": "German Reich",
+"tag": "GER"
+},
+{
+"casualties": 65954,
+"extra": 0,
+"name": "Netherlands",
+"tag": "HOL"
+}
+],
+"since": {
+"iso": "1940-05-11 21:00",
+"raw": 60797540
+}
+},
+{
+"attributed": true,
+"countries": [
+{
+"casualties": 51399,
+"extra": 0,
+"name": "German Reich",
+"tag": "GER"
+},
+{
+"casualties": 18100,
+"extra": 0,
+"name": "Belgium",
+"tag": "BEL"
+}
+],
+"since": {
+"iso": "1940-05-14 04:00",
+"raw": 60797595
+}
+}
+],
+"sides": [],
+"sides_consistent": true
+}
+]
+},
+"economy": {
+"civilian_factories_available_for_projects": 40,
+"civilian_factories_idle": 0,
+"civilian_factories_on_construction": 40,
+"construction_projects_queued": 17,
+"factory_trigger_count": {
+"civilian": 106,
+"military": 109,
+"naval": 21
+},
+"input_authorized": false,
+"observation_paused_game": false,
+"owned": true,
+"player": "GER",
+"political_power": {
+"exact_rational": {
+"denominator": 100000,
+"numerator": 52965301
+},
+"integer_trigger_count": 529,
+"raw_signed": 52965301,
+"raw_units_per_point": 100000
+},
+"unavailable": {
+"idle_builders": true,
+"shortages": true,
+"stability": true,
+"ui_factory_totals": true,
+"war_support": true
+}
+},
+"production_lines": {
+"anomalous_counter_count": 0,
+"catalog_coverage": "all_types_in_scoped_equipment_line_collection",
+"collection_count": 11,
+"collection_policy": {
+"engine_invariant_claimed": false,
+"maximum_capacity": 2048
+},
+"complete_catalog": true,
+"counter_data_complete": true,
+"counter_policy": {
+"engine_invariant_claimed": false,
+"maximum": 1000000,
+"minimum": 0
+},
+"cross_load_identity_available": false,
+"custom_variant_identity_available": false,
+"eligibility_available": false,
+"equipment_catalog_scope": "reviewed_base_equipment_types_only",
+"equipment_id_kind": "base_equipment_type_key",
+"equipment_id_unavailable_count": 0,
+"equipment_ids_available": true,
+"general_production_collection_available": false,
+"idle_capacity_available": false,
+"input_authorized": false,
+"known_line_count": 11,
+"limit": 128,
+"lines": [
+{
+"entry_index": 0,
+"equipment_id": "small_plane_naval_bomber_airframe_1",
+"equipment_unavailable_reason": null,
+"factory_counters": {
+"active_factories_raw_signed": 1,
+"available_under_reviewed_policy": true,
+"damaged_factories_raw_signed": 0,
+"requested_factories_raw_signed": 1
+},
+"input_authorized": false,
+"line_kind": "military",
+"output": {
+"at_cap": false,
+"available": true,
+"days_to_next_unit": 3.157,
+"efficiency": 83.945,
+"efficiency_cap": 85.0,
+"efficiency_min": 83.945,
+"efficiency_start": 17.5,
+"ic_last_day": 6.666,
+"progress": 0.085,
+"progress_ic": 1.953,
+"unit_cost": 23.0,
+"units_left": null,
+"units_per_day": 0.29
+}
+},
+{
+"entry_index": 1,
+"equipment_id": "medium_tank_chassis_1",
+"equipment_unavailable_reason": null,
+"factory_counters": {
+"active_factories_raw_signed": 30,
+"available_under_reviewed_policy": true,
+"damaged_factories_raw_signed": 0,
+"requested_factories_raw_signed": 30
+},
+"input_authorized": false,
+"line_kind": "military",
+"output": {
+"at_cap": true,
+"available": true,
+"days_to_next_unit": 0.039,
+"efficiency": 85.0,
+"efficiency_cap": 85.0,
+"efficiency_min": 85.0,
+"efficiency_start": 17.5,
+"ic_last_day": 196.761,
+"progress": 0.067,
+"progress_ic": 0.545,
+"unit_cost": 8.14,
+"units_left": null,
+"units_per_day": 24.172
+}
+},
+{
+"entry_index": 2,
+"equipment_id": "infantry_equipment_1",
+"equipment_unavailable_reason": null,
+"factory_counters": {
+"active_factories_raw_signed": 26,
+"available_under_reviewed_policy": true,
+"damaged_factories_raw_signed": 0,
+"requested_factories_raw_signed": 26
+},
+"input_authorized": false,
+"line_kind": "military",
+"output": {
+"at_cap": false,
+"available": true,
+"days_to_next_unit": 0.001,
+"efficiency": 76.92,
+"efficiency_cap": 91.0,
+"efficiency_min": 70.628,
+"efficiency_start": 17.5,
+"ic_last_day": 157.016,
+"progress": 0.726,
+"progress_ic": 0.352,
+"unit_cost": 0.485,
+"units_left": null,
+"units_per_day": 323.744
+}
+},
+{
+"entry_index": 3,
+"equipment_id": "support_equipment_1",
+"equipment_unavailable_reason": null,
+"factory_counters": {
+"active_factories_raw_signed": 6,
+"available_under_reviewed_policy": true,
+"damaged_factories_raw_signed": 0,
+"requested_factories_raw_signed": 6
+},
+"input_authorized": false,
+"line_kind": "military",
+"output": {
+"at_cap": true,
+"available": true,
+"days_to_next_unit": 0.011,
+"efficiency": 85.0,
+"efficiency_cap": 85.0,
+"efficiency_min": 85.0,
+"efficiency_start": 17.5,
+"ic_last_day": 39.352,
+"progress": 0.889,
+"progress_ic": 3.557,
+"unit_cost": 4.0,
+"units_left": null,
+"units_per_day": 9.838
+}
+}
+],
+"next_offset": null,
+"observation_paused_game": false,
+"offset": 0,
+"owned": true,
+"page_count": 11,
+"page_index_scope": "fresh_snapshot_collection_only",
+"player": "GER",
+"scope": "own_equipment_line_collection_only",
+"supported_count": 11,
+"total_count": 11,
+"ui_allocation_available": false,
+"unsupported_count": 0,
+"unsupported_type_metadata": []
+},
+"stockpile": {
+"equipment": [
+{
+"archetype": "anti_air_equipment",
+"consumption_per_day": 0.0,
+"cover_after_shortfall": 777.0,
+"days_of_cover": null,
+"depleting": false,
+"factories": 1,
+"fielded_have": 0.0,
+"fielded_need": 0.0,
+"fielded_short": 0.0,
+"net_per_day": 10.07,
+"produced_per_day": 0.48,
+"production_lines": 1,
+"stockpile": 777.0,
+"trend_days": 29.79,
+"variant_count": 4
+},
+{
+"archetype": "anti_tank_equipment",
+"consumption_per_day": 0.0,
+"cover_after_shortfall": 472.0,
+"days_of_cover": null,
+"depleting": false,
+"factories": 0,
+"fielded_have": 0.0,
+"fielded_need": 0.0,
+"fielded_short": 0.0,
+"net_per_day": 9.8,
+"produced_per_day": -0.0,
+"production_lines": 0,
+"stockpile": 472.0,
+"trend_days": 29.79,
+"variant_count": 4
+},
+{
+"archetype": "armored_car_equipment",
+"consumption_per_day": 0.0,
+"cover_after_shortfall": 44.0,
+"days_of_cover": null,
+"depleting": false,
+"factories": 0,
+"fielded_have": 0.0,
+"fielded_need": 0.0,
+"fielded_short": 0.0,
+"net_per_day": 1.48,
+"produced_per_day": -0.0,
+"production_lines": 0,
+"stockpile": 44.0,
+"trend_days": 29.79,
+"variant_count": 2
+},
+{
+"archetype": "artillery_equipment",
+"consumption_per_day": 1.16,
+"cover_after_shortfall": 8361.0,
+"days_of_cover": null,
+"depleting": false,
+"factories": 12,
+"fielded_have": 5825.0,
+"fielded_need": 5868.0,
+"fielded_short": 43.0,
+"net_per_day": 22.02,
+"produced_per_day": 23.18,
+"production_lines": 1,
+"stockpile": 8404.0,
+"trend_days": 29.79,
+"variant_count": 6
+}
+],
+"input_authorized": false,
+"observation_paused_game": false,
+"trend_note": "net_per_day is measured by this server between game days it has seen (up to 30); it is null until the game has run past one more day",
+"trucks": {
+"archetype": "motorized_equipment",
+"consumption_per_day": 0.0,
+"cover_after_shortfall": 1038.0,
+"days_of_cover": null,
+"depleting": false,
+"factories": 7,
+"fielded_have": 5299.0,
+"fielded_need": 5320.0,
+"fielded_short": 21.0,
+"net_per_day": 17.52,
+"produced_per_day": 15.57,
+"production_lines": 1,
+"stockpile": 1059.0,
+"trend_days": 29.79,
+"variant_count": 4
+}
+},
+"states_LUX": {
+"factories_start": {
+"controlled": {
+"civilian": 3,
+"military": 1,
+"naval": 0,
+"total": 4
+},
+"owned": {
+"civilian": 3,
+"military": 1,
+"naval": 0,
+"total": 4
+}
+},
+"matched": 1,
+"max_shared": 25,
+"ms": 9,
+"read_ms": 9,
+"states": [
+{
+"buildings": {
+"air_base": 4,
+"arms_factory": 6,
+"industrial_complex": 2,
+"infrastructure": 3
+},
+"category": "town",
+"controller": "LUX",
+"factories": {
+"civilian": 2,
+"military": 6,
+"naval": 0,
+"total": 8
+},
+"factories_start": {
+"civilian": 3,
+"military": 1,
+"naval": 0
+},
+"infrastructure_start": 3,
+"name": "Luxembourg",
+"owner": "LUX",
+"provinces_held_by_others": [
+{
+"controller": "GER",
+"province": 13375
+}
+],
+"resources": {
+"steel": 14.0
+},
+"state_id": 8,
+"victory_points": [
+{
+"controller": "LUX",
+"province": 6583,
+"victory_points": 5.0
+}
+],
+"victory_points_total": 5.0,
+"x": 2900.0,
+"z": 1512.0
+}
+],
+"states_total": 1,
+"tag": "LUX",
+"totals": {
+"factories": {
+"civilian": 2,
+"military": 6,
+"naval": 0
+},
+"free_slots": null,
+"states_controlled": 1,
+"states_owned": 1
+},
+"victory_points": {
+"held_by_others": 0.0,
+"largest_still_held": [
+{
+"province": 6583,
+"state_id": 8,
+"victory_points": 5.0
+}
+],
+"share_held_by_others": 0.0,
+"total": 5.0
+}
+}
+}

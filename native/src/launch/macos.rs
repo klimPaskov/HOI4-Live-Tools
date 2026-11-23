@@ -102,6 +102,7 @@ mod supply;
 mod supplymem;
 mod template_edit;
 mod template_get;
+mod terrain;
 #[cfg(test)]
 mod testmem;
 mod ui;
@@ -781,7 +782,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_army_exercise","description":"Start or stop army exercises for own armies: the divisions train toward the game's training maximum and the country earns army experience (doctrines, templates and designs are paid with it), at the cost of extra attrition (equipment) and fuel. Start: the army's card selects it and the battle plan bar's exercise button (btn_exercise) is clicked; stop_at_max (default true) Shift+clicks it so each army stops by itself at the maximum. Stop (on:false): the card's stop-training button. Verified per army by its card: training_marker shown while it exercises, icn_exercise_stop_at_max with the stop at the maximum (hoi4_armies reports both as exercising and exercise_stop_at_max). An army already as asked is left alone. A disabled button (no division that can train, all at the maximum) is refused with exercise_unavailable for that army; the receipt's detail lists every army's card state.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string","minLength":1,"maxLength":128},"minItems":1,"maxItems":24},"on":{"type":"boolean"},"stop_at_max":{"type":"boolean","description":"start only: stop each army at the training maximum (default true)"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","on","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_states","description":"States in one memory read (no interface input). A country tag (e.g. SOV, GER) lists every state it owns or controls: owner, controller, category, live building levels (buildings, factories), for the own country the shared building slots (unlocked, used, queued, free), resources, victory points with who holds them, the factories history/states gives (factories_start, an estimate for another country) and totals. Filter and sort in the same call instead of opening states one by one: owned_only, ids, min_free_slots, building with min_level/max_level, resource; sort by free_slots (default), factories, infrastructure, victory_points, level (of building), resource, id or name; limit (default 200) and offset. Large countries are read as fast as small ones: choose the few states to act on from this table, then act. A name (accent-insensitive substring) or one exact ID finds states by name instead. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"},"ids":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"maxItems":1000},"owned_only":{"type":"boolean"},"min_free_slots":{"type":"integer","minimum":0,"maximum":25},"building":{"type":"string"},"min_level":{"type":"integer","minimum":0},"max_level":{"type":"integer","minimum":0},"resource":{"type":"string"},"sort":{"type":"string","enum":["free_slots","factories","infrastructure","victory_points","level","resource","id","name"]},"limit":{"type":"integer","minimum":0,"maximum":1000},"offset":{"type":"integer","minimum":0}},"required":["query"],"additionalProperties":false}}),
         json!({"name":"hoi4_wars","description":"Own land borders, occupied and threatened own states, from state owner/controller, own division positions and state adjacency derived from the install map files. Pure read; no lease. Stage B: wars lists the own wars (enemies, allies at war, start date) from war relations; sides, leaders, war score and justification timers are unvalidated; surrender progress (wars[].enemy_surrender_progress, own_surrender_progress) and the naval intel against each enemy (wars[].own_naval_intel) are not yet built and always null with a reason; hostility is the war enemies plus the occupation proxy and the optional enemies tags you pass; covered is a heuristic (own divisions stand in the border states), not a front-line-order read. Alerts: own_state_occupied, border_uncovered, threatened_state_undefended. capital_land: own-controlled states the capital reaches over own-controlled land (history capital, else the largest own area); a division elsewhere is overseas (disbanding it loses 75% of its equipment).","inputSchema":{"type":"object","properties":{"enemies":{"type":"array","items":{"type":"string","minLength":3,"maxLength":3},"maxItems":32},"max_states":{"type":"integer","minimum":1,"maximum":1100}},"additionalProperties":false}}),
-        json!({"name":"hoi4_province_graph","description":"Land provinces of the given states and the provinces each one touches, from the install's map files (provinces.bmp, definition.csv, history/states): per province its id, its state and its land neighbours. Use it to see which provinces an objective can be attacked from and to find a way over land; who holds a province is in hoi4_states (a state id query lists its provinces with their controllers). Pure read; no lease, no game memory.","inputSchema":{"type":"object","properties":{"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":128}},"required":["states"],"additionalProperties":false}}),
+        json!({"name":"hoi4_province_graph","description":"Land provinces of the given states and the provinces each one touches, from the install's map files (provinces.bmp, definition.csv, history/states): per province its id, its state and its land neighbours; its terrain with the terrain's combat width, support width, attack modifier, movement cost and attrition (common/terrain), whether it is coastal, and the bunker levels its state history sets (forts_in_history: start or the dated block; live levels are not read here); per border (borders[]) the river that draws it (small or large, with the attack penalty of the river defines; touches = a river meets the border only at a point, estimate) and special crossings of adjacencies.csv (sea strait with the sea province, impassable, canal rule). Use it to see which provinces an objective can be attacked from and to find a way over land; who holds a province is in hoi4_states (a state id query lists its provinces with their controllers). Pure read; no lease, no game memory.","inputSchema":{"type":"object","properties":{"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":128}},"required":["states"],"additionalProperties":false}}),
         json!({"name":"hoi4_front_plan","description":"War plan for the named enemy tags (a tag, a comma list or an array): per contiguous border the own and enemy border states, ranked attack axes (cheapest route by terrain, infrastructure, urban and bunkers toward the enemy capital and valuable states, with the states along it), holding-line and second-line states for the other fronts, own divisions per front versus what is missing, and concrete hoi4_army_front / hoi4_army_offensive / hoi4_army_plan suggestions with state ids (add request_id and lease_token). Pure read; visible ownership and own division positions only, vanilla map files; no lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"},"description":"enemy tag(s), e.g. POL or [\"FRA\",\"BEL\"]"},"max_axes":{"type":"integer","minimum":1,"maximum":6}},"required":["enemy"],"additionalProperties":false}}),
         json!({"name":"hoi4_encirclement_candidates","description":"Pockets of enemy-controlled states that taking at most max_gap neck states would cut off: the pocket, the neck, the two pincer arms (own state into neck state), divisions needed and available per arm, value (points, industry, manpower, resources) and a score; sea, impassable states and neutral neighbours count as walls. Pure read; no lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"max_gap":{"type":"integer","minimum":0,"maximum":3},"limit":{"type":"integer","minimum":1,"maximum":20}},"required":["enemy"],"additionalProperties":false}}),
         json!({"name":"hoi4_war_goal_targets","description":"Which enemy-owned states to demand in the peace conference, ranked by points, industry, manpower and resources with tiers (must_take, worth_taking, optional), resource prizes, contiguous blocks, own cores and which states we already occupy. A read, not an action; the conference cost itself is not modelled. No lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["enemy"],"additionalProperties":false}}),
@@ -1802,6 +1803,8 @@ impl MacClock {
                 .exe;
             let dir = mapdata::game_dir(exe)?;
             let neighbours = wars::province_neighbours(&dir)?;
+            // terrain, rivers, forts and special crossings (map files); the graph stands without them
+            let terrain = terrain::map_terrain(&dir);
             let mut rows = Vec::new();
             for state in states {
                 // A state id the map does not know is left out, not an error for the others.
@@ -1815,10 +1818,28 @@ impl MacClock {
                     };
                     let mut next = next.clone();
                     next.sort_unstable();
-                    rows.push(json!({"province": province, "state_id": state, "neighbours": next}));
+                    let mut row =
+                        json!({"province": province, "state_id": state, "neighbours": next});
+                    if let Ok(t) = &terrain {
+                        if let (Some(o), Value::Object(extra)) =
+                            (row.as_object_mut(), t.province(province))
+                        {
+                            o.extend(extra);
+                        }
+                        row["borders"] = json!(next
+                            .iter()
+                            .map(|n| t.border(province, *n))
+                            .collect::<Vec<_>>());
+                    }
+                    rows.push(row);
                 }
             }
-            return Ok(json!({"provinces": rows, "source": "map files"}));
+            let mut out = json!({"provinces": rows, "source": "map files"});
+            match &terrain {
+                Ok(t) => out["rules"] = t.rules(),
+                Err(e) => out["terrain_error"] = json!(e),
+            }
+            return Ok(out);
         }
         if matches!(
             name,
