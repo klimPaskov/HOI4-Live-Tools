@@ -205,6 +205,26 @@ class Poland(unittest.TestCase):
                             "war.operation_refs")
         self.assertTrue(any("over the 24" in m for m in found), found)
 
+    def test_a_regroup_at_war_takes_line_armies_outside_the_group(self):
+        def outside(op):
+            op["formations"][1]["army"] = "Armee West"
+            op["holds"][0]["armies"] = [{"army": "Armee Rhein", "divisions": {INF: 5}}]
+        found = self.errors(self.changed(outside), "war.operation_refs")
+        self.assertTrue(any("not in army_group" in m for m in found), found)
+        found = self.errors(self.changed(lambda op: (outside(op), op.update(regroup_at_war=True))),
+                            "war.operation_refs")
+        self.assertFalse(any("not in army_group" in m for m in found), found)
+
+    def test_group_cap_allows_two_groups_of_line_armies(self):
+        def six(op):
+            op["formations"][:2] = [{"army": f"Armee {i}", "role": "line", "divisions": {INF: 2}} for i in range(6)]
+        found = self.errors(self.changed(six), "war.operation_refs")
+        self.assertTrue(any("6 line armies in one group" in m for m in found), found)
+        found = self.errors(self.changed(lambda op: (six(op), op.update(group_cap=3))), "war.operation_refs")
+        self.assertFalse(any("line armies" in m for m in found), found)
+        found = self.errors(self.changed(lambda op: (six(op), op.update(group_cap=2))), "war.operation_refs")
+        self.assertTrue(any("two groups of 2" in m for m in found), found)
+
     def test_the_air_flies_over_the_operation(self):
         found = self.errors(self.changed(lambda op: op["air"].update(regions=[38])), "war.operation_support")
         self.assertTrue(any("[39]" in m for m in found), found)
