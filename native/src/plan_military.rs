@@ -176,7 +176,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Duration;
 
 /// Losses per enemy tag: (own, enemy), in men.
-type Losses = BTreeMap<String, (f64, f64)>;
+pub(super) type Losses = BTreeMap<String, (f64, f64)>;
 
 /// What the runner keeps for these rules besides `done` and the skip timers.
 #[derive(Default)]
@@ -1167,7 +1167,7 @@ fn invasion_step(
 
 /// Own and enemy losses per enemy tag from hoi4_war_stats (the relations with the player);
 /// None when the read has no player.
-fn losses_by_enemy(stats: &Value) -> Option<Losses> {
+pub(super) fn losses_by_enemy(stats: &Value) -> Option<Losses> {
     let me = stats["player"]["tag"].as_str()?;
     let mut out: Losses = BTreeMap::new();
     for war in list(stats, "wars")
@@ -1986,7 +1986,24 @@ pub(super) fn group_marshal_step(
     for (group, divisions) in vacant {
         let named = planned_marshals(state, plan, &roster, &group);
         let skip = |n: &str| state.skipped(now, "gfmc", &format!("{group}|{n}"));
-        let Some((general, promotes)) = marshal_pick(rows, &tag, &named, &skip) else {
+        // the commander list closed: the read knows only the leaders who lead something, so a
+        // free field marshal is invisible (w46a1, 23 Nov 2026: leader_roster_read false, Army
+        // Group 2 leaderless all war). The plan's named marshals who lead no group are tried by
+        // name (hoi4_army_commander opens the list and refuses an unknown name); a refused name
+        // rests 30 days like any other.
+        let leading: Vec<String> = list(&roster, "army_groups")
+            .iter()
+            .filter_map(|g| g["field_marshal"].as_str().map(str::to_string))
+            .collect();
+        let blind = (read["leader_roster_read"] == json!(false))
+            .then(|| {
+                named
+                    .iter()
+                    .find(|n| !leading.contains(n) && !skip(n))
+                    .map(|n| (n.clone(), false))
+            })
+            .flatten();
+        let Some((general, promotes)) = marshal_pick(rows, &tag, &named, &skip).or(blind) else {
             note(
                 state,
                 key,

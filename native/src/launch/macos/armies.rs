@@ -270,9 +270,18 @@ fn planning_of(planning: &BTreeMap<String, f64>, ids: &[String]) -> Value {
 }
 /// division id -> state id where it stands (None while moving or unknown).
 pub(super) fn division_states(r: &Reader<'_>, image: u64) -> Result<BTreeMap<String, Option<i32>>> {
+    let country = own_country(r, image)?;
+    division_states_of(r, image, country)
+}
+/// division id -> state id of another country's divisions (the same CCountry division list the
+/// own read walks; the caller passes a country pointer of the game state's country table).
+pub(super) fn division_states_of(
+    r: &Reader<'_>,
+    image: u64,
+    country: u64,
+) -> Result<BTreeMap<String, Option<i32>>> {
     let u = ui(r)?;
     let l = crate::construction::layout(r);
-    let country = own_country(r, image)?;
     let (_, data, count) = r.array_header(country + u.country_divisions)?;
     let mut out = BTreeMap::new();
     for index in 0..count.min(4096) as u64 {

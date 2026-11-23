@@ -3120,6 +3120,26 @@ fn wing_owners(entries: &[Value], active: &[bool], wings: &[Value]) -> HashMap<S
             owner.insert(name.to_string(), i);
         }
     }
+    // a wing no entry claims (its own entry is over, or it flies an older model than the active
+    // entries name) joins an active entry of its airframe: no wing stays on a finished war's
+    // region (w46c1, 23 Nov 2026: 800 planes over Western Poland for the whole western war after
+    // the Polish entries had ended)
+    for w in wings {
+        let name = text(&w["wing"]);
+        if name.is_empty() || owner.contains_key(name) {
+            continue;
+        }
+        let airframe_only = |e: &Value| {
+            e["wing"].as_str().is_none_or(str::is_empty)
+                && e["airframe"]
+                    .as_str()
+                    .filter(|a| !a.is_empty())
+                    .is_some_and(|a| text(&w["aircraft_type"]).starts_with(a))
+        };
+        if let Some(i) = (0..entries.len()).find(|i| active[*i] && airframe_only(&entries[*i])) {
+            owner.insert(name.to_string(), i);
+        }
+    }
     owner
 }
 
@@ -3213,7 +3233,32 @@ pub(super) fn air_plan_step(
             // A base the game refused (full, or out of the wing's reach) is not asked again for
             // 30 days; the wing flies its mission from where it stands meanwhile (n1, 16 Nov 2026:
             // the same refused rebase every 15 days and no mission in between).
-            let target = rebase_target(entry, region, wing, &room)
+            // a base refused for THIS wing is left out (another base with room is tried), not
+            // every rebase of the wing (w43n1: JG 1's base in state 57 was refused and the wing
+            // flew from Poland for 30 days while other bases had room)
+            let open: Vec<Value> = room
+                .iter()
+                .filter(|b| {
+                    b["state_id"]
+                        .as_i64()
+                        .is_none_or(|s| !state.skipped(now, "airrebase", &format!("{name}|{s}")))
+                })
+                .cloned()
+                .collect();
+            let here = wing["air_base"]["state_id"].as_i64();
+            let planes = wing["aircraft"].as_i64().unwrap_or(0);
+            // a mission the game refused (the wing's reach, a marker over the region) is not sent
+            // again unchanged: the wing first moves to a base with room inside the mission's
+            // region (w43n1: four CAS wings refused over Benelux 4-5 times each, from Poland)
+            let refused_here = region_arg.as_ref().is_some_and(|r| {
+                state.done.get(&format!("airref:{name}:{r}")).copied() == here.or(Some(-1))
+            });
+            let target = rebase_target(entry, region, wing, &open)
+                .or_else(|| {
+                    refused_here
+                        .then(|| roomiest_base(&open, region, here, planes))
+                        .flatten()
+                })
                 .filter(|_| !state.skipped(now, "airrebase", &name));
             if let Some(base) = target {
                 let planes = wing["aircraft"].as_i64().unwrap_or(0);
@@ -3231,11 +3276,11 @@ pub(super) fn air_plan_step(
                     "ab",
                 )?;
                 if why.contains("rebase_refused") {
-                    state.skip(now, "airrebase", &name, 30 * DAY);
+                    state.skip(now, "airrebase", &format!("{name}|{base}"), 30 * DAY);
                     note(
                         state,
                         "air_plan",
-                        format!("{name}: the game refused the base in state {base}; the wing flies from its own base for 30 days"),
+                        format!("{name}: the game refused the base in state {base} (full, or out of reach); another base with room is tried"),
                     );
                 } else if !ok {
                     state.skip(now, "airplan", &name, 7 * DAY);
@@ -3261,6 +3306,28 @@ pub(super) fn air_plan_step(
             if !moved.is_empty() {
                 return Ok(Some(moved.join("; ")));
             }
+            // refused from this very base before, and no base with room in the region: not sent
+            // again unchanged; the entry's `fallback_region` is flown instead when it has one
+            let fallback = entry["fallback_region"]
+                .as_i64()
+                .map(|n| n.to_string())
+                .or_else(|| entry["fallback_region"].as_str().map(str::to_string));
+            let region_arg = if refused_here {
+                match fallback {
+                    Some(f) if &f != region_arg => f,
+                    _ => {
+                        state.skip(now, "airplan", &name, 7 * DAY);
+                        note(
+                            state,
+                            "air_plan",
+                            format!("{name}: {mission} over region {region_arg} refused from its base in state {}; no base with room in the region: the wing needs a base there (build or free one)", here.map_or("?".into(), |h| h.to_string())),
+                        );
+                        continue;
+                    }
+                }
+            } else {
+                region_arg.clone()
+            };
             let (ok, why) = state.act(
                 tools,
                 lease,
@@ -3269,7 +3336,12 @@ pub(super) fn air_plan_step(
                 "ap",
             )?;
             if !ok {
-                state.skip(now, "airplan", &name, 7 * DAY);
+                state.skip(now, "airplan", &name, DAY);
+                state
+                    .done
+                    .insert(format!("airref:{name}:{region_arg}"), here.unwrap_or(-1));
+            } else {
+                state.done.remove(&format!("airref:{name}:{region_arg}"));
             }
             return Ok(Some(format!(
                 "air_plan {name} {mission} over region {region_arg}: {ok} {why}"
@@ -8624,6 +8696,12 @@ mod tests {
         assert_eq!(owners["JG 3"], 1);
         let owners = wing_owners(entries, &[false, false], list(&read, "wings"));
         assert!(!owners.contains_key("JG 3"));
+        // an older model no active entry names (its own entry is over) joins one of its airframe
+        read["wings"].as_array_mut().unwrap().push(json!(
+            {"wing": "JG 4", "aircraft_type": "small_plane_airframe_1", "variant": "Bf 109 B", "aircraft": 100,
+             "region": {"id": 38}, "air_base": {"base_id": 4, "state_id": 551}, "missions": ["air_superiority"]}));
+        let owners = wing_owners(entries, &[false, true], list(&read, "wings"));
+        assert_eq!(owners["JG 4"], 1);
     }
 
     #[test]
@@ -8965,7 +9043,7 @@ mod tests {
     }
 
     #[test]
-    fn a_refused_rebase_waits_30_days_and_the_wing_flies_its_mission_meanwhile() {
+    fn a_refused_base_is_not_asked_again_another_is_tried_and_the_wing_flies_its_mission() {
         let tools = fake(vec![("hoi4_air", air_read())]);
         tools
             .refuse
@@ -8977,7 +9055,11 @@ mod tests {
         let mut state = State::default();
         let out = step(&mut state, &tools, &plan, "l", START).unwrap();
         assert!(out.unwrap().contains("rebase to state 551: false"));
+        // the other base of the region with room (w43n1: one refused base kept JG 1 in Poland)
         let out = step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap();
+        assert!(out.unwrap().contains("rebase to state 550: false"));
+        // no base left: the wing flies its mission from where it stands
+        let out = step(&mut state, &tools, &plan, "l", START + 6 * DAY).unwrap();
         assert_eq!(
             out.as_deref(),
             Some("air_plan 1. Stormo air_superiority over region 273: true Verified")
@@ -8986,7 +9068,38 @@ mod tests {
             .iter()
             .filter(|(n, _)| n == "hoi4_air_rebase")
             .count();
-        assert_eq!(rebases, 1);
+        assert_eq!(rebases, 2);
+    }
+
+    #[test]
+    fn a_refused_mission_moves_the_wing_into_the_region_and_is_not_sent_again_unchanged() {
+        let tools = fake(vec![("hoi4_air", air_read())]);
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_air_mission".into(), "input_readback_failed");
+        // no base_region: only the refusal moves the wing
+        let plan = json!({"air_plan": [
+            {"airframe": "small_plane_airframe_0", "version": "CR.32",
+             "mission": "air_superiority", "region": 273}]});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.contains("air_superiority over region 273: false"),
+            "{out}"
+        );
+        // refused: the next turn moves it to a base with room inside region 273
+        let out = step(&mut state, &tools, &plan, "l", START + 3 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("rebase to state"), "{out}");
+        let missions = actions(&tools)
+            .iter()
+            .filter(|(n, _)| n == "hoi4_air_mission")
+            .count();
+        assert_eq!(missions, 1, "the refused order is not sent again unchanged");
     }
 
     #[test]

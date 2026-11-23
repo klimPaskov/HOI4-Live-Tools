@@ -348,6 +348,37 @@ pub(super) fn snapshot(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
     })
 }
 
+/// Divisions of each named country per state where they stand (moving ones left out). Read from
+/// each country's own division list (the CCountry array the own division read walks).
+fn foreign_divisions(
+    r: &Reader<'_>,
+    image: u64,
+    tags: &BTreeSet<String>,
+) -> Result<BTreeMap<String, BTreeMap<i32, usize>>> {
+    let mut out = BTreeMap::new();
+    if tags.is_empty() {
+        return Ok(out);
+    }
+    let w = super::diplomacy_state::world(r, image)?;
+    for tag in tags {
+        let Ok(index) = super::diplomacy_state::tag_index_of(r, image, tag) else {
+            continue;
+        };
+        let Some(&country) = w.country_of.get(&index) else {
+            continue;
+        };
+        let mut per: BTreeMap<i32, usize> = BTreeMap::new();
+        for state in super::armies::division_states_of(r, image, country)?
+            .into_values()
+            .flatten()
+        {
+            *per.entry(state).or_insert(0) += 1;
+        }
+        out.insert(tag.clone(), per);
+    }
+    Ok(out)
+}
+
 // ---------------------------------------------------------------------------
 // Pure analysis.
 
@@ -365,6 +396,8 @@ struct Input<'a> {
     /// the Stage B `wars` value, or the reason it is missing
     wars: std::result::Result<&'a Value, String>,
     max_states: usize,
+    /// enemy divisions per state (per enemy tag), `Err(reason)` when unread
+    foreign: std::result::Result<&'a BTreeMap<String, BTreeMap<i32, usize>>, String>,
 }
 
 fn name_of(names: &HashMap<i32, String>, id: i32) -> Value {
@@ -578,9 +611,36 @@ fn analyse(input: &Input<'_>) -> Value {
                 json!({"army":"<army>","state_id":own[0]}),
             ));
         }
+        // the enemy's divisions standing in its states on this border (what the map shows
+        // beside our line); null when the enemy's division list was not read
+        let theirs_held: Value = match &input.foreign {
+            Ok(f) => f.get(*tag).map_or(Value::Null, |per| {
+                json!(b
+                    .theirs
+                    .iter()
+                    .map(|id| per.get(id).copied().unwrap_or(0))
+                    .sum::<usize>())
+            }),
+            Err(_) => Value::Null,
+        };
+        // every enemy's divisions there (an ally's army standing in the neighbour's land: the
+        // French in Luxembourg or Belgium)
+        let hostile_held: Value = match &input.foreign {
+            Ok(f) => json!(f
+                .values()
+                .map(|per| b
+                    .theirs
+                    .iter()
+                    .map(|id| per.get(id).copied().unwrap_or(0))
+                    .sum::<usize>())
+                .sum::<usize>()),
+            Err(_) => Value::Null,
+        };
         border_rows.push((
             bad,
             json!({"neighbour_tag":tag,"hostile":bad,
+                "neighbour_divisions_in_border_states":theirs_held,
+                "hostile_divisions_in_border_states":hostile_held,
                 "hostile_basis":hostile.get(*tag).cloned().unwrap_or_default(),
                 "own_border_states":own,
                 "neighbour_states":b.theirs.iter().collect::<Vec<_>>(),
@@ -710,6 +770,12 @@ pub(super) fn wars(process: &dyn Process, dir: &Path, args: &Map<String, Value>)
         Ok(w) => (Some(&w.enemies), Ok(&w.json)),
         Err(e) => (None, Err(format!("{}: {}", e.code, e.message))),
     };
+    // the enemies' divisions on our borders (each enemy's own division list, as the own read)
+    let foreign_tags: BTreeSet<String> = war_enemies.cloned().unwrap_or_default();
+    let foreign = read(process, |r, image| {
+        foreign_divisions(r, image, &foreign_tags)
+    })
+    .map_err(|e| format!("{}: {}", e.code, e.message));
     let mut out = analyse(&Input {
         player: &snap.player,
         states: &snap.states,
@@ -721,6 +787,7 @@ pub(super) fn wars(process: &dyn Process, dir: &Path, args: &Map<String, Value>)
         war_enemies,
         wars: wars_value,
         max_states,
+        foreign: foreign.as_ref().map_err(Clone::clone),
     });
     match &graph {
         Ok(g) => {
@@ -907,6 +974,7 @@ mod tests {
             war_enemies: None,
             wars: Err("test".to_string()),
             max_states: max,
+            foreign: Err("test".to_string()),
         })
     }
 
@@ -1057,6 +1125,12 @@ mod tests {
         let none = BTreeSet::new();
         let war = BTreeSet::from(["POL".to_string()]);
         let wars = json!({"at_war":true,"count":1});
+        // two Polish divisions in the border state 2, one deep inside Poland (state 9)
+        let foreign: BTreeMap<String, BTreeMap<i32, usize>> = BTreeMap::from([
+            ("POL".to_string(), BTreeMap::from([(2, 2), (9, 1)])),
+            // an ally's three divisions standing in the Polish border state
+            ("FRA".to_string(), BTreeMap::from([(2, 3)])),
+        ]);
         let v = analyse(&Input {
             player: "GER",
             states: &states,
@@ -1068,8 +1142,11 @@ mod tests {
             war_enemies: Some(&war),
             wars: Ok(&wars),
             max_states: 10,
+            foreign: Ok(&foreign),
         });
         assert_eq!(v["enemies_source"], "war_relations");
+        assert_eq!(v["borders"][0]["neighbour_divisions_in_border_states"], 2);
+        assert_eq!(v["borders"][0]["hostile_divisions_in_border_states"], 5);
         assert_eq!(v["wars"]["count"], 1);
         assert_eq!(v["borders"][0]["hostile"], true);
         assert_eq!(v["borders"][0]["hostile_basis"][0], "war_relation");
