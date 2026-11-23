@@ -978,6 +978,11 @@
           "description": "retired, read by nothing: the force spends (political power, template edits, officer corps spirits, designs) are lanes of every pass",
           "x-owner": "text"
         },
+        "issues_due": {
+          "type": "boolean",
+          "default": true,
+          "description": "true offers the lanes that own an open issue of the run monitor (RUN/issues_open.json, docs/MONITORING.md) ahead of the routine pass, each at most once a game day; false leaves the pass order alone"
+        },
         "war_every_tick": {
           "type": "boolean",
           "default": false,
@@ -995,6 +1000,57 @@
       "additionalProperties": false,
       "description": "the pass scheduler (plan_run.rs lanes_tick): every lane is offered once a pass in value order, the war-first block every other tick while a war or an operation runs",
       "x-owner": "executor"
+    },
+    "logistics": {
+      "type": "object",
+      "properties": {
+        "trains": {
+          "anyOf": [
+            {"const": false},
+            {
+              "type": "object",
+              "properties": {"factories": {"type": "integer", "minimum": 1}},
+              "additionalProperties": false
+            }
+          ],
+          "description": "a train line from the start when no line makes trains (factories, default 1); stockpile_targets.train_equipment grows it"
+        },
+        "hubs": {
+          "type": "boolean",
+          "description": "hub motorization per army: full for the formations of an operation under way (or its supply.motorization) and for an army below floor, the standing war.motorization elsewhere; a raise waits for the trucks"
+        },
+        "floor": {"type": "number", "minimum": 0, "maximum": 100, "description": "army mean supply percent below which its hubs go to full (default war.supply_floor)"},
+        "why": {"type": "string"}
+      },
+      "additionalProperties": false,
+      "description": "trains and supply-hub trucks (plan_logistics.rs); off unless present",
+      "x-owner": "executor"
+    },
+    "formations": {
+      "type": "object",
+      "x-owner": "executor",
+      "description": "division management (plan_divisions.rs): fielded templates worse than the plan's own (small: under half the reference width; or less defence and attack per width) are converted in place to the reference layout when the reference has their battalion kinds, else disbanded through the disband rule. OFF unless act is true; the judgement always feeds the omissions row weak_formation_fielded",
+      "properties": {
+        "act": {
+          "type": "boolean",
+          "description": "true: convert and disband; false or missing: only report"
+        },
+        "keep": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "template names never judged (a role the numbers do not show: mountain, marine, garrison duty, a coming landing); give the reason in why"
+        },
+        "when": {
+          "$ref": "#/definitions/predicate"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false
     },
     "disband": {
       "type": "object",
@@ -1111,7 +1167,12 @@
         "max": {
           "type": "integer",
           "default": 24,
-          "minimum": 1
+          "minimum": 1,
+          "description": "the most divisions an army holds; each army is held to its commander's own limit (hoi4_armies division_limit: the game's base plus his traits) when that is lower"
+        },
+        "over_limit_reason": {
+          "type": "string",
+          "description": "why armies may pass their commander's limit up to max (an over-limit army lowers its leader's bonuses; e.g. experience for one general); without it the commander's limit holds"
         },
         "min_for_general": {
           "type": "integer",
@@ -2619,7 +2680,9 @@
             "properties": {
               "motorization": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 2,
+                "description": "hub motorization level of the operation's formations from its prepare on (read by logistics.hubs; without it the key does nothing)"
               },
               "floor": {
                 "type": "number",
@@ -4407,8 +4470,8 @@
         "bulk": {
           "type": "array",
           "default": [],
-          "items": {"type": "string", "enum": ["all", "production_chords", "air_base_select", "mio_queue_many", "construction_fill"]},
-          "description": "the game's bulk paths the executor uses (one input for many elements, one read-back at the end; the single-element path stays the fallback when the read-back fails). Each is off until its live probe passes (docs/LIVE_VALIDATION_QUEUE.md, BATCHING PROBES): production_chords (Ctrl +5 / Shift +10 factories), air_base_select (a click on an air base selects all its wings: one mission or rebase order for every wing of a base whose wings are all asked for), mio_queue_many (every listed trait of an organisation queued in one visit of its tree window; an auto organisation listed and kept two traits deep in one visit), construction_fill (a state's every free slot of a building queued by one Shift+Click)"
+          "items": {"type": "string", "enum": ["all", "production_chords", "air_base_select", "mio_queue_many", "construction_fill", "-production_chords", "-air_base_select", "-mio_queue_many", "-construction_fill"]},
+          "description": "the game's bulk paths the executor uses (one input for many elements, one read-back at the end; the single-element path stays the fallback when the read-back fails). A path is off until its live probe passes (docs/LIVE_VALIDATION_QUEUE.md, BATCHING PROBES); production_chords and air_base_select passed and are on unless listed as \"-name\" (e.g. \"-air_base_select\"): production_chords (Ctrl +5 / Shift +10 factories), air_base_select (a click on an air base selects all its wings: one mission or rebase order for every wing of a base whose wings are all asked for), mio_queue_many (every listed trait of an organisation queued in one visit of its tree window; an auto organisation listed and kept two traits deep in one visit), construction_fill (a state's every free slot of a building queued by one Shift+Click)"
         },
         "alert_persist_days": {
           "type": "integer",
@@ -7306,8 +7369,31 @@
             "description": "game days between two legs of a `legs` railway (default 14)"
           },
           "when": {
-            "$ref": "#/definitions/trigger",
-            "x-owner": "executor"
+            "anyOf": [
+              {
+                "$ref": "#/definitions/trigger"
+              },
+              {
+                "$ref": "#/definitions/predicate"
+              }
+            ],
+            "x-owner": "executor",
+            "description": "a trigger (date, province_controlled, state_fully_controlled, owner) or any plan predicate (e.g. tech_researched:radio_detection); the item is queued once it holds"
+          },
+          "requires": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "x-owner": "executor",
+            "description": "technologies the building needs (enable_building level 1; facts.py support <TAG>): the item waits for all of them without spending its three tries (radar_station needs radio_detection, which the sp_air_radar project grants)"
           },
           "priority": {
             "type": "string",

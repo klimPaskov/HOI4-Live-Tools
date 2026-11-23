@@ -311,11 +311,13 @@ def _land(raw):
             "executing": bool(x.get("plan_executing")),
             "battle_plan_orders": x.get("battle_plan_orders"),
             "motorization": x.get("motorization"),
+            "division_limit": x.get("division_limit"),
             "supply_mean": s.get("supply_percent_mean"), "supply_lowest": s.get("supply_percent_lowest"),
             "organisation_mean": s.get("organisation_mean"), "strength_mean": s.get("hp_percent_mean"),
             "equipment_fill_min": s.get("equipment_fill_min"),
         })
     groups = [{"group": x.get("army_group"), "field_marshal": x.get("field_marshal"),
+               "army_limit": x.get("army_limit"),
                "orders": [_order(o) for o in x.get("plan") or []],
                "armies": [r["army"] for r in armies if r["group"] == x.get("army_group")]}
               for x in a.get("army_groups") or []]

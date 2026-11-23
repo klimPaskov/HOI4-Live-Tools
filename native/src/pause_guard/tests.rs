@@ -570,3 +570,31 @@ fn the_binding_is_watched_and_the_pause_key_is_only_sent_on_purpose() {
         "the pause key is pressed outside press_clock: {stray:?}"
     );
 }
+
+#[test]
+fn a_call_that_sent_no_input_leaves_another_lanes_menu_open() {
+    // A save on one thread opens the game menu; a read on another thread sent nothing, so its
+    // bracket reads the state and touches neither the menu nor the pause.
+    let game = Keys::default();
+    let (keys, watch) = game.watched(OPEN);
+    let saver = {
+        let keys = Watched::new(Box::new(game.clone()), watch.clone());
+        std::thread::spawn(move || {
+            keys.press(Key::Escape).unwrap();
+            sent_on_this_thread()
+        })
+    };
+    let before = sent_on_this_thread();
+    let scope = watch.begin();
+    assert_eq!(saver.join().unwrap(), 1);
+    assert!(game.game().menu);
+    assert_eq!(sent_on_this_thread(), before);
+    let verdict = scope.untouched();
+    assert!(!verdict.ours);
+    assert_eq!(verdict.restored, None);
+    assert!(game.game().menu && game.game().paused);
+    assert_eq!(game.game().clock_keys, 0);
+    // this thread's own input is counted
+    keys.click((1920, 1080), 10.0, 10.0).unwrap();
+    assert_eq!(sent_on_this_thread(), before + 1);
+}

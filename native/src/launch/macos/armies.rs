@@ -627,7 +627,25 @@ fn army_name(r: &Reader<'_>, group: u64) -> Result<String> {
 }
 /// Own armies with their division ids, plus unassigned division ids.
 pub(super) fn armies(process: &dyn Process) -> Result<Value> {
+    let limits = super::command_limit::limits(process);
     read(process, |r, image| {
+        // each commander's traits for the command limits (divisions an army commander and armies a
+        // field marshal lead without penalty); unreadable leaders get the base limits
+        let traits: BTreeMap<String, Vec<String>> = super::units::leaders(r, image)
+            .map(|ls| ls.into_iter().map(|l| (l.name, l.traits)).collect())
+            .unwrap_or_default();
+        let limit_of = |leader: Option<&String>, marshal: bool| -> Option<i64> {
+            let l = limits.as_ref()?;
+            let t = leader
+                .and_then(|n| traits.get(n))
+                .cloned()
+                .unwrap_or_default();
+            Some(if marshal {
+                l.armies(&t)
+            } else {
+                l.divisions(&t)
+            })
+        };
         let members = membership(r, image)?;
         let mut groups: BTreeMap<u64, Vec<String>> = BTreeMap::new();
         let mut unassigned = Vec::new();
@@ -704,7 +722,8 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                     "defensive_orders":defensive,
                     "plan_executing":executing,"exercising":exercise.map(|e| e.exercising),
                     "exercise_stop_at_max":exercise.map(|e| e.stop_at_max),"planning":planning_of(&planning, &ids),
-                    "division_count":ids.len(),"divisions":ids,"plan":plan_of(group),
+                    "division_count":ids.len(),"division_limit":limit_of(commander.as_ref(), false),
+                    "divisions":ids,"plan":plan_of(group),
                     "states":standing,"main_state":main_state,
                     "motorization":(r.i32(group + fld(r.string_abi(), &GROUP, MOTORIZATION)?)? as u32) & 0xff}),
                 )
@@ -756,7 +775,10 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 } else {
                     Some(r.string_bounded(leader + ui(r)?.leader_name, 128)?)
                 };
-                Ok(json!({"army_group":army_name(r, g)?,"field_marshal":marshal,"plan":plan_of(g)}))
+                Ok(
+                    json!({"army_group":army_name(r, g)?,"field_marshal":marshal,
+                    "army_limit":limit_of(marshal.as_ref(), true),"plan":plan_of(g)}),
+                )
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(
@@ -1102,7 +1124,7 @@ fn assign_boxes(
     army: &str,
 ) -> Result<()> {
     clear_notices(process, keys)?;
-    default_map_mode(keys)?;
+    default_map_mode(process, keys)?;
     find_state(process, keys, plan.state)?;
     let expected = plan.unassigned + plan.target_here;
     // Divisions stand anywhere in the state, so try the usual box first and
@@ -1512,7 +1534,7 @@ fn create_once(
     clear_notices(process, keys)?;
     // The selection box stays clear of the left-hand panels; Escape is not used
     // because on a free map it opens the game menu.
-    default_map_mode(keys)?;
+    default_map_mode(process, keys)?;
     find_state(process, keys, state)?;
     // Unassigned divisions can stand anywhere in the state: when the usual box
     // does not hold exactly them, try wider boxes (a new drag replaces the
@@ -2458,6 +2480,11 @@ fn army_groups(r: &Reader<'_>, image: u64) -> Result<BTreeSet<u64>> {
     Ok(out)
 }
 /// The own army or army group named `army` (names must be unique).
+/// The army (or army group) of this name exists among the own formations (a refusal before input).
+/// The army object's address (for read-back diffs).
+pub(super) fn army_address(process: &dyn Process, army: &str) -> Result<u64> {
+    read(process, |r, i| group_named(r, i, army))
+}
 fn group_named(r: &Reader<'_>, image: u64, army: &str) -> Result<u64> {
     let mut groups: BTreeSet<u64> = membership(r, image)?
         .into_values()
@@ -4481,10 +4508,8 @@ pub(super) fn divisions_heading_for(
 /// selection holds exactly `expected` divisions; refuses with `selection_mismatch` otherwise.
 /// Back to the default map mode (F1, mapmodes_interface.gui): in the air map mode left by the
 /// air tools the division counters are hidden and a box selection picks nothing.
-fn default_map_mode(keys: &dyn GameInput) -> Result<()> {
-    keys.press_code(crate::platform::game_input::vk::F1)?;
-    crate::phase::sleep(std::time::Duration::from_millis(250));
-    Ok(())
+fn default_map_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+    super::ui::leave_strategic_modes(process, keys).map(|_| ())
 }
 pub(super) fn box_select_exact(
     process: &dyn Process,
@@ -4492,7 +4517,7 @@ pub(super) fn box_select_exact(
     state: i32,
     expected: usize,
 ) -> Result<()> {
-    default_map_mode(keys)?;
+    default_map_mode(process, keys)?;
     find_state(process, keys, state)?;
     let mut sizes = Vec::new();
     for (from, to) in ASSIGN_BOXES {

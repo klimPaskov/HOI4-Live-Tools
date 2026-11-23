@@ -1,0 +1,2563 @@
+[
+{
+"date": "1940.05.01.01",
+"utc": 1795437979.2,
+"speed": 1,
+"paused": true,
+"trigger": "start",
+"player": "GER",
+"wars": {
+"at_war": true,
+"enemies": [
+"AST",
+"BRM",
+"CAN",
+"ENG",
+"FRA",
+"JOR",
+"KUW",
+"LEB",
+"MAL",
+"NZL",
+"OMA",
+"PAL",
+"POL",
+"RAJ",
+"SAF",
+"SYR"
+],
+"own_states_lost": [],
+"per_enemy": {
+"SAF": {
+"tag": "SAF",
+"name": "South Africa",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: SAF owns 7 and controls 7 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 7,
+"states_owned": 7,
+"at_war": true,
+"vp_total": 25.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 7
+},
+"LEB": {
+"tag": "LEB",
+"name": "Lebanese Republic",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: LEB owns 1 and controls 1 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 1,
+"states_owned": 1,
+"at_war": true,
+"vp_total": 5.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 1
+},
+"JOR": {
+"tag": "JOR",
+"name": "Emirate of Transjordan",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: JOR owns 1 and controls 1 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 1,
+"states_owned": 1,
+"at_war": true,
+"vp_total": 3.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 1
+},
+"SYR": {
+"tag": "SYR",
+"name": "Republic of Syria",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: SYR owns 4 and controls 4 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 4,
+"states_owned": 4,
+"at_war": true
+},
+"PAL": {
+"tag": "PAL",
+"name": "Mandatory Palestine",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: PAL owns 1 and controls 1 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 1,
+"states_owned": 1,
+"at_war": true,
+"vp_total": 5.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 1
+},
+"MAL": {
+"tag": "MAL",
+"name": "British Malaya",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: MAL owns 10 and controls 10 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 10,
+"states_owned": 10,
+"at_war": true,
+"vp_total": 27.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 10
+},
+"CAN": {
+"tag": "CAN",
+"name": "Dominion of Canada",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: CAN owns 23 and controls 23 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 23,
+"states_owned": 23,
+"at_war": true,
+"vp_total": 89.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 23
+},
+"ENG": {
+"tag": "ENG",
+"name": "United Kingdom",
+"casualties_own": 0,
+"casualties_enemy": 44,
+"since": "1939-09-03 10:00",
+"result": "ongoing: ENG owns 95 and controls 95 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 95,
+"states_owned": 95,
+"at_war": true,
+"vp_total": 429.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 95
+},
+"NZL": {
+"tag": "NZL",
+"name": "Dominion of New Zealand",
+"casualties_own": 12,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: NZL owns 6 and controls 6 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 6,
+"states_owned": 6,
+"at_war": true,
+"vp_total": 28.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 6
+},
+"KUW": {
+"tag": "KUW",
+"name": "Sheikhdom of Kuwait",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: KUW owns 1 and controls 1 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 1,
+"states_owned": 1,
+"at_war": true,
+"vp_total": 1.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 1
+},
+"POL": {
+"tag": "POL",
+"name": "Poland",
+"casualties_own": 24684,
+"casualties_enemy": 241743,
+"since": "1939-09-03 09:00",
+"result": "WON: POL controls none of its 11 state(s) (it has capitulated); a peace conference or annexation follows",
+"started": "1939-09-03 09:00",
+"states_controlled": 0,
+"states_owned": 11,
+"at_war": true,
+"vp_total": 112.0,
+"vp_held_by_us": 112.0,
+"vp_held_by_others": 112.0,
+"states_we_control": 11,
+"states_listed": 11
+},
+"AST": {
+"tag": "AST",
+"name": "Australia",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: AST owns 20 and controls 20 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 20,
+"states_owned": 20,
+"at_war": true,
+"vp_total": 142.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 20
+},
+"OMA": {
+"tag": "OMA",
+"name": "Sultanate of Oman",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: OMA owns 4 and controls 4 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 4,
+"states_owned": 4,
+"at_war": true,
+"vp_total": 5.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 4
+},
+"RAJ": {
+"tag": "RAJ",
+"name": "British Raj",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: RAJ owns 35 and controls 35 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 35,
+"states_owned": 35,
+"at_war": true,
+"vp_total": 222.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 35
+},
+"FRA": {
+"tag": "FRA",
+"name": "France",
+"casualties_own": 6,
+"casualties_enemy": 6,
+"since": "1939-09-03 10:00",
+"result": "ongoing: FRA owns 75 and controls 75 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 75,
+"states_owned": 75,
+"at_war": true,
+"vp_total": 398.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 75
+},
+"BRM": {
+"tag": "BRM",
+"name": "British Burma",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: BRM owns 9 and controls 9 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 9,
+"states_owned": 9,
+"at_war": true,
+"vp_total": 27.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 9
+}
+}
+},
+"omissions": [],
+"findings": [
+{
+"code": "civilian_factories_idle",
+"severity": "high",
+"text": "20 civilian factories idle with 1 projects queued: an idle factory builds nothing, queue more projects (each takes at most 15 factories)",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"idle": 20
+},
+"open_snapshots": 0
+},
+{
+"code": "army_without_order",
+"severity": "high",
+"text": "army Mitte Brandenburg (1 divisions, at state 88: 1) has no front, offensive or hold order: at war it fights only where the AI of each division wanders",
+"subject": "Mitte Brandenburg",
+"owner": "findings",
+"numbers": {
+"divisions": 1
+},
+"open_snapshots": 0
+},
+{
+"code": "army_without_order",
+"severity": "high",
+"text": "army Army 4 (2 divisions, at state 98: 2) has no front, offensive or hold order: at war it fights only where the AI of each division wanders",
+"subject": "Army 4",
+"owner": "findings",
+"numbers": {
+"divisions": 2
+},
+"open_snapshots": 0
+},
+{
+"code": "province_overstacked",
+"severity": "high",
+"text": "province 9281 (state 56): 23 divisions draw 38.6 supply where the province gives 6.4: their supply is 26%; it carries about 3 at full supply: spread the rest along the line or into the second line",
+"subject": "9281",
+"owner": "findings",
+"numbers": {
+"divisions": 23,
+"supply": 6.426,
+"demand": 38.57,
+"division_supply": 25.899999999999988
+},
+"open_snapshots": 0
+},
+{
+"code": "province_overstacked",
+"severity": "high",
+"text": "province 9522 (state 51): 15 divisions draw 14.7 supply where the province gives 5.6: their supply is 37%; it carries about 5 at full supply: spread the rest along the line or into the second line",
+"subject": "9522",
+"owner": "findings",
+"numbers": {
+"divisions": 15,
+"supply": 5.622,
+"demand": 14.651,
+"division_supply": 37.2
+},
+"open_snapshots": 0
+},
+{
+"code": "province_overstacked",
+"severity": "high",
+"text": "province 11435 (state 42): 9 divisions draw 10.9 supply where the province gives 4.0: their supply is 38%; it carries about 3 at full supply: spread the rest along the line or into the second line",
+"subject": "11435",
+"owner": "findings",
+"numbers": {
+"divisions": 9,
+"supply": 3.964,
+"demand": 10.89,
+"division_supply": 38.0
+},
+"open_snapshots": 0
+},
+{
+"code": "dockyards_unassigned",
+"severity": "medium",
+"text": "6 of 21 dockyards build nothing",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"free": 6,
+"total": 21
+},
+"open_snapshots": 0
+},
+{
+"code": "political_power_unspent",
+"severity": "medium",
+"text": "political power 252 banked while something is affordable (the game marks decisions_available) and no costlier pick is being saved for: unspent power buys nothing",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"political_power": 251.83,
+"gain_14d": null
+},
+"open_snapshots": 0
+},
+{
+"code": "order_not_executing",
+"severity": "medium",
+"text": "army Panzergruppe Ost's battle plan on [42] is not executing",
+"subject": "Panzergruppe Ost",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "order_not_executing",
+"severity": "medium",
+"text": "army Armee Pommern's battle plan on [51] is not executing",
+"subject": "Armee Pommern",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "order_not_executing",
+"severity": "medium",
+"text": "army Panzergruppe Nord's battle plan on [56] is not executing",
+"subject": "Panzergruppe Nord",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "order_not_executing",
+"severity": "medium",
+"text": "army Armee West Süd's battle plan on [42] is not executing",
+"subject": "Armee West Süd",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "province_overstacked",
+"severity": "medium",
+"text": "province 3547 (state 51): 12 divisions draw 13.7 supply where the province gives 8.0: their supply is 61%; it carries about 7 at full supply: spread the rest along the line or into the second line",
+"subject": "3547",
+"owner": "findings",
+"numbers": {
+"divisions": 12,
+"supply": 7.99,
+"demand": 13.666,
+"division_supply": 60.79999999999999
+},
+"open_snapshots": 0
+},
+{
+"code": "air_wings_without_mission",
+"severity": "medium",
+"text": "1 air wing(s) have no mission (LG 'Greifswald'): planes on the ground do nothing",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"wings": 1
+},
+"open_snapshots": 0
+},
+{
+"code": "resource_deficit",
+"severity": "medium",
+"text": "4 production line(s) lack rubber: they run below efficiency (trade or build for it)",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"lines": 4
+},
+"open_snapshots": 0
+},
+{
+"code": "executor_repeated_refusal",
+"severity": "medium",
+"text": "the executor has tried `hoi4_production_add {\"equipment\":\"ship_hull_submarine_1\",\"factories\":6}` 3 times and was refused each time; it keeps waiting on the same refusal",
+"subject": "hoi4_production_add {\"equipment\":\"ship_hull_submarine_1\",\"factories\":6}",
+"owner": "findings",
+"numbers": {
+"count": 3
+},
+"open_snapshots": 0
+},
+{
+"code": "naval_task_force_idle",
+"severity": "low",
+"text": "1 naval task force(s) on hold with no mission",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"task_forces": 1
+},
+"open_snapshots": 0
+},
+{
+"code": "plan_item_blocked",
+"severity": "low",
+"text": "plan item id:cp_radar_51 blocked after 3 tries building_select_failed: Observed: after one click on the radar_station button the construction manager's selection did not name radar_station within 3 s; nothin",
+"subject": "id:cp_radar_51",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "plan_item_blocked",
+"severity": "low",
+"text": "plan item id:cp_radar_56 blocked after 3 tries building_select_failed: Observed: after one click on the radar_station button the construction manager's selection did not name radar_station within 3 s; nothin",
+"subject": "id:cp_radar_56",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "game_alert:free_civilian_factories",
+"severity": "low",
+"text": "the game flags free_civilian_factories: civilian factories build nothing: hoi4_construction_add (or trade)",
+"subject": "free_civilian_factories",
+"owner": "game alert row",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "game_alert:free_dockyards",
+"severity": "low",
+"text": "the game flags free_dockyards: idle dockyards: naval production lines",
+"subject": "free_dockyards",
+"owner": "game alert row",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "game_alert:unfulfilled_import_requests",
+"severity": "low",
+"text": "the game flags unfulfilled_import_requests: an import request is not filled: hoi4_trade / hoi4_auto_import",
+"subject": "unfulfilled_import_requests",
+"owner": "game alert row",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "game_alert:outdated_equipment_in_production",
+"severity": "low",
+"text": "the game flags outdated_equipment_in_production: a line makes an older model than the newest the country has: switch it (hoi4_design_set_production, variant 90%) or let it finish and remove it (start naval queue), per the plan's production entries",
+"subject": "outdated_equipment_in_production",
+"owner": "game alert row",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "game_alert:decisions_available",
+"severity": "low",
+"text": "the game flags decisions_available: decisions can be taken: hoi4_decisions_list",
+"subject": "decisions_available",
+"owner": "game alert row",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "game_alert:doctrines_available",
+"severity": "low",
+"text": "the game flags doctrines_available: a doctrine can be unlocked: hoi4_doctrines",
+"subject": "doctrines_available",
+"owner": "game alert row",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "game_alert:modify_officer_corps",
+"severity": "low",
+"text": "the game flags modify_officer_corps: a high command or military advisor can be picked: hoi4_politics_options",
+"subject": "modify_officer_corps",
+"owner": "game alert row",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "game_alert:mio_traits",
+"severity": "low",
+"text": "the game flags mio_traits: military industrial organisation traits can be unlocked: hoi4_mios",
+"subject": "mio_traits",
+"owner": "game alert row",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "game_alert:special_project_available",
+"severity": "low",
+"text": "the game flags special_project_available: a special project can start: hoi4_special_projects, hoi4_special_project_assign",
+"subject": "special_project_available",
+"owner": "game alert row",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "game_alert:admiral_assignable",
+"severity": "low",
+"text": "the game flags admiral_assignable: an admiral can be assigned to a naval headquarters: hoi4_fleet_admiral {fleet, list:true} lists the admirals offered, then hoi4_fleet_admiral {fleet, admiral}",
+"subject": "admiral_assignable",
+"owner": "game alert row",
+"numbers": {},
+"open_snapshots": 0
+},
+{
+"code": "game_alert:insufficient_resources",
+"severity": "low",
+"text": "the game flags insufficient_resources: resources missing for production (the tooltip names them): hoi4_trade / hoi4_trade_set or hoi4_auto_import",
+"subject": "insufficient_resources",
+"owner": "game alert row",
+"numbers": {},
+"open_snapshots": 0
+}
+],
+"stacking": {
+"supply_mean": 54.0,
+"supply_lowest": 25.9
+},
+"executor": {
+"game_hour": 60797301,
+"operations": {
+"op_lowlands": {
+"steps": 32,
+"fought": [],
+"ended": false,
+"executing": false,
+"prepared": true,
+"phase": "preparing"
+},
+"op_poland": {
+"steps": 43,
+"fought": [
+"POL"
+],
+"ended": true,
+"executing": true,
+"prepared": true,
+"phase": "ended"
+}
+},
+"failures": [
+{
+"what": "hoi4_air_wing_create {\"aircraft\":\"He 51\",\"state_id\":57}",
+"count": 4,
+"last_hour": 60797048,
+"first_hour": 60795178
+},
+{
+"what": "hoi4_production_set {\"equipment\":\"convoy_1\",\"factories\":18,\"line\":9}",
+"count": 4,
+"last_hour": 60796973,
+"first_hour": 60795425
+},
+{
+"what": "hoi4_production_add {\"equipment\":\"ship_hull_submarine_1\",\"factories\":3}",
+"count": 4,
+"last_hour": 60796566,
+"first_hour": 60794718
+},
+{
+"what": "hoi4_mio_policy {\"organization\":\"GER_henschel_organization\",\"policy\":\"mio_policy_land_cutting_corners\"}",
+"count": 4,
+"last_hour": 60796052,
+"first_hour": 60794356
+},
+{
+"what": "hoi4_production_add {\"equipment\":\"ship_hull_submarine_1\",\"factories\":6}",
+"count": 3,
+"last_hour": 60797212,
+"first_hour": 60796953
+},
+{
+"what": "hoi4_diplomacy_act {\"action\":\"invite_to_faction\",\"country\":\"ROM\"}",
+"count": 3,
+"last_hour": 60796879,
+"first_hour": 60794654
+},
+{
+"what": "hoi4_diplomacy_act {\"action\":\"invite_to_faction\",\"country\":\"HUN\"}",
+"count": 3,
+"last_hour": 60796546,
+"first_hour": 60794130
+},
+{
+"what": "hoi4_operative_assign {\"mission\":\"build_intel_network\",\"operative\":0,\"state_id\":16}",
+"count": 3,
+"last_hour": 60796522,
+"first_hour": 60794597
+},
+{
+"what": "hoi4_template_edit {\"priority\":\"elite\",\"template\":\"Infanterie-Division (mot.)\"}",
+"count": 3,
+"last_hour": 60796483,
+"first_hour": 60794520
+},
+{
+"what": "hoi4_construction_add {\"building\":\"radar_station\",\"state_id\":51}",
+"count": 3,
+"last_hour": 60796445,
+"first_hour": 60795969
+},
+{
+"what": "hoi4_construction_add {\"building\":\"radar_station\",\"state_id\":56}",
+"count": 3,
+"last_hour": 60796362,
+"first_hour": 60795826
+},
+{
+"what": "hoi4_air_mission {\"mission\":\"training\",\"state_id\":64,\"wing\":\"LG 'Greifswald'\"}",
+"count": 2,
+"last_hour": 60796509,
+"first_hour": 60795605
+}
+],
+"blocked": [
+{
+"item": "id:cp_radar_51",
+"tries": 3,
+"at": 60796445,
+"why": "building_select_failed: Observed: after one click on the radar_station button the construction manager's selection did not name radar_station within 3 s; nothin"
+},
+{
+"item": "id:cp_radar_56",
+"tries": 3,
+"at": 60796362,
+"why": "building_select_failed: Observed: after one click on the radar_station button the construction manager's selection did not name radar_station within 3 s; nothin"
+}
+],
+"war_stage": {
+"Armee Mitte": 2,
+"Armee Süd": 2,
+"Panzergruppe Nord": 2,
+"Panzergruppe Ost": 2
+},
+"checkpoints_passed": 26,
+"checkpoints": 29,
+"done_count": 283,
+"last_executor_action": {
+"tool": "hoi4_states",
+"ok": true,
+"error": null,
+"unix_ms": 1795437979226
+},
+"last_outside_action": {
+"tool": "hoi4_events",
+"ok": true,
+"error": null,
+"unix_ms": 1795437976965
+},
+"last_step": null,
+"last_order": null
+},
+"land": {
+"division_count": 143
+}
+},
+{
+"date": "1940.05.08.22",
+"utc": 1795438066.5,
+"speed": 2,
+"paused": false,
+"trigger": "week",
+"player": "GER",
+"wars": {
+"at_war": true,
+"enemies": [
+"AST",
+"BRM",
+"CAN",
+"ENG",
+"FRA",
+"JOR",
+"KUW",
+"LEB",
+"MAL",
+"NZL",
+"OMA",
+"PAL",
+"POL",
+"RAJ",
+"SAF",
+"SYR"
+],
+"own_states_lost": [],
+"per_enemy": {
+"SAF": {
+"tag": "SAF",
+"name": "South Africa",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: SAF owns 7 and controls 7 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 7,
+"states_owned": 7,
+"at_war": true,
+"vp_total": 25.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 7
+},
+"LEB": {
+"tag": "LEB",
+"name": "Lebanese Republic",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: LEB owns 1 and controls 1 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 1,
+"states_owned": 1,
+"at_war": true,
+"vp_total": 5.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 1
+},
+"JOR": {
+"tag": "JOR",
+"name": "Emirate of Transjordan",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: JOR owns 1 and controls 1 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 1,
+"states_owned": 1,
+"at_war": true,
+"vp_total": 3.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 1
+},
+"SYR": {
+"tag": "SYR",
+"name": "Republic of Syria",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: SYR owns 4 and controls 4 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 4,
+"states_owned": 4,
+"at_war": true
+},
+"PAL": {
+"tag": "PAL",
+"name": "Mandatory Palestine",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: PAL owns 1 and controls 1 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 1,
+"states_owned": 1,
+"at_war": true,
+"vp_total": 5.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 1
+},
+"MAL": {
+"tag": "MAL",
+"name": "British Malaya",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: MAL owns 10 and controls 10 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 10,
+"states_owned": 10,
+"at_war": true,
+"vp_total": 27.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 10
+},
+"CAN": {
+"tag": "CAN",
+"name": "Dominion of Canada",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: CAN owns 23 and controls 23 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 23,
+"states_owned": 23,
+"at_war": true,
+"vp_total": 89.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 23
+},
+"ENG": {
+"tag": "ENG",
+"name": "United Kingdom",
+"casualties_own": 0,
+"casualties_enemy": 44,
+"since": "1939-09-03 10:00",
+"result": "ongoing: ENG owns 95 and controls 95 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 95,
+"states_owned": 95,
+"at_war": true,
+"vp_total": 429.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 95
+},
+"NZL": {
+"tag": "NZL",
+"name": "Dominion of New Zealand",
+"casualties_own": 12,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: NZL owns 6 and controls 6 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 6,
+"states_owned": 6,
+"at_war": true,
+"vp_total": 28.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 6
+},
+"KUW": {
+"tag": "KUW",
+"name": "Sheikhdom of Kuwait",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: KUW owns 1 and controls 1 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 1,
+"states_owned": 1,
+"at_war": true,
+"vp_total": 1.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 1
+},
+"POL": {
+"tag": "POL",
+"name": "Poland",
+"casualties_own": 24684,
+"casualties_enemy": 241743,
+"since": "1939-09-03 09:00",
+"result": "WON: POL controls none of its 11 state(s) (it has capitulated); a peace conference or annexation follows",
+"started": "1939-09-03 09:00",
+"states_controlled": 0,
+"states_owned": 11,
+"at_war": true,
+"vp_total": 112.0,
+"vp_held_by_us": 112.0,
+"vp_held_by_others": 112.0,
+"states_we_control": 11,
+"states_listed": 11
+},
+"AST": {
+"tag": "AST",
+"name": "Australia",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: AST owns 20 and controls 20 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 20,
+"states_owned": 20,
+"at_war": true,
+"vp_total": 142.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 20
+},
+"OMA": {
+"tag": "OMA",
+"name": "Sultanate of Oman",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: OMA owns 4 and controls 4 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 4,
+"states_owned": 4,
+"at_war": true,
+"vp_total": 5.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 4
+},
+"RAJ": {
+"tag": "RAJ",
+"name": "British Raj",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: RAJ owns 35 and controls 35 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 35,
+"states_owned": 35,
+"at_war": true,
+"vp_total": 222.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 35
+},
+"FRA": {
+"tag": "FRA",
+"name": "France",
+"casualties_own": 6,
+"casualties_enemy": 6,
+"since": "1939-09-03 10:00",
+"result": "ongoing: FRA owns 75 and controls 75 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 75,
+"states_owned": 75,
+"at_war": true,
+"vp_total": 398.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 75
+},
+"BRM": {
+"tag": "BRM",
+"name": "British Burma",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: BRM owns 9 and controls 9 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 9,
+"states_owned": 9,
+"at_war": true,
+"vp_total": 27.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 9
+}
+}
+},
+"omissions": [
+{
+"days_open": 0,
+"item": "frame_4",
+"note_contradicts_read": false,
+"owner": "player",
+"owner_note": null,
+"todo": "unlabelled alert: hover it in game or check every domain"
+},
+{
+"days_open": 0,
+"item": "free_civilian_factories",
+"note_contradicts_read": false,
+"owner": "construction",
+"owner_note": null,
+"todo": "civilian factories build nothing: hoi4_construction_add (or trade)"
+},
+{
+"days_open": 0,
+"item": "free_dockyards",
+"note_contradicts_read": false,
+"owner": "dockyards",
+"owner_note": null,
+"todo": "idle dockyards: naval production lines"
+},
+{
+"days_open": 0,
+"item": "unfulfilled_import_requests",
+"note_contradicts_read": false,
+"owner": "resources",
+"owner_note": null,
+"todo": "an import request is not filled: hoi4_trade / hoi4_auto_import"
+},
+{
+"days_open": 0,
+"item": "frame_11",
+"note_contradicts_read": false,
+"owner": "player",
+"owner_note": null,
+"todo": "unlabelled alert: hover it in game or check every domain"
+},
+{
+"days_open": 0,
+"item": "frame_17",
+"note_contradicts_read": false,
+"owner": "player",
+"owner_note": null,
+"todo": "unlabelled alert: hover it in game or check every domain"
+},
+{
+"days_open": 0,
+"item": "frame_31",
+"note_contradicts_read": false,
+"owner": "player",
+"owner_note": null,
+"todo": "unlabelled alert: hover it in game or check every domain"
+},
+{
+"days_open": 0,
+"item": "outdated_equipment_in_production",
+"note_contradicts_read": false,
+"owner": "naval_queue",
+"owner_note": null,
+"todo": "a line makes an older model than the newest the country has: switch it (hoi4_design_set_production, variant 90%) or let it finish and remove it (start naval queue), per the plan's production entries"
+},
+{
+"days_open": 0,
+"item": "decisions_available",
+"note_contradicts_read": false,
+"owner": "decisions",
+"owner_note": null,
+"todo": "decisions can be taken: hoi4_decisions_list"
+},
+{
+"days_open": 0,
+"item": "frame_49",
+"note_contradicts_read": false,
+"owner": "player",
+"owner_note": null,
+"todo": "unlabelled alert: hover it in game or check every domain"
+},
+{
+"days_open": 0,
+"item": "doctrines_available",
+"note_contradicts_read": false,
+"owner": "doctrines",
+"owner_note": null,
+"todo": "a doctrine can be unlocked: hoi4_doctrines"
+},
+{
+"days_open": 0,
+"item": "modify_officer_corps",
+"note_contradicts_read": false,
+"owner": "officer_corps",
+"owner_note": null,
+"todo": "a high command or military advisor can be picked: hoi4_politics_options"
+},
+{
+"days_open": 0,
+"item": "mio_traits",
+"note_contradicts_read": false,
+"owner": "mio",
+"owner_note": null,
+"todo": "military industrial organisation traits can be unlocked: hoi4_mios"
+},
+{
+"days_open": 0,
+"item": "special_project_available",
+"note_contradicts_read": false,
+"owner": "special_projects",
+"owner_note": null,
+"todo": "a special project can start: hoi4_special_projects, hoi4_special_project_assign"
+},
+{
+"days_open": 0,
+"item": "frame_62",
+"note_contradicts_read": false,
+"owner": "player",
+"owner_note": null,
+"todo": "unlabelled alert: hover it in game or check every domain"
+},
+{
+"days_open": 0,
+"item": "admiral_assignable",
+"note_contradicts_read": false,
+"owner": "navy",
+"owner_note": null,
+"todo": "an admiral can be assigned to a naval headquarters: hoi4_fleet_admiral {fleet, list:true} lists the admirals offered, then hoi4_fleet_admiral {fleet, admiral}"
+},
+{
+"days_open": 0,
+"item": "insufficient_resources",
+"note_contradicts_read": false,
+"owner": "resources",
+"owner_note": null,
+"todo": "resources missing for production (the tooltip names them): hoi4_trade / hoi4_trade_set or hoi4_auto_import"
+}
+],
+"findings": [
+{
+"code": "army_without_order",
+"severity": "high",
+"text": "army Mitte Brandenburg (1 divisions, at state 88: 1) has no front, offensive or hold order: at war it fights only where the AI of each division wanders",
+"subject": "Mitte Brandenburg",
+"owner": "findings",
+"numbers": {
+"divisions": 1
+},
+"open_snapshots": 1
+},
+{
+"code": "army_without_order",
+"severity": "high",
+"text": "army Army 4 (2 divisions, at state 98: 2) has no front, offensive or hold order: at war it fights only where the AI of each division wanders",
+"subject": "Army 4",
+"owner": "findings",
+"numbers": {
+"divisions": 2
+},
+"open_snapshots": 1
+},
+{
+"code": "province_overstacked",
+"severity": "high",
+"text": "province 9281 (state 56): 23 divisions draw 38.6 supply where the province gives 6.4: their supply is 26%; it carries about 3 at full supply: spread the rest along the line or into the second line",
+"subject": "9281",
+"owner": "findings",
+"numbers": {
+"divisions": 23,
+"supply": 6.411,
+"demand": 38.572,
+"division_supply": 26.05652173913045
+},
+"open_snapshots": 1
+},
+{
+"code": "province_overstacked",
+"severity": "high",
+"text": "province 9522 (state 51): 15 divisions draw 15.4 supply where the province gives 5.4: their supply is 35%; it carries about 5 at full supply: spread the rest along the line or into the second line",
+"subject": "9522",
+"owner": "findings",
+"numbers": {
+"divisions": 15,
+"supply": 5.358,
+"demand": 15.437,
+"division_supply": 35.199999999999996
+},
+"open_snapshots": 1
+},
+{
+"code": "province_overstacked",
+"severity": "high",
+"text": "province 11435 (state 42): 9 divisions draw 12.0 supply where the province gives 3.5: their supply is 32%; it carries about 2 at full supply: spread the rest along the line or into the second line",
+"subject": "11435",
+"owner": "findings",
+"numbers": {
+"divisions": 9,
+"supply": 3.542,
+"demand": 11.997,
+"division_supply": 32.199999999999996
+},
+"open_snapshots": 1
+},
+{
+"code": "political_power_unspent",
+"severity": "medium",
+"text": "political power 263 banked while something is affordable (the game marks decisions_available) and no costlier pick is being saved for: unspent power buys nothing",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"political_power": 262.77,
+"gain_14d": null
+},
+"open_snapshots": 1
+},
+{
+"code": "order_not_executing",
+"severity": "medium",
+"text": "army Panzergruppe Ost's battle plan on [42] is not executing",
+"subject": "Panzergruppe Ost",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 1
+},
+{
+"code": "order_not_executing",
+"severity": "medium",
+"text": "army Armee Pommern's battle plan on [51] is not executing",
+"subject": "Armee Pommern",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 1
+},
+{
+"code": "order_not_executing",
+"severity": "medium",
+"text": "army Panzergruppe Nord's battle plan on [56] is not executing",
+"subject": "Panzergruppe Nord",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 1
+},
+{
+"code": "order_not_executing",
+"severity": "medium",
+"text": "army Armee West Süd's battle plan on [42] is not executing",
+"subject": "Armee West Süd",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 1
+},
+{
+"code": "province_overstacked",
+"severity": "medium",
+"text": "province 3547 (state 51): 12 divisions draw 14.4 supply where the province gives 7.3: their supply is 57%; it carries about 6 at full supply: spread the rest along the line or into the second line",
+"subject": "3547",
+"owner": "findings",
+"numbers": {
+"divisions": 12,
+"supply": 7.314,
+"demand": 14.358,
+"division_supply": 57.100000000000016
+},
+"open_snapshots": 1
+},
+{
+"code": "air_wings_without_mission",
+"severity": "medium",
+"text": "1 air wing(s) have no mission (LG 'Greifswald'): planes on the ground do nothing",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"wings": 1
+},
+"open_snapshots": 1
+},
+{
+"code": "resource_deficit",
+"severity": "medium",
+"text": "4 production line(s) lack rubber: they run below efficiency (trade or build for it)",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"lines": 4
+},
+"open_snapshots": 1
+},
+{
+"code": "frame_4",
+"severity": "medium",
+"text": "unlabelled alert: hover it in game or check every domain; executor rule player",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "free_civilian_factories",
+"severity": "medium",
+"text": "civilian factories build nothing: hoi4_construction_add (or trade); executor rule construction",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "free_dockyards",
+"severity": "medium",
+"text": "idle dockyards: naval production lines; executor rule dockyards",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "unfulfilled_import_requests",
+"severity": "medium",
+"text": "an import request is not filled: hoi4_trade / hoi4_auto_import; executor rule resources",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "frame_11",
+"severity": "medium",
+"text": "unlabelled alert: hover it in game or check every domain; executor rule player",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "frame_17",
+"severity": "medium",
+"text": "unlabelled alert: hover it in game or check every domain; executor rule player",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "frame_31",
+"severity": "medium",
+"text": "unlabelled alert: hover it in game or check every domain; executor rule player",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "outdated_equipment_in_production",
+"severity": "medium",
+"text": "a line makes an older model than the newest the country has: switch it (hoi4_design_set_production, variant 90%) or let it finish and remove it (start naval queue), per the plan's production entries; executor rule naval_queue",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "decisions_available",
+"severity": "medium",
+"text": "decisions can be taken: hoi4_decisions_list; executor rule decisions",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "frame_49",
+"severity": "medium",
+"text": "unlabelled alert: hover it in game or check every domain; executor rule player",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "doctrines_available",
+"severity": "medium",
+"text": "a doctrine can be unlocked: hoi4_doctrines; executor rule doctrines",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "modify_officer_corps",
+"severity": "medium",
+"text": "a high command or military advisor can be picked: hoi4_politics_options; executor rule officer_corps",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "mio_traits",
+"severity": "medium",
+"text": "military industrial organisation traits can be unlocked: hoi4_mios; executor rule mio",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "special_project_available",
+"severity": "medium",
+"text": "a special project can start: hoi4_special_projects, hoi4_special_project_assign; executor rule special_projects",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "frame_62",
+"severity": "medium",
+"text": "unlabelled alert: hover it in game or check every domain; executor rule player",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "admiral_assignable",
+"severity": "medium",
+"text": "an admiral can be assigned to a naval headquarters: hoi4_fleet_admiral {fleet, list:true} lists the admirals offered, then hoi4_fleet_admiral {fleet, admiral}; executor rule navy",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "insufficient_resources",
+"severity": "medium",
+"text": "resources missing for production (the tooltip names them): hoi4_trade / hoi4_trade_set or hoi4_auto_import; executor rule resources",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 0
+},
+{
+"code": "naval_task_force_idle",
+"severity": "low",
+"text": "1 naval task force(s) on hold with no mission",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"task_forces": 1
+},
+"open_snapshots": 1
+},
+{
+"code": "plan_item_blocked",
+"severity": "low",
+"text": "plan item id:cp_radar_51 blocked after 3 tries building_select_failed: Observed: after one click on the radar_station button the construction manager's selection did not name radar_station within 3 s; nothin",
+"subject": "id:cp_radar_51",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 1
+},
+{
+"code": "plan_item_blocked",
+"severity": "low",
+"text": "plan item id:cp_radar_56 blocked after 3 tries building_select_failed: Observed: after one click on the radar_station button the construction manager's selection did not name radar_station within 3 s; nothin",
+"subject": "id:cp_radar_56",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 1
+},
+{
+"code": "game_alert:missing_equipment_production",
+"severity": "low",
+"text": "the game flags missing_equipment_production: logistics requests equipment nothing produces: hoi4_production_add",
+"subject": "missing_equipment_production",
+"owner": "game alert row",
+"numbers": {},
+"open_snapshots": 0
+}
+],
+"stacking": {
+"supply_mean": 52.5,
+"supply_lowest": 26.0
+},
+"executor": {
+"game_hour": 60797448,
+"operations": {
+"op_lowlands": {
+"steps": 32,
+"fought": [],
+"ended": false,
+"executing": false,
+"prepared": true,
+"phase": "preparing"
+},
+"op_poland": {
+"steps": 43,
+"fought": [
+"POL"
+],
+"ended": true,
+"executing": true,
+"prepared": true,
+"phase": "ended"
+}
+},
+"failures": [
+{
+"what": "hoi4_mio_policy {\"organization\":\"GER_henschel_organization\",\"policy\":\"mio_policy_land_cutting_corners\"}",
+"count": 1,
+"last_hour": 60797391,
+"first_hour": 60797391
+},
+{
+"what": "hoi4_politics_choose {\"category\":\"government\",\"idea\":\"limited_exports\",\"slot\":1}",
+"count": 1,
+"last_hour": 60797326,
+"first_hour": 60797326
+},
+{
+"what": "hoi4_production_add {\"equipment\":\"ship_hull_submarine_1\",\"factories\":6}",
+"count": 1,
+"last_hour": 60797280,
+"first_hour": 60797280
+},
+{
+"what": "hoi4_production_set {\"equipment\":\"convoy_1\",\"factories\":18,\"line\":9}",
+"count": 1,
+"last_hour": 60797280,
+"first_hour": 60797280
+}
+],
+"blocked": [
+{
+"item": "id:cp_radar_51",
+"tries": 3,
+"at": 60796445,
+"why": "building_select_failed: Observed: after one click on the radar_station button the construction manager's selection did not name radar_station within 3 s; nothin"
+},
+{
+"item": "id:cp_radar_56",
+"tries": 3,
+"at": 60796362,
+"why": "building_select_failed: Observed: after one click on the radar_station button the construction manager's selection did not name radar_station within 3 s; nothin"
+}
+],
+"war_stage": {},
+"checkpoints_passed": 26,
+"checkpoints": 29,
+"done_count": 291,
+"last_executor_action": {
+"tool": "hoi4_states",
+"ok": true,
+"error": null,
+"unix_ms": 1795438066483
+},
+"last_outside_action": {
+"tool": "hoi4_wars",
+"ok": true,
+"error": null,
+"unix_ms": 1795438058665
+},
+"last_step": {
+"reason": "action failed",
+"ms": 8065,
+"unix_ms": 1795438056628,
+"actions": "[\"mio GER_henschel_organization policy mio_policy_land_cutting_corners: false input_readback_failed: open policy window: expected game change not observed\"]"
+},
+"last_order": {
+"kind": "mio_policy",
+"error": "input_readback_failed",
+"army": null,
+"unix_ms": null
+}
+},
+"land": {
+"division_count": 143
+}
+},
+{
+"date": "1940.05.10.21",
+"utc": 1795438083.2,
+"speed": 1,
+"paused": false,
+"trigger": "war_declared:HOL",
+"player": "GER",
+"wars": {
+"at_war": true,
+"enemies": [
+"AST",
+"BRM",
+"CAN",
+"ENG",
+"FRA",
+"HOL",
+"JOR",
+"KUW",
+"LEB",
+"MAL",
+"NZL",
+"OMA",
+"PAL",
+"POL",
+"RAJ",
+"SAF",
+"SYR"
+],
+"own_states_lost": [],
+"per_enemy": {
+"SAF": {
+"tag": "SAF",
+"name": "South Africa",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: SAF owns 7 and controls 7 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 7,
+"states_owned": 7,
+"at_war": true
+},
+"LEB": {
+"tag": "LEB",
+"name": "Lebanese Republic",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: LEB owns 1 and controls 1 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 1,
+"states_owned": 1,
+"at_war": true,
+"vp_total": 5.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 1
+},
+"JOR": {
+"tag": "JOR",
+"name": "Emirate of Transjordan",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: JOR owns 1 and controls 1 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 1,
+"states_owned": 1,
+"at_war": true,
+"vp_total": 3.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 1
+},
+"SYR": {
+"tag": "SYR",
+"name": "Republic of Syria",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: SYR owns 4 and controls 4 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 4,
+"states_owned": 4,
+"at_war": true
+},
+"PAL": {
+"tag": "PAL",
+"name": "Mandatory Palestine",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: PAL owns 1 and controls 1 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 1,
+"states_owned": 1,
+"at_war": true,
+"vp_total": 5.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 1
+},
+"MAL": {
+"tag": "MAL",
+"name": "British Malaya",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: MAL owns 10 and controls 10 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 10,
+"states_owned": 10,
+"at_war": true,
+"vp_total": 27.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 10
+},
+"CAN": {
+"tag": "CAN",
+"name": "Dominion of Canada",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: CAN owns 23 and controls 23 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 23,
+"states_owned": 23,
+"at_war": true,
+"vp_total": 89.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 23
+},
+"ENG": {
+"tag": "ENG",
+"name": "United Kingdom",
+"casualties_own": 0,
+"casualties_enemy": 44,
+"since": "1939-09-03 10:00",
+"result": "ongoing: ENG owns 95 and controls 95 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 95,
+"states_owned": 95,
+"at_war": true,
+"vp_total": 429.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 95
+},
+"NZL": {
+"tag": "NZL",
+"name": "Dominion of New Zealand",
+"casualties_own": 12,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: NZL owns 6 and controls 6 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 6,
+"states_owned": 6,
+"at_war": true,
+"vp_total": 28.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 6
+},
+"KUW": {
+"tag": "KUW",
+"name": "Sheikhdom of Kuwait",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: KUW owns 1 and controls 1 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 1,
+"states_owned": 1,
+"at_war": true,
+"vp_total": 1.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 1
+},
+"HOL": {
+"tag": "HOL",
+"name": "Netherlands",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1940-05-10 13:00",
+"result": "ongoing: HOL owns 5 and controls 5 state(s)",
+"started": "1940-05-10 13:00",
+"states_controlled": 5,
+"states_owned": 5,
+"at_war": true,
+"vp_total": 91.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 5
+},
+"POL": {
+"tag": "POL",
+"name": "Poland",
+"casualties_own": 24686,
+"casualties_enemy": 241743,
+"since": "1939-09-03 09:00",
+"result": "WON: POL controls none of its 11 state(s) (it has capitulated); a peace conference or annexation follows",
+"started": "1939-09-03 09:00",
+"states_controlled": 0,
+"states_owned": 11,
+"at_war": true,
+"vp_total": 112.0,
+"vp_held_by_us": 112.0,
+"vp_held_by_others": 112.0,
+"states_we_control": 11,
+"states_listed": 11
+},
+"AST": {
+"tag": "AST",
+"name": "Australia",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: AST owns 20 and controls 20 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 20,
+"states_owned": 20,
+"at_war": true,
+"vp_total": 142.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 20
+},
+"OMA": {
+"tag": "OMA",
+"name": "Sultanate of Oman",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: OMA owns 4 and controls 4 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 4,
+"states_owned": 4,
+"at_war": true,
+"vp_total": 5.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 4
+},
+"RAJ": {
+"tag": "RAJ",
+"name": "British Raj",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: RAJ owns 35 and controls 35 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 35,
+"states_owned": 35,
+"at_war": true,
+"vp_total": 222.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 35
+},
+"FRA": {
+"tag": "FRA",
+"name": "France",
+"casualties_own": 6,
+"casualties_enemy": 6,
+"since": "1939-09-03 10:00",
+"result": "ongoing: FRA owns 75 and controls 75 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 75,
+"states_owned": 75,
+"at_war": true,
+"vp_total": 398.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 75
+},
+"BRM": {
+"tag": "BRM",
+"name": "British Burma",
+"casualties_own": 0,
+"casualties_enemy": 0,
+"since": "1939-09-03 10:00",
+"result": "ongoing: BRM owns 9 and controls 9 state(s)",
+"started": "1939-09-03 10:00",
+"states_controlled": 9,
+"states_owned": 9,
+"at_war": true,
+"vp_total": 27.0,
+"vp_held_by_us": 0.0,
+"vp_held_by_others": 0.0,
+"states_we_control": 0,
+"states_listed": 9
+}
+}
+},
+"omissions": [
+{
+"days_open": 0,
+"item": "frame_4",
+"note_contradicts_read": false,
+"owner": "player",
+"owner_note": null,
+"todo": "unlabelled alert: hover it in game or check every domain"
+},
+{
+"days_open": 0,
+"item": "free_civilian_factories",
+"note_contradicts_read": false,
+"owner": "construction",
+"owner_note": null,
+"todo": "civilian factories build nothing: hoi4_construction_add (or trade)"
+},
+{
+"days_open": 0,
+"item": "free_dockyards",
+"note_contradicts_read": false,
+"owner": "dockyards",
+"owner_note": null,
+"todo": "idle dockyards: naval production lines"
+},
+{
+"days_open": 0,
+"item": "unfulfilled_import_requests",
+"note_contradicts_read": false,
+"owner": "resources",
+"owner_note": null,
+"todo": "an import request is not filled: hoi4_trade / hoi4_auto_import"
+},
+{
+"days_open": 0,
+"item": "frame_11",
+"note_contradicts_read": false,
+"owner": "player",
+"owner_note": null,
+"todo": "unlabelled alert: hover it in game or check every domain"
+},
+{
+"days_open": 0,
+"item": "frame_17",
+"note_contradicts_read": false,
+"owner": "player",
+"owner_note": null,
+"todo": "unlabelled alert: hover it in game or check every domain"
+},
+{
+"days_open": 0,
+"item": "frame_31",
+"note_contradicts_read": false,
+"owner": "player",
+"owner_note": null,
+"todo": "unlabelled alert: hover it in game or check every domain"
+},
+{
+"days_open": 0,
+"item": "outdated_equipment_in_production",
+"note_contradicts_read": false,
+"owner": "naval_queue",
+"owner_note": null,
+"todo": "a line makes an older model than the newest the country has: switch it (hoi4_design_set_production, variant 90%) or let it finish and remove it (start naval queue), per the plan's production entries"
+},
+{
+"days_open": 0,
+"item": "decisions_available",
+"note_contradicts_read": false,
+"owner": "decisions",
+"owner_note": null,
+"todo": "decisions can be taken: hoi4_decisions_list"
+},
+{
+"days_open": 0,
+"item": "frame_49",
+"note_contradicts_read": false,
+"owner": "player",
+"owner_note": null,
+"todo": "unlabelled alert: hover it in game or check every domain"
+},
+{
+"days_open": 0,
+"item": "doctrines_available",
+"note_contradicts_read": false,
+"owner": "doctrines",
+"owner_note": null,
+"todo": "a doctrine can be unlocked: hoi4_doctrines"
+},
+{
+"days_open": 0,
+"item": "modify_officer_corps",
+"note_contradicts_read": false,
+"owner": "officer_corps",
+"owner_note": null,
+"todo": "a high command or military advisor can be picked: hoi4_politics_options"
+},
+{
+"days_open": 0,
+"item": "mio_traits",
+"note_contradicts_read": false,
+"owner": "mio",
+"owner_note": null,
+"todo": "military industrial organisation traits can be unlocked: hoi4_mios"
+},
+{
+"days_open": 0,
+"item": "special_project_available",
+"note_contradicts_read": false,
+"owner": "special_projects",
+"owner_note": null,
+"todo": "a special project can start: hoi4_special_projects, hoi4_special_project_assign"
+},
+{
+"days_open": 0,
+"item": "frame_62",
+"note_contradicts_read": false,
+"owner": "player",
+"owner_note": null,
+"todo": "unlabelled alert: hover it in game or check every domain"
+},
+{
+"days_open": 0,
+"item": "admiral_assignable",
+"note_contradicts_read": false,
+"owner": "navy",
+"owner_note": null,
+"todo": "an admiral can be assigned to a naval headquarters: hoi4_fleet_admiral {fleet, list:true} lists the admirals offered, then hoi4_fleet_admiral {fleet, admiral}"
+},
+{
+"days_open": 0,
+"item": "insufficient_resources",
+"note_contradicts_read": false,
+"owner": "resources",
+"owner_note": null,
+"todo": "resources missing for production (the tooltip names them): hoi4_trade / hoi4_trade_set or hoi4_auto_import"
+}
+],
+"findings": [
+{
+"code": "army_without_order",
+"severity": "high",
+"text": "army Mitte Brandenburg (1 divisions, at state 88: 1) has no front, offensive or hold order: at war it fights only where the AI of each division wanders",
+"subject": "Mitte Brandenburg",
+"owner": "findings",
+"numbers": {
+"divisions": 1
+},
+"open_snapshots": 2
+},
+{
+"code": "army_without_order",
+"severity": "high",
+"text": "army Army 4 (2 divisions, at state 98: 2) has no front, offensive or hold order: at war it fights only where the AI of each division wanders",
+"subject": "Army 4",
+"owner": "findings",
+"numbers": {
+"divisions": 2
+},
+"open_snapshots": 2
+},
+{
+"code": "province_overstacked",
+"severity": "high",
+"text": "province 9281 (state 56): 23 divisions draw 38.6 supply where the province gives 6.1: their supply is 25%; it carries about 3 at full supply: spread the rest along the line or into the second line",
+"subject": "9281",
+"owner": "findings",
+"numbers": {
+"divisions": 23,
+"supply": 6.057,
+"demand": 38.57,
+"division_supply": 25.10000000000001
+},
+"open_snapshots": 2
+},
+{
+"code": "province_overstacked",
+"severity": "high",
+"text": "province 9522 (state 51): 15 divisions draw 16.1 supply where the province gives 5.4: their supply is 33%; it carries about 4 at full supply: spread the rest along the line or into the second line",
+"subject": "9522",
+"owner": "findings",
+"numbers": {
+"divisions": 15,
+"supply": 5.351,
+"demand": 16.114,
+"division_supply": 33.39999999999999
+},
+"open_snapshots": 2
+},
+{
+"code": "province_overstacked",
+"severity": "high",
+"text": "province 11435 (state 42): 9 divisions draw 12.0 supply where the province gives 3.8: their supply is 34%; it carries about 2 at full supply: spread the rest along the line or into the second line",
+"subject": "11435",
+"owner": "findings",
+"numbers": {
+"divisions": 9,
+"supply": 3.759,
+"demand": 11.972,
+"division_supply": 33.800000000000004
+},
+"open_snapshots": 2
+},
+{
+"code": "political_power_unspent",
+"severity": "medium",
+"text": "political power 266 banked while something is affordable (the game marks decisions_available) and no costlier pick is being saved for: unspent power buys nothing",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"political_power": 265.89,
+"gain_14d": null
+},
+"open_snapshots": 2
+},
+{
+"code": "order_not_executing",
+"severity": "medium",
+"text": "army Armee West Süd's battle plan on [42] is not executing",
+"subject": "Armee West Süd",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 2
+},
+{
+"code": "province_overstacked",
+"severity": "medium",
+"text": "province 3547 (state 51): 12 divisions draw 15.0 supply where the province gives 7.6: their supply is 56%; it carries about 6 at full supply: spread the rest along the line or into the second line",
+"subject": "3547",
+"owner": "findings",
+"numbers": {
+"divisions": 12,
+"supply": 7.594,
+"demand": 15.033,
+"division_supply": 55.79999999999999
+},
+"open_snapshots": 2
+},
+{
+"code": "air_wings_without_mission",
+"severity": "medium",
+"text": "1 air wing(s) have no mission (LG 'Greifswald'): planes on the ground do nothing",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"wings": 1
+},
+"open_snapshots": 2
+},
+{
+"code": "resource_deficit",
+"severity": "medium",
+"text": "4 production line(s) lack rubber: they run below efficiency (trade or build for it)",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"lines": 4
+},
+"open_snapshots": 2
+},
+{
+"code": "frame_4",
+"severity": "medium",
+"text": "unlabelled alert: hover it in game or check every domain; executor rule player",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "free_civilian_factories",
+"severity": "medium",
+"text": "civilian factories build nothing: hoi4_construction_add (or trade); executor rule construction",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "free_dockyards",
+"severity": "medium",
+"text": "idle dockyards: naval production lines; executor rule dockyards",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "unfulfilled_import_requests",
+"severity": "medium",
+"text": "an import request is not filled: hoi4_trade / hoi4_auto_import; executor rule resources",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "frame_11",
+"severity": "medium",
+"text": "unlabelled alert: hover it in game or check every domain; executor rule player",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "frame_17",
+"severity": "medium",
+"text": "unlabelled alert: hover it in game or check every domain; executor rule player",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "frame_31",
+"severity": "medium",
+"text": "unlabelled alert: hover it in game or check every domain; executor rule player",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "outdated_equipment_in_production",
+"severity": "medium",
+"text": "a line makes an older model than the newest the country has: switch it (hoi4_design_set_production, variant 90%) or let it finish and remove it (start naval queue), per the plan's production entries; executor rule naval_queue",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "decisions_available",
+"severity": "medium",
+"text": "decisions can be taken: hoi4_decisions_list; executor rule decisions",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "frame_49",
+"severity": "medium",
+"text": "unlabelled alert: hover it in game or check every domain; executor rule player",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "doctrines_available",
+"severity": "medium",
+"text": "a doctrine can be unlocked: hoi4_doctrines; executor rule doctrines",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "modify_officer_corps",
+"severity": "medium",
+"text": "a high command or military advisor can be picked: hoi4_politics_options; executor rule officer_corps",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "mio_traits",
+"severity": "medium",
+"text": "military industrial organisation traits can be unlocked: hoi4_mios; executor rule mio",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "special_project_available",
+"severity": "medium",
+"text": "a special project can start: hoi4_special_projects, hoi4_special_project_assign; executor rule special_projects",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "frame_62",
+"severity": "medium",
+"text": "unlabelled alert: hover it in game or check every domain; executor rule player",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "admiral_assignable",
+"severity": "medium",
+"text": "an admiral can be assigned to a naval headquarters: hoi4_fleet_admiral {fleet, list:true} lists the admirals offered, then hoi4_fleet_admiral {fleet, admiral}; executor rule navy",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "insufficient_resources",
+"severity": "medium",
+"text": "resources missing for production (the tooltip names them): hoi4_trade / hoi4_trade_set or hoi4_auto_import; executor rule resources",
+"subject": null,
+"owner": "server omissions",
+"numbers": {
+"days_open": 0
+},
+"open_snapshots": 1
+},
+{
+"code": "naval_task_force_idle",
+"severity": "low",
+"text": "2 naval task force(s) on hold with no mission",
+"subject": null,
+"owner": "findings",
+"numbers": {
+"task_forces": 2
+},
+"open_snapshots": 2
+},
+{
+"code": "plan_item_blocked",
+"severity": "low",
+"text": "plan item id:cp_radar_51 blocked after 3 tries building_select_failed: Observed: after one click on the radar_station button the construction manager's selection did not name radar_station within 3 s; nothin",
+"subject": "id:cp_radar_51",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 2
+},
+{
+"code": "plan_item_blocked",
+"severity": "low",
+"text": "plan item id:cp_radar_56 blocked after 3 tries building_select_failed: Observed: after one click on the radar_station button the construction manager's selection did not name radar_station within 3 s; nothin",
+"subject": "id:cp_radar_56",
+"owner": "findings",
+"numbers": {},
+"open_snapshots": 2
+},
+{
+"code": "game_alert:missing_equipment_production",
+"severity": "low",
+"text": "the game flags missing_equipment_production: logistics requests equipment nothing produces: hoi4_production_add",
+"subject": "missing_equipment_production",
+"owner": "game alert row",
+"numbers": {},
+"open_snapshots": 1
+}
+],
+"stacking": {
+"supply_mean": 52.1,
+"supply_lowest": 25.1
+},
+"executor": {
+"game_hour": 60797499,
+"operations": {
+"op_lowlands": {
+"steps": 41,
+"fought": [
+"HOL"
+],
+"ended": false,
+"executing": true,
+"prepared": true,
+"phase": "executing"
+},
+"op_poland": {
+"steps": 43,
+"fought": [
+"POL"
+],
+"ended": true,
+"executing": true,
+"prepared": true,
+"phase": "ended"
+}
+},
+"failures": [
+{
+"what": "hoi4_mio_policy {\"organization\":\"GER_henschel_organization\",\"policy\":\"mio_policy_land_cutting_corners\"}",
+"count": 1,
+"last_hour": 60797391,
+"first_hour": 60797391
+},
+{
+"what": "hoi4_politics_choose {\"category\":\"government\",\"idea\":\"limited_exports\",\"slot\":1}",
+"count": 1,
+"last_hour": 60797326,
+"first_hour": 60797326
+},
+{
+"what": "hoi4_production_add {\"equipment\":\"ship_hull_submarine_1\",\"factories\":6}",
+"count": 1,
+"last_hour": 60797280,
+"first_hour": 60797280
+},
+{
+"what": "hoi4_production_set {\"equipment\":\"convoy_1\",\"factories\":18,\"line\":9}",
+"count": 1,
+"last_hour": 60797280,
+"first_hour": 60797280
+}
+],
+"blocked": [
+{
+"item": "id:cp_radar_51",
+"tries": 3,
+"at": 60796445,
+"why": "building_select_failed: Observed: after one click on the radar_station button the construction manager's selection did not name radar_station within 3 s; nothin"
+},
+{
+"item": "id:cp_radar_56",
+"tries": 3,
+"at": 60796362,
+"why": "building_select_failed: Observed: after one click on the radar_station button the construction manager's selection did not name radar_station within 3 s; nothin"
+}
+],
+"war_stage": {},
+"checkpoints_passed": 26,
+"checkpoints": 29,
+"done_count": 302,
+"last_executor_action": {
+"tool": "hoi4_states",
+"ok": true,
+"error": null,
+"unix_ms": 1795438083149
+},
+"last_outside_action": {
+"tool": "hoi4_events",
+"ok": true,
+"error": null,
+"unix_ms": 1795438070917
+},
+"last_step": {
+"reason": "action failed",
+"ms": 8065,
+"unix_ms": 1795438056628,
+"actions": "[\"mio GER_henschel_organization policy mio_policy_land_cutting_corners: false input_readback_failed: open policy window: expected game change not observed\"]"
+},
+"last_order": {
+"kind": "army_plan",
+"error": null,
+"army": null,
+"unix_ms": null
+}
+},
+"land": {
+"division_count": 143
+}
+}
+]
