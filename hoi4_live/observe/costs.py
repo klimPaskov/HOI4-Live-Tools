@@ -23,6 +23,9 @@ from collections import Counter, defaultdict
 
 from .runlogs import FINAL, body_date, game_days
 
+# Published list prices per million tokens, taken 2026-11-03 from the API's pricing table; to be verified
+# against the console's billing before they are relied on for more than a budget estimate.
+PRICES_TAKEN = "2026-11-03 (published list prices; to be verified)"
 PRICES = {
     # model: in, out, cache read, cache write 5m, cache write 1h ($ per million tokens)
     "claude-haiku-5-5": {"in": 0.10, "out": 0.50, "cache_read": 0.01, "cache_write_5m": 0.125,
@@ -217,7 +220,10 @@ def render_costs(run_dir, monitor_dir=None, m=None):
     m = m or measure(run_dir, monitor_dir)
     span = m["span"]
     years = ((span[1] - span[0]) / 365) if span and span[1] > span[0] else None
-    lines = [f"# Costs of {os.path.basename(os.path.abspath(run_dir))}", ""]
+    from .budget import Budget
+    lines = [f"# Costs of {os.path.basename(os.path.abspath(run_dir))}", "",
+             Budget().line(os.path.basename(os.path.abspath(run_dir))), "",
+             f"Prices: {PRICES_TAKEN}.", ""]
     if span:
         lines.append(f"Game {span[2]} .. {span[3]} ({span[1] - span[0]:.0f} game days) in {span[4]:.0f} real minutes")
     lines += ["", "## Model tokens and money by role", "",
