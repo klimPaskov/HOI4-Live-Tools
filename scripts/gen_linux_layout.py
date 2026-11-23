@@ -7,6 +7,11 @@ usage:
   gen_linux_layout.py generate MACHO ELF [--src native/src] [--hints hints.json] [--include-low] [--no-fill]
                       [--out native/layouts/linux-<build-id>.json] [--report coverage.json] [--cache DIR]
   gen_linux_layout.py --check-table TABLE.json [--keys keys.json]
+  gen_linux_layout.py extend TABLE.json [--src native/src] [--write] [--unmapped OUT.json]
+      offline, no binaries: fill the field keys the sources added since the table was generated from
+      mapped neighbours with the same shift (the bracketed rule of `generate`), then list what is still
+      unmapped by source file. --unmapped writes that list (the baseline tests/test_xlayout_coverage.py
+      compares with); everything listed there needs `generate` with the ELF, a hint, or a live entry.
 
 Keys are the macOS 1.19.4.1 values the tools pass to `img(abi, mac)` and
 `fld(abi, &Class::new(name, mac_vtable), mac_offset)`. The table has the format
@@ -666,6 +671,40 @@ def fill_gaps(out, need, res):
     return filled
 
 
+def extend(table, keys):
+    """Offline extension of a generated table to the keys the sources use now: each missing field key of a
+    class gets the shift of its mapped neighbours when both have the same shift (fill_gaps' bracketed rule;
+    no binary is read, so no single-vote results). Stride pseudo-classes (`.size`) are never filled.
+    Changes `table` in place; returns {class: {mac offset: elf offset}} of the filled entries."""
+    filled = {}
+    fields = table.setdefault('fields', {})
+    for cls, d in sorted(keys['classes'].items()):
+        if cls.endswith('.size'):
+            continue
+        have = fields.get(cls, {})
+        need = {int(o, 16) for o in d['offsets']} - {int(k, 16) for k in have}
+        if not need or not have:
+            continue
+        out = {k: v for k, v in have.items() if int(k, 16) >= 0}
+        how = fill_gaps(out, need, {})
+        if how:
+            got = {k: out[k] for k in how}
+            fields.setdefault(cls, {}).update(got)
+            filled[cls] = got
+    return filled
+
+
+def unmapped_by_file(table, keys):
+    """{"image": {mac: [files]}, "fields": {"Class+0x..": [files]}} of the keys the table lacks."""
+    _, cov = check_table(table, keys)
+    img = {a: sorted({w.split(':')[0] for w in keys['image'].get(a, [])}) for a in cov['missing_image']}
+    fld = {}
+    for k in cov['missing_fields']:
+        cls = k.rsplit('+', 1)[0]
+        fld[k] = sorted({w.split(':')[0] for w in keys['classes'].get(cls, {}).get('declared', [])})
+    return dict(image=img, fields=fld)
+
+
 def apply_live(table, live):
     """Entries measured on the running Linux game override the static result:
     {"image": {"0xmac": {"elf": "0x..", "evidence": ".."}},
@@ -858,6 +897,11 @@ def main(argv=None):
     k = sub.add_parser('keys')
     k.add_argument('--src', default='native/src')
     k.add_argument('--out')
+    e = sub.add_parser('extend')
+    e.add_argument('table')
+    e.add_argument('--src', default='native/src')
+    e.add_argument('--write', action='store_true', help='write the filled entries into TABLE')
+    e.add_argument('--unmapped', help='write the keys still unmapped (by source file) here')
     g = sub.add_parser('generate')
     g.add_argument('macho')
     g.add_argument('elf')
@@ -881,6 +925,35 @@ def main(argv=None):
             pathlib.Path(a.out).write_text(text + '\n')
         else:
             print(text)
+        return
+    if a.cmd == 'extend':
+        path = pathlib.Path(a.table)
+        table = json.loads(path.read_text())
+        keys = keys_document(scan(a.src))
+        _, before = check_table(table, keys)
+        filled = extend(table, keys)
+        _, after = check_table(table, keys)
+        n = sum(len(v) for v in filled.values())
+        print(f'image {before["image"]} -> {after["image"]}; fields {before["fields"]} -> {after["fields"]} '
+              f'({n} bracketed fills in {len(filled)} classes)', file=sys.stderr)
+        for cls, got in filled.items():
+            print(f'  filled {cls}: ' + ', '.join(f'{k}->{v}' for k, v in sorted(got.items())), file=sys.stderr)
+        left = unmapped_by_file(table, keys)
+        if a.write and filled:
+            path.write_text(json.dumps(table, indent=1, sort_keys=True) + '\n')
+            print(f'wrote {path}', file=sys.stderr)
+            # the generation report keeps where every entry came from
+            rep = path.with_name(re.sub(r'\.json$', '', path.name) + '.coverage.json')
+            if rep.exists():
+                report = json.loads(rep.read_text())
+                for cls, got in filled.items():
+                    report.setdefault('offline_fill', {}).setdefault(cls, {}).update(
+                        {k: {'elf': v, 'how': 'bracketed (extend, no binary)'} for k, v in got.items()})
+                rep.write_text(json.dumps(report, indent=1) + '\n')
+                print(f'wrote {rep}', file=sys.stderr)
+        if a.unmapped:
+            pathlib.Path(a.unmapped).write_text(json.dumps(left, indent=1, sort_keys=True) + '\n')
+        print(json.dumps(left, indent=1, sort_keys=True))
         return
     hints = json.loads(pathlib.Path(a.hints).read_text()) if a.hints else None
     table, report = generate(a.macho, a.elf, a.src, hints, a.include_low, a.cache,

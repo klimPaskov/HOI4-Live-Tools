@@ -55,6 +55,19 @@ const MANAGER_SCAN: usize = 0x400;
 const ROOT_OFFSETS: [u64; 13] = [
     0x490, 0x68, 0x50, 0x60, 0x70, 0x78, 0x430, 0x20, 0x28, 0x30, 0x8, 0x10, 0x18,
 ];
+/// The same on the Linux build: views derived from CCountryView keep their root at +0x338 and
+/// pop-ups derived from CPopUpWindow at +0x330 (both measured on the running Linux 1.19.4.1 game,
+/// scripts/data/xlayout-live-1.19.4.1.json), then the small offsets of nested windows. Every
+/// candidate is accepted only when `gui_tree::container` reads a widget container there.
+const ROOT_OFFSETS_LINUX: [u64; 14] = [
+    0x338, 0x330, 0x68, 0x50, 0x60, 0x70, 0x78, 0x20, 0x28, 0x30, 0x8, 0x10, 0x18, 0x328,
+];
+fn root_offsets(abi: StringAbi) -> &'static [u64] {
+    match abi {
+        StringAbi::LibCxx => &ROOT_OFFSETS,
+        StringAbi::LibStdCxx => &ROOT_OFFSETS_LINUX,
+    }
+}
 const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
 const GAME_GUI: xlayout::Class = xlayout::Class::new("idler.gui", 0);
 const GUI_FROM_IDLER: u64 = 0x4c0;
@@ -69,12 +82,6 @@ fn plausible(p: u64) -> bool {
 
 /// Window objects: the interface manager's views and the pop-up list's windows.
 fn holders(r: &Reader<'_>, image: u64) -> Result<Vec<(u64, &'static str)>> {
-    if r.string_abi() != StringAbi::LibCxx {
-        return Err(Error::new(
-            "capability_unavailable",
-            "Window enumeration is mapped for the macOS build only",
-        ));
-    }
     let mut out = Vec::new();
     let manager = kit::manager(r, image)?;
     for c in r.read(manager, MANAGER_SCAN)?.chunks_exact(8) {
@@ -109,7 +116,7 @@ pub(super) fn roots(
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for (holder, source) in holders {
-        for off in ROOT_OFFSETS {
+        for &off in root_offsets(r.string_abi()) {
             let Ok(p) = r.u64(holder + off) else { continue };
             if !plausible(p) {
                 continue;
@@ -1003,6 +1010,16 @@ pub(super) fn tools() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_build_scans_its_own_root_offsets() {
+        // macOS views and pop-ups keep their root at +0x490; the Linux build at +0x338 (views)
+        // and +0x330 (pop-ups). Neither list carries the other build's view root.
+        assert_eq!(root_offsets(StringAbi::LibCxx)[0], 0x490);
+        assert_eq!(root_offsets(StringAbi::LibStdCxx)[..2], [0x338, 0x330]);
+        assert!(!root_offsets(StringAbi::LibStdCxx).contains(&0x490));
+        assert!(!root_offsets(StringAbi::LibCxx).contains(&0x338));
+    }
     use crate::memory::ReadMemory;
     use std::collections::BTreeMap;
 
