@@ -4465,8 +4465,8 @@
         "bulk": {
           "type": "array",
           "default": [],
-          "items": {"type": "string", "enum": ["all", "production_chords", "air_base_select", "mio_queue_many", "construction_fill"]},
-          "description": "the game's bulk paths the executor uses (one input for many elements, one read-back at the end; the single-element path stays the fallback when the read-back fails). Each is off until its live probe passes (docs/LIVE_VALIDATION_QUEUE.md, BATCHING PROBES): production_chords (Ctrl +5 / Shift +10 factories), air_base_select (a click on an air base selects all its wings: one mission or rebase order for every wing of a base whose wings are all asked for), mio_queue_many (every listed trait of an organisation queued in one visit of its tree window; an auto organisation listed and kept two traits deep in one visit), construction_fill (a state's every free slot of a building queued by one Shift+Click)"
+          "items": {"type": "string", "enum": ["all", "production_chords", "air_base_select", "mio_queue_many", "construction_fill", "-production_chords", "-air_base_select", "-mio_queue_many", "-construction_fill"]},
+          "description": "the game's bulk paths the executor uses (one input for many elements, one read-back at the end; the single-element path stays the fallback when the read-back fails). A path is off until its live probe passes (docs/LIVE_VALIDATION_QUEUE.md, BATCHING PROBES); production_chords and air_base_select passed and are on unless listed as \"-name\" (e.g. \"-air_base_select\"): production_chords (Ctrl +5 / Shift +10 factories), air_base_select (a click on an air base selects all its wings: one mission or rebase order for every wing of a base whose wings are all asked for), mio_queue_many (every listed trait of an organisation queued in one visit of its tree window; an auto organisation listed and kept two traits deep in one visit), construction_fill (a state's every free slot of a building queued by one Shift+Click)"
         },
         "alert_persist_days": {
           "type": "integer",

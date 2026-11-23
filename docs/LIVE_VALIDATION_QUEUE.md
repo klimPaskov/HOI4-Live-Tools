@@ -88,15 +88,18 @@ The May 1940 Germany bed source (1 May 1940, paused, executor off unless said):
     timing shows the click count), no trace "chords off". Before: 1.3 s + about 0.3 s a factory (23 factories
     about 8 s); after about 2.5 s. When a chord moves the line by one only, the game on macOS reads another
     modifier: note which (Ctrl or Command) and leave `production_chords` off.
+    DONE v60a (23 Nov 2026): anti_air line 1 -> 24 -> 1 Verified both ways, 5 clicks each, 2.56 s and 2.13 s. production_chords on by default.
 17. Air missions by base (10 min): `hoi4_air`; a base whose wings are all fighters (three or more) and one
     fighter at a base it shares with another type. `hoi4_air_mission {wings: [the base's wings and the shared
     one], mission: "air_superiority", region, bulk: true}` with the map watched. Expected: Verified; the result's
     `by_base` row for the clean base ok, the shared base's wing ordered by the single path; one base click, one
     mission click and one region click for the clean base. Before: 2.5-5 s a wing; after about 4 s a base. The
     same call again clicks nothing (every wing flies it already).
+    DONE v60a: 9 wings (8 of one base, 1 of a mixed base) air_superiority Verified in 7.9 s (0.88 s a wing), 9 clicks; the same call again 1.2 s, no click. air_base_select on by default.
 18. Air rebase by base (5 min): `hoi4_air_rebase {wings: [every wing of one base], state_id: another own base
     with room, bulk: true}`. Expected: each wing's transfer_to_base_id is the target; one base click and one
     right click. Before: 1.8-3.4 s a wing; after about 3 s a base.
+    DONE v60a: 4 wings of one base rebased Verified in 1.35 s, 3 clicks.
 19. Selection questions for the next step (5 min, by hand, nothing kept): in air mode, Shift+Click a second
     base circle while one base is selected (are its wings added?), and Shift+Click (then Ctrl+Click) a wing row
     of the selection view (`airwing_selection_item`): is that wing taken out of the selection? Either answer lets
@@ -107,6 +110,7 @@ The May 1940 Germany bed source (1 May 1940, paused, executor off unless said):
     three traits read queue numbers in the result's `entries`, the second organisation has two enabled traits
     queued. Before: 8.3 s a trait plus 8 s for a listing visit; after about 10 s a visit. Note how often the
     detail window had to be opened again after a click.
+    RUN v60a, NOT FASTER: three traits Verified in 26 s (8.7 s a trait, 40 clicks): after each queued trait the detail window closes and the organisation is found again row by row. mio_queue_many stays off until the found row is reopened directly.
 21. Executor bed with every bulk path (25 min): a STUDY bed of 7 war days from the same source with the plan's
     `manage.bulk: ["all"]`, hands off; compare its cleanliness table with a bed of the same plan without it
     (air_mission, air_rebase, production_set, mio_trait: calls, elements changed, s per element). Expected: air
