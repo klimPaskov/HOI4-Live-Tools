@@ -84,6 +84,8 @@ fn synthetic_owner(events: Arc<Events>) -> (Arc<Shared>, Receiver<()>, SyncSende
         commands: RwLock::new(Some(Arc::new(Adapter(events)))),
         display: None,
         directory: PathBuf::new(),
+        input_calls: std::sync::atomic::AtomicUsize::new(0),
+        read_tools: std::sync::OnceLock::new(),
     });
     (shared, entered_rx, release_tx)
 }
