@@ -258,6 +258,23 @@ const ATOMS: &[(&str, Kind, bool)] = &[
     ("province_controller", Kind::Tag, true),
 ];
 
+/// Whether `tag` still holds our border in a hoi4_wars read: its divisions stand in its states
+/// on our border (`neighbour_divisions_in_border_states` > 0), or, when that count is not read,
+/// it holds any state touching ours. Pure.
+pub(crate) fn border_held(wars: &Value, tag: &str) -> bool {
+    wars["borders"].as_array().is_some_and(|bs| {
+        bs.iter().any(|b| {
+            b["neighbour_tag"].as_str() == Some(tag)
+                && b["neighbour_states"]
+                    .as_array()
+                    .is_some_and(|n| !n.is_empty())
+                && b["neighbour_divisions_in_border_states"]
+                    .as_i64()
+                    .is_none_or(|n| n > 0)
+        })
+    })
+}
+
 /// An enemy that still controls only a remnant: at most REMNANT_SHARE of its victory points (a
 /// colony or two across the sea). Its war is over in practice and the next declaration may go
 /// (w42s3, 23 Nov 2026: the Netherlands held Suriname and Curacao, 2 of 91 victory points, for 24
@@ -1272,18 +1289,16 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
                         return Ok(Reading::Flag(true));
                     }
                 }
-                // a remnant still holding land on our border fights on: out only across the sea
-                // (w43c1, 23 Nov 2026: 2 of 91 points held in Zeeland, Holland retook 20)
-                let touching = ctx.read("hoi4_wars", &json!({})).is_some_and(|w| {
-                    w["borders"].as_array().is_some_and(|bs| {
-                        bs.iter().any(|b| {
-                            b["neighbour_tag"].as_str() == Some(tag.as_str())
-                                && b["neighbour_states"]
-                                    .as_array()
-                                    .is_some_and(|n| !n.is_empty())
-                        })
-                    })
-                });
+                // a remnant still holding land on our border fights on: out only when none of
+                // its divisions stands in its states on our border (w43c1, 23 Nov 2026: 2 of 91
+                // points held in Zeeland, Holland retook 20); a remnant on our border with no
+                // division there is beaten (w43n1: Holland held 2 of 91 points and Belgium 1 of
+                // 86 on our border for 15-25 days, the game never capitulated them and the
+                // operation into France never started). A read without the enemy's divisions
+                // counts any state on our border, as before.
+                let touching = ctx
+                    .read("hoi4_wars", &json!({}))
+                    .is_some_and(|w| border_held(w, &tag));
                 let read = ctx
                     .read("hoi4_states", &json!({"query": tag}))
                     .ok_or("hoi4_states unreadable")?;
@@ -1619,6 +1634,22 @@ mod tests {
                    "borders": [{"neighbour_tag": "HOL", "neighbour_states": [309]}]}),
         );
         assert_eq!(eval(&f, json!("capitulated:HOL")), Truth::False);
+        // the read names its divisions there: two of them hold the border, it fights on
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": true, "enemies": ["HOL"], "wars_won": []},
+                   "borders": [{"neighbour_tag": "HOL", "neighbour_states": [309],
+                                "neighbour_divisions_in_border_states": 2}]}),
+        );
+        assert_eq!(eval(&f, json!("capitulated:HOL")), Truth::False);
+        // the remnant on our border with no division in it is beaten (w43n1)
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": true, "enemies": ["HOL"], "wars_won": []},
+                   "borders": [{"neighbour_tag": "HOL", "neighbour_states": [309],
+                                "neighbour_divisions_in_border_states": 0}]}),
+        );
+        assert_eq!(eval(&f, json!("capitulated:HOL")), Truth::True);
     }
     #[test]
     fn surrender_progress_is_unknown_until_hoi4_wars_maps_it() {

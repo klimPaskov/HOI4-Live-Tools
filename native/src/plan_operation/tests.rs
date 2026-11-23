@@ -36,6 +36,8 @@ struct Game {
     pol_border: RefCell<bool>,
     /// what hoi4_commanders lists, when set
     commanders: RefCell<Value>,
+    /// what hoi4_supply answers, when set (provinces and divisions)
+    supply: RefCell<Option<Value>>,
     calls: RefCell<Vec<(String, Value)>>,
 }
 
@@ -74,6 +76,7 @@ impl Game {
             pol_rows: RefCell::new(None),
             pol_border: RefCell::new(true),
             commanders: RefCell::new(json!({})),
+            supply: RefCell::new(None),
             calls: RefCell::new(vec![]),
         }
     }
@@ -240,6 +243,9 @@ impl Tools for Game {
                         }
                     }
                 })
+            }
+            "hoi4_supply" if self.supply.borrow().is_some() => {
+                return Ok(self.supply.borrow().clone().unwrap());
             }
             "hoi4_supply" => {
                 let rows: Vec<Value> = self
@@ -2483,9 +2489,11 @@ fn a_reserve_standing_on_a_holds_border_joins_that_holds_front() {
     let wars = json!({"wars": {"enemies": ["FRA"]},
         "borders": [{"neighbour_tag": "FRA", "neighbour_states": [28], "own_border_states": [42]}]});
     let mut state = State::default();
-    let line = reserves(&mut state, &game, "op_pol", &op, &roster, &wars, "l", START)
-        .unwrap()
-        .unwrap();
+    let line = reserves(
+        &mut state, &game, "op_pol", &op, None, &roster, &wars, "l", START,
+    )
+    .unwrap()
+    .unwrap();
     assert!(line.contains("joins its front"), "{line}");
     let fronts: Vec<Value> = game
         .orders()
@@ -2554,15 +2562,18 @@ fn a_reserve_left_on_its_groups_front_is_cleared_and_marches_back_from_the_borde
     let wars = json!({"wars": {"enemies": ["FRA"]},
         "borders": [{"neighbour_tag": "FRA", "neighbour_states": [28], "own_border_states": [42]}]});
     let mut state = State::default();
-    let line = reserves(&mut state, &game, "op_pol", &op, &roster, &wars, "l", START)
-        .unwrap()
-        .unwrap();
+    let line = reserves(
+        &mut state, &game, "op_pol", &op, None, &roster, &wars, "l", START,
+    )
+    .unwrap()
+    .unwrap();
     assert!(line.contains("clear its orders"), "{line}");
     let line = reserves(
         &mut state,
         &game,
         "op_pol",
         &op,
+        None,
         &roster,
         &wars,
         "l",
@@ -2601,4 +2612,280 @@ fn a_reserve_inside_the_operations_group_is_left_out_when_the_group_is_formed_ag
         group_creates(&game).first(),
         Some(&json!({"armies": ["Mitte", "Nord"]}))
     );
+}
+
+/// A supply read: (province, state, supply, demand, [(division id, army, organisation)]).
+type SupplyRow<'a> = (i64, i64, f64, f64, Vec<(&'a str, &'a str, f64)>);
+
+fn supply_read(rows: &[SupplyRow<'_>]) -> Value {
+    let mut provinces = Vec::new();
+    let mut divisions = Vec::new();
+    for (p, s, sup, dem, divs) in rows {
+        provinces.push(
+            json!({"province_id": p, "state_id": s, "divisions": divs.len(),
+            "division_ids": divs.iter().map(|d| d.0).collect::<Vec<_>>(),
+            "supply": sup, "demand": dem, "headroom": sup - dem}),
+        );
+        for (id, army, org) in divs {
+            divisions.push(
+                json!({"id": id, "army": army, "province_id": p, "state_id": s,
+                "organisation": org}),
+            );
+        }
+    }
+    json!({"provinces": provinces, "divisions": divisions})
+}
+
+fn ids(prefix: &str, n: usize) -> Vec<String> {
+    (0..n).map(|i| format!("{prefix}{i:02}")).collect()
+}
+
+#[test]
+fn a_province_carries_what_its_supply_feeds_and_never_more_than_the_battle_width() {
+    // w43n1 (1 July 1940): 28 divisions draw 33.0 where province 9444 gives 3.4
+    assert_eq!(stack_carry(28, 3.4, 33.0, STACK_MAX), 2);
+    // fed in full but a battle takes no more than STACK_MAX
+    assert_eq!(stack_carry(12, 30.0, 12.0, STACK_MAX), 8);
+    // starving: still one
+    assert_eq!(stack_carry(3, 0.0, 9.0, STACK_MAX), 1);
+    let a = ids("a", 12);
+    let b = ids("b", 3);
+    let mut divs: Vec<(&str, &str, f64)> = a.iter().map(|d| (d.as_str(), "Mitte", 50.0)).collect();
+    // the most worn are taken first
+    divs[0].2 = 10.0;
+    divs[1].2 = 12.0;
+    let read = supply_read(&[
+        (9444, 980, 4.0, 12.0, divs),
+        (
+            6500,
+            35,
+            9.0,
+            3.0,
+            b.iter().map(|d| (d.as_str(), "Sued", 50.0)).collect(),
+        ),
+        // a stack of another army is not the operation's
+        (
+            11,
+            64,
+            1.0,
+            9.0,
+            vec![("x1", "Home", 50.0), ("x2", "Home", 50.0)],
+        ),
+    ]);
+    let line: HashSet<String> = ["Mitte".to_string(), "Sued".to_string()].into();
+    let seen = stack_read(&read, &line, STACK_MAX);
+    // 9444 carries 4 of 12: 8 over; 6500 carries 8 (fed for 9, width 8) and holds 3: room 5
+    assert_eq!(seen.total, 8);
+    assert_eq!(seen.room, 5);
+    assert_eq!(seen.top, (12, 9444, 4));
+    assert_eq!(seen.surplus.len(), 1);
+    assert_eq!(seen.surplus[0].0, "Mitte");
+    assert_eq!(seen.surplus[0].1.len(), 8);
+    assert_eq!(
+        &seen.surplus[0].1[..2],
+        &["a00".to_string(), "a01".to_string()]
+    );
+}
+
+#[test]
+fn an_overstacked_line_forms_a_second_echelon_on_an_empty_border_state_and_feeds_it_forward() {
+    let game = Game::new();
+    let a = ids("a", 20);
+    game.unit("Mitte", |r| {
+        r["plan"] = json!([]);
+        r["division_count"] = json!(20);
+        r["states"] = json!({"980": 20});
+    });
+    let mut divs: Vec<(&str, &str, f64)> = a.iter().map(|d| (d.as_str(), "Mitte", 50.0)).collect();
+    divs[5].2 = 5.0;
+    *game.supply.borrow_mut() = Some(supply_read(&[(9444, 980, 4.0, 20.0, divs)]));
+    // the mock's detach moves the ids of `divs` into the new army
+    *game.divs.borrow_mut() = a
+        .iter()
+        .map(|d| (d.clone(), "Mitte".to_string(), "Inf".to_string()))
+        .collect();
+    let op = json!({"id": "op_low", "enemies": ["BEL"]});
+    let units = vec![unit("Mitte".into(), Role::Line, &Value::Null, &Value::Null)];
+    let wars = json!({"wars": {"enemies": ["BEL"]},
+        "borders": [{"neighbour_tag": "BEL", "neighbour_states": [6],
+                     "own_border_states": [980, 51, 36], "uncovered_own_border_states": [51]}]});
+    let plan = json!({"war": {"me": "GER"}});
+    let mut state = State::default();
+    let roster = game.roster.borrow().clone();
+    // first read: seen once, nothing moves
+    let first = stacking(
+        &mut state, &game, &plan, "op_low", &op, &units, &roster, &wars, "l", START,
+    )
+    .unwrap();
+    assert!(first.is_none(), "{first:?}");
+    // second read half a day later: the 16 over the carry (most worn first), at most 18 a call
+    let line = stacking(
+        &mut state,
+        &game,
+        &plan,
+        "op_low",
+        &op,
+        &units,
+        &roster,
+        &wars,
+        "l",
+        START + DAY / 2,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(line.contains("second echelon Army 9"), "{line}");
+    let det = game
+        .orders()
+        .into_iter()
+        .find(|(n, _)| n == "hoi4_army_detach")
+        .unwrap();
+    let moved = strings(&det.1, "divisions");
+    assert_eq!(moved.len(), 16);
+    assert_eq!(moved[0], "a05");
+    assert_eq!(
+        state.layout.get("echelon:op_low:Mitte").map(String::as_str),
+        Some("Army 9")
+    );
+    // the echelon is the operation's (no other step orders it)
+    let full_plan = json!({"operations": [op.clone()]});
+    let roster = game.roster.borrow().clone();
+    assert!(owned_names(&state, &full_plan, &op, &roster).contains(&"Army 9".to_string()));
+    // it takes a real order: an area defence of the border state no division holds
+    game.unit("Army 9", |r| {
+        r["division_count"] = json!(16);
+        r["states"] = json!({"980": 16});
+    });
+    let roster = game.roster.borrow().clone();
+    let line = stacking(
+        &mut state,
+        &game,
+        &plan,
+        "op_low",
+        &op,
+        &units,
+        &roster,
+        &wars,
+        "l",
+        START + DAY,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(line.contains("holds its station 51"), "{line}");
+    assert!(game
+        .orders()
+        .iter()
+        .any(|(n, a)| n == "hoi4_army_area_defense"
+            && a["army"] == json!("Army 9")
+            && a["states"] == json!([51])));
+    // provinces taken: the line spread over six provinces with room for the echelon
+    game.unit(
+        "Army 9",
+        |r| r["plan"] = json!([{"kind": "area_defense", "executing": false, "offensives": []}]),
+    );
+    let roster = game.roster.borrow().clone();
+    let spread: Vec<SupplyRow<'_>> = (0..6)
+        .map(|i| {
+            (
+                100 + i as i64,
+                980,
+                20.0,
+                1.0,
+                vec![(["b0", "b1", "b2", "b3", "b4", "b5"][i], "Mitte", 50.0)],
+            )
+        })
+        .collect();
+    *game.supply.borrow_mut() = Some(supply_read(&spread));
+    let line = stacking(
+        &mut state,
+        &game,
+        &plan,
+        "op_low",
+        &op,
+        &units,
+        &roster,
+        &wars,
+        "l",
+        START + 2 * DAY,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(line.contains("fed forward into Mitte"), "{line}");
+    assert!(game.orders().iter().any(|(n, a)| n == "hoi4_army_merge"
+        && a["source"] == json!("Army 9")
+        && a["target"] == json!("Mitte")));
+    assert!(!state.layout.contains_key("echelon:op_low:Mitte"));
+}
+
+#[test]
+fn stacking_off_sends_nothing() {
+    let game = Game::new();
+    let op = json!({"id": "op_low", "enemies": ["BEL"], "stacking": false});
+    let units = vec![unit("Mitte".into(), Role::Line, &Value::Null, &Value::Null)];
+    let mut state = State::default();
+    let roster = game.roster.borrow().clone();
+    let r = stacking(
+        &mut state,
+        &game,
+        &json!({}),
+        "op_low",
+        &op,
+        &units,
+        &roster,
+        &json!({}),
+        "l",
+        START,
+    )
+    .unwrap();
+    assert!(r.is_none());
+    assert!(game.calls.borrow().is_empty());
+}
+
+#[test]
+fn a_reserve_left_on_its_old_groups_front_has_that_front_cleared_once() {
+    // w43o1 (23 Nov 2026): the group formed again from Mitte and Nord as Army Group 3; Armee Süd
+    // stayed in Army Group 1, whose old front kept 11 of its divisions in Friesland 36
+    let game = Game::new();
+    let op = json!({"id": "op_low", "reserve_orders": true,
+        "reserve": [{"army": "Sued", "station": 55}]});
+    game.unit("Sued", |r| {
+        r["states"] = json!({"36": 20});
+        r["division_count"] = json!(20);
+    });
+    game.unit("Army Group 1", |r| {
+        r["plan"] = json!([{"kind": "front", "executing": false, "offensives": []}])
+    });
+    let roster = game.roster.borrow().clone();
+    let wars = json!({"wars": {"enemies": ["HOL"]}, "borders": []});
+    let mut state = State::default();
+    let line = reserves(
+        &mut state,
+        &game,
+        "op_low",
+        &op,
+        Some("Army Group 3"),
+        &roster,
+        &wars,
+        "l",
+        START,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(line.contains("clear Army Group 1"), "{line}");
+    // once: the next call goes on with the reserve's own march
+    game.unit("Army Group 1", |r| r["plan"] = json!([]));
+    let roster = game.roster.borrow().clone();
+    let line = reserves(
+        &mut state,
+        &game,
+        "op_low",
+        &op,
+        Some("Army Group 3"),
+        &roster,
+        &wars,
+        "l",
+        START + 1,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(!line.contains("clear Army Group 1"), "{line}");
 }

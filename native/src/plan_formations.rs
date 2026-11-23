@@ -1317,6 +1317,37 @@ mod tests {
     }
 
     #[test]
+    fn a_closed_commander_list_tries_the_named_marshal_who_leads_no_group() {
+        // w46a1 (23 Nov 2026): the list closed, the read knew only the leaders in command, Army
+        // Group 2 stayed without a field marshal for the whole war
+        let plan = json!({"war": {"me": "GER"},
+            "operations": [{"id": "op_low", "marshals": ["Rundstedt", "Bock"]}]});
+        let tools = game(vec![
+            (
+                "hoi4_armies",
+                json!({
+                "armies": [{"army": "A", "division_count": 23, "commander": "x", "army_group": "Army Group 2"},
+                           {"army": "B", "division_count": 40, "commander": "y", "army_group": "Army Group 1"}],
+                "army_groups": [{"army_group": "Army Group 2", "field_marshal": null},
+                                {"army_group": "Army Group 1", "field_marshal": "Rundstedt"}]}),
+            ),
+            (
+                "hoi4_commanders",
+                json!({"leader_roster_read": false, "commander_list_open": false, "commanders": [
+                    {"name": "Rundstedt", "assigned_to": {"kind": "army_group", "name": "Army Group 1"}}]}),
+            ),
+        ]);
+        let mut st = State::default();
+        let out = plan_military::group_marshal_step(&mut st, &tools, &plan, "l", 1000)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.contains("Army Group 2 (23 divisions) led by field marshal Bock"),
+            "{out}"
+        );
+    }
+
+    #[test]
     fn a_promotion_comes_only_when_no_field_marshal_is_free() {
         let skip = |_: &str| false;
         let named = vec!["Hoepner".to_string()];
