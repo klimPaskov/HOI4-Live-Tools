@@ -131,7 +131,14 @@
 //!                          each item queued once (hoi4_construction_add, or hoi4_railway_build for
 //!                          "rail_way"/"railway" from `path`'s first to last province) when `when` holds:
 //!                          "YYYY.MM.DD", "province_controlled:<id>", "state_fully_controlled:<id>",
-//!                          "owner:<state>=<TAG>" or empty (at once). Runs in peace and at war (when the
+//!                          "owner:<state>=<TAG>", any other predicate of plan_predicate (text or
+//!                          object, e.g. "tech_researched:radio_detection") or empty (at once).
+//!                          `requires` ["tech",..] (or one key): the item also waits, spending no
+//!                          tries, until every named technology is researched: a building a
+//!                          technology unlocks (radar_station: radio_detection, which the radar
+//!                          special project grants) cannot be selected before it, and a date
+//!                          guessed for the unlock was refused three times and given up (g17n,
+//!                          g17o, s53a: radar_station 6 refusals a run). Runs in peace and at war (when the
 //!                          war runs first, right after the war step; else just before `construction`).
 //!                          Done-memory is keyed by `id` (stable), else by `order`. A railway item
 //!                          starts at the nearest own railway node when its first province is none.
@@ -326,6 +333,10 @@ pub(crate) use plan_operation::guard_outside as operation_guard_outside;
 // What the executor's reads find assignable and unassigned, beyond the game's alerts.
 #[path = "plan_omissions.rs"]
 mod plan_omissions;
+
+// Division management: weak fielded templates converted in place or disbanded (`formations`).
+#[path = "plan_divisions.rs"]
+mod plan_divisions;
 // Game speed by the war the country manages (peace 3, a war to manage 2; a human's choice kept).
 #[path = "plan_speed.rs"]
 mod plan_speed;
@@ -663,6 +674,9 @@ pub struct State {
     plan_blocked: HashMap<String, Value>,
     /// Failed attempts per `construction_plan` item since it last worked or was revised.
     plan_tries: HashMap<String, (u32, String)>,
+    /// `construction_plan` items waiting for a technology they `require`: key -> what for
+    /// (shown in the status; not saved: the next read finds the wait again).
+    plan_waits: HashMap<String, String>,
     /// `army_layout`: name_hint -> the army that plays that role.
     layout: HashMap<String, String>,
     /// doctrine entry -> the folder experience it had when the game disabled its Unlock: it is
@@ -872,6 +886,7 @@ impl Default for State {
             war_province: HashMap::new(),
             plan_built: HashMap::new(),
             plan_blocked: HashMap::new(),
+            plan_waits: HashMap::new(),
             plan_tries: HashMap::new(),
             layout: HashMap::new(),
             doc_xp: HashMap::new(),
@@ -3534,12 +3549,14 @@ fn war_first_steps(
         // equipment (live 15 Nov 2026). It is bounded by `disband.max` and then quiet.
         // The sea transfers go first: a division a route ships is not disbanded.
         plan_ship::step,
+        // then the weak fielded templates (`formations.act`): converted in place, else disbanded
         |state, tools, plan, lease, now| {
             if plan["disband"].is_object() {
-                disband_step(state, tools, plan, lease, now)
-            } else {
-                Ok(None)
+                if let Some(line) = disband_step(state, tools, plan, lease, now)? {
+                    return Ok(Some(line));
+                }
             }
+            plan_divisions::step(state, tools, plan, lease, now)
         },
         |state, tools, plan, lease, now| war_burst(state, tools, plan, lease, now, war_step),
         |state, tools, plan, lease, now| {
@@ -4818,12 +4835,25 @@ fn construction_plan_step(
             text(&detail(id.trim().parse().unwrap_or(0))["owner"]) == tag.trim()
         } else if let Some(at) = date_hour(when) {
             now >= at
+        } else if item["when"].is_null() || (item["when"].is_string() && when.is_empty()) {
+            true
         } else {
-            when.is_empty()
+            // any other predicate (a text atom or an object): judged like every plan `when`;
+            // before, an object `when` read as empty text and was due at once
+            judge(state, tools, &item["when"], now).is_true()
         };
         if !due {
             continue;
         }
+        // the technologies the building needs: waiting for them spends no tries
+        if let Some(missing) = missing_tech(state, tools, item, now) {
+            state.skip(now, "cplan", &key, 7 * DAY);
+            state
+                .plan_waits
+                .insert(key.clone(), format!("{label} waits for {missing}"));
+            continue;
+        }
+        state.plan_waits.remove(&key);
         let building = text(&item["building"]);
         let (tool, args) = if building == "rail_way" || building == "railway" {
             let path: Vec<i64> = list(item, "path")
@@ -4891,7 +4921,36 @@ fn construction_plan_step(
             "construction plan {label} {building} in {home}: {ok} {why}"
         )));
     }
+    if !state.plan_waits.is_empty() {
+        let mut waits: Vec<String> = state.plan_waits.values().cloned().collect();
+        waits.sort();
+        plan_manage::note(state, "construction_plan", waits.join("; "));
+    }
     Ok(None)
+}
+
+/// The first technology of a `construction_plan` item's `requires` (one key or a list) that is
+/// not researched yet; None when all are, when the item names none, or when the research read
+/// fails (the item then goes ahead and the game's refusal is the answer).
+fn missing_tech(
+    state: &mut State,
+    tools: &dyn Tools,
+    item: &Value,
+    now: GameHour,
+) -> Option<String> {
+    let wanted: Vec<String> = match &item["requires"] {
+        Value::String(k) if !k.trim().is_empty() => vec![k.trim().to_string()],
+        Value::Array(keys) => keys
+            .iter()
+            .filter_map(Value::as_str)
+            .map(|k| k.trim().to_string())
+            .filter(|k| !k.is_empty())
+            .collect(),
+        _ => return None,
+    };
+    wanted
+        .into_iter()
+        .find(|k| judge(state, tools, &json!(format!("tech_researched:{k}")), now) == Truth::False)
 }
 
 /// Failed attempts after which a `construction_plan` item is given up and reported.
@@ -15448,6 +15507,84 @@ mod tests {
         );
         assert!(state.plan_built.contains_key("id:east"));
         assert!(state.plan_tries.is_empty() && state.plan_blocked.is_empty());
+    }
+
+    #[test]
+    fn a_construction_plan_item_waits_for_the_technology_it_requires_without_spending_tries() {
+        // g17n, g17o, s53a: radar_station was dated 1940.3.1, the radar project that grants
+        // radio_detection still ran in May 1940; three refusals per state gave the items up.
+        struct Radar(RefCell<Vec<String>>, RefCell<u32>);
+        impl Tools for Radar {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                Ok(match name {
+                    "hoi4_overview" => json!({"player": "GER"}),
+                    "hoi4_research" => json!({"researched": self.0.borrow().clone()}),
+                    "hoi4_construction_add" => {
+                        *self.1.borrow_mut() += 1;
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ if args.get("request_id").is_some() => {
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let plan = json!({"construction_plan": [{"id": "radar_56", "building": "radar_station",
+            "state": 56, "when": "", "requires": "radio_detection"}]});
+        let tools = Radar(RefCell::new(vec!["radio".into()]), RefCell::new(0));
+        let mut state = State::default();
+        let mut now = START;
+        for _ in 0..6 {
+            assert_eq!(
+                construction_plan_step(&mut state, &tools, &plan, "l", now).unwrap(),
+                None
+            );
+            now += 8 * DAY;
+        }
+        assert_eq!(*tools.1.borrow(), 0);
+        assert!(state.plan_tries.is_empty() && state.plan_blocked.is_empty());
+        let note = manage_note(&state, "construction_plan");
+        assert!(
+            note.contains("waits for radio_detection"),
+            "{note:?} {:?}",
+            state.plan_waits
+        );
+        tools.0.borrow_mut().push("radio_detection".into());
+        let step = construction_plan_step(&mut state, &tools, &plan, "l", now).unwrap();
+        assert!(step.unwrap().contains("radar_station in 56: true"));
+        assert_eq!(*tools.1.borrow(), 1);
+        assert!(state.plan_waits.is_empty());
+    }
+
+    #[test]
+    fn a_construction_plan_item_with_a_predicate_when_waits_for_it() {
+        struct Tech;
+        impl Tools for Tech {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                Ok(match name {
+                    "hoi4_overview" => json!({"player": "GER"}),
+                    "hoi4_research" => json!({"researched": ["radio"]}),
+                    _ if args.get("request_id").is_some() => {
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        for when in [
+            json!("tech_researched:radio_detection"),
+            json!({"all": ["tech_researched:radio_detection"]}),
+        ] {
+            let plan = json!({"construction_plan": [{"id": "r", "building": "radar_station",
+                "state": 56, "when": when}]});
+            let mut state = State::default();
+            assert_eq!(
+                construction_plan_step(&mut state, &Tech, &plan, "l", START).unwrap(),
+                None,
+                "{when}"
+            );
+        }
     }
 
     #[test]

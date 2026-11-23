@@ -1513,6 +1513,32 @@ class World:
 
         return self.cached("unitunlocks", load)
 
+    def building_unlocks(self):
+        """{building: [{"tech", "level", "year", "src"}]} from the technologies' enable_building: a building
+        whose level 1 no start technology unlocks cannot be selected in the construction view before one of
+        these is researched (radar_station: radio_detection, granted by the sp_air_radar project)."""
+
+        def load():
+            out = {}
+            for p in self.game.files("common/technologies"):
+                for k, v in parse_file(p):
+                    if k != "technologies" or not isinstance(v, list):
+                        continue
+                    for j, (name, body) in enumerate(v):
+                        if not name or not isinstance(body, list) or name.startswith("@"):
+                            continue
+                        for en in get(body, "enable_building"):
+                            if not isinstance(en, list):
+                                continue
+                            b = get1(en, "building")
+                            if b:
+                                out.setdefault(b, []).append({"tech": name, "level": num(get1(en, "level"), 1),
+                                                              "year": num(get1(body, "start_year"), 0),
+                                                              "src": self.src(p, line_of(v, j))})
+            return out
+
+        return self.cached("buildingunlocks", load)
+
     def sub_units(self):
         """{sub-unit: row} from common/units: group, type, categories, combat_width, manpower,
         training_time, need (equipment per battalion), essential, the template row it may sit in

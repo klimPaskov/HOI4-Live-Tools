@@ -608,6 +608,7 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              "conquest.vp_selection", "conquest.levers", "conquest.tool_gap"}
 NEW_RULES |= {"focus.available", "focus.idle", "focus.unconfirmed"}  # the focus slot walk (plan_gates)
 NEW_RULES |= {"playbook.refs", "decisions.coverage"}  # every decision names its source (lint_refs.py)
+NEW_RULES |= {"construction.requires_tech", "projects.facility", "formations.keep"}  # lint_support.py
 NEW_RULES |= {"force.home_divisions"}  # every start division outside the theatre has a stated use
 # the plan against the game's own conditions, the management inventory, production over all lines
 NEW_RULES |= {"focus.condition", "focus.condition_unchecked", "decision.condition", "politics.visible",
@@ -6116,6 +6117,8 @@ class Lint:
         __import__((__package__ or "hoi4facts") + ".lint_resources", fromlist=["check"]).check(self)
         # the force against what the plan's wars need (force.py): breakthrough, air, landings, the force table
         __import__((__package__ or "hoi4facts") + ".lint_force", fromlist=["check"]).check(self)
+        # supply, trains, radar, special projects, formations (lint_support.py)
+        __import__((__package__ or "hoi4facts") + ".lint_support", fromlist=["check"]).check(self)
         order = {s: i for i, s in enumerate(SEVERITIES)}
         self.findings.sort(key=lambda f: (order[f["severity"]], f["rule"]))
         return self

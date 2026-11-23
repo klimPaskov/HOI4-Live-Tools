@@ -996,6 +996,32 @@
       "description": "the pass scheduler (plan_run.rs lanes_tick): every lane is offered once a pass in value order, the war-first block every other tick while a war or an operation runs",
       "x-owner": "executor"
     },
+    "formations": {
+      "type": "object",
+      "x-owner": "executor",
+      "description": "division management (plan_divisions.rs): fielded templates worse than the plan's own (small: under half the reference width; or less defence and attack per width) are converted in place to the reference layout when the reference has their battalion kinds, else disbanded through the disband rule. OFF unless act is true; the judgement always feeds the omissions row weak_formation_fielded",
+      "properties": {
+        "act": {
+          "type": "boolean",
+          "description": "true: convert and disband; false or missing: only report"
+        },
+        "keep": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "template names never judged (a role the numbers do not show: mountain, marine, garrison duty, a coming landing); give the reason in why"
+        },
+        "when": {
+          "$ref": "#/definitions/predicate"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false
+    },
     "disband": {
       "type": "object",
       "properties": {
@@ -7306,8 +7332,31 @@
             "description": "game days between two legs of a `legs` railway (default 14)"
           },
           "when": {
-            "$ref": "#/definitions/trigger",
-            "x-owner": "executor"
+            "anyOf": [
+              {
+                "$ref": "#/definitions/trigger"
+              },
+              {
+                "$ref": "#/definitions/predicate"
+              }
+            ],
+            "x-owner": "executor",
+            "description": "a trigger (date, province_controlled, state_fully_controlled, owner) or any plan predicate (e.g. tech_researched:radio_detection); the item is queued once it holds"
+          },
+          "requires": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "x-owner": "executor",
+            "description": "technologies the building needs (enable_building level 1; facts.py support <TAG>): the item waits for all of them without spending its three tries (radar_station needs radio_detection, which the sp_air_radar project grants)"
           },
           "priority": {
             "type": "string",
