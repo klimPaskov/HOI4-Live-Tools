@@ -108,7 +108,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 
 ## Army, templates, designs, supply
 
-- `hoi4_armies` (R): Own armies (name, division ids, threat:
+- `hoi4_armies` (R): Own armies (name, division ids, division_limit:
 - `hoi4_army` (R): Bounded own-country divisions with observation-scoped full handles, selected own location joins and raw signed strength/organisation.
 - `hoi4_army_area_defense` (A): Give an own army an area defence order over own states (the army spreads over them and holds what the order covers):
 - `hoi4_army_assign` (A): Fold the unassigned divisions standing in a state into an existing army there without disturbing other armies, or create a new army when none stands there.

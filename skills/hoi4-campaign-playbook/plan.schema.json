@@ -1162,7 +1162,12 @@
         "max": {
           "type": "integer",
           "default": 24,
-          "minimum": 1
+          "minimum": 1,
+          "description": "the most divisions an army holds; each army is held to its commander's own limit (hoi4_armies division_limit: the game's base plus his traits) when that is lower"
+        },
+        "over_limit_reason": {
+          "type": "string",
+          "description": "why armies may pass their commander's limit up to max (an over-limit army lowers its leader's bonuses; e.g. experience for one general); without it the commander's limit holds"
         },
         "min_for_general": {
           "type": "integer",

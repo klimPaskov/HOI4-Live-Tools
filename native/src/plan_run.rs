@@ -3855,6 +3855,20 @@ fn gather_takes_loose(tools: &dyn Tools, plan: &Value) -> bool {
         })
 }
 
+/// Divisions one army may hold: its commander's limit from the roster (`division_limit`: the
+/// game's base plus his traits), never above the plan's `armies.max`; the plan's max may exceed
+/// the commander's limit only with `armies.over_limit_reason` (an over-limit army lowers its
+/// leader's bonuses; worth it only for a stated reason such as experience).
+fn command_cap(limit: &Value, plan_max: u64, cfg: &Value) -> u64 {
+    let reason = cfg["over_limit_reason"]
+        .as_str()
+        .is_some_and(|s| !s.trim().is_empty());
+    match limit.as_u64() {
+        Some(l) if l > 0 && !reason => l.min(plan_max),
+        _ => plan_max,
+    }
+}
+
 /// 9. every division in an army of sensible size, generals only for real armies. At war it runs
 ///    right after the war step: the war cannot start before its armies exist (w15: the opening's
 ///    armies came a month late behind research, production and construction ticks).
@@ -4088,13 +4102,16 @@ fn armies_step(
         for army in list(&roster, "armies") {
             let name = text(&army["army"]);
             let count = army["division_count"].as_u64().unwrap_or(0);
-            if count > max && !state.skipped(now, "armysplit", name) {
-                let chunk = (count - max).clamp(1, 19);
+            // the commander's own limit (the game's base plus his traits) unless the plan allows
+            // more with a reason (`armies.over_limit_reason`, e.g. experience for one general)
+            let cap = command_cap(&army["division_limit"], max, cfg);
+            if count > cap && !state.skipped(now, "armysplit", name) {
+                let chunk = (count - cap).clamp(1, 19);
                 let (ok, why) = state.act(
                     tools,
                     lease,
                     "hoi4_army_split",
-                    json!({"army": name, "count": chunk}),
+                    json!({"army": name, "count": chunk, "over_limit": true}),
                     "sp",
                 )?;
                 if !ok {
@@ -19990,6 +20007,29 @@ mod tests {
         assert_eq!(option_index(&options, "deal"), Some(0));
         assert_eq!(option_index(&options, "e"), None, "ambiguous");
         assert_eq!(option_index(&options, ""), None);
+    }
+
+    #[test]
+    fn an_army_is_capped_at_its_commanders_limit_unless_the_plan_gives_a_reason() {
+        let cfg = json!({"max": 24});
+        assert_eq!(command_cap(&json!(24), 24, &cfg), 24);
+        assert_eq!(
+            command_cap(&json!(30), 24, &cfg),
+            24,
+            "never above the plan's max"
+        );
+        assert_eq!(
+            command_cap(&json!(6), 24, &cfg),
+            6,
+            "a politically connected general"
+        );
+        assert_eq!(
+            command_cap(&Value::Null, 24, &cfg),
+            24,
+            "unread: the plan's max"
+        );
+        let farm = json!({"max": 30, "over_limit_reason": "experience for one general"});
+        assert_eq!(command_cap(&json!(24), 30, &farm), 30);
     }
 
     #[test]

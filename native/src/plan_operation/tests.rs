@@ -3263,3 +3263,22 @@ fn the_armour_of_an_enemy_out_joins_the_groups_enemy_the_wing_goes_to_the_next()
     );
     assert_eq!(units[1].enemy, "BEL");
 }
+
+#[test]
+fn an_owned_army_over_its_limit_may_give_its_excess_away_and_nothing_else() {
+    // s55a (23 Nov 2026): Armee West Nord held 35 divisions the whole war, every split refused
+    let owned: HashMap<String, String> =
+        [("Armee West Nord".to_string(), "op_lowlands".to_string())].into();
+    let mut over = json!({"army": "Armee West Nord", "count": 11, "over_limit": true});
+    assert_eq!(guard(&owned, "hoi4_army_split", &mut over), None);
+    assert!(
+        over.get("over_limit").is_none(),
+        "the marker never reaches the tool"
+    );
+    let mut plain = json!({"army": "Armee West Nord", "count": 11});
+    assert!(guard(&owned, "hoi4_army_split", &mut plain).is_some());
+    // with nothing owned the marker is still taken off
+    let mut free = json!({"army": "Army 3", "count": 2, "over_limit": true});
+    assert_eq!(guard(&HashMap::new(), "hoi4_army_split", &mut free), None);
+    assert!(free.get("over_limit").is_none());
+}
