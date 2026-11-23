@@ -452,7 +452,9 @@ class CoverageKeys(unittest.TestCase):
                 "exercise_fill": 0.9, "command_power_max": 80, "cp_trait_prefer": [],
                 # plan_manage.rs: idle wings train, fuel cuts missions, unplanned reserve founds wings
                 "air_training": True, "air_training_why": "", "air_training_fuel": 0.5, "fuel_days_floor": 30,
-                "air_reserve_min": 50}
+                "air_reserve_min": 50,
+                # plan_run.rs: the game's bulk paths, each off until its live probe passes
+                "bulk": []}
         for k, v in want.items():
             self.assertEqual(m[k]["default"], v, k)
         for k in ("casualty_ratio_max", "casualty_window_days", "casualty_min_losses", "casualty_rest_days"):
