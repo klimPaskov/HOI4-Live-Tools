@@ -1786,7 +1786,7 @@ fn state_distance(state: &State, a: Option<i64>, b: Option<i64>) -> f64 {
 /// wings. No churn: a wing attached stays with its army (a wing that reads unlinked after a load
 /// goes back to the army it had); it is moved only when its army is gone. `manage.off:
 /// ["air_attach"]` turns the rule off.
-fn air_attach_rule(
+pub(super) fn air_attach_rule(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,
