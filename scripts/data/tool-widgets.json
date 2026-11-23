@@ -1,0 +1,1296 @@
+{
+ "modules": {
+  "agency_act": {
+   "tools": [
+    "hoi4_agency_create",
+    "hoi4_agency_upgrade",
+    "hoi4_operative_assign",
+    "hoi4_operative_recruit",
+    "hoi4_time"
+   ],
+   "widgets": [
+    "agency_branches_title",
+    "background_button",
+    "before_creation_panel",
+    "btn_close",
+    "button",
+    "cancel_creation_button",
+    "country",
+    "create_button",
+    "creation_button",
+    "creation_progressbar",
+    "intel_agency_button",
+    "item_grid",
+    "leader_icon",
+    "leaders",
+    "leaders_grid",
+    "name",
+    "on_mission_window",
+    "operative_skill_level",
+    "operatives_box",
+    "operatives_progressbar",
+    "portrait_btn",
+    "portrait_overlay_bg",
+    "progressbar_days",
+    "progressbar_desc",
+    "upgrade_branch_name",
+    "upgrade_button",
+    "upgrade_name",
+    "upgrade_progressbar",
+    "upgrades",
+    "upgrades_list"
+   ]
+  },
+  "air": {
+   "tools": [
+    "hoi4_air_mission",
+    "hoi4_air_wing_split",
+    "hoi4_air_wings",
+    "hoi4_navy_ui"
+   ],
+   "widgets": [
+    "air_units",
+    "air_wing_toolbar",
+    "assigned_region",
+    "base",
+    "btn",
+    "btn_bg",
+    "btn_close",
+    "icon",
+    "item_grid",
+    "mission_toolbar",
+    "missions_grid",
+    "other",
+    "training",
+    "unit_name"
+   ]
+  },
+  "airact": {
+   "tools": [
+    "hoi4_air_mission",
+    "hoi4_air_rebase",
+    "hoi4_air_region_probe",
+    "hoi4_air_regions",
+    "hoi4_air_wing_create",
+    "hoi4_air_wing_disband",
+    "hoi4_air_wing_merge",
+    "hoi4_air_wing_split",
+    "hoi4_economy_detail",
+    "hoi4_navy_ui"
+   ],
+   "widgets": [
+    "btn_delete",
+    "btn_hold",
+    "list_left",
+    "merge_wings_btn",
+    "none",
+    "split_wing_btn"
+   ]
+  },
+  "airread": {
+   "tools": [
+    "hoi4_air"
+   ],
+   "widgets": [
+    "training"
+   ]
+  },
+  "airui": {
+   "tools": [],
+   "widgets": [
+    "air_wing_reorganization",
+    "air_wing_toolbar",
+    "bg_btn",
+    "bg_strat_btn",
+    "close_button",
+    "confirm_btn",
+    "count",
+    "count_bg",
+    "count_selected",
+    "count_txt",
+    "current_plane_count",
+    "detection_left_text",
+    "detection_right_text",
+    "effeciency_left_text",
+    "effeciency_right_text",
+    "list",
+    "name",
+    "region_name",
+    "type",
+    "wing_type_left_text_1",
+    "wing_type_left_text_2",
+    "wing_type_left_text_3",
+    "wing_type_left_text_4",
+    "wing_type_right_text_1",
+    "wing_type_right_text_2",
+    "wing_type_right_text_3",
+    "wing_type_right_text_4"
+   ]
+  },
+  "alerts": {
+   "tools": [
+    "hoi4_alerts"
+   ],
+   "widgets": [
+    "global_alerticon_window",
+    "icon",
+    "unassigned_divisions"
+   ]
+  },
+  "armies": {
+   "tools": [
+    "hoi4_armies",
+    "hoi4_army_assign",
+    "hoi4_army_assign_plan",
+    "hoi4_army_commander",
+    "hoi4_army_create",
+    "hoi4_army_detach",
+    "hoi4_army_exercise",
+    "hoi4_army_fallback",
+    "hoi4_army_front",
+    "hoi4_army_gather",
+    "hoi4_army_group_create",
+    "hoi4_army_merge",
+    "hoi4_army_motorization",
+    "hoi4_army_move",
+    "hoi4_army_offensive",
+    "hoi4_army_plan",
+    "hoi4_army_rename",
+    "hoi4_army_split",
+    "hoi4_division_disband",
+    "hoi4_economy_detail",
+    "hoi4_navy_ui",
+    "hoi4_time"
+   ],
+   "widgets": [
+    "army_bg",
+    "army_item_bg",
+    "army_motorization_priority_button",
+    "battleplantools_window",
+    "box",
+    "btn_bg",
+    "btn_delete",
+    "btn_execute",
+    "btn_execute_1",
+    "btn_execute_2",
+    "btn_execute_anim",
+    "btn_exercise",
+    "btn_exercise_anim",
+    "btn_hold",
+    "btn_order_delete",
+    "btn_order_draw_blitz",
+    "btn_priority",
+    "btn_stop",
+    "btn_stop_training",
+    "division",
+    "group_name",
+    "icn_exercise_stop_at_max",
+    "icon_execute_type",
+    "leader_button",
+    "leaders_grid",
+    "name",
+    "new",
+    "no_leader_button",
+    "planning_speed_window",
+    "portrait_btn",
+    "promote_btn",
+    "select",
+    "sort_name",
+    "training",
+    "training_marker",
+    "unassigned_divisions"
+   ]
+  },
+  "army_roles": {
+   "tools": [
+    "hoi4_army_create",
+    "hoi4_time"
+   ],
+   "widgets": [
+    "source"
+   ]
+  },
+  "commanders": {
+   "tools": [
+    "hoi4_army_commander",
+    "hoi4_commanders"
+   ],
+   "widgets": [
+    "army",
+    "attack",
+    "defense",
+    "skill",
+    "traits"
+   ]
+  },
+  "construction": {
+   "tools": [
+    "hoi4_construction_add",
+    "hoi4_construction_order"
+   ],
+   "widgets": [
+    "bottom",
+    "close_production_line",
+    "decrease_priority",
+    "facility_item_grid",
+    "increase_priority",
+    "non_shared_item_grid",
+    "possible_constructions",
+    "possible_facility_constructions",
+    "possible_province_constructions",
+    "possible_shared_constructions",
+    "possible_state_constructions",
+    "province_item_grid",
+    "remove",
+    "shared_item_grid",
+    "start_construction_button",
+    "top"
+   ]
+  },
+  "country_status": {
+   "tools": [
+    "hoi4_country_status",
+    "hoi4_special_project_recruit"
+   ],
+   "widgets": [
+    "command_power_value",
+    "convoys",
+    "convoys_count",
+    "count",
+    "fuel",
+    "fuel_value",
+    "manpower",
+    "number",
+    "percent",
+    "pol_power",
+    "stability",
+    "supply",
+    "supply_value",
+    "threat_value",
+    "war_support",
+    "year"
+   ]
+  },
+  "daily": {
+   "tools": [
+    "hoi4_daily_governor"
+   ],
+   "widgets": [
+    "factories_add_1x",
+    "factories_sub_1x",
+    "start",
+    "stop"
+   ]
+  },
+  "decisions": {
+   "tools": [
+    "hoi4_decision_take",
+    "hoi4_decisions_list"
+   ],
+   "widgets": [
+    "btn_select",
+    "cost",
+    "decisionview_button",
+    "name_text",
+    "topbar"
+   ]
+  },
+  "deployment": {
+   "tools": [
+    "hoi4_deploy_locations",
+    "hoi4_division_templates",
+    "hoi4_train"
+   ],
+   "widgets": [
+    "add_button",
+    "add_template_button",
+    "deploy_location_button",
+    "edit_button",
+    "increase_amount",
+    "name",
+    "open_designer_button"
+   ]
+  },
+  "design_edit": {
+   "tools": [
+    "hoi4_design_create",
+    "hoi4_design_obsolete",
+    "hoi4_design_options",
+    "hoi4_design_set_production",
+    "hoi4_production_add"
+   ],
+   "widgets": [
+    "air",
+    "army",
+    "base",
+    "design_invalid",
+    "duplicate_button",
+    "empty",
+    "equipment_button",
+    "naval_button",
+    "navy",
+    "none",
+    "other",
+    "plane",
+    "tank_button"
+   ]
+  },
+  "design_ui": {
+   "tools": [],
+   "widgets": [
+    "active_equipment_view",
+    "btn_back",
+    "category",
+    "checkbox",
+    "close_button",
+    "cost",
+    "decrease_level",
+    "duplicate_button",
+    "equipment_button",
+    "equipment_icon",
+    "equipment_variant_label",
+    "equipments",
+    "equipments_grid",
+    "experience",
+    "gb_modules",
+    "increase_level",
+    "infantry_button",
+    "label",
+    "level",
+    "module_selector_window",
+    "name",
+    "naval_button",
+    "obsolete",
+    "plane",
+    "production_value",
+    "refit_cost",
+    "reset_button",
+    "save_button",
+    "slot_name",
+    "tank_button",
+    "variant",
+    "variant_name"
+   ]
+  },
+  "designer": {
+   "tools": [],
+   "widgets": [
+    "cancel_button",
+    "close_button",
+    "combat_width_text",
+    "combat_width_view",
+    "cost",
+    "designer_regiments_grid",
+    "designerregimentswindow",
+    "division",
+    "divisions",
+    "divisions_grid",
+    "edit_button",
+    "experience",
+    "invisible_icon",
+    "name",
+    "non_hq_view",
+    "priority_button_1",
+    "production_value",
+    "save_button",
+    "subunit_icon",
+    "subunits",
+    "unit_icon"
+   ]
+  },
+  "designs": {
+   "tools": [
+    "hoi4_design_create",
+    "hoi4_design_obsolete",
+    "hoi4_designs",
+    "hoi4_production_add"
+   ],
+   "widgets": [
+    "other",
+    "plane"
+   ]
+  },
+  "diplomacy": {
+   "tools": [
+    "hoi4_diplomacy_act"
+   ],
+   "widgets": [
+    "accept_icon",
+    "add_wargoal",
+    "call_allies",
+    "cancel",
+    "cancel_button",
+    "cost",
+    "declare_war",
+    "description",
+    "diplo_actions_entry_bg",
+    "diplo_reply",
+    "diplo_view_button",
+    "generate_wargoal",
+    "guarantee",
+    "invite_faction_diplomacy_controller",
+    "name",
+    "naval_blockade",
+    "send_button",
+    "send_volunteers",
+    "standard_diplomacy_controller",
+    "threat_value",
+    "title",
+    "wargoal_name",
+    "wargoal_warning",
+    "wars"
+   ]
+  },
+  "diplomacy_keys": {
+   "tools": [],
+   "widgets": [
+    "boost_party_popularity",
+    "call_allies",
+    "declare_war",
+    "give_state_control",
+    "guarantee",
+    "join_allies",
+    "lend_lease",
+    "send_attache",
+    "send_volunteers",
+    "stage_coup"
+   ]
+  },
+  "diplomacy_state": {
+   "tools": [
+    "hoi4_diplomacy_countries",
+    "hoi4_diplomacy_state",
+    "hoi4_occupation_all"
+   ],
+   "widgets": [
+    "boost_party_popularity",
+    "faction",
+    "guarantee",
+    "ideology",
+    "lend_lease",
+    "naval_blockade",
+    "wargoals"
+   ]
+  },
+  "doctrine_act": {
+   "tools": [
+    "hoi4_doctrine_adopt",
+    "hoi4_officer_corps"
+   ],
+   "widgets": [
+    "air",
+    "army",
+    "button",
+    "cost",
+    "desc",
+    "doctrine",
+    "doctrine_folder_view",
+    "doctrine_icon",
+    "doctrine_name",
+    "doctrine_selection_list",
+    "doctrines_grid",
+    "folder_button",
+    "folders_grid",
+    "grand_doctrine",
+    "grand_doctrine_button",
+    "grid",
+    "idea_entry_bg",
+    "label",
+    "list",
+    "navy",
+    "select_button",
+    "spirit",
+    "spirit_icon",
+    "spirit_window",
+    "sub_doctrine",
+    "sub_doctrine_button",
+    "text",
+    "title",
+    "tracks_grid",
+    "unlock_button",
+    "value",
+    "xp_cost_text"
+   ]
+  },
+  "doctrines": {
+   "tools": [
+    "hoi4_doctrines"
+   ],
+   "widgets": [
+    "air",
+    "army",
+    "experience",
+    "game_time",
+    "grand_doctrine",
+    "mastery",
+    "name",
+    "navy",
+    "source"
+   ]
+  },
+  "economy_detail": {
+   "tools": [
+    "hoi4_economy_detail"
+   ],
+   "widgets": [
+    "civilian_economy",
+    "fuel",
+    "industrial_capacity",
+    "manpower",
+    "modifiers",
+    "source",
+    "stability",
+    "trade",
+    "war_support"
+   ]
+  },
+  "event_options": {
+   "tools": [],
+   "widgets": [
+    "name"
+   ]
+  },
+  "events": {
+   "tools": [
+    "hoi4_economy_detail",
+    "hoi4_event_choose",
+    "hoi4_events",
+    "hoi4_peace_status"
+   ],
+   "widgets": [
+    "agency_insignia",
+    "event_picture",
+    "leader_frame",
+    "leader_fullname",
+    "options_grid"
+   ]
+  },
+  "faction": {
+   "tools": [
+    "hoi4_diplomacy_state",
+    "hoi4_faction_create",
+    "hoi4_faction_invite_accept",
+    "hoi4_faction_leave",
+    "hoi4_time"
+   ],
+   "widgets": [
+    "accept",
+    "accept_button",
+    "base",
+    "choose_icon_button",
+    "close_button",
+    "countries_grid",
+    "countryfactionview",
+    "create_faction",
+    "create_faction_button",
+    "decline_button",
+    "description",
+    "faction",
+    "faction_button",
+    "faction_setup_window",
+    "goal_text",
+    "guarantee",
+    "incoming_lend_lease",
+    "invite_button",
+    "invite_countries",
+    "invite_countries_window",
+    "leave_faction_button",
+    "manifest_name",
+    "name",
+    "name_selection",
+    "new_faction_button",
+    "new_faction_window",
+    "other",
+    "rule_text",
+    "select_button",
+    "selected_icon",
+    "template",
+    "title"
+   ]
+  },
+  "fair_facts": {
+   "tools": [
+    "hoi4_air_region_probe"
+   ],
+   "widgets": [
+    "archetype",
+    "category",
+    "combat_width",
+    "equipment",
+    "equipment_modules",
+    "equipments",
+    "group",
+    "type",
+    "year"
+   ]
+  },
+  "fleetmem": {
+   "tools": [],
+   "widgets": [
+    "defense",
+    "fuel_consumption",
+    "hard_attack",
+    "soft_attack"
+   ]
+  },
+  "fleetops": {
+   "tools": [
+    "hoi4_time"
+   ],
+   "widgets": [
+    "assign",
+    "balance",
+    "btn_delete",
+    "btn_exclude",
+    "btn_merge",
+    "btn_split_in_half",
+    "btn_taskforce_o_matic",
+    "confirm",
+    "delete",
+    "fleet"
+   ]
+  },
+  "front_plan": {
+   "tools": [
+    "hoi4_encirclement_candidates",
+    "hoi4_front_plan"
+   ],
+   "widgets": [
+    "attack",
+    "buildings",
+    "history",
+    "land",
+    "limit",
+    "manpower",
+    "owner",
+    "resources",
+    "state",
+    "units",
+    "victory_points"
+   ]
+  },
+  "intelligence": {
+   "tools": [
+    "hoi4_intelligence"
+   ],
+   "widgets": [
+    "experience",
+    "game_time",
+    "level",
+    "modifier",
+    "reason",
+    "source"
+   ]
+  },
+  "invasion": {
+   "tools": [
+    "hoi4_naval_invasion",
+    "hoi4_time"
+   ],
+   "widgets": [
+    "army",
+    "battleplantools_window",
+    "btn_order_draw_naval_inv",
+    "btn_order_draw_naval_inv_with_harbor",
+    "divisions",
+    "none"
+   ]
+  },
+  "kit": {
+   "tools": [],
+   "widgets": [
+    "accept_button",
+    "decline_button"
+   ]
+  },
+  "leader_act": {
+   "tools": [
+    "hoi4_general_trait",
+    "hoi4_time"
+   ],
+   "widgets": [
+    "active_traits",
+    "assign_trait",
+    "close_button",
+    "disabled_bg",
+    "disabled_trait",
+    "list",
+    "locked",
+    "name",
+    "pickable_bg",
+    "pickable_trait",
+    "picked_bg",
+    "picked_trait",
+    "regular_traits",
+    "terrain_traits",
+    "trait",
+    "tree",
+    "type",
+    "unitleader_trait_tree_window"
+   ]
+  },
+  "live_designer": {
+   "tools": [],
+   "widgets": [
+    "cancel_conveyor_button",
+    "delete_button",
+    "edit_button",
+    "grid"
+   ]
+  },
+  "live_designs": {
+   "tools": [],
+   "widgets": [
+    "none"
+   ]
+  },
+  "live_reads": {
+   "tools": [],
+   "widgets": [
+    "supply"
+   ]
+  },
+  "live_reads_navalair": {
+   "tools": [],
+   "widgets": [
+    "air",
+    "convoys",
+    "fleets"
+   ]
+  },
+  "loc": {
+   "tools": [],
+   "widgets": [
+    "text"
+   ]
+  },
+  "mapdata": {
+   "tools": [
+    "hoi4_air_region_probe",
+    "hoi4_armies",
+    "hoi4_army_fallback",
+    "hoi4_army_move",
+    "hoi4_army_offensive",
+    "hoi4_army_plan",
+    "hoi4_encirclement_candidates",
+    "hoi4_occupation",
+    "hoi4_occupation_all",
+    "hoi4_occupation_law",
+    "hoi4_peace_take",
+    "hoi4_province_graph",
+    "hoi4_state_slots",
+    "hoi4_states",
+    "hoi4_wars"
+   ],
+   "widgets": [
+    "air_base",
+    "buildings",
+    "history",
+    "land",
+    "state"
+   ]
+  },
+  "mio_act": {
+   "tools": [
+    "hoi4_mio_design_team",
+    "hoi4_mio_line",
+    "hoi4_mio_policy",
+    "hoi4_mio_trait",
+    "hoi4_occupation_all",
+    "hoi4_time"
+   ],
+   "widgets": [
+    "attach_manufacturer",
+    "attached_policy_name",
+    "background_button",
+    "change_manufacturer",
+    "close_button",
+    "details_button",
+    "equipment",
+    "icon_frame",
+    "industrial_org_entry",
+    "industrial_org_name",
+    "industrial_organisation_policy_window",
+    "industrial_organisation_trait_entry",
+    "list",
+    "name",
+    "open_policies",
+    "open_roster_button",
+    "organisation_list",
+    "organisations",
+    "policy_list",
+    "queue_number"
+   ]
+  },
+  "mios": {
+   "tools": [
+    "hoi4_mios"
+   ],
+   "widgets": [
+    "air",
+    "designer",
+    "equipment_type",
+    "game_time",
+    "icon",
+    "ideas",
+    "land",
+    "plane",
+    "source",
+    "trait"
+   ]
+  },
+  "modlayer": {
+   "tools": [],
+   "widgets": [
+    "history"
+   ]
+  },
+  "naval": {
+   "tools": [
+    "hoi4_convoys",
+    "hoi4_fleets"
+   ],
+   "widgets": [
+    "training"
+   ]
+  },
+  "navalact": {
+   "tools": [
+    "hoi4_fleet_admiral",
+    "hoi4_fleet_create",
+    "hoi4_fleet_mission",
+    "hoi4_naval_production_options"
+   ],
+   "widgets": [
+    "btn_close",
+    "btn_mission0",
+    "btn_mission1",
+    "btn_mission2",
+    "btn_mission3",
+    "btn_mission4",
+    "btn_mission5",
+    "btn_mission6",
+    "btn_mission7",
+    "btn_mission9",
+    "btn_remove_regions",
+    "close_button",
+    "naval_unit_leader_frame",
+    "no_leader_button",
+    "none",
+    "training"
+   ]
+  },
+  "navalui": {
+   "tools": [
+    "hoi4_navy_ui"
+   ],
+   "widgets": [
+    "back",
+    "background_sprite",
+    "bottom",
+    "btn_disband_navy",
+    "centering_box",
+    "close_button",
+    "detailed_fleet_box",
+    "detailed_fleet_list",
+    "fleet_name",
+    "fleets_box",
+    "leader_icon",
+    "leaders",
+    "leaders_grid",
+    "name",
+    "new_fleet_window",
+    "no_leader_button",
+    "portrait_btn",
+    "portrait_frame",
+    "portrait_highlighted_btn",
+    "region_name",
+    "select_btn",
+    "skill",
+    "sort_name",
+    "taskforce_count"
+   ]
+  },
+  "occlaw": {
+   "tools": [
+    "hoi4_occupation",
+    "hoi4_occupation_law"
+   ],
+   "widgets": [
+    "header",
+    "resistance_target",
+    "select_law_button"
+   ]
+  },
+  "operation_act": {
+   "tools": [
+    "hoi4_operation_start",
+    "hoi4_time"
+   ],
+   "widgets": [
+    "btn_close",
+    "btn_select_button",
+    "btn_start_button",
+    "cb_auto_commence",
+    "close_button",
+    "leaders",
+    "leaders_grid",
+    "name",
+    "operation_name_text",
+    "operations_grid",
+    "operations_grid_container",
+    "operations_tab_button",
+    "operative_portrait_pos",
+    "operatives_grid",
+    "portrait_overlay_bg"
+   ]
+  },
+  "panelkit": {
+   "tools": [
+    "hoi4_division_disband",
+    "hoi4_occupation_all"
+   ],
+   "widgets": [
+    "country_doctrine_view",
+    "countryintelligenceagencyview",
+    "countryinternationalmarketview",
+    "countryofficercorpview",
+    "countrypoliticsview",
+    "doctrine_selection_list",
+    "industrial_organisation_detail_window",
+    "industrial_organisation_list_window",
+    "industrial_organisation_policy_window",
+    "intelligence_agency_upgrades_window",
+    "name_logo_agency_selection_window",
+    "operation_overview_window",
+    "operative_leader_window",
+    "operative_order_bar",
+    "operativeleaderwindow"
+   ]
+  },
+  "peace": {
+   "tools": [
+    "hoi4_peace_options",
+    "hoi4_peace_submit",
+    "hoi4_peace_take"
+   ],
+   "widgets": [
+    "action_name",
+    "available_actions_list",
+    "beneficiaries_tab",
+    "bid_button",
+    "biddings_grid",
+    "bidphase_text",
+    "cost",
+    "current_score",
+    "demilitarize_zone_action",
+    "dismantle_industry_action",
+    "done_button",
+    "end_turn_button",
+    "expand",
+    "force_government_action",
+    "forfeit_button",
+    "label",
+    "liberate_action",
+    "nb_biddings",
+    "number_of_available_states",
+    "number_of_bids",
+    "number_of_contested_bids",
+    "number_of_contested_states",
+    "number_of_items",
+    "number_of_wargoals",
+    "peacescore_ratio",
+    "puppet_action",
+    "remainingturns_text",
+    "reset_button",
+    "resource_rights_action",
+    "score",
+    "scorethisturn_text",
+    "select_all_button",
+    "take_navy_action",
+    "take_state_action",
+    "tension",
+    "underlying_resource_name",
+    "victors_tab",
+    "war_reparation_action"
+   ]
+  },
+  "politics": {
+   "tools": [
+    "hoi4_politics_choose"
+   ],
+   "widgets": [
+    "command_character_view_window",
+    "idea_entry_bg",
+    "ideas",
+    "ideas_grid",
+    "options"
+   ]
+  },
+  "production": {
+   "tools": [
+    "hoi4_design_obsolete",
+    "hoi4_production_add",
+    "hoi4_production_priority"
+   ],
+   "widgets": [
+    "aircraft_button",
+    "attach_manufacturer",
+    "bottom",
+    "category",
+    "change_manufacturer",
+    "close_production_line",
+    "decrease_priority",
+    "equipment_button",
+    "equipments",
+    "equipments_grid",
+    "factories_add_1x",
+    "factories_sub_1x",
+    "has_mio_background",
+    "increase_priority",
+    "item_grid",
+    "military_tab",
+    "production_lines",
+    "production_win_top",
+    "tank_button",
+    "top"
+   ]
+  },
+  "railway": {
+   "tools": [
+    "hoi4_railway_build"
+   ],
+   "widgets": [
+    "victory_points"
+   ]
+  },
+  "research": {
+   "tools": [
+    "hoi4_research_start"
+   ],
+   "widgets": [
+    "empty_research_slot_glow",
+    "folder_tabs",
+    "research_slots",
+    "research_slots_grid",
+    "slots_window"
+   ]
+  },
+  "research_extras": {
+   "tools": [
+    "hoi4_research_extras"
+   ],
+   "widgets": [
+    "game_time",
+    "source"
+   ]
+  },
+  "special_project_rules": {
+   "tools": [],
+   "widgets": [
+    "resources",
+    "specialization"
+   ]
+  },
+  "special_projects": {
+   "tools": [
+    "hoi4_special_project_assign",
+    "hoi4_special_project_recruit",
+    "hoi4_special_project_stop",
+    "hoi4_special_projects",
+    "hoi4_special_projects_panel"
+   ],
+   "widgets": [
+    "air",
+    "land"
+   ]
+  },
+  "state_table": {
+   "tools": [
+    "hoi4_state_slots"
+   ],
+   "widgets": [
+    "factories",
+    "history",
+    "ideas",
+    "level",
+    "limit",
+    "modifier",
+    "name",
+    "resource",
+    "resources",
+    "state",
+    "victory_points"
+   ]
+  },
+  "stateslots": {
+   "tools": [
+    "hoi4_state_slots"
+   ],
+   "widgets": [
+    "shared_slot_count",
+    "state_info_window",
+    "state_name",
+    "state_shared_slot_building_entries"
+   ]
+  },
+  "stockpile": {
+   "tools": [
+    "hoi4_stockpile"
+   ],
+   "widgets": [
+    "equipment"
+   ]
+  },
+  "supply": {
+   "tools": [
+    "hoi4_supply"
+   ],
+   "widgets": [
+    "attrition",
+    "manpower",
+    "number"
+   ]
+  },
+  "template_edit": {
+   "tools": [
+    "hoi4_template_create",
+    "hoi4_template_delete",
+    "hoi4_template_edit",
+    "hoi4_template_options",
+    "hoi4_template_rename"
+   ],
+   "widgets": [
+    "delete_button",
+    "name",
+    "priority"
+   ]
+  },
+  "template_get": {
+   "tools": [
+    "hoi4_template_get"
+   ],
+   "widgets": [
+    "manpower"
+   ]
+  },
+  "terrain": {
+   "tools": [
+    "hoi4_province_graph"
+   ],
+   "widgets": [
+    "attack",
+    "attrition",
+    "buildings",
+    "combat_width",
+    "history",
+    "land",
+    "start",
+    "state",
+    "units"
+   ]
+  },
+  "trade": {
+   "tools": [
+    "hoi4_auto_import",
+    "hoi4_trade",
+    "hoi4_trade_set"
+   ],
+   "widgets": [
+    "amount",
+    "available_export",
+    "available_export_background",
+    "background",
+    "balance",
+    "buy_needed_amount_button",
+    "cancel_button",
+    "civ_factories",
+    "convoys",
+    "convoys_background",
+    "country",
+    "country_flag",
+    "exported",
+    "exported_background",
+    "factories_available",
+    "factories_description",
+    "filters",
+    "imported",
+    "max_amount",
+    "min_amount",
+    "needed",
+    "produced",
+    "production_line",
+    "resources",
+    "resources_grid",
+    "send_button",
+    "special_project",
+    "trade",
+    "trade_grid",
+    "tradeoffer_window"
+   ]
+  },
+  "ui": {
+   "tools": [
+    "hoi4_army_commander",
+    "hoi4_army_exercise",
+    "hoi4_army_fallback",
+    "hoi4_army_front",
+    "hoi4_army_motorization",
+    "hoi4_army_move",
+    "hoi4_army_offensive",
+    "hoi4_army_plan",
+    "hoi4_deploy_locations",
+    "hoi4_division_disband",
+    "hoi4_navy_ui",
+    "hoi4_occupation_all",
+    "hoi4_production_priority",
+    "hoi4_save",
+    "hoi4_time"
+   ],
+   "widgets": [
+    "accept",
+    "accept_button",
+    "close",
+    "close_button",
+    "decline_button",
+    "ingamemenu_save",
+    "menu_save_button",
+    "ok_button",
+    "open",
+    "player_flag",
+    "save"
+   ]
+  },
+  "units": {
+   "tools": [],
+   "widgets": [
+    "defense",
+    "division",
+    "fuel_consumption",
+    "hard_attack",
+    "soft_attack"
+   ]
+  },
+  "war_stats": {
+   "tools": [
+    "hoi4_war_stats",
+    "hoi4_war_stats_all"
+   ],
+   "widgets": [
+    "all"
+   ]
+  },
+  "wars": {
+   "tools": [
+    "hoi4_occupation_all",
+    "hoi4_province_graph",
+    "hoi4_wars"
+   ],
+   "widgets": [
+    "land",
+    "none",
+    "wars"
+   ]
+  }
+ }
+}

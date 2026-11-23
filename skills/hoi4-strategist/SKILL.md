@@ -94,6 +94,11 @@ timed duplicate. `check_calls.py` fails any brief call that duplicates the execu
 [references/procedure.md](references/procedure.md).
 *Gate:* `RUN/dossier/manifest.json` has a content hash (record it for `_meta.dossier_hash`), and its
 DLC and mod list match the run spec (or the launch configuration when `auto`).
+With any mod in the run spec, also run `python3 scripts/hoi4facts/facts.py mod-diff --mods auto` (add `--mod`
+as for the dossier) and read it before planning: new resources, buildings, decision categories, scripted
+interfaces (the mod's own mechanics), a replaced map, changed defines, and the typed tools whose panels the mod
+replaced. A plan for such a mod names what the player must learn first (its `learning_targets`) and never
+relies on a typed tool the report lists as affected.
 
 **2. Formalise the goal.** Follow [references/goal-patterns.md](references/goal-patterns.md): search
 in-game formalisations first (`facts.py decisions <TAG>`, `missions <TAG>`, `hooks <TAG>`, `vp <ENEMY>`,

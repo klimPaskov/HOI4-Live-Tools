@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+What a mod adds, in one read: `facts.py mod-diff` compares the merged game of the enabled mods with the plain
+game and names the new resources, buildings, decision categories, ideologies, focus trees, the mod's own panels
+(scripted interfaces: their buttons, what a click spends, whether it can be undone), map and defines changes,
+the replaced interface files, the typed tools whose buttons the mod no longer defines, and what to learn first.
+The strategist runs it before it plans for a modded game. `NDefines.X.KEY = v` override lines are now read as
+defines.
+
 A campaign through the product, start to report: what the private developer rig did for a run is now in
 `hoi4-live play` and a new `hoi4-live report`.
 

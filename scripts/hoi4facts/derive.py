@@ -79,7 +79,8 @@ def fmt(t):
 
 # --------------------------------------------------------------------------- defines
 
-_DEFINE = re.compile(r"^\s*([A-Z][A-Z0-9_]*)\s*=\s*(-?[0-9.]+|\"[^\"]*\"|true|false)", re.M)
+# `KEY = value` inside the NDefines table, or a mod's override line `NDefines.NGame.KEY = value`.
+_DEFINE = re.compile(r"^\s*(?:NDefines\.[A-Za-z_]+\.)?([A-Z][A-Z0-9_]*)\s*=\s*(-?[0-9.]+|\"[^\"]*\"|true|false)", re.M)
 
 
 def defines(game):

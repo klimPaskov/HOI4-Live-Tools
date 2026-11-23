@@ -166,6 +166,18 @@ def kv(row, keys):
 
 # ---------------------------------------------------------------- commands
 
+def cmd_mod_diff(args):
+    """What the mod set (enabled mods + --mod) adds or changes against the plain game: report and learning targets."""
+    from hoi4facts import moddiff
+
+    game_dir, mods, _dlcs, _tag, _date, _mode, _userdir = resolve(args)
+    if not mods:
+        return fail("no mod: enable one in the launcher or pass --mod DESCRIPTOR_OR_FOLDER")
+    rep = moddiff.diff(Game(game_dir, []), Game(game_dir, mods), limit=args.limit)
+    emit(args, rep, moddiff.text)
+    return 0
+
+
 def cmd_dossier(args):
     if args.action == "build":
         if not args.tag or not args.date:
@@ -1570,6 +1582,10 @@ def parser():
     p.add_argument("--mods", choices=("auto", "none"), default="auto")
     p.add_argument("--enemy", action="append", help="enemy tag for sections 3, 4 and 9 (default: wars at start)")
     p.add_argument("--fresh", action="store_true", help="build even when the dossier cache has this one")
+    p = add("mod-diff", cmd_mod_diff)
+    p.add_argument("--mods", choices=("auto", "none"), default="auto",
+                   help="none: only the --mod mods, not the ones enabled in the launcher")
+    p.add_argument("--limit", type=int, default=40, help="names listed per category")
     add("focus", cmd_focus, "id")
     p = add("focus-tree", cmd_focus_tree, "TAG")
     p.add_argument("--branch")
