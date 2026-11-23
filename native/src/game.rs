@@ -1,3 +1,4 @@
+use crate::xlayout::UNMAPPED;
 // Own-country object semantics derived from Clausewitz-MCP calling/{api,game}.py.
 // Copyright (c) 2026 smerss, MIT; ../LICENSE.clausewitz retains full notice.
 // Offsets below belong only to the independently inspected current Linux ELF.
@@ -119,6 +120,41 @@ pub(crate) const MACOS: Layout = Layout {
     build_id: "DFA875A5-25BA-35E0-9736-627F8A5C4396",
     source: "native mach_vm_read",
 };
+/// Windows: no reviewed layout yet. Every offset and address is past the readable range, so
+/// each read through it fails with `read_bound` instead of reading a guessed place.
+pub(crate) const WINDOWS: Layout = Layout {
+    gs_global: UNMAPPED,
+    idler_global: UNMAPPED,
+    technology_db_global: UNMAPPED,
+    tag_db_global: UNMAPPED,
+    gs_vtable: UNMAPPED,
+    idler_vtable: UNMAPPED,
+    playthrough: UNMAPPED,
+    date: UNMAPPED,
+    speed: UNMAPPED,
+    paused: UNMAPPED,
+    player_tag: UNMAPPED,
+    tag_country_index: UNMAPPED,
+    countries: UNMAPPED,
+    difficulty: UNMAPPED,
+    historical: UNMAPPED,
+    tag_stride: UNMAPPED,
+    country_focus_progress: UNMAPPED,
+    country_technology_status: UNMAPPED,
+    country_vtable: UNMAPPED,
+    country_production: UNMAPPED,
+    country_politics: UNMAPPED,
+    country_focus_tree: UNMAPPED,
+    production_vtable: UNMAPPED,
+    politics_vtable: UNMAPPED,
+    type_metadata: (UNMAPPED, UNMAPPED),
+    type_names: (UNMAPPED, UNMAPPED),
+    focus_name: UNMAPPED,
+    production_shift_from: UNMAPPED,
+    production_shift: UNMAPPED,
+    build_id: "unmapped",
+    source: "unmapped",
+};
 /// Each supported string ABI belongs to exactly one inspected build.
 impl Layout {
     /// Offset of a CProductionStatus field given its 1.19.3 (Linux-reviewed) offset.
@@ -134,6 +170,7 @@ pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {
         crate::memory::StringAbi::LibStdCxx => &LINUX,
         crate::memory::StringAbi::LibCxx => &MACOS,
+        crate::memory::StringAbi::Msvc => &WINDOWS,
     }
 }
 pub const SHA256: &str = "36a69ea446df3903baa0d1b2dec1331cfd2fe16eacee482d84cc36e5b6f9b5da";

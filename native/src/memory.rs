@@ -31,6 +31,9 @@ pub enum StringAbi {
     /// form {capacity|1, size, data}, otherwise byte 0 holds size << 1 and up
     /// to 22 bytes follow inline.
     LibCxx,
+    /// MSVC STL (Windows PE): a 16-byte union of the inline buffer and the data
+    /// pointer, then size and capacity; 32 bytes. Inline while capacity < 16.
+    Msvc,
 }
 pub trait ReadMemory {
     fn read(&self, address: u64, size: usize) -> Result<Vec<u8>>;
@@ -117,6 +120,11 @@ impl<'a> Reader<'a> {
         if self.abi == StringAbi::LibCxx {
             return self.libcxx_string(a, limit);
         }
+        if self.abi == StringAbi::Msvc {
+            let bytes = self.msvc_string(a, limit, 1)?;
+            return String::from_utf8(bytes)
+                .map_err(|_| Error::new("invalid_string", "Invalid UTF-8"));
+        }
         let header = self.read(a, 32)?;
         let ptr = u64::from_le_bytes(header[..8].try_into().unwrap());
         let size = u64::from_le_bytes(header[8..16].try_into().unwrap());
@@ -138,6 +146,16 @@ impl<'a> Reader<'a> {
     /// A libstdc++ `std::wstring` (four-byte code points; pointer, length, then a 16-byte buffer
     /// that holds up to three characters inline), at most `limit` characters.
     pub fn wstring_bounded(&self, a: u64, limit: usize) -> Result<String> {
+        if self.abi == StringAbi::Msvc && limit <= 1024 {
+            // MSVC wchar_t is UTF-16.
+            let units: Vec<u16> = self
+                .msvc_string(a, limit, 2)?
+                .chunks_exact(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .collect();
+            return String::from_utf16(&units)
+                .map_err(|_| Error::new("invalid_string", "Invalid UTF-16"));
+        }
         if self.abi != StringAbi::LibStdCxx || limit > 1024 {
             return Err(Error::new(
                 "invalid_string",
@@ -165,6 +183,33 @@ impl<'a> Reader<'a> {
             .map(|c| char::from_u32(u32::from_le_bytes(c.try_into().unwrap())))
             .collect::<Option<String>>()
             .ok_or_else(|| Error::new("invalid_string", "Invalid UTF-32"))
+    }
+    /// MSVC `std::basic_string` of `unit`-byte characters: the raw character bytes.
+    /// Inline (in the first 16 bytes) while capacity < 16 / unit.
+    fn msvc_string(&self, a: u64, limit: usize, unit: usize) -> Result<Vec<u8>> {
+        let header = self.read(a, 32)?;
+        let size = u64::from_le_bytes(header[16..24].try_into().unwrap());
+        let capacity = u64::from_le_bytes(header[24..32].try_into().unwrap());
+        let inline = 16 / unit as u64;
+        if size > limit as u64 || size > capacity {
+            return Err(Error::new("invalid_string", "Invalid bounded MSVC string"));
+        }
+        let n = size as usize * unit;
+        let bytes = if capacity < inline {
+            header[..n].to_vec()
+        } else if size == 0 {
+            Vec::new()
+        } else {
+            let ptr = u64::from_le_bytes(header[..8].try_into().unwrap());
+            if ptr % unit as u64 != 0 {
+                return Err(Error::new("invalid_string", "Misaligned MSVC string data"));
+            }
+            self.read(ptr, n)?
+        };
+        if self.read(a, 32)? != header {
+            return Err(Error::new("torn_read", "String header changed"));
+        }
+        Ok(bytes)
     }
     fn libcxx_string(&self, a: u64, limit: usize) -> Result<String> {
         let header = self.read(a, 24)?;
@@ -303,6 +348,69 @@ mod tests {
             torn,
             calls: Cell::new(0),
         })
+    }
+    struct Msvc(Fake);
+    impl ReadMemory for Msvc {
+        fn read(&self, a: u64, n: usize) -> Result<Vec<u8>> {
+            self.0.read(a, n)
+        }
+        fn string_abi(&self) -> StringAbi {
+            StringAbi::Msvc
+        }
+    }
+    /// A 32-byte MSVC string header at 0x10000 (buffer or pointer, size, capacity) with
+    /// `tail` stored at 0x10040.
+    fn msvc(first: &[u8], size: u64, capacity: u64, tail: &[u8], torn: bool) -> Msvc {
+        let mut data = vec![0; 128];
+        data[..first.len()].copy_from_slice(first);
+        data[16..24].copy_from_slice(&size.to_le_bytes());
+        data[24..32].copy_from_slice(&capacity.to_le_bytes());
+        data[64..64 + tail.len()].copy_from_slice(tail);
+        Msvc(Fake {
+            data,
+            torn,
+            calls: Cell::new(0),
+        })
+    }
+    #[test]
+    fn msvc_inline_and_heap_strings_decode_and_bound() {
+        let r = msvc(b"GER", 3, 15, b"", false);
+        assert_eq!(Reader::new(&r).string(0x10000).unwrap(), "GER");
+        let r = msvc(&0x10040u64.to_le_bytes(), 18, 31, b"generic_infantry_2", false);
+        assert_eq!(
+            Reader::new(&r).string(0x10000).unwrap(),
+            "generic_infantry_2"
+        );
+        let r = msvc(b"", 0, 15, b"", false);
+        assert_eq!(Reader::new(&r).string(0x10000).unwrap(), "");
+        // size beyond capacity, beyond the caller's bound, or a changed header
+        let r = msvc(b"GER", 16, 15, b"", false);
+        assert_eq!(Reader::new(&r).string(0x10000).unwrap_err().code, "invalid_string");
+        let r = msvc(&0x10040u64.to_le_bytes(), 18, 31, b"generic_infantry_2", false);
+        assert_eq!(
+            Reader::new(&r).string_bounded(0x10000, 8).unwrap_err().code,
+            "invalid_string"
+        );
+        let r = msvc(b"GER", 3, 15, b"", true);
+        assert_eq!(Reader::new(&r).string(0x10000).unwrap_err().code, "torn_read");
+    }
+    #[test]
+    fn msvc_wide_strings_are_utf16() {
+        let text: Vec<u8> = "Berlin"
+            .encode_utf16()
+            .flat_map(|u| u.to_le_bytes())
+            .collect();
+        // 6 units do not fit inline (7 units do, capacity 7): stored on the heap here
+        let r = msvc(&0x10040u64.to_le_bytes(), 6, 15, &text, false);
+        assert_eq!(Reader::new(&r).wstring_bounded(0x10000, 64).unwrap(), "Berlin");
+        let short: Vec<u8> = "Rom".encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
+        let r = msvc(&short, 3, 7, b"", false);
+        assert_eq!(Reader::new(&r).wstring_bounded(0x10000, 64).unwrap(), "Rom");
+        let r = msvc(&0x10041u64.to_le_bytes(), 6, 15, &text, false);
+        assert_eq!(
+            Reader::new(&r).wstring_bounded(0x10000, 64).unwrap_err().code,
+            "invalid_string"
+        );
     }
     #[test]
     fn libcxx_short_and_long_strings_decode_and_bound() {

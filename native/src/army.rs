@@ -1,6 +1,7 @@
 //! Independently recovered current Linux own Army list/handle/location getters.
 //! Consulted smerss/Clausewitz-MCP calling/{game,combat,unitorders}.py, MIT;
 //! ../LICENSE.clausewitz. No native calls or action eligibility.
+use crate::xlayout::UNMAPPED;
 use crate::{
     error::{Error, Result},
     game,
@@ -38,10 +39,20 @@ const MACOS: Layout = Layout {
     organisation: 0x420,
     province_id: 0x9c,
 };
+/// Windows: no reviewed layout yet. Every offset and address is past the readable range, so
+/// each read through it fails with `read_bound` instead of reading a guessed place.
+const WINDOWS: Layout = Layout {
+    country_divisions: UNMAPPED,
+    division_vtable: UNMAPPED,
+    strength: UNMAPPED,
+    organisation: UNMAPPED,
+    province_id: UNMAPPED,
+};
 fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {
         crate::memory::StringAbi::LibStdCxx => &LINUX,
         crate::memory::StringAbi::LibCxx => &MACOS,
+        crate::memory::StringAbi::Msvc => &WINDOWS,
     }
 }
 fn exact(r: &Reader<'_>, p: u64, v: u64) -> Result<()> {

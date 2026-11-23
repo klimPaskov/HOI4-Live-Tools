@@ -7,6 +7,8 @@ mod pe;
 pub(crate) use pe::PeIdentity;
 #[cfg(target_os = "windows")]
 pub(crate) mod native;
+#[cfg(target_os = "windows")]
+pub(crate) mod process;
 #[cfg(test)]
 mod tests;
 
@@ -178,6 +180,10 @@ struct Profile {
 }
 enum ExpectedBuild {
     Production,
+    /// Development builds only (`--features dev-table`, never in releases): the one executable
+    /// whose SHA-256 the developer names, for live layout mapping on a build with no review yet.
+    #[cfg(feature = "dev-table")]
+    Development([u8; 32]),
     // Cannot be selected by any production argument, environment or manifest.
     #[cfg(test)]
     Generated(Profile),
@@ -193,6 +199,16 @@ fn validate_profile(
             "unsupported_build",
             "No Windows game profile/ABI/layout is reviewed",
         )),
+        #[cfg(feature = "dev-table")]
+        ExpectedBuild::Development(sha256) => {
+            if _image.sha256 != sha256 || _size != _pe.image_size {
+                return Err(error(
+                    "unsupported_build",
+                    "Windows executable differs from the development SHA-256",
+                ));
+            }
+            Ok(())
+        }
         #[cfg(test)]
         ExpectedBuild::Generated(profile) => {
             if _image.sha256 != profile.sha256 || *_pe != profile.pe || _size != _pe.image_size {
@@ -219,6 +235,11 @@ pub(crate) struct OwnedReader<A: Api> {
 impl<A: Api> OwnedReader<A> {
     pub(crate) fn open(api: A, session: Session) -> Result<Self> {
         Self::open_with(api, session, ExpectedBuild::Production)
+    }
+    /// Development builds only: read the executable with exactly this SHA-256.
+    #[cfg(feature = "dev-table")]
+    pub(crate) fn development(api: A, session: Session, sha256: [u8; 32]) -> Result<Self> {
+        Self::open_with(api, session, ExpectedBuild::Development(sha256))
     }
     #[cfg(test)]
     fn generated(api: A, session: Session, profile: Profile) -> Result<Self> {

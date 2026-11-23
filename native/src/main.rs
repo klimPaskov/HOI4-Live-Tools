@@ -104,6 +104,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             launch::close_window(&directory, &config)?;
             return Ok(());
         }
+        #[cfg(target_os = "windows")]
+        Some("--windows-serve") => {
+            let config = PathBuf::from(
+                args.next()
+                    .ok_or("--windows-serve requires a private launch config")?,
+            );
+            if args.next().is_some() {
+                return Err("Unexpected extra argument".into());
+            }
+            launch::windows::serve(&config)?;
+            return Ok(());
+        }
+        #[cfg(target_os = "windows")]
+        Some("--windows-restore") => {
+            let directory = PathBuf::from(
+                args.next()
+                    .ok_or("--windows-restore requires the run directory")?,
+            );
+            if args.next().is_some() {
+                return Err("Unexpected extra argument".into());
+            }
+            println!("{}", launch::windows::restore(&directory)?);
+            return Ok(());
+        }
         Some(mode @ ("--serve" | "--connect" | "--close")) => {
             let path = PathBuf::from(args.next().ok_or("Endpoint mode requires a path")?);
             if args.next().is_some() {
