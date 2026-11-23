@@ -122,12 +122,20 @@ A 1936 start (Germany, paused unless said):
     3; the cleanliness table against the 1936 campaign baseline (production_set about 1.3 s a line, mio_trait
     8.3 s a trait, construction_add 2.9 s a state).
 
-## Session 5: support, supply and logistics (about 75 minutes, Germany 1939-40 save, executor off unless said)
+## Session 5: support, supply and logistics (about 85 minutes, Germany 1939-40 save, executor off unless said)
 
 Ordered by value. Each item names the read-back; memory structures are mapped the way `supplymem.rs` (supply nodes
 and province flows) and `stockpile.rs` (the country's equipment stockpile) were: find the number on screen,
 search the country object for it, confirm on a second value, then read it without opening the view.
 
+0. Hub motorisation, first (10 min, executor off): `hoi4_army_motorization` level 2 on an army at the front (never
+   set live above 1), read it back in `hoi4_armies`, then open the supply map mode and read the supply range of
+   the hubs it draws from before and after (screenshot and `hoi4_supply` province supply/headroom of the
+   provinces 2-4 beyond the hub); note the trucks taken from the stockpile (`hoi4_stockpile` motorized_equipment
+   before and after). Questions: does the army level set every hub it draws from, or only some; how many trucks a
+   hub took at level 1 and 2; whether a per-hub level is readable from memory (the hub's node object in
+   `supplymem.rs`). Then the executor on with `logistics.hubs` and an operation prepared: the formation's hubs
+   go to its `supply.motorization` before the execute.
 1. Railway legs (10 min, executor on with one `construction_plan` item `legs: true` from Silesia to a Polish state
    at war): the first leg queued (`hoi4_railway_build` leg:true), the queue read back, the item re-sent after
    `leg_days`. Question: does the leg stop at the own-controlled edge and re-use existing track.
@@ -159,4 +167,4 @@ search the country object for it, confirm on a second value, then read it withou
    would move weak divisions to the line template without retraining; the `formations` rule then prefers it to
    an in-place layout edit when the weak template has other uses.
 
-Total: about 315 minutes in five sessions.
+Total: about 325 minutes in five sessions.

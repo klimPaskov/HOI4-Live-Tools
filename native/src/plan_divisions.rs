@@ -128,7 +128,7 @@ fn protected(plan: &Value) -> BTreeSet<String> {
 }
 
 /// The verdicts on a `hoi4_template_get` read; pure. Empty when nothing to compare with.
-pub(super) fn judge(read: &Value, plan: &Value) -> Vec<Verdict> {
+pub(super) fn weak_templates(read: &Value, plan: &Value) -> Vec<Verdict> {
     let rows = list(read, "templates");
     let named = plan_templates(plan);
     let keep = protected(plan);
@@ -243,7 +243,7 @@ const CONVERT_TRIES: u64 = 3;
 
 /// `formations.act`: one conversion per tick, then the disband rule with the weak templates
 /// added to `disband.templates`. Reads once a game week.
-pub(super) fn step(
+pub(super) fn formations_step(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,
@@ -258,7 +258,7 @@ pub(super) fn step(
         return Ok(None);
     }
     let read = tools.call("hoi4_template_get", &json!({}))?;
-    let verdicts = judge(&read, plan);
+    let verdicts = weak_templates(&read, plan);
     if verdicts.is_empty() {
         state.skip(now, "formations", "read", 7 * DAY);
         super::plan_manage::note(state, "formations", "every fielded template is kept");
@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn weak_templates_are_converted_when_the_reference_shares_their_battalions_else_disbanded() {
-        let v = judge(&germany(), &plan());
+        let v = weak_templates(&germany(), &plan());
         let by = |n: &str| v.iter().find(|x| x.template == n).cloned();
         // same 9 infantry battalions, less per width: converted in place
         let s = by("Sicherungs-Division").unwrap();
@@ -396,12 +396,12 @@ mod tests {
             row("Austrian", 7, &[("infantry", 9)], 18.0, 380.0, 80.0),
         ]});
         // more defence, less attack per width: not worse in both, kept
-        assert!(judge(&read, &json!({})).is_empty());
+        assert!(weak_templates(&read, &json!({})).is_empty());
         let weak = json!({"templates": [
             row("Line", 40, &[("infantry", 9)], 18.0, 360.0, 90.0),
             row("Austrian", 7, &[("infantry", 6)], 12.0, 200.0, 50.0),
         ]});
-        let v = judge(&weak, &json!({}));
+        let v = weak_templates(&weak, &json!({}));
         assert_eq!(v.len(), 1);
         assert_eq!(
             (v[0].action.clone(), v[0].reference.as_str()),
@@ -413,7 +413,7 @@ mod tests {
     fn a_template_the_plan_upgrades_itself_is_left_to_that_entry() {
         let mut p = plan();
         p["templates"] = json!([{"base": "Sicherungs-Division", "name": "Infanterie-Division"}]);
-        assert!(judge(&germany(), &p)
+        assert!(weak_templates(&germany(), &p)
             .iter()
             .all(|v| v.template != "Sicherungs-Division"));
     }

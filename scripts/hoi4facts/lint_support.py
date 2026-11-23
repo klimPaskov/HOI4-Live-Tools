@@ -11,10 +11,13 @@
                      heavy fighters) and no air_plan entry on logistics_strike: trains and trucks are the
                      enemy's supply (500 CAS killed 48 trains and 200 trucks in a month, supply 26% by month 2:
                      airnaval T4).
-  supply.trains      (info) a plan at war with no train_equipment in stockpile_targets and no train production
-                     line: the start stock equals the start need (DEFAULT_STARTING_TRAIN_RATIO 1), the need
+  supply.trains      (warning) no train line from the start (logistics.trains or a train_equipment production
+                     row): the start stock equals the start need (DEFAULT_STARTING_TRAIN_RATIO 1), the need
                      grows with every railway province between the capital and a hub (NUM_RAILWAYS_TRAIN_FACTOR)
                      and logistics strikes kill trains; with too few, supply falls toward MIN_TRAIN_SUPPLY_FACTOR.
+                     (info) a train line without stockpile_targets.train_equipment to grow it.
+  supply.hubs        (warning) an operation's supply.motorization without logistics.hubs (nothing else reads
+                     it); (info) logistics.hubs without a truck line.
   formations.keep    (warning) a formations.keep name that is neither a start template nor a plan template.
 """
 
@@ -99,18 +102,40 @@ def logistics_findings(plan):
 
 
 def train_findings(plan):
-    if not at_war(plan):
-        return []
+    """Trains from the start: the start stock equals the start need, so a line must exist before the fronts grow."""
+    out = []
+    logi = plan.get("logistics") if isinstance(plan.get("logistics"), dict) else {}
     targets = plan.get("stockpile_targets") if isinstance(plan.get("stockpile_targets"), dict) else {}
-    if any(str(k).startswith("train_equipment") for k in targets):
-        return []
-    if any(str(p.get("equipment") or "").startswith("train_equipment") for p in _items(plan, "production")):
-        return []
-    return [("info", "stockpile_targets", "no train_equipment in stockpile_targets and no train line: the start "
-             "stock equals the start need, the need grows with each railway province between the capital and a hub "
-             "(NUM_RAILWAYS_TRAIN_FACTOR 0.03) and logistics strikes kill trains; short trains cut supply up to "
-             "half (MIN_TRAIN_SUPPLY_FACTOR 0.5). Name train_equipment with its days of cover so the stockpile rule "
-             "adds a line when the stock falls")]
+    line = isinstance(logi.get("trains"), dict) or any(
+        str(p.get("equipment") or "").startswith("train_equipment") for p in _items(plan, "production"))
+    target = any(str(k).startswith("train_equipment") for k in targets)
+    if not line:
+        out.append(("warning", "logistics.trains", "no train line from the start: a country starts with exactly the "
+                    "trains its network needs (DEFAULT_STARTING_TRAIN_RATIO 1); each railway province between the "
+                    "capital and a hub adds need (NUM_RAILWAYS_TRAIN_FACTOR 0.03), logistics strikes kill trains, "
+                    "and short trains cut supply up to half (MIN_TRAIN_SUPPLY_FACTOR 0.5). Set logistics.trains "
+                    "{factories: 1} or a production row for train_equipment"))
+    if not target and (line or at_war(plan)):
+        out.append(("info", "stockpile_targets", "no train_equipment in stockpile_targets: name it with its days "
+                    "of cover so the stockpile rule raises the train line when the stock falls"))
+    return out
+
+
+def hub_findings(plan):
+    """Operation motorization is acted on only by logistics.hubs; trucks for hubs need a truck line."""
+    out = []
+    logi = plan.get("logistics") if isinstance(plan.get("logistics"), dict) else {}
+    for i, op in enumerate(_items(plan, "operations")):
+        level = (op.get("supply") or {}).get("motorization") if isinstance(op.get("supply"), dict) else None
+        if level is not None and logi.get("hubs") is not True:
+            out.append(("warning", f"operations[{i}].supply.motorization",
+                        f"{op.get('id')}: motorization {level} is read only by logistics.hubs (set it true): "
+                        "without it the operation's hubs keep the standing war.motorization"))
+    if logi.get("hubs") is True and not any(
+            str(p.get("equipment") or "").startswith("motorized_equipment") for p in _items(plan, "production")):
+        out.append(("info", "logistics.hubs", "hub motorization spends trucks from the stockpile "
+                    "(SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST 60 a hub): plan a truck line"))
+    return out
 
 
 def keep_findings(plan, start_templates):
@@ -147,6 +172,8 @@ def check(lint):
         lint.add(sev, "air.logistics_strike", where, msg)
     for sev, where, msg in train_findings(plan):
         lint.add(sev, "supply.trains", where, msg)
+    for sev, where, msg in hub_findings(plan):
+        lint.add(sev, "supply.hubs", where, msg)
     if isinstance(plan.get("formations"), dict):
         start_t = None
         try:

@@ -608,7 +608,8 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              "conquest.vp_selection", "conquest.levers", "conquest.tool_gap"}
 NEW_RULES |= {"focus.available", "focus.idle", "focus.unconfirmed"}  # the focus slot walk (plan_gates)
 NEW_RULES |= {"playbook.refs", "decisions.coverage"}  # every decision names its source (lint_refs.py)
-NEW_RULES |= {"construction.requires_tech", "projects.facility", "formations.keep"}  # lint_support.py
+NEW_RULES |= {"construction.requires_tech", "projects.facility", "formations.keep",
+             "supply.trains", "supply.hubs"}  # lint_support.py
 NEW_RULES |= {"force.home_divisions"}  # every start division outside the theatre has a stated use
 # the plan against the game's own conditions, the management inventory, production over all lines
 NEW_RULES |= {"focus.condition", "focus.condition_unchecked", "decision.condition", "politics.visible",

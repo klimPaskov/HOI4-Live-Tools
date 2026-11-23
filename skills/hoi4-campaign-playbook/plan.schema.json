@@ -996,6 +996,31 @@
       "description": "the pass scheduler (plan_run.rs lanes_tick): every lane is offered once a pass in value order, the war-first block every other tick while a war or an operation runs",
       "x-owner": "executor"
     },
+    "logistics": {
+      "type": "object",
+      "properties": {
+        "trains": {
+          "anyOf": [
+            {"const": false},
+            {
+              "type": "object",
+              "properties": {"factories": {"type": "integer", "minimum": 1}},
+              "additionalProperties": false
+            }
+          ],
+          "description": "a train line from the start when no line makes trains (factories, default 1); stockpile_targets.train_equipment grows it"
+        },
+        "hubs": {
+          "type": "boolean",
+          "description": "hub motorization per army: full for the formations of an operation under way (or its supply.motorization) and for an army below floor, the standing war.motorization elsewhere; a raise waits for the trucks"
+        },
+        "floor": {"type": "number", "minimum": 0, "maximum": 100, "description": "army mean supply percent below which its hubs go to full (default war.supply_floor)"},
+        "why": {"type": "string"}
+      },
+      "additionalProperties": false,
+      "description": "trains and supply-hub trucks (plan_logistics.rs); off unless present",
+      "x-owner": "executor"
+    },
     "formations": {
       "type": "object",
       "x-owner": "executor",
@@ -2645,7 +2670,9 @@
             "properties": {
               "motorization": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 2,
+                "description": "hub motorization level of the operation's formations from its prepare on (read by logistics.hubs; without it the key does nothing)"
               },
               "floor": {
                 "type": "number",

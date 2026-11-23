@@ -14,7 +14,9 @@
 //! special_project_facility_idle (a facility running nothing while a project of its kind is
 //! open or a scientist is free), trains_falling (the train stock falls and no line makes
 //! trains: logistics strikes or captures eat it; with fewer trains than the network needs
-//! supply drops to MIN_TRAIN_SUPPLY_FACTOR 0.5). Each read is a pure memory read (no input),
+//! supply drops to MIN_TRAIN_SUPPLY_FACTOR 0.5), train_line_missing (no line makes trains at
+//! all), starving_hubs_low:<army> (an army below the supply floor whose hubs are not fully
+//! motorised). Each read is a pure memory read (no input),
 //! once a game day with the alerts.
 use super::{list, text, GameHour, State, Tools, DAY};
 use serde_json::{json, Value};
@@ -236,6 +238,53 @@ pub(super) fn trains_falling(read: &Value) -> Option<String> {
     ))
 }
 
+/// The trains row of a `hoi4_stockpile` read when no line makes trains at all: the start
+/// stock equals the start need (DEFAULT_STARTING_TRAIN_RATIO 1), so every railway province a
+/// front adds and every train a logistics strike kills is a shortage nothing replaces.
+pub(super) fn trains_no_line(read: &Value) -> Option<String> {
+    let row = list(read, "equipment")
+        .into_iter()
+        .find(|r| text(&r["archetype"]) == "train_equipment")?;
+    if row["lines"].as_u64().unwrap_or(0) > 0 || row["produced_per_day"].as_f64().unwrap_or(0.0) > 0.0 {
+        return None;
+    }
+    let stock = row["stockpile"].as_f64().unwrap_or(0.0);
+    Some(format!(
+        "{stock:.0} trains in stock and no line makes trains: the start stock only covers the start network; a train line from the start (logistics.trains, or hoi4_production_add train_equipment) and stockpile_targets.train_equipment to grow it with the fronts"
+    ))
+}
+
+/// Armies whose divisions' mean supply (`hoi4_supply` divisions) is below `floor` while their
+/// hubs are not fully motorised (`hoi4_armies` motorization below 2): trucks are the supply
+/// lever that acts at once.
+pub(super) fn hubs_low(roster: &Value, supply: &Value, floor: f64) -> Vec<(String, String)> {
+    let mut sum: HashMap<String, (f64, usize)> = HashMap::new();
+    for d in list(supply, "divisions") {
+        if let Some(p) = d["supply_percent"].as_f64() {
+            let e = sum.entry(text(&d["army"]).to_string()).or_default();
+            e.0 += p;
+            e.1 += 1;
+        }
+    }
+    let mut out = Vec::new();
+    for a in list(roster, "armies") {
+        let name = text(&a["army"]);
+        let (Some(level), Some((t, n))) = (a["motorization"].as_u64(), sum.get(name)) else {
+            continue;
+        };
+        let mean = t / *n as f64;
+        if level < 2 && mean < floor {
+            out.push((
+                name.to_string(),
+                format!(
+                    "{name}: supply {mean:.0}% below {floor:.0}% with hub motorization {level} of 2: raise it (hoi4_army_motorization level 2, logistics.hubs) while trucks are in stock, and a railway or hub where it starves"
+                ),
+            ));
+        }
+    }
+    out
+}
+
 /// The rows of this read with their first-seen days.
 pub(super) fn derived(
     state: &mut State,
@@ -340,7 +389,7 @@ pub(super) fn derived(
     }
     // formations: fielded templates worse than the plan's own (plan_divisions)
     if let Ok(read) = tools.call("hoi4_template_get", &json!({})) {
-        let verdicts = super::plan_divisions::judge(&read, plan);
+        let verdicts = super::plan_divisions::weak_templates(&read, plan);
         if !verdicts.is_empty() {
             let acting = plan["formations"]["act"] == json!(true);
             open.push((
@@ -397,6 +446,31 @@ pub(super) fn derived(
                 todo,
                 "stockpile",
                 super::plan_manage::note_of(state, "stockpile").map(String::from),
+            ));
+        } else if let Some(todo) = trains_no_line(&read) {
+            open.push((
+                "train_line_missing".to_string(),
+                todo,
+                "logistics",
+                super::plan_manage::note_of(state, "logistics").map(String::from),
+            ));
+        }
+    }
+    // supply: a starving army whose hubs are not fully motorised
+    if let (Ok(roster), Ok(supply)) = (
+        tools.call("hoi4_armies", &json!({"threat": false})),
+        tools.call("hoi4_supply", &json!({})),
+    ) {
+        let floor = plan["logistics"]["floor"]
+            .as_f64()
+            .or_else(|| plan["war"]["supply_floor"].as_f64())
+            .unwrap_or(50.0);
+        for (army, todo) in hubs_low(&roster, &supply, floor) {
+            open.push((
+                format!("starving_hubs_low:{army}"),
+                todo,
+                "logistics",
+                super::plan_manage::note_of(state, "logistics").map(String::from),
             ));
         }
     }
@@ -531,6 +605,22 @@ mod tests {
             "project": null, "scientist": {"name": "x"}}], "projects": [],
             "scientists": [{"name": "x", "assigned_facility_id": 2}]});
         assert!(idle_facilities(&busy).is_empty());
+    }
+
+    #[test]
+    fn a_missing_train_line_and_a_starving_army_on_low_trucks_are_named() {
+        let read = |lines: u64| json!({"equipment": [{"archetype": "train_equipment",
+            "stockpile": 71.0, "lines": lines, "produced_per_day": 0.0}]});
+        assert!(trains_no_line(&read(0)).unwrap().contains("71 trains in stock"));
+        assert_eq!(trains_no_line(&read(1)), None);
+        let roster = json!({"armies": [{"army": "A", "motorization": 1},
+            {"army": "B", "motorization": 2}, {"army": "C", "motorization": 0}]});
+        let supply = json!({"divisions": [{"army": "A", "supply_percent": 30.0},
+            {"army": "A", "supply_percent": 50.0}, {"army": "B", "supply_percent": 20.0},
+            {"army": "C", "supply_percent": 90.0}]});
+        let low = hubs_low(&roster, &supply, 50.0);
+        assert_eq!(low.len(), 1);
+        assert!(low[0].1.contains("A: supply 40% below 50% with hub motorization 1 of 2"));
     }
 
     #[test]

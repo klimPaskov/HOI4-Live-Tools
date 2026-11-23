@@ -61,11 +61,22 @@ class WarSupply(unittest.TestCase):
         self.assertEqual(lint_support.logistics_findings(plan), [])
         self.assertEqual(lint_support.logistics_findings({"air_plan": self.WAR["air_plan"]}), [])
 
-    def test_trains_are_noted_until_a_target_or_a_line_names_them(self):
-        self.assertEqual(len(lint_support.train_findings(self.WAR)), 1)
-        self.assertEqual(lint_support.train_findings(dict(self.WAR, stockpile_targets={"train_equipment": 60})), [])
-        self.assertEqual(lint_support.train_findings(
-            dict(self.WAR, production=[{"equipment": "train_equipment_1", "factories": 2}])), [])
+    def test_a_train_line_is_wanted_from_the_start_and_a_target_to_grow_it(self):
+        self.assertEqual([f[0] for f in lint_support.train_findings(self.WAR)], ["warning", "info"])
+        self.assertEqual([f[0] for f in lint_support.train_findings({})], ["warning"])
+        line = dict(self.WAR, logistics={"trains": {"factories": 1}})
+        self.assertEqual([f[1] for f in lint_support.train_findings(line)], ["stockpile_targets"])
+        self.assertEqual(lint_support.train_findings(dict(line, stockpile_targets={"train_equipment": 60})), [])
+        self.assertEqual([f[0] for f in lint_support.train_findings(
+            dict(self.WAR, production=[{"equipment": "train_equipment_1", "factories": 2}]))], ["info"])
+
+    def test_operation_motorization_needs_the_hub_rule(self):
+        plan = {"operations": [{"id": "op_e", "supply": {"motorization": 2, "floor": 35}}]}
+        self.assertEqual([f[1] for f in lint_support.hub_findings(plan)], ["operations[0].supply.motorization"])
+        plan["logistics"] = {"hubs": True}
+        self.assertEqual([f[1] for f in lint_support.hub_findings(plan)], ["logistics.hubs"])
+        plan["production"] = [{"equipment": "motorized_equipment_1", "factories": 4}]
+        self.assertEqual(lint_support.hub_findings(plan), [])
 
 
 class Formations(unittest.TestCase):

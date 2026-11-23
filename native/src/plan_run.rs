@@ -337,6 +337,8 @@ mod plan_omissions;
 // Division management: weak fielded templates converted in place or disbanded (`formations`).
 #[path = "plan_divisions.rs"]
 mod plan_divisions;
+#[path = "plan_logistics.rs"]
+mod plan_logistics;
 // Game speed by the war the country manages (peace 3, a war to manage 2; a human's choice kept).
 #[path = "plan_speed.rs"]
 mod plan_speed;
@@ -3467,7 +3469,7 @@ fn war_first_steps(
     if let Some(line) = declare_first(state, tools, plan, lease, now)? {
         return Ok(Some(line));
     }
-    let steps: [Step; 11] = [
+    let steps: [Step; 12] = [
         // the operations: prepare, execute, advance (plan_operation.rs); the air burst follows in
         // the same tick (o1d: the operation acted in every tick of the first war days and the
         // air step behind it first ran on day 3, every wing still on its peace training)
@@ -3556,7 +3558,7 @@ fn war_first_steps(
                     return Ok(Some(line));
                 }
             }
-            plan_divisions::step(state, tools, plan, lease, now)
+            plan_divisions::formations_step(state, tools, plan, lease, now)
         },
         |state, tools, plan, lease, now| war_burst(state, tools, plan, lease, now, war_step),
         |state, tools, plan, lease, now| {
@@ -3578,6 +3580,8 @@ fn war_first_steps(
         },
         construction_plan_step,
         armies_step,
+        // the train line and the hub motorisation of attacking or starving armies (`logistics`)
+        plan_logistics::logistics_step,
     ];
     // A step whose order failed (or that the failure ledger held back) does not end the tick:
     // the next steps still get it (shakedown 10 Nov 2026: a failing army_create in the layout
