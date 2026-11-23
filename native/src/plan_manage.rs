@@ -82,7 +82,8 @@
 //!                    aircraft type and variant) is rebased (hoi4_air_rebase: to `base_state`, or to the
 //!                    base of `base_region` with the most free room when its own base is outside that
 //!                    region or over capacity) and then flies `mission` over `region` (hoi4_air_mission);
-//!                    once `switch_when` holds, over `then_region` with `then_mission`. Wings the air plan
+//!                    once `switch_when` holds, over `then_region` with `then_mission`; once `until`
+//!                    holds the entry is over and its wings go to the other entries. Wings the air plan
 //!                    names are left out of `air.war_missions`.
 //!                    `follow_region` true: the wing is based inside the region it flies over now
 //!                    (`region`, or `then_region` once switched), so a mission region that moves with
@@ -3110,9 +3111,28 @@ pub(super) fn air_plan_step(
     };
     let bases = list(&air, "air_bases");
     let all_wings = list(&air, "wings");
+    // an entry whose `until` holds is over: it claims no wing, so its wings join the entries of
+    // the next war (w42zc, 23 Nov 2026: the seven Polish entries held 2,099 planes over Western
+    // Poland eight months after Poland fell; the Low Countries had 199 fighters and 100 CAS)
+    let live: Vec<Value> = entries
+        .iter()
+        .map(|e| {
+            let over =
+                !e["until"].is_null() && when_holds(state, tools, &e["until"], now) == Truth::True;
+            if over {
+                json!({})
+            } else {
+                e.clone()
+            }
+        })
+        .collect();
+    let entries: &[Value] = &live;
     let active: Vec<bool> = entries
         .iter()
-        .map(|e| when_holds(state, tools, &e["when"], now) == Truth::True)
+        .map(|e| {
+            !e.as_object().is_some_and(|o| o.is_empty())
+                && when_holds(state, tools, &e["when"], now) == Truth::True
+        })
         .collect();
     let owners = wing_owners(entries, &active, all_wings);
     let mut flying = 0;
@@ -8543,6 +8563,29 @@ mod tests {
         assert_eq!(owners["JG 3"], 1);
         let owners = wing_owners(entries, &[false, false], list(&read, "wings"));
         assert!(!owners.contains_key("JG 3"));
+    }
+
+    #[test]
+    fn an_entry_whose_until_holds_gives_its_wings_to_the_next_war() {
+        let read = json!({"air_bases": [], "wings": [
+            {"wing": "JG 1", "aircraft_type": "small_plane_airframe_1", "aircraft": 100, "region": {"id": 38},
+             "air_base": {"base_id": 3, "state_id": 66}, "missions": ["air_superiority"]}]});
+        let tools = fake(vec![("hoi4_air", read)]);
+        let plan = json!({"air_plan": [
+            {"airframe": "small_plane_airframe_1", "region": 38, "mission": "air_superiority",
+             "until": "date:1936.6.1"},
+            {"airframe": "small_plane_airframe_1", "region": 5, "mission": "air_superiority"}]});
+        let mut state = State::default();
+        // the first war's entry still holds the wing: it flies over 38 already, nothing to do
+        let before = date_hour("1936.6.1").unwrap().min(START + DAY) - DAY;
+        assert_eq!(step(&mut state, &tools, &plan, "l", before).unwrap(), None);
+        // once its war is over the wing flies the next entry's region
+        let mut state = State::default();
+        let over = date_hour("1936.6.1").unwrap().max(START) + DAY;
+        let line = step(&mut state, &tools, &plan, "l", over)
+            .unwrap()
+            .unwrap_or_default();
+        assert!(line.contains("air_superiority over region 5"), "{line}");
     }
 
     #[test]

@@ -2161,6 +2161,70 @@
               "click_state": {
                 "$ref": "#/definitions/state_id",
                 "description": "the state the front order clicks near (the nearest highlighted border to it); without it the enemy's border state nearest the middle of own_states"
+              },
+              "low": {
+                "type": "object",
+                "properties": {
+                  "enemy": {
+                    "$ref": "#/definitions/tag"
+                  },
+                  "own_states": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/state_id"
+                    },
+                    "minItems": 1
+                  },
+                  "click_state": {
+                    "$ref": "#/definitions/state_id"
+                  },
+                  "target_line": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/state_id"
+                    }
+                  },
+                  "axis": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/state_id"
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "description": "with group_cap: the group on the side of the first of the two own_states farthest apart: its own enemy, border piece, click and line (each key optional)"
+              },
+              "high": {
+                "type": "object",
+                "properties": {
+                  "enemy": {
+                    "$ref": "#/definitions/tag"
+                  },
+                  "own_states": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/state_id"
+                    },
+                    "minItems": 1
+                  },
+                  "click_state": {
+                    "$ref": "#/definitions/state_id"
+                  },
+                  "target_line": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/state_id"
+                    }
+                  },
+                  "axis": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/state_id"
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "description": "with group_cap: the other group's own enemy, border piece, click and line (each key optional)"
               }
             },
             "additionalProperties": false,
@@ -2733,6 +2797,10 @@
           },
           "switch_when": {
             "$ref": "#/definitions/predicate"
+          },
+          "until": {
+            "$ref": "#/definitions/predicate",
+            "description": "the entry is over once this holds: it claims no wing and its wings go to the other entries (the next war's)"
           },
           "then_region": {
             "type": [

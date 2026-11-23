@@ -159,7 +159,7 @@ pub(super) fn province_states(dir: &Path) -> Result<HashMap<i32, i32>> {
     let mut out = HashMap::new();
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        let Some(id) = name.split('-').next().and_then(|v| v.parse::<i32>().ok()) else {
+        let Some(id) = super::mapdata::state_file_id(&name) else {
             continue;
         };
         let Ok(text) = std::fs::read_to_string(entry.path()) else {

@@ -669,6 +669,8 @@ pub struct State {
     /// country has gained some (a refusal is usually a missing few points).
     pol_pp_at_fail: HashMap<String, f64>,
     centers: HashMap<i32, (f64, f64)>,
+    /// Country tags whose state centres were read into `centers` in this server life.
+    centre_tags: HashSet<String>,
     con: ConState,
     /// stop_on_date: (target hour, outcome of the single pause attempt)
     date_stop: Option<(i64, String)>,
@@ -847,6 +849,7 @@ impl Default for State {
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
             centers: HashMap::new(),
+            centre_tags: HashSet::new(),
             con: ConState::default(),
             date_stop: None,
             stages: Stages::default(),
@@ -3017,6 +3020,17 @@ fn declare_first(
                 state.last_ok = Some(true);
                 return Ok(Some(format!(
                     "{declared}; events open: answered before the attack is executed"
+                )));
+            }
+            // another declaration due now goes out in the next tick before any burst (w42v,
+            // 23 Nov 2026: Belgium was declared, the opening air burst took 34 s = seven game
+            // days and Holland, whose war the operation executes on, came nine days later)
+            state.done.remove("declnear:at");
+            if plan_affairs::declaration_near(state, tools, plan, now, 0) {
+                state.war_active = true;
+                state.last_ok = Some(true);
+                return Ok(Some(format!(
+                    "{declared}; another declaration is due: it goes out first"
                 )));
             }
             let executed = war_burst(state, tools, plan, lease, now, plan_operation::step)?;
@@ -6081,6 +6095,13 @@ fn air_war_step(
     if !state.war_active {
         if !plan_operation::active(state) {
             return Ok(None);
+        }
+        // the plan's own air entries (their `when` gates them) before the default missions: the
+        // wings of a finished war rebase to the next one before its declaration (w42s1, 23 Nov
+        // 2026: the air plan never ran in the prepare and 2,099 planes stood in Poland on the
+        // war day in the West)
+        if let Some(line) = plan_manage::air_plan_step(state, tools, plan, lease, now)? {
+            return Ok(Some(line));
         }
         return air_war_missions(state, tools, plan, lease, now);
     }

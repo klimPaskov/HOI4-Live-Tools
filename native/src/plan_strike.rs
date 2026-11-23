@@ -1196,6 +1196,41 @@ fn graph(memory: &mut Memory, tools: &dyn Tools, states: &[i64]) {
     memory.graph_states = states.to_vec();
 }
 
+/// An army's strike, march or rest whose objective lies in no state of the enemies fought now and
+/// in no own state (an objective of a war that is over, or land a third country holds) is
+/// forgotten: the army chooses again from this war's objectives. g17n (23 Nov 2026): Panzergruppe
+/// Ost kept a Polish objective "for 256 days" after Poland capitulated and stood in Slovakia on the
+/// day of the war in the West.
+fn forget_finished(
+    memory: &mut Memory,
+    enemy_states: &HashSet<i64>,
+    own_states: &HashSet<i64>,
+    lost_own: &HashSet<i64>,
+) {
+    let graph = &memory.graph;
+    let stale: Vec<String> = memory
+        .armies
+        .iter()
+        .filter(|(_, a)| a.mode != Mode::Idle && a.objective != 0)
+        .filter(|(_, a)| match graph.get(&a.objective) {
+            None => true,
+            Some((st, _)) => {
+                !enemy_states.contains(st)
+                    && !own_states.contains(st)
+                    && !lost_own.contains(&a.objective)
+            }
+        })
+        .map(|(n, _)| n.clone())
+        .collect();
+    for name in stale {
+        if let Some(a) = memory.armies.get_mut(&name) {
+            a.mode = Mode::Idle;
+            a.objective = 0;
+            a.group.clear();
+        }
+    }
+}
+
 /// The strike step. `None`: the step is off (or not yet on) and the war step runs as before.
 /// `Some(line)`: the step owns the armies this tick; `line` is the action it took, if any.
 #[allow(clippy::too_many_arguments)]
@@ -1310,6 +1345,7 @@ pub(super) fn step(
         state.strike.active = false;
         return Ok(None);
     }
+    forget_finished(&mut state.strike, &enemy_states, &own_states, &lost_own);
     let supply = tools.call("hoi4_supply", &json!({"summary": false}))?;
     let divisions: Vec<Division> = list(&supply, "divisions")
         .iter()
@@ -2202,6 +2238,33 @@ pub(super) fn owns_armies(state: &State, plan: &Value) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_strike_on_a_finished_war_is_forgotten() {
+        let mut m = Memory::default();
+        m.graph.insert(422, (90, vec![]));
+        m.graph.insert(700, (34, vec![]));
+        m.graph.insert(800, (51, vec![]));
+        let army = |objective: i64, mode: Mode| Army {
+            mode,
+            objective,
+            since: 0,
+            group: vec!["d1".into()],
+            ..Army::default()
+        };
+        m.armies.insert("PG Ost".into(), army(422, Mode::Strike));
+        m.armies.insert("PG Nord".into(), army(700, Mode::Strike));
+        m.armies.insert("March".into(), army(800, Mode::March));
+        m.armies.insert("Far".into(), army(999, Mode::Rest));
+        let enemy: HashSet<i64> = [34].into();
+        let own: HashSet<i64> = [51].into();
+        forget_finished(&mut m, &enemy, &own, &HashSet::new());
+        assert_eq!(m.armies["PG Ost"].mode, Mode::Idle);
+        assert_eq!(m.armies["PG Ost"].objective, 0);
+        assert!(m.armies["PG Ost"].group.is_empty());
+        assert_eq!(m.armies["Far"].mode, Mode::Idle);
+        assert_eq!(m.armies["PG Nord"].mode, Mode::Strike);
+        assert_eq!(m.armies["March"].mode, Mode::March);
+    }
     use std::cell::{Cell, RefCell};
 
     #[test]

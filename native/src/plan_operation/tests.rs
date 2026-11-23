@@ -2236,3 +2236,134 @@ fn a_group_without_a_field_marshal_gets_the_first_free_name_of_marshals() {
         [json!({"army": "Army Group 3", "general": "Rundstedt"})]
     );
 }
+
+#[test]
+fn a_plan_click_off_the_border_gives_way_to_a_border_state() {
+    let st = State::default();
+    let front = json!({"enemy": "BEL", "own_states": [51, 42], "click_state": 980});
+    let u = unit("Army Group 2".into(), Role::Group, &front, &json!({}));
+    let wars = json!({"borders": [
+        {"neighbour_tag": "BEL", "neighbour_states": [34, 6], "own_border_states": [51]},
+        {"neighbour_tag": "HOL", "neighbour_states": [7], "own_border_states": [36]}
+    ]});
+    assert_eq!(click_state(&st, &wars, &u), Some(34));
+    let on = json!({"enemy": "BEL", "own_states": [51], "click_state": 6});
+    let u = unit("Army Group 2".into(), Role::Group, &on, &json!({}));
+    assert_eq!(click_state(&st, &wars, &u), Some(6));
+    // no border read: the plan's click stands
+    let u = unit("Army Group 2".into(), Role::Group, &front, &json!({}));
+    assert_eq!(click_state(&st, &json!({}), &u), Some(980));
+}
+
+#[test]
+fn a_strike_formation_marches_while_only_a_holds_enemy_is_at_war() {
+    // g17n and w42s (23 Nov 2026): the Westwall hold faces France, at war since September 1939;
+    // counted as the operation's war, no march went out and the armour stood in the East
+    let game = Game::new();
+    *game.enemies.borrow_mut() = vec!["FRA"];
+    let mut plan = plan();
+    plan["operations"][0]["formations"][2]["drive"] = json!("strike");
+    let mut state = State::default();
+    game.unit("Panzer", |r| r["states"] = json!({"71": 24}));
+    burst(&mut state, &game, &plan, START);
+    let marches: Vec<Value> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, a)| n == "hoi4_army_move" && a["army"] == json!("Panzer"))
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(marches, [json!({"army": "Panzer", "state_id": 67})]);
+}
+
+#[test]
+fn a_side_on_its_own_countrys_border_is_clicked_plainly() {
+    let mut u = unit(
+        "Army Group 3".into(),
+        Role::Group,
+        &json!({"enemy": "HOL", "own_states": [56, 57]}),
+        &json!({}),
+    );
+    u.side = Some(true);
+    assert_eq!(
+        front_args(&u, 35, true),
+        json!({"army": "Army Group 3", "state_id": 35, "from_states": [56, 57]})
+    );
+    u.own_enemy = true;
+    assert_eq!(
+        front_args(&u, 35, true),
+        json!({"army": "Army Group 3", "state_id": 35})
+    );
+}
+
+#[test]
+fn a_wing_on_one_own_state_draws_that_states_border_only() {
+    let u = unit(
+        "Armee Pommern".into(),
+        Role::Wing,
+        &json!({"enemy": "BEL", "own_states": [51]}),
+        &json!({}),
+    );
+    assert_eq!(
+        front_args(&u, 980, true),
+        json!({"army": "Armee Pommern", "state_id": 980, "from_state": 51})
+    );
+    assert_eq!(
+        front_args(&u, 980, false),
+        json!({"army": "Armee Pommern", "state_id": 980})
+    );
+}
+
+#[test]
+fn the_sides_once_recorded_stay_while_the_armies_walk() {
+    let mut state = State::default();
+    for (s, p) in [(56, (2930.0, 1575.0)), (42, (2919.0, 1511.0))] {
+        state.centers.insert(s, p);
+    }
+    let op =
+        json!({"id": "op_w", "group_cap": 2, "front": {"enemy": "BEL", "own_states": [56, 42]}});
+    let lines: Vec<String> = ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect();
+    for (n, side) in [("A", 1), ("B", 2), ("C", 1), ("D", 2)] {
+        state.done.insert(format!("op:op_w:side:{n}"), side);
+    }
+    let (_, low, high) = split_parts(&state, &op, &json!({"armies": []}), &lines).unwrap();
+    assert_eq!(low, ["A", "C"]);
+    assert_eq!(high, ["B", "D"]);
+}
+
+#[test]
+fn a_sides_front_off_its_own_piece_is_cleared_and_drawn_again() {
+    let game = Game::new();
+    game.unit("Army Group 1", |r| {
+        r["plan"] = json!([{"kind": "front", "id": 9, "divisions": 30,
+            "line": {"states": [42, 51]}, "offensives": []}])
+    });
+    let mut u = unit(
+        "Army Group 1".into(),
+        Role::Group,
+        &json!({"enemy": "HOL", "own_states": [56, 57], "click_state": 35}),
+        &json!({"target_line": [7]}),
+    );
+    u.side = Some(true);
+    u.own_enemy = true;
+    let mut state = State::default();
+    let roster = game.roster.borrow().clone();
+    let line = reconcile(
+        &mut state,
+        &game,
+        "op_w",
+        &u,
+        &[7],
+        &roster,
+        &json!({}),
+        "l",
+        START,
+        true,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(line.contains("off its own piece"), "{line}");
+    assert_eq!(
+        game.orders().last().unwrap().1,
+        json!({"army": "Army Group 1", "clear_orders": true})
+    );
+}
