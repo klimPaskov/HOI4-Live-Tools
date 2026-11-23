@@ -970,10 +970,8 @@ fn start_resident(shared: &Arc<Shared>) -> Value {
             .name("owned-watcher".into())
             .spawn(move || {
                 let mut watcher = crate::resident::Watcher::default();
-                while resident_step(&shared, |server, commands| {
-                    watcher.sample(server, commands)
-                })
-                .is_some()
+                while resident_step(&shared, |server, commands| watcher.sample(server, commands))
+                    .is_some()
                 {
                     crate::phase::sleep(crate::resident::WATCH_PERIOD);
                 }
@@ -1168,9 +1166,7 @@ fn service_client(stream: UnixStream, shared: Arc<Shared>) {
                     json!({"jsonrpc":"2.0","id":0,"method":"tools/list"}),
                     Some(&service),
                 );
-                let _ = shared
-                    .read_tools
-                    .set(framing::read_tools(listed.as_ref()));
+                let _ = shared.read_tools.set(framing::read_tools(listed.as_ref()));
                 *commands = Some(Arc::new(service));
                 drop(commands);
                 let resident = start_resident(&shared);

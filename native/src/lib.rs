@@ -30,9 +30,9 @@ pub mod platform;
 pub mod protocol;
 pub mod recording;
 pub mod research;
-pub mod resident;
 pub mod research_folders;
 pub mod research_ui;
+pub mod resident;
 #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
 pub(crate) mod script;
 mod target_node;

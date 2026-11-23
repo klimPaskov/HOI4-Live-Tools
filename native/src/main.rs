@@ -1,6 +1,6 @@
-use hoi4_live_native::{launch, platform, protocol::Server};
 #[cfg(target_os = "macos")]
 use hoi4_live_native::resident::{autopilot_step, watch_loop};
+use hoi4_live_native::{launch, platform, protocol::Server};
 use std::{io, path::PathBuf};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
