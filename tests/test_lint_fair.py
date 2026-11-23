@@ -130,6 +130,16 @@ class Seeded(unittest.TestCase):
         wide = {"id": "t_wide", "name": "Wide", "regiments": [["infantry"] * 5]}
         self.assertClean(self.italy(templates=[wide]), "fair.width")
 
+    def test_garrison_template_is_not_deployed(self):
+        # the occupation garrison draws through its template but deploys no division: no width floor
+        tanks = {"id": "t_garrison", "name": "Garrison", "role": "garrison", "regiments": [["light_armor"] * 3]}
+        self.assertClean(self.italy(templates=[tanks], garrison_template={"template": "t_garrison"}), "fair.width")
+        # the same template without the garrison setting, or trained as a field division, is still judged
+        self.assertHit(self.italy(templates=[tanks]), "fair.width", text="6 combat width")
+        line = {"template": "Garrison", "deploy_state": 2, "only_if_stockpile": {"light_tank_equipment": 1}}
+        self.assertHit(self.italy(templates=[tanks], garrison_template={"template": "t_garrison"}, training=line),
+                       "fair.width", text="6 combat width")
+
     def test_space_marines(self):
         sm = {"id": "t_sm", "name": "Marines", "regiments": [["infantry"] * 4, ["light_armor"]]}
         self.assertHit(self.italy(templates=[sm]), "fair.space_marines", text="tank battalions")

@@ -604,7 +604,9 @@ class Ctx:
                                  "forecast": round(have), "can_exist": _fmt(made) if made is not None else "never"})
                 ws = war_start(r.get("war"))
                 due = min([d for d in (ready, ws) if d is not None])
-                if made is None or made + days > due:
+                # a template whose fielded divisions already meet the row is not late: only new training waits
+                # (a later start, e.g. the 1939 bookmark, fields the row's divisions on the first day)
+                if (made is None or made + days > due) and have < n:
                     lint.add("error", "force.template_late", where,
                              f"{t} can exist from {_fmt(made) if made is not None else 'never (a tech its units or '}"
                              f"{'' if made is not None else 'its `when` wait on is not in the research plan)'}"

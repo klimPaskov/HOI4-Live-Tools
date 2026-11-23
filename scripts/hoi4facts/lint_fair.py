@@ -660,6 +660,22 @@ class Fair:
                 start[name] = [u for u, n in (t.get("regiments") or {}).items() for _ in range(int(n or 0))]
         return plan, start
 
+    def garrison_only(self):
+        """Names and ids the plan's garrison_template names: the occupation garrison draws men and equipment
+        through that template but never deploys a division of it, so the width floor does not apply unless the
+        plan also trains it (the trained path keeps the check)."""
+        gt = self.plan.get("garrison_template")
+        name = gt.get("template") if isinstance(gt, dict) else None
+        if not isinstance(name, str):
+            return set()
+        out = {name}
+        for t in self.lt.list_of("templates"):
+            if name in (t.get("id"), t.get("name")):
+                out |= {n for n in (t.get("id"), t.get("name")) if isinstance(n, str)}
+        if out & {line[1] for line in self.training_lines()}:
+            return set()
+        return out
+
     def template_rules(self, where, name, keys, at_war, trained=False):
         units, cls = self.unit_class()
         if not keys or any(k not in units for k in keys):
@@ -685,10 +701,11 @@ class Fair:
         units, cls = self.unit_class()
         divisions = Counter(d.get("template") for d in self.oob().get("divisions") or [])
         kinds_of = {}
+        garrison = self.garrison_only()
         for name, (where, keys, t) in plan.items():
             if name != t.get("name") and t.get("name") in plan:
                 continue  # one entry per template (by name; the id only when it has no name)
-            kinds_of[name] = self.template_rules(where, name, keys, at_war) or Counter()
+            kinds_of[name] = self.template_rules(where, name, keys, at_war and name not in garrison) or Counter()
             base = t.get("base")
             sf_new = kinds_of[name]["sf"]
             sf_old = sum(1 for k in start.get(base, []) if "sf" in cls(k)) if isinstance(base, str) else 0

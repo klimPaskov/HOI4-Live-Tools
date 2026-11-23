@@ -92,6 +92,8 @@ class WorldFacts(unittest.TestCase):
         self.assertEqual(world(dlcs=["Fixture DLC"]).country()["oobs"][0]["v"], "AAA_dlc")
         self.assertEqual({v["name"]: v["v"] for v in c["variables"]}, {"AAA_conquer_days": 170, "AAA_other": 3})
         self.assertIsNone(c["political_power"])  # the 1939 block is after the start
+        # dated blocks add up: +500 then -150 is a bank of 350, not the last line's -150
+        self.assertEqual(world("1939.1.1").country()["political_power"]["v"], 350)
 
     def test_wars_by_start_date(self):
         self.assertEqual(self.w.at_war_with("AAA"), ["BBB"])

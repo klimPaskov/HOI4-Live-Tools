@@ -218,6 +218,17 @@ class Germany(unittest.TestCase):
         self.assertTrue(any(x["where"] == "force_design.air[0]" for x in air), air)
         self.assertIn("force_design.budget", [x["where"] for x in self.rules(f, "force.budget")])
 
+    def test_fielded_divisions_are_not_late(self):
+        # a start template the army already fields in the row's number is not late, however long new
+        # divisions train; the same row asking for more than are fielded still is
+        plan = germany_at_war()
+        plan["force_design"] = {"land": [
+            {"template": "Infanterie-Division", "role": "line", "count": 10, "ready": "1936.2.1"},
+            {"template": "Infanterie-Division", "role": "line", "count": 400, "ready": "1936.2.2"}]}
+        late = self.rules(lint_plan.lint(plan, self.game)["findings"], "force.template_late")
+        self.assertFalse([x for x in late if x["where"] == "force_design.land[0] Infanterie-Division"], late)
+        self.assertTrue([x for x in late if x["where"] == "force_design.land[1] Infanterie-Division"], late)
+
     def test_the_air_force_is_an_arm(self):
         f = self.lt.findings
         use = self.rules(f, "force.air_use")
