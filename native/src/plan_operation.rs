@@ -1263,7 +1263,7 @@ fn line_tag(line: &[i64]) -> String {
 }
 
 /// Map centres of the operation's enemies' states (read once per enemy).
-fn learn_centres(state: &mut State, tools: &dyn Tools, tags: &[String]) {
+pub(super) fn learn_centres(state: &mut State, tools: &dyn Tools, tags: &[String]) {
     for tag in tags {
         // the centres live in this server life: a tag is read once per life (the done key a
         // continued campaign carries in plan_state said "read" while this life had read only the
@@ -1648,7 +1648,9 @@ fn one(
         }
     }
     if executed {
-        if state.centers.is_empty() {
+        // every tag is read once per server life (learn_centres keeps the tags it read): the air
+        // plan's own-state centres in peace must not stop the enemies' from being read here
+        if enemies.iter().any(|t| !state.centre_tags.contains(t)) {
             let mut tags = enemies.clone();
             tags.push(player(tools, plan));
             learn_centres(state, tools, &tags);
@@ -4749,7 +4751,7 @@ fn control(tools: &dyn Tools, me: &str, ids: &[i64]) -> (Vec<i64>, usize) {
     (states, provinces)
 }
 
-fn player(tools: &dyn Tools, plan: &Value) -> String {
+pub(super) fn player(tools: &dyn Tools, plan: &Value) -> String {
     if let Some(me) = plan["war"]["me"].as_str() {
         return me.to_string();
     }
