@@ -353,6 +353,11 @@ pub(super) fn digest(state: &State) -> Option<Value> {
     (!state.manage.notes.is_empty()).then(|| json!(state.manage.notes))
 }
 
+/// A copy of every rule's last status line (to see what a step wrote).
+pub(super) fn notes_snapshot(state: &State) -> BTreeMap<String, String> {
+    state.manage.notes.clone()
+}
+
 /// The rule's status line in the run result's `manage` digest (the last one per rule).
 pub(super) fn note(state: &mut State, rule: &str, line: impl Into<String>) {
     state.manage.notes.insert(rule.to_string(), line.into());
