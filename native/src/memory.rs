@@ -302,9 +302,34 @@ impl<'a> Reader<'a> {
                 "Invalid type information pointer",
             ));
         }
+        if self.string_abi() == StringAbi::Msvc {
+            return self.msvc_object_type(info, name);
+        }
         let text = self.u64(info + 8)?;
         let encoded = format!("{}{name}", name.len());
         let bytes = self.read(text, encoded.len() + 1)?;
+        if bytes[..encoded.len()] != *encoded.as_bytes() || bytes[encoded.len()] != 0 {
+            return Err(Error::new("invalid_type", format!("Expected {name}")));
+        }
+        Ok(())
+    }
+    /// MSVC x64: the slot before the vtable points to the complete object locator
+    /// (signature 1, offset of this vtable in the object, then image-relative
+    /// offsets of the type descriptor at +12 and of the locator itself at +20).
+    /// The type descriptor's name is `.?AV<name>@@` for a class.
+    fn msvc_object_type(&self, locator: u64, name: &str) -> Result<()> {
+        let head = self.read(locator, 24)?;
+        let word = |o: usize| u32::from_le_bytes(head[o..o + 4].try_into().unwrap());
+        let invalid = || Error::new("invalid_type", "Invalid complete object locator");
+        if word(0) != 1 || word(4) != 0 {
+            return Err(invalid());
+        }
+        let image = locator
+            .checked_sub(u64::from(word(20)))
+            .ok_or_else(invalid)?;
+        let descriptor = image + u64::from(word(12));
+        let encoded = format!(".?AV{name}@@");
+        let bytes = self.read(descriptor + 16, encoded.len() + 1)?;
         if bytes[..encoded.len()] != *encoded.as_bytes() || bytes[encoded.len()] != 0 {
             return Err(Error::new("invalid_type", format!("Expected {name}")));
         }
@@ -371,6 +396,43 @@ mod tests {
             torn,
             calls: Cell::new(0),
         })
+    }
+    /// Image at 0x10000: object +0x100 -> vtable +0x208, locator +0x300 (self RVA
+    /// `self_rva`), type descriptor +0x400 named `type_name`.
+    fn msvc_object(type_name: &str, signature: u32, self_rva: u32) -> Msvc {
+        let mut data = vec![0; 0x500];
+        data[0x100..0x108].copy_from_slice(&0x10208u64.to_le_bytes());
+        data[0x200..0x208].copy_from_slice(&0x10300u64.to_le_bytes());
+        data[0x300..0x304].copy_from_slice(&signature.to_le_bytes());
+        data[0x30c..0x310].copy_from_slice(&0x400u32.to_le_bytes());
+        data[0x314..0x318].copy_from_slice(&self_rva.to_le_bytes());
+        data[0x410..0x410 + type_name.len()].copy_from_slice(type_name.as_bytes());
+        Msvc(Fake {
+            data,
+            torn: false,
+            calls: Cell::new(0),
+        })
+    }
+    #[test]
+    fn msvc_object_type_reads_the_complete_object_locator() {
+        let r = msvc_object(".?AVCCountry@@", 1, 0x300);
+        Reader::new(&r).object_type(0x10100, "CCountry").unwrap();
+        for (name, sig, self_rva) in [
+            (".?AVCCountryX@@", 1, 0x300), // another class
+            (".?AVCCountry@@", 0, 0x300),  // 32-bit locator form
+            (".?AVCCountry@@", 1, 0x310),  // self offset disagrees with the image
+        ] {
+            let r = msvc_object(name, sig, self_rva);
+            assert_eq!(
+                Reader::new(&r)
+                    .object_type(0x10100, "CCountry")
+                    .unwrap_err()
+                    .code,
+                "invalid_type"
+            );
+        }
+        let r = msvc_object(".?AVCCountry@@", 1, 0x300);
+        assert!(Reader::new(&r).object_type(0x10100, "CCount").is_err());
     }
     #[test]
     fn msvc_inline_and_heap_strings_decode_and_bound() {

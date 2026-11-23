@@ -74,7 +74,11 @@ Two runtimes exist:
   (`hoi4-live-native --windows-serve CONFIG`) that starts `hoi4.exe` without Steam variables in a
   private user folder, refuses while a game or the Steam client runs, and restores the launcher
   settings it redirected when the game exits (`--windows-restore RUN` repairs an interrupted run).
-  Windows strings are MSVC `std::string`/`std::wstring`. It sends no input and has no layout yet: a
+  Windows strings are MSVC `std::string`/`std::wstring`; `object_type` reads the MSVC complete
+  object locator. The core game and army layouts for Windows 1.20.0.0 were read live from an owned
+  game (globals, date, speed, pause, player tag, countries, difficulty, playthrough, the country's
+  member objects, division strength and organisation); the tag database, the division province and
+  the production members are not measured yet and fail with `read_bound`. It sends no input: a
   development build (`--features dev-table`) reads a table from `HOI4_LIVE_DEV_TABLE` and accepts
   the executable named by `HOI4_LIVE_DEV_WINDOWS_SHA256`; release builds attach to nothing.
   The management tools are compiled and unit-tested on Windows, but nothing binds them there yet.
