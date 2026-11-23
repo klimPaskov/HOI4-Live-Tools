@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     uint64_t *g; unsigned *r;
     size_t ng = scan_global_candidates(&im, 200, &g, &r);
     double t2 = now();
-    static char buf[16384];
+    static char buf[65536];
     printf("%s\n", caps_json(&im, &t, buf, sizeof buf));
     printf("{\"resolved\":%d,\"of\":%d,\"scan_ms\":%.1f,\"globals_ms\":%.1f,\"globals_200_refs\":%zu,\"top\":[",
            ok, CAP_COUNT, (t1 - t0) * 1e3, (t2 - t1) * 1e3, ng);
@@ -71,6 +71,12 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "speed_gs_global")) got = t.speed.ok ? t.speed.gs_global : 0;
         else if (!strcmp(argv[a], "forbid_desc")) got = t.forbid.ok ? t.forbid.desc : 0;
         else if (!strcmp(argv[a], "fields")) got = t.fields != NULL;
+        else if (!strcmp(argv[a], "stage2_on")) got = t.cap[CAP_STAGE2_COMMON].value;
+        else if (!strcmp(argv[a], "valid_slot")) got = t.st2.common.valid_slot;
+        else if (!strcmp(argv[a], "exec_flag")) got = t.st2.common.exec_flag_off;
+        else if (!strcmp(argv[a], "player_tag")) got = t.st2.common.player_tag_off;
+        else if (!strcmp(argv[a], "line_factories")) got = t.st2.common.line_factories_off;
+        else if (!strcmp(argv[a], "region_id")) got = t.st2.common.region_id_off;
         else {
             found = 0;
             for (int i = 0; i < CAP_COUNT; i++)

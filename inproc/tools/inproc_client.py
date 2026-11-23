@@ -77,7 +77,11 @@ def stage1(ch, outdir, external, shot):
     res = dict(stage=1, hello=ch.hello, checks={}, steps=[])
     c = res['checks']
     c['post_enabled'] = ch.hello.get('post', {}).get('enabled') is True
-    c['allow_list_is_one_command'] = ch.hello.get('post', {}).get('allow') == ['set_game_speed']
+    # stage 2: the allow-list names the speed command and the families; the speed command is the only one opted in
+    # for this procedure (the launcher's HOI4_INPROC_POST=set_game_speed), so no family may be on
+    fams = ch.hello.get('families', {})
+    c['allow_list_is_one_command'] = (ch.hello.get('post', {}).get('allow', [None])[0] == 'set_game_speed' and
+                                      not any(f.get('on') for f in fams.values()))
     probe = ch.call('probe'); res['probe'] = probe
     c['probe_main_thread'] = probe.get('main_thread') is True
     c['probe_single_player'] = probe.get('server_type') == '12CDummyServer'

@@ -5,9 +5,9 @@ set -e
 cd "${0:A:h}"
 mkdir -p build
 CF=(-arch x86_64 -mmacosx-version-min=11.0 -O2 -Wall -Wextra -std=c11)
-xcrun clang $CF -o build/scan_file tools/scan_file.c core/scan.c core/caps.c core/cmd.c
+xcrun clang $CF -o build/scan_file tools/scan_file.c core/scan.c core/caps.c core/cmd.c core/cmd2.c
 xcrun clang $CF -dynamiclib -fvisibility=hidden -install_name @rpath/libhoi4live_inproc.dylib \
-  -o build/libhoi4live_inproc.dylib macos/module.c core/scan.c core/caps.c core/cmd.c core/ipc.c
+  -o build/libhoi4live_inproc.dylib macos/module.c core/scan.c core/caps.c core/cmd.c core/cmd2.c core/ipc.c
 xcrun clang $CF -o build/fake_host tools/fake_host.c
 xcrun clang $CF -o build/ipc_selftest tools/ipc_selftest.c core/ipc.c
 xcrun clang -arch x86_64 -mmacosx-version-min=11.0 -O2 -fobjc-arc -framework AppKit -o build/pump_host tools/pump_host.m

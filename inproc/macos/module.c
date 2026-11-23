@@ -36,7 +36,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define MODULE_VERSION "stage1-1"
+#define MODULE_VERSION "stage2-1"
 static int g_log = -1;
 static char g_log_path[1024];
 static long g_log_bytes;
@@ -356,11 +356,269 @@ static int be_post_speed(int64_t value, long id, char *out, size_t n, int *unexp
     return ok;
 }
 
+
+/* ======================= STAGE 2: the families, posted the way the UI posts them =======================
+ * One request = one family op over up to 32 own objects, run as ONE main-thread job (one command per object, as the
+ * UI's helpers do: N wings or N lines = N posts in the same frame, microseconds each). For each object, before
+ * anything is created: the object pointer must round-trip through the game's own typed resolver (resolve(handle(obj))
+ * == obj: a live object of the command's class) and the game's own owner getter must return the player's tag (the
+ * field the game's per-frame command gate compares). The command is made by the game's factory (and, for container
+ * payloads, the UI's own constructor), checked, then the game's own "can do" check decides (refused: the module
+ * deletes it with the command's own destructor, as the UI does), then Post(session, cmd, 0) exactly as the UI. */
+typedef unsigned char (*valid_fn2)(void *, int);
+typedef void (*delete_fn2)(void *);
+typedef void *(*resolve_fn2)(const void *);
+typedef int32_t (*owner_fn2)(void *);
+typedef void (*ctor_wing_i32_u8)(void *, void *, int32_t, int);
+typedef void (*ctor_wing_i32_ptr)(void *, void *, int32_t, void *);
+
+#define J2_MAX 32
+enum { R_NONE = 0, R_POSTED, R_INVALID, R_NOT_OWN, R_BAD_OBJ, R_BAD_OBJ2, R_DROPPED, R_UNEXPECTED, R_SKIPPED };
+static const char *const R_NAMES[] = {"none", "posted", "refused_by_game_check", "not_own", "not_a_live_object",
+                                      "second_object_invalid", "dropped_by_post", "unexpected_object", "skipped"};
+
+typedef struct {
+    int refs;
+    const cmd_type *ct;
+    int n; uint64_t obj[J2_MAX]; int64_t val[J2_MAX]; uint64_t obj2; int64_t flag; long id;
+    long long queued_us, deadline_us;
+    int ran, main_thread, forbid, requeues, unexplained, posted, refused;
+    int32_t player_tag, region_id;
+    int res[J2_MAX]; int32_t before[J2_MAX];
+    long long ran_us, post_us;
+    char reason[200], queue_type[64], server_type[64];
+    dispatch_semaphore_t done;
+} job2_t;
+
+static void job2_release(job2_t *j) {
+    if (__atomic_sub_fetch(&j->refs, 1, __ATOMIC_ACQ_REL) == 0) { dispatch_release(j->done); free(j); }
+}
+static void finish2(job2_t *j) { dispatch_semaphore_signal(j->done); job2_release(j); }
+
+/* fault-free read of a handle at obj+off; then the game's typed resolver must give back obj */
+static int roundtrip(const cmd_type *ct, uint64_t obj, uint64_t *handle) {
+    const stage2_common *c = &g_t.st2.common;
+    uint64_t h;
+    if (!plausible(obj) || !sq(obj + ct->target_hint + c->cref_handle_off, &h) || h == 0) return 0;
+    uint64_t rf = ct->resolve_fn + (uint64_t)g_slide;
+    if (!code_ptr(rf)) return 0;
+    void *back = ((resolve_fn2)(uintptr_t)rf)(&h);
+    *handle = h;
+    return (uint64_t)(uintptr_t)back == obj;
+}
+
+static void run_job2(void *ctx) {
+    job2_t *j = (job2_t *)ctx;
+    const stage2_common *c = &g_t.st2.common;
+    const cmd_type *ct = j->ct;
+    long long now = mono_us();
+    j->ran = 1; j->ran_us = now - j->queued_us;
+    j->main_thread = pthread_main_np() == 1;
+    if (!j->main_thread) { snprintf(j->reason, sizeof j->reason, "job ran off the main thread"); j->unexplained = 1; finish2(j); return; }
+    if (killed()) { snprintf(j->reason, sizeof j->reason, "kill switch"); finish2(j); return; }
+    if (now > j->deadline_us) { snprintf(j->reason, sizeof j->reason, "expired before the main thread ran it"); finish2(j); return; }
+    uint64_t acc = g_t.forbid.accessor + (uint64_t)g_slide;
+    int *pc = code_ptr(acc) ? ((tlv_fn)(uintptr_t)acc)() : NULL;
+    int32_t fc = -1;
+    if (!pc || !sread((uint64_t)(uintptr_t)pc, &fc, 4)) { snprintf(j->reason, sizeof j->reason, "thread-forbid count unreadable"); j->unexplained = 1; finish2(j); return; }
+    j->forbid = fc;
+    uint64_t gs, idler, vp, q, server;
+    if (!g_gs_glob || !g_idler_glob || !sq(g_gs_glob + (uint64_t)g_slide, &gs) || !sq(gs, &vp) || vp != g_vt_gs ||
+        !sq(g_idler_glob + (uint64_t)g_slide, &idler) || !sq(idler, &vp) || vp != g_vt_idler) {
+        snprintf(j->reason, sizeof j->reason, "no loaded game"); finish2(j); return;
+    }
+    uint64_t getter;
+    if (!sq(vp + g_t.cap[CAP_QUEUE_ROOT].extra, &getter) || !code_ptr(getter)) { snprintf(j->reason, sizeof j->reason, "queue getter not game code"); j->unexplained = 1; finish2(j); return; }
+    q = (uint64_t)(uintptr_t)((getq_fn)(uintptr_t)getter)((void *)(uintptr_t)idler);
+    if (!dyn_type(q, j->queue_type, sizeof j->queue_type) || strcmp(j->queue_type, "8CSession")) { snprintf(j->reason, sizeof j->reason, "the queue is not a CSession"); j->unexplained = 1; finish2(j); return; }
+    uint8_t gate = 0, executing = 1;
+    if (!sread(q + c->gate_flag_off, &gate, 1) || !sread(q + c->exec_flag_off, &executing, 1)) { snprintf(j->reason, sizeof j->reason, "session flags unreadable"); finish2(j); return; }
+    if (fc != 0 || executing) { /* not a point where the UI could post: try again at the next pump, until the deadline */
+        if (now + 3000 < j->deadline_us) { j->requeues++; dispatch_after_f(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_MSEC), dispatch_get_main_queue(), j, run_job2); return; }
+        snprintf(j->reason, sizeof j->reason, "%s until the deadline", fc ? "game-state access forbidden" : "the session was executing commands");
+        finish2(j); return;
+    }
+    if (!sq(q + g_t.post.server_off, &server) || !dyn_type(server, j->server_type, sizeof j->server_type)) { snprintf(j->reason, sizeof j->reason, "no server on the session"); j->unexplained = 1; finish2(j); return; }
+    if (strcmp(j->server_type, "12CDummyServer")) { snprintf(j->reason, sizeof j->reason, "not single player (server %s): stage 2 never posts in multiplayer", j->server_type); finish2(j); return; }
+    if (!gate) { snprintf(j->reason, sizeof j->reason, "the session's command gate is closed (no country played): Post would drop"); finish2(j); return; }
+    if (!sread(gs + c->player_tag_off, &j->player_tag, 4) || j->player_tag <= 0) { snprintf(j->reason, sizeof j->reason, "no player country"); finish2(j); return; }
+    int32_t snd = -1;
+    if (!sread(q + g_t.post.sender_src, &snd, 4) || snd < 0) { snprintf(j->reason, sizeof j->reason, "sender unreadable"); finish2(j); return; }
+    /* the second object: an air base (transfer) or a strategic region (enable_mission), checked by its exact vtable */
+    const char *op = ct->spec->op;
+    uint64_t h2 = 0;
+    if (!strcmp(op, "air.transfer") || !strcmp(op, "air.enable_mission")) {
+        int is_base = !strcmp(op, "air.transfer");
+        uint64_t want = (is_base ? c->vt_base : c->vt_region) + (uint64_t)g_slide, v2 = 0;
+        if (!plausible(j->obj2) || !sq(j->obj2, &v2) || v2 != want) { for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2; snprintf(j->reason, sizeof j->reason, "obj2 is not a live %s", is_base ? "CAirBase" : "CStrategicRegion"); finish2(j); return; }
+        if (is_base) {
+            uint64_t lk = ct->lookup_fn + (uint64_t)g_slide;
+            if (!sq(j->obj2 + c->cref_handle_off, &h2) || !code_ptr(lk) || (uint64_t)(uintptr_t)((resolve_fn2)(uintptr_t)lk)(&h2) != j->obj2) {
+                for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2; snprintf(j->reason, sizeof j->reason, "the base's handle does not resolve to it"); finish2(j); return;
+            }
+        } else if (!sread(j->obj2 + c->region_id_off, &j->region_id, 4) || j->region_id < 0) {
+            for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2; snprintf(j->reason, sizeof j->reason, "region id unreadable"); finish2(j); return;
+        }
+    }
+    uint64_t fac = ct->factory + (uint64_t)g_slide, post = g_t.post.post + (uint64_t)g_slide, nullref = 0;
+    if (!code_ptr(fac) || !code_ptr(post) || !sq(c->null_ref_global + (uint64_t)g_slide, &nullref)) { snprintf(j->reason, sizeof j->reason, "factory/post not game code"); j->unexplained = 1; finish2(j); return; }
+    long long tp = 0;
+    for (int i = 0; i < j->n; i++) {
+        uint64_t h, owner_f = ct->owner_fn + (uint64_t)g_slide;
+        if (!roundtrip(ct, j->obj[i], &h)) { j->res[i] = R_BAD_OBJ; j->refused++; continue; }
+        if (!code_ptr(owner_f) || ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)j->obj[i]) != j->player_tag) { j->res[i] = R_NOT_OWN; j->refused++; continue; }
+        if (!strcmp(op, "production.add_factories")) sread(j->obj[i] + c->line_factories_off, &j->before[i], 4);
+        char *cmd = (char *)((factory_fn)(uintptr_t)fac)();
+        uint64_t cvp = 0; int32_t cs = 0;
+        if (!cmd || !sq((uint64_t)(uintptr_t)cmd, &cvp) || cvp != ct->vtable + (uint64_t)g_slide || !sread((uint64_t)(uintptr_t)cmd + 0xc, &cs, 4) || cs != -1) {
+            j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the factory built an unexpected object"); break;
+        }
+        int ok = 1;
+        if (ct->spec->build == BUILD_FIELDS) {
+            for (int k = 0; k < ct->spec->nf && ok; k++) { /* every field still holds the factory's default */
+                const cmd_field *f = &ct->spec->f[k];
+                uint64_t cur = 0;
+                if (f->kind == FK_REF) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == nullref;
+                else if (f->kind == FK_I32) { int32_t v = 1; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 4) && v == 0; }
+                else ok = 0;
+            }
+            if (ok) { /* fill: our own fresh command object, never game state */
+                for (int k = 0; k < ct->spec->nf; k++) {
+                    const cmd_field *f = &ct->spec->f[k];
+                    if (f->kind == FK_REF) *(uint64_t *)(cmd + f->off) = k == 0 ? h : h2;
+                    else *(int32_t *)(cmd + f->off) = (int32_t)j->val[i];
+                }
+            }
+        } else { /* the UI's own constructor, on the fresh object whose containers are still empty */
+            uint64_t data = 1; int32_t size = 1;
+            ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[0].off, &data) && data == 0 &&
+                 sread((uint64_t)(uintptr_t)cmd + ct->spec->f[0].count_off, &size, 4) && size == 0;
+            uint64_t ctor = ct->ctor + (uint64_t)g_slide;
+            if (ok && code_ptr(ctor)) {
+                if (ct->spec->ctor == CTOR_WING_I32_U8) ((ctor_wing_i32_u8)(uintptr_t)ctor)(cmd, (void *)(uintptr_t)j->obj[i], (int32_t)j->val[i], j->flag ? 1 : 0);
+                else ((ctor_wing_i32_ptr)(uintptr_t)ctor)(cmd, (void *)(uintptr_t)j->obj[i], j->region_id, NULL);
+                /* what the game built must be exactly what was asked: one handle (this wing's) and the value */
+                uint64_t d2 = 0, e0 = 0; int32_t s2 = 0, v2 = 0;
+                ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
+                     sq((uint64_t)(uintptr_t)cmd + ct->spec->f[0].off, &d2) && sread((uint64_t)(uintptr_t)cmd + ct->spec->f[0].count_off, &s2, 4) &&
+                     s2 == 1 && sq(d2, &e0) && e0 == h && sread((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &v2, 4) &&
+                     v2 == (ct->spec->ctor == CTOR_WING_I32_U8 ? (int32_t)j->val[i] : j->region_id);
+                if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+            } else ok = 0;
+        }
+        if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the factory's defaults differ from the scan"); break; }
+        void **vt = *(void ***)cmd;
+        unsigned char valid = ((valid_fn2)vt[c->valid_slot / 8])(cmd, 0); /* the game's own "can do" check, as the UI */
+        if (!valid) { ((delete_fn2)vt[c->delete_slot / 8])(cmd); j->res[i] = R_INVALID; j->refused++; continue; }
+        long long t0 = mono_us();
+        unsigned char r = ((post_fn)(uintptr_t)post)((void *)(uintptr_t)q, cmd, 0); /* Post owns cmd from here */
+        tp += mono_us() - t0;
+        if (r) { j->res[i] = R_POSTED; j->posted++; }
+        else { j->res[i] = R_DROPPED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "Post dropped a command every check passed"); break; }
+    }
+    j->post_us = tp;
+    finish2(j);
+}
+
+static int parse_list_u64(const char *s, uint64_t *out, int max) {
+    int n = 0;
+    while (*s && n < max) {
+        char *e; unsigned long long v = strtoull(s, &e, 16);
+        if (e == s) return -1;
+        out[n++] = (uint64_t)v;
+        if (*e == ',') e++; else if (*e) return -1;
+        s = e;
+    }
+    return *s ? -1 : n;
+}
+static int parse_list_i64(const char *s, int64_t *out, int max) {
+    int n = 0;
+    while (*s && n < max) {
+        char *e; long long v = strtoll(s, &e, 10);
+        if (e == s) return -1;
+        out[n++] = v;
+        if (*e == ',') e++; else if (*e) return -1;
+        s = e;
+    }
+    return *s ? -1 : n;
+}
+
+static int be_post2(const char *op, const char *objs, const char *vals, const char *obj2, int64_t flag, long id, char *out, size_t n,
+                    int *unexplained) {
+    const cmd_type *ct = stage2_find(&g_t.st2, op);
+    if (!ct || !ct->ok) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused\",\"reason\":\"type not resolved on this build\"", op); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
+    job2_t *j = (job2_t *)calloc(1, sizeof *j);
+    if (!j) return 0;
+    j->refs = 2; j->ct = ct; j->id = id; j->flag = flag;
+    j->n = parse_list_u64(objs, j->obj, J2_MAX);
+    int nv = vals && *vals ? parse_list_i64(vals, j->val, J2_MAX) : 0;
+    const char *why = NULL;
+    if (j->n < 1) why = "objs: comma-separated hex addresses";
+    else if (!strcmp(op, "production.add_factories")) {
+        if (nv != j->n) why = "vals: one factory delta per line";
+        else for (int i = 0; i < j->n; i++) if (j->val[i] == 0 || j->val[i] < -150 || j->val[i] > 150) why = "a delta is 0 or outside -150..150";
+    } else if (!strcmp(op, "air.set_mission")) {
+        if (nv != 1 || j->val[0] <= 0 || j->val[0] > 0x40000000 || (j->val[0] & (j->val[0] - 1))) why = "vals: one mission mask with exactly one bit";
+        else { for (int i = 1; i < j->n; i++) j->val[i] = j->val[0]; if (flag != 0 && flag != 1) why = "flag: 1 enable, 0 disable"; }
+    } else if (nv) why = "this op takes no vals";
+    if (!why && (!strcmp(op, "air.transfer") || !strcmp(op, "air.enable_mission"))) {
+        uint64_t o2[1];
+        if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0];
+    }
+    for (int a = 0; !why && a < j->n; a++) for (int b = a + 1; b < j->n; b++) if (j->obj[a] == j->obj[b]) why = "an object is listed twice (no duplicate orders)";
+    if (why) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused_by_policy\",\"reason\":\"%s\"", op, why); free(j); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
+    long long t0 = mono_us();
+    j->done = dispatch_semaphore_create(0);
+    j->queued_us = t0; j->deadline_us = t0 + 1000000;
+    dispatch_async_f(dispatch_get_main_queue(), j, run_job2);
+    if (dispatch_semaphore_wait(j->done, dispatch_time(DISPATCH_TIME_NOW, 1500 * NSEC_PER_MSEC))) {
+        snprintf(out, n, "\"op\":\"%s\",\"result\":\"not_run\",\"reason\":\"the main thread did not run the job within 1.5 s\"", op);
+        logj("\"event\":\"post2\",\"id\":%ld,%s", id, out);
+        return 0; /* the job keeps its reference; it expires by its deadline and posts nothing */
+    }
+    /* read-back the module can do itself: a line's factories (field proven by the game's own add-factories check) */
+    int executed = 0, pending = 0; long long rb_us = -1;
+    if (!strcmp(op, "production.add_factories") && j->posted) {
+        long long start = mono_us();
+        while (mono_us() - start < 3000000) {
+            executed = 0; pending = 0;
+            for (int i = 0; i < j->n; i++) {
+                if (j->res[i] != R_POSTED) continue;
+                int32_t now_f = -1;
+                if (sread(j->obj[i] + g_t.st2.common.line_factories_off, &now_f, 4) && now_f == j->before[i] + (int32_t)j->val[i]) executed++; else pending++;
+            }
+            if (!pending) { rb_us = mono_us() - t0; break; }
+            usleep(1000);
+        }
+        if (pending) {
+            reads_t r; do_reads(&r);
+            if (!(r.ok && r.has_date && r.paused)) { j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "posted; %d of %d not executed after 3 s in a running game", pending, j->posted); }
+            else snprintf(j->reason, sizeof j->reason, "posted; %d not executed yet (game paused)", pending);
+        }
+    }
+    *unexplained = j->unexplained;
+    size_t at = (size_t)snprintf(out, n, "\"op\":\"%s\",\"type_id\":%u,\"objects\":%d,\"posted\":%d,\"refused\":%d,\"executed\":%d,"
+                                 "\"result\":\"%s\",\"reason\":\"%s\",\"main_wait_ms\":%.2f,\"requeues\":%d,\"forbid\":%d,"
+                                 "\"post_us_total\":%lld,\"readback_ms\":%.2f,\"total_ms\":%.2f,\"player_tag_id\":%d,\"per_object\":[",
+                                 op, ct->type_id, j->n, j->posted, j->refused, executed,
+                                 !j->ran ? "not_run" : j->unexplained ? "unexplained" : j->refused ? (j->posted ? "partly_refused" : "refused") : "posted",
+                                 j->reason, j->ran_us / 1000.0, j->requeues, j->forbid, j->post_us, rb_us >= 0 ? rb_us / 1000.0 : -1.0,
+                                 (mono_us() - t0) / 1000.0, j->player_tag);
+    for (int i = 0; i < j->n && at < n; i++)
+        at += (size_t)snprintf(out + at, n - at, "%s{\"obj\":\"0x%llx\",\"result\":\"%s\"%s}", i ? "," : "", (unsigned long long)j->obj[i],
+                               R_NAMES[j->res[i]], "");
+    if (at < n) snprintf(out + at, n - at, "]");
+    logj("\"event\":\"post2\",\"id\":%ld,%s", id, out);
+    int ok = j->ran && !j->unexplained && j->refused == 0 && j->posted == j->n && (pending == 0);
+    job2_release(j);
+    return ok;
+}
+
 static void be_log(const char *members) { logj("%s", members); }
 
 static void *ipc_thread(void *arg) {
     pthread_setname_np("hoi4-live-inproc-ipc");
-    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, killed, be_log};
+    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, be_post2, killed, be_log};
     ipc_serve((const char *)arg, &be, &g_policy);
     return NULL;
 }
@@ -382,7 +640,7 @@ static void *worker(void *arg) {
     }
     int resolved = caps_resolve(&g_im, t);
     long long t1 = now_ms();
-    static char js[16384];
+    static char js[65536];
     logj("\"event\":\"capabilities\",\"resolved\":%d,\"of\":%d,\"scan_ms\":%lld,\"slide\":\"0x%llx\",\"table\":%s",
          resolved, CAP_COUNT, t1 - t0, (unsigned long long)g_slide, caps_json(&g_im, t, js, sizeof js));
     { /* per-build cache, read by `doctor`; the module rescans every start (the scan is cheap), so a stale cache is harmless */
@@ -425,9 +683,18 @@ static void *worker(void *arg) {
         g_policy.post_enabled = 1;
         snprintf(g_policy.post_off_reason, sizeof g_policy.post_off_reason, "on: %s", optin);
     }
-    logj("\"event\":\"post_policy\",\"enabled\":%s,\"reason\":\"%s\",\"allow\":\"%s\",\"min_interval_ms\":%ld,\"max_per_minute\":%d",
-         g_policy.post_enabled ? "true" : "false", g_policy.post_off_reason, IPC_ALLOWED[0], g_policy.min_interval_ms,
-         g_policy.max_per_minute);
+    /* stage 1 (speed) and the stage-2 families: each needs its name in the launcher's opt-in and its scans */
+    g_policy.fam_on[0] = g_policy.post_enabled && ipc_optin_has(optin, "set_game_speed");
+    g_policy.stage2_jobs_per_minute = 600; g_policy.stage2_cmds_per_minute = 2400;
+    for (int i = 1; i < IPC_ALLOWED_COUNT && i < IPC_MAX_FAMILIES; i++) {
+        int named = ipc_optin_has(optin, IPC_ALLOWED[i]), resolved = stage2_family_on(&t->st2, IPC_ALLOWED[i]);
+        g_policy.fam_on[i] = g_policy.post_enabled && named && resolved && t->cap[CAP_STAGE2_COMMON].ok;
+        snprintf(g_policy.fam_reason[i], sizeof g_policy.fam_reason[i], "%s", g_policy.fam_on[i] ? "on" : !g_policy.post_enabled ? "posting off" :
+                 !named ? "not named in the launcher's opt-in" : "a command type of the family did not resolve on this build");
+    }
+    logj("\"event\":\"post_policy\",\"enabled\":%s,\"reason\":\"%s\",\"speed\":%s,\"production\":\"%s\",\"air\":\"%s\",\"min_interval_ms\":%ld,\"max_per_minute\":%d",
+         g_policy.post_enabled ? "true" : "false", g_policy.post_off_reason, g_policy.fam_on[0] ? "true" : "false",
+         g_policy.fam_reason[1], g_policy.fam_reason[2], g_policy.min_interval_ms, g_policy.max_per_minute);
 
     uint64_t *cand; unsigned *refs;
     size_t nc = scan_global_candidates(&g_im, 200, &cand, &refs);

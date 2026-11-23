@@ -15,8 +15,17 @@
 #include <time.h>
 #include <unistd.h>
 
-const char *const IPC_ALLOWED[] = {"set_game_speed"};
-const int IPC_ALLOWED_COUNT = 1;
+const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air"};
+const int IPC_ALLOWED_COUNT = 3;
+const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 0, 0};
+
+int ipc_family_of(const char *op) {
+    const char *dot = op ? strchr(op, '.') : NULL;
+    if (!dot) return -1;
+    for (int i = 1; i < IPC_ALLOWED_COUNT; i++)
+        if ((size_t)(dot - op) == strlen(IPC_ALLOWED[i]) && !strncmp(op, IPC_ALLOWED[i], (size_t)(dot - op))) return i;
+    return -1;
+}
 
 static long long mono_ms(void) {
     struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
@@ -35,6 +44,14 @@ int ipc_optin_valid(const char *list, char *why, size_t n) {
     }
     if (!any) snprintf(why, n, "empty opt-in");
     return any;
+}
+
+int ipc_optin_has(const char *list, const char *name) {
+    if (!list) return 0;
+    char buf[256]; snprintf(buf, sizeof buf, "%s", list);
+    for (char *save = NULL, *tok = strtok_r(buf, ",", &save); tok; tok = strtok_r(NULL, ",", &save))
+        if (!strcmp(tok, name)) return 1;
+    return 0;
 }
 
 /* A strict parser for one flat JSON object of at most `max` members whose values are short strings without escapes
@@ -136,7 +153,22 @@ static int consttime_eq(const char *a, const char *b, size_t n) {
 typedef struct {
     long long last_post, window[64];
     int nwin, in_flight;
+    long long last2, win2[128]; int nwin2, cmds2[128];
 } rate_state;
+
+/* stage 2: at most p->stage2_jobs_per_minute requests and p->stage2_cmds_per_minute commands a minute, 50 ms apart */
+static int rate2_ok(rate_state *r, const ipc_policy *p, int ncmds, char *why, size_t n) {
+    long long now = mono_ms();
+    int k = 0, cmds = 0;
+    for (int i = 0; i < r->nwin2; i++)
+        if (now - r->win2[i] < 60000) { r->win2[k] = r->win2[i]; r->cmds2[k] = r->cmds2[i]; cmds += r->cmds2[k]; k++; }
+    r->nwin2 = k;
+    if (r->in_flight) { snprintf(why, n, "a post is in flight"); return 0; }
+    if (r->last2 && now - r->last2 < 50) { snprintf(why, n, "rate limit: %lld ms since the last request (minimum 50)", now - r->last2); return 0; }
+    if (r->nwin2 >= p->stage2_jobs_per_minute || r->nwin2 >= 128) { snprintf(why, n, "rate limit: %d requests in the last minute", r->nwin2); return 0; }
+    if (cmds + ncmds > p->stage2_cmds_per_minute) { snprintf(why, n, "rate limit: %d commands in the last minute", cmds); return 0; }
+    return 1;
+}
 
 static int rate_ok(rate_state *r, const ipc_policy *p, char *why, size_t n) {
     long long now = mono_ms();
@@ -154,7 +186,7 @@ static int rate_ok(rate_state *r, const ipc_policy *p, char *why, size_t n) {
 
 static void handle(int fd, const ipc_backend *b, ipc_policy *p, rate_state *rs, const char *token) {
     char line[1100]; size_t at = 0; int authed = 0;
-    static char frag[8192], out[9000];
+    static char frag[16384], out[17000];
     for (;;) {
         if (b->killed()) return;
         struct pollfd pf = {fd, POLLIN, 0};
@@ -185,11 +217,17 @@ static void handle(int fd, const ipc_backend *b, ipc_policy *p, rate_state *rs, 
                     char allow[200] = ""; size_t aa = 0;
                     for (int i = 0; i < IPC_ALLOWED_COUNT; i++)
                         aa += (size_t)snprintf(allow + aa, sizeof allow - aa, "%s\"%s\"", i ? "," : "", IPC_ALLOWED[i]);
+                    char fams[900] = ""; size_t fa = 0;
+                    for (int i = 1; i < IPC_ALLOWED_COUNT && i < IPC_MAX_FAMILIES; i++)
+                        fa += (size_t)snprintf(fams + fa, sizeof fams - fa, "%s\"%s\":{\"on\":%s,\"live_passed\":%s,\"reason\":\"%s\"}",
+                                               i > 1 ? "," : "", IPC_ALLOWED[i], p->fam_on[i] ? "true" : "false",
+                                               IPC_LIVE_PASSED[i] ? "true" : "false", p->fam_reason[i]);
                     snprintf(frag, sizeof frag,
                              "\"protocol\":%d,%s,\"post\":{\"enabled\":%s,\"reason\":\"%s\",\"allow\":[%s],"
-                             "\"min_interval_ms\":%ld,\"max_per_minute\":%d}",
+                             "\"min_interval_ms\":%ld,\"max_per_minute\":%d},\"families\":{%s},"
+                             "\"stage2_limits\":{\"max_objects\":32,\"requests_per_minute\":%d,\"commands_per_minute\":%d}",
                              IPC_PROTOCOL, h, p->post_enabled ? "true" : "false", p->post_off_reason, allow,
-                             p->min_interval_ms, p->max_per_minute);
+                             p->min_interval_ms, p->max_per_minute, fams, p->stage2_jobs_per_minute, p->stage2_cmds_per_minute);
                     ok = 1;
                 }
             } else if (authed != 1) err = "hello first";
@@ -197,10 +235,34 @@ static void handle(int fd, const ipc_backend *b, ipc_policy *p, rate_state *rs, 
             else if (!strcmp(op->str, "probe")) ok = b->probe(frag, sizeof frag);
             else if (!strcmp(op->str, "post")) {
                 const ipc_member *c = get(m, nm, "cmd"), *sp = get(m, nm, "speed");
-                int allowed = 0;
-                for (int i = 0; c && !c->is_num && i < IPC_ALLOWED_COUNT; i++) if (!strcmp(c->str, IPC_ALLOWED[i])) allowed = 1;
-                if (!p->post_enabled) { snprintf(why, sizeof why, "posting off: %s", p->post_off_reason); err = why; }
+                int allowed = 0, fam = c && !c->is_num ? ipc_family_of(c->str) : -1;
+                for (int i = 0; c && !c->is_num && i < 1; i++) if (!strcmp(c->str, IPC_ALLOWED[i])) allowed = 1;
+                if (fam > 0) { /* STAGE 2: a family command */
+                    const ipc_member *ob = get(m, nm, "objs"), *va = get(m, nm, "vals"), *o2 = get(m, nm, "obj2"), *fl = get(m, nm, "flag");
+                    int nobj = 0;
+                    if (ob && !ob->is_num && ob->str[0]) { nobj = 1; for (const char *q = ob->str; *q; q++) if (*q == ',') nobj++; }
+                    if (!p->post_enabled) { snprintf(why, sizeof why, "posting off: %s", p->post_off_reason); err = why; }
+                    else if (fam >= IPC_MAX_FAMILIES || !p->fam_on[fam]) { snprintf(why, sizeof why, "family %s off: %s", IPC_ALLOWED[fam], fam < IPC_MAX_FAMILIES ? p->fam_reason[fam] : "?"); err = why; }
+                    else if (!ob || ob->is_num || nobj < 1 || nobj > 32) err = "objs: 1 to 32 comma-separated object addresses";
+                    else if ((va && va->is_num) || (o2 && o2->is_num) || (fl && !fl->is_num)) err = "member types";
+                    else if (!rate2_ok(rs, p, nobj, why, sizeof why)) err = why;
+                    else {
+                        int unexplained = 0;
+                        rs->in_flight = 1;
+                        long long t0 = mono_ms();
+                        ok = b->post2(c->str, ob->str, va ? va->str : "", o2 ? o2->str : "", fl ? fl->num : 0, id, frag, sizeof frag, &unexplained);
+                        rs->in_flight = 0;
+                        rs->last2 = t0;
+                        if (rs->nwin2 < 128) { rs->win2[rs->nwin2] = t0; rs->cmds2[rs->nwin2] = nobj; rs->nwin2++; }
+                        if (unexplained) {
+                            p->fam_on[fam] = 0;
+                            snprintf(p->fam_reason[fam], sizeof p->fam_reason[fam], "switched off after an unexplained refusal");
+                            b->log("\"event\":\"family_off\",\"reason\":\"unexplained refusal\"");
+                        }
+                    }
+                } else if (!p->post_enabled) { snprintf(why, sizeof why, "posting off: %s", p->post_off_reason); err = why; }
                 else if (!allowed) err = "command not on the allow-list";
+                else if (!p->fam_on[0]) err = "set_game_speed not named in the launcher's opt-in";
                 else if (nm != (idm ? 5 : 4)) err = "unexpected members for set_game_speed";
                 else if (!sp || !sp->is_num || sp->num < 0 || sp->num >= p->speed_max) err = "speed out of the scanned range";
                 else if (!rate_ok(rs, p, why, sizeof why)) err = why;

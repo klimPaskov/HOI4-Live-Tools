@@ -51,6 +51,12 @@ int caps_resolve(const scan_image *im, caps_table *t) {
     c->value = t->forbid.accessor; c->extra = t->forbid.desc;
     snprintf(c->evidence, sizeof c->evidence, "%.159s", t->forbid.evidence);
     ok += c->ok;
+    c = &t->cap[CAP_STAGE2_COMMON];
+    c->name = "stage2_common"; snprintf(c->source, sizeof c->source, "scan");
+    int on = scan_stage2(im, &t->post, t->speed.ok ? t->speed.gs_global : 0, &t->st2);
+    c->ok = t->st2.common.ok; c->value = (uint64_t)on; c->extra = (uint64_t)t->st2.n;
+    snprintf(c->evidence, sizeof c->evidence, "%.159s", t->st2.common.evidence);
+    ok += c->ok;
     return ok;
 }
 
@@ -72,5 +78,11 @@ const char *caps_json(const scan_image *im, const caps_table *t, char *buf, size
                  t->speed.speed_field, (unsigned long long)t->speed.gs_global, t->post.ok ? "true" : "false",
                  t->post.gate_flag_off, t->post.gate_slot, t->post.sender_src, t->post.server_off, t->post.send_slot,
                  t->post.auth_slot);
+    if (at < n - 1 && buf[at - 1] == '}') { /* append the stage-2 table inside the object */
+        at--;
+        at += (size_t)snprintf(buf + at, n - at, ",\"stage2\":");
+        if (at < n) { stage2_json(&t->st2, buf + at, n - at); at += strlen(buf + at); }
+        if (at < n) snprintf(buf + at, n - at, "}");
+    }
     return buf;
 }

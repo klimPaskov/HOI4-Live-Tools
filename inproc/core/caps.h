@@ -4,7 +4,7 @@
  * on it runs, and the external runtime keeps serving that need. */
 #ifndef HOI4_INPROC_CAPS_H
 #define HOI4_INPROC_CAPS_H
-#include "cmd.h"
+#include "cmd2.h"
 
 enum {
     CAP_POST,            /* CCommandQueue::Post (not called in stage 0) */
@@ -19,6 +19,8 @@ enum {
     CAP_POST_LAYOUT,     /* what Post checks and stamps: gate slot, sender source, server, auth slot */
     CAP_SPEED_CMD,       /* CSetGameSpeedCommand: layout, range, Post's gate and auth for it, the read-back field */
     CAP_FORBID_TLV,      /* the game's thread-local _ThreadForbidCount accessor */
+    /* stage 2: the generic command builder (core/cmd2.c) */
+    CAP_STAGE2_COMMON,   /* validity slot, Post's executing byte, the per-frame gate's player-tag field, handles */
     CAP_COUNT
 };
 
@@ -36,6 +38,7 @@ typedef struct {
     post_layout post;
     speed_cmd speed;
     forbid_tlv forbid;
+    stage2_table st2;
 } caps_table;
 
 /* Resolve every capability on an image view. Returns the number resolved. */

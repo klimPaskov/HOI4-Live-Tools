@@ -12,16 +12,19 @@ OLD=${2:-$HOI4_VERSIONS/1.19.3-c01a/hoi4.bin}
 V120=${3:-$HOI4_V120}
 [ -f "$NEW" ] && [ -f "$OLD" ] || { echo "usage: test_offline.sh EXE_1_19_4_1 EXE_1_19_3 [EXE_1_20_0_0] (or set HOI4_VERSIONS)"; exit 2; }
 S1=(auth_slot=0x98 speed_type_id=0x2f42 speed_payload=0x24 speed_field=0x47c speed_range=5 speed_gs_global=0x10372b040 forbid_desc=0x103715808)
+# stage 2 (hand-found in the 1.19.4.1 disassembly, 23 Nov e68): 5 command types on; the UI's validity slot; Post's
+# executing byte; the per-frame gate's player-tag field; a line's factories; a region's id
+S2=(stage2_on=5 valid_slot=0x50 exec_flag=0x624 player_tag=0x4d8 line_factories=0xe8 region_id=0x58)
 fail=0
 echo "== 1.19.4.1 f584 ($NEW)"
 ./build/scan_file $NEW command_post=0x10284d4a0 queue_root=0x10372afc0 queue_slot=0x90 \
   research_factory=0x10022bb70 research_vtable=0x1034b7fa8 research_type_id=0x2f70 \
-  gamestate_vtable=0x1035044e8 idler_vtable=0x1035089d8 fields=1 $S1 | grep -E "^expect|resolved" || fail=1
+  gamestate_vtable=0x1035044e8 idler_vtable=0x1035089d8 fields=1 $S1 $S2 | grep -E "^expect|resolved" || fail=1
 [ ${pipestatus[1]} = 0 ] || fail=1
 echo "== 1.19.3 c01a ($OLD): same scans, different addresses; no field table (reads off by design)"
 ./build/scan_file $OLD command_post=0x1026d57a0 queue_root=0x1035196c0 queue_slot=0x90 \
   research_factory=0x100218c50 research_vtable=0x1032ba448 research_type_id=0x2f70 \
-  gamestate_vtable=0x103306260 idler_vtable=0x103308f90 fields=0 auth_slot=0 speed_type_id=0 forbid_desc=0x103505990 \
+  gamestate_vtable=0x103306260 idler_vtable=0x103308f90 fields=0 auth_slot=0 speed_type_id=0 forbid_desc=0x103505990 stage2_on=0 \
   | grep -E "^expect|resolved" || fail=1
 [ ${pipestatus[1]} = 0 ] || fail=1
 echo "   (1.19.3's Post has no authorisation step: post_layout and speed_command stay OFF there, by design)"
@@ -30,14 +33,14 @@ if [ -f "$V120" ]; then
   ./build/scan_file $V120 command_post=0x1028505d0 queue_root=0x103730150 queue_slot=0x90 research_factory=0x10022c2b0 \
     research_vtable=0x1034bc180 research_type_id=0x2f70 gamestate_vtable=0x103508988 idler_vtable=0x10350cea0 fields=0 \
     auth_slot=0xa0 speed_type_id=0x2f42 speed_payload=0x24 speed_field=0x47c speed_range=5 speed_gs_global=0x1037301d0 \
-    forbid_desc=0x10371a988 | grep -E "^expect|resolved" || fail=1
+    forbid_desc=0x10371a988 $S2 | grep -E "^expect|resolved" || fail=1
   [ ${pipestatus[1]} = 0 ] || fail=1
 fi
 
 echo "== 1.19.4.1 through the PROCESS view (segments laid out at a nonzero slide, as dyld maps them)"
 SCAN_AS_PROCESS=1 ./build/scan_file $NEW command_post=0x10284d4a0 queue_root=0x10372afc0 queue_slot=0x90 \
   research_factory=0x10022bb70 research_vtable=0x1034b7fa8 research_type_id=0x2f70 \
-  gamestate_vtable=0x1035044e8 idler_vtable=0x1035089d8 fields=1 $S1 2>&1 | grep -E "^expect|resolved|process view" || fail=1
+  gamestate_vtable=0x1035044e8 idler_vtable=0x1035089d8 fields=1 $S1 $S2 2>&1 | grep -E "^expect|resolved|process view" || fail=1
 [ ${pipestatus[1]} = 0 ] || fail=1
 
 echo "== load test: stand-in host, not the game"
