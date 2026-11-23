@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+The agent can learn what no tool defines, a total-conversion mod above all ([guide](docs/LEARNING.md)):
+
+- `hoi4_ui_inspect` reads every open window from the game's interface memory: each widget's stable id (its
+  `.gui` names), kind, place on screen, greyed or not, text, and what the game's and the mod's files say about
+  it (tooltip text; for a mod's scripted button the effect, what it spends, whether it can be undone).
+- `hoi4_ui_act` clicks, right/shift/ctrl-clicks, hovers or scrolls one widget by id under the input lease and
+  answers what changed: windows and widgets, and the country's numbers. A click that spends something or
+  cannot be undone needs `confirm_irreversible`, a pop-up's button `answer_dialog`.
+- Skills: `hoi4_skill_save / list / show / run / retire` and `hoi4_fact_save / list` keep what worked as plain
+  JSON files in `learned/` (one file per skill), stamped with the game version and mod set; a skill whose
+  panel is gone is marked stale and refused.
+- Plans: the `learned` key runs saved skills on the executor's lane (when, max, every_days).
+- The player brief says how to learn a panel no tool knows; the situation report names alert icons no tool
+  manages.
+
 What a mod adds, in one read: `facts.py mod-diff` compares the merged game of the enabled mods with the plain
 game and names the new resources, buildings, decision categories, ideologies, focus trees, the mod's own panels
 (scripted interfaces: their buttons, what a click spends, whether it can be undone), map and defines changes,

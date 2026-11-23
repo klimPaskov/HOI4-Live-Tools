@@ -249,6 +249,11 @@
 //!                          targeted decision (hoi4_decision_take target); `max` successful takes at most
 //!                          (done-memory by id); "never": true blocks the decision in every path, the
 //!                          `decisions` list included (`decision_forbidden`)
+//!   learned                [{"id"?,"skill","args"?,"when"?,"max"?,"every_days"?,"confirm_irreversible"?}]:
+//!                          a skill the player learned and saved (hoi4_skill_save) runs with
+//!                          hoi4_skill_run when `when` holds, at most `max` successful runs (done-memory
+//!                          by id), at most once every `every_days` (default 7); a failed or refused run
+//!                          waits 3 days and counts in the failure ledger like any order
 //!   event_rules            [{"event","option_name","when" (or "condition")?,"else_option_name"?,
 //!                          "fallback_option_name"?,"fallback_index"?}]: the first rule of the open event
 //!                          whose condition holds picks the option whose text or script name
@@ -391,6 +396,7 @@ pub fn arg_built(tool: &str, arg: &str) -> bool {
 /// orders, shakedown sk2). `act` refuses any tool not listed here; a test checks every tool
 /// named at an `act` call is listed. Add a tool only once its handler journals a receipt.
 pub const RECEIPT_TOOLS: &[&str] = &[
+    "hoi4_skill_run",
     "hoi4_army_fallback",
     "hoi4_army_exercise",
     "hoi4_production_priority",
@@ -2635,12 +2641,13 @@ const LANE_MAX_WAIT: GameHour = DAY;
 /// choosin a research, spending pp, etc"). HEAVY: many inputs or reads, or orders whose timing
 /// matters within a day: speed 3 from its first action until it has been quiet for a while.
 /// A lane not listed is heavy. (lane, minor, why)
-pub(super) const LANE_WEIGHT: [(&str, bool, &str); 47] = [
+pub(super) const LANE_WEIGHT: [(&str, bool, &str); 48] = [
     ("research", true, "one pick in the research view"),
     ("focus", true, "one pick in the focus tree"),
     ("politics", true, "a law, advisor or idea: one pick"),
     ("officer_corps", true, "one officer-corps pick"),
     ("decisions", true, "one decision: one click"),
+    ("learned", false, "a learned skill: up to twelve steps"),
     ("extras", true, "a doctrine or a special project: one pick"),
     ("mio", true, "a design company assigned: one pick"),
     ("mio_traits", true, "a design company trait: one pick"),
@@ -2820,6 +2827,7 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
     out.push(("extras", extras_step));
     // `decision_rules` (guarded, targeted, counted, never-take) before the plain `decisions` list
     out.push(("decisions", decisions_step));
+    out.push(("learned", learned_step));
     out.push(("training", |state, tools, plan, lease, now| {
         // one template or a list, with training_rules (plan_manage.rs)
         if plan["training"].is_null() {
@@ -9602,6 +9610,53 @@ fn decisions_step(
             state.skip(now, "dec", key, if ok { 30 * DAY } else { 3 * DAY });
             return Ok(Some(format!("decision {key}: {ok} {why}")));
         }
+    }
+    Ok(None)
+}
+
+/// `learned`: skills the player learned on panels no typed tool knows (a mod's mechanics) join
+/// routine play: each rule runs its skill with hoi4_skill_run when `when` holds, at most `max`
+/// successful runs and at most once every `every_days` game days (default 7). One run per tick.
+fn learned_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    for (index, rule) in list(plan, "learned").iter().enumerate() {
+        let skill = text(&rule["skill"]).to_string();
+        if skill.is_empty() {
+            continue;
+        }
+        let id = item_id(rule).unwrap_or_else(|| format!("{index}:{skill}"));
+        let prefix = format!("learned:{id}#");
+        let runs = state.done.keys().filter(|k| k.starts_with(&prefix)).count();
+        if rule["max"].as_u64().is_some_and(|max| runs as u64 >= max) {
+            continue;
+        }
+        if state.skipped(now, "learned", &id) {
+            continue;
+        }
+        if !rule["when"].is_null() && !judge(state, tools, &rule["when"], now).is_true() {
+            continue;
+        }
+        let mut args = json!({"name": skill});
+        if rule["args"].is_object() {
+            args["args"] = rule["args"].clone();
+        }
+        if rule["confirm_irreversible"] == json!(true) {
+            args["confirm_irreversible"] = json!(true);
+        }
+        let (ok, why) = state.act(tools, lease, "hoi4_skill_run", args, "ls")?;
+        let every = rule["every_days"].as_u64().unwrap_or(7).clamp(1, 365) as GameHour;
+        state.skip(now, "learned", &id, if ok { every * DAY } else { 3 * DAY });
+        if ok {
+            state.done.insert(format!("learned:{id}#{}", runs + 1), now);
+        }
+        return Ok(Some(format!(
+            "learned skill {skill} (rule {id}): {ok} {why}"
+        )));
     }
     Ok(None)
 }
@@ -19500,6 +19555,42 @@ mod tests {
         let later = game(json!(["ITA"]));
         tick(&mut state, &later, &plan, "l", START + 40 * DAY).unwrap();
         assert!(actions(&later).is_empty(), "max 1 reached");
+    }
+
+    #[test]
+    fn learned_rules_run_a_saved_skill_when_due_and_stop_at_max() {
+        let plan = json!({"learned": [{"id": "water", "skill": "buy_water", "args": {"amount": 2},
+            "when": "at_war_with:ITA", "max": 2, "every_days": 10, "confirm_irreversible": true}]});
+        let game =
+            |enemies: Value| fake(vec![("hoi4_wars", json!({"wars": {"enemies": enemies}}))]);
+        let mut state = State::default();
+        let peace = game(json!([]));
+        tick(&mut state, &peace, &plan, "l", START).unwrap();
+        assert!(
+            !names(&peace).contains(&"hoi4_skill_run".to_string()),
+            "when is false"
+        );
+        let war = game(json!(["ITA"]));
+        assert_eq!(
+            acted(tick(&mut state, &war, &plan, "l", START + DAY).unwrap()),
+            "learned skill buy_water (rule water): true Verified"
+        );
+        let sent = &actions(&war)[0];
+        assert_eq!(sent.0, "hoi4_skill_run");
+        assert_eq!(sent.1["args"]["amount"], 2);
+        assert_eq!(sent.1["confirm_irreversible"], true);
+        let soon = game(json!(["ITA"]));
+        tick(&mut state, &soon, &plan, "l", START + 5 * DAY).unwrap();
+        assert!(
+            !names(&soon).contains(&"hoi4_skill_run".to_string()),
+            "every_days 10"
+        );
+        let again = game(json!(["ITA"]));
+        tick(&mut state, &again, &plan, "l", START + 12 * DAY).unwrap();
+        assert_eq!(actions(&again).len(), 1);
+        let done = game(json!(["ITA"]));
+        tick(&mut state, &done, &plan, "l", START + 40 * DAY).unwrap();
+        assert!(actions(&done).is_empty(), "max 2 reached");
     }
 
     #[test]

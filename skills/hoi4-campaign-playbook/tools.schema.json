@@ -2281,6 +2281,42 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_fact_list": {
+   "description": "Read-only: the saved facts, optionally only those whose statement contains a word. Example: {\"contains\": \"water\"}",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "contains": {
+      "maxLength": 100,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_fact_save": {
+   "description": "Keep one fact learned about this game or mod (a statement and where it comes from: a file path or what was seen) in learned/facts.json with the game version and mod set. A repeated statement is kept once. Example: {\"statement\": \"Water is bought in the caps panel for 25 political power\", \"source\": \"common/scripted_guis/caps.txt\"}",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "source": {
+      "maxLength": 300,
+      "type": "string"
+     },
+     "statement": {
+      "maxLength": 500,
+      "type": "string"
+     }
+    },
+    "required": [
+     "statement",
+     "source"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_faction_create": {
    "description": "UNVALIDATED (no live test yet): Create a faction through the ordinary windows: the top bar faction button (ctrl+Q) opens the New Faction window with its templates (name, manifest, rule, goal), the chosen template's card, Create Faction, then the setup window: the name typed key by key into the name box (each key verified), optional `invite` country names picked in the Invite Countries window, and Create Faction. Refused with already_in_faction (read from memory) before any input; capability_unavailable when the top bar shows no faction button (the 'can create factions' rule is missing); template_required / template_unknown (offered templates listed, after the window was opened and closed again), invite_country_not_listed, button_disabled. Verified by the player being in a faction (named as asked) in memory. Windows are closed afterwards. Result has validated:false.",
    "inputSchema": {
@@ -4354,6 +4390,215 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_skill_list": {
+   "description": "Read-only: the saved skills (name, purpose, parameters, status active/stale/retired, runs that worked and failed, whether it can run on this game version and mod set) and the current mod set. No input. Example: {}",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_skill_retire": {
+   "description": "Mark a saved skill retired (kept on disk, never run again) with the reason. Example: {\"name\": \"open_caps_trade\", \"reason\": \"the mod removed this panel\"}",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "pattern": "^[a-z0-9_]{3,64}$",
+      "type": "string"
+     },
+     "reason": {
+      "maxLength": 300,
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "reason"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_skill_run": {
+   "description": "Run a saved skill: checks it may run here (not retired or stale, learned on this game version and mod set unless revalidate:true), that its required windows and widgets are on screen (a missing one marks it stale and refuses), runs its steps through the ordinary tools with this lease, then its verify checks; the run is counted in the skill file. A skill with reversible:false needs confirm_irreversible:true. Typed refusals: skill_not_found, skill_refused, skill_stale, irreversible_needs_confirmation, invalid_arguments (a missing parameter); skill_step_failed names the step. Example: {\"name\": \"open_caps_trade\", \"args\": {}, \"request_id\": \"r2\", \"lease_token\": \"...\"}",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "args": {
+      "description": "the skill's parameters by name",
+      "type": "object"
+     },
+     "confirm_irreversible": {
+      "type": "boolean"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "name": {
+      "pattern": "^[a-z0-9_]{3,64}$",
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "revalidate": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "name",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_skill_save": {
+   "description": "Keep something that worked as a named skill (a plain JSON file in the learned/skills folder, one per skill, readable and editable): name, purpose, parameters, the windows/widgets that must be on screen before it starts (requires), its steps (tool calls; \"{param}\" in a string is replaced by the run's argument; leave out request_id and lease_token), the proofs that it worked (verify), cost and whether one click can undo it (reversible). The game version and mod set are stamped on it. Refused with what to fix: invalid_skill; skill_exists (replace:true overwrites). Example: {\"skill\": {\"name\": \"open_caps_trade\", \"purpose\": \"Open the mod's caps trade panel\", \"steps\": [{\"tool\": \"hoi4_ui_act\", \"args\": {\"widget\": \"topbar/caps_button\"}}], \"verify\": [{\"check\": \"window_opens\", \"id\": \"caps_window\"}], \"cost\": \"nothing\", \"reversible\": true}}",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "replace": {
+      "type": "boolean"
+     },
+     "skill": {
+      "properties": {
+       "cost": {
+        "type": "string"
+       },
+       "evidence": {
+        "type": "string"
+       },
+       "name": {
+        "pattern": "^[a-z0-9_]{3,64}$",
+        "type": "string"
+       },
+       "parameters": {
+        "description": "parameter name -> what to pass",
+        "type": "object"
+       },
+       "purpose": {
+        "maxLength": 400,
+        "type": "string"
+       },
+       "requires": {
+        "additionalProperties": false,
+        "properties": {
+         "widgets": {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "windows": {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         }
+        },
+        "type": "object"
+       },
+       "reversible": {
+        "type": "boolean"
+       },
+       "steps": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "args": {
+           "type": "object"
+          },
+          "note": {
+           "type": "string"
+          },
+          "tool": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "tool"
+         ],
+         "type": "object"
+        },
+        "maxItems": 12,
+        "minItems": 1,
+        "type": "array"
+       },
+       "verify": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "check": {
+           "enum": [
+            "window_opens",
+            "window_closes",
+            "widget_changes",
+            "read_changes"
+           ],
+           "type": "string"
+          },
+          "direction": {
+           "enum": [
+            "up",
+            "down",
+            "any"
+           ],
+           "type": "string"
+          },
+          "id": {
+           "type": "string"
+          },
+          "path": {
+           "type": "string"
+          },
+          "tool": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "check"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "name",
+       "purpose",
+       "steps"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "skill"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_skill_show": {
+   "description": "Read-only: one saved skill in full (steps, requires, verify, cost, where it was learned, its runs) and why it cannot run here if it cannot. Example: {\"name\": \"open_caps_trade\"}",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "pattern": "^[a-z0-9_]{3,64}$",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_special_project_assign": {
    "description": "Put a scientist and/or a project into one own research facility with ordinary input: Research panel (W), Experimental Facilities tab, the facility card's scientist portrait and the roster row, then the facility icon, the project entry and Start. Give scientist (name as listed by hoi4_special_projects) and/or project (key, e.g. sp_air_radar); a project needs a scientist already in the facility or passed together. Verified from memory when the facility's own scientist and project slots hold them. Starting a project spends breakthrough points of its specialization. Refused before any input: facility_unknown, unknown_scientist (closest names), scientist_wrong_specialization, scientist_busy, unknown_project, project_wrong_specialization, project_busy, facility_has_project, scientist_required, already_assigned. Refused at the screen without starting: scientist_not_offered, project_not_offered, project_not_startable. Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).",
    "inputSchema": {
@@ -5044,6 +5289,93 @@
      "request_id",
      "lease_token"
     ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_ui_act": {
+   "description": "One ordinary input on a widget by its id from hoi4_ui_inspect, then what changed: `changed` (windows opened or closed, widgets shown, hidden, enabled, disabled, new text) and `state_changed` (political power, stability, war support, manpower, factories, resources, alerts with their deltas). Refused before any input: widget_not_found / widget_ambiguous (with candidates), widget_forbidden (console and debug controls), widget_hidden, widget_disabled, widget_without_rectangle; irreversible_needs_confirmation when the files say the click spends something or cannot be undone (pass confirm_irreversible:true only when you mean it); dialog_needs_answer_flag for a pop-up's buttons (answer_dialog:true). action: click (default), right_click, shift_click, ctrl_click, hover (rest the cursor on it), scroll_up, scroll_down; times repeats a click (1-10). When it worked, keep it with hoi4_skill_save. Example: {\"widget\": \"topbar/decisionview_button\", \"action\": \"click\", \"request_id\": \"r1\", \"lease_token\": \"...\"}",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "default": "click",
+      "enum": [
+       "click",
+       "right_click",
+       "shift_click",
+       "ctrl_click",
+       "hover",
+       "scroll_up",
+       "scroll_down"
+      ],
+      "type": "string"
+     },
+     "answer_dialog": {
+      "type": "boolean"
+     },
+     "confirm_irreversible": {
+      "type": "boolean"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "times": {
+      "default": 1,
+      "maximum": 10,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "wait_ms": {
+      "default": 700,
+      "description": "how long to wait before reading what changed",
+      "maximum": 5000,
+      "minimum": 200,
+      "type": "integer"
+     },
+     "widget": {
+      "description": "widget id from hoi4_ui_inspect (or a name only one shown widget has)",
+      "maxLength": 400,
+      "type": "string"
+     }
+    },
+    "required": [
+     "widget",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_ui_inspect": {
+   "description": "Read-only: every open window and its widgets from the game's interface memory, for panels no other tool knows (a mod's own mechanics, a new DLC). Each widget has a stable `id` (the path of .gui element names, e.g. \"topbar/decisionview_button\"; `#n` numbers repeated names, `#n` below a grid numbers its entries), `kind` (button, icon, text, container, grid, ...), `at` [x,y,w,h] on screen when known, `enabled:false` when the game greys it out, `text` for text boxes, and `script`: what the game's and the mod's interface files say (tooltip text, the scripted effect a mod's button runs, what it spends, what cannot be undone). Pass `window` (a window id or a widget id) to read one panel; `all:true` adds hidden widgets. No input, no lease, never pauses. Example: {\"window\": \"topbar\"}",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "all": {
+      "description": "also list hidden widgets (default false)",
+      "type": "boolean"
+     },
+     "hidden_windows": {
+      "description": "also list windows the game keeps hidden (default false)",
+      "type": "boolean"
+     },
+     "max": {
+      "default": 400,
+      "maximum": 3000,
+      "minimum": 20,
+      "type": "integer"
+     },
+     "window": {
+      "description": "a window id from an earlier reading, or a widget id to read only that subtree",
+      "maxLength": 400,
+      "type": "string"
+     }
+    },
     "type": "object"
    },
    "source": "--list-tools"

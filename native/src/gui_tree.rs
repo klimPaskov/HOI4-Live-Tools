@@ -196,6 +196,17 @@ pub(crate) fn container(r: &Reader<'_>, pointer: u64, image: u64) -> Result<Opti
     let object = pointer.wrapping_sub(l.container_base);
     Ok((r.u64(object)? == image + l.container_vtable).then_some(object))
 }
+/// Short class of a widget from its primary vtable: "icon", "button" or "checkbox" for the
+/// reviewed renderer classes, "container" for a container window, else None (unknown class).
+pub(crate) fn class_of(r: &Reader<'_>, image: u64, base: u64) -> Option<&'static str> {
+    let l = layout(r).ok()?;
+    let primary = r.u64(base).ok()?;
+    if let Some(i) = l.renderers.iter().position(|(vt, _)| image + vt == primary) {
+        return ["icon", "button", "checkbox"].get(i).copied();
+    }
+    let object = base.wrapping_sub(l.container_base);
+    (r.u64(object).ok()? == image + l.container_vtable).then_some("container")
+}
 /// Whether any widget (by GUI-object base) is shown.
 pub(crate) fn shown(r: &Reader<'_>, base: u64) -> Result<bool> {
     let l = layout(r)?;
@@ -502,6 +513,14 @@ mod tests {
             child(&r, IMAGE, 0x20_0000, "pol_power_value_bg").unwrap(),
             Some(0x21_0000)
         );
+    }
+    #[test]
+    fn classes_of_reviewed_widgets_and_containers() {
+        let m = topbar();
+        let r = Reader::new(&m);
+        assert_eq!(class_of(&r, IMAGE, 0x21_0000), Some("icon"));
+        assert_eq!(class_of(&r, IMAGE, 0x20_0030), Some("container"));
+        assert_eq!(class_of(&r, IMAGE, 0x25_0000), None);
     }
     #[test]
     fn hidden_containers_and_unknown_names_are_reported() {
