@@ -746,7 +746,7 @@ fn close_menu_drawn(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
         return Ok(());
     }
     let Ok((rect, _)) = settled(process, "save button", menu_save_button) else {
-        return close_menu(process, keys);
+        return close_menu_now(process, keys);
     };
     let at = near_left(rect);
     let away = (f64::from(rect.x) - 8.0, at.1);
@@ -769,7 +769,7 @@ fn close_menu_drawn(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     }
     keys.scroll((1920, 1080), at, 0)?;
     if holds(true, 700)? {
-        close_menu(process, keys)?;
+        close_menu_now(process, keys)?;
     }
     Ok(())
 }
@@ -878,7 +878,18 @@ pub(super) fn menus_closed() -> u64 {
 pub(super) fn menu_shown(process: &dyn Process) -> bool {
     read(process, menu_open).unwrap_or(false)
 }
+/// Close the game menu only when it is really on screen: its shown flag can read open while
+/// nothing is drawn (v55w), and an Escape then OPENS the menu, which the save's own menu
+/// button click toggled shut again (v65c frame bursts, 23 Nov 2026: menu drawn at 0.50 s, gone
+/// at 0.82 s, the Save click on the map).
 pub(super) fn close_menu(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+    if !read(process, menu_open)? {
+        return Ok(());
+    }
+    close_menu_drawn(process, keys)
+}
+/// Escape the game menu on its shown flag alone (callers have proved it is drawn).
+fn close_menu_now(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     let _phase = crate::phase::enter("close");
     if read(process, menu_open)? {
         MENUS_CLOSED.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
