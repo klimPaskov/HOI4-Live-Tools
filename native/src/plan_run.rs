@@ -669,6 +669,8 @@ pub struct State {
     /// country has gained some (a refusal is usually a missing few points).
     pol_pp_at_fail: HashMap<String, f64>,
     centers: HashMap<i32, (f64, f64)>,
+    /// Country tags whose state centres were read into `centers` in this server life.
+    centre_tags: HashSet<String>,
     con: ConState,
     /// stop_on_date: (target hour, outcome of the single pause attempt)
     date_stop: Option<(i64, String)>,
@@ -847,6 +849,7 @@ impl Default for State {
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
             centers: HashMap::new(),
+            centre_tags: HashSet::new(),
             con: ConState::default(),
             date_stop: None,
             stages: Stages::default(),

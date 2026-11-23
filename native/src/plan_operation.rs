@@ -1196,9 +1196,10 @@ fn line_tag(line: &[i64]) -> String {
 /// Map centres of the operation's enemies' states (read once per enemy).
 fn learn_centres(state: &mut State, tools: &dyn Tools, tags: &[String]) {
     for tag in tags {
-        let k = format!("op_centres:{tag}");
-        // (the centres live in this server life: after a restart they are read again)
-        if tag.is_empty() || (state.done.contains_key(&k) && !state.centers.is_empty()) {
+        // the centres live in this server life: a tag is read once per life (the done key a
+        // continued campaign carries in plan_state said "read" while this life had read only the
+        // enemy's states, so the own front states had no centre and group_cap never split: w42s)
+        if tag.is_empty() || state.centre_tags.contains(tag) {
             continue;
         }
         if let Ok(read) = tools.call("hoi4_states", &json!({"query": tag})) {
@@ -1211,7 +1212,7 @@ fn learn_centres(state: &mut State, tools: &dyn Tools, tags: &[String]) {
                     state.centers.insert(id as i32, (x, z));
                 }
             }
-            state.done.insert(k, 0);
+            state.centre_tags.insert(tag.clone());
         }
     }
 }
@@ -2901,10 +2902,11 @@ fn prepare(
     // days' march from its first objective (qc1/qc2, 19 Nov 2026: Panzergruppe Ost formed in
     // Pomerania for a Lodz row and went by the Danzig corridor). Until it stands there the
     // operation is not ready (the declaration waits, at most its own cap).
-    if !war_tags(wars)
-        .iter()
-        .any(|t| units.iter().any(|u| &u.enemy == t))
-    {
+    // before the war on the OPERATION's enemies: a hold's enemy may be at war already (the
+    // Westwall hold faces France from September 1939: with it counted, no march ever went out and
+    // both Panzergruppen stood in Poland and Slovakia until the war in the West, g17n and w42s)
+    let op_enemies = strings(op, "enemies");
+    if !war_tags(wars).iter().any(|t| op_enemies.contains(t)) {
         for u in units.iter().filter(|u| u.role == Role::Strike || u.spear) {
             let Some(start) = u.own_states.first().copied() else {
                 continue;

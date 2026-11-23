@@ -2254,3 +2254,23 @@ fn a_plan_click_off_the_border_gives_way_to_a_border_state() {
     let u = unit("Army Group 2".into(), Role::Group, &front, &json!({}));
     assert_eq!(click_state(&st, &json!({}), &u), Some(980));
 }
+
+#[test]
+fn a_strike_formation_marches_while_only_a_holds_enemy_is_at_war() {
+    // g17n and w42s (23 Nov 2026): the Westwall hold faces France, at war since September 1939;
+    // counted as the operation's war, no march went out and the armour stood in the East
+    let game = Game::new();
+    *game.enemies.borrow_mut() = vec!["FRA"];
+    let mut plan = plan();
+    plan["operations"][0]["formations"][2]["drive"] = json!("strike");
+    let mut state = State::default();
+    game.unit("Panzer", |r| r["states"] = json!({"71": 24}));
+    burst(&mut state, &game, &plan, START);
+    let marches: Vec<Value> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, a)| n == "hoi4_army_move" && a["army"] == json!("Panzer"))
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(marches, [json!({"army": "Panzer", "state_id": 67})]);
+}
