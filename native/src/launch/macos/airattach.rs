@@ -99,7 +99,9 @@ pub(super) fn attach(
         let _ = super::air::deselect(process, keys);
         let mut row = match row {
             Ok(v) => v,
-            Err(e) => json!({"wing": wing, "attached": false, "error": e.code, "message": e.message}),
+            Err(e) => {
+                json!({"wing": wing, "attached": false, "error": e.code, "message": e.message})
+            }
         };
         if let (Some(b), Some(a)) = (before, wing_words(process, wing)) {
             row["changed_words"] = json!(changed_words(&b, &a));

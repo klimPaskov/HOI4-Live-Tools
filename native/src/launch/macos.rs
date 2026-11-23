@@ -4752,7 +4752,9 @@ impl MacClock {
                 .iter()
                 .map(|v| {
                     v.as_str()
-                        .filter(|t| !t.is_empty() && t.len() <= 128 && !t.chars().any(char::is_control))
+                        .filter(|t| {
+                            !t.is_empty() && t.len() <= 128 && !t.chars().any(char::is_control)
+                        })
                         .map(str::to_string)
                         .ok_or_else(|| Error::new("invalid_arguments", "Invalid wing name"))
                 })
