@@ -5296,7 +5296,9 @@ impl MacClock {
                             *mask,
                             &mut reread,
                         ),
-                        Air::Rebase { .. } => inproc::air_rebase(ch, &bases, &wings, &rebase_plans),
+                        Air::Rebase { .. } => {
+                            inproc::air_rebase(ch, &bases, &wings, &rebase_plans, &mut reread)
+                        }
                         _ => inproc::Routed::Gui,
                     };
                     match done {

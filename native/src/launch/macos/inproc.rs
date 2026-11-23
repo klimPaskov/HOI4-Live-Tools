@@ -400,8 +400,10 @@ pub(super) fn air_rebase(
     bases: &[super::airread::Base],
     wings: &[super::airread::Wing],
     plans: &[super::airact::RebasePlan],
+    reread: &mut dyn FnMut() -> Option<Vec<super::airread::Wing>>,
 ) -> Routed {
     let mut by_base: Vec<(u64, Vec<u64>)> = Vec::new();
+    let mut want: Vec<(u64, i32)> = Vec::new();
     for p in plans {
         let Some(w) = wings.iter().find(|w| w.name == p.wing && w.address != 0) else {
             return Routed::Gui;
@@ -415,6 +417,7 @@ pub(super) fn air_rebase(
         else {
             return Routed::Gui;
         };
+        want.push((w.address, p.to_base_id));
         match by_base.iter_mut().find(|(a, _)| *a == b.address) {
             Some((_, list)) => list.push(w.address),
             None => by_base.push((b.address, vec![w.address])),
@@ -433,7 +436,32 @@ pub(super) fn air_rebase(
         }
         replies.push(r);
     }
+    // the call's read-back follows at once: return only once the game has executed every transfer (read right after
+    // the post, one of two wings still showed no transfer and the call closed Diverged, s2g 24 Nov 2026)
+    if !want.is_empty() {
+        let start = std::time::Instant::now();
+        let mut seen = false;
+        while start.elapsed() < MISSION_BIT_WAIT {
+            if reread().is_some_and(|now| transfers_executed(&now, &want)) {
+                seen = true;
+                break;
+            }
+            std::thread::sleep(MISSION_BIT_POLL);
+        }
+        replies.push(
+            json!({"transfers_executed":seen,"waited_ms":start.elapsed().as_millis() as u64}),
+        );
+    }
     Routed::Done(json!({"backend":"inprocess","module":replies}))
+}
+
+/// True when every (wing address, base id) pair shows the wing at that base or on its way to it.
+pub(super) fn transfers_executed(wings: &[super::airread::Wing], want: &[(u64, i32)]) -> bool {
+    want.iter().all(|(a, base)| {
+        wings
+            .iter()
+            .any(|w| w.address == *a && (w.base_id == *base || w.transfer_base_id == *base))
+    })
 }
 
 #[cfg(test)]
@@ -540,6 +568,13 @@ mod tests {
             7
         ));
         assert!(!regions_executed(&[there, wing(0x20, 1)], &[0x10, 0x20], 7));
+        let mut moving = wing(0x10, 1);
+        moving.transfer_base_id = 5;
+        assert!(transfers_executed(&[moving.clone()], &[(0x10, 5)]));
+        assert!(!transfers_executed(
+            &[moving, wing(0x20, 1)],
+            &[(0x10, 5), (0x20, 5)]
+        ));
     }
 
     #[test]
