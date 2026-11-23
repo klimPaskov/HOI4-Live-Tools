@@ -403,6 +403,7 @@ pub const BULK_PATHS: &[(&str, &str)] = &[
     ("hoi4_air_mission", "air_base_select"),
     ("hoi4_air_rebase", "air_base_select"),
     ("hoi4_mio_trait", "mio_queue_many"),
+    ("hoi4_construction_add", "construction_fill"),
 ];
 /// The `manage.bulk` name of a tool's bulk path.
 fn bulk_path_of(tool: &str) -> Option<&'static str> {
@@ -5631,13 +5632,12 @@ fn construction_step(
             .min(state.con.cap.get(&id).copied().unwrap_or(want))
             .min(known_free.unwrap_or(want))
             .max(1);
-        let (ok, why) = state.act(
-            tools,
-            lease,
-            "hoi4_construction_add",
-            json!({"building": building, "state_id": id, "count": count}),
-            "co",
-        )?;
+        let mut args = json!({"building": building, "state_id": id, "count": count});
+        // every free slot of the state at once: one Shift+Click (manage.bulk construction_fill)
+        if count > 1 && known_free == Some(count) && state.bulk_on("construction_fill") {
+            args["fill"] = json!(true);
+        }
+        let (ok, why) = state.act(tools, lease, "hoi4_construction_add", args, "co")?;
         state.con.rr += 1;
         if !ok && why.starts_with("skipped") {
             // the order rests on its own failure memory and sent no input: it does not take
@@ -11684,6 +11684,8 @@ mod tests {
         slots: HashMap<i64, u32>,
         full: Vec<i64>,
         added: RefCell<Vec<(i64, i64)>>,
+        /// states ordered with fill (one Shift+Click for every free slot)
+        filled: RefCell<Vec<i64>>,
         probe_fails: bool,
         own: Vec<i64>,
     }
@@ -11693,6 +11695,7 @@ mod tests {
                 slots: HashMap::new(),
                 full: vec![],
                 added: RefCell::new(vec![]),
+                filled: RefCell::new(vec![]),
                 probe_fails: false,
                 own: vec![],
             }
@@ -11746,6 +11749,9 @@ mod tests {
                     self.added
                         .borrow_mut()
                         .push((id, args["count"].as_i64().unwrap()));
+                    if args["fill"] == json!(true) {
+                        self.filled.borrow_mut().push(id);
+                    }
                     Ok(json!({"receipt": {"status": "Verified"}}))
                 }
                 _ => Ok(json!({})),
@@ -11757,6 +11763,30 @@ mod tests {
             Tick::Acted(s) => s,
             other => panic!("expected an action, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn with_the_bulk_path_a_state_s_every_free_slot_goes_in_one_shift_click() {
+        let mut b = Builder::new();
+        b.slots = [(60, 3)].into();
+        let plan = json!({"manage": {"bulk": ["construction_fill"]},
+            "construction": [{"building": "arms_factory", "states": [60], "count": 3}]});
+        let mut state = State::default();
+        let first = acted(tick(&mut state, &b, &plan, "l", START).unwrap());
+        assert!(first.starts_with("construct arms_factory 60: true"), "{first}");
+        assert_eq!(b.added.borrow().as_slice(), &[(60, 3)]);
+        assert_eq!(b.filled.borrow().as_slice(), &[60]);
+        // off (the default): the same count by single clicks
+        let b = {
+            let mut b = Builder::new();
+            b.slots = [(60, 3)].into();
+            b
+        };
+        let plan = json!({"construction": [{"building": "arms_factory", "states": [60], "count": 3}]});
+        let mut state = State::default();
+        acted(tick(&mut state, &b, &plan, "l", START).unwrap());
+        assert_eq!(b.added.borrow().as_slice(), &[(60, 3)]);
+        assert!(b.filled.borrow().is_empty());
     }
 
     #[test]
