@@ -395,6 +395,28 @@ pub fn arg_built(tool: &str, arg: &str) -> bool {
 /// without receipts repeats each success until the game refuses it (railway and construction
 /// orders, shakedown sk2). `act` refuses any tool not listed here; a test checks every tool
 /// named at an `act` call is listed. Add a tool only once its handler journals a receipt.
+/// The tools with a bulk path and the `manage.bulk` name that turns it on. Every path is off
+/// until its live probe passes (docs/LIVE_VALIDATION_QUEUE.md, BATCHING PROBES).
+pub const BULK_PATHS: &[(&str, &str)] = &[
+    ("hoi4_production_set", "production_chords"),
+    ("hoi4_production_add", "production_chords"),
+];
+/// The `manage.bulk` name of a tool's bulk path.
+fn bulk_path_of(tool: &str) -> Option<&'static str> {
+    BULK_PATHS.iter().find(|(t, _)| *t == tool).map(|(_, p)| *p)
+}
+/// The bulk paths a plan turns on (`manage.bulk`: names, or "all").
+fn bulk_paths(plan: &Value) -> HashSet<String> {
+    plan["manage"]["bulk"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(|s| s.trim().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
 pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_skill_run",
     "hoi4_army_fallback",
@@ -695,6 +717,9 @@ pub struct State {
     pcache: Option<(GameHour, Cache)>,
     /// Armies and army groups an active operation owns -> the operation (plan_operation.rs).
     op_owned: HashMap<String, String>,
+    /// The bulk paths the plan turns on (`manage.bulk`): `act` passes `bulk: true` to the tools
+    /// that have one.
+    bulk: HashSet<String>,
     /// The game hour `op_owned` was last worked out.
     op_owned_at: Option<GameHour>,
     /// The operation step sends the order (its own armies pass the ownership guard).
@@ -872,6 +897,7 @@ impl Default for State {
             strategy: Strategy::default(),
             pcache: None,
             op_owned: HashMap::new(),
+            bulk: HashSet::new(),
             op_owned_at: None,
             op_acting: false,
             op_events_now: false,
@@ -1264,6 +1290,14 @@ impl State {
             if let Some(why) = plan_operation::guard(&self.op_owned, name, &mut args) {
                 self.last_ok = Some(false);
                 return Ok((false, why));
+            }
+        }
+        // The plan's bulk paths: the tool takes its bulk form (one input for many elements); the
+        // signature carries it, so a bulk refusal does not hold back the single form.
+        if let Some(path) = bulk_path_of(name) {
+            let on = self.bulk.contains(path) || self.bulk.contains("all");
+            if let Some(object) = args.as_object_mut().filter(|_| on) {
+                object.entry("bulk").or_insert(json!(true));
             }
         }
         let signature = format!("{name} {args}");
@@ -1675,6 +1709,7 @@ pub fn tick(
     let concentrated = plan_formations::concentrate(plan);
     let plan = concentrated.as_ref().unwrap_or(plan);
     state.moves.rules = MoveRules::of(plan);
+    state.bulk = bulk_paths(plan);
     // operations own their armies from their prepare on: worked out before any step orders one
     plan_operation::refresh(state, tools, plan, now);
     // 1. events (they block every other input)
@@ -10822,6 +10857,38 @@ mod tests {
             refuse_text: RefCell::new(HashMap::new()),
         }
     }
+    #[test]
+    fn a_bulk_path_the_plan_turns_on_reaches_the_tool_and_stays_off_otherwise() {
+        let f = fake(vec![]);
+        let args = json!({"line": 2, "equipment": "infantry_equipment_1", "factories": 14});
+        let mut state = State::default();
+        // off (the default): the single form
+        state.bulk = bulk_paths(&json!({}));
+        state
+            .act(&f, "l", "hoi4_production_set", args.clone(), "pf")
+            .unwrap();
+        // on by name, and by "all"
+        state.bulk = bulk_paths(&json!({"manage": {"bulk": ["production_chords"]}}));
+        state
+            .act(&f, "l", "hoi4_production_set", args.clone(), "pf")
+            .unwrap();
+        state.bulk = bulk_paths(&json!({"manage": {"bulk": ["all"]}}));
+        state
+            .act(&f, "l", "hoi4_production_add", json!({"equipment": "x", "factories": 3}), "pa")
+            .unwrap();
+        // a tool without a bulk path never gets the flag
+        state
+            .act(&f, "l", "hoi4_research_start", json!({"slot": 0, "technology": "t"}), "rs")
+            .unwrap();
+        let calls = f.calls.borrow();
+        let bulk: Vec<Option<bool>> = calls
+            .iter()
+            .filter(|(_, a)| a.get("request_id").is_some())
+            .map(|(_, a)| a.get("bulk").and_then(Value::as_bool))
+            .collect();
+        assert_eq!(bulk, vec![None, Some(true), Some(true), None]);
+    }
+
     #[test]
     fn consolidation_disbands_one_division_at_a_time_and_passes_over_refused_ones() {
         let f = fake(vec![
