@@ -3026,7 +3026,7 @@ fn stack_carry(divisions: i64, supply: f64, demand: f64, max: i64) -> i64 {
 /// where they stand, the divisions over its carry (`stack_carry`), the line armies' most worn
 /// divisions there first (lowest organisation); and the room the line's other provinces have.
 /// Pure.
-fn stack_read(read: &Value, line: &HashSet<String>, max: i64) -> StackRead {
+fn stack_read(read: &Value, line: &HashSet<String>, pick: &HashSet<String>, max: i64) -> StackRead {
     let mut out = StackRead::default();
     let rows: HashMap<String, &Value> = list(read, "divisions")
         .iter()
@@ -3064,18 +3064,24 @@ fn stack_read(read: &Value, line: &HashSet<String>, max: i64) -> StackRead {
             })
             .collect();
         let n = p["divisions"].as_i64().unwrap_or(ids.len() as i64);
+        let on_line = ids.iter().any(|id| {
+            rows.get(id)
+                .is_some_and(|d| line.contains(text(&d["army"])))
+        });
+        if !on_line {
+            continue;
+        }
+        // the divisions that may go back: of an infantry line or wing army (the armour keeps its
+        // concentration), standing (a marching division is not where it goes)
         let mut ours: Vec<(&String, f64, &str)> = ids
             .iter()
             .filter_map(|id| {
                 let d = rows.get(id)?;
                 let army = text(&d["army"]);
-                line.contains(army)
+                (pick.contains(army) && d["heading_province"].is_null())
                     .then(|| (id, d["organisation"].as_f64().unwrap_or(0.0), army))
             })
             .collect();
-        if ours.is_empty() {
-            continue;
-        }
         let carry = stack_carry(
             n,
             p["supply"].as_f64().unwrap_or(0.0),
@@ -3195,7 +3201,10 @@ fn stacking(
     if *cfg == json!(false) || cfg["enabled"] == json!(false) {
         return Ok(None);
     }
-    if state.skipped(now, "opstk", id) {
+    // at war only: before the attack the divisions are still marching to their line and the
+    // assembly stacks are not the front's (w46b1, 23 Nov 2026: in the paused prepare 14 of
+    // Panzergruppe Nord's 15 divisions were taken out at their start province)
+    if !state.done.contains_key(&key(id, "exec")) || state.skipped(now, "opstk", id) {
         return Ok(None);
     }
     state.skip(now, "opstk", id, DAY / 2);
@@ -3221,13 +3230,24 @@ fn stacking(
     if line.is_empty() {
         return Ok(None);
     }
+    let pick: HashSet<String> = units
+        .iter()
+        .filter(|u| matches!(u.role, Role::Line | Role::Wing) && !u.spear)
+        .map(|u| u.name.clone())
+        .chain(
+            units
+                .iter()
+                .filter(|u| u.role == Role::Group)
+                .flat_map(|u| u.members.iter().cloned()),
+        )
+        .collect();
     let Ok(read) = tools.call("hoi4_supply", &json!({})) else {
         return Ok(None);
     };
     if read["supply_available"] == json!(false) {
         return Ok(None);
     }
-    let seen = stack_read(&read, &line, max);
+    let seen = stack_read(&read, &line, &pick, max);
     let ech = echelons(state, id);
     // an echelon whose army is gone (merged, destroyed) is forgotten
     for (src, e) in &ech {
@@ -3296,7 +3316,7 @@ fn stacking(
         }
         let k = key(id, &format!("echord:{e}"));
         let tries = state.done.get(&k).copied().unwrap_or(0);
-        if tries >= RESERVE_ORDERS || state.skipped(now, "opech", e) {
+        if tries > RESERVE_ORDERS || state.skipped(now, "opech", e) {
             continue;
         }
         let from = army_row(roster, e).and_then(main_state);
@@ -3310,6 +3330,19 @@ fn stacking(
         };
         state.done.insert(k, tries + 1);
         state.skip(now, "opech", e, DAY);
+        // the area defence would not place (w46b1: "placed no new battle-plan order" for an
+        // echelon of armour): after its tries the echelon marches to the station as one army
+        if tries == RESERVE_ORDERS {
+            return Ok(Some(order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("second echelon {e} (from {src}) marches to its station {station}"),
+                "hoi4_army_move",
+                json!({"army": e, "state_id": station}),
+            )?));
+        }
         return Ok(Some(order(
             state,
             tools,
@@ -3344,9 +3377,10 @@ fn stacking(
         };
         let count = row["division_count"].as_i64().unwrap_or(0);
         // never the whole army, at most what one order moves
+        // never more than half the army at once, at most what one order moves
         let take: Vec<String> = ids
             .iter()
-            .take(((count - 1).max(0) as usize).min(18))
+            .take(((count / 2).max(0) as usize).min(18))
             .cloned()
             .collect();
         if take.is_empty() || state.skipped(now, "opdet", army) {

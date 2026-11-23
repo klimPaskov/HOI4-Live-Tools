@@ -2673,7 +2673,7 @@ fn a_province_carries_what_its_supply_feeds_and_never_more_than_the_battle_width
         ),
     ]);
     let line: HashSet<String> = ["Mitte".to_string(), "Sued".to_string()].into();
-    let seen = stack_read(&read, &line, STACK_MAX);
+    let seen = stack_read(&read, &line, &line, STACK_MAX);
     // 9444 carries 4 of 12: 8 over; 6500 carries 8 (fed for 9, width 8) and holds 3: room 5
     assert_eq!(seen.total, 8);
     assert_eq!(seen.room, 5);
@@ -2712,13 +2712,30 @@ fn an_overstacked_line_forms_a_second_echelon_on_an_empty_border_state_and_feeds
     let plan = json!({"war": {"me": "GER"}});
     let mut state = State::default();
     let roster = game.roster.borrow().clone();
+    // before the attack executes nothing is read (the assembly stacks are not the front's)
+    assert!(stacking(
+        &mut state,
+        &game,
+        &plan,
+        "op_low",
+        &op,
+        &units,
+        &roster,
+        &wars,
+        "l",
+        START - DAY
+    )
+    .unwrap()
+    .is_none());
+    assert!(game.calls.borrow().is_empty());
+    state.done.insert(key("op_low", "exec"), START - DAY);
     // first read: seen once, nothing moves
     let first = stacking(
         &mut state, &game, &plan, "op_low", &op, &units, &roster, &wars, "l", START,
     )
     .unwrap();
     assert!(first.is_none(), "{first:?}");
-    // second read half a day later: the 16 over the carry (most worn first), at most 18 a call
+    // second read half a day later: 16 over the carry, half the army (10) at once, most worn first
     let line = stacking(
         &mut state,
         &game,
@@ -2740,7 +2757,7 @@ fn an_overstacked_line_forms_a_second_echelon_on_an_empty_border_state_and_feeds
         .find(|(n, _)| n == "hoi4_army_detach")
         .unwrap();
     let moved = strings(&det.1, "divisions");
-    assert_eq!(moved.len(), 16);
+    assert_eq!(moved.len(), 10);
     assert_eq!(moved[0], "a05");
     assert_eq!(
         state.layout.get("echelon:op_low:Mitte").map(String::as_str),
