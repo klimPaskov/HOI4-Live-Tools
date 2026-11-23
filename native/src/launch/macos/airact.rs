@@ -1889,6 +1889,7 @@ mod tests {
             base_id,
             base_state: Some(state),
             transfer_base_id: 0,
+            attached_army: None,
         }
     }
     fn fixture() -> (Vec<Base>, Vec<Wing>) {

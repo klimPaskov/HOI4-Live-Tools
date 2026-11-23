@@ -3401,6 +3401,16 @@ fn wing_matches(entry: &Value, wing: &Value) -> bool {
             .is_none_or(|v| wing["variant"].as_str().is_none_or(|w| w == v))
 }
 
+/// A wing an air plan entry names by its own name (not by airframe): never taken for another use.
+pub(super) fn air_plan_pinned(plan: &Value, wing: &Value) -> bool {
+    let name = text(&wing["wing"]);
+    list(plan, "air_plan").iter().any(|e| {
+        e["wing"]
+            .as_str()
+            .is_some_and(|n| !n.is_empty() && n == name)
+    })
+}
+
 /// The extras step's default war missions leave the wings the air plan names alone.
 pub(super) fn air_plan_claims(plan: &Value, wing: &Value) -> bool {
     list(plan, "air_plan")
@@ -3735,7 +3745,14 @@ pub(super) fn air_plan_step(
         return Ok(None);
     };
     let bases = list(&air, "air_bases");
-    let all_wings = list(&air, "wings");
+    // a wing attached to an army flies for that army's battles and follows it (the air_attach
+    // rule): the air plan neither rebases it nor gives it a region mission
+    let free_wings: Vec<Value> = list(&air, "wings")
+        .iter()
+        .filter(|w| w["attached_army"].as_str().is_none_or(str::is_empty))
+        .cloned()
+        .collect();
+    let all_wings: &[Value] = &free_wings;
     // an entry whose `until` holds is over: it claims no wing, so its wings join the entries of
     // the next war (w42zc, 23 Nov 2026: the seven Polish entries held 2,099 planes over Western
     // Poland eight months after Poland fell; the Low Countries had 199 fighters and 100 CAS)
