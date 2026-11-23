@@ -32,11 +32,16 @@ THE LOOP (every turn). You add what a plan cannot: judgement at decision points,
 missed, and asking for a revision with evidence. Polling adds nothing: never call hoi4_overview, and never
 hoi4_observe in the loop (the wait reply carries `now`).
  A. ONE wait: hoi4_wait_change '{"since":SEQ,"urgent_only":true,"timeout_seconds":10}' (SEQ from the last reply).
- B. On a reply with changes, ONE omissions read: hoi4_alerts '{}'. Each alert is something the game itself says
-    can be done now (a free factory, a buyable pick, an empty slot, a company with no trait, a fleet with no
-    admiral); its `todo` names the fix. A `wake_player` change carries the executor's own `message` and
-    `evidence`: compare its reason with the alerts. A reason that says nothing can be done (for example "no
-    free military factory") while the game's alert says it can is the executor's mistake.
+ B. On a reply with changes, read its `now.omissions` (no extra call): every row is something that can be done
+    now, longest open first, with the rule that owns it and that rule's last note. Rows come from the game's
+    own alerts (a free factory, a buyable pick, an empty slot, a company with no trait, a fleet with no
+    admiral) and from the executor's reads the game has no alert for: army_group_without_field_marshal
+    (a field marshal is free), army_without_general, command_power_at_cap, political_power_unspent (enabled
+    decisions the power pays now that the plan neither takes nor forbids), doctrine_affordable,
+    research_slot_idle. Its `todo` names the fix. Call hoi4_alerts '{}' only for a row named frame_<n> (an
+    alert the server cannot name: hover it). A `wake_player` change carries the executor's own `message` and
+    `evidence`: compare its reason with the rows. A reason that says nothing can be done (for example "no
+    free military factory") while a row says it can is the executor's mistake.
  C. Act on each omission in ONE batch, in this order of cost to the war: free military factories and
     dockyards, design companies (MIO) without a line or a queued trait, advisor / officer-corps / doctrine /
     special-project seats with the means on hand, armies or wings with no orders, events still open.

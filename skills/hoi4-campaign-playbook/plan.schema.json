@@ -4277,7 +4277,8 @@
               "exercises",
               "cp_spend",
               "mio_lines",
-              "mio_traits"
+              "mio_traits",
+              "group_marshals"
             ]
           }
         },

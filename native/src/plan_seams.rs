@@ -138,6 +138,11 @@ pub(super) fn digest(state: &State) -> Option<Value> {
     (!state.seams.notes.is_empty()).then(|| json!(state.seams.notes))
 }
 
+/// A seam step's last status line (the omissions read quotes cp_spend).
+pub(super) fn note_of<'a>(state: &'a State, key: &str) -> Option<&'a str> {
+    state.seams.notes.get(key).map(String::as_str)
+}
+
 fn note(state: &mut State, key: &str, line: impl Into<String>) {
     state.seams.notes.insert(key.to_string(), line.into());
 }

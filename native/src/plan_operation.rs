@@ -3172,7 +3172,28 @@ fn prepare(
             if !row["field_marshal"].is_null() || state.skipped(now, "opfm", &u.name) {
                 continue;
             }
-            let Some(general) = names.iter().find(|n| !leading.contains(n)) else {
+            // an unassigned field marshal before any promotion: the named ones first, then the
+            // country's best free one, a named general (promoted for 40 command power) only when
+            // no field marshal is free (owner, 23 Nov 2026; plan_military::marshal_pick)
+            let free_names: Vec<String> = names
+                .iter()
+                .filter(|n| !leading.contains(n))
+                .cloned()
+                .collect();
+            let picked = tools
+                .call("hoi4_commanders", &json!({}))
+                .ok()
+                .and_then(|read| {
+                    let tag = super::plan_formations::country_tag(state, tools, plan);
+                    super::plan_military::marshal_pick(
+                        list(&read, "commanders"),
+                        &tag,
+                        &free_names,
+                        &|_| false,
+                    )
+                    .map(|(g, _)| g)
+                });
+            let Some(general) = picked.or_else(|| free_names.first().cloned()) else {
                 state.op_notes.insert(
                     format!("{id}:{}", u.name),
                     format!(

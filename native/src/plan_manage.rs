@@ -201,6 +201,13 @@ pub(super) struct Memory {
     deficit_since: Option<GameHour>,
     /// Alert name -> the game hour it was first seen in the current unbroken run of days.
     pub(super) alert_since: HashMap<String, GameHour>,
+    /// What the executor's own reads find open (plan_omissions.rs), item -> first seen.
+    pub(super) derived_since: HashMap<String, GameHour>,
+    /// The last command power read (game hour, value): unchanged a day later = at its cap.
+    pub(super) cp_last: Option<(GameHour, f64)>,
+    /// The decisions step's last hoi4_decisions_list read (that read opens the panel, so the
+    /// omissions read uses this copy and never opens it itself).
+    pub(super) decisions_seen: Option<(GameHour, Value)>,
     /// The next priority line in turn for idle factories when no shortage is known.
     feed_turn: usize,
     /// Since when political power above the threshold found nothing to buy (`politics_auto`).
@@ -560,6 +567,11 @@ enum Route {
     Wake(&'static str),
 }
 
+/// A manage rule's last status line (the omissions read quotes the owning rule).
+pub(super) fn note_of<'a>(state: &'a State, key: &str) -> Option<&'a str> {
+    state.manage.notes.get(key).map(String::as_str)
+}
+
 /// Which step fixes an alert of `hoi4_alerts` (the names of `alerts.rs`).
 fn route(alert: &str) -> Route {
     match alert {
@@ -878,7 +890,11 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
         .manage
         .alert_since
         .retain(|name, _| seen.contains(name));
-    let omissions = omission_rows(state, &read, &ignore, now);
+    let mut omissions = omission_rows(state, &read, &ignore, now);
+    // what the game has no alert for but the executor's reads see open (unassigned field
+    // marshals, banked power, open doctrine tracks...), longest open first with the rest
+    omissions.extend(super::plan_omissions::derived(state, tools, plan, now));
+    omissions.sort_by_key(|r| -r["days_open"].as_i64().unwrap_or(0));
     crate::watch::feed().set_omissions(Value::Array(omissions));
     let line = if lines.is_empty() {
         "no alerts".to_string()
