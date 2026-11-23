@@ -26,6 +26,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from hoi4_live.observe import cleanliness  # noqa: E402
 from hoi4_live.observe import findings as findings_mod  # noqa: E402
 from hoi4_live.observe import history, mapfiles, sitrep  # noqa: E402
 from hoi4_live.observe.reads import SNAPSHOT_TOOL  # noqa: E402
@@ -161,6 +162,7 @@ def cmd_sitrep(a):
     if fs is None:
         fs = findings_mod.findings(newest, prev)
     sys.stdout.write(sitrep.render(newest, prev, os.path.basename(os.path.abspath(a.run)), fs))
+    sys.stdout.write(cleanliness.render(a.run, snaps))
     return 0
 
 

@@ -1469,6 +1469,12 @@ pub(super) fn unready(state: &State, plan: &Value, target: &str) -> Option<Strin
         .find(|(id, op)| {
             started(state, id)
                 && !state.done.contains_key(&key(id, "ready"))
+                // an operation already executing against another enemy of the same war holds
+                // no declaration: the war is one opening blow, declared together (w47r1, 23
+                // Nov 2026: Luxembourg's declaration waited 10 days on Panzergruppe Ost's new
+                // front while Holland and Belgium were at war; the wing holds until the blow
+                // is ready anyway)
+                && !state.done.contains_key(&key(id, "exec"))
                 && strings(op, "enemies").iter().any(|e| e == target)
         })
         .map(|(id, _)| id)
@@ -1593,6 +1599,47 @@ fn one(
         .find(|e| at_war.contains(e))
         .or_else(|| enemies.first())
         .cloned();
+    // BEATEN, NOT OUT: an enemy left with a remnant of its victory points that still has
+    // divisions on our border keeps the line armies facing it (w43c1: Holland retook 20 points
+    // when every unit left), but the armour goes on to the next enemy at once (w47c1, 23 Nov
+    // 2026: Holland held 89 of 91 points on day 37 with a few divisions in Zeeland, and the whole
+    // operation, both Panzergruppen with it, faced that remnant for 18 days while Belgium stood
+    // untouched). Read once a game day per enemy.
+    let mut beaten: Vec<String> = Vec::new();
+    for e in &enemies {
+        if !at_war.contains(e) || !state.done.contains_key(&key(id, &format!("fought:{e}"))) {
+            continue;
+        }
+        let bk = key(id, &format!("beaten:{e}"));
+        if state.done.contains_key(&bk) {
+            beaten.push(e.clone());
+            continue;
+        }
+        if state.skipped(now, "opbeaten", e) {
+            continue;
+        }
+        state.skip(now, "opbeaten", e, DAY);
+        if let Ok(read) = tools.call("hoi4_states", &json!({"query": e})) {
+            if crate::plan_predicate::remnant(list(&read, "states"), e) {
+                state.done.insert(bk, now);
+                beaten.push(e.clone());
+            }
+        }
+    }
+    let after_beaten = enemies
+        .iter()
+        .find(|e| !beaten.contains(e) && at_war.contains(e))
+        .or_else(|| enemies.iter().find(|e| !beaten.contains(e)))
+        .cloned();
+    if let Some(next) = after_beaten {
+        for u in units.iter_mut() {
+            if beaten.contains(&u.enemy)
+                && (u.role == Role::Strike || u.spear || u.role == Role::Mobile)
+            {
+                u.enemy = next.clone();
+            }
+        }
+    }
     if let Some(next) = next {
         for u in units.iter_mut() {
             if out.contains(&u.enemy) {
@@ -2826,6 +2873,9 @@ const ASSAULT_HARD: f64 = -0.4;
 /// A wing attacks alone only with this many divisions for each enemy division standing in the
 /// target's border states.
 const ASSAULT_SUPERIORITY: i64 = 2;
+/// The longest a guarded wing waits once an attack of its war executes beside it: then it
+/// attacks with it whatever stands there (never held forever).
+const JOINT_MAX_WAIT: GameHour = 21 * DAY;
 /// Attack penalty counted per level of a fort in the province's history (about the defence a
 /// land fort level gives).
 const FORT_STEP: f64 = -0.15;
@@ -2974,7 +3024,97 @@ fn assault_guarded(
         .and_then(|r| r["division_count"].as_i64())
         .unwrap_or(0);
     let weak = theirs.is_some_and(|t| t > 0 && ours < ASSAULT_SUPERIORITY * t);
-    let hard = best.2 <= ASSAULT_HARD || weak;
+    let hard_alone = best.2 <= ASSAULT_HARD || weak;
+    // NEVER ALONE, NEVER FOREVER (w46c1: the wing assaulted alone and bled 26.2k:0.5k; w46e1/f1:
+    // the guard held it all war and Luxembourg was never attacked). The wing attacks together
+    // with an attack of the same war (an army of an operation of the same `war` executes: the
+    // group's or the armour's attack on the neighbours): at once when the ground and the odds
+    // allow, at even odds when they do not, and after JOINT_MAX_WAIT of the joint attack
+    // whatever stands there (the neighbours' attack has drawn them off or never will).
+    let war_of = |owner_id: &str| {
+        list(plan, "operations")
+            .iter()
+            .enumerate()
+            .find(|(i, o)| op_id(o, *i) == owner_id)
+            .map(|(_, o)| text(&o["war"]).to_string())
+    };
+    let my_war = text(&op["war"]).to_string();
+    let joint: Vec<String> = state
+        .op_owned
+        .iter()
+        .filter(|(army, owner)| {
+            **army != u.name
+                && (my_war.is_empty() || war_of(owner).is_some_and(|w| w == my_war))
+                && executing(roster, army)
+        })
+        .map(|(army, _)| army.clone())
+        .collect();
+    let jk = key(id, &format!("joint:{}", u.name));
+    let joint_days = if joint.is_empty() {
+        state.done.remove(&jk);
+        None
+    } else {
+        Some((now - *state.done.entry(jk).or_insert(now)) / DAY)
+    };
+    // A SECOND DIRECTION: a border state facing the target that was not ours when the guard
+    // first read (the group or the armour took a neighbour of the target): the small country is
+    // cut off and the wing attacks with that attack at once (w47p1, 23 Nov 2026: at even odds
+    // from its own border alone the wing lost 18.2k men to Luxembourg's 0 in 28 days).
+    let mut second: Vec<i64> = Vec::new();
+    for st in &from {
+        let k0 = key(id, &format!("from0:{}:{st}", u.name));
+        if !state.done.contains_key(&k0) {
+            if state
+                .done
+                .contains_key(&key(id, &format!("from0:{}", u.name)))
+            {
+                second.push(*st);
+            } else {
+                state.done.insert(k0, now);
+            }
+        }
+    }
+    state
+        .done
+        .entry(key(id, &format!("from0:{}", u.name)))
+        .or_insert(now);
+    let _ = hard_alone;
+    // after JOINT_MAX_WAIT of the joint attack without a second direction it attacks only at
+    // the odds an assault needs (w47c1, 23 Nov 2026: at 21 days it attacked 7 against the French
+    // standing in Luxembourg and lost 17.4k men to none in a week); otherwise it keeps holding
+    // and its note says what it waits for (a second direction or the odds), never silently
+    // NOT ALONE: an army of this operation executing an offensive into the same target states
+    // (the armour leading through the same piece) makes one blow with the wing; it attacks at
+    // once when the two together have the odds (owner, 23 Nov 2026: Luxembourg is always taken
+    // in the opening, armour leading, never by a weak wing alone; w47r1: Armee West Süd held
+    // ten days behind Panzergruppe Ost's attack on the same state)
+    let beside: Vec<(String, i64)> = state
+        .op_owned
+        .iter()
+        .filter(|(army, owner)| {
+            **army != u.name
+                && owner.as_str() == id
+                && executing(roster, army)
+                && offensives(roster, army).iter().any(|o| {
+                    ints(&o["target_states"])
+                        .iter()
+                        .any(|t| targets.contains(t))
+                })
+        })
+        .map(|(army, _)| {
+            let n = army_row(roster, army)
+                .and_then(|r| r["division_count"].as_i64())
+                .unwrap_or(0);
+            (army.clone(), n)
+        })
+        .collect();
+    let together = ours + beside.iter().map(|(_, n)| n).sum::<i64>();
+    let one_blow = !beside.is_empty() && theirs.is_none_or(|t| together >= ASSAULT_SUPERIORITY * t);
+    let hard = match joint_days {
+        _ if one_blow => false,
+        None => true,
+        Some(days) => second.is_empty() && (days < JOINT_MAX_WAIT / DAY || weak),
+    };
     let mut seen: Vec<String> = ways.iter().map(|w| w.3.clone()).collect();
     seen.sort();
     seen.dedup();
@@ -2983,12 +3123,35 @@ fn assault_guarded(
         format!(
             "operation {id}: {} ({ours} divisions) {} {:?}: {} way(s) in, the best {} from {} at {:+.2} ({}); {} enemy division(s) stand there; there: {}",
             u.name,
-            if weak {
-                "HOLDS (too weak to assault alone)"
-            } else if hard {
-                "HOLDS (no assault alone across that ground)"
-            } else {
-                "may attack"
+            match (joint_days, hard) {
+                _ if one_blow => format!(
+                    "ATTACKS in one blow with {} ({together} divisions together)",
+                    beside
+                        .iter()
+                        .map(|(a, _)| a.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                (None, _) => "HOLDS (never alone: no attack of the same war executes)".to_string(),
+                (Some(d), true) => format!(
+                    "HOLDS (no second direction yet{}; the joint attack of {} runs {d} of {} days)",
+                    if weak {
+                        ", too weak for an assault: it waits for a second direction or the odds"
+                    } else {
+                        ""
+                    },
+                    joint.join(", "),
+                    JOINT_MAX_WAIT / DAY
+                ),
+                (Some(_), false) if !second.is_empty() => format!(
+                    "ATTACKS together with {} (a second direction from state(s) {second:?})",
+                    joint.join(", ")
+                ),
+                (Some(_), false) => format!(
+                    "ATTACKS together with {} (the joint attack has run {} days)",
+                    joint.join(", "),
+                    JOINT_MAX_WAIT / DAY
+                ),
             },
             targets,
             ways.len(),

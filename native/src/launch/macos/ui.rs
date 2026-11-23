@@ -432,12 +432,16 @@ pub(super) fn save_game(
 /// bp2 (window not opened in time, window closed by a click landing on the map), so a caller
 /// that saved once gave up on a segment; every try starts again from a closed menu.
 const SAVE_TRIES: u32 = 4;
-/// A failed sequence that wrote nothing: a menu or window that did not open or closed early.
+/// Seconds a confirmed save may take to appear on disk before the sequence is tried again.
+const SAVE_WRITE_SECS: u64 = 30;
+/// A failed sequence that wrote nothing: a menu or window that did not open or closed early, or
+/// a confirm that wrote no file (the next whole try saved in 4.7 s in the save probe of 22 Nov
+/// 2026, after three calls had each given up on one 60 s wait).
 fn save_retryable(e: &Error) -> bool {
     matches!(
         e.code,
         "input_readback_failed" | "invalid_gui" | "gui_target_unavailable"
-    ) && !e.message.contains("No save file was written")
+    )
 }
 fn save_game_once(
     process: &dyn Process,
@@ -460,6 +464,19 @@ fn save_game_once(
     };
     let before = newest().map(|(t, _)| t);
     clear_notices(process, keys)?;
+    // A menu flag already up before our own Escape is not trusted: with a view or an event open
+    // the menu window read visible while the screen showed only the darkened map, and the Save
+    // clicks fell through onto the map four to eight times (save probe, 22 Nov 2026). Close it
+    // first so the menu we click in is one our own press opened.
+    let mut closes = 0;
+    while read(process, menu_open)? && closes < 4 {
+        keys.press(Key::Escape)?;
+        closes += 1;
+        let deadline = Instant::now() + Duration::from_millis(900);
+        while Instant::now() < deadline && read(process, menu_open)? {
+            crate::phase::sleep(Duration::from_millis(50));
+        }
+    }
     // Escape first closes whatever view is open (a trade or politics view left open took the
     // only Escape live, 6 Nov 2026), so press it until the menu itself is open.
     let mut presses = 0;
@@ -520,17 +537,30 @@ fn save_game_once(
         keys.click((1920, 1080), x, y)?;
         // Overwriting a save of the same name asks for confirmation.
         let _ = accept_command(process, keys);
-        let deadline = Instant::now() + Duration::from_secs(60);
+        let started = Instant::now();
+        let deadline = started + Duration::from_secs(SAVE_WRITE_SECS);
+        let mut reclicked = false;
         let written = loop {
             if let Some((t, name)) = newest() {
                 if before.is_none_or(|b| t > b) {
                     break name;
                 }
             }
+            // the confirm click that did not take: the save window still shows with nothing
+            // written (a save that works writes in about 5 s; the next whole try after a 60 s
+            // wait saved in 4.7 s, save probe 22 Nov 2026), so click it once more
+            if !reclicked
+                && started.elapsed() >= Duration::from_secs(6)
+                && read(process, |r, i| Ok(save_root(r, i)?.is_some())).unwrap_or(false)
+            {
+                reclicked = true;
+                keys.click((1920, 1080), x, y)?;
+                let _ = accept_command(process, keys);
+            }
             if Instant::now() >= deadline {
                 return Err(Error::new(
                     "input_readback_failed",
-                    "No save file was written within 60 s",
+                    format!("No save file was written within {SAVE_WRITE_SECS} s"),
                 ));
             }
             crate::phase::sleep(Duration::from_millis(500));
@@ -979,9 +1009,9 @@ mod tests {
             "invalid_gui",
             "Save window closed"
         )));
-        assert!(!save_retryable(&Error::new(
+        assert!(save_retryable(&Error::new(
             "input_readback_failed",
-            "No save file was written within 60 s"
+            "No save file was written within 30 s"
         )));
         assert!(!save_retryable(&Error::new(
             "events_open",

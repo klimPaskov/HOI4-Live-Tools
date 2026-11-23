@@ -241,7 +241,14 @@ def lookup(schema, path):
             continue
         props = node.get("properties", {})
         if part not in props:
-            return None
+            # a key that is false or an object (oneOf/anyOf): the object's properties
+            for alt in node.get("oneOf", []) + node.get("anyOf", []):
+                alt_props = _deref(alt, schema).get("properties", {})
+                if part in alt_props:
+                    props = alt_props
+                    break
+            else:
+                return None
         node = props[part]
     return node
 
