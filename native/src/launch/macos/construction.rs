@@ -428,6 +428,7 @@ pub(super) fn add(
     state: i32,
     count: i64,
     province: Option<i32>,
+    fill: bool,
 ) -> Result<()> {
     if key == "rail_way" || key == "railway" {
         return Err(Error::new(
@@ -498,7 +499,14 @@ pub(super) fn add(
             loop {
                 super::ui::dismiss_notices(process, keys)?;
                 let (x, y) = points[point];
-                keys.click(GAME, x, y)?;
+                // `fill`: the first click with Shift builds the maximum amount the state takes
+                // (CONSTRUCTION_MAPMODE_TOOLTIP_TO_MAX_AMOUNT); when the game took it as one
+                // building the plain clicks below finish the count
+                if fill && click == 0 {
+                    keys.shift_click(GAME, x, y)?;
+                } else {
+                    keys.click(GAME, x, y)?;
+                }
                 let wait_for = if points.len() > 1 { 1200 } else { 3000 };
                 let deadline = std::time::Instant::now() + Duration::from_millis(wait_for);
                 let grew = loop {

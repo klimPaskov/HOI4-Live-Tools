@@ -1635,6 +1635,138 @@ fn mio_trait(
     result
 }
 
+/// The traits `auto` queues: enabled, visible, not queued and not held entries, in the tree's
+/// order, until `depth` enabled entries wait in the queue (a queued entry the game shows disabled
+/// does not count: it is never unlocked and holds the points idle). `entries` = (index, enabled,
+/// queued, owned, visible). Pure.
+pub(super) fn auto_picks(entries: &[(usize, bool, bool, bool, bool)], depth: usize) -> Vec<usize> {
+    let waiting = entries
+        .iter()
+        .filter(|(_, enabled, queued, owned, _)| *enabled && *queued && !*owned)
+        .count();
+    entries
+        .iter()
+        .filter(|(_, enabled, queued, owned, visible)| *enabled && !*queued && !*owned && *visible)
+        .map(|(index, ..)| *index)
+        .take(depth.saturating_sub(waiting))
+        .collect()
+}
+
+/// Several traits queued in ONE visit of the organisation's tree window (the game's completion
+/// queue unlocks them in order as points come): the `asked` indices in order, then with `auto`
+/// the first open entries until that many wait in the queue. Each click is read back from the
+/// entry's queue number; a trait already queued counts as reached; a refused one is listed with
+/// its reason and the rest go on.
+fn mio_traits_many(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    display: &str,
+    slot: usize,
+    asked: &[usize],
+    auto: Option<usize>,
+) -> Driven {
+    let result: Driven = (|| {
+        let found = open_org(process, keys, slot, display)?;
+        let mut entries = settled(process, "trait entries", trait_entries)?;
+        let flags = |entries: &[TraitEntry]| -> Vec<(usize, bool, bool, bool, bool)> {
+            entries
+                .iter()
+                .map(|e| {
+                    (
+                        e.index,
+                        e.enabled,
+                        !e.queue.is_empty(),
+                        e.state == 2,
+                        e.rect.is_some(),
+                    )
+                })
+                .collect()
+        };
+        let mut wanted: Vec<usize> = asked.to_vec();
+        if let Some(depth) = auto {
+            for i in auto_picks(&flags(&entries), depth) {
+                if !wanted.contains(&i) {
+                    wanted.push(i);
+                }
+            }
+        }
+        let summary = |entries: &[TraitEntry]| -> Vec<Value> {
+            entries
+                .iter()
+                .map(|e| json!({"index": e.index, "enabled": e.enabled, "queue": e.queue, "visible": e.rect.is_some(), "owned": e.state == 2}))
+                .collect()
+        };
+        if wanted.is_empty() {
+            return Ok(
+                json!({"nothing_to_queue": true, "changed": 0, "entries": summary(&entries),
+                "verification": "gui_only"}),
+            );
+        }
+        let mut queued: Vec<usize> = Vec::new();
+        let mut unchanged: Vec<Value> = Vec::new();
+        for index in wanted.iter().copied() {
+            if entries.is_empty() {
+                // a queued trait can detach the detail window (mio_trait): open it again
+                leave(process, keys);
+                open_system(process, keys, found)?;
+                open_roster(process, keys, found)?;
+                open_detail(process, keys, display)?;
+                entries = settled(process, "trait entries", trait_entries)?;
+            }
+            if let Some((code, why)) = trait_refusal(&entries, index) {
+                if code == "trait_already_queued" {
+                    queued.push(index);
+                } else {
+                    unchanged.push(json!({"index": index, "code": code, "why": why}));
+                }
+                continue;
+            }
+            pk::click(process, keys, "trait icon", |r, i| {
+                trait_entries(r, i)?
+                    .get(index)
+                    .and_then(|e| e.rect)
+                    .ok_or_else(|| {
+                        Error::new("gui_target_unavailable", "Trait icon left the window")
+                    })
+            })?;
+            accept_command(process, keys)?;
+            let deadline = std::time::Instant::now() + Duration::from_millis(2000);
+            entries = read(process, trait_entries).unwrap_or_default();
+            while !entries.is_empty()
+                && !entries.get(index).is_some_and(|e| !e.queue.is_empty())
+                && std::time::Instant::now() < deadline
+            {
+                pause(150);
+                entries = read(process, trait_entries).unwrap_or_default();
+            }
+            if entries.is_empty() {
+                leave(process, keys);
+                open_system(process, keys, found)?;
+                open_roster(process, keys, found)?;
+                open_detail(process, keys, display)?;
+                entries = settled(process, "trait entries", trait_entries)?;
+            }
+            if entries.get(index).is_some_and(|e| !e.queue.is_empty()) {
+                queued.push(index);
+            } else {
+                unchanged.push(json!({"index": index, "code": "action_not_applied",
+                    "why": "no queue number after the click"}));
+            }
+        }
+        Ok(json!({
+            "trait_queued": unchanged.is_empty(),
+            "some_queued": !queued.is_empty(),
+            "queued": queued,
+            "changed": queued.len(),
+            "unchanged": unchanged,
+            "entries": summary(&entries),
+            "verification": "gui_only",
+        }))
+    })();
+    leave(process, keys);
+    result
+}
+
 // ------------------------------------------------------------------- tools
 
 fn slot_arg(args: &serde_json::Map<String, Value>) -> Result<usize> {
@@ -1744,14 +1876,87 @@ pub(super) fn call(
                 &[
                     "organization",
                     "trait_index",
+                    "trait_indices",
+                    "auto",
                     "list",
                     "slot",
+                    "bulk",
                     "request_id",
                     "lease_token",
                 ],
             )?;
             let organization = key_arg(args, "organization")?;
             let slot = slot_arg(args)?;
+            let many: Vec<usize> = match args.get("trait_indices") {
+                None => Vec::new(),
+                Some(v) => {
+                    let list = v
+                        .as_array()
+                        .filter(|l| (1..=16).contains(&l.len()))
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", "trait_indices must list 1..16 indices")
+                        })?;
+                    let mut out: Vec<usize> = Vec::new();
+                    for x in list {
+                        let i = x.as_u64().filter(|n| *n <= 63).ok_or_else(|| {
+                            Error::new("invalid_arguments", "a trait index must be 0..63")
+                        })? as usize;
+                        if !out.contains(&i) {
+                            out.push(i);
+                        }
+                    }
+                    out
+                }
+            };
+            let auto = match args.get("auto") {
+                None => None,
+                Some(v) => Some(v.as_u64().filter(|n| (1..=5).contains(n)).ok_or_else(|| {
+                    Error::new(
+                        "invalid_arguments",
+                        "auto must be 1..5 (traits waiting in the queue)",
+                    )
+                })? as usize),
+            };
+            if !many.is_empty() || auto.is_some() {
+                if args.get("trait_index").is_some() || args.get("list").is_some() {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "trait_indices/auto queue several traits; leave out trait_index and list",
+                    ));
+                }
+                let job = Job {
+                    kind: "mio_trait",
+                    action: json!({"kind":"mio_trait","organization":organization,"trait_indices":many,"auto":auto,"slot":slot}),
+                    plan: Box::new(|process| {
+                        *resolved.borrow_mut() = Some(names(process, organization, None)?);
+                        Ok(())
+                    }),
+                    dispatch: Box::new(|process, keys| {
+                        let n = need()?;
+                        mio_traits_many(process, keys, &n.org_display, slot, &many, auto)
+                    }),
+                    settle: Box::new(|_, seen| {
+                        let detail = json!({"tool":"mio_trait","organization":organization,
+                            "changed": seen.and_then(|v| v.get("changed")).cloned().unwrap_or(json!(0)),
+                            "unchanged": seen.and_then(|v| v.get("unchanged")).cloned().unwrap_or(json!([]))});
+                        let flag = |k: &str| seen.and_then(|v| v.get(k)).and_then(Value::as_bool);
+                        Ok(
+                            if flag("nothing_to_queue") == Some(true)
+                                || flag("trait_queued") == Some(true)
+                            {
+                                super::journal::Outcome::Reached(detail)
+                            } else if flag("some_queued") == Some(true) {
+                                super::journal::Outcome::Diverged(detail)
+                            } else {
+                                ui_action::effect(seen, "trait_queued", detail)
+                            },
+                        )
+                    }),
+                };
+                return ui_action::run_bounded(
+                    job, 150, id, token, process, keys, guard, authority, actions,
+                );
+            }
             let list_only = mgmt::flag(args, "list")?;
             let index =
                 match args.get("trait_index") {
@@ -1876,12 +2081,32 @@ pub(super) fn tools() -> Vec<Value> {
         json!({"name":"hoi4_mio_design_team","description":"Browse only, assigns nothing (live pp4, 17 Nov 2026): the politics view's organisation slots open a roster to look at; the game assigns an organisation from a task (a production line: hoi4_mio_line; a technology; a design). Kept for older plans: put a military-industrial organisation into a design-team slot of the politics view: Q politics view, the slot's roster button (the `slot`-th shown organisation slot, default 0), the organisation's row in the list (found by its localised name; `organization` is the script key from hoi4_mios, e.g. GER_porsche_organization). Typed refusals: organization_unknown, organization_not_allowed (allowed block rules the tag out) before input; mio_system_absent (the politics view shows no organisation slot: the organisation system is not in use in this game, designers are ideas, use hoi4_politics_choose), slot_unknown, organization_not_offered (lists the rows) found from the windows before the first state-changing click. Verified only by the list closing (political power before/after is recorded): verification gui_only. Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_mio_policy","description":"UNVALIDATED (no live test yet): attach a policy to an organisation: politics view, the slot's roster, the organisation's details button, Open policies, the policy row (by localised name). `organization` and `policy` are script keys (mio_policy_general_ruthless_contracts, ...). Typed refusals: organization_unknown, organization_not_allowed, policy_unknown (before input); mio_system_absent, slot_unknown, organization_not_offered, policy_not_offered (lists the rows) from the windows before the click. Verified from the detail window's attached policy name only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"policy":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","policy","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_mio_line","description":"Attach an organisation to an own production line with ordinary input, or read the line's state. The production line's organisation button (drawn at scale 0.45 in its rect's bottom-left corner) opens the roster of the organisations that make that equipment, under a 'Produce without a Military Industrial Organization' entry; its rows are read from memory (name, organisation or not) before any row click, the list is wheeled to its top, read again, and only an organisation row drawn in full is clicked (live pp14, 17 Nov 2026: Rheinmetall attached to a new anti-air line). The last line, whose button the screen edge cuts, is moved to the top for the roster and back to the bottom after. `organization` (localised name or key) picks the row, else the first organisation offered. A line that has an organisation answers assigned, already_attached without input. list:true opens the roster, answers attached and offered (the organisations' names) and closes it, changing nothing. Verified from the line's own row (has_mio_background). A line costs no political power. The politics view's organisation slots only browse rosters. The line is addressed like hoi4_production_set (line = entry_index from hoi4_production_lines, with its equipment). Typed refusals: invalid_target, organization_unknown, organization_not_allowed (before input); line_takes_no_organization (no organisation makes the equipment: the line shows no button, its button is disabled, or its roster offers only the 'Produce without' row); organization_not_offered (the roster's organisations named); row_not_visible (the row is below the five drawn in full); roster_unreadable (the roster's layout is not the reviewed one).","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"organization":{"type":"string","maxLength":128},"list":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_mio_trait","description":"Live-verified (6 Nov 2026 on 1.19.4 with 10 DLCs: a trait queued, read back by reopening the detail window): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"trait_index":{"type":"integer","minimum":0,"maximum":63},"list":{"type":"boolean"},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_mio_trait","description":"Live-verified (6 Nov 2026 on 1.19.4 with 10 DLCs: a trait queued, read back by reopening the detail window): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"trait_index":{"type":"integer","minimum":0,"maximum":63},"trait_indices":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"integer","minimum":0,"maximum":63},"description":"several traits queued in order in ONE visit of the tree window (the game's completion queue unlocks them as points come); each read back from its queue number; an already queued trait counts as reached; refused ones are listed in the receipt (unchanged)"},"auto":{"type":"integer","minimum":1,"maximum":5,"description":"in the same visit, queue the first open (enabled, visible, not held) traits until this many enabled traits wait in the queue; with trait_indices they come after those"},"list":{"type":"boolean"},"slot":{"type":"integer","minimum":0,"maximum":15},"bulk":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","request_id","lease_token"],"additionalProperties":false}}),
     ]
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn auto_queues_open_traits_until_the_queue_holds_enough_enabled_ones() {
+        // (index, enabled, queued, owned, visible)
+        let tree = [
+            (0, true, false, true, true),   // held
+            (1, true, true, false, true),   // queued, enabled
+            (2, false, true, false, true),  // queued but disabled: does not count
+            (3, true, false, false, false), // scrolled out
+            (4, true, false, false, true),
+            (5, true, false, false, true),
+            (6, false, false, false, true),
+        ];
+        assert_eq!(super::auto_picks(&tree, 3), vec![4, 5]);
+        assert_eq!(super::auto_picks(&tree, 2), vec![4]);
+        assert!(
+            super::auto_picks(&tree, 1).is_empty(),
+            "one enabled trait waits already"
+        );
+    }
+
     fn row(name: &str, organisation: bool) -> super::RosterRow {
         super::RosterRow {
             name: name.into(),

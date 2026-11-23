@@ -395,6 +395,32 @@ pub fn arg_built(tool: &str, arg: &str) -> bool {
 /// without receipts repeats each success until the game refuses it (railway and construction
 /// orders, shakedown sk2). `act` refuses any tool not listed here; a test checks every tool
 /// named at an `act` call is listed. Add a tool only once its handler journals a receipt.
+/// The tools with a bulk path and the `manage.bulk` name that turns it on. Every path is off
+/// until its live probe passes (docs/LIVE_VALIDATION_QUEUE.md, BATCHING PROBES).
+pub const BULK_PATHS: &[(&str, &str)] = &[
+    ("hoi4_production_set", "production_chords"),
+    ("hoi4_production_add", "production_chords"),
+    ("hoi4_air_mission", "air_base_select"),
+    ("hoi4_air_rebase", "air_base_select"),
+    ("hoi4_mio_trait", "mio_queue_many"),
+    ("hoi4_construction_add", "construction_fill"),
+];
+/// The `manage.bulk` name of a tool's bulk path.
+fn bulk_path_of(tool: &str) -> Option<&'static str> {
+    BULK_PATHS.iter().find(|(t, _)| *t == tool).map(|(_, p)| *p)
+}
+/// The bulk paths a plan turns on (`manage.bulk`: names, or "all").
+fn bulk_paths(plan: &Value) -> HashSet<String> {
+    plan["manage"]["bulk"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(|s| s.trim().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
 pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_skill_run",
     "hoi4_army_fallback",
@@ -695,6 +721,9 @@ pub struct State {
     pcache: Option<(GameHour, Cache)>,
     /// Armies and army groups an active operation owns -> the operation (plan_operation.rs).
     op_owned: HashMap<String, String>,
+    /// The bulk paths the plan turns on (`manage.bulk`): `act` passes `bulk: true` to the tools
+    /// that have one.
+    bulk: HashSet<String>,
     /// The game hour `op_owned` was last worked out.
     op_owned_at: Option<GameHour>,
     /// The operation step sends the order (its own armies pass the ownership guard).
@@ -872,6 +901,7 @@ impl Default for State {
             strategy: Strategy::default(),
             pcache: None,
             op_owned: HashMap::new(),
+            bulk: HashSet::new(),
             op_owned_at: None,
             op_acting: false,
             op_events_now: false,
@@ -1194,6 +1224,10 @@ impl State {
             _ => true,
         }
     }
+    /// Whether the plan turns on the bulk path `path` (`manage.bulk`).
+    fn bulk_on(&self, path: &str) -> bool {
+        self.bulk.contains(path) || self.bulk.contains("all")
+    }
     /// Army `old` now carries the name `new`: everything kept by army name follows it (role
     /// bindings, war rules, done-memory and skip timers ending in the name, military memory).
     fn army_renamed(&mut self, old: &str, new: &str) {
@@ -1264,6 +1298,14 @@ impl State {
             if let Some(why) = plan_operation::guard(&self.op_owned, name, &mut args) {
                 self.last_ok = Some(false);
                 return Ok((false, why));
+            }
+        }
+        // The plan's bulk paths: the tool takes its bulk form (one input for many elements); the
+        // signature carries it, so a bulk refusal does not hold back the single form.
+        if let Some(path) = bulk_path_of(name) {
+            let on = self.bulk.contains(path) || self.bulk.contains("all");
+            if let Some(object) = args.as_object_mut().filter(|_| on) {
+                object.entry("bulk").or_insert(json!(true));
             }
         }
         let signature = format!("{name} {args}");
@@ -1675,6 +1717,7 @@ pub fn tick(
     let concentrated = plan_formations::concentrate(plan);
     let plan = concentrated.as_ref().unwrap_or(plan);
     state.moves.rules = MoveRules::of(plan);
+    state.bulk = bulk_paths(plan);
     // operations own their armies from their prepare on: worked out before any step orders one
     plan_operation::refresh(state, tools, plan, now);
     // 1. events (they block every other input)
@@ -5589,13 +5632,12 @@ fn construction_step(
             .min(state.con.cap.get(&id).copied().unwrap_or(want))
             .min(known_free.unwrap_or(want))
             .max(1);
-        let (ok, why) = state.act(
-            tools,
-            lease,
-            "hoi4_construction_add",
-            json!({"building": building, "state_id": id, "count": count}),
-            "co",
-        )?;
+        let mut args = json!({"building": building, "state_id": id, "count": count});
+        // every free slot of the state at once: one Shift+Click (manage.bulk construction_fill)
+        if count > 1 && known_free == Some(count) && state.bulk_on("construction_fill") {
+            args["fill"] = json!(true);
+        }
+        let (ok, why) = state.act(tools, lease, "hoi4_construction_add", args, "co")?;
         state.con.rr += 1;
         if !ok && why.starts_with("skipped") {
             // the order rests on its own failure memory and sent no input: it does not take
@@ -10823,6 +10865,52 @@ mod tests {
         }
     }
     #[test]
+    fn a_bulk_path_the_plan_turns_on_reaches_the_tool_and_stays_off_otherwise() {
+        let f = fake(vec![]);
+        let args = json!({"line": 2, "equipment": "infantry_equipment_1", "factories": 14});
+        // off (the default): the single form
+        let mut state = State {
+            bulk: bulk_paths(&json!({})),
+            ..State::default()
+        };
+        state
+            .act(&f, "l", "hoi4_production_set", args.clone(), "pf")
+            .unwrap();
+        // on by name, and by "all"
+        state.bulk = bulk_paths(&json!({"manage": {"bulk": ["production_chords"]}}));
+        state
+            .act(&f, "l", "hoi4_production_set", args.clone(), "pf")
+            .unwrap();
+        state.bulk = bulk_paths(&json!({"manage": {"bulk": ["all"]}}));
+        state
+            .act(
+                &f,
+                "l",
+                "hoi4_production_add",
+                json!({"equipment": "x", "factories": 3}),
+                "pa",
+            )
+            .unwrap();
+        // a tool without a bulk path never gets the flag
+        state
+            .act(
+                &f,
+                "l",
+                "hoi4_research_start",
+                json!({"slot": 0, "technology": "t"}),
+                "rs",
+            )
+            .unwrap();
+        let calls = f.calls.borrow();
+        let bulk: Vec<Option<bool>> = calls
+            .iter()
+            .filter(|(_, a)| a.get("request_id").is_some())
+            .map(|(_, a)| a.get("bulk").and_then(Value::as_bool))
+            .collect();
+        assert_eq!(bulk, vec![None, Some(true), Some(true), None]);
+    }
+
+    #[test]
     fn consolidation_disbands_one_division_at_a_time_and_passes_over_refused_ones() {
         let f = fake(vec![
             ("hoi4_overview", json!({"player": "ETH"})),
@@ -11610,6 +11698,8 @@ mod tests {
         slots: HashMap<i64, u32>,
         full: Vec<i64>,
         added: RefCell<Vec<(i64, i64)>>,
+        /// states ordered with fill (one Shift+Click for every free slot)
+        filled: RefCell<Vec<i64>>,
         probe_fails: bool,
         own: Vec<i64>,
     }
@@ -11619,6 +11709,7 @@ mod tests {
                 slots: HashMap::new(),
                 full: vec![],
                 added: RefCell::new(vec![]),
+                filled: RefCell::new(vec![]),
                 probe_fails: false,
                 own: vec![],
             }
@@ -11672,6 +11763,9 @@ mod tests {
                     self.added
                         .borrow_mut()
                         .push((id, args["count"].as_i64().unwrap()));
+                    if args["fill"] == json!(true) {
+                        self.filled.borrow_mut().push(id);
+                    }
                     Ok(json!({"receipt": {"status": "Verified"}}))
                 }
                 _ => Ok(json!({})),
@@ -11683,6 +11777,34 @@ mod tests {
             Tick::Acted(s) => s,
             other => panic!("expected an action, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn with_the_bulk_path_a_state_s_every_free_slot_goes_in_one_shift_click() {
+        let mut b = Builder::new();
+        b.slots = [(60, 3)].into();
+        let plan = json!({"manage": {"bulk": ["construction_fill"]},
+            "construction": [{"building": "arms_factory", "states": [60], "count": 3}]});
+        let mut state = State::default();
+        let first = acted(tick(&mut state, &b, &plan, "l", START).unwrap());
+        assert!(
+            first.starts_with("construct arms_factory 60: true"),
+            "{first}"
+        );
+        assert_eq!(b.added.borrow().as_slice(), &[(60, 3)]);
+        assert_eq!(b.filled.borrow().as_slice(), &[60]);
+        // off (the default): the same count by single clicks
+        let b = {
+            let mut b = Builder::new();
+            b.slots = [(60, 3)].into();
+            b
+        };
+        let plan =
+            json!({"construction": [{"building": "arms_factory", "states": [60], "count": 3}]});
+        let mut state = State::default();
+        acted(tick(&mut state, &b, &plan, "l", START).unwrap());
+        assert_eq!(b.added.borrow().as_slice(), &[(60, 3)]);
+        assert!(b.filled.borrow().is_empty());
     }
 
     #[test]

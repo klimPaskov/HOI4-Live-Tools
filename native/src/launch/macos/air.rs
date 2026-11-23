@@ -427,7 +427,7 @@ fn region_points(
 /// Screen points for the region click over `state` (`region_points` filtered to the usable
 /// map area): where the camera already is when the state shows at an aiming height, else after
 /// the Find view centres it; the screen centre as the last resort.
-fn region_targets(
+pub(super) fn region_targets(
     process: &dyn Process,
     keys: &dyn GameInput,
     dir: Option<&std::path::Path>,
@@ -467,6 +467,30 @@ fn region_targets(
         }
     }
     Ok(targets)
+}
+/// The game folder and the region an order over `state` means: the region named, else the
+/// region holding most of the state (from the game's files).
+pub(super) fn target_region(
+    process: &dyn Process,
+    state: i32,
+    named: Option<i32>,
+) -> (Option<std::path::PathBuf>, Option<i32>) {
+    let dir = process
+        .identity()
+        .and_then(|i| super::mapdata::game_dir(&i.exe).ok());
+    let region = named.or_else(|| {
+        dir.as_ref()
+            .and_then(|dir| super::mapdata::state_regions(dir).ok())
+            .and_then(|m| m.get(&state).map(|v| v.0))
+    });
+    (dir, region)
+}
+/// The mission toolbar's icon frame of a mission name.
+pub(super) fn mission_frame(mission: &str) -> Option<i32> {
+    MISSIONS
+        .iter()
+        .find(|(n, _)| *n == mission)
+        .map(|(_, f)| *f)
 }
 /// Give wing `name` mission `mission` over the region containing `state`.
 pub(super) fn assign(

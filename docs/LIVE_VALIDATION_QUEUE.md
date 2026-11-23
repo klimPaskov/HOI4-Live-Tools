@@ -73,4 +73,53 @@ A save where a small country falls alone (a 1936 start with a war goal on an iso
 15. `hoi4_faction_create`, `hoi4_faction_leave` (watch why its read-back fails), `hoi4_faction_invite_accept`
     on an invitation, `hoi4_diplomacy_incoming` while a proposal is open.
 
-Total: about 155 minutes in three sessions.
+## Session 4: BATCHING PROBES (about 85 minutes)
+
+Each bulk path below is off until its probe passes (`manage.bulk` in the plan, or `bulk: true` on the call);
+the single path stays in use until then. A passed probe adds its name to the plan's `manage.bulk`. Seconds
+are wall seconds from the receipt (dispatch to receipt) and from the `[order]` timing lines; the situation
+report's cleanliness block shows calls, elements changed and seconds per element per action kind.
+
+The May 1940 Germany bed source (1 May 1940, paused, executor off unless said):
+
+16. Factory chords (5 min): `hoi4_production_lines`; a line with a few factories:
+    `hoi4_production_set {line, equipment, factories: current + 23, bulk: true}`, then back to the old count
+    with `bulk: true`. Expected: Verified both ways, 5 clicks each way (two Shift, three plain; the phase
+    timing shows the click count), no trace "chords off". Before: 1.3 s + about 0.3 s a factory (23 factories
+    about 8 s); after about 2.5 s. When a chord moves the line by one only, the game on macOS reads another
+    modifier: note which (Ctrl or Command) and leave `production_chords` off.
+17. Air missions by base (10 min): `hoi4_air`; a base whose wings are all fighters (three or more) and one
+    fighter at a base it shares with another type. `hoi4_air_mission {wings: [the base's wings and the shared
+    one], mission: "air_superiority", region, bulk: true}` with the map watched. Expected: Verified; the result's
+    `by_base` row for the clean base ok, the shared base's wing ordered by the single path; one base click, one
+    mission click and one region click for the clean base. Before: 2.5-5 s a wing; after about 4 s a base. The
+    same call again clicks nothing (every wing flies it already).
+18. Air rebase by base (5 min): `hoi4_air_rebase {wings: [every wing of one base], state_id: another own base
+    with room, bulk: true}`. Expected: each wing's transfer_to_base_id is the target; one base click and one
+    right click. Before: 1.8-3.4 s a wing; after about 3 s a base.
+19. Selection questions for the next step (5 min, by hand, nothing kept): in air mode, Shift+Click a second
+    base circle while one base is selected (are its wings added?), and Shift+Click (then Ctrl+Click) a wing row
+    of the selection view (`airwing_selection_item`): is that wing taken out of the selection? Either answer lets
+    mixed bases join the bulk path.
+20. Design-company traits in one visit (10 min): `hoi4_mio_trait {organization, list: true}`, then
+    `hoi4_mio_trait {organization, trait_indices: [three enabled, visible traits], bulk: true}` with the tree
+    window watched; then `hoi4_mio_trait {organization: another, auto: 2, bulk: true}`. Expected: Verified, the
+    three traits read queue numbers in the result's `entries`, the second organisation has two enabled traits
+    queued. Before: 8.3 s a trait plus 8 s for a listing visit; after about 10 s a visit. Note how often the
+    detail window had to be opened again after a click.
+21. Executor bed with every bulk path (25 min): a STUDY bed of 7 war days from the same source with the plan's
+    `manage.bulk: ["all"]`, hands off; compare its cleanliness table with a bed of the same plan without it
+    (air_mission, air_rebase, production_set, mio_trait: calls, elements changed, s per element). Expected: air
+    orders at least three times fewer calls, no order repeated after a Verified read-back.
+
+A 1936 start (Germany, paused unless said):
+
+22. Construction fill (5 min): `hoi4_state_slots` for a state with three or more free slots for arms_factory;
+    `hoi4_construction_add {building: "arms_factory", state_id, count: <free slots>, fill: true, bulk: true}`.
+    Expected: Verified, the state's queue grew by the free slots after one Shift+Click. Before: about 1 s a
+    building after the first (a 600 ms settle and a read); after one click.
+23. Peace years with every bulk path (20 min): executor on with `manage.bulk: ["all"]` for 60 game days at speed
+    3; the cleanliness table against the 1936 campaign baseline (production_set about 1.3 s a line, mio_trait
+    8.3 s a trait, construction_add 2.9 s a state).
+
+Total: about 240 minutes in four sessions.

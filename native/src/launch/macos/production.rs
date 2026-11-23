@@ -535,19 +535,81 @@ pub(super) fn prioritize(
     })
 }
 
-/// Adjust the line's requested factories to `target` with single +/- clicks.
-fn adjust(process: &dyn Process, keys: &dyn GameInput, handle: u64, target: i32) -> Result<()> {
-    for _ in 0..120 {
-        let current = lines(process)?
+/// One factory click: the +/-1 button alone (1), with Ctrl (5) or with Shift (10): the game's
+/// own steps (PRODUCTION_ADD_FACTORIES_CLICK / PRODUCTION_SUB_FACTORIES_CLICK: "Click to add +1,
+/// Ctrl + Click to add +5, Shift + Click to add +10").
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Chord {
+    One,
+    Five,
+    Ten,
+}
+impl Chord {
+    #[cfg(test)]
+    pub(super) fn size(self) -> i32 {
+        match self {
+            Chord::One => 1,
+            Chord::Five => 5,
+            Chord::Ten => 10,
+        }
+    }
+}
+/// The next click from `current` to `target`: (add?, chord), the largest step that does not
+/// pass the target (single steps only without `chords`); None when the target is reached. Pure.
+pub(super) fn next_chord(current: i32, target: i32, chords: bool) -> Option<(bool, Chord)> {
+    let gap = (target - current).abs();
+    if gap == 0 {
+        return None;
+    }
+    let chord = match gap {
+        _ if !chords => Chord::One,
+        g if g >= 10 => Chord::Ten,
+        g if g >= 5 => Chord::Five,
+        _ => Chord::One,
+    };
+    Some((target > current, chord))
+}
+/// The clicks a change takes: (with chords, single steps). Pure.
+#[cfg(test)]
+pub(super) fn clicks_needed(current: i32, target: i32) -> (u32, u32) {
+    let mut now = current;
+    let mut n = 0;
+    while let Some((add, chord)) = next_chord(now, target, true) {
+        now += if add { chord.size() } else { -chord.size() };
+        n += 1;
+    }
+    (n, current.abs_diff(target))
+}
+
+/// Adjust the line's requested factories to `target` with +/- clicks: single clicks, or with
+/// `chords` the game's Ctrl (5) and Shift (10) clicks first. Each click is read back from
+/// memory; a chord that moved the line by one step only (the modifier not taken) turns the
+/// chords off for the rest of the change, so the single clicks finish it.
+fn adjust(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    handle: u64,
+    target: i32,
+    chords: bool,
+) -> Result<()> {
+    let mut chords = chords;
+    let requested = || -> Result<i32> {
+        Ok(lines(process)?
             .into_iter()
             .find(|l| l.handle == handle)
             .ok_or_else(|| Error::new("input_readback_failed", "Production line disappeared"))?
-            .requested;
-        if current == target {
+            .requested)
+    };
+    if chords {
+        clear_notices(process, keys)?;
+    }
+    let mut current = requested()?;
+    for _ in 0..120 {
+        let Some((add, chord)) = next_chord(current, target, chords) else {
             return Ok(());
-        }
+        };
         reveal(process, keys, handle)?;
-        let name = if current < target {
+        let name = if add {
             "factories_add_1x"
         } else {
             "factories_sub_1x"
@@ -556,13 +618,27 @@ fn adjust(process: &dyn Process, keys: &dyn GameInput, handle: u64, target: i32)
             button(r, i, handle, name)?
                 .ok_or_else(|| Error::new("gui_target_unavailable", "Factory button not found"))
         })?;
-        click(process, keys, rect)?;
+        let (x, y) = rect.center();
+        match chord {
+            Chord::One if chords => keys.click(GAME, x, y).map(|_| ())?,
+            Chord::One => click(process, keys, rect)?,
+            Chord::Five => keys.ctrl_click(GAME, x, y).map(|_| ())?,
+            Chord::Ten => keys.shift_click(GAME, x, y).map(|_| ())?,
+        }
+        let was = current;
         wait(process, "factory change", |r, base| {
             Ok(production_lines::own_lines(r, base)?
                 .iter()
                 .find(|l| l.handle == handle)
-                .is_none_or(|l| l.requested != current))
+                .is_none_or(|l| l.requested != was))
         })?;
+        current = requested()?;
+        if chord != Chord::One && (current - was).abs() == 1 {
+            super::ui::trace_text(&format!(
+                "factory {chord:?} click moved the line by one: chords off for this change"
+            ));
+            chords = false;
+        }
     }
     Err(Error::new(
         "input_readback_failed",
@@ -577,6 +653,7 @@ pub(super) fn add(
     key: &str,
     factories: i32,
     design: Option<i32>,
+    chords: bool,
 ) -> Result<()> {
     clear_notices(process, keys)?;
     ensure_open(process, keys)?;
@@ -694,7 +771,7 @@ pub(super) fn add(
             "Production panel closed after adding the line",
         ));
     }
-    adjust(process, keys, handle, factories)
+    adjust(process, keys, handle, factories, chords)
 }
 
 /// Set an existing line (by collection index and its equipment key) to `factories`.
@@ -704,6 +781,7 @@ pub(super) fn set(
     index: usize,
     key: &str,
     factories: i32,
+    chords: bool,
 ) -> Result<()> {
     clear_notices(process, keys)?;
     let line = lines(process)?
@@ -750,5 +828,31 @@ pub(super) fn set(
                 .any(|l| l.handle == line.handle))
         });
     }
-    adjust(process, keys, line.handle, factories)
+    adjust(process, keys, line.handle, factories, chords)
+}
+
+#[cfg(test)]
+mod chord_tests {
+    use super::{clicks_needed, next_chord, Chord};
+
+    #[test]
+    fn chords_take_the_largest_step_that_does_not_pass_the_target() {
+        assert_eq!(next_chord(0, 0, true), None);
+        assert_eq!(next_chord(0, 23, true), Some((true, Chord::Ten)));
+        assert_eq!(next_chord(20, 27, true), Some((true, Chord::Five)));
+        assert_eq!(next_chord(25, 27, true), Some((true, Chord::One)));
+        assert_eq!(next_chord(30, 2, true), Some((false, Chord::Ten)));
+        assert_eq!(next_chord(7, 2, true), Some((false, Chord::Five)));
+        // without chords: single steps only (the old path)
+        assert_eq!(next_chord(0, 23, false), Some((true, Chord::One)));
+    }
+
+    #[test]
+    fn chords_cut_the_clicks_of_a_large_change() {
+        // 0 -> 23: +10, +10, +1, +1, +1 = 5 clicks instead of 23
+        assert_eq!(clicks_needed(0, 23), (5, 23));
+        assert_eq!(clicks_needed(4, 19), (2, 15));
+        assert_eq!(clicks_needed(15, 0), (2, 15));
+        assert_eq!(clicks_needed(3, 3), (0, 0));
+    }
 }
