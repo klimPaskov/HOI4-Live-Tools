@@ -556,10 +556,12 @@ class World:
                 out["war_support"] = F(num(v), line)
             elif kl == "set_convoys":
                 out["convoys"] = F(num(v), line)
-            elif kl == "add_political_power":
-                out["political_power"] = F(num(v), line)
-            elif kl == "add_command_power":
-                out["command_power"] = F(num(v), line)
+            elif kl in ("add_political_power", "add_command_power"):
+                # additive: a history file adds and removes power in several lines (GER 1939: +1000, then -150
+                # for the focuses its block completes); the last line alone is not the bank
+                key = kl[len("add_"):]
+                prev = out[key]["v"] if out[key] and isinstance(out[key].get("v"), (int, float)) else 0
+                out[key] = F(prev + (num(v) or 0), line)
             elif kl == "add_ideas":
                 for idea in (bare(v) if isinstance(v, list) else [v]):
                     ideas[idea] = F(idea, line)
