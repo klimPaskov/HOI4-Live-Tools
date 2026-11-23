@@ -2296,6 +2296,24 @@ fn a_side_on_its_own_countrys_border_is_clicked_plainly() {
 }
 
 #[test]
+fn a_wing_on_one_own_state_draws_that_states_border_only() {
+    let u = unit(
+        "Armee Pommern".into(),
+        Role::Wing,
+        &json!({"enemy": "BEL", "own_states": [51]}),
+        &json!({}),
+    );
+    assert_eq!(
+        front_args(&u, 980, true),
+        json!({"army": "Armee Pommern", "state_id": 980, "from_state": 51})
+    );
+    assert_eq!(
+        front_args(&u, 980, false),
+        json!({"army": "Armee Pommern", "state_id": 980})
+    );
+}
+
+#[test]
 fn the_sides_once_recorded_stay_while_the_armies_walk() {
     let mut state = State::default();
     for (s, p) in [(56, (2930.0, 1575.0)), (42, (2919.0, 1511.0))] {

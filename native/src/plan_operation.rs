@@ -1273,7 +1273,10 @@ fn order(
 /// whatever the target); every other front takes the whole highlighted border.
 fn front_args(u: &Unit, click: i64, peace: bool) -> Value {
     match (u.role, u.own_states.as_slice()) {
-        (Role::Mobile, [own]) if peace => {
+        // a mobile or wing army on one own state: the segment of that state's border only (a wing's
+        // plain-click front against Belgium grew at war along the whole French border, 23 divisions
+        // on [978,42,51,36], w42z1, 23 Nov 2026)
+        (Role::Mobile | Role::Wing, [own]) if peace => {
             json!({"army": u.name, "state_id": click, "from_state": own})
         }
         // a side on its own country's border: the plain click takes that country's whole piece
@@ -3265,8 +3268,14 @@ fn reconcile(
     }
     // a side on its own country's border whose front stands on another piece (a group kept from
     // before the split, its front on the other country's border: w42u, 23 Nov 2026) is cleared
-    // and drawn again on its own piece, at most REDRAWS times
-    if u.own_enemy && peace {
+    // and drawn again on its own piece, at most REDRAWS times. Any group or wing with own states
+    // too: a group front clicked near an army still standing elsewhere took the next country's
+    // highlight and stood on [42,51] against Belgium for months while its offensive into Holland
+    // was refused (w42y/w42za, 23 Nov 2026)
+    if peace
+        && !u.own_states.is_empty()
+        && (u.own_enemy || matches!(u.role, Role::Group | Role::Wing))
+    {
         let fronts: Vec<&Value> = orders(roster, &u.name)
             .iter()
             .filter(|o| o["kind"] == json!("front"))
