@@ -371,6 +371,23 @@ pub(super) fn quick_state(process: &dyn Process) -> Value {
     })
 }
 
+/// Why no input may reach this widget at all: the console and debug controls are not the player's
+/// interface (FAIR play), even when a mod draws a debug button in its own panel.
+pub(super) fn forbidden(window: &Window, widget: &Widget) -> Option<String> {
+    let effect = widget
+        .script
+        .as_ref()
+        .and_then(|s| s["effect"].as_str())
+        .unwrap_or("");
+    [window.id.as_str(), widget.id.as_str(), effect]
+        .iter()
+        .find(|t| {
+            let t = t.to_ascii_lowercase();
+            t.contains("console") || t.contains("debug")
+        })
+        .map(|t| format!("{t} is a console or debug control: not the player's interface"))
+}
+
 /// Why a click on this widget needs the caller's say-so, or None.
 pub(super) fn needs_consent(window: &Window, widget: &Widget) -> Option<(&'static str, String)> {
     if window.source == "popup" {
@@ -491,6 +508,9 @@ pub(super) fn act(
                 ),
             )
         })?;
+        if let Some(why) = forbidden(w, x) {
+            return Err(Error::new("widget_forbidden", why));
+        }
         if !x.shown {
             return Err(Error::new(
                 "widget_hidden",
@@ -969,7 +989,7 @@ pub(super) fn skill_run(
 pub(super) fn tools() -> Vec<Value> {
     vec![
         json!({"name": "hoi4_ui_inspect", "description": "Read-only: every open window and its widgets from the game's interface memory, for panels no other tool knows (a mod's own mechanics, a new DLC). Each widget has a stable `id` (the path of .gui element names, e.g. \"topbar/decisionview_button\"; `#n` numbers repeated names, `#n` below a grid numbers its entries), `kind` (button, icon, text, container, grid, ...), `at` [x,y,w,h] on screen when known, `enabled:false` when the game greys it out, `text` for text boxes, and `script`: what the game's and the mod's interface files say (tooltip text, the scripted effect a mod's button runs, what it spends, what cannot be undone). Pass `window` (a window id or a widget id) to read one panel; `all:true` adds hidden widgets. No input, no lease, never pauses. Example: {\"window\": \"topbar\"}", "inputSchema": {"type": "object", "properties": {"window": {"type": "string", "maxLength": 400, "description": "a window id from an earlier reading, or a widget id to read only that subtree"}, "all": {"type": "boolean", "description": "also list hidden widgets (default false)"}, "hidden_windows": {"type": "boolean", "description": "also list windows the game keeps hidden (default false)"}, "max": {"type": "integer", "minimum": 20, "maximum": 3000, "default": 400}}, "additionalProperties": false}, "annotations": {"readOnlyHint": true}}),
-        json!({"name": "hoi4_ui_act", "description": "One ordinary input on a widget by its id from hoi4_ui_inspect, then what changed: `changed` (windows opened or closed, widgets shown, hidden, enabled, disabled, new text) and `state_changed` (political power, stability, war support, manpower, factories, resources, alerts with their deltas). Refused before any input: widget_not_found / widget_ambiguous (with candidates), widget_hidden, widget_disabled, widget_without_rectangle; irreversible_needs_confirmation when the files say the click spends something or cannot be undone (pass confirm_irreversible:true only when you mean it); dialog_needs_answer_flag for a pop-up's buttons (answer_dialog:true). action: click (default), right_click, shift_click, ctrl_click, hover (rest the cursor on it), scroll_up, scroll_down; times repeats a click (1-10). When it worked, keep it with hoi4_skill_save. Example: {\"widget\": \"topbar/decisionview_button\", \"action\": \"click\", \"request_id\": \"r1\", \"lease_token\": \"...\"}", "inputSchema": {"type": "object", "properties": {"widget": {"type": "string", "maxLength": 400, "description": "widget id from hoi4_ui_inspect (or a name only one shown widget has)"}, "action": {"type": "string", "enum": ["click", "right_click", "shift_click", "ctrl_click", "hover", "scroll_up", "scroll_down"], "default": "click"}, "times": {"type": "integer", "minimum": 1, "maximum": 10, "default": 1}, "confirm_irreversible": {"type": "boolean"}, "answer_dialog": {"type": "boolean"}, "wait_ms": {"type": "integer", "minimum": 200, "maximum": 5000, "default": 700, "description": "how long to wait before reading what changed"}, "request_id": {"type": "string"}, "lease_token": {"type": "string"}}, "required": ["widget", "request_id", "lease_token"], "additionalProperties": false}}),
+        json!({"name": "hoi4_ui_act", "description": "One ordinary input on a widget by its id from hoi4_ui_inspect, then what changed: `changed` (windows opened or closed, widgets shown, hidden, enabled, disabled, new text) and `state_changed` (political power, stability, war support, manpower, factories, resources, alerts with their deltas). Refused before any input: widget_not_found / widget_ambiguous (with candidates), widget_forbidden (console and debug controls), widget_hidden, widget_disabled, widget_without_rectangle; irreversible_needs_confirmation when the files say the click spends something or cannot be undone (pass confirm_irreversible:true only when you mean it); dialog_needs_answer_flag for a pop-up's buttons (answer_dialog:true). action: click (default), right_click, shift_click, ctrl_click, hover (rest the cursor on it), scroll_up, scroll_down; times repeats a click (1-10). When it worked, keep it with hoi4_skill_save. Example: {\"widget\": \"topbar/decisionview_button\", \"action\": \"click\", \"request_id\": \"r1\", \"lease_token\": \"...\"}", "inputSchema": {"type": "object", "properties": {"widget": {"type": "string", "maxLength": 400, "description": "widget id from hoi4_ui_inspect (or a name only one shown widget has)"}, "action": {"type": "string", "enum": ["click", "right_click", "shift_click", "ctrl_click", "hover", "scroll_up", "scroll_down"], "default": "click"}, "times": {"type": "integer", "minimum": 1, "maximum": 10, "default": 1}, "confirm_irreversible": {"type": "boolean"}, "answer_dialog": {"type": "boolean"}, "wait_ms": {"type": "integer", "minimum": 200, "maximum": 5000, "default": 700, "description": "how long to wait before reading what changed"}, "request_id": {"type": "string"}, "lease_token": {"type": "string"}}, "required": ["widget", "request_id", "lease_token"], "additionalProperties": false}}),
         json!({"name": "hoi4_skill_save", "description": "Keep something that worked as a named skill (a plain JSON file in the learned/skills folder, one per skill, readable and editable): name, purpose, parameters, the windows/widgets that must be on screen before it starts (requires), its steps (tool calls; \"{param}\" in a string is replaced by the run's argument; leave out request_id and lease_token), the proofs that it worked (verify), cost and whether one click can undo it (reversible). The game version and mod set are stamped on it. Refused with what to fix: invalid_skill; skill_exists (replace:true overwrites). Example: {\"skill\": {\"name\": \"open_caps_trade\", \"purpose\": \"Open the mod's caps trade panel\", \"steps\": [{\"tool\": \"hoi4_ui_act\", \"args\": {\"widget\": \"topbar/caps_button\"}}], \"verify\": [{\"check\": \"window_opens\", \"id\": \"caps_window\"}], \"cost\": \"nothing\", \"reversible\": true}}", "inputSchema": {"type": "object", "properties": {"skill": {"type": "object", "properties": {"name": {"type": "string", "pattern": "^[a-z0-9_]{3,64}$"}, "purpose": {"type": "string", "maxLength": 400}, "parameters": {"type": "object", "description": "parameter name -> what to pass"}, "requires": {"type": "object", "properties": {"windows": {"type": "array", "items": {"type": "string"}}, "widgets": {"type": "array", "items": {"type": "string"}}}, "additionalProperties": false}, "steps": {"type": "array", "minItems": 1, "maxItems": 12, "items": {"type": "object", "properties": {"tool": {"type": "string"}, "args": {"type": "object"}, "note": {"type": "string"}}, "required": ["tool"], "additionalProperties": false}}, "verify": {"type": "array", "items": {"type": "object", "properties": {"check": {"type": "string", "enum": ["window_opens", "window_closes", "widget_changes", "read_changes"]}, "id": {"type": "string"}, "tool": {"type": "string"}, "path": {"type": "string"}, "direction": {"type": "string", "enum": ["up", "down", "any"]}}, "required": ["check"], "additionalProperties": false}}, "cost": {"type": "string"}, "reversible": {"type": "boolean"}, "evidence": {"type": "string"}}, "required": ["name", "purpose", "steps"]}, "replace": {"type": "boolean"}}, "required": ["skill"], "additionalProperties": false}}),
         json!({"name": "hoi4_skill_list", "description": "Read-only: the saved skills (name, purpose, parameters, status active/stale/retired, runs that worked and failed, whether it can run on this game version and mod set) and the current mod set. No input. Example: {}", "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false}, "annotations": {"readOnlyHint": true}}),
         json!({"name": "hoi4_skill_show", "description": "Read-only: one saved skill in full (steps, requires, verify, cost, where it was learned, its runs) and why it cannot run here if it cannot. Example: {\"name\": \"open_caps_trade\"}", "inputSchema": {"type": "object", "properties": {"name": {"type": "string", "pattern": "^[a-z0-9_]{3,64}$"}}, "required": ["name"], "additionalProperties": false}, "annotations": {"readOnlyHint": true}}),
@@ -1154,6 +1174,13 @@ mod tests {
         assert!(needs_consent(w, x).is_none());
         let (w, x) = uitree::find(&ws, "accept_button").unwrap();
         assert_eq!(needs_consent(w, x).unwrap().0, "answer_dialog");
+        assert!(forbidden(w, x).is_none());
+        let mut debug = x.clone();
+        debug.id = "roach_nest_window/button_debug".into();
+        assert!(forbidden(w, &debug).unwrap().contains("debug"));
+        let mut console = w.clone();
+        console.id = "console".into();
+        assert!(forbidden(&console, x).is_some());
     }
 
     #[test]

@@ -121,7 +121,8 @@ in its row. Review a skill with `hoi4_skill_show` before you list it.
 
 - It acts only through the game's own interface, as a player would: no console, no debug commands, no save
   editing, no changes to the game's memory, the same input lease as every other action.
-- It clicks only widgets that are shown and greyed-out widgets are refused.
+- It clicks only widgets that are shown; greyed-out widgets, the console and any debug control (even a
+  mod's own debug button) are refused.
 - It never spends something or does something final without being told to (`confirm_irreversible`), and
   never answers a pop-up without `answer_dialog`.
 - In a campaign it never reloads to undo a try.

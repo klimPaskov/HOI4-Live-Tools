@@ -98,7 +98,9 @@ With any mod in the run spec, also run `python3 scripts/hoi4facts/facts.py mod-d
 as for the dossier) and read it before planning: new resources, buildings, decision categories, scripted
 interfaces (the mod's own mechanics), a replaced map, changed defines, and the typed tools whose panels the mod
 replaced. A plan for such a mod names what the player must learn first (its `learning_targets`) and never
-relies on a typed tool the report lists as affected.
+relies on a typed tool the report lists as affected. What earlier sessions learned is in the install's `learned/` folder
+(`learned/facts.json`: facts with their source; `learned/skills/*.json`: saved skills with their status and
+runs): use the facts as evidence, and put an active skill that serves the goal in the plan's `learned` key.
 
 **2. Formalise the goal.** Follow [references/goal-patterns.md](references/goal-patterns.md): search
 in-game formalisations first (`facts.py decisions <TAG>`, `missions <TAG>`, `hooks <TAG>`, `vp <ENEMY>`,
