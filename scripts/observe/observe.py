@@ -11,6 +11,17 @@
       print the newest SITREP; with --since, what changed since that game date.
   observe.py history RUN PATH [--changes]
       one quantity over time (see hoi4_live/observe/history.py for paths).
+  observe.py watch RUN [--poll 10]
+      the issue monitor for the whole life of a run: RUN/issues.jsonl, ISSUES.md, issues_open.json,
+      GATE.md and gates/, COSTS.md, COVERAGE.md (docs/MONITORING.md). Reads files only.
+  observe.py monitor RUN [--out DIR]
+      replay the monitor over a finished run and print what it would have caught and when.
+  observe.py costs RUN / observe.py coverage RUN
+      print the cost meter / the tool coverage table of a run.
+  observe.py lessons STORE {seed [FILE] | list | lint PLAN [--country TAG]}
+      the lessons store (learned/lessons): install the seeded lessons, list them, lint a plan.
+  observe.py report REPORT.md RUN [RUN ...] [--store STORE]
+      rewrite the generated blocks (<!-- auto:NAME --> ... <!-- /auto:NAME -->) of a report from runs.
 
 RUN is a run directory. The socket speaks one JSON line each way:
 {"tool", "args", "source": "recorder"} -> {"isError", "body"}.
@@ -171,6 +182,70 @@ def cmd_history(a):
     return 0
 
 
+def cmd_watch(a):
+    from hoi4_live.observe.monitor import watch
+    mon = watch(a.run, poll=a.poll)
+    print(f"monitor stopped: {len(mon.det.issues)} issues, {len(mon.esc.log)} escalations", flush=True)
+    return 0
+
+
+def cmd_monitor(a):
+    from hoi4_live.observe.monitor import Monitor, summarize
+    out = a.out or os.path.join(a.run, "monitor-replay")
+    if os.path.exists(os.path.join(out, "issues.jsonl")):
+        os.remove(os.path.join(out, "issues.jsonl"))
+    for name in ("escalations.jsonl",):
+        if os.path.exists(os.path.join(out, name)):
+            os.remove(os.path.join(out, name))
+    mon = Monitor(a.run, out, replay=True, store=a.store)
+    events = mon.replay()
+    sys.stdout.write(summarize(events, a.limit))
+    st = mon._stats()
+    print(f"overhead: {st['snapshots']} snapshots, mean {st['ms_per_snapshot_mean']:.1f} ms; whole replay "
+          f"{mon.poll_ms[-1]:.0f} ms; files in {out}")
+    return 0
+
+
+def cmd_costs(a):
+    from hoi4_live.observe import costs
+    sys.stdout.write(costs.render_costs(a.run))
+    return 0
+
+
+def cmd_coverage(a):
+    from hoi4_live.observe import costs
+    sys.stdout.write(costs.coverage(a.run))
+    return 0
+
+
+def cmd_lessons(a):
+    from hoi4_live.observe.lessons import LessonStore
+    st = LessonStore(a.store, os.environ.get("HOI4_GAME_VERSION", ""))
+    if a.action == "seed":
+        seed = a.arg or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                                     "hoi4_live", "observe", "lessons_seed.json")
+        print(f"{st.seed(seed)} lessons installed in {st.dir}")
+    elif a.action == "list":
+        for le in st.all():
+            print(f"{le['id']} [{le.get('status')}, {le.get('confidence', 0):.2f}, {le.get('scope')}]: "
+                  f"{le.get('statement', '')[:150]}")
+    elif a.action == "lint":
+        with open(a.arg) as f:
+            plan = json.load(f)
+        warns = st.lint_plan(plan, a.country)
+        for w in warns:
+            print(f"WARN lesson {w['lesson']} at {w['where']}: {w['text'][:200]}")
+        print(f"{len(warns)} warning(s)")
+    return 0
+
+
+def cmd_report(a):
+    from hoi4_live.observe.report import fill
+    fill(a.report, a.runs, a.store)
+    print(f"filled {a.report} from {len(a.runs)} run(s)")
+    return 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -199,6 +274,33 @@ def main(argv=None):
     h.add_argument("path")
     h.add_argument("--changes", action="store_true")
     h.set_defaults(fn=cmd_history)
+    w = sub.add_parser("watch")
+    w.add_argument("run")
+    w.add_argument("--poll", type=float, default=10.0)
+    w.set_defaults(fn=cmd_watch)
+    m = sub.add_parser("monitor")
+    m.add_argument("run")
+    m.add_argument("--out")
+    m.add_argument("--store", help="lessons store (default: learned/ beside the run, as the server's)")
+    m.add_argument("--limit", type=int, default=40)
+    m.set_defaults(fn=cmd_monitor)
+    c = sub.add_parser("costs")
+    c.add_argument("run")
+    c.set_defaults(fn=cmd_costs)
+    cv = sub.add_parser("coverage")
+    cv.add_argument("run")
+    cv.set_defaults(fn=cmd_coverage)
+    ls = sub.add_parser("lessons")
+    ls.add_argument("store")
+    ls.add_argument("action", choices=["seed", "list", "lint"])
+    ls.add_argument("arg", nargs="?")
+    ls.add_argument("--country")
+    ls.set_defaults(fn=cmd_lessons)
+    rpt = sub.add_parser("report")
+    rpt.add_argument("report")
+    rpt.add_argument("runs", nargs="+")
+    rpt.add_argument("--store")
+    rpt.set_defaults(fn=cmd_report)
     a = p.parse_args(argv)
     return a.fn(a)
 

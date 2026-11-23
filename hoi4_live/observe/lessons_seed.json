@@ -1,0 +1,913 @@
+[
+ {
+  "id": "events_open_is_transient",
+  "statement": "An order refused because an event is open passes once the event is answered: retry it within hours and never store it as a refusal of the order itself.",
+  "situation": {
+   "tool": "*",
+   "cause": "events_open",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1939-40 source run (23 Nov): one air_superiority order refused with events_open was kept as a refusal of the region; 9 fighter wings (900 planes) trained all winter",
+   "three war runs (22-23 Nov): events_open refusals of air_mission 13, air_rebase 10, construction_add 2, army_offensive 1"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.8,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the ledger's passing_failure list has no events_open; only the air plan lane treats it as transient",
+  "executor": {
+   "treat_as": "transient",
+   "advice": "answer the open events, then send the order again"
+  }
+ },
+ {
+  "id": "selection_lost_is_transient",
+  "statement": "An order refused because the selection was lost (another click took it) is not a refusal of the order: retry it soon.",
+  "situation": {
+   "tool": "*",
+   "cause": "selection_lost",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1939-40 (s53a, 23 Nov): the air lane had stored such refusals as refusals of the region and left wings training; its fix covers the air lane only"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the ledger's passing_failure list has no selection_lost; only the air plan lane treats it as transient",
+  "executor": {
+   "treat_as": "transient",
+   "advice": "send the order again; nothing about it was wrong"
+  }
+ },
+ {
+  "id": "air_base_full_use_nearest_base_with_room",
+  "statement": "A rebase to a full air base is refused every time: send the wing to the nearest base with room instead (hoi4_air_regions lists each base's free capacity).",
+  "situation": {
+   "tool": "hoi4_air_rebase",
+   "cause": "air_base_full",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany campaign and West beds (22-23 Nov): hoi4_air_rebase refused air_base_full 16 times, the same base asked again"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.75,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "no executor lane handles air_base_full; only the tool itself reports it",
+  "executor": {
+   "treat_as": "permanent",
+   "advice": "rebase to the nearest base with room; the full base will not take it"
+  }
+ },
+ {
+  "id": "production_add_invalid_target_waits_for_research",
+  "statement": "A production line for equipment the country cannot build yet (research not done, or a ship hull on military factories) is refused until that changes: wait for the research instead of re-adding the line every few days.",
+  "situation": {
+   "tool": "hoi4_production_add",
+   "cause": "invalid_target",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1939-40 (g17n, g17o): production_add ship_hull_submarine_1 refused 17 times, every one or two weeks; six dockyards idle meanwhile"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the ledger treats invalid_target as final only for focus starts; production orders rest the standard span",
+  "executor": {
+   "treat_as": "wait",
+   "days": 30,
+   "advice": "the equipment needs its research first: queue the research or pick a researched equipment"
+  }
+ },
+ {
+  "id": "general_trait_none_enabled_waits_for_a_level",
+  "statement": "When no trait of a general can be picked, the refusal holds until he gains a level: do not ask again within weeks.",
+  "situation": {
+   "tool": "hoi4_general_trait",
+   "cause": "no_enabled_trait",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1939-40: 11 tries for two generals, 0 traits; every answer was 'No assignable trait can be picked now'"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the seams lane skips the general on this code; the generic ledger (other lanes, the player) does not",
+  "executor": {
+   "treat_as": "wait",
+   "days": 30,
+   "advice": "spend the command power elsewhere; the general needs a level first"
+  }
+ },
+ {
+  "id": "politics_options_designers_use_mio_tools",
+  "statement": "Design companies and their slots are not politics options: hoi4_politics_options refuses them with use_mio_tools; read and assign them with hoi4_mios and hoi4_mio_line.",
+  "situation": {
+   "tool": "hoi4_politics_options",
+   "cause": "use_mio_tools",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "three runs (22-23 Nov): hoi4_politics_options refused use_mio_tools 51 times"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "no executor lane names use_mio_tools; the read is repeated on every politics pass",
+  "executor": {
+   "treat_as": "permanent",
+   "advice": "use hoi4_mios for designers and design companies"
+  }
+ },
+ {
+  "id": "template_edit_unknown_template",
+  "statement": "A template edit for a template name the game does not have is refused every time: read hoi4_division_templates for the exact name first.",
+  "situation": {
+   "tool": "hoi4_template_edit",
+   "cause": "template_unknown",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "three runs (22-23 Nov): hoi4_template_edit refused template_unknown 11 times"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the generic ledger rests it as any other refusal",
+  "executor": {
+   "treat_as": "permanent",
+   "advice": "read the exact template names with hoi4_division_templates"
+  }
+ },
+ {
+  "id": "construction_select_failed_is_a_gui_fault",
+  "statement": "A construction order refused with building_select_failed did not reach the game's building button (a GUI fault of that building on this version), not a reason to give up the state: report it as a tool fault.",
+  "situation": {
+   "tool": "hoi4_construction_add",
+   "cause": "building_select_failed",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1939-40 (s53a): radar stations in states 51 and 56 blocked after 3 tries each, building_select_failed; 12 such refusals in three runs"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the plan item is blocked after three tries; nothing tells the gate it is the tool",
+  "executor": {
+   "treat_as": "permanent",
+   "advice": "a tool fault for this building: report it; build other buildings meanwhile"
+  }
+ },
+ {
+  "id": "event_choose_option_is_an_index",
+  "statement": "hoi4_event_choose takes the option as its index (0, 1, ...), not the option's key or name.",
+  "situation": {
+   "tool": "hoi4_event_choose",
+   "cause": "invalid_arguments",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1939-40 (g17n): option given as the key string 'germany.14.a' 18 times, refused invalid_arguments; 0 passed"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the tool refuses a key; nothing tells the player before the call"
+ },
+ {
+  "id": "event_choose_top_event_first",
+  "statement": "When an event answer reads back still open, another event is drawn over it: answer the event on top first (the list order is not the screen order).",
+  "situation": {
+   "tool": "hoi4_event_choose",
+   "cause": "event_covered",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "news.234 answered 5 times and still open (s53a); mtg_netherlands.66 x17, news.33 x10 in the audit"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the executor iterates the events from the last; the player has no such rule"
+ },
+ {
+  "id": "list_tools_take_no_full_flag",
+  "statement": "hoi4_decisions_list and hoi4_special_projects take no `full` argument: call them without it.",
+  "situation": {
+   "tool": "hoi4_decisions_list",
+   "cause": "invalid_arguments",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1939-40 (g17n): both tools refused `full` at the player's setup reads"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the tools refuse unknown arguments"
+ },
+ {
+  "id": "politics_options_needs_a_category",
+  "statement": "hoi4_politics_options needs `category` as a string (and `slot`): a call without it is refused.",
+  "situation": {
+   "tool": "hoi4_politics_options",
+   "cause": "invalid_arguments",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1939-40 (g17n): 5 calls without a category refused; the audit counts 48 such faults"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the schema requires category"
+ },
+ {
+  "id": "research_start_needs_a_free_slot",
+  "statement": "hoi4_research_start without a free slot is refused unless `replace` is set: read hoi4_research for a free slot first.",
+  "situation": {
+   "tool": "hoi4_research_start",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "the audit counts 62 research_start calls without a free slot (18-23 Nov)"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the tool refuses; the player retried"
+ },
+ {
+  "id": "air_mission_region_form",
+  "statement": "hoi4_air_mission's region is the strategic region's id as the game reads it (hoi4_air_regions lists them); a wrong form is refused.",
+  "situation": {
+   "tool": "hoi4_air_mission",
+   "cause": "invalid_arguments",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "the audit counts 30 air_mission calls refused for the region's form"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the schema leaves the type open"
+ },
+ {
+  "id": "states_needs_a_query",
+  "statement": "hoi4_states needs `query` (a country tag, a name or ids): an empty call is refused.",
+  "situation": {
+   "tool": "hoi4_states",
+   "cause": "invalid_arguments",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "the audit counts 34 hoi4_states {} calls"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the schema requires query"
+ },
+ {
+  "id": "owned_armies_refuse_direct_orders",
+  "statement": "An army that belongs to a running operation refuses direct orders (owned_by_operation): change the operation in the plan, or take the army out of it, instead of ordering it by hand.",
+  "situation": {
+   "tool": "hoi4_army_front",
+   "cause": "owned_by_operation",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1940 (g17n): a hand front for the stalled group was refused owned_by_operation; the operation had to be edited"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the server refuses before input; the player is not told what to do instead"
+ },
+ {
+  "id": "save_answer_events_first",
+  "statement": "hoi4_save is refused while an event is open: answer the open events first, then save.",
+  "situation": {
+   "tool": "hoi4_save",
+   "cause": "events_open",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "the audit counts 14 saves refused with events_open (52 of 117 saves failed)"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the save flow refuses; nothing answers the events for it"
+ },
+ {
+  "id": "save_from_the_default_map_mode",
+  "statement": "Saving while paused in the naval map mode fails: the save clicks fall through onto the map. Switch to the default map mode (hoi4_map_mode) before hoi4_save, and retry a failed save once.",
+  "situation": {
+   "tool": "hoi4_save",
+   "cause": "invalid_gui",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "West beds (23 Nov): 14 of 27 saves failed; a screenshot showed the North Sea region panel open and the map in the naval mode under the save clicks"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the save flow does not set the map mode"
+ },
+ {
+  "id": "divisions_beyond_width_wait_in_reserve",
+  "statement": "An attack from one province engages only what the combat width holds (4 of 23 divisions engaged in a forest battle, 19 in reserve): spread the attackers over the neighbouring provinces of the front and attack the same target from several.",
+  "situation": {
+   "code": "battle_reserve_waiting",
+   "when": "war"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "West bed (23 Nov, battle read): Armee Pommern attacked a Belgian forest province with 23 divisions, 4 engaged, 19 in reserve"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.7,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "no executor rule spreads an attacking stack by the combat width"
+ },
+ {
+  "id": "short_front_overstacks",
+  "statement": "A front piece too short for its divisions overstacks: supply and organisation fall before the enemy is met. Give a large formation a front with enough provinces for its divisions (63 divisions on a 4-province border ran at 21-30% supply).",
+  "situation": {
+   "code": "province_overstacked",
+   "when": "war"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1940 (g17n): Army Group 2, 63 divisions on the 4-province Belgian border, supply 21-30%, organisation 49-61%, BEL held all its states for six months",
+   "West beds (23 Nov): 19-23 divisions in one Groningen/Rhineland province at 50-57% supply"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.7,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the stacking finding names it; no rule widens a front",
+  "plan_lint": {
+   "path": "operations[*].front.own_states",
+   "shorter_than": 2,
+   "text": "a group front from a single own state is a short piece for a whole group: check it is long enough for its divisions"
+  }
+ },
+ {
+  "id": "one_state_spear_line_stops",
+  "statement": "A spear line must run through a small country to a target beyond it: a line of one state stops at that state and does not carry the armour to the victory points.",
+  "situation": {
+   "code": "victory_points_flat",
+   "when": "war"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "West beds (23 Nov): with the line [Luxembourg] alone Luxembourg was never taken (0/5 VP although its army died); with the line through Luxembourg to the states beyond it fell on day 4"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.65,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the operation follows the plan's target_line as written",
+  "plan_lint": {
+   "path": "operations[*].formations[*].offensive.target_line",
+   "shorter_than": 2,
+   "text": "a one-state target line stops the formation at that state: run it through to a target beyond"
+  }
+ },
+ {
+  "id": "wing_alone_needs_the_assault_guard",
+  "statement": "A wing alone against a defended border with allied divisions behind it bleeds and takes nothing: keep the assault guard on for a wing; the border falls to the main weight.",
+  "situation": {
+   "code": "losing_exchange",
+   "when": "war"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "West beds (23 Nov): without the guard Armee Pommern (23 div) attacked Belgium alone at 1:0.91 and Moselland was lost; with it the Belgians bled 1:2.4 against the held front"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the guard exists in the operation; nothing stops a plan from turning it off",
+  "plan_lint": {
+   "path": "operations[*].assault_guard",
+   "equals": false,
+   "text": "the assault guard is off: a wing alone against a defended border bled in the West beds"
+  }
+ },
+ {
+  "id": "plan_before_declaring",
+  "statement": "Draw the attacking fronts weeks before the declaration: a front drawn or redrawn days before has no planning bonus and its first battles are fought without it.",
+  "situation": {
+   "code": "planning_low_at_declaration",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1940 (g17n): the Low Countries front drawn in late April after a rename, war on 11 May: no planning bonus at W day",
+   "West beds (23 Nov): the group's planning 0.43 in April fell to 0.24 at war after redraws"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.65,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the operation prepares from its prepare date; nothing reports planning at the declaration"
+ },
+ {
+  "id": "armies_after_a_capitulation_need_new_fronts",
+  "statement": "When an enemy capitulates, every army that fought it needs a new front within days; left without one it stands where the war ended (63 divisions at Lublin for 3.5 months).",
+  "situation": {
+   "code": "army_without_order",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1939-40 (g17n): Army Group 2 stood at Lublin with no front from October to January after Poland capitulated"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.65,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the operation's hand-over moves formations it names; armies outside it get nothing"
+ },
+ {
+  "id": "air_follows_the_war_after_a_capitulation",
+  "statement": "After an enemy capitulates its air regions empty: send every land-mission wing over it to the next front the same week.",
+  "situation": {
+   "code": "air_away_from_front",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1940 (g17n): 11 fighter wings flew air superiority over pacified Western Poland in January; the plan's West air rows started in late April"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the air plan follows its dated rows; nothing reacts to a capitulation"
+ },
+ {
+  "id": "strike_targets_end_with_their_operation",
+  "statement": "A strike objective of a finished operation must not stay on an army of the next one (an armoured group sat in Slovakia for 256 days on a Polish province).",
+  "situation": {
+   "code": "army_without_order",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1940 (g17n): Panzergruppe Ost stood in western Slovakia with a Polish strike objective 256 days old on the day the West began"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.55,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "reported as an executor gap; the monitor's packet carries it until a rule exists"
+ },
+ {
+  "id": "flooding_follows_a_slow_dutch_opening",
+  "statement": "Holland floods its water line (an event) when its core is not taken in the first days: the armour must be on the Dutch border at the declaration, not on its way.",
+  "situation": {
+   "code": "victory_points_flat",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1940 (g17n): the armour was in Bohemia and Slovakia on W day; Holland flooded and held 4 of 5 states for six months"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.55,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "country-specific fact; no rule names it"
+ },
+ {
+  "id": "defended_border_needs_the_main_weight",
+  "statement": "A defended border with allied divisions behind it is not taken by a wing: put the main weight (the group and the armour) on it, from the side where the defence is thinnest.",
+  "situation": {
+   "code": "victory_points_flat",
+   "when": "war"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "West beds (23 Nov): Belgium held 0 of 86 points in every 28-day run while the group and both armour corps fought in Holland or the Ardennes"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.55,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the plan decides the weight; no rule moves it"
+ },
+ {
+  "id": "small_neighbour_falls_to_a_planned_armour_front",
+  "statement": "A formation that stood on its front long enough to reach its planning bonus takes a small neighbour in days at a high ratio (Luxembourg in 4 days, 1:90 and 1:33).",
+  "situation": {
+   "code": "planning_near_zero",
+   "when": "war"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "West beds w53a and w53c (23 Nov): the armour fronted on Luxembourg since October at planning 0.40 took it on day 4"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "a judgement for plans; no rule"
+ },
+ {
+  "id": "war_silence_is_waiting_on_a_guard",
+  "statement": "When an executing operation sends no army order for days, its formations are waiting on a guard, a hand-over or an order that keeps failing: read the operation's last status lines, not the map.",
+  "situation": {
+   "code": "war_orders_silent",
+   "when": "war"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "West bed w53a (23 Nov): no army order from war day 0 to about day 9 (declarations, air, MIO and doctrine only)"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.55,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the monitor's war_orders_silent rule finds it; no executor rule reports it"
+ },
+ {
+  "id": "river_attacks_shift_the_arrow",
+  "statement": "An attack across a river fights at a penalty: when the battle read shows one, move the arrow to a province without the river or bring the armour to it, rather than paying the losses.",
+  "situation": {
+   "code": "battle_across_river",
+   "when": "war"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "West beds (23 Nov): HOL ratios 1:1.7-1:3.4 and the Dutch canal line held from day 14 in every run"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.5,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "general game mechanics; the executor attacks the target line as written"
+ },
+ {
+  "id": "saves_failing_are_a_gate_item",
+  "statement": "Two failed saves in a row are a tool fault for the gate, not something to retry every minute: answer events, close panels, switch to the default map mode, retry once, then report.",
+  "situation": {
+   "code": "save_failing",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "22-23 Nov: 14 of 27 saves in the West runs and 52 of 117 overall failed (input_readback_failed 35, events_open 14, window closed 10)"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.7,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the save flow retries internally; nothing reports a failing streak"
+ },
+ {
+  "id": "execute_a_plan_once_after_the_last_redraw",
+  "statement": "Executing a battle plan after every redraw repeats the same order: draw all fronts and arrows of a formation first, then execute once.",
+  "situation": {
+   "code": "duplicate_action",
+   "tool": "hoi4_army_plan",
+   "when": "war"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "West beds (23 Nov): 22-34 identical repeats per 38 days, most of them army_plan execute after each redraw (PG Nord / Army Group 1 x3-6)"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the war step executes after each order it sends; nothing batches the execute"
+ },
+ {
+  "id": "send_the_whole_target_line_at_once",
+  "statement": "An offensive sent one state at a time repeats the order for each state: send the formation's whole target line in one hoi4_army_offensive call with `states`.",
+  "situation": {
+   "code": "duplicate_action",
+   "tool": "hoi4_army_offensive",
+   "when": "war"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "West beds (23 Nov): offensives sent state by state (West Sud to 35 x3, PG Ost to 34 x4); 39 single-state calls against 20 with states"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the tool takes `states`; the war step still sends single states in several paths"
+ },
+ {
+  "id": "hold_armies_stay_out_of_attack_groups",
+  "statement": "An army that holds a border must not be listed in an attack group: the group's regroup takes it and the border it held falls.",
+  "situation": {
+   "code": "threatened_state_undefended",
+   "when": "any"
+  },
+  "tried": "",
+  "outcome": "rule",
+  "evidence": [
+   "Germany 1939 (bed c41d, 23 Nov): the Westwall hold army joined the Polish group, its hold front kept 0 divisions and France took three border states"
+  ],
+  "scope": "any",
+  "learned_on": {
+   "game_version": "1.19.4.1",
+   "mod_set": "plain"
+  },
+  "confidence": 0.6,
+  "confirmations": 0,
+  "contradictions": 0,
+  "status": "active",
+  "source": "seed",
+  "checked": "the regroup was fixed for armies outside the plan group; a plan can still list a hold army in a group"
+ }
+]

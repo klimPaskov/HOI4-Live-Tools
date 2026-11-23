@@ -1,0 +1,2634 @@
+[
+{
+"id": "plan-ar-1795390512-10",
+"action": {
+"kind": "air_rebase",
+"state_id": 75,
+"wings": [
+"Jagdgeschwader 136",
+"JG 6 'Horst Wessel'",
+"JG 27 'Afrika'",
+"Jagdgeschwader 134",
+"JG 1 'Oesau'",
+"Jagdgeschwader 132",
+"JG 3 'Udet'",
+"JG 5 'Eismeer'",
+"JG 26 'Schlageter'",
+"JG 2 'Richthofen'"
+]
+},
+"status": "Dispatching",
+"unix_ms": 1795390535903,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-10",
+"action": {
+"kind": "air_rebase",
+"state_id": 75,
+"wings": [
+"Jagdgeschwader 136",
+"JG 6 'Horst Wessel'",
+"JG 27 'Afrika'",
+"Jagdgeschwader 134",
+"JG 1 'Oesau'",
+"Jagdgeschwader 132",
+"JG 3 'Udet'",
+"JG 5 'Eismeer'",
+"JG 26 'Schlageter'",
+"JG 2 'Richthofen'"
+]
+},
+"status": "NotApplied",
+"unix_ms": 1795390580722,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-13",
+"action": {
+"kind": "air_rebase",
+"state_id": 763,
+"wing": "JG 51 'Mölders'"
+},
+"status": "Dispatching",
+"unix_ms": 1795390584285,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-13",
+"action": {
+"kind": "air_rebase",
+"state_id": 763,
+"wing": "JG 51 'Mölders'"
+},
+"status": "Verified",
+"unix_ms": 1795390586388,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-16",
+"action": {
+"kind": "air_rebase",
+"state_id": 763,
+"wings": [
+"Jagdgeschwader 136",
+"JG 6 'Horst Wessel'",
+"JG 27 'Afrika'",
+"Jagdgeschwader 134",
+"JG 1 'Oesau'",
+"Jagdgeschwader 132",
+"JG 3 'Udet'"
+]
+},
+"status": "Dispatching",
+"unix_ms": 1795390591955,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-16",
+"action": {
+"kind": "air_rebase",
+"state_id": 763,
+"wings": [
+"Jagdgeschwader 136",
+"JG 6 'Horst Wessel'",
+"JG 27 'Afrika'",
+"Jagdgeschwader 134",
+"JG 1 'Oesau'",
+"Jagdgeschwader 132",
+"JG 3 'Udet'"
+]
+},
+"status": "Verified",
+"unix_ms": 1795390602759,
+"run": "g17n"
+},
+{
+"id": "plan-pk-1795390512-19",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 6,
+"kind": "production_set",
+"line": 5
+},
+"status": "Dispatching",
+"unix_ms": 1795390622328,
+"run": "g17n"
+},
+{
+"id": "plan-pk-1795390512-19",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 6,
+"kind": "production_set",
+"line": 5
+},
+"status": "Verified",
+"unix_ms": 1795390623289,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-21",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wings": [
+"JG 5 'Eismeer'",
+"JG 26 'Schlageter'",
+"JG 2 'Richthofen'"
+]
+},
+"status": "Dispatching",
+"unix_ms": 1795390626869,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-21",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wings": [
+"JG 5 'Eismeer'",
+"JG 26 'Schlageter'",
+"JG 2 'Richthofen'"
+]
+},
+"status": "Verified",
+"unix_ms": 1795390631979,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-35",
+"action": {
+"army": "Armee Nord",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795390750983,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-35",
+"action": {
+"army": "Armee Nord",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795390751175,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-36",
+"action": {
+"army": "Army Group 2",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795390751586,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-36",
+"action": {
+"army": "Army Group 2",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795390751817,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-45",
+"action": {
+"army": "Armee Nord",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795390778987,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-45",
+"action": {
+"army": "Armee Nord",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795390779185,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-46",
+"action": {
+"army": "Armee Nord",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795390779660,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-46",
+"action": {
+"army": "Armee Nord",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795390779853,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-47",
+"action": {
+"kind": "air_rebase",
+"state_id": 75,
+"wing": "JG 53 'Pik As'"
+},
+"status": "Dispatching",
+"unix_ms": 1795390780528,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-47",
+"action": {
+"kind": "air_rebase",
+"state_id": 75,
+"wing": "JG 53 'Pik As'"
+},
+"status": "Verified",
+"unix_ms": 1795390782517,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-54",
+"action": {
+"kind": "air_rebase",
+"state_id": 10,
+"wing": "JG 53 'Pik As'"
+},
+"status": "Dispatching",
+"unix_ms": 1795390828504,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-54",
+"action": {
+"kind": "air_rebase",
+"state_id": 10,
+"wing": "JG 53 'Pik As'"
+},
+"status": "Verified",
+"unix_ms": 1795390830862,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-88",
+"action": {
+"equipment": "small_plane_airframe_1",
+"factories": 15,
+"kind": "production_set",
+"line": 6
+},
+"status": "Dispatching",
+"unix_ms": 1795391072954,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-88",
+"action": {
+"equipment": "small_plane_airframe_1",
+"factories": 15,
+"kind": "production_set",
+"line": 6
+},
+"status": "Verified",
+"unix_ms": 1795391073710,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-89",
+"action": {
+"equipment": "infantry_equipment_1",
+"factories": 15,
+"kind": "production_set",
+"line": 2
+},
+"status": "Dispatching",
+"unix_ms": 1795391073729,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-89",
+"action": {
+"equipment": "infantry_equipment_1",
+"factories": 15,
+"kind": "production_set",
+"line": 2
+},
+"status": "Verified",
+"unix_ms": 1795391075463,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-90",
+"action": {
+"equipment": "medium_tank_chassis_1",
+"factories": 31,
+"kind": "production_set",
+"line": 1
+},
+"status": "Dispatching",
+"unix_ms": 1795391075480,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-90",
+"action": {
+"equipment": "medium_tank_chassis_1",
+"factories": 31,
+"kind": "production_set",
+"line": 1
+},
+"status": "Verified",
+"unix_ms": 1795391077945,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-91",
+"action": {
+"equipment": "infantry_equipment_1",
+"factories": 25,
+"kind": "production_set",
+"line": 2
+},
+"status": "Dispatching",
+"unix_ms": 1795391077963,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-91",
+"action": {
+"equipment": "infantry_equipment_1",
+"factories": 25,
+"kind": "production_set",
+"line": 2
+},
+"status": "Verified",
+"unix_ms": 1795391080397,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-92",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 10,
+"kind": "production_add",
+"line": null
+},
+"status": "Dispatching",
+"unix_ms": 1795391083521,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-92",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 10,
+"kind": "production_add",
+"line": null
+},
+"status": "NotApplied",
+"unix_ms": 1795391083861,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-93",
+"action": {
+"equipment": "convoy_1",
+"factories": 13,
+"kind": "production_set",
+"line": 8
+},
+"status": "Dispatching",
+"unix_ms": 1795391086644,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-93",
+"action": {
+"equipment": "convoy_1",
+"factories": 13,
+"kind": "production_set",
+"line": 8
+},
+"status": "Verified",
+"unix_ms": 1795391087717,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-104",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 8,
+"kind": "production_add",
+"line": null
+},
+"status": "Dispatching",
+"unix_ms": 1795391158648,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-104",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 8,
+"kind": "production_add",
+"line": null
+},
+"status": "NotApplied",
+"unix_ms": 1795391159279,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-105",
+"action": {
+"equipment": "convoy_1",
+"factories": 16,
+"kind": "production_set",
+"line": 8
+},
+"status": "Dispatching",
+"unix_ms": 1795391164573,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-105",
+"action": {
+"equipment": "convoy_1",
+"factories": 16,
+"kind": "production_set",
+"line": 8
+},
+"status": "Diverged",
+"unix_ms": 1795391168617,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-110",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 77 'Herz As'"
+},
+"status": "Dispatching",
+"unix_ms": 1795391199236,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-110",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 77 'Herz As'"
+},
+"status": "NotApplied",
+"unix_ms": 1795391206149,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-130",
+"action": {
+"equipment": "small_plane_cas_airframe_1",
+"factories": 6,
+"kind": "production_set",
+"line": 7
+},
+"status": "Dispatching",
+"unix_ms": 1795391368539,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-130",
+"action": {
+"equipment": "small_plane_cas_airframe_1",
+"factories": 6,
+"kind": "production_set",
+"line": 7
+},
+"status": "Verified",
+"unix_ms": 1795391369544,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-131",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 77 'Herz As'"
+},
+"status": "Dispatching",
+"unix_ms": 1795391370570,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-131",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 77 'Herz As'"
+},
+"status": "NotApplied",
+"unix_ms": 1795391375576,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-132",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 3,
+"kind": "production_add",
+"line": null
+},
+"status": "Dispatching",
+"unix_ms": 1795391380999,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-132",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 3,
+"kind": "production_add",
+"line": null
+},
+"status": "NotApplied",
+"unix_ms": 1795391381815,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-133",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 8
+},
+"status": "Dispatching",
+"unix_ms": 1795391384748,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-133",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 8
+},
+"status": "NotApplied",
+"unix_ms": 1795391388276,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-144",
+"action": {
+"equipment": "medium_tank_chassis_1",
+"factories": 28,
+"kind": "production_set",
+"line": 1
+},
+"status": "Dispatching",
+"unix_ms": 1795391460025,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-144",
+"action": {
+"equipment": "medium_tank_chassis_1",
+"factories": 28,
+"kind": "production_set",
+"line": 1
+},
+"status": "Verified",
+"unix_ms": 1795391462527,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-145",
+"action": {
+"equipment": "small_plane_cas_airframe_1",
+"factories": 7,
+"kind": "production_set",
+"line": 7
+},
+"status": "Dispatching",
+"unix_ms": 1795391462545,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-145",
+"action": {
+"equipment": "small_plane_cas_airframe_1",
+"factories": 7,
+"kind": "production_set",
+"line": 7
+},
+"status": "Verified",
+"unix_ms": 1795391464019,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-146",
+"action": {
+"equipment": "medium_tank_chassis_1",
+"factories": 26,
+"kind": "production_set",
+"line": 1
+},
+"status": "Dispatching",
+"unix_ms": 1795391464037,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-146",
+"action": {
+"equipment": "medium_tank_chassis_1",
+"factories": 26,
+"kind": "production_set",
+"line": 1
+},
+"status": "Verified",
+"unix_ms": 1795391465832,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-147",
+"action": {
+"equipment": "small_plane_cas_airframe_1",
+"factories": 9,
+"kind": "production_set",
+"line": 7
+},
+"status": "Dispatching",
+"unix_ms": 1795391465851,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-147",
+"action": {
+"equipment": "small_plane_cas_airframe_1",
+"factories": 9,
+"kind": "production_set",
+"line": 7
+},
+"status": "Verified",
+"unix_ms": 1795391467613,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-150",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 3,
+"kind": "production_add",
+"line": null
+},
+"status": "Dispatching",
+"unix_ms": 1795391484814,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-150",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 3,
+"kind": "production_add",
+"line": null
+},
+"status": "NotApplied",
+"unix_ms": 1795391485446,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-152",
+"action": {
+"kind": "air_rebase",
+"state_id": 42,
+"wings": [
+"Sturzkampfgeschwader 2",
+"JG 54 'Grünherz'"
+]
+},
+"status": "Dispatching",
+"unix_ms": 1795391501661,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-152",
+"action": {
+"kind": "air_rebase",
+"state_id": 42,
+"wings": [
+"Sturzkampfgeschwader 2",
+"JG 54 'Grünherz'"
+]
+},
+"status": "Verified",
+"unix_ms": 1795391506999,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-155",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 8
+},
+"status": "Dispatching",
+"unix_ms": 1795391522152,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-155",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 8
+},
+"status": "NotApplied",
+"unix_ms": 1795391525858,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-159",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 77 'Herz As'"
+},
+"status": "Dispatching",
+"unix_ms": 1795391559420,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-159",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 77 'Herz As'"
+},
+"status": "NotApplied",
+"unix_ms": 1795391565330,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-162",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 300 'Wilde Sau'"
+},
+"status": "Dispatching",
+"unix_ms": 1795391577890,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-162",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 300 'Wilde Sau'"
+},
+"status": "NotApplied",
+"unix_ms": 1795391583047,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-167",
+"action": {
+"kind": "air_rebase",
+"state_id": 42,
+"wing": "JG 301 'Wilde Sau'"
+},
+"status": "Dispatching",
+"unix_ms": 1795391610331,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-167",
+"action": {
+"kind": "air_rebase",
+"state_id": 42,
+"wing": "JG 301 'Wilde Sau'"
+},
+"status": "Verified",
+"unix_ms": 1795391612473,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-182",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 77 'Herz As'"
+},
+"status": "Dispatching",
+"unix_ms": 1795391746277,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-182",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 77 'Herz As'"
+},
+"status": "NotApplied",
+"unix_ms": 1795391751755,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-184",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 300 'Wilde Sau'"
+},
+"status": "Dispatching",
+"unix_ms": 1795391766302,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-184",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 300 'Wilde Sau'"
+},
+"status": "NotApplied",
+"unix_ms": 1795391771666,
+"run": "g17n"
+},
+{
+"id": "plan-pk-1795390512-190",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 9,
+"kind": "production_set",
+"line": 5
+},
+"status": "Dispatching",
+"unix_ms": 1795391821204,
+"run": "g17n"
+},
+{
+"id": "plan-pk-1795390512-190",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 9,
+"kind": "production_set",
+"line": 5
+},
+"status": "Verified",
+"unix_ms": 1795391822416,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-192",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 11,
+"kind": "production_set",
+"line": 5
+},
+"status": "Dispatching",
+"unix_ms": 1795391836216,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-192",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 11,
+"kind": "production_set",
+"line": 5
+},
+"status": "Verified",
+"unix_ms": 1795391837186,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-193",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 12,
+"kind": "production_set",
+"line": 5
+},
+"status": "Dispatching",
+"unix_ms": 1795391837204,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-193",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 12,
+"kind": "production_set",
+"line": 5
+},
+"status": "Verified",
+"unix_ms": 1795391837465,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-194",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 6,
+"kind": "production_add",
+"line": null
+},
+"status": "Dispatching",
+"unix_ms": 1795391837889,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-194",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 6,
+"kind": "production_add",
+"line": null
+},
+"status": "NotApplied",
+"unix_ms": 1795391838234,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-195",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 8
+},
+"status": "Dispatching",
+"unix_ms": 1795391840299,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-195",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 8
+},
+"status": "NotApplied",
+"unix_ms": 1795391843859,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-198",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 302 'Wilde Sau'"
+},
+"status": "Dispatching",
+"unix_ms": 1795391866617,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-198",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 302 'Wilde Sau'"
+},
+"status": "NotApplied",
+"unix_ms": 1795391873034,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-212",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 300 'Wilde Sau'"
+},
+"status": "Dispatching",
+"unix_ms": 1795391960290,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-212",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 300 'Wilde Sau'"
+},
+"status": "NotApplied",
+"unix_ms": 1795391966942,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-224",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 302 'Wilde Sau'"
+},
+"status": "Dispatching",
+"unix_ms": 1795392049348,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-224",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 302 'Wilde Sau'"
+},
+"status": "Diverged",
+"unix_ms": 1795392056705,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-227",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "EKD 'Edelweiß'"
+},
+"status": "Dispatching",
+"unix_ms": 1795392068765,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-227",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "EKD 'Edelweiß'"
+},
+"status": "NotApplied",
+"unix_ms": 1795392073978,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-231",
+"action": {
+"army": "Armee Nord",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795392091779,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-231",
+"action": {
+"army": "Armee Nord",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795392092211,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-232",
+"action": {
+"army": "Army Group 2",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795392092636,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-232",
+"action": {
+"army": "Army Group 2",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795392092835,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-241",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 300 'Wilde Sau'"
+},
+"status": "Dispatching",
+"unix_ms": 1795392150218,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-241",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 300 'Wilde Sau'"
+},
+"status": "Verified",
+"unix_ms": 1795392153494,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-249",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "EKD 'Edelweiß'"
+},
+"status": "Dispatching",
+"unix_ms": 1795392195852,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-249",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "EKD 'Edelweiß'"
+},
+"status": "Diverged",
+"unix_ms": 1795392203402,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-253",
+"action": {
+"army": "Army Group 2",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795392224535,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-253",
+"action": {
+"army": "Army Group 2",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795392224547,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-254",
+"action": {
+"army": "Army Group 2",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795392225222,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-254",
+"action": {
+"army": "Army Group 2",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795392225234,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-255",
+"action": {
+"kind": "air_rebase",
+"state_id": 763,
+"wing": "JG 77 'Herz As'"
+},
+"status": "Dispatching",
+"unix_ms": 1795392225289,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-255",
+"action": {
+"kind": "air_rebase",
+"state_id": 763,
+"wing": "JG 77 'Herz As'"
+},
+"status": "Verified",
+"unix_ms": 1795392227520,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-256",
+"action": {
+"army": "Army Group 2",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795392228623,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-256",
+"action": {
+"army": "Army Group 2",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795392228860,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-258",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 77 'Herz As'"
+},
+"status": "Dispatching",
+"unix_ms": 1795392233831,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-258",
+"action": {
+"kind": "air_rebase",
+"state_id": 66,
+"wing": "JG 77 'Herz As'"
+},
+"status": "Verified",
+"unix_ms": 1795392237792,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-266",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 6,
+"kind": "production_add",
+"line": null
+},
+"status": "Dispatching",
+"unix_ms": 1795392281975,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-266",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 6,
+"kind": "production_add",
+"line": null
+},
+"status": "NotApplied",
+"unix_ms": 1795392282670,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-268",
+"action": {
+"kind": "air_rebase",
+"state_id": 763,
+"wing": "JG 302 'Wilde Sau'"
+},
+"status": "Dispatching",
+"unix_ms": 1795392295683,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-268",
+"action": {
+"kind": "air_rebase",
+"state_id": 763,
+"wing": "JG 302 'Wilde Sau'"
+},
+"status": "Verified",
+"unix_ms": 1795392297844,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-280",
+"action": {
+"kind": "air_rebase",
+"state_id": 67,
+"wing": "EKD 'Edelweiß'"
+},
+"status": "Dispatching",
+"unix_ms": 1795392360234,
+"run": "g17n"
+},
+{
+"id": "plan-ab-1795390512-280",
+"action": {
+"kind": "air_rebase",
+"state_id": 67,
+"wing": "EKD 'Edelweiß'"
+},
+"status": "Verified",
+"unix_ms": 1795392362381,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-283",
+"action": {
+"kind": "air_rebase",
+"state_id": 51,
+"wing": "JG zbV"
+},
+"status": "Dispatching",
+"unix_ms": 1795392382546,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-283",
+"action": {
+"kind": "air_rebase",
+"state_id": 51,
+"wing": "JG zbV"
+},
+"status": "NotApplied",
+"unix_ms": 1795392382560,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-289",
+"action": {
+"kind": "air_rebase",
+"state_id": 51,
+"wing": "JG zbV"
+},
+"status": "Dispatching",
+"unix_ms": 1795392427674,
+"run": "g17n"
+},
+{
+"id": "plan-ar-1795390512-289",
+"action": {
+"kind": "air_rebase",
+"state_id": 51,
+"wing": "JG zbV"
+},
+"status": "Verified",
+"unix_ms": 1795392431411,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-297",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 8
+},
+"status": "Dispatching",
+"unix_ms": 1795392454905,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-297",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 8
+},
+"status": "NotApplied",
+"unix_ms": 1795392458490,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-310",
+"action": {
+"army": "Panzergruppe Ost",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795392552350,
+"run": "g17n"
+},
+{
+"id": "plan-op-1795390512-310",
+"action": {
+"army": "Panzergruppe Ost",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795392552796,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-331",
+"action": {
+"equipment": "small_plane_airframe_1",
+"factories": 16,
+"kind": "production_set",
+"line": 6
+},
+"status": "Dispatching",
+"unix_ms": 1795392677144,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-331",
+"action": {
+"equipment": "small_plane_airframe_1",
+"factories": 16,
+"kind": "production_set",
+"line": 6
+},
+"status": "Verified",
+"unix_ms": 1795392677732,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-332",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 8,
+"kind": "production_set",
+"line": 5
+},
+"status": "Dispatching",
+"unix_ms": 1795392677751,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-332",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 8,
+"kind": "production_set",
+"line": 5
+},
+"status": "Verified",
+"unix_ms": 1795392678734,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-333",
+"action": {
+"equipment": "small_plane_airframe_1",
+"factories": 20,
+"kind": "production_set",
+"line": 6
+},
+"status": "Dispatching",
+"unix_ms": 1795392678752,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-333",
+"action": {
+"equipment": "small_plane_airframe_1",
+"factories": 20,
+"kind": "production_set",
+"line": 6
+},
+"status": "Verified",
+"unix_ms": 1795392679727,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-334",
+"action": {
+"equipment": "medium_tank_chassis_1",
+"factories": 23,
+"kind": "production_set",
+"line": 1
+},
+"status": "Dispatching",
+"unix_ms": 1795392679746,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-334",
+"action": {
+"equipment": "medium_tank_chassis_1",
+"factories": 23,
+"kind": "production_set",
+"line": 1
+},
+"status": "Verified",
+"unix_ms": 1795392682048,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-335",
+"action": {
+"equipment": "small_plane_cas_airframe_1",
+"factories": 12,
+"kind": "production_set",
+"line": 7
+},
+"status": "Dispatching",
+"unix_ms": 1795392682066,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-335",
+"action": {
+"equipment": "small_plane_cas_airframe_1",
+"factories": 12,
+"kind": "production_set",
+"line": 7
+},
+"status": "Verified",
+"unix_ms": 1795392683403,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-336",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 7,
+"kind": "production_set",
+"line": 5
+},
+"status": "Dispatching",
+"unix_ms": 1795392683428,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-336",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 7,
+"kind": "production_set",
+"line": 5
+},
+"status": "Verified",
+"unix_ms": 1795392683697,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-337",
+"action": {
+"equipment": "support_equipment_1",
+"factories": 7,
+"kind": "production_set",
+"line": 3
+},
+"status": "Dispatching",
+"unix_ms": 1795392683716,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-337",
+"action": {
+"equipment": "support_equipment_1",
+"factories": 7,
+"kind": "production_set",
+"line": 3
+},
+"status": "Verified",
+"unix_ms": 1795392683979,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-338",
+"action": {
+"equipment": "medium_tank_chassis_1",
+"factories": 22,
+"kind": "production_set",
+"line": 1
+},
+"status": "Dispatching",
+"unix_ms": 1795392683999,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-338",
+"action": {
+"equipment": "medium_tank_chassis_1",
+"factories": 22,
+"kind": "production_set",
+"line": 1
+},
+"status": "Verified",
+"unix_ms": 1795392684306,
+"run": "g17n"
+},
+{
+"id": "plan-pr-1795390512-342",
+"action": {
+"equipment": "medium_plane_airframe_1",
+"factories": 1,
+"kind": "production_add",
+"line": null
+},
+"status": "Dispatching",
+"unix_ms": 1795392701327,
+"run": "g17n"
+},
+{
+"id": "plan-pr-1795390512-342",
+"action": {
+"equipment": "medium_plane_airframe_1",
+"factories": 1,
+"kind": "production_add",
+"line": null
+},
+"status": "Verified",
+"unix_ms": 1795392705077,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-343",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 6,
+"kind": "production_add",
+"line": null
+},
+"status": "Dispatching",
+"unix_ms": 1795392705664,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-343",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 6,
+"kind": "production_add",
+"line": null
+},
+"status": "NotApplied",
+"unix_ms": 1795392705970,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-344",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 8
+},
+"status": "Dispatching",
+"unix_ms": 1795392711471,
+"run": "g17n"
+},
+{
+"id": "plan-cv-1795390512-344",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 8
+},
+"status": "NotApplied",
+"unix_ms": 1795392714835,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-358",
+"action": {
+"equipment": "infantry_equipment_1",
+"factories": 24,
+"kind": "production_set",
+"line": 2
+},
+"status": "Dispatching",
+"unix_ms": 1795392835972,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-358",
+"action": {
+"equipment": "infantry_equipment_1",
+"factories": 24,
+"kind": "production_set",
+"line": 2
+},
+"status": "Verified",
+"unix_ms": 1795392837720,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-359",
+"action": {
+"equipment": "anti_air_equipment_1",
+"factories": 2,
+"kind": "production_set",
+"line": 10
+},
+"status": "Dispatching",
+"unix_ms": 1795392837738,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-359",
+"action": {
+"equipment": "anti_air_equipment_1",
+"factories": 2,
+"kind": "production_set",
+"line": 10
+},
+"status": "Verified",
+"unix_ms": 1795392840090,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-360",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 6,
+"kind": "production_set",
+"line": 5
+},
+"status": "Dispatching",
+"unix_ms": 1795392840108,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-360",
+"action": {
+"equipment": "motorized_equipment_1",
+"factories": 6,
+"kind": "production_set",
+"line": 5
+},
+"status": "Verified",
+"unix_ms": 1795392841595,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-361",
+"action": {
+"equipment": "medium_plane_airframe_1",
+"factories": 2,
+"kind": "production_set",
+"line": 11
+},
+"status": "Dispatching",
+"unix_ms": 1795392841611,
+"run": "g17n"
+},
+{
+"id": "plan-bl-1795390512-361",
+"action": {
+"equipment": "medium_plane_airframe_1",
+"factories": 2,
+"kind": "production_set",
+"line": 11
+},
+"status": "Verified",
+"unix_ms": 1795392843942,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-362",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 6,
+"kind": "production_add",
+"line": null
+},
+"status": "Dispatching",
+"unix_ms": 1795392847299,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795390512-362",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 6,
+"kind": "production_add",
+"line": null
+},
+"status": "NotApplied",
+"unix_ms": 1795392847647,
+"run": "g17n"
+},
+{
+"id": "plan-dk-1795437976-3",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 6,
+"kind": "production_add",
+"line": null
+},
+"status": "Dispatching",
+"unix_ms": 1795437989248,
+"run": "w53a"
+},
+{
+"id": "plan-dk-1795437976-3",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 6,
+"kind": "production_add",
+"line": null
+},
+"status": "NotApplied",
+"unix_ms": 1795437990079,
+"run": "w53a"
+},
+{
+"id": "plan-cv-1795437976-6",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 9
+},
+"status": "Dispatching",
+"unix_ms": 1795438002840,
+"run": "w53a"
+},
+{
+"id": "plan-cv-1795437976-6",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 9
+},
+"status": "NotApplied",
+"unix_ms": 1795438006574,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-18",
+"action": {
+"army": "Armee Pommern",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438079759,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-18",
+"action": {
+"army": "Armee Pommern",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438080014,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-19",
+"action": {
+"army": "Panzergruppe Nord",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438080693,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-19",
+"action": {
+"army": "Panzergruppe Nord",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438080904,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-20",
+"action": {
+"army": "Panzergruppe Ost",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438081552,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-20",
+"action": {
+"army": "Panzergruppe Ost",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438081771,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-21",
+"action": {
+"army": "Army Group 1",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438082534,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-21",
+"action": {
+"army": "Army Group 1",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438082763,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-26",
+"action": {
+"kind": "air_rebase",
+"state_id": 8,
+"wing": "Schlachtgeschwader 1"
+},
+"status": "Dispatching",
+"unix_ms": 1795438120971,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-26",
+"action": {
+"kind": "air_rebase",
+"state_id": 8,
+"wing": "Schlachtgeschwader 1"
+},
+"status": "NotApplied",
+"unix_ms": 1795438126564,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-27",
+"action": {
+"kind": "air_rebase",
+"state_id": 8,
+"wing": "Schnellkampfgeschwader 1"
+},
+"status": "Dispatching",
+"unix_ms": 1795438126585,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-27",
+"action": {
+"kind": "air_rebase",
+"state_id": 8,
+"wing": "Schnellkampfgeschwader 1"
+},
+"status": "NotApplied",
+"unix_ms": 1795438131741,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-32",
+"action": {
+"army": "Panzergruppe Nord",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438204254,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-32",
+"action": {
+"army": "Panzergruppe Nord",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438204278,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-33",
+"action": {
+"army": "Panzergruppe Nord",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438205099,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-33",
+"action": {
+"army": "Panzergruppe Nord",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438205122,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-36",
+"action": {
+"army": "Panzergruppe Nord",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438226837,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-36",
+"action": {
+"army": "Panzergruppe Nord",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438227081,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-38",
+"action": {
+"army": "Panzergruppe Ost",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438230778,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-38",
+"action": {
+"army": "Panzergruppe Ost",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438230800,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-39",
+"action": {
+"army": "Panzergruppe Ost",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438231483,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-39",
+"action": {
+"army": "Panzergruppe Ost",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438231496,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-42",
+"action": {
+"army": "Panzergruppe Ost",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438243285,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-42",
+"action": {
+"army": "Panzergruppe Ost",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438243579,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-44",
+"action": {
+"army": "Armee West Süd",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438250606,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-44",
+"action": {
+"army": "Armee West Süd",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438250899,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-45",
+"action": {
+"kind": "air_rebase",
+"state_id": 8,
+"wing": "Sturzkampfgeschwader 1"
+},
+"status": "Dispatching",
+"unix_ms": 1795438251885,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-45",
+"action": {
+"kind": "air_rebase",
+"state_id": 8,
+"wing": "Sturzkampfgeschwader 1"
+},
+"status": "Verified",
+"unix_ms": 1795438254353,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-49",
+"action": {
+"kind": "air_rebase",
+"state_id": 52,
+"wing": "Sturzkampfgeschwader 1"
+},
+"status": "Dispatching",
+"unix_ms": 1795438283618,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-49",
+"action": {
+"kind": "air_rebase",
+"state_id": 52,
+"wing": "Sturzkampfgeschwader 1"
+},
+"status": "Verified",
+"unix_ms": 1795438286112,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-51",
+"action": {
+"army": "Armee West Süd",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438291989,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-51",
+"action": {
+"army": "Armee West Süd",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438292011,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-52",
+"action": {
+"army": "Armee West Süd",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438292731,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-52",
+"action": {
+"army": "Armee West Süd",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438292752,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-53",
+"action": {
+"army": "Armee West Süd",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438294517,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-53",
+"action": {
+"army": "Armee West Süd",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438294767,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-67",
+"action": {
+"kind": "air_rebase",
+"state_id": 8,
+"wing": "Sturzkampfgeschwader 1"
+},
+"status": "Dispatching",
+"unix_ms": 1795438411721,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-67",
+"action": {
+"kind": "air_rebase",
+"state_id": 8,
+"wing": "Sturzkampfgeschwader 1"
+},
+"status": "Verified",
+"unix_ms": 1795438415890,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-73",
+"action": {
+"army": "Panzergruppe Nord",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438448777,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-73",
+"action": {
+"army": "Panzergruppe Nord",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438449022,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-76",
+"action": {
+"army": "Armee Pommern",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438499287,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-76",
+"action": {
+"army": "Armee Pommern",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438499539,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-78",
+"action": {
+"army": "Panzergruppe Ost",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438502204,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-78",
+"action": {
+"army": "Panzergruppe Ost",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438502487,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-79",
+"action": {
+"kind": "air_rebase",
+"state_id": 52,
+"wing": "Sturzkampfgeschwader 1"
+},
+"status": "Dispatching",
+"unix_ms": 1795438503565,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-79",
+"action": {
+"kind": "air_rebase",
+"state_id": 52,
+"wing": "Sturzkampfgeschwader 1"
+},
+"status": "Verified",
+"unix_ms": 1795438505975,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-81",
+"action": {
+"kind": "air_rebase",
+"state_id": 7,
+"wing": "Sturzkampfgeschwader 1"
+},
+"status": "Dispatching",
+"unix_ms": 1795438616219,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-81",
+"action": {
+"kind": "air_rebase",
+"state_id": 7,
+"wing": "Sturzkampfgeschwader 1"
+},
+"status": "Verified",
+"unix_ms": 1795438618693,
+"run": "w53a"
+},
+{
+"id": "plan-pk-1795437976-83",
+"action": {
+"equipment": "light_tank_chassis_2",
+"factories": 4,
+"kind": "production_set",
+"line": 10
+},
+"status": "Dispatching",
+"unix_ms": 1795438622018,
+"run": "w53a"
+},
+{
+"id": "plan-pk-1795437976-83",
+"action": {
+"equipment": "light_tank_chassis_2",
+"factories": 4,
+"kind": "production_set",
+"line": 10
+},
+"status": "Verified",
+"unix_ms": 1795438623114,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-84",
+"action": {
+"kind": "air_rebase",
+"state_id": 7,
+"wing": "Schlachtgeschwader 1"
+},
+"status": "Dispatching",
+"unix_ms": 1795438623638,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-84",
+"action": {
+"kind": "air_rebase",
+"state_id": 7,
+"wing": "Schlachtgeschwader 1"
+},
+"status": "Verified",
+"unix_ms": 1795438625772,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-85",
+"action": {
+"kind": "air_rebase",
+"state_id": 7,
+"wing": "Schnellkampfgeschwader 1"
+},
+"status": "Dispatching",
+"unix_ms": 1795438625805,
+"run": "w53a"
+},
+{
+"id": "plan-ab-1795437976-85",
+"action": {
+"kind": "air_rebase",
+"state_id": 7,
+"wing": "Schnellkampfgeschwader 1"
+},
+"status": "Verified",
+"unix_ms": 1795438628071,
+"run": "w53a"
+},
+{
+"id": "plan-bl-1795437976-89",
+"action": {
+"equipment": "infantry_equipment_1",
+"factories": 26,
+"kind": "production_set",
+"line": 1
+},
+"status": "Dispatching",
+"unix_ms": 1795438645417,
+"run": "w53a"
+},
+{
+"id": "plan-bl-1795437976-89",
+"action": {
+"equipment": "infantry_equipment_1",
+"factories": 26,
+"kind": "production_set",
+"line": 1
+},
+"status": "Verified",
+"unix_ms": 1795438647309,
+"run": "w53a"
+},
+{
+"id": "plan-dk-1795437976-90",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 7,
+"kind": "production_add",
+"line": null
+},
+"status": "Dispatching",
+"unix_ms": 1795438647914,
+"run": "w53a"
+},
+{
+"id": "plan-dk-1795437976-90",
+"action": {
+"equipment": "ship_hull_submarine_1",
+"factories": 7,
+"kind": "production_add",
+"line": null
+},
+"status": "NotApplied",
+"unix_ms": 1795438648238,
+"run": "w53a"
+},
+{
+"id": "plan-cv-1795437976-91",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 9
+},
+"status": "Dispatching",
+"unix_ms": 1795438651502,
+"run": "w53a"
+},
+{
+"id": "plan-cv-1795437976-91",
+"action": {
+"equipment": "convoy_1",
+"factories": 18,
+"kind": "production_set",
+"line": 9
+},
+"status": "NotApplied",
+"unix_ms": 1795438655055,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-94",
+"action": {
+"army": "Army Group 1",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438683759,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-94",
+"action": {
+"army": "Army Group 1",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438683779,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-95",
+"action": {
+"army": "Army Group 1",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438684418,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-95",
+"action": {
+"army": "Army Group 1",
+"execute": false,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438684437,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-96",
+"action": {
+"army": "Army Group 1",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438685397,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-96",
+"action": {
+"army": "Army Group 1",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438685683,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-97",
+"action": {
+"army": "Armee Pommern",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Dispatching",
+"unix_ms": 1795438686215,
+"run": "w53a"
+},
+{
+"id": "plan-op-1795437976-97",
+"action": {
+"army": "Armee Pommern",
+"execute": true,
+"kind": "army_plan"
+},
+"status": "Verified",
+"unix_ms": 1795438686470,
+"run": "w53a"
+}
+]

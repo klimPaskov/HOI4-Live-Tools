@@ -162,6 +162,9 @@ def main(argv=None):
     ap.add_argument("--mod", action="append", default=[],
                     help="a .mod descriptor or mod folder layered after the user folder's mods")
     ap.add_argument("--strict", action="store_true", help="treat warnings as errors")
+    ap.add_argument("--lessons", default=os.environ.get("HOI4_LIVE_LEARNED"),
+                    help="a learned store (learned/): its lessons of scope plan/country/any warn on plan rows "
+                         "they contradict (docs/MONITORING.md)")
     args = ap.parse_args(argv)
     with open(args.plan, encoding="utf-8") as fh:
         plan = json.load(fh)
@@ -180,6 +183,14 @@ def main(argv=None):
     rep, counts = validate(plan, game)
     if missing:
         rep.warnings.insert(0, missing)
+    if args.lessons:
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from hoi4_live.observe.lessons import LessonStore
+        meta = plan.get("_meta") if isinstance(plan.get("_meta"), dict) else {}
+        # advisory: printed with the warnings, never counted by --strict (a lesson is evidence to weigh, not
+        # a rule; the plan's row may be a deliberate departure)
+        for w in LessonStore(args.lessons).lint_plan(plan, meta.get("country") or meta.get("tag")):
+            print(f"warning (lesson {w['lesson']}, confidence {w['confidence']}) at {w['where']}: {w['text']}")
     for w in rep.warnings:
         print("warning:", w)
     for e in rep.errors:
