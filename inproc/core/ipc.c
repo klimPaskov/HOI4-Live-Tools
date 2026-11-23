@@ -17,7 +17,7 @@
 
 const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air"};
 const int IPC_ALLOWED_COUNT = 3;
-const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 0, 0};
+const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;
