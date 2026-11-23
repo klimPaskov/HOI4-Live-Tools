@@ -443,8 +443,8 @@ fn save_retryable(e: &Error) -> bool {
         "input_readback_failed" | "invalid_gui" | "gui_target_unavailable"
     )
 }
-/// The game menu's fade-in (ingamemenu.gui fade_time 500) and a frame of margin.
-const MENU_FADE_MS: u64 = 600;
+/// How long the save window may take to show after the Save button closed the menu.
+const SAVE_WINDOW: Duration = Duration::from_secs(12);
 
 fn save_game_once(
     process: &dyn Process,
@@ -500,11 +500,6 @@ fn save_game_once(
     }
     // Any failure from here closes the game menu again (it was left open on the error path,
     // and the next action then met a paused game behind a menu).
-    // The game menu fades in (interface/ingamemenu.gui `ingamemenu` fade_time = 500 ms) and its
-    // rectangle reads settled from the first frame: a click before the fade ends went through to
-    // the map and closed the menu (v55t, 23 Nov 2026: 5 of 10 paused saves "The Save click went
-    // through to the map", the menu read open and its button settled each time).
-    crate::phase::sleep(Duration::from_millis(MENU_FADE_MS));
     let result = (|| -> Result<String> {
         let button = settled(process, "save button", |r, i| {
             map_clear(r, i)?;
@@ -527,32 +522,34 @@ fn save_game_once(
             |r: gui_tree::Rect| (f64::from(r.x) + 40.0, f64::from(r.y) + f64::from(r.h) / 2.0);
         let (x, y) = near_left(button);
         keys.click((1920, 1080), x, y)?;
-        // One more click when the window does not open (i18a, 18 Nov 2026: the first click on the
-        // Save button opened nothing).
-        if wait(
-            process,
-            "save window",
-            |r, i| Ok(save_root(r, i)?.is_some()),
-        )
-        .is_err()
-        {
-            // The first click took nothing: click again only on a menu still drawn over a clear
-            // map; a closed menu means the click went through to the map (retry from the start).
-            read(process, |r, i| {
-                if !menu_open(r, i)? {
-                    return Err(Error::new(
-                        "invalid_gui",
-                        "The Save click went through to the map: the game menu closed",
-                    ));
-                }
-                map_clear(r, i)
-            })?;
+        // The Save button closes the game menu and opens the save window, which lists the save
+        // folder first and can take seconds to show (v55v, 23 Nov 2026: the click at 856,379
+        // landed on the button read at 816,361 864x36, the menu closed, and the 3 s wait for the
+        // window ran out: the try was called "went through to the map" and the window closed by
+        // the clean-up). So: a menu that closed is waited on for the window up to SAVE_WINDOW;
+        // one more click only on a menu still open (i18a, 18 Nov 2026: the first click opened
+        // nothing).
+        let opened = |r: &Reader<'_>, i: u64| -> Result<bool> {
+            Ok(save_root(r, i)?.is_some() || !menu_open(r, i)?)
+        };
+        if wait(process, "save window", opened).is_err() {
+            read(process, map_clear)?;
             keys.click((1920, 1080), x, y)?;
-            wait(
-                process,
-                "save window",
-                |r, i| Ok(save_root(r, i)?.is_some()),
-            )?;
+            wait(process, "save window", opened)?;
+        }
+        if read(process, |r, i| Ok(save_root(r, i)?.is_none()))? {
+            wait_up_to(process, "save window (slow)", SAVE_WINDOW, |r, i| {
+                Ok(save_root(r, i)?.is_some())
+            })
+            .map_err(|_| {
+                Error::new(
+                    "invalid_gui",
+                    format!(
+                        "The Save click at {x:.0},{y:.0} (button read at {},{} {}x{}) closed the game menu and no save window showed within {} s",
+                        button.x, button.y, button.w, button.h, SAVE_WINDOW.as_secs()
+                    ),
+                )
+            })?;
         }
         let confirm = settled(process, "save confirm", |r, i| {
             map_clear(r, i)?;
