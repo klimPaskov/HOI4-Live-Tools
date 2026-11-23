@@ -20,7 +20,7 @@ import re
 # 1.20.0.0 values (the fallback when the files cannot be read)
 FALLBACK = {
     "xp_cap": {"army": 500.0, "navy": 500.0, "air": 500.0},
-    "spirit_costs": {"army": [20.0, 35.0, 50.0], "navy": [20.0, 35.0, 50.0], "air": [20.0, 35.0]},
+    "spirit_costs": {"army": [20.0, 35.0, 50.0], "navy": [20.0, 35.0, 50.0], "air": [50.0, 50.0, 50.0]},
     "reward_mastery": 100.0,
     "bank_rate": 0.25,
     "bank_max": 200.0,
@@ -164,7 +164,7 @@ def _subdoctrine_mastery(common, default_reward):
 
 def _spirit_costs(common):
     text = parse(_read(os.path.join(common, "idea_tags", "00_idea.txt")))
-    slots = get(text, "slots", [])
+    slots = get(text, "idea_categories", []) or get(text, "slots", [])
     branch = {"army_spirit": "army", "navy_spirit": "navy", "air_spirit": "air"}
     out = {}
     for _, _, body in slots or []:

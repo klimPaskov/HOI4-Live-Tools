@@ -44,7 +44,7 @@ def game_dir():
     with open(os.path.join(common, "doctrines", "subdoctrines", "land", "x.txt"), "w") as f:
         f.write(SUB)
     with open(os.path.join(common, "idea_tags", "00_idea.txt"), "w") as f:
-        f.write("slots = { a = { type = air_spirit cost = 20 } b = { type = air_spirit cost = 35 } }")
+        f.write("idea_categories = { a = { type = air_spirit cost = 50 } b = { type = air_spirit cost = 50 } }")
     return root
 
 
@@ -75,7 +75,7 @@ class GameRules(unittest.TestCase):
     def test_the_files_give_caps_laws_and_reward_mastery(self):
         f = gamerules.facts(game_dir())
         self.assertEqual(f["xp_cap"]["air"], 400.0)
-        self.assertEqual(f["spirit_costs"]["air"], [20.0, 35.0])
+        self.assertEqual(f["spirit_costs"]["air"], [50.0, 50.0])
         self.assertEqual(f["subdoctrines"]["mobile_infantry"]["mastery_to_complete"], 350.0)
         laws = {x["law"]: x for x in f["laws"]["mobilization_laws"]}
         self.assertEqual(laws["extensive_conscription"]["modifiers"]["training_time_factor"], 0.1)
