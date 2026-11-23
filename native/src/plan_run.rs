@@ -3022,6 +3022,17 @@ fn declare_first(
                     "{declared}; events open: answered before the attack is executed"
                 )));
             }
+            // another declaration due now goes out in the next tick before any burst (w42v,
+            // 23 Nov 2026: Belgium was declared, the opening air burst took 34 s = seven game
+            // days and Holland, whose war the operation executes on, came nine days later)
+            state.done.remove("declnear:at");
+            if plan_affairs::declaration_near(state, tools, plan, now, 0) {
+                state.war_active = true;
+                state.last_ok = Some(true);
+                return Ok(Some(format!(
+                    "{declared}; another declaration is due: it goes out first"
+                )));
+            }
             let executed = war_burst(state, tools, plan, lease, now, plan_operation::step)?;
             state.war_active = true;
             let air = war_burst_for(

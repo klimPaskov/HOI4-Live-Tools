@@ -2311,3 +2311,41 @@ fn the_sides_once_recorded_stay_while_the_armies_walk() {
     assert_eq!(low, ["A", "C"]);
     assert_eq!(high, ["B", "D"]);
 }
+
+#[test]
+fn a_sides_front_off_its_own_piece_is_cleared_and_drawn_again() {
+    let game = Game::new();
+    game.unit("Army Group 1", |r| {
+        r["plan"] = json!([{"kind": "front", "id": 9, "divisions": 30,
+            "line": {"states": [42, 51]}, "offensives": []}])
+    });
+    let mut u = unit(
+        "Army Group 1".into(),
+        Role::Group,
+        &json!({"enemy": "HOL", "own_states": [56, 57], "click_state": 35}),
+        &json!({"target_line": [7]}),
+    );
+    u.side = Some(true);
+    u.own_enemy = true;
+    let mut state = State::default();
+    let roster = game.roster.borrow().clone();
+    let line = reconcile(
+        &mut state,
+        &game,
+        "op_w",
+        &u,
+        &[7],
+        &roster,
+        &json!({}),
+        "l",
+        START,
+        true,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(line.contains("off its own piece"), "{line}");
+    assert_eq!(
+        game.orders().last().unwrap().1,
+        json!({"army": "Army Group 1", "clear_orders": true})
+    );
+}

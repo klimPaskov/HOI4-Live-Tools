@@ -1845,9 +1845,14 @@ fn strikes(
             }
         }
         let mut last: Vec<i64> = Vec::new();
+        // a line that STARTS with the capital's state strikes it first: the plan put it there on
+        // purpose (Holland 7 holds Amsterdam, Rotterdam and The Hague, and the Dutch flood fires only
+        // while Holland holds all of state 7: as the last row the armour went to Antwerp first and
+        // Holland flooded, w42v, 23 Nov 2026)
+        let first = u.line.first().copied();
         for s in &u.line {
             if let Some((p, _)) = best.get(s) {
-                if Some(*p) == capital {
+                if Some(*p) == capital && Some(*s) != first {
                     last.push(*p);
                 } else {
                     rows.push(json!({"army": u.name, "province": p, "path": []}));
