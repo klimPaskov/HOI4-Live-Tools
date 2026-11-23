@@ -19,6 +19,17 @@ A campaign through the product, start to report: what the private developer rig 
 - The supervisor keeps the whole feed (`feed.jsonl`) and a production sample every five minutes, brings the game to
   the front before the executor's first input, watches for a system prompt on screen (ends the run if it stays
   five minutes) and removes a plan's `stop_on_date` (a run never pauses itself).
+- Arguments the player kept getting wrong are taken: `hoi4_event_choose` takes the option's key from
+  `hoi4_events` (`"germany.14.a"`, or `"a"`) or its text as well as its index; `hoi4_research_start` without
+  `slot` uses the first empty slot; `hoi4_air_mission` and `hoi4_air_region_probe` take a region id as a number;
+  `hoi4_politics_options`/`_choose` take common words for a category and say the slot layout when a slot is
+  missing.
+- The command-power rule no longer asks a tool the server does not have for the cap: the cap is
+  `manage.command_power_max`, else the game's define, never below the power held.
+- The sitrep says when the agency has operatives but no intelligence network abroad (no operation can start)
+  and when resistance in an occupied state is above the game's own target.
+- docs/LIVE_VALIDATION_QUEUE.md: what each tool has shown in the game on 1.19.4.1 and the ordered probes still to
+  run; docs/TOOLS_MACOS.md lists every catalogued tool.
 - Publish the game clock to a file (opt-in, off by default): `clock_file` in the run's `settings.json` or
   `HOI4_LIVE_CLOCK_FILE` names a file the supervisor rewrites about once a second with the pause flag, the speed
   and the date (reads only), and removes when the run ends.

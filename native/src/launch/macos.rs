@@ -490,6 +490,41 @@ fn string<'a>(args: &'a serde_json::Map<String, Value>, name: &str) -> Result<&'
         .and_then(Value::as_str)
         .ok_or_else(|| Error::new("invalid_arguments", format!("{name} must be a string")))
 }
+/// The slot layout of the base game, said when a politics call names no slot or a wrong one
+/// (players sent 48 such calls in the runs of 11-23 Nov).
+const POLITICS_SLOT_HELP: &str = "slot must be 0..7: the slot's position in its category \
+    (base game: government 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors; \
+    research_production 0-3 designers or design companies, 4 industrial concern, 5 theorist; \
+    military_staff 0 chief of army, 1 chief of navy, 2 chief of air force, 3-5 high command); \
+    the reply's `slots` lists every slot of the category with its holder";
+/// The politics category of a call; words players used for one are taken as it, and a wrong
+/// one is refused with the three categories and where officer corps spirits are chosen.
+fn politics_category(args: &serde_json::Map<String, Value>) -> Result<&'static str> {
+    let given = args.get("category").and_then(Value::as_str).unwrap_or("");
+    let word = given.trim().to_ascii_lowercase().replace([' ', '-'], "_");
+    Ok(match word.as_str() {
+        "government" | "law" | "laws" | "advisor" | "advisors" | "political"
+        | "political_advisor" | "political_advisors" => "government",
+        "research_production" | "designer" | "designers" | "industry" | "theorist" => {
+            "research_production"
+        }
+        "military_staff" | "military" | "staff" | "high_command" | "chiefs" => "military_staff",
+        "officer_corps" => {
+            return Err(Error::new(
+                "invalid_arguments",
+                "officer corps spirits are read and picked with hoi4_officer_corps (list:true reads them)",
+            ))
+        }
+        _ => {
+            return Err(Error::new(
+                "invalid_arguments",
+                format!(
+                    "category {given:?} unknown: one of government, research_production, military_staff"
+                ),
+            ))
+        }
+    })
+}
 fn allowed(args: &serde_json::Map<String, Value>, keys: &[&str]) -> Result<()> {
     // A request id or lease token on a read is harmless: players add them by habit and a
     // refusal only costs a call (Ethiopia continuation, 6 Nov 2026).
@@ -759,7 +794,7 @@ pub fn mac_tool_list() -> Vec<Value> {
             {"properties":{"op":{"const":"renew"},"lease_token":{"type":"string"},"seconds":{"type":"integer","minimum":30,"maximum":900}},"required":["op","lease_token"],"additionalProperties":false},
             {"properties":{"op":{"const":"release"},"lease_token":{"type":"string"}},"required":["op","lease_token"],"additionalProperties":false},
             {"properties":{"op":{"const":"status"}},"required":["op"],"additionalProperties":false}]}}),
-        json!({"name":"hoi4_research_start","description":"Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_research_start","description":"Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology; without `slot` the first empty slot is used) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_production_add","description":"Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id or design name from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options. The line gets no military-industrial organisation (the design is Shift+clicked past the organisation chooser); `organization` (the organisation's script key, as hoi4_mios lists it) is not yet built: it is refused with not_yet_built before any input.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"anyOf":[{"type":"integer","minimum":1},{"type":"string","maxLength":128}]},"organization":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_production_priority","description":"Move an own production line in the production view's priority order (a line higher in the list gets resources and factories first, so shortages and lost factories hit the bottom lines): the line's arrows (increase_priority, decrease_priority), Shift+click for to:top or to:bottom. The line is addressed like hoi4_production_set (line = entry_index from hoi4_production_lines, with its equipment). Verified by the line's place in the view's list (receipt detail: place before and after, the shown order).","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"to":{"type":"string","enum":["top","up","down","bottom"]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","to","request_id","lease_token"],"additionalProperties":false}}),
@@ -787,7 +822,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_encirclement_candidates","description":"Pockets of enemy-controlled states that taking at most max_gap neck states would cut off: the pocket, the neck, the two pincer arms (own state into neck state), divisions needed and available per arm, value (points, industry, manpower, resources) and a score; sea, impassable states and neutral neighbours count as walls. Pure read; no lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"max_gap":{"type":"integer","minimum":0,"maximum":3},"limit":{"type":"integer","minimum":1,"maximum":20}},"required":["enemy"],"additionalProperties":false}}),
         json!({"name":"hoi4_war_goal_targets","description":"Which enemy-owned states to demand in the peace conference, ranked by points, industry, manpower and resources with tiers (must_take, worth_taking, optional), resource prizes, contiguous blocks, own cores and which states we already occupy. A read, not an action; the conference cost itself is not modelled. No lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["enemy"],"additionalProperties":false}}),
         json!({"name":"hoi4_events","description":"Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed. Each event comes with its full text read from game memory (no screenshot): title, description (markup removed), the leader for leader/operative layouts, and every option text, so the event can be judged from the report alone. option_keys gives, per shown option, the name the event script uses for it (for example my_event.1.b; null when it cannot be told from the event files and the localisation), so a rule or a guide that names an option by its script name finds the right one even when an option is hidden.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
-        json!({"name":"hoi4_event_choose","description":"Choose an option (0-based, in listed order) of an open event by clicking it (the list order is not the stacking order: single-option windows over it are acknowledged first; a choice window over it is named in event_covered). Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"type":"integer","minimum":0,"maximum":7},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_event_choose","description":"Choose an option of an open event by clicking it: `option` is the 0-based index in listed order, or the option's script key as hoi4_events lists it in option_keys (\"germany.14.a\", or just \"a\"), or its shown text (the list order is not the stacking order: single-option windows over it are acknowledged first; a choice window over it is named in event_covered). Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"anyOf":[{"type":"integer","minimum":0,"maximum":7},{"type":"string","minLength":1,"maxLength":200}]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"countries":{"type":"array","items":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"maxItems":6},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string","maxLength":128},"war_goal":{"type":"string","maxLength":128},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
         railway::tool(),
         json!({"name":"hoi4_army_attack","description":"Front line, offensive line and execute for one army in one call (the same steps as hoi4_army_front, hoi4_army_offensive and hoi4_army_plan execute:true, each verified and journalled as <request_id>:front, :offensive, :execute). Skip a step with front:false (the army already holds a front), offensive:false or execute:false. Stops at the first failing step and says which steps were done.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"front":{"type":"boolean"},"offensive":{"type":"boolean"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
@@ -816,14 +851,14 @@ pub fn mac_tool_list() -> Vec<Value> {
         doctrine_act::tool(),
         json!({"name":"hoi4_army_commander","description":"Assign a general (exact name as listed by hoi4_commanders) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list. Verified when the army's commander is that general. Refused before any click with army_unknown (lists valid armies/groups), unknown_commander (5 closest names) or commander_unavailable (already leads another army/group; pass reassign: true to move them).","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"general":{"type":"string"},"reassign":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","general","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wings","description":"Own air wings with air base, assigned region and missions, from the Air Forces Overview (opens it). Changes nothing in the game.","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_air_mission","description":"Give an own air wing (exact name) a mission over a strategic air region with the game's ordinary controls: wing row of the Air Forces Overview (L), the mission button, the Find view centres `state_id` (any state inside the wanted region) and a right click assigns. Pass `region` (region id or display name, e.g. 'Eastern Germany') instead of or with `state_id`: the state is then chosen from the game's files and the result is verified to be that region; a sea region (no state in it, e.g. 'English Channel') is reached by centring the nearest state and clicking the region's own sea provinces on screen. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (unknown mission), region_unknown, region_state_mismatch; the game's own disabling (mission not offered / needs more planes) surfaces as invalid_target. Verified from the wing's mission mask and region id in memory (hoi4_air). No percent or intensity control exists in the game's air UI; aggressiveness and day/night are per-wing cycle buttons not driven by this tool.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) given the same mission over the same region in one input sequence: selected together in the overview (a click, then Shift+clicks), one mission click, one region click; a wing the selection does not take is ordered alone. The receipt is Verified when all fly it, Diverged when some do (detail.wings names each, result.failed says why)"},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["mission","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_air_mission","description":"Give an own air wing (exact name) a mission over a strategic air region with the game's ordinary controls: wing row of the Air Forces Overview (L), the mission button, the Find view centres `state_id` (any state inside the wanted region) and a right click assigns. Pass `region` (region id or display name, e.g. 'Eastern Germany') instead of or with `state_id`: the state is then chosen from the game's files and the result is verified to be that region; a sea region (no state in it, e.g. 'English Channel') is reached by centring the nearest state and clicking the region's own sea provinces on screen. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (unknown mission), region_unknown, region_state_mismatch; the game's own disabling (mission not offered / needs more planes) surfaces as invalid_target. Verified from the wing's mission mask and region id in memory (hoi4_air). No percent or intensity control exists in the game's air UI; aggressiveness and day/night are per-wing cycle buttons not driven by this tool.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) given the same mission over the same region in one input sequence: selected together in the overview (a click, then Shift+clicks), one mission click, one region click; a wing the selection does not take is ordered alone. The receipt is Verified when all fly it, Diverged when some do (detail.wings names each, result.failed says why)"},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"anyOf":[{"type":"string","maxLength":96},{"type":"integer","minimum":1,"maximum":4095}]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["mission","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_rebase","description":"Rebase one own air wing to the air base of a state with ordinary input: strategic air map (F3), the wing's row of the Air Forces Overview, the Find view centres `state_id`, the base's circle is located from the game's own map icon objects and right clicked. The wing flies a transfer (status 'To <base>'); verified from the wing's transfer destination in memory (hoi4_air `transfer_to_base_id`), the base id changes on arrival. Typed refusals before any input: wing_unknown, wing_ambiguous, air_base_unknown (state without an own air base; lists own base states), nothing_to_change (already based or already flying there), air_base_full (capacity minus wings stationed or incoming). The game set no range limit on a transfer in the test (a 570 km fighter wing was accepted 207 map units away); if it refuses anyway the tool reports rebase_refused. Map mode is restored afterwards.","inputSchema":{"type":"object","properties":{"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) to the same base in one call: one air mode, each selected and right-clicked onto the base in turn (the camera stays on the base). Verified when all transfer, Diverged when some do (detail.wings, result.failed)"},"wing":{"type":"string","maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_create","description":"Found a new air wing from reserve aircraft at an own air base: strategic air map, Find view centres `state_id`, left click on the base circle, the N shortcut ('Add new Air Wing'), the reserve row of `aircraft` (variant name such as 'Ju 86' or class name such as 'Inter-War Fighter', case-insensitive) moves up to 100 planes of that variant into the wing (the game's own limit per click), Ok. Reserve aircraft come from production or from disbanding a wing. Typed refusals: air_base_unknown, air_base_full (before input); no_reserve_aircraft (the game refuses the window when the reserve is empty), aircraft_not_in_reserve (lists what is in reserve), aircraft_ambiguous, create_unavailable (Ok disabled, e.g. no manpower) while driving; nothing is created in those cases. Verified from the new wing's name appearing at that base in memory (hoi4_air). The wing gets the game's default name and 'Deploying from Reserves' status.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"aircraft":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","aircraft","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_disband","description":"Disband one own air wing (row of the Air Forces Overview, toolbar Disband, OK of the confirmation); all its equipment returns to the reserve. Typed refusals before input: wing_unknown, wing_ambiguous; disband_unavailable if the game disables the button. Verified from the wing's absence in memory (hoi4_air).","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_split","description":"Split one own air wing in two halves with the toolbar's Split button (shortcut D) after selecting it in the Air Forces Overview: the original keeps half of its aircraft, a new wing of the same type, base and orders takes the rest and gets the game's default name. Typed refusals before input: wing_unknown, wing_ambiguous, wing_in_transfer, nothing_to_change (fewer than 2 aircraft); split_unavailable if the game disables the button. Verified from memory: one more wing at the base and fewer aircraft in the original. This and hoi4_air_wing_create (up to 100 aircraft per click) are the ways to size wings; hoi4_air_wing_merge joins them again.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_merge","description":"Merge own air wings of one aircraft type at one air base with the toolbar's Merge button. The game's map stack and merge work on every wing of that type at the base, so `wing` is joined with all others of its type there; give `with` to name the single expected partner (refused with merge_group_larger when more than two wings of the type are there). The first wing is selected through its Air Forces Overview row, the stack item of the type beside the base circle joins with a Shift click, the game's selection array decides that exactly the group is selected, then Merge; the first wing survives with the aircraft (a wing holds at most 100: merging 40+80+40 bombers left wings of 100 and 60). Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (same wing twice), merge_different_base, merge_different_type, no_merge_partner, merge_group_larger, wing_in_transfer; merge_unavailable if the game disables the button, selection_lost if the group could not be selected (nothing is merged then). Verified from memory: fewer wings of the group left holding all their aircraft.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"with":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_hold","description":"Stop an own air wing's mission (the toolbar's Hold Air Wings button, shortcut H): the wing keeps its base and stands by (its panel row reads 'Standing by', the Air Forces Overview's Area column empties); its assigned region is cleared, the last mission selection stays in memory. Typed refusals before input: wing_unknown, wing_ambiguous, nothing_to_change (already standing by); hold_unavailable if the game disables the button. Verified from the wing's assigned region pointer in memory.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_air_region_probe","description":"What the player's air map shows for one strategic air region: Find view centres `state_id`, a left click on the region opens the game's region window, which is read (region name, active aircraft by type for us and the enemy: fighters, bombers, close air support, anti-air guns; detection and efficiency percentages) and closed again; `region` (id or display name) instead of `state_id` picks a state inside it from the game files. Adds enemy_air_superiority_estimate: the enemy's share of the active fighters weighted by each side's efficiency shown (theirs / (ours + theirs)), null with no fighter on either side; an estimate from what the window shows, not the game's own superiority figure (not located in memory). Orders nothing; moves the cursor and clicks, so it needs the input lease. Only what the air map displays; no hidden enemy information.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"type":"string","maxLength":96},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_air_region_probe","description":"What the player's air map shows for one strategic air region: Find view centres `state_id`, a left click on the region opens the game's region window, which is read (region name, active aircraft by type for us and the enemy: fighters, bombers, close air support, anti-air guns; detection and efficiency percentages) and closed again; `region` (id or display name) instead of `state_id` picks a state inside it from the game files. Adds enemy_air_superiority_estimate: the enemy's share of the active fighters weighted by each side's efficiency shown (theirs / (ours + theirs)), null with no fighter on either side; an estimate from what the window shows, not the game's own superiority figure (not located in memory). Orders nothing; moves the cursor and clicks, so it needs the input lease. Only what the air map displays; no hidden enemy information.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"anyOf":[{"type":"string","maxLength":96},{"type":"integer","minimum":1,"maximum":4095}]},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_regions","description":"Own wings and air bases grouped by strategic air region, read from memory and the game's map files (no input, never pauses): per region its name, own wings assigned (aircraft, type, missions, base state), aircraft total and the own air bases inside with capacity, aircraft stationed and free capacity; plus the wings that have no region. Enemy presence is not in memory: use hoi4_air_region_probe for the regions that matter. regions[].enemy_air_superiority is not yet built: always null with enemy_air_superiority_reason.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
         json!({"name":"hoi4_army_group_create","description":"Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card). Give it a field marshal with hoi4_army_commander using the army group's name. Verified when all the armies belong to one new army group.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string"},"minItems":2,"maxItems":12},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_rename","description":"Rename an own army with the game's own control: the army's card selects it, its badge's name box takes a click, the old name is erased and the new one typed key by key (each key verified in the box), then Return. Verified when the army carries the new name. `army` may be the army's name or its plan role (army_layout name_hint). Refused before input with army_unknown, name_taken (another army or army group has it) or name_not_typable (letters, digits, space and - _ . , / ' ( ), at most 24 characters).","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"name":{"type":"string","minLength":1,"maxLength":24},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","name","request_id","lease_token"],"additionalProperties":false}}),
@@ -3031,12 +3066,21 @@ impl MacClock {
             {
                 return Err(Error::new("invalid_arguments", "Invalid technology key"));
             }
-            let slot = args
-                .get("slot")
-                .and_then(Value::as_u64)
-                .filter(|v| *v <= 15)
-                .ok_or_else(|| Error::new("invalid_arguments", "slot must be 0..15"))?
-                as usize;
+            let slot = match args.get("slot") {
+                // no slot named: the first empty one (or the one already holding it, for a retry)
+                None | Some(Value::Null) if !replace => {
+                    research::default_slot(&research::assignments(process)?, &key)?
+                }
+                given => given
+                    .and_then(Value::as_u64)
+                    .filter(|v| *v <= 15)
+                    .ok_or_else(|| {
+                        Error::new(
+                            "invalid_arguments",
+                            "slot must be 0..15 (it may be left out without replace: the first empty slot)",
+                        )
+                    })? as usize,
+            };
             let id = string(args, "request_id")?;
             let token = string(args, "lease_token")?;
             let expected = guard.observe_context(process)?;
@@ -4115,12 +4159,21 @@ impl MacClock {
             if event.is_empty() || event.len() > 128 || event.chars().any(char::is_control) {
                 return Err(Error::new("invalid_arguments", "Invalid event id"));
             }
-            let option = args
-                .get("option")
-                .and_then(Value::as_u64)
-                .filter(|v| *v < 8)
-                .ok_or_else(|| Error::new("invalid_arguments", "option must be 0..7"))?
-                as usize;
+            let option = match args.get("option") {
+                // a key ("germany.14.a"), its letter or the shown text: looked up in the open event
+                Some(Value::String(wanted)) => {
+                    events::option_index(&events::list(process)?, event, wanted)?
+                }
+                other => other
+                    .and_then(Value::as_u64)
+                    .filter(|v| *v < 8)
+                    .ok_or_else(|| {
+                        Error::new(
+                            "invalid_arguments",
+                            "option must be 0..7 or the option's key from hoi4_events option_keys",
+                        )
+                    })? as usize,
+            };
             let id = string(args, "request_id")?;
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
@@ -4652,7 +4705,7 @@ impl MacClock {
                     .map(|_| airact::state_arg(args, "state_id"))
                     .transpose()?,
                 args.get("region")
-                    .map(|_| airact::text_arg(args, "region", 96))
+                    .map(|_| airact::region_arg(args))
                     .transpose()?,
             )?;
             let token = string(args, "lease_token")?;
@@ -4774,7 +4827,7 @@ impl MacClock {
                             .map(|_| airact::state_arg(args, "state_id"))
                             .transpose()?,
                         args.get("region")
-                            .map(|_| airact::text_arg(args, "region", 96))
+                            .map(|_| airact::region_arg(args))
                             .transpose()?,
                     )?;
                     Air::Mission {
@@ -7032,15 +7085,12 @@ impl MacClock {
             } else {
                 allowed(args, &["category", "slot", "lease_token"])?;
             }
-            let category = string(args, "category")?;
-            if !["government", "research_production", "military_staff"].contains(&category) {
-                return Err(Error::new("invalid_arguments", "Unknown category"));
-            }
+            let category = politics_category(args)?;
             let index = args
                 .get("slot")
                 .and_then(Value::as_u64)
                 .filter(|v| *v <= 7)
-                .ok_or_else(|| Error::new("invalid_arguments", "slot must be 0..7"))?
+                .ok_or_else(|| Error::new("invalid_arguments", POLITICS_SLOT_HELP))?
                 as usize;
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
@@ -7288,6 +7338,28 @@ impl MacClock {
         };
         let receipt = journal.execute(id, &epoch, action, &mut backend, Duration::from_secs(10))?;
         Ok(json!({"receipt":receipt}))
+    }
+}
+
+#[cfg(test)]
+mod argument_tests {
+    use super::*;
+    fn args(v: Value) -> serde_json::Map<String, Value> {
+        v.as_object().unwrap().clone()
+    }
+    #[test]
+    fn politics_categories_take_the_words_players_used_and_name_the_right_place() {
+        assert_eq!(politics_category(&args(json!({"category": "government"}))).unwrap(), "government");
+        assert_eq!(politics_category(&args(json!({"category": "advisor"}))).unwrap(), "government");
+        assert_eq!(
+            politics_category(&args(json!({"category": "High Command"}))).unwrap(),
+            "military_staff"
+        );
+        let e = politics_category(&args(json!({"category": "officer_corps"}))).unwrap_err();
+        assert!(e.message.contains("hoi4_officer_corps"), "{}", e.message);
+        let e = politics_category(&args(json!({}))).unwrap_err();
+        assert!(e.message.contains("research_production"), "{}", e.message);
+        assert!(POLITICS_SLOT_HELP.contains("political advisors"));
     }
 }
 

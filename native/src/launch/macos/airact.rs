@@ -1409,6 +1409,18 @@ pub(super) fn text_arg(
     }
     Ok(v.to_string())
 }
+/// A strategic region given as its name, its map file name or its id; an id may come as a
+/// number (players sent `region: 5` 30 times in the runs of 11-19 Nov and were refused).
+pub(super) fn region_arg(args: &serde_json::Map<String, Value>) -> Result<String> {
+    match args.get("region") {
+        Some(Value::Number(n)) => n
+            .as_u64()
+            .filter(|id| (1..=4095).contains(id))
+            .map(|id| id.to_string())
+            .ok_or_else(|| Error::new("invalid_arguments", "Invalid region")),
+        _ => text_arg(args, "region", 96),
+    }
+}
 pub(super) fn state_arg(args: &serde_json::Map<String, Value>, key: &str) -> Result<i32> {
     args.get(key)
         .and_then(Value::as_i64)
@@ -1420,6 +1432,18 @@ pub(super) fn state_arg(args: &serde_json::Map<String, Value>, key: &str) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_region_id_may_come_as_a_number() {
+        let args = |v: Value| v.as_object().unwrap().clone();
+        assert_eq!(region_arg(&args(serde_json::json!({"region": 5}))).unwrap(), "5");
+        assert_eq!(
+            region_arg(&args(serde_json::json!({"region": "Western Poland"}))).unwrap(),
+            "Western Poland"
+        );
+        assert!(region_arg(&args(serde_json::json!({"region": 0}))).is_err());
+        assert!(region_arg(&args(serde_json::json!({"region": -3}))).is_err());
+    }
 
     fn base(id: i32, state: i32, capacity: i32) -> Base {
         Base {

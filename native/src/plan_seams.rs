@@ -97,8 +97,8 @@ pub(super) struct Memory {
 
 /// Assigns a unit-leader trait for command power (the trait tree window).
 pub(super) const TRAIT_TOOL: &str = "hoi4_general_trait";
-/// NDefines.NCountry.BASE_MAX_COMMAND_POWER of 1.19.4, used only when neither a tooltip read
-/// ("x / y") nor `manage.command_power_max` gives the cap (a mod or a raised cap sets the latter).
+/// NDefines.NCountry.BASE_MAX_COMMAND_POWER of 1.19.4, used when `manage.command_power_max` does
+/// not give the cap (a mod or a raised cap sets it) and the power held is below it.
 const BASE_MAX_COMMAND_POWER: f64 = 80.0;
 /// NDefines.NMilitary.UNIT_LEADER_ASSIGN_TRAIT_COST of 1.19.4: below it nothing is tried (the
 /// tool reads the install's own value and refuses insufficient_command_power).
@@ -195,33 +195,6 @@ pub(super) fn step(
     production_order_step(state, tools, plan, lease, now)
 }
 
-/// The cap of an "x / y" command power text (the first number after a slash that follows a
-/// number); pure.
-pub(super) fn slash_max(text: &str) -> Option<f64> {
-    let number = |s: &str| -> Option<f64> {
-        let t: String = s
-            .chars()
-            .take_while(|c| c.is_ascii_digit() || *c == '.')
-            .collect();
-        t.trim_end_matches('.').parse().ok()
-    };
-    for (at, _) in text.match_indices('/') {
-        let before = text[..at].trim_end();
-        let tail: String = before
-            .chars()
-            .rev()
-            .take_while(|c| c.is_ascii_digit() || *c == '.')
-            .collect();
-        if tail.is_empty() {
-            continue;
-        }
-        if let Some(max) = number(text[at + 1..].trim_start()) {
-            return Some(max);
-        }
-    }
-    None
-}
-
 /// Whether command power is high enough to spend: within 20 of the cap, or at 80% of it, and
 /// at least one trait's cost; pure.
 pub(super) fn cp_should_spend(cp: f64, max: f64) -> bool {
@@ -246,20 +219,16 @@ pub(super) fn generals_by_divisions(armies: &[Value]) -> Vec<String> {
     out.into_iter().map(|(g, _)| g).collect()
 }
 
-/// The command power cap: a tooltip read "x / y", else manage.command_power_max, else the
-/// 1.19.4 define.
-fn command_power_max(tools: &dyn Tools, plan: &Value) -> f64 {
-    tools
-        .call("hoi4_tooltip", &json!({"target": "command_power"}))
-        .ok()
-        .and_then(|r| slash_max(&r.to_string()))
+/// The command power cap: `manage.command_power_max` when the plan sets it, else the 1.19.4
+/// define; never below the power held (the game caps command power, so a reading above the define
+/// proves the cap is at least that: a raised cap from laws, advisors or a mod). No tool reads the
+/// cap itself yet.
+fn command_power_max(plan: &Value, held: f64) -> f64 {
+    plan["manage"]["command_power_max"]
+        .as_f64()
         .filter(|m| *m > 0.0)
-        .or_else(|| {
-            plan["manage"]["command_power_max"]
-                .as_f64()
-                .filter(|m| *m > 0.0)
-        })
         .unwrap_or(BASE_MAX_COMMAND_POWER)
+        .max(held)
 }
 
 /// How long the rule rests after the trait tree window was not found: longer than any campaign,
@@ -286,9 +255,9 @@ const CP_PICK_REFUSALS: &[&str] = &[
 ];
 
 /// Rule (manage.off "cp_spend"): command power is not left at its cap. Once a week command
-/// power is read (hoi4_country_status fields.command_power.value; the cap from hoi4_tooltip
-/// target command_power when it reads "x / y", else manage.command_power_max, else the 1.19.4
-/// BASE_MAX_COMMAND_POWER 80); when it is within 20 of the cap or at 80% of it, one assignable
+/// power is read (hoi4_country_status fields.command_power.value; the cap from
+/// manage.command_power_max, else the 1.19.4 BASE_MAX_COMMAND_POWER 80, never below the power
+/// held); when it is within 20 of the cap or at 80% of it, one assignable
 /// trait is bought (hoi4_general_trait): first the plan's `commanders` [{general, traits}] in
 /// order (each general:trait once, done-memory `cps:<general>:<trait>`), then the first trait
 /// the tree lets the general pick for the generals leading the most divisions (hoi4_armies),
@@ -337,7 +306,7 @@ fn cp_spend_step(
         return Ok(None);
     };
     super::plan_omissions::record_cp(state, now, cp);
-    let max = command_power_max(tools, plan);
+    let max = command_power_max(plan, cp);
     if !cp_should_spend(cp, max) {
         note(
             state,
@@ -1936,10 +1905,16 @@ mod tests {
         );
         assert!(cp_should_spend(85.0, 100.0));
         assert!(!cp_should_spend(10.0, 20.0), "below one trait's cost");
-        assert_eq!(slash_max("Command Power: 63.5 / 100"), Some(100.0));
-        assert_eq!(slash_max("{\"text\":\"a/b 5 / 120.\"}"), Some(120.0));
-        assert_eq!(slash_max("no cap here"), None);
-        assert_eq!(slash_max("and/or"), None);
+        assert_eq!(command_power_max(&json!({}), 50.0), 80.0);
+        assert_eq!(
+            command_power_max(&json!({}), 210.0),
+            210.0,
+            "power above the define proves a raised cap (g17n read '210 of 80')"
+        );
+        assert_eq!(
+            command_power_max(&json!({"manage": {"command_power_max": 110}}), 50.0),
+            110.0
+        );
         let armies = list(&cp_game(0.0).replies["hoi4_armies"], "armies").to_vec();
         assert_eq!(
             generals_by_divisions(&armies),
@@ -1997,20 +1972,17 @@ mod tests {
 
     #[test]
     fn command_power_below_one_trait_is_kept_and_the_rule_can_be_switched_off() {
-        let mut f = cp_game(10.0);
-        f.replies
-            .insert("hoi4_tooltip", json!({"text": "Command Power 10 / 120"}));
+        let cap = json!({"manage": {"command_power_max": 120}});
+        let f = cp_game(10.0);
         let mut state = State::default();
-        assert_eq!(step(&mut state, &f, &json!({}), "l", START).unwrap(), None);
+        assert_eq!(step(&mut state, &f, &cap, "l", START).unwrap(), None);
         assert!(state.seams.notes["cp_spend"].contains("10 of 120: kept"));
         // far from the cap, one trait's cost on hand is spent
-        let mut f = cp_game(50.0);
-        f.replies
-            .insert("hoi4_tooltip", json!({"text": "Command Power 50 / 120"}));
+        let f = cp_game(50.0);
         let mut state = State::default();
-        assert!(step(&mut state, &f, &json!({}), "l", START)
-            .unwrap()
-            .is_some());
+        assert!(step(&mut state, &f, &cap, "l", START).unwrap().is_some());
+        // no tool reads the cap: nothing asks a tool the server does not have
+        assert!(f.calls.borrow().iter().all(|(n, _)| n.as_str() != "hoi4_tooltip"));
         // the plan's cap without a tooltip
         let f = cp_game(50.0);
         let plan = json!({"manage": {"command_power_max": 60}});

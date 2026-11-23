@@ -38,6 +38,15 @@ for f in files:
         # The read form of hoi4_diplomacy_incoming needs no lease; every other one is an action.
         needs_lease = name != "hoi4_diplomacy_incoming"
         tools.setdefault(name, (UNVALIDATED + m.group(3), needs_lease, f.name))
+# Tools whose descriptors are assembled by helper functions (protocol.rs, the construction, focus and
+# research preview modules, module tool lists) are not matched above; the catalogue that
+# scripts/hoi4facts/tool_schemas.py builds from the same sources lists them.
+catalogue = pathlib.Path(__file__).resolve().parent.parent / "skills/hoi4-campaign-playbook/tools.schema.json"
+if catalogue.is_file():
+    for name, entry in json.loads(catalogue.read_text()).get("tools", {}).items():
+        props = (entry.get("inputSchema") or {}).get("properties") or {}
+        tools.setdefault(name, (entry.get("description", ""), "lease_token" in props,
+                                entry.get("source", "catalogue")))
 domains = [
     ("Time, plans and events", r"^hoi4_(time|plan|plan_run|wait_for|events|event_choose|capabilities|input_lease|daily_governor|overview)$"),
     ("Economy, construction and production", r"economy|resource|industry|construction|production|state_slots|shortage|trade"),

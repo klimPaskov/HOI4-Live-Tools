@@ -6,29 +6,41 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 
 ## Time, plans and events
 
+- `hoi4_capabilities` (R): Verified runtime capabilities and explicit platform/build limitations.
 - `hoi4_daily_governor` (A): Owned Mac background plan preview.
-- `hoi4_event_choose` (A): Choose an option (0-based, in listed order) of an open event by clicking it (the list order is not the stacking order:
+- `hoi4_event_choose` (A): Choose an option of an open event by clicking it:
 - `hoi4_events` (R): Open event windows in order (the last is on top) with their title and option texts.
 - `hoi4_input_lease` (A): Exclusive configured-controller lease for ordinary macOS input.
+- `hoi4_overview` (R): Fresh owned-country process snapshot.
 - `hoi4_plan` (R): Read or change the standing plan (plan.json in the run directory):
 - `hoi4_plan_run` (A): Carry out the standing plan for up to `seconds` (default 60):
 - `hoi4_time` (A): Set desired pause or internal speed 0..4 (the game's speeds 1 to 5:
+- `hoi4_wait_for` (R): Bounded server wait for own focus/research change, game date, research UI, or all explicit until_assignments targets.
 
 ## Economy, construction and production
 
 - `hoi4_construction_add` (A): Queue more of a building in an own state with ordinary input:
 - `hoi4_construction_clear_selection` (A): Default-off Mac qualification:
+- `hoi4_construction_controls` (R): Combined read-only own construction opener and one canonical public building choice for the verified Linux layout.
 - `hoi4_construction_find_open` (A): Default-off Mac qualification:
 - `hoi4_construction_find_state` (A): Default-off Mac qualification:
+- `hoi4_construction_find_view` (R): Read-only own map Find view using independently recovered Linux and native Mac layouts.
 - `hoi4_construction_open` (A): Default-off Mac qualification:
 - `hoi4_construction_order` (A): Reorder or remove one own construction line with its row buttons in the construction panel:
+- `hoi4_construction_panel_probe` (R): Read-only Mac construction panel/topbar opener binding.
 - `hoi4_construction_place` (A): Default-off Mac single-placement qualification:
+- `hoi4_construction_queue` (R): Read-only preview of own construction collection, validated fully before paging.
 - `hoi4_construction_select` (A): Default-off Mac qualification:
+- `hoi4_construction_target` (R): Compact read-only queued amounts for one canonical public building and one own-owned-and-controlled state.
+- `hoi4_construction_ui_probe` (R): Read-only native Mac construction observation:
 - `hoi4_design_set_production` (A): Change which design an existing own production line builds:
+- `hoi4_economy` (R): Own-country named factory trigger counts, civilian project capacity and signed fixed-point political power.
 - `hoi4_economy_detail` (R): Own economy detail from game memory (no input, no lease, never pauses):
 - `hoi4_industry` (R): Own civilian, military and dockyard factory counts (validated against the top bar total) and political power;
 - `hoi4_naval_production_options` (R): Read-only (memory, no input):
 - `hoi4_production_add` (A): Add one own military or naval production line for a base equipment type (e.g.
+- `hoi4_production_controls` (R): Linux read-only preview:
+- `hoi4_production_lines` (R): Fresh own equipment-line collection only, validated in full before paging;
 - `hoi4_production_priority` (A): Move an own production line in the production view's priority order (a line higher in the list gets resources and factories first, so shortages and lost factories hit the bottom lines):
 - `hoi4_production_set` (A): factories 0 removes the line (its close button).
 - `hoi4_production_shortages` (R): Per production line (military and naval) the resources it was allocated per day and which of them are in deficit for the whole country.
@@ -41,6 +53,13 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 
 - `hoi4_doctrine_adopt` (A): Adopt a grand doctrine (e.g.
 - `hoi4_doctrines` (R): Own doctrines read from game memory (no input, no lease, never pauses).
+- `hoi4_focus_available` (R): Read-only:
+- `hoi4_focus_completed` (R): Preview:
+- `hoi4_focus_input_probe` (R): Read-only Mac preview:
+- `hoi4_focus_list` (R): Bounded own canonical focus keys;
+- `hoi4_focus_node_detail` (R): Exact own focus key joined to complete current-item ownership and only the requested control/callback metadata.
+- `hoi4_focus_search_state` (R): Read-only current own Focus search highlight and match counts for an exact canonical focus_id.
+- `hoi4_focus_selected_detail` (R): Compact fresh exact own selected focus detail window.
 - `hoi4_focus_start` (A): Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory;
 - `hoi4_intelligence` (R): Own intelligence agency, read-only (no input, no lease, never pauses).
 - `hoi4_mio_design_team` (A): Browse only, assigns nothing (live pp4, 17 Nov 2026):
@@ -48,14 +67,22 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_mio_policy` (A): UNVALIDATED (no live test yet): attach a policy to an organisation:
 - `hoi4_mio_trait` (A): Live-verified: queue a trait of an organisation's trait tree:
 - `hoi4_mios` (R): Military-industrial organisations and designers for the own country, read-only (no input, no lease, never pauses).
+- `hoi4_research` (R): Fresh own completed technology IDs with bounded pagination, and active raw research counters.
+- `hoi4_research_category` (R): Read-only exact public folder ID association with the current own research tree, named tab, dense selection index and ordinary callback.
 - `hoi4_research_extras` (R): Own research bonuses that the research panel only shows as tooltips, read from game memory (no input, no lease, never pauses):
-- `hoi4_research_start` (A): Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage 
+- `hoi4_research_folders` (R): Fresh sorted exact installed public research-folder IDs for the verified Linux layout.
+- `hoi4_research_node_detail` (R): One exact own current technology key:
+- `hoi4_research_nodes` (R): Current own-tree nodes joined to public technology keys and conditional ordinary-control diagnostics.
+- `hoi4_research_slot_control` (R): One own research slot by current array index:
+- `hoi4_research_start` (A): Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology;
+- `hoi4_research_ui` (R): Bounded own research slot widgets, selected slot, canonical technology Info windows, named ordinary research button state and exact render diagnostics.
 - `hoi4_special_project_assign` (A): Put a scientist and/or a project into one own research facility with ordinary input:
 - `hoi4_special_project_recruit` (A): Recruit one scientist the Recruit Scientist window offers (names under recruitable.candidates of hoi4_special_projects) for political power (25/50/75/100 by how many scientists are idle).
 - `hoi4_special_project_stop` (A): Stop the running project of one own facility:
 - `hoi4_special_project_unassign` (A): Take the scientist out of an own facility (the small button on the portrait of the facility card).
 - `hoi4_special_projects` (R): Own special-project state read from memory (no input, no lease, nothing paused):
 - `hoi4_special_projects_panel` (A): Open the Research panel's Experimental Facilities tab with ordinary input (W, the tab), read what only the screen shows and close the panel again:
+- `hoi4_technology_list` (R): Canonical loaded public technology IDs with bounded filtering/pagination.
 
 ## Politics, decisions, diplomacy, wars
 
@@ -82,6 +109,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 ## Army, templates, designs, supply
 
 - `hoi4_armies` (R): Own armies (name, division ids, threat:
+- `hoi4_army` (R): Bounded own-country divisions with observation-scoped full handles, selected own location joins and raw signed strength/organisation.
 - `hoi4_army_area_defense` (A): Give an own army an area defence order over own states (the army spreads over them and holds what the order covers):
 - `hoi4_army_assign` (A): Fold the unassigned divisions standing in a state into an existing army there without disturbing other armies, or create a new army when none stands there.
 - `hoi4_army_assign_plan` (R): Pure read:
@@ -152,12 +180,17 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_agency_upgrade` (A): Start an agency upgrade:
 - `hoi4_alerts` (R): Read-only:
 - `hoi4_auto_import` (A): HOI4 1.19.4 Automatic Importing (Trade view):
+- `hoi4_autopilot` (A): Turn the resident executor on or off:
 - `hoi4_general_trait` (A): Live-verified: give an own army general an assignable trait for command power (NDefines UNIT_LEADER_ASSIGN_TRAIT_COST, read from the game's defines;
+- `hoi4_input_geometry` (R): Read-only own GUI dimensions and scale diagnostics.
+- `hoi4_map_daynight` (A): Turn the map's day/night shading off (on:false, the default) or on:
 - `hoi4_map_mode` (A): Switch the map mode with the game's own F-key shortcut, as a human checks the map:
+- `hoi4_observe` (R): What changed since your last look, from the server's watcher (it samples your own situation a few times a second):
 - `hoi4_occupation` (R): Read-only (memory, no input, no pause):
 - `hoi4_occupation_law` (A): Set the DEFAULT occupation law for all occupied territories (the Occupied Territories view's Territory Management law) with ordinary input:
 - `hoi4_officer_corps` (A): Live-verified read (pp18, pp23, 17 Nov 2026) and pick (fk1, 18 Nov 2026:
 - `hoi4_operation_start` (A): Prepare an intelligence operation against a target with ordinary input, as a player does:
+- `hoi4_operations` (R): Read-only:
 - `hoi4_operative_assign` (A): Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission:
 - `hoi4_operative_recruit` (A): Recruit an operative into a free slot of the operative bar:
 - `hoi4_peace_exit` (A): Leave the peace conference (the Confirm and Exit / done button and the OK of its confirmation);
@@ -170,6 +203,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_save` (A): Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games.
 - `hoi4_states` (R): States in one memory read (no interface input).
 - `hoi4_stockpile` (R): Own equipment stockpile from game memory (no input, no lease, never pauses).
+- `hoi4_wait_change` (R): Block until a change after `since` arrives (optionally only given kinds or urgent ones), or until timeout_seconds (1-30) pass;
 - `hoi4_war_risk` (R): Read-only, before justifying or declaring war on `country`:
 - `hoi4_war_stats` (R): Read-only (memory, no input, no pause):
 

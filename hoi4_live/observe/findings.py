@@ -409,6 +409,35 @@ def supply_and_stock(snap):
     return out
 
 
+def affairs(snap):
+    """Espionage and occupation, from the pure reads the snapshot keeps (no judgement on numbers the game
+    does not show: a network abroad either exists or not; resistance is compared with the game's own target)."""
+    out = []
+    it = snap.get("intelligence") or {}
+    ops = it.get("operatives")
+    roster = ops.get("list") if isinstance(ops, dict) else None
+    if it.get("created") and roster and not it.get("networks"):
+        home = [o for o in roster if o.get("mission") and o.get("mission_target") == snap.get("player")]
+        if len(home) == len(roster):
+            out.append(F("intel_no_network_abroad", "medium",
+                         f"the agency has {len(roster)} operative(s), all on missions at home "
+                         f"({', '.join(sorted({o['mission'] for o in home}))}) and no intelligence network "
+                         f"abroad: no operation (collaboration government, coup, cipher) can start without one",
+                         operatives=len(roster)))
+    occ = snap.get("occupation") or {}
+    over = [s for s in occ.get("states") or []
+            if s.get("resistance") is not None and s.get("resistance_target") is not None
+            and s["resistance"] > s["resistance_target"]]
+    if over:
+        names = ", ".join(f"{s.get('name') or s.get('state')} {s['resistance']:.0f}/{s['resistance_target']:.0f}"
+                          for s in sorted(over, key=lambda s: -s["resistance"])[:4])
+        out.append(F("resistance_above_target", "medium",
+                     f"resistance above its target in {len(over)} occupied state(s) ({names}): garrisons or "
+                     f"the occupation law do not hold it (law {g(occ, 'law', 'key') or occ.get('law')})",
+                     states=len(over)))
+    return out
+
+
 def game_flags(snap, already):
     out = []
     seen = {f["code"] for f in already}
@@ -434,6 +463,7 @@ def findings(snap, prev=None, state_regions=None):
     out += air(snap, prev, state_regions)
     out += wars(snap, prev)
     out += supply_and_stock(snap)
+    out += affairs(snap)
     out += executor(snap)
     out += game_flags(snap, out)
     # how long each finding has been open: consecutive earlier snapshots with the same code+subject

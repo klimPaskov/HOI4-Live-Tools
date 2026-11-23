@@ -190,6 +190,23 @@ class MoreFindings(unittest.TestCase):
         self.assertIn("offensive_at_own_state", fs)
         self.assertIn("planning_near_zero", fs)
 
+    def test_agency_without_a_network_abroad_and_resistance_over_its_target(self):
+        home = {"mission": "counter_intelligence", "mission_target": "GER"}
+        now = snap(intelligence={"created": True, "networks": [],
+                                 "operatives": {"idle": 0, "list": [home, dict(home)]}},
+                   occupation={"law": {"key": "martial_law_occupation"}, "states": [
+                       {"state": 7, "name": "Holland", "resistance": 11.1, "resistance_target": 10.0},
+                       {"state": 6, "name": "Flanders", "resistance": 6.4, "resistance_target": 10.0}]})
+        fs = F.findings(now, [])
+        self.assertIn("intel_no_network_abroad", codes(fs))
+        res = [f for f in fs if f["code"] == "resistance_above_target"]
+        self.assertEqual(len(res), 1)
+        self.assertIn("Holland 11/10", res[0]["text"])
+        # a network abroad, or an operative abroad: nothing to say
+        ok = snap(intelligence={"created": True, "networks": [{"target": "FRA", "strength": 20}],
+                                "operatives": {"list": [home]}})
+        self.assertNotIn("intel_no_network_abroad", codes(F.findings(ok, [])))
+
     def test_executor_repeated_refusal_and_idle_assignables(self):
         ex = {"game_hour": 1000, "failures": [{"what": "hoi4_air_mission {...}", "count": 4, "last_hour": 990}]}
         now = snap(executor=ex, economy={"civilian_idle": 6, "factories": {"civilian": 50, "military": 45}},
