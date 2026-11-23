@@ -129,6 +129,17 @@ def measure(run_dir, snaps):
         kind = str((a.get("action") or {}).get("kind", ""))
         if "speed" in kind or kind in ("time", "time_set"):
             y["speed_changes"] += 1
+    # speed changes: the clock ledger (the executor's ids start with "plan-"; others are the
+    # harness's or a human's)
+    for c in _jsonl(os.path.join(run_dir, "clock-actions.jsonl")):
+        if c.get("status") != "Verified" or (c.get("action") or {}).get("kind") != "SetSpeed":
+            continue
+        utc = (c.get("unix_ms") or 0) / 1000.0
+        year = (_date_at(clock, utc) if utc else (clock[-1][1] if clock else ""))[:4] or "?"
+        if str(c.get("id", "")).startswith("plan-"):
+            years[year]["speed_changes"] += 1
+        else:
+            years[year]["speed_others"] = years[year].get("speed_others", 0) + 1
     act_utc.sort()
     by_kind = defaultdict(list)
     for a in finals:
@@ -190,7 +201,9 @@ def render(run_dir, snaps):
             f"  {year}: {y['acts']} actions, {y['refused']} refused; identical repeated {reps}; "
             f"refused then retried unchanged {retr}; domain-days still with something assignable "
             f"{y['idle_days']:.0f}; speed changes {y['speed_changes']} by the executor"
+            + (f", {y['speed_others']} by others (harness or human)" if y.get("speed_others") else "")
             + (f", {y['speed_seen']} seen" if y.get("speed_seen") else "")
+            + (" OVER THE BUDGET (6 a year outside war starts and ends: check)" if y["speed_changes"] > 8 else "")
         )
         for key, n in y["retried"].most_common(3):
             lines.append(f"    retried after a refusal x{n}: {key}")

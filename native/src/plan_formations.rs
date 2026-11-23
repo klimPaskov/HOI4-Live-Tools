@@ -466,18 +466,14 @@ pub(super) fn command_step(
     plan_military::group_marshal_step(state, tools, plan, lease, now)
 }
 
-/// Whether an army is mobile (motorised or armoured) by the roster's `motorization` share.
-fn mobile(row: &Value) -> bool {
-    row["motorization"].as_f64().unwrap_or(0.0) > 0.5
-}
-
 /// An army with no order at all that no operation names (formation, hold or reserve row) is a
-/// straggler while an operation runs: it joins the nearest army of the same kind
-/// (mobile or not) that has an order and room (hoi4_army_merge), so no division waits a war out
-/// and no new front is drawn (w46e1/f1, w47p1, 23 Nov 2026: Mitte Brandenburg and Army 1 stood
-/// with no order for the whole war; the plan's `armies.concentrate: false` kept the formation
-/// merges off, so nothing took them). Works with concentrate off: the kind keeps infantry out of
-/// the armour.
+/// straggler while an operation runs: it joins the nearest LINE army of an operation (a formation
+/// of role `line` or `wing`) with room (hoi4_army_merge), so no division waits a war out and no new
+/// front is drawn (w46e1/f1, w47p1/p2, 23 Nov 2026: Mitte Brandenburg and Army 1 stood with no
+/// order for the whole war; the plan's `armies.concentrate: false` kept the formation merges
+/// off). Never into the armour: infantry in a Panzergruppe slows it (the reason the plan turned
+/// concentration off); an armoured straggler in a line army still fights. An army inside an army
+/// group (its group's front is its order) is not a straggler.
 fn straggler_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -510,7 +506,22 @@ fn straggler_step(
         a["battle_plan_orders"].as_u64().unwrap_or(0) == 0
             && a["defensive_orders"].as_u64().unwrap_or(0) == 0
             && a["plan_executing"] != json!(true)
+            && a["army_group"].as_str().is_none_or(str::is_empty)
     };
+    // the operations' line armies (by army name, a layout hint resolved to its army)
+    let lines: HashSet<String> = list(plan, "operations")
+        .iter()
+        .flat_map(|op| list(op, "formations").iter())
+        .filter(|f| matches!(text(&f["role"]), "line" | "wing"))
+        .map(|f| {
+            let hint = text(&f["army"]);
+            state
+                .layout
+                .get(hint)
+                .cloned()
+                .unwrap_or_else(|| hint.to_string())
+        })
+        .collect();
     let sailing = super::plan_ship::claimed(state);
     for a in armies {
         let name = text(&a["army"]).to_string();
@@ -535,8 +546,7 @@ fn straggler_step(
             .filter(|t| {
                 let tn = text(&t["army"]);
                 tn != name
-                    && !orderless(t)
-                    && mobile(t) == mobile(a)
+                    && lines.contains(tn)
                     && t["defensive_orders"].as_u64().unwrap_or(0) == 0
                     && !reserved.contains(tn)
                     && t["division_count"].as_u64().unwrap_or(0) + n <= max
@@ -568,8 +578,7 @@ fn straggler_step(
             plan_military::forget_army(state, &name);
         }
         return Ok(Some(format!(
-            "command: {name} ({n} division(s), no order, named by no operation) joins {target}, the nearest {} army with an order and room: {ok} {why}",
-            if mobile(a) { "mobile" } else { "infantry" }
+            "command: {name} ({n} division(s), no order, named by no operation) joins {target}, the nearest line army of an operation with room: {ok} {why}"
         )));
     }
     Ok(None)
@@ -1050,12 +1059,13 @@ mod tests {
     #[test]
     fn a_straggler_at_war_joins_the_nearest_army_of_its_kind_even_without_concentration() {
         let plan = json!({"armies": {"concentrate": false},
-            "operations": [{"id": "op", "formations": [{"army": "Armee Mitte"}, {"army": "PG"}],
+            "operations": [{"id": "op", "formations": [{"army": "Armee Mitte", "role": "line"},
+                {"army": "PG", "role": "mobile"}],
                 "reserve": [{"army": "Armee Rhein"}]}]});
         let tools = game(vec![(
             "hoi4_armies",
             json!({"armies": [
-                {"army": "Armee Mitte", "division_count": 20, "battle_plan_orders": 1, "motorization": 0, "main_state": 55},
+                {"army": "Armee Mitte", "division_count": 20, "battle_plan_orders": 0, "army_group": "Army Group 1", "motorization": 1, "main_state": 55},
                 {"army": "PG", "division_count": 9, "battle_plan_orders": 1, "motorization": 1, "main_state": 64},
                 {"army": "Armee Rhein", "division_count": 17, "battle_plan_orders": 0, "motorization": 0, "main_state": 55},
                 {"army": "Mitte Brandenburg", "division_count": 2, "battle_plan_orders": 0, "motorization": 0, "main_state": 64}]}),
