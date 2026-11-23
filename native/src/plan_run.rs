@@ -2993,6 +2993,9 @@ fn air_waits_for_war(state: &mut State, tools: &dyn Tools, plan: &Value, now: Ga
         && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD)
 }
 
+/// Wall seconds the operations' burst may take between two declarations due the same day.
+const BETWEEN_DECLARATIONS_SECONDS: u64 = 6;
+
 /// Whether the operations' burst after a declaration had an order refused (an open event holds
 /// them, or an order line reads `: false`): the opening air burst then waits a tick.
 fn burst_refused(events_now: bool, executed: Option<&str>) -> bool {
@@ -3065,10 +3068,28 @@ fn declare_first(
             // days and Holland, whose war the operation executes on, came nine days later)
             state.done.remove("declnear:at");
             if plan_affairs::declaration_near(state, tools, plan, now, 0) {
+                // the operations that wait for this war execute now (a short burst: their
+                // execute orders take a few seconds); only the air waits for the last
+                // declaration (w43i1, 23 Nov 2026: three declarations one after another held
+                // the attack on Holland three and a half game days)
+                let executed = war_burst_for(
+                    state,
+                    tools,
+                    plan,
+                    lease,
+                    now,
+                    plan_operation::step,
+                    BETWEEN_DECLARATIONS_SECONDS,
+                )?;
                 state.war_active = true;
                 state.last_ok = Some(true);
+                let line = [Some(declared), executed]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join("; ");
                 return Ok(Some(format!(
-                    "{declared}; another declaration is due: it goes out first"
+                    "{line}; another declaration is due: it goes out next"
                 )));
             }
             let executed = war_burst(state, tools, plan, lease, now, plan_operation::step)?;
