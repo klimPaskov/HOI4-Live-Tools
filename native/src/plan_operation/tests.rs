@@ -2236,3 +2236,21 @@ fn a_group_without_a_field_marshal_gets_the_first_free_name_of_marshals() {
         [json!({"army": "Army Group 3", "general": "Rundstedt"})]
     );
 }
+
+#[test]
+fn a_plan_click_off_the_border_gives_way_to_a_border_state() {
+    let st = State::default();
+    let front = json!({"enemy": "BEL", "own_states": [51, 42], "click_state": 980});
+    let u = unit("Army Group 2".into(), Role::Group, &front, &json!({}));
+    let wars = json!({"borders": [
+        {"neighbour_tag": "BEL", "neighbour_states": [34, 6], "own_border_states": [51]},
+        {"neighbour_tag": "HOL", "neighbour_states": [7], "own_border_states": [36]}
+    ]});
+    assert_eq!(click_state(&st, &wars, &u), Some(34));
+    let on = json!({"enemy": "BEL", "own_states": [51], "click_state": 6});
+    let u = unit("Army Group 2".into(), Role::Group, &on, &json!({}));
+    assert_eq!(click_state(&st, &wars, &u), Some(6));
+    // no border read: the plan's click stands
+    let u = unit("Army Group 2".into(), Role::Group, &front, &json!({}));
+    assert_eq!(click_state(&st, &json!({}), &u), Some(980));
+}

@@ -87,11 +87,10 @@ pub(super) fn parse_victory_points(text: &str) -> Vec<(i32, f64)> {
 }
 
 fn state_text(dir: &Path, state: i32) -> Result<String> {
-    let prefix = format!("{state}-");
     let entries = std::fs::read_dir(dir.join("history/states"))
         .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"))?;
     for entry in entries.flatten() {
-        if entry.file_name().to_string_lossy().starts_with(&prefix) {
+        if super::mapdata::state_file_id(&entry.file_name().to_string_lossy()) == Some(state) {
             return std::fs::read_to_string(entry.path())
                 .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"));
         }

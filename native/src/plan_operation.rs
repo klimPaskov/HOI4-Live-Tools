@@ -849,6 +849,30 @@ fn split_groups(
                 });
             u.members = part;
             u.side = Some(is_low);
+            // `front.low` / `front.high`: the side's own enemy, click, own states and line (two
+            // groups by geography on two countries' border pieces: the Dutch piece and the Belgian
+            // one in May 1940; one enemy for both put 63 divisions on four Belgian provinces in g17n)
+            let side = &op["front"][if is_low { "low" } else { "high" }];
+            if let Some(e) = side["enemy"].as_str().filter(|e| !e.is_empty()) {
+                u.enemy = e.to_string();
+            }
+            if let Some(c) = side["click_state"].as_i64() {
+                u.click = Some(c);
+            }
+            let own = ints(&side["own_states"]);
+            if !own.is_empty() {
+                u.own_states = own;
+            }
+            let line = ints(&side["target_line"]);
+            if !line.is_empty() {
+                u.anchor = ints(&side["axis"])
+                    .iter()
+                    .rev()
+                    .find(|s| line.contains(s))
+                    .copied()
+                    .or_else(|| line.get(line.len() / 2).copied());
+                u.line = line;
+            }
             u
         })
         .collect()
@@ -1086,14 +1110,19 @@ fn executing(roster: &Value, name: &str) -> bool {
 /// The state a front order clicks near: the plan's `click_state`, else the enemy's border state
 /// nearest the middle of the own states (map centres when known), else the first own state.
 fn click_state(state: &State, wars: &Value, u: &Unit) -> Option<i64> {
-    if u.click.is_some() {
-        return u.click;
-    }
     let theirs: Vec<i64> = list(wars, "borders")
         .iter()
         .filter(|b| text(&b["neighbour_tag"]) == u.enemy)
         .flat_map(|b| ints(&b["neighbour_states"]))
         .collect();
+    // the plan's click when it is a state on the border with the enemy (or no border is read); a
+    // click at a state that touches no own land finds no highlighted front (g17n, 23 Nov 2026:
+    // the Ardennes 980 does not touch Germany, the group's front was refused for five months)
+    if let Some(c) = u.click {
+        if theirs.is_empty() || theirs.contains(&c) {
+            return Some(c);
+        }
+    }
     let centre = |ids: &[i64]| -> Option<(f64, f64)> {
         let pts: Vec<(f64, f64)> = ids
             .iter()
@@ -1432,7 +1461,26 @@ fn one(
         i64::from(op["replace_arrows"] == json!(true)),
     );
     let executed = state.done.contains_key(&key(id, "exec"));
-    let (units, group) = units(state, id, op, roster);
+    let (mut units, group) = units(state, id, op, roster);
+    // an enemy of the operation that was fought and is no longer at war (it capitulated) hands
+    // its units to the operation's next enemy at war: their fronts are clicked at that enemy's
+    // contact line (the Dutch side's group goes on into Belgium over Brabant)
+    for e in &enemies {
+        if at_war.contains(e) {
+            state.done.insert(key(id, &format!("fought:{e}")), now);
+        }
+    }
+    if let Some(next) = enemies.iter().find(|e| at_war.contains(e)) {
+        for u in units.iter_mut() {
+            if !at_war.contains(&u.enemy)
+                && state
+                    .done
+                    .contains_key(&key(id, &format!("fought:{}", u.enemy)))
+            {
+                u.enemy = next.clone();
+            }
+        }
+    }
     if executed {
         if state.centers.is_empty() {
             let mut tags = enemies.clone();
@@ -2842,28 +2890,10 @@ fn prepare(
             return Ok(Some(line));
         }
     }
-    // 2. the group's front and its offensive FIRST, before any assembly, march or commander: the
-    // planning bonus grows only while the line stands (PLANNING_GAIN 0.02 a day, the cap 0.3
-    // and more from doctrines and the marshal), and the attack is the battle plan executed
-    // with that bonus (the owner's war model, 19 Nov 2026). Drawn after the assembly and the
-    // marches (rs5/rs6) the group's line stood six game days later.
-    let fighting = war_tags(wars);
-    for u in units.iter().filter(|u| u.role == Role::Group) {
-        let one = key(id, &format!("one:{}:{}", u.name, line_tag(&u.line)));
-        let line = match state.done.get(&one) {
-            Some(first) => vec![*first],
-            None => u.line.clone(),
-        };
-        let peace = !fighting.contains(&u.enemy);
-        if let Some(line) = reconcile(state, tools, id, u, &line, roster, wars, lease, now, peace)?
-        {
-            return Ok(Some(line));
-        }
-    }
-    // ASSEMBLE: a mobile formation gathers its templates' divisions out of the other armies
-    if let Some(line) = assemble(state, tools, id, op, units, roster, lease, now)? {
-        return Ok(Some(line));
-    }
+    // THE MARCH FIRST (g17n, 23 Nov 2026): a strike formation's march is one whole-army move every
+    // two game days; behind a group front or offensive that kept failing it got no turn from
+    // October to May and the armour stood in Bohemia and Slovakia on the day of the war in the West.
+    // It goes before the group's draws now (it costs them one tick in two days).
     // a strike formation marches to its start state (its `front.own_states`, first) before
     // the war, at once after its assembly and before the fronts are drawn (the march is game
     // days, the drawing real seconds: drawn first, the march began 12 days into the bed's prepare
@@ -2903,6 +2933,28 @@ fn prepare(
             )?;
             return Ok(Some(line));
         }
+    }
+    // 2. the group's front and its offensive FIRST, before any assembly, march or commander: the
+    // planning bonus grows only while the line stands (PLANNING_GAIN 0.02 a day, the cap 0.3
+    // and more from doctrines and the marshal), and the attack is the battle plan executed
+    // with that bonus (the owner's war model, 19 Nov 2026). Drawn after the assembly and the
+    // marches (rs5/rs6) the group's line stood six game days later.
+    let fighting = war_tags(wars);
+    for u in units.iter().filter(|u| u.role == Role::Group) {
+        let one = key(id, &format!("one:{}:{}", u.name, line_tag(&u.line)));
+        let line = match state.done.get(&one) {
+            Some(first) => vec![*first],
+            None => u.line.clone(),
+        };
+        let peace = !fighting.contains(&u.enemy);
+        if let Some(line) = reconcile(state, tools, id, u, &line, roster, wars, lease, now, peace)?
+        {
+            return Ok(Some(line));
+        }
+    }
+    // ASSEMBLE: a mobile formation gathers its templates' divisions out of the other armies
+    if let Some(line) = assemble(state, tools, id, op, units, roster, lease, now)? {
+        return Ok(Some(line));
     }
     // `marshals`: a group of the operation without a field marshal (a regroup or the second group
     // of a split makes a new game group, and a new group has none) gets the first named general
@@ -3060,8 +3112,15 @@ fn reconcile(
         else {
             return Ok(None);
         };
-        let fk = key(id, &format!("fronts:{}", u.name));
+        // the draws are counted per clicked state: a plan edit that moves the click (or a click
+        // the operation chose again) draws afresh (g17n, 23 Nov 2026: six refused clicks at a state
+        // that does not touch the border used the count up for good and the edited click was
+        // never sent); `fronts:<unit>` keeps the count of the latest click
+        let fk = key(id, &format!("fronts:{}:{click}", u.name));
         let fronts = state.done.get(&fk).copied().unwrap_or(0);
+        state
+            .done
+            .insert(key(id, &format!("fronts:{}", u.name)), fronts);
         if fronts >= 3 * REDRAWS {
             state.op_notes.insert(
                 format!("{id}:{}", u.name),
@@ -3070,6 +3129,9 @@ fn reconcile(
             return Ok(None);
         }
         state.done.insert(fk, fronts + 1);
+        state
+            .done
+            .insert(key(id, &format!("fronts:{}", u.name)), fronts + 1);
         let line = order(
             state,
             tools,

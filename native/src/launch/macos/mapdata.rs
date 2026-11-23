@@ -294,12 +294,10 @@ pub(super) fn state_province_index(dir: &Path) -> Result<StateIndex> {
 }
 /// The land provinces of one state (history/states, lakes left out).
 pub(super) fn state_provinces(dir: &Path, state: i32) -> Result<Vec<i32>> {
-    let prefix = format!("{state}-");
     let entries = std::fs::read_dir(dir.join("history/states"))
         .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"))?;
     for entry in entries.flatten() {
-        let name = entry.file_name();
-        if name.to_string_lossy().starts_with(&prefix) {
+        if state_file_id(&entry.file_name().to_string_lossy()) == Some(state) {
             let text = std::fs::read_to_string(entry.path())
                 .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"))?;
             let found = land_only(&water_provinces(dir), parse_state_provinces(&text));
@@ -309,6 +307,15 @@ pub(super) fn state_provinces(dir: &Path, state: i32) -> Result<Vec<i32>> {
         }
     }
     Err(Error::new("invalid_target", "Unknown state"))
+}
+
+/// The state id a history/states file name starts with: `7-Holland.txt` and `977 - Antwerp.txt`
+/// alike (1.19 added states whose file names put spaces around the dash; read as `977-` they had
+/// no provinces and no map position, and every order naming them was refused).
+pub(super) fn state_file_id(name: &str) -> Option<i32> {
+    name.split('-')
+        .next()
+        .and_then(|v| v.trim().parse::<i32>().ok())
 }
 
 /// Mean map position of every state's land provinces, read once per install.
@@ -326,7 +333,7 @@ pub(super) fn state_centers(dir: &Path) -> Result<std::sync::Arc<HashMap<i32, (f
     let mut out = HashMap::new();
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        let Some(id) = name.split('-').next().and_then(|v| v.parse::<i32>().ok()) else {
+        let Some(id) = state_file_id(&name) else {
             continue;
         };
         let Ok(text) = std::fs::read_to_string(entry.path()) else {
@@ -408,7 +415,7 @@ pub(super) fn province_regions(dir: &Path) -> Result<std::sync::Arc<RegionMap>> 
     let mut out = HashMap::new();
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        let Some(id) = name.split('-').next().and_then(|v| v.parse::<i32>().ok()) else {
+        let Some(id) = state_file_id(&name) else {
             continue;
         };
         if let Ok(text) = std::fs::read_to_string(entry.path()) {
@@ -435,7 +442,7 @@ pub(super) fn state_regions(dir: &Path) -> Result<std::sync::Arc<StateRegions>> 
     let mut out = HashMap::new();
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        let Some(id) = name.split('-').next().and_then(|v| v.parse::<i32>().ok()) else {
+        let Some(id) = state_file_id(&name) else {
             continue;
         };
         let Ok(text) = std::fs::read_to_string(entry.path()) else {
@@ -563,6 +570,13 @@ pub(super) fn parse_coastal(text: &str) -> std::collections::HashSet<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_state_file_name_with_spaces_around_the_dash_names_its_state() {
+        assert_eq!(state_file_id("7-Holland.txt"), Some(7));
+        assert_eq!(state_file_id("977 - Antwerp.txt"), Some(977));
+        assert_eq!(state_file_id("1080 - Marlborough.txt"), Some(1080));
+        assert_eq!(state_file_id("readme.txt"), None);
+    }
     #[test]
     fn parses_unit_positions_and_state_provinces() {
         let p = parse_positions("2;0;3429.00;9.85;1699.00;0.00;0.30\n2;1;1;1;1;0;0\nbad\n");
