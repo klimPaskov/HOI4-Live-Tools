@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 /// The state recorder's reads (key, tool, arguments): the same list as
 /// hoi4_live/observe/reads.py READS, taken by `hoi4_state_snapshot` in one call.
-const STATE_READS: [(&str, &str, &str); 30] = [
+const STATE_READS: [(&str, &str, &str); 31] = [
     ("overview", "hoi4_overview", "{}"),
     ("country_status", "hoi4_country_status", "{}"),
     ("economy", "hoi4_economy", "{}"),
@@ -35,6 +35,7 @@ const STATE_READS: [(&str, &str, &str); 30] = [
     ("supply", "hoi4_supply", r#"{"summary":false}"#),
     ("wars", "hoi4_wars", "{}"),
     ("war_stats", "hoi4_war_stats", "{}"),
+    ("battles", "hoi4_battles", r#"{"limit":40}"#),
     ("diplomacy", "hoi4_diplomacy_state", "{}"),
     ("air", "hoi4_air", "{}"),
     ("air_regions", "hoi4_air_regions", "{}"),

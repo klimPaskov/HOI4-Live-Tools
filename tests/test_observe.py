@@ -353,5 +353,63 @@ class HistoryPaths(unittest.TestCase):
         self.assertEqual(history.extract(s, "air.wings_without_mission.#"), {"value": 0})
 
 
+def battles_body():
+    """hoi4_battles as the server answers it: the Belgian forest attack of the 23 Nov study session
+    (province 3488, 23 divisions, 4 in the line and 19 in reserve) and a Dutch defence we are losing."""
+    def side(role, tags, engaged, reserve, org, hours_left, planning=0.33, tactic="tactic_shock"):
+        return {"role": role, "tags": tags, "tactic": tactic, "divisions": engaged + reserve,
+                "engaged": engaged, "reserve": reserve, "org_engaged_mean": org, "planning_mean": planning,
+                "supply_mean": 1.0, "hours_until_broken": hours_left,
+                "engaged_divisions": [{"template": "Infanterie-Division"}]}
+    return {"country": "GER", "battles": 2, "summary": {"attacking": 1, "defending": 1,
+            "divisions_engaged": 5, "divisions_in_reserve": 19},
+            "list": [
+                {"id": 5346, "province": 3488, "state": 980, "terrain": "forest", "hours": 72,
+                 "since": {"iso": "1940-05-11 06:00"}, "our_side": "attacker",
+                 "width": {"terrain": 60.0, "per_extra_direction": 30.0, "directions": 2,
+                           "attacker_max": 90.0, "attacker_engaged": 72.0, "full": True},
+                 "winning": "defender",
+                 "lines": [{"line": "terrain", "side": "attacker", "value": -0.15},
+                           {"line": "river", "side": "attacker", "divisions_crossing": 13,
+                            "crossings": [{"from": 3448, "river": "small", "value": -0.3}]}],
+                 "attacker": side("attacker", ["GER"], 4, 19, 34.9, 122.0),
+                 "defender": side("defender", ["BEL"], 5, 0, 33.0, 205.0, 0.0, "tactic_basic_defend"),
+                 "not_read": ["night"]},
+                {"id": 5343, "province": 6500, "state": 35, "terrain": "plains", "hours": 86,
+                 "since": {"iso": "1940-05-11 00:00"}, "our_side": "attacker",
+                 "width": {"terrain": 70.0, "per_extra_direction": 35.0, "directions": 1,
+                           "attacker_max": 70.0, "attacker_engaged": 12.0, "full": False},
+                 "winning": "defender", "lines": [],
+                 "attacker": side("attacker", ["GER"], 1, 0, 13.6, 20.0, tactic="tactic_basic_attack"),
+                 "defender": side("defender", ["HOL"], 2, 0, 51.6, 900.0, 0.0, "tactic_ambush")},
+            ]}
+
+
+class Battles(unittest.TestCase):
+    def test_battle_read_becomes_findings_and_a_sitrep_block(self):
+        with open(RECORDED) as f:
+            raw = json.load(f)
+        states = {"LUX": raw.pop("states_LUX")}
+        raw["battles"] = battles_body()
+        s = build(raw, states_by_tag=states, trigger="start")
+        self.assertTrue(s["battles"]["readable"])
+        self.assertEqual(s["battles"]["list"][0]["our_reserve"], 19)
+        fs = F.findings(s, [], {})
+        got = codes(fs)
+        self.assertIn("battle_reserve_waiting", got)
+        self.assertIn("battle_across_river", got)
+        self.assertIn("battle_being_lost", got)
+        self.assertIn("battle_low_organisation", got)
+        text = " ".join(f["text"] for f in fs if f["code"] == "battle_reserve_waiting")
+        self.assertIn("19 of our divisions in reserve", text)
+        out = sitrep.render(s, [], "t", fs)
+        self.assertIn("BATTLES 2", out)
+        self.assertIn("3488 (forest, st 980) we attacker vs BEL 72h: line 4+19 reserve", out)
+
+    def test_no_battle_read_is_marked_missing(self):
+        s = build({}, trigger="start")
+        self.assertFalse(s["battles"]["readable"])
+
+
 if __name__ == "__main__":
     unittest.main()

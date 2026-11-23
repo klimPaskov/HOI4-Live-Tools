@@ -463,6 +463,43 @@ def game_flags(snap, already):
     return out
 
 
+def battles(snap):
+    """What the battle read shows about our own fights (hoi4_battles)."""
+    out = []
+    b = snap.get("battles") or {}
+    if not b.get("readable"):
+        return out
+    for x in b.get("list") or []:
+        where = f"province {x['province']} ({x.get('terrain') or '?'}, state {x.get('state')})"
+        enemy = "/".join(x.get("enemy") or []) or "the enemy"
+        if x.get("we") == "attacker" and (x.get("our_reserve") or 0) >= 3:
+            out.append(F("battle_reserve_waiting", "high",
+                         f"the attack on {where} has {x['our_reserve']} of our divisions in reserve and "
+                         f"{x.get('our_engaged')} in the line: width {x.get('width_engaged')} of "
+                         f"{x.get('width_max')} ({x.get('directions')} direction(s), terrain width "
+                         f"{x.get('width_terrain')}); the waiting divisions add nothing here, another "
+                         f"province or direction would use them", subject=x["province"],
+                         reserve=x["our_reserve"], engaged=x.get("our_engaged")))
+        for line in x.get("lines") or []:
+            if line.get("line") == "river" and x.get("we") == "attacker":
+                worst = min((c.get("value") or 0) for c in line.get("crossings") or [{}])
+                out.append(F("battle_across_river", "medium",
+                             f"attacking {where} across a river at {worst * 100:+.0f}% "
+                             f"({line.get('divisions_crossing')} divisions crossing)", subject=x["province"],
+                             penalty=worst))
+        if x.get("winning") and x.get("winning") not in (x.get("we"), "even", "unknown"):
+            out.append(F("battle_being_lost", "high" if x.get("we") == "defender" else "medium",
+                         f"{enemy} is winning the battle at {where}: our side has {x.get('our_hours_left')} h "
+                         f"of organisation left at its loss rate, theirs {x.get('their_hours_left')} h "
+                         f"(our org {x.get('our_org')} vs {x.get('their_org')}, {x.get('our_engaged')} vs "
+                         f"{x.get('their_engaged')} in the line, {x.get('hours')} h in)", subject=x["province"]))
+        if x.get("we") == "attacker" and x.get("our_org") is not None and x["our_org"] < 20:
+            out.append(F("battle_low_organisation", "medium",
+                         f"our attack on {where} fights at organisation {x['our_org']} "
+                         f"({', '.join(x.get('our_templates') or []) or '?'})", subject=x["province"]))
+    return out
+
+
 def findings(snap, prev=None, state_regions=None):
     prev = prev or []
     out = from_omissions(snap)
@@ -470,6 +507,7 @@ def findings(snap, prev=None, state_regions=None):
     out += land(snap, prev)
     out += air(snap, prev, state_regions)
     out += wars(snap, prev)
+    out += battles(snap)
     out += supply_and_stock(snap)
     out += affairs(snap)
     out += executor(snap)

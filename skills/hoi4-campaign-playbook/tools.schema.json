@@ -1131,6 +1131,32 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_battles": {
+   "description": "Read-only (memory, no input, no pause): every land battle a country fights (default the player's; country:TAG for another one, all:true for every battle in the world). Per battle: province, state, terrain, hours since it began; attacker and defender with their countries, tactic, divisions in the combat line and in reserve waiting for width (template, width, strength, organisation, planning, supply, the province they attack from), width used against the attacker's maximum (terrain width + support width per extra direction), the organisation and strength damage each side has taken and its rate, and who is winning (organisation left against the rate it is lost). Lines named: terrain attack (common/terrain), river crossings (map rivers), forts of the state history, planning and supply; the game's other modifier lines (air, night, entrenchment, leader, stacking) are listed under not_read. Sorted by the number of own divisions in the battle.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "all": {
+      "type": "boolean"
+     },
+     "country": {
+      "pattern": "^[A-Z0-9]{3}$",
+      "type": "string"
+     },
+     "divisions": {
+      "description": "list the divisions of each side (default true)",
+      "type": "boolean"
+     },
+     "limit": {
+      "maximum": 200,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_capabilities": {
    "description": "Verified runtime capabilities and explicit platform/build limitations.",
    "inputSchema": {

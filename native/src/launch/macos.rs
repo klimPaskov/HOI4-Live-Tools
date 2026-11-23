@@ -56,6 +56,7 @@ mod peace;
 mod trade;
 #[cfg(target_os = "macos")]
 pub(crate) use focus::input_probe as focus_input_probe;
+mod battles;
 mod economy_detail;
 mod input_gate;
 mod intel_live;
@@ -752,6 +753,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         occupation::tool(),
         occlaw::tool(),
         war_stats::tool(),
+        battles::tool(),
         alerts::tool(),
         json!({"name":"hoi4_peace_status","description":"Read-only: whether the peace conference window is open and, when it is, the texts it shows (current player, score, bidding phase, turns left). Without a conference it returns the route an ordinary player takes (actions list, states on the conference map, End turn). NOT validated live while a conference is open (no war was fought in the qualification game); no peace action tool exists yet.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
         trade::tool(),
@@ -962,6 +964,7 @@ impl Commands for MacClock {
                     | "hoi4_states"
                     | "hoi4_wars"
                     | "hoi4_war_stats"
+                    | "hoi4_battles"
                     | "hoi4_alerts"
                     | "hoi4_occupation"
                     | "hoi4_war_risk"
@@ -1810,6 +1813,10 @@ impl MacClock {
         if name == "hoi4_war_stats" {
             allowed(args, &["all"])?;
             return war_stats::stats(process, args);
+        }
+        if name == "hoi4_battles" {
+            allowed(args, &["country", "all", "limit", "divisions"])?;
+            return battles::battles(process, args);
         }
         if name == "hoi4_occupation" {
             allowed(args, &["scope", "limit"])?;
