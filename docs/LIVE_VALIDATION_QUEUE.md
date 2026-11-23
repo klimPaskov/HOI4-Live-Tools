@@ -128,7 +128,7 @@ Ordered by value. Each item names the read-back; memory structures are mapped th
 and province flows) and `stockpile.rs` (the country's equipment stockpile) were: find the number on screen,
 search the country object for it, confirm on a second value, then read it without opening the view.
 
-0. Hub motorisation, first (10 min, executor off): `hoi4_army_motorization` level 2 on an army at the front (never
+24. Hub motorisation, first (10 min, executor off): `hoi4_army_motorization` level 2 on an army at the front (never
    set live above 1), read it back in `hoi4_armies`, then open the supply map mode and read the supply range of
    the hubs it draws from before and after (screenshot and `hoi4_supply` province supply/headroom of the
    provinces 2-4 beyond the hub); note the trucks taken from the stockpile (`hoi4_stockpile` motorized_equipment
@@ -136,33 +136,33 @@ search the country object for it, confirm on a second value, then read it withou
    hub took at level 1 and 2; whether a per-hub level is readable from memory (the hub's node object in
    `supplymem.rs`). Then the executor on with `logistics.hubs` and an operation prepared: the formation's hubs
    go to its `supply.motorization` before the execute.
-1. Railway legs (10 min, executor on with one `construction_plan` item `legs: true` from Silesia to a Polish state
+25. Railway legs (10 min, executor on with one `construction_plan` item `legs: true` from Silesia to a Polish state
    at war): the first leg queued (`hoi4_railway_build` leg:true), the queue read back, the item re-sent after
    `leg_days`. Question: does the leg stop at the own-controlled edge and re-use existing track.
-2. Train need (10 min): the top bar's `logistics_button` opens `countrylogisticsview`; the train row of
+26. Train need (10 min): the top bar's `logistics_button` opens `countrylogisticsview`; the train row of
    `logistics_overview_land_other_entry` shows stock against `needs`/`in_need`. Map the need beside the stockpile
    row `stockpile.rs` already reads; add `need` and `short` to `hoi4_stockpile` train_equipment and trucks
    (hub motorisation use). Read-back: the view's numbers on two dates.
-3. Rail and hub throughput (10 min): the supply map mode (`hoi4_map_mode supply`) tooltip of a hub and a railway
+27. Rail and hub throughput (10 min): the supply map mode (`hoi4_map_mode supply`) tooltip of a hub and a railway
    segment: flow, level, damage. Map the railway segment flow next to the node flows `supplymem.rs` reads; add
    `rail_flow` and `damaged` to `hoi4_supply` supply_nodes. Read-back: the tooltip text.
-4. Damage and repair (10 min, after an RAF raid or our own logistics strike on the enemy): damaged railway levels
+28. Damage and repair (10 min, after an RAF raid or our own logistics strike on the enemy): damaged railway levels
    and infrastructure of a state from the state object the slot read uses; the construction view's `repair`
    entries (`countryconstructionsview`, `production_railway_gun_repair_entry`) and their priority. A tool
    `hoi4_repair_priority {state|building}` if the game exposes one; else the read alone feeds an omission row.
-5. Logistics strike (10 min): `hoi4_air_mission logistics_strike` one CAS wing over the Polish or French front
+29. Logistics strike (10 min): `hoi4_air_mission logistics_strike` one CAS wing over the Polish or French front
    region; two game days later `hoi4_air_wings` mission mask and the wing's kills in the air view; the enemy's
    supply in `hoi4_wars`. Question: does the mission stay set and does the tool read it back.
-6. Railway guns (5 min, read only): `railway_gun.gui` army list (`armies_count_box`, `btn_select_half`); the
+30. Railway guns (5 min, read only): `railway_gun.gui` army list (`armies_count_box`, `btn_select_half`); the
    railway gun as a unit in memory; production via `hoi4_production_add railway_gun_equipment` (refused or not).
-7. Radar coverage (5 min): `hoi4_construction_add radar_station` in a state once radio_detection is held (the
+31. Radar coverage (5 min): `hoi4_construction_add radar_station` in a state once radio_detection is held (the
    executor's `requires` path), the queue read-back; radar level per state from the state's buildings; the radar
    map icon. Coverage is then computed offline from RADAR_RANGE_* and the state centres.
-8. Special projects (10 min): `hoi4_special_projects_panel`, a prototype reward choice in the project's reward
+32. Special projects (10 min): `hoi4_special_projects_panel`, a prototype reward choice in the project's reward
    window (`multiple_selection_reward_window`, `reward_option`, `confirm_option_button`): a typed
    `hoi4_special_project_reward {facility_id, option}`; `dismantle_facility_button` read only (100 days).
    Also GAPS Q12 (recruit, unassign, stop).
-9. Change a division's template (5 min): the division panel's `template_change_icon` / `change_template_icon`
+33. Change a division's template (5 min): the division panel's `template_change_icon` / `change_template_icon`
    (unitview.gui) on one Sicherungs-Division: a typed `hoi4_division_change_template {army, divisions, template}`
    would move weak divisions to the line template without retraining; the `formations` rule then prefers it to
    an in-place layout edit when the weak template has other uses.
