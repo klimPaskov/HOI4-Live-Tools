@@ -383,7 +383,7 @@
     },
     "speed": {
       "x-owner": "executor",
-      "description": "game speed by the war the country manages (rule speed, manage.off \"speed\"), in the game's own speeds 1-3: peace (default 3) while it only builds or faces a quiet border, war (default 2) while an operation executes, a war an operation names was declared this week, or it lost men or an own state this week; set once per change and again after a pause, a speed a human changes while the game runs is kept for the phase; false turns it off",
+      "description": "game speed by the weight of the work (rule speed, manage.off \"speed\"), in the game's own speeds: war (default 2) while an operation executes, a war an operation names was declared this week, or it lost men or an own state this week; peace (default 3) while heavy peace work runs (production, construction, armies, templates, air, an operation preparing); wait (default 4) while only minor one-click work comes due and the measured load leaves time at 4; far (default 5) only when alone, in a long empty stretch with a light load, at most 5 times a run; a speed holds at least 14 game days and 90 real seconds, at most 6 changes a game year outside war starts and ends, a war steps down at once; a speed a human changes while the game runs is kept for the phase and speed 5 is never set after it; false turns it off",
       "oneOf": [
         {"type": "boolean", "const": false},
         {
@@ -391,7 +391,10 @@
           "additionalProperties": false,
           "properties": {
             "peace": {"type": "integer", "minimum": 1, "maximum": 3},
-            "war": {"type": "integer", "minimum": 1, "maximum": 3}
+            "war": {"type": "integer", "minimum": 1, "maximum": 3},
+            "wait": {"type": "integer", "minimum": 1, "maximum": 4},
+            "far": {"type": "integer", "minimum": 1, "maximum": 5},
+            "alone": {"type": "boolean", "description": "no human is in the game (an unattended harness): only then may the rule set speed 5; default false (a human may be present: only the human chooses 5)"}
           }
         }
       ]

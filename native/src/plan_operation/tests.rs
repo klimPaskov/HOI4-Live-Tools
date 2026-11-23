@@ -2445,9 +2445,10 @@ fn an_enemy_left_with_a_remnant_hands_its_units_on_and_the_operation_waits_for_t
             {"province": 1, "victory_points": 99.0, "controller": "GER"}]},
         {"state_id": 300, "controller": "POL", "victory_points": [
             {"province": 2, "victory_points": 1.0, "controller": "POL"}]}]));
-    // a remnant on our border fights on
+    // a remnant on our border fights on: not out, but beaten (the armour goes on, w47c1)
     burst(&mut state, &game, &plan, START + 2 * DAY);
     assert!(!state.done.contains_key(&key("op_pol", "out:POL")));
+    assert!(state.done.contains_key(&key("op_pol", "beaten:POL")));
     // across the sea: out
     *game.pol_border.borrow_mut() = false;
     burst(&mut state, &game, &plan, START + 3 * DAY);
@@ -3031,8 +3032,13 @@ fn a_guarded_wing_never_attacks_alone_and_never_waits_forever() {
         note.contains("joint attack of Mitte") && note.contains("no second direction"),
         "{note}"
     );
-    // three weeks of the joint attack: it attacks whatever stands there
-    assert!(!guarded(&mut state, 15, START + 23 * DAY));
+    // three weeks of the joint attack: it attacks when the odds allow an assault (7 against 1)...
+    assert!(!guarded(&mut state, 1, START + 23 * DAY));
+    // ...never 7 against fifteen French (w47c1: 17.4k lost to none)
+    assert!(guarded(&mut state, 15, START + 25 * DAY));
+    assert!(
+        state.op_notes["op_lux:guard:Nord"].contains("waits for a second direction or the odds")
+    );
     // a second direction (the Belgian Ardennes taken): it attacks with the joint attack at once
     let mut fresh = State::default();
     fresh.op_owned.insert("Mitte".into(), "op_low".into());

@@ -1593,6 +1593,47 @@ fn one(
         .find(|e| at_war.contains(e))
         .or_else(|| enemies.first())
         .cloned();
+    // BEATEN, NOT OUT: an enemy left with a remnant of its victory points that still has
+    // divisions on our border keeps the line armies facing it (w43c1: Holland retook 20 points
+    // when every unit left), but the armour goes on to the next enemy at once (w47c1, 23 Nov
+    // 2026: Holland held 89 of 91 points on day 37 with a few divisions in Zeeland, and the whole
+    // operation, both Panzergruppen with it, faced that remnant for 18 days while Belgium stood
+    // untouched). Read once a game day per enemy.
+    let mut beaten: Vec<String> = Vec::new();
+    for e in &enemies {
+        if !at_war.contains(e) || !state.done.contains_key(&key(id, &format!("fought:{e}"))) {
+            continue;
+        }
+        let bk = key(id, &format!("beaten:{e}"));
+        if state.done.contains_key(&bk) {
+            beaten.push(e.clone());
+            continue;
+        }
+        if state.skipped(now, "opbeaten", e) {
+            continue;
+        }
+        state.skip(now, "opbeaten", e, DAY);
+        if let Ok(read) = tools.call("hoi4_states", &json!({"query": e})) {
+            if crate::plan_predicate::remnant(list(&read, "states"), e) {
+                state.done.insert(bk, now);
+                beaten.push(e.clone());
+            }
+        }
+    }
+    let after_beaten = enemies
+        .iter()
+        .find(|e| !beaten.contains(e) && at_war.contains(e))
+        .or_else(|| enemies.iter().find(|e| !beaten.contains(e)))
+        .cloned();
+    if let Some(next) = after_beaten {
+        for u in units.iter_mut() {
+            if beaten.contains(&u.enemy)
+                && (u.role == Role::Strike || u.spear || u.role == Role::Mobile)
+            {
+                u.enemy = next.clone();
+            }
+        }
+    }
     if let Some(next) = next {
         for u in units.iter_mut() {
             if out.contains(&u.enemy) {
@@ -3032,9 +3073,13 @@ fn assault_guarded(
         .entry(key(id, &format!("from0:{}", u.name)))
         .or_insert(now);
     let _ = hard_alone;
+    // after JOINT_MAX_WAIT of the joint attack without a second direction it attacks only at
+    // the odds an assault needs (w47c1, 23 Nov 2026: at 21 days it attacked 7 against the French
+    // standing in Luxembourg and lost 17.4k men to none in a week); otherwise it keeps holding
+    // and its note says what it waits for (a second direction or the odds), never silently
     let hard = match joint_days {
         None => true,
-        Some(days) => second.is_empty() && days < JOINT_MAX_WAIT / DAY,
+        Some(days) => second.is_empty() && (days < JOINT_MAX_WAIT / DAY || weak),
     };
     let mut seen: Vec<String> = ways.iter().map(|w| w.3.clone()).collect();
     seen.sort();
@@ -3048,7 +3093,11 @@ fn assault_guarded(
                 (None, _) => "HOLDS (never alone: no attack of the same war executes)".to_string(),
                 (Some(d), true) => format!(
                     "HOLDS (no second direction yet{}; the joint attack of {} runs {d} of {} days)",
-                    if weak { ", too weak alone" } else { "" },
+                    if weak {
+                        ", too weak for an assault: it waits for a second direction or the odds"
+                    } else {
+                        ""
+                    },
                     joint.join(", "),
                     JOINT_MAX_WAIT / DAY
                 ),

@@ -281,7 +281,7 @@ pub(crate) fn border_held(wars: &Value, tag: &str) -> bool {
 /// days after Holland fell; the Belgian declaration waited on capitulated:HOL that never read true).
 const REMNANT_SHARE: f64 = 0.05;
 
-fn remnant(rows: &[Value], tag: &str) -> bool {
+pub(crate) fn remnant(rows: &[Value], tag: &str) -> bool {
     let (mut held, mut total) = (0.0, 0.0);
     for v in rows
         .iter()

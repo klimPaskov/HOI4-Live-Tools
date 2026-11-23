@@ -149,14 +149,6 @@ fn real_secs() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64)
 }
-#[cfg(test)]
-thread_local! {
-    static REAL: std::cell::Cell<i64> = const { std::cell::Cell::new(1_000_000) };
-}
-#[cfg(test)]
-fn real_secs() -> i64 {
-    REAL.with(|r| r.get())
-}
 
 /// The operations of the plan that execute now (executed, not ended), from the executor's
 /// memory (`op:<id>:exec` without `op:<id>:end`); pure.
@@ -646,6 +638,17 @@ pub(super) fn step(
             Ok(Some(line))
         }
     }
+}
+
+// (the test clock sits here, after the rule's code: scripts/hoi4facts/plan_keys.py reads the
+// code above the first test attribute)
+#[cfg(test)]
+thread_local! {
+    static REAL: std::cell::Cell<i64> = const { std::cell::Cell::new(1_000_000) };
+}
+#[cfg(test)]
+fn real_secs() -> i64 {
+    REAL.with(|r| r.get())
 }
 
 #[cfg(test)]

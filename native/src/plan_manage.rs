@@ -3289,7 +3289,13 @@ pub(super) fn air_plan_step(
                         format!("{name}: the game refused the base in state {base} (full, or out of reach); another base with room is tried"),
                     );
                 } else if !ok {
-                    state.skip(now, "airplan", &name, 7 * DAY);
+                    // a rebase that did not take (NotApplied: the transfer never started) leaves
+                    // that base out for this wing as a refusal does; the next try picks another
+                    // base with room (w47c1, 23 Nov 2026: 15 rebases of Polish wings to state 57
+                    // came back NotApplied and were sent again unchanged every week, and the old
+                    // wings flew over Poland for 45 days of the western war)
+                    state.skip(now, "airrebase", &format!("{name}|{base}"), 30 * DAY);
+                    state.skip(now, "airplan", &name, DAY);
                 }
                 // rebases go out together (one per call kept the Polish wings over Poland for
                 // months: g17o, 23 Nov 2026, 13 air orders from October to mid-December)
@@ -9075,6 +9081,30 @@ mod tests {
             .filter(|(n, _)| n == "hoi4_air_rebase")
             .count();
         assert_eq!(rebases, 2);
+    }
+
+    #[test]
+    fn a_rebase_that_did_not_take_is_not_sent_again_unchanged() {
+        // w47c1 (23 Nov 2026): NotApplied rebases to the same base every week for 45 days
+        let tools = fake(vec![("hoi4_air", air_read())]);
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_air_rebase".into(), "NotApplied");
+        let plan = json!({"air_plan": [
+            {"airframe": "small_plane_airframe_0", "version": "CR.32", "base_region": 273,
+             "mission": "air_superiority", "region": 273}]});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out.unwrap().contains("rebase to state 551: false"));
+        let out = step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap();
+        assert!(out.unwrap().contains("rebase to state 550: false"));
+        let rebases: Vec<Value> = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_air_rebase")
+            .map(|(_, a)| a["state_id"].clone())
+            .collect();
+        assert_eq!(rebases, vec![json!(551), json!(550)]);
     }
 
     #[test]
