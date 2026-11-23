@@ -3,6 +3,7 @@
 use super::*;
 use serde_json::{json, Value};
 
+#[cfg_attr(windows, allow(dead_code))]
 pub(crate) fn snapshot(process: &dyn Process, key: &str, include_pan: bool) -> Result<Value> {
     own_focus::validate_key(key)?;
     let start = Instant::now();

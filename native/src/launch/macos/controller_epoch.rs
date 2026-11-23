@@ -11,7 +11,6 @@ use crate::{
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{
     fs::{File, OpenOptions},
-    os::unix::fs::{MetadataExt, OpenOptionsExt},
     path::{Path, PathBuf},
 };
 
@@ -184,7 +183,9 @@ impl Record {
     }
 }
 
+#[cfg(unix)]
 fn private_file(metadata: &std::fs::Metadata) -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
     if !metadata.is_file()
         || metadata.uid() != unsafe { libc::geteuid() }
         || metadata.mode() & 0o777 != 0o600
@@ -218,6 +219,20 @@ fn check_bootstrap(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Windows: a regular file that is no reparse point. Owner-only access (the ACL) is not checked
+/// yet; the Windows port has no live session (docs/PORTING_STATUS.md).
+#[cfg(windows)]
+fn private_file(metadata: &std::fs::Metadata) -> Result<()> {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    if !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err(Error::new(
+            "unsafe_plan_path",
+            "Private owned regular controller state required",
+        ));
+    }
+    Ok(())
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Stamp {
     device: u64,
@@ -229,13 +244,29 @@ struct Stamp {
 impl Stamp {
     fn read(metadata: &std::fs::Metadata) -> Result<Self> {
         private_file(metadata)?;
-        Ok(Self {
-            device: metadata.dev(),
-            inode: metadata.ino(),
-            size: metadata.len(),
-            modified: (metadata.mtime(), metadata.mtime_nsec()),
-            changed: (metadata.ctime(), metadata.ctime_nsec()),
-        })
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            Ok(Self {
+                device: metadata.dev(),
+                inode: metadata.ino(),
+                size: metadata.len(),
+                modified: (metadata.mtime(), metadata.mtime_nsec()),
+                changed: (metadata.ctime(), metadata.ctime_nsec()),
+            })
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            // No stable file index on Windows: size, write and creation times pin the file.
+            Ok(Self {
+                device: 0,
+                inode: 0,
+                size: metadata.len(),
+                modified: (metadata.last_write_time() as i64, 0),
+                changed: (metadata.creation_time() as i64, 0),
+            })
+        }
     }
 }
 struct PinnedFile {
@@ -245,10 +276,14 @@ struct PinnedFile {
 impl PinnedFile {
     fn open(path: &Path) -> Result<Self> {
         let before = Stamp::read(&path.symlink_metadata()?)?;
-        let file = OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-            .open(path)?;
+        let mut options = OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+        }
+        let file = options.open(path)?;
         let pinned = Self {
             stamp: Stamp::read(&file.metadata()?)?,
             file,
@@ -408,14 +443,14 @@ impl ControllerEpoch {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use serde_json::{json, Value};
     use std::{
         fs::{self, DirBuilder},
         io::Write,
-        os::unix::fs::{symlink, DirBuilderExt, PermissionsExt},
+        os::unix::fs::{symlink, DirBuilderExt, OpenOptionsExt, PermissionsExt},
         sync::atomic::{AtomicU64, Ordering},
     };
 

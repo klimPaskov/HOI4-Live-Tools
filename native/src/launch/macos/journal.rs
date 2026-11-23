@@ -125,6 +125,11 @@ pub(super) enum StrictOutcome {
 
 pub struct GameJournal {
     file: File,
+    /// Windows: the exclusive lock is held on `<journal>.lock`, because a Windows byte-range
+    /// lock on the journal itself would stop every other reader (diagnostics, the player's
+    /// harness, tests) from reading it. Unix locks are advisory and stay on the journal.
+    #[cfg(windows)]
+    _lock: File,
     receipts: BTreeMap<String, Receipt>,
     poisoned: bool,
     /// Detail of the next intent record (set only inside `execute_baselined`).
@@ -175,8 +180,23 @@ impl GameJournal {
             options.mode(0o600);
         }
         let file = options.open(path)?;
+        #[cfg(unix)]
         file.try_lock_exclusive()
             .map_err(|e| Error::new("journal_busy", e.to_string()))?;
+        #[cfg(windows)]
+        let lock = {
+            let mut name = path.as_os_str().to_owned();
+            name.push(".lock");
+            let lock = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(std::path::PathBuf::from(name))?;
+            lock.try_lock_exclusive()
+                .map_err(|e| Error::new("journal_busy", e.to_string()))?;
+            lock
+        };
         if file.metadata()?.len() > JOURNAL_LIMIT {
             return Err(Error::new("invalid_journal", "Journal exceeds bound"));
         }
@@ -238,6 +258,8 @@ impl GameJournal {
         }
         Ok(Self {
             file,
+            #[cfg(windows)]
+            _lock: lock,
             receipts,
             poisoned: false,
             baseline: None,

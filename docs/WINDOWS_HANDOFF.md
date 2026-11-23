@@ -5,6 +5,9 @@ The released Windows Python package and the Rust preview are separate. See
 reports `platform_unavailable` for Windows game attachment. No Windows HOI4
 campaign or native input acceptance is claimed.
 
+The per-platform state and the order of the remaining steps are in
+[PORTING_STATUS.md](PORTING_STATUS.md).
+
 ## Current foundation
 
 [`platform/windows`](../native/src/platform/windows.rs) is an internal read-only

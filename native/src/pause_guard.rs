@@ -14,6 +14,9 @@
 //! reads the pause state before and after and puts back the state the action started with
 //! when the change was ours. Deliberate clock keys go through `press_clock` and are never
 //! counted.
+// Windows has no input backend yet, so nothing binds the management tools there: this code is
+// compiled and unit-tested on Windows but not reachable (docs/PORTING_STATUS.md).
+#![cfg_attr(windows, allow(dead_code))]
 use crate::error::Result;
 use crate::platform::game_input::{vk, Capture, GameInput, Key, Point};
 use crate::platform::{key_once, Process};

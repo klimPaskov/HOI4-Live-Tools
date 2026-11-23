@@ -443,6 +443,10 @@ fn authority(epoch: &crate::actions::Epoch) -> InputAuthority {
 }
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "reads the production journal while its writer holds the Windows lock on it"
+)]
 fn recovered_guard_never_repeats_cursor_movement_or_journal_dispatch() {
     let temp = Scratch::new();
     let target = Target::Factories(proof_tests::target(&proof_tests::snapshot()));
@@ -502,6 +506,10 @@ fn recovered_guard_never_repeats_cursor_movement_or_journal_dispatch() {
 }
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "reads the production journal while its writer holds the Windows lock on it"
+)]
 fn coherent_changed_allocation_or_fixed_control_after_torn_read_closes_unconfirmed() {
     for mode in [Mode::AllocationChanged, Mode::ControlChanged] {
         unproven_dispatch_is_closed(mode, "production_state_changed", 2);
@@ -509,6 +517,10 @@ fn coherent_changed_allocation_or_fixed_control_after_torn_read_closes_unconfirm
 }
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "reads the production journal while its writer holds the Windows lock on it"
+)]
 fn exhausted_guard_closes_with_unknown_delivery_and_original_cause_without_replay() {
     unproven_dispatch_is_closed(Mode::Exhaust, "torn_read", 4);
 }

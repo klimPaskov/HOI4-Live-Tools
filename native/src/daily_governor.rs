@@ -1,5 +1,8 @@
 //! Private prerequisite for durable daily routine. No process reader, pause,
 //! engine callback, input transport, MCP command or strategic chooser lives here.
+// Windows has no input backend yet, so nothing binds the management tools there: this code is
+// compiled and unit-tested on Windows but not reachable (docs/PORTING_STATUS.md).
+#![cfg_attr(windows, allow(dead_code))]
 mod production;
 #[cfg(unix)]
 pub(crate) mod store;
@@ -370,7 +373,6 @@ impl Governor {
     /// Load the original private plan before any owner input is enabled.
     /// Existing bytes, quarantine and unresolved intents are never rewritten.
     /// A present result retains the same exclusive Store lock as `open`.
-    #[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
     pub(crate) fn load_existing(path: &Path) -> Result<Option<Self>> {
         let (store, bytes) = store::Store::open(path)?;
         let Some(bytes) = bytes else {
@@ -483,7 +485,6 @@ impl Governor {
         }
         Ok(day)
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn blocks_work(&self) -> bool {
         self.poisoned
             || self.state.quarantine.is_some()
@@ -493,19 +494,15 @@ impl Governor {
                 .values()
                 .any(|e| matches!(e, EntryState::Intent { .. }))
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn last_sequence(&self) -> u64 {
         self.state.last_sequence.unwrap_or(0)
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn plan(&self) -> Plan {
         self.state.plan.clone()
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn preparation_check(&mut self) -> Result<()> {
         self.check()
     }
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) fn verify_live_scope(&mut self, scope: &Scope, date_raw: i32) -> Result<()> {
         self.check()?;
         crate::calendar::decode(date_raw)?;
@@ -523,7 +520,6 @@ impl Governor {
     /// Historical key hint only. A completed assignment proves a past Start,
     /// not the current active focus or panel state; the owner must join both
     /// from fresh scoped observations before any navigation.
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn completed_focus_hint(&mut self) -> Result<Option<Entry>> {
         self.check()?;
         Ok(self
@@ -542,7 +538,6 @@ impl Governor {
             .max_by_key(|(sequence, _)| *sequence)
             .map(|(_, entry)| entry.clone()))
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn pending_research(&self, day: i64) -> Vec<Entry> {
         let mut slots = std::collections::BTreeSet::new();
         self.state
@@ -564,7 +559,6 @@ impl Governor {
             .cloned()
             .collect()
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn pending_focus(&self, day: i64) -> Option<Entry> {
         let head = self.state.plan.entries.iter().find(|e| {
@@ -687,7 +681,6 @@ impl Governor {
             .filter(|r| r.terminal.is_none() && r.day == day)
             .count()
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn budget_available(&self, day: i64) -> bool {
         !self
             .state
@@ -701,14 +694,12 @@ impl Governor {
     }
     /// Durable assignment history, independent of the latest batch and current
     /// game state. Caller holds the governor lock; this never authorizes input.
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn assignment_summary(&mut self) -> Result<Value> {
         self.check_history()?;
         self.assignment_history()
     }
     /// STOP has no fresh game observation. Derive its budget from the same
     /// checked durable state as assignments, never from a worker report cache.
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn stopped_history(&mut self) -> Result<(Value, Value)> {
         self.check_history()?;
         let day = self.state.last_day;
@@ -729,7 +720,6 @@ impl Governor {
             "remaining":remaining,"navigation_spends_assignment_budget":false});
         Ok((self.assignment_history()?, budget))
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     fn check_history(&mut self) -> Result<()> {
         if self.poisoned {
             return Err(Error::new(
@@ -743,7 +733,6 @@ impl Governor {
         }
         Ok(())
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     fn assignment_history(&self) -> Result<Value> {
         let mut complete = Vec::new();
         let mut pending = 0;
@@ -941,7 +930,6 @@ impl Governor {
     /// Waiting/deferred heads do not consume this admission; after an actual
     /// attempt, later entries retain their existing Pending state. Same-day
     /// runnable work may use continue_entry with its own original deadline.
-    #[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
     pub(crate) fn run_next(
         &mut self,
         backend: &mut dyn Backend,
@@ -950,7 +938,6 @@ impl Governor {
     ) -> Result<DailyResult> {
         self.run_batch(backend, now_unix_ms, deadline, false, None, 1)
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn continue_entry(
         &mut self,
         backend: &mut dyn Backend,

@@ -940,7 +940,6 @@ mod tests {
         serde_json::from_value(json!({"version":1,"revision":1,"entries":[{"id":"one","intent":{"kind":"Research","technology_id":"tech","slot":0}}],"max_actions_per_day":2,"max_observation_age_ms":5000,"review_day":null})).unwrap()
     }
     pub(super) fn dir() -> PathBuf {
-        use std::os::unix::fs::PermissionsExt;
         static N: AtomicUsize = AtomicUsize::new(0);
         let p = std::env::temp_dir().join(format!(
             "hoi4-mac-daily-{}-{}",
@@ -949,7 +948,11 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir(&p).unwrap();
-        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o700)).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
         p
     }
     fn config() -> Config {
@@ -1043,6 +1046,10 @@ mod tests {
         }
     }
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "the daily plan store refuses on Windows until it is verified there"
+    )]
     fn focus_capability_reports_explicit_permission() {
         for enabled in [false, true] {
             let p = dir();
@@ -1091,6 +1098,10 @@ mod tests {
         }
     }
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "the daily plan store refuses on Windows until it is verified there"
+    )]
     fn persisted_uncertainty_blocks_binding_even_with_every_permission_disabled() {
         let p = dir();
         let plan = spec().plan(scope(), true, false, false).unwrap();
@@ -1118,6 +1129,10 @@ mod tests {
         std::fs::remove_dir_all(p).unwrap();
     }
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "the daily plan store refuses on Windows until it is verified there"
+    )]
     fn healthy_reopen_keeps_single_writer_and_replacement_blocks_manual_gate() {
         let p = dir();
         let plan = spec().plan(scope(), true, false, false).unwrap();
@@ -1138,6 +1153,10 @@ mod tests {
         std::fs::remove_dir_all(p).unwrap();
     }
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "the daily plan store refuses on Windows until it is verified there"
+    )]
     fn retained_scope_mismatch_cannot_be_rebased_by_disabling_permissions() {
         let p = dir();
         drop(
@@ -1176,6 +1195,10 @@ mod tests {
         }
     }
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "the daily plan store refuses on Windows until it is verified there"
+    )]
     fn bind_refuses_rewound_plan_history_before_any_manual_input() {
         let p = dir();
         let mut governor = core::Governor::open(

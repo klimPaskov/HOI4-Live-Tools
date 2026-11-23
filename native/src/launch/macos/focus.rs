@@ -77,6 +77,7 @@ mod binding;
 mod pan;
 mod probe;
 use binding::{Control, Owner};
+#[cfg_attr(windows, allow(unused_imports))]
 pub(crate) use probe::snapshot as input_probe;
 /// Drags one start may use to bring its node into view.
 const MAX_PANS: u32 = 12;

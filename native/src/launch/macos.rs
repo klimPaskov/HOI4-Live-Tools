@@ -2,6 +2,9 @@
 //! journals, CGEvent keys and clicks only while the owned window is front-most,
 //! and fresh memory readback for every step. The clock keeps the Linux tool
 //! contract; research starts are driven by live GUI geometry.
+// Windows has no input backend yet, so nothing binds the management tools there: this code is
+// compiled and unit-tested on Windows but not reachable (docs/PORTING_STATUS.md).
+#![cfg_attr(windows, allow(dead_code))]
 mod action_fence;
 mod agency_act;
 mod air;
@@ -316,7 +319,8 @@ impl MacClock {
         )?);
         Self::bind_with_input(process, directory, keys)
     }
-    /// Bind with an already-verified platform input binding for the same process.
+    /// Bind with an already-verified platform input binding for the same process (macOS
+    /// `MacKeys`, Linux `X11Input`; the entry point a Windows input backend will use).
     pub(crate) fn bind_with_input(
         process: Arc<dyn Process + Send + Sync>,
         directory: &Path,

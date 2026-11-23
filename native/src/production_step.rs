@@ -472,7 +472,6 @@ impl Journal {
         }
         result
     }
-    #[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
     pub(crate) fn check_owner(&mut self, epoch: &Epoch) -> Result<()> {
         self.check_storage()?;
         if self.records.values().any(|r| r.target.epoch() != epoch) {
@@ -484,7 +483,6 @@ impl Journal {
         }
         Ok(())
     }
-    #[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
     /// A persistence failure, or an intent an interrupted server left open that may still
     /// have input in flight (`stage_settle::ORPHAN_MS`). A closed request is not unresolved.
     pub(crate) fn unresolved(&self) -> bool {
