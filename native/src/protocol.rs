@@ -622,7 +622,7 @@ impl Server {
                 if !feed.running() {
                     return Err(Error::new(
                         "watcher_unavailable",
-                        "The change watcher is not running in this server (it needs the owned macOS input session)",
+                        "The change watcher is not running in this server (it needs a bound input session: macOS --mac-input, Linux --bind-management)",
                     ));
                 }
                 let since = object.get("since").and_then(Value::as_u64).unwrap_or(0);

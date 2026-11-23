@@ -172,6 +172,23 @@ class CheckTable(unittest.TestCase):
         self.assertEqual(cov['fields'], '1/2')
         self.assertEqual(cov['missing_fields'], ['CCountryPoliticsView+0x40'])
 
+    def test_extend_fills_only_bracketed_offsets(self):
+        table = {'build_id': self.GOOD['build_id'], 'image': {},
+                 'fields': {'C': {'0x10': '0x10', '0x30': '0x30', '0x50': '0x58'},
+                            'D.size': {'0x10': '0x18'}}}
+        keys = {'image': {'0x1': ['a.rs:1']},
+                'classes': {'C': {'offsets': ['0x20', '0x40', '0x60'], 'declared': ['c.rs:3']},
+                            'D.size': {'offsets': ['0x20'], 'declared': ['d.rs:1']},
+                            'E': {'offsets': ['0x8'], 'declared': ['e.rs:1']}}}
+        filled = gen.extend(table, keys)
+        # 0x20 lies between two neighbours with shift 0; 0x40 between shifts 0 and 8; 0x60 has none above
+        self.assertEqual(filled, {'C': {'0x20': '0x20'}})
+        self.assertEqual(table['fields']['C']['0x20'], '0x20')
+        left = gen.unmapped_by_file(table, keys)
+        self.assertEqual(left['image'], {'0x1': ['a.rs']})
+        self.assertEqual(sorted(left['fields']), ['C+0x40', 'C+0x60', 'D.size+0x20', 'E+0x8'])
+        self.assertEqual(left['fields']['C+0x40'], ['c.rs'])
+
 
 if __name__ == '__main__':
     unittest.main()

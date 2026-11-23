@@ -76,6 +76,8 @@ impl Fixture {
             commands: RwLock::new(None),
             display,
             directory: directory.clone(),
+            input_calls: AtomicUsize::new(0),
+            read_tools: OnceLock::new(),
         });
         let path = directory.clone();
         let owner_shared = Arc::clone(&shared);
@@ -1700,4 +1702,15 @@ fn readiness_threaded_exec_collects_actual_image_operation_failures() {
     }
     assert_eq!(ready + parent_zero_refusals, 12);
     eprintln!("ACTUAL_EXEC_OBSERVATION summary generated_execs=12 ready={ready} conservative_parent0_refusals={parent_zero_refusals} real_image_errors={genuine}; refusal_is_not_readiness_success");
+}
+
+#[test]
+fn input_calls_are_counted_while_served() {
+    let count = AtomicUsize::new(0);
+    {
+        let _a = InputCall::new(&count);
+        let _b = InputCall::new(&count);
+        assert_eq!(count.load(Ordering::Acquire), 2);
+    }
+    assert_eq!(count.load(Ordering::Acquire), 0);
 }

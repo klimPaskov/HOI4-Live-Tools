@@ -26,9 +26,9 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::{self, Receiver, SyncSender},
-        Arc, RwLock,
+        Arc, OnceLock, RwLock,
     },
     thread,
     time::{Duration, Instant},
@@ -929,6 +929,77 @@ fn dispatch_window_close(
         Err(error) => CloseDispatch::refused(error),
     }
 }
+/// Counts one tool call that may give input while it is served.
+struct InputCall<'a>(&'a AtomicUsize);
+impl<'a> InputCall<'a> {
+    fn new(count: &'a AtomicUsize) -> Self {
+        count.fetch_add(1, Ordering::AcqRel);
+        Self(count)
+    }
+}
+impl Drop for InputCall<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+/// One resident step under the read gate, with the bound tools; None once the owner stops
+/// serving reads (shutdown) or nothing is bound.
+fn resident_step<T>(
+    shared: &Shared,
+    step: impl FnOnce(&Server, &dyn crate::protocol::Commands) -> T,
+) -> Option<T> {
+    if !shared.accepting_reads.load(Ordering::Acquire) {
+        return None;
+    }
+    let _read = shared.reads.read().ok()?;
+    if !shared.accepting_reads.load(Ordering::Acquire) {
+        return None;
+    }
+    let commands = shared.commands.read().ok()?.clone()?;
+    Some(step(&shared.server, commands.as_ref()))
+}
+/// Start the change watcher (unless HOI4_WATCH=0) and the resident executor for the bound
+/// management tools, as the macOS server runs them beside its lanes. Both end when the owner
+/// stops serving reads. Returns which of them started.
+fn start_resident(shared: &Arc<Shared>) -> Value {
+    let watching = std::env::var("HOI4_WATCH").map_or(true, |v| v != "0");
+    let mut started = json!({"watcher": false, "executor": false});
+    if watching {
+        let shared = Arc::clone(shared);
+        let spawned = thread::Builder::new()
+            .name("owned-watcher".into())
+            .spawn(move || {
+                let mut watcher = crate::resident::Watcher::default();
+                while resident_step(&shared, |server, commands| watcher.sample(server, commands))
+                    .is_some()
+                {
+                    crate::phase::sleep(crate::resident::WATCH_PERIOD);
+                }
+            });
+        started["watcher"] = json!(spawned.is_ok());
+    }
+    let shared = Arc::clone(shared);
+    let spawned = thread::Builder::new()
+        .name("owned-executor".into())
+        .spawn(move || loop {
+            // The caller's input calls go first; a step runs only between them.
+            let ran = if shared.input_calls.load(Ordering::Acquire) == 0 {
+                match resident_step(&shared, crate::resident::autopilot_step) {
+                    Some(ran) => ran,
+                    None => return,
+                }
+            } else if shared.accepting_reads.load(Ordering::Acquire) {
+                false
+            } else {
+                return;
+            };
+            if !ran {
+                crate::phase::sleep(Duration::from_millis(50));
+            }
+        });
+    started["executor"] = json!(spawned.is_ok());
+    started
+}
 struct Shared {
     server: Server,
     endpoint: Endpoint,
@@ -942,6 +1013,11 @@ struct Shared {
     directory: PathBuf,
     /// The same owned reader as `server.process`, shared with the management tools.
     managed: Option<Arc<dyn Process + Send + Sync>>,
+    /// Tool calls that may give input (not pure reads) being served now: the resident executor
+    /// steps only while this is zero, so the caller's requests go first (as on macOS).
+    input_calls: AtomicUsize,
+    /// The pure read tools of the bound management server (set at binding).
+    read_tools: OnceLock<std::collections::HashSet<String>>,
 }
 impl Shared {
     fn retire_reads(&self) {
@@ -984,8 +1060,13 @@ fn service_client(stream: UnixStream, shared: Arc<Shared>) {
                     .read()
                     .map_err(|_| Error::new("input_unavailable", "Input binding lock poisoned"))?
                     .clone();
+                let message = request.get("message").cloned().unwrap_or(Value::Null);
+                let _counted = shared.read_tools.get().and_then(|reads| {
+                    (!framing::is_read_call(&message, reads))
+                        .then(|| InputCall::new(&shared.input_calls))
+                });
                 Ok(
-                    json!({"reply":shared.server.handle_with_commands(request.get("message").cloned().unwrap_or(Value::Null), commands.as_deref())}),
+                    json!({"reply":shared.server.handle_with_commands(message, commands.as_deref())}),
                 )
             }
             Some("bind_input") => {
@@ -1081,8 +1162,15 @@ fn service_client(stream: UnixStream, shared: Arc<Shared>) {
                     &shared.directory,
                     Arc::new(input),
                 )?;
+                let listed = shared.server.handle_with_commands(
+                    json!({"jsonrpc":"2.0","id":0,"method":"tools/list"}),
+                    Some(&service),
+                );
+                let _ = shared.read_tools.set(framing::read_tools(listed.as_ref()));
                 *commands = Some(Arc::new(service));
-                Ok(json!({"bound":true,"management":true}))
+                drop(commands);
+                let resident = start_resident(&shared);
+                Ok(json!({"bound":true,"management":true,"resident":resident}))
             }
             Some("close") | Some("close_window") => {
                 let kind = if request.get("op") == Some(&json!("close_window")) {
@@ -1617,6 +1705,8 @@ pub fn serve(path: &Path) -> Result<()> {
         display: Some(config.display.clone()),
         directory: directory.to_path_buf(),
         managed,
+        input_calls: AtomicUsize::new(0),
+        read_tools: OnceLock::new(),
     });
     eprintln!("Owned Linux supervisor ready; optional input requires an explicit binding");
     run_owner(listener, socket_meta, directory, child, shared, receiver)
