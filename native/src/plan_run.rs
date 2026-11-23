@@ -408,8 +408,9 @@ pub fn arg_built(tool: &str, arg: &str) -> bool {
 /// without receipts repeats each success until the game refuses it (railway and construction
 /// orders, shakedown sk2). `act` refuses any tool not listed here; a test checks every tool
 /// named at an `act` call is listed. Add a tool only once its handler journals a receipt.
-/// The tools with a bulk path and the `manage.bulk` name that turns it on. Every path is off
-/// until its live probe passes (docs/LIVE_VALIDATION_QUEUE.md, BATCHING PROBES).
+/// The tools with a bulk path and the `manage.bulk` name that turns it on. A path is off until
+/// its live probe passes (docs/LIVE_VALIDATION_QUEUE.md, BATCHING PROBES); a passed path is on
+/// by default (`BULK_DEFAULT`).
 pub const BULK_PATHS: &[(&str, &str)] = &[
     ("hoi4_production_set", "production_chords"),
     ("hoi4_production_add", "production_chords"),
@@ -418,21 +419,35 @@ pub const BULK_PATHS: &[(&str, &str)] = &[
     ("hoi4_mio_trait", "mio_queue_many"),
     ("hoi4_construction_add", "construction_fill"),
 ];
+/// The bulk paths on unless a plan turns them off: their live probes passed (v60a, 23 Nov 2026:
+/// a line moved 23 factories in 5 clicks, 2.1-2.6 s against about 8 s; nine wings took their
+/// mission at 0.9 s a wing against 5.3 s; four wings rebased in 1.35 s against 2.4 s a wing).
+pub const BULK_DEFAULT: &[&str] = &["production_chords", "air_base_select"];
 /// The `manage.bulk` name of a tool's bulk path.
 fn bulk_path_of(tool: &str) -> Option<&'static str> {
     BULK_PATHS.iter().find(|(t, _)| *t == tool).map(|(_, p)| *p)
 }
-/// The bulk paths a plan turns on (`manage.bulk`: names, or "all").
+/// The bulk paths a plan runs: `BULK_DEFAULT`, plus the names `manage.bulk` lists (or "all"),
+/// less each name it lists as "-name".
 fn bulk_paths(plan: &Value) -> HashSet<String> {
-    plan["manage"]["bulk"]
+    let mut on: HashSet<String> = BULK_DEFAULT.iter().map(|s| s.to_string()).collect();
+    for name in plan["manage"]["bulk"]
         .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(Value::as_str)
-                .map(|s| s.trim().to_string())
-                .collect()
-        })
-        .unwrap_or_default()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::trim)
+    {
+        match name.strip_prefix('-') {
+            Some(off) => {
+                on.remove(off.trim());
+            }
+            None => {
+                on.insert(name.to_string());
+            }
+        }
+    }
+    on
 }
 pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_skill_run",
@@ -10928,12 +10943,26 @@ mod tests {
         }
     }
     #[test]
+    fn the_bulk_paths_whose_probes_passed_are_on_by_default() {
+        let none = bulk_paths(&json!({}));
+        assert!(none.contains("production_chords") && none.contains("air_base_select"));
+        assert!(!none.contains("mio_queue_many") && !none.contains("construction_fill"));
+        let some =
+            bulk_paths(&json!({"manage": {"bulk": ["-air_base_select", "construction_fill"]}}));
+        assert!(!some.contains("air_base_select"));
+        assert!(some.contains("construction_fill") && some.contains("production_chords"));
+        for p in BULK_DEFAULT {
+            assert!(BULK_PATHS.iter().any(|(_, q)| q == p), "{p} is a bulk path");
+        }
+    }
+
+    #[test]
     fn a_bulk_path_the_plan_turns_on_reaches_the_tool_and_stays_off_otherwise() {
         let f = fake(vec![]);
         let args = json!({"line": 2, "equipment": "infantry_equipment_1", "factories": 14});
-        // off (the default): the single form
+        // off by the plan: the single form
         let mut state = State {
-            bulk: bulk_paths(&json!({})),
+            bulk: bulk_paths(&json!({"manage": {"bulk": ["-production_chords"]}})),
             ..State::default()
         };
         state
