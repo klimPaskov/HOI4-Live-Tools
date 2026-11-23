@@ -47,7 +47,7 @@ def target(run, user_dir=None, env=None):
         if not user_dir:
             return None
         path = os.path.join(user_dir, path)
-    return path
+    return os.path.normpath(path)
 
 
 def record(overview, now):

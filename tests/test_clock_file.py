@@ -51,12 +51,12 @@ class ClockFileTests(unittest.TestCase):
 
     def test_the_run_setting_wins_and_relative_paths_land_in_the_user_folder(self):
         env = {clockfile.ENV: os.path.join(self.dir, "env.json")}
-        self.assertEqual(clockfile.target(self.run_dir, self.user_dir, env=env), env[clockfile.ENV])
+        self.assertEqual(clockfile.target(self.run_dir, self.user_dir, env=env), os.path.normpath(env[clockfile.ENV]))
         self.settings(clock_file="sub/clock.json")
         self.assertEqual(clockfile.target(self.run_dir, self.user_dir, env=env), os.path.join(self.user_dir, "sub", "clock.json"))
         self.assertIsNone(clockfile.target(self.run_dir, None, env=env))   # relative without a user folder: off
         self.settings(clock_file="~/clock.json")
-        self.assertEqual(clockfile.target(self.run_dir, None, env={}), os.path.expanduser("~/clock.json"))
+        self.assertEqual(clockfile.target(self.run_dir, None, env={}), os.path.normpath(os.path.expanduser("~/clock.json")))
 
     def test_record_counts_speed_like_the_game_and_keeps_the_internal_value(self):
         body = clockfile.record({"paused": False, "speed": 2, "date": {"text": "1936.03.14.12"}}, 100.0)
