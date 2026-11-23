@@ -352,10 +352,24 @@ def _programme(ctx, prog, ops, facts):
             if o["day"] is not None:
                 last[r] = max(last.get(r, 0), o["day"])
     rows_roles = {nv.ROW_KIND.get(r.get("kind")) for r in rows}
+    # a line switched with `replace` is judged as the type it becomes (its first hull is of that type)
+    switched = {x["equipment"]: x["replace"] for x in lint.list_of("production")
+                if isinstance(x.get("equipment"), str) and isinstance(x.get("replace"), str)}
+
+    def final(eq):
+        hops = set()
+        while eq in switched and eq not in hops:
+            hops.add(eq)
+            eq = switched[eq]
+        return eq
+
     seen = set()
     for i, x in enumerate(lint.list_of("production")):
         eq = x.get("equipment")
-        if not isinstance(eq, str) or x.get("remove") or lint.factory_pool(eq) != "dockyards" or eq in seen:
+        if not isinstance(eq, str) or x.get("remove") or "replace" in x:
+            continue
+        eq = final(eq)
+        if lint.factory_pool(eq) != "dockyards" or eq in seen:
             continue
         seen.add(eq)
         role = nv.role_of(g, eq) or ("convoy" if "convoy" in (derive.equipment_types(g).get(eq) or ()) else None)
