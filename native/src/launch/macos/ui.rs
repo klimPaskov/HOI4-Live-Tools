@@ -414,19 +414,31 @@ pub(super) fn save_game(
     saves: &std::path::Path,
 ) -> Result<serde_json::Value> {
     let mut tries = 1;
+    // each failed try's reason, returned with the result so a slow or failed save says why
+    let mut failed: Vec<String> = Vec::new();
     loop {
         match save_game_once(process, keys, saves) {
             Ok(mut v) => {
                 v["tries"] = serde_json::json!(tries);
+                if !failed.is_empty() {
+                    v["failed_tries"] = serde_json::json!(failed);
+                }
                 return Ok(v);
             }
             Err(e) if tries < SAVE_TRIES && save_retryable(&e) => {
+                failed.push(format!("{}: {}", e.code, e.message));
                 tries += 1;
                 // a refused input check sent nothing; the OS window list settles within a second
                 let wait = if input_refused(&e) { 1500 } else { 800 };
                 crate::phase::sleep(Duration::from_millis(wait));
             }
-            Err(e) => return Err(e),
+            Err(e) if failed.is_empty() => return Err(e),
+            Err(e) => {
+                return Err(Error::new(
+                    e.code,
+                    format!("{} (earlier tries: {})", e.message, failed.join("; ")),
+                ))
+            }
         }
     }
 }
