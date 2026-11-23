@@ -6250,6 +6250,18 @@ def lint(plan, game, k=FRONT_K, schema=None, hand=None, decisions=None):
             "findings": lt.findings, "facts": lt.facts}
 
 
+def add_lessons(out, plan, store):
+    """The lessons a plan row contradicts, as warnings (hoi4_live/observe/lessons.py)."""
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    from hoi4_live.observe.lessons import LessonStore
+    meta = plan.get("_meta") if isinstance(plan.get("_meta"), dict) else {}
+    for w in LessonStore(store).lint_plan(plan, meta.get("country") or meta.get("tag")):
+        out["findings"].append({"severity": "warning", "rule": f"lesson:{w['lesson']}", "where": w["where"],
+                                "message": f"{w['text']} (lesson confidence {w['confidence']})"})
+        out["warnings"] += 1
+    return out
+
+
 def load_game(game_dir, userdir=None, mod_args=()):
     mods = content.mods_from_userdir(userdir) if userdir else []
     for arg in mod_args:
@@ -6272,6 +6284,9 @@ def main(argv=None):
                     help="hand-written plan: report the coverage-build rules as warnings (as _meta.source hand)")
     ap.add_argument("--decisions", default=None,
                     help="the run's decision table (default: decisions.md beside the plan, when it exists)")
+    ap.add_argument("--lessons", default=os.environ.get("HOI4_LIVE_LEARNED"),
+                    help="a learned store (learned/): lessons of scope plan/country/any that a plan row contradicts "
+                         "are warnings (rule lesson:<id>)")
     args = ap.parse_args(argv)
     try:
         with open(args.plan, encoding="utf-8") as fh:
@@ -6295,6 +6310,8 @@ def main(argv=None):
         return 2
     out = lint(plan, load_game(args.game, args.userdir, args.mod), args.front_distance, hand=args.hand or None,
                decisions=decisions)
+    if args.lessons:
+        out = add_lessons(out, plan, args.lessons)
     if args.json:
         print(json.dumps(out, indent=2, default=sorted))
     else:

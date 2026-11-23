@@ -1,0 +1,1292 @@
+[
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 45706,
+"request_id": "plan-ar-1795390512-10",
+"executor": true,
+"unix_ms": 1795390580729,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 2119,
+"request_id": "plan-ar-1795390512-13",
+"executor": true,
+"unix_ms": 1795390586397,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 10816,
+"request_id": "plan-ar-1795390512-16",
+"executor": true,
+"unix_ms": 1795390602766,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 3,
+"request_id": "plan-ar-1795390512-18",
+"executor": true,
+"unix_ms": 1795390619935,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 968,
+"request_id": "plan-pk-1795390512-19",
+"executor": true,
+"unix_ms": 1795390623293,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 5123,
+"request_id": "plan-ar-1795390512-21",
+"executor": true,
+"unix_ms": 1795390631987,
+"run": "g17n"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 469,
+"request_id": "plan-op-1795390512-35",
+"executor": true,
+"unix_ms": 1795390751181,
+"run": "g17n"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 509,
+"request_id": "plan-op-1795390512-36",
+"executor": true,
+"unix_ms": 1795390751822,
+"run": "g17n"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 474,
+"request_id": "plan-op-1795390512-45",
+"executor": true,
+"unix_ms": 1795390779189,
+"run": "g17n"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 480,
+"request_id": "plan-op-1795390512-46",
+"executor": true,
+"unix_ms": 1795390779857,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 2374,
+"request_id": "plan-ar-1795390512-47",
+"executor": true,
+"unix_ms": 1795390782524,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 3105,
+"request_id": "plan-ar-1795390512-54",
+"executor": true,
+"unix_ms": 1795390830869,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 874,
+"request_id": "plan-bl-1795390512-88",
+"executor": true,
+"unix_ms": 1795391073715,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 1747,
+"request_id": "plan-bl-1795390512-89",
+"executor": true,
+"unix_ms": 1795391075467,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 2477,
+"request_id": "plan-bl-1795390512-90",
+"executor": true,
+"unix_ms": 1795391077949,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 2448,
+"request_id": "plan-bl-1795390512-91",
+"executor": true,
+"unix_ms": 1795391080403,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_add",
+"ok": false,
+"error": "invalid_target",
+"ms": 656,
+"request_id": "plan-dk-1795390512-92",
+"executor": true,
+"unix_ms": 1795391084167,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 1084,
+"request_id": "plan-cv-1795390512-93",
+"executor": true,
+"unix_ms": 1795391087720,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_add",
+"ok": false,
+"error": "invalid_target",
+"ms": 1051,
+"request_id": "plan-dk-1795390512-104",
+"executor": true,
+"unix_ms": 1795391159581,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": false,
+"error": "input_readback_failed",
+"ms": 4058,
+"request_id": "plan-cv-1795390512-105",
+"executor": true,
+"unix_ms": 1795391168621,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 7561,
+"request_id": "plan-ab-1795390512-110",
+"executor": true,
+"unix_ms": 1795391206780,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 2933,
+"request_id": "plan-bl-1795390512-130",
+"executor": true,
+"unix_ms": 1795391369548,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 5646,
+"request_id": "plan-ab-1795390512-131",
+"executor": true,
+"unix_ms": 1795391375581,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_add",
+"ok": false,
+"error": "invalid_target",
+"ms": 1129,
+"request_id": "plan-dk-1795390512-132",
+"executor": true,
+"unix_ms": 1795391382116,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": false,
+"error": "input_readback_failed",
+"ms": 3542,
+"request_id": "plan-cv-1795390512-133",
+"executor": true,
+"unix_ms": 1795391388280,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 2619,
+"request_id": "plan-bl-1795390512-144",
+"executor": true,
+"unix_ms": 1795391462531,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 1487,
+"request_id": "plan-bl-1795390512-145",
+"executor": true,
+"unix_ms": 1795391464023,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 1809,
+"request_id": "plan-bl-1795390512-146",
+"executor": true,
+"unix_ms": 1795391465836,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 1776,
+"request_id": "plan-bl-1795390512-147",
+"executor": true,
+"unix_ms": 1795391467617,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_add",
+"ok": false,
+"error": "invalid_target",
+"ms": 957,
+"request_id": "plan-dk-1795390512-150",
+"executor": true,
+"unix_ms": 1795391485761,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 6081,
+"request_id": "plan-ar-1795390512-152",
+"executor": true,
+"unix_ms": 1795391507008,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": false,
+"error": "input_readback_failed",
+"ms": 3727,
+"request_id": "plan-cv-1795390512-155",
+"executor": true,
+"unix_ms": 1795391525863,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 6547,
+"request_id": "plan-ab-1795390512-159",
+"executor": true,
+"unix_ms": 1795391565336,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 5174,
+"request_id": "plan-ab-1795390512-162",
+"executor": true,
+"unix_ms": 1795391583051,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 2162,
+"request_id": "plan-ar-1795390512-167",
+"executor": true,
+"unix_ms": 1795391612481,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 5496,
+"request_id": "plan-ab-1795390512-182",
+"executor": true,
+"unix_ms": 1795391751759,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 5381,
+"request_id": "plan-ab-1795390512-184",
+"executor": true,
+"unix_ms": 1795391771671,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 1226,
+"request_id": "plan-pk-1795390512-190",
+"executor": true,
+"unix_ms": 1795391822420,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 985,
+"request_id": "plan-bl-1795390512-192",
+"executor": true,
+"unix_ms": 1795391837191,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 273,
+"request_id": "plan-bl-1795390512-193",
+"executor": true,
+"unix_ms": 1795391837470,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_add",
+"ok": false,
+"error": "invalid_target",
+"ms": 671,
+"request_id": "plan-dk-1795390512-194",
+"executor": true,
+"unix_ms": 1795391838551,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 6436,
+"request_id": "plan-ab-1795390512-198",
+"executor": true,
+"unix_ms": 1795391873039,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 1141,
+"request_id": "plan-ab-1795390512-207",
+"executor": true,
+"unix_ms": 1795391934900,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 6672,
+"request_id": "plan-ab-1795390512-212",
+"executor": true,
+"unix_ms": 1795391966946,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 637,
+"request_id": "plan-ab-1795390512-214",
+"executor": true,
+"unix_ms": 1795391979809,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 7995,
+"request_id": "plan-ab-1795390512-224",
+"executor": true,
+"unix_ms": 1795392056710,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 5231,
+"request_id": "plan-ab-1795390512-227",
+"executor": true,
+"unix_ms": 1795392073983,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 3399,
+"request_id": "plan-ab-1795390512-241",
+"executor": true,
+"unix_ms": 1795392153503,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 13,
+"request_id": "plan-ab-1795390512-242",
+"executor": true,
+"unix_ms": 1795392154014,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 8854,
+"request_id": "plan-ab-1795390512-249",
+"executor": true,
+"unix_ms": 1795392203407,
+"run": "g17n"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 285,
+"request_id": "plan-op-1795390512-253",
+"executor": true,
+"unix_ms": 1795392224551,
+"run": "g17n"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 458,
+"request_id": "plan-op-1795390512-254",
+"executor": true,
+"unix_ms": 1795392225238,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 2250,
+"request_id": "plan-ab-1795390512-255",
+"executor": true,
+"unix_ms": 1795392227528,
+"run": "g17n"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 677,
+"request_id": "plan-op-1795390512-256",
+"executor": true,
+"unix_ms": 1795392228864,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 4614,
+"request_id": "plan-ab-1795390512-258",
+"executor": true,
+"unix_ms": 1795392238430,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 11,
+"request_id": "plan-ab-1795390512-259",
+"executor": true,
+"unix_ms": 1795392238493,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 2183,
+"request_id": "plan-ab-1795390512-268",
+"executor": true,
+"unix_ms": 1795392297851,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 13,
+"request_id": "plan-ab-1795390512-279",
+"executor": true,
+"unix_ms": 1795392360201,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 2164,
+"request_id": "plan-ab-1795390512-280",
+"executor": true,
+"unix_ms": 1795392362392,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "events_open",
+"ms": 33,
+"request_id": "plan-ar-1795390512-283",
+"executor": true,
+"unix_ms": 1795392382564,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 2472,
+"request_id": "plan-ab-1795390512-286",
+"executor": true,
+"unix_ms": 1795392411575,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 4375,
+"request_id": "plan-ar-1795390512-289",
+"executor": true,
+"unix_ms": 1795392432038,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 12,
+"request_id": "plan-ab-1795390512-291",
+"executor": true,
+"unix_ms": 1795392437199,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 12,
+"request_id": "plan-ab-1795390512-293",
+"executor": true,
+"unix_ms": 1795392445777,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": false,
+"error": "input_readback_failed",
+"ms": 3603,
+"request_id": "plan-cv-1795390512-297",
+"executor": true,
+"unix_ms": 1795392458497,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 27,
+"request_id": "plan-ab-1795390512-302",
+"executor": true,
+"unix_ms": 1795392491124,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 18,
+"request_id": "plan-ab-1795390512-306",
+"executor": true,
+"unix_ms": 1795392530223,
+"run": "g17n"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 733,
+"request_id": "plan-op-1795390512-310",
+"executor": true,
+"unix_ms": 1795392552800,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 12,
+"request_id": "plan-ab-1795390512-312",
+"executor": true,
+"unix_ms": 1795392559207,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 4,
+"request_id": "plan-ab-1795390512-322",
+"executor": true,
+"unix_ms": 1795392612971,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 634,
+"request_id": "plan-ab-1795390512-327",
+"executor": true,
+"unix_ms": 1795392644073,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 602,
+"request_id": "plan-bl-1795390512-331",
+"executor": true,
+"unix_ms": 1795392677736,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 997,
+"request_id": "plan-bl-1795390512-332",
+"executor": true,
+"unix_ms": 1795392678739,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 986,
+"request_id": "plan-bl-1795390512-333",
+"executor": true,
+"unix_ms": 1795392679731,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 2316,
+"request_id": "plan-bl-1795390512-334",
+"executor": true,
+"unix_ms": 1795392682052,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 1352,
+"request_id": "plan-bl-1795390512-335",
+"executor": true,
+"unix_ms": 1795392683409,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 286,
+"request_id": "plan-bl-1795390512-336",
+"executor": true,
+"unix_ms": 1795392683701,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 278,
+"request_id": "plan-bl-1795390512-337",
+"executor": true,
+"unix_ms": 1795392683985,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 319,
+"request_id": "plan-bl-1795390512-338",
+"executor": true,
+"unix_ms": 1795392684309,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 13,
+"request_id": "plan-ab-1795390512-339",
+"executor": true,
+"unix_ms": 1795392684831,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_add",
+"ok": true,
+"error": null,
+"ms": 3769,
+"request_id": "plan-pr-1795390512-342",
+"executor": true,
+"unix_ms": 1795392705084,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_add",
+"ok": false,
+"error": "invalid_target",
+"ms": 632,
+"request_id": "plan-dk-1795390512-343",
+"executor": true,
+"unix_ms": 1795392706285,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": false,
+"error": "input_readback_failed",
+"ms": 3378,
+"request_id": "plan-cv-1795390512-344",
+"executor": true,
+"unix_ms": 1795392714839,
+"run": "g17n"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "air_base_full",
+"ms": 14,
+"request_id": "plan-ab-1795390512-351",
+"executor": true,
+"unix_ms": 1795392770288,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 1868,
+"request_id": "plan-bl-1795390512-358",
+"executor": true,
+"unix_ms": 1795392837724,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 2365,
+"request_id": "plan-bl-1795390512-359",
+"executor": true,
+"unix_ms": 1795392840094,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 1499,
+"request_id": "plan-bl-1795390512-360",
+"executor": true,
+"unix_ms": 1795392841598,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 2344,
+"request_id": "plan-bl-1795390512-361",
+"executor": true,
+"unix_ms": 1795392843947,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_add",
+"ok": false,
+"error": "invalid_target",
+"ms": 659,
+"request_id": "plan-dk-1795390512-362",
+"executor": true,
+"unix_ms": 1795392847948,
+"run": "g17n"
+},
+{
+"tool": "hoi4_production_add",
+"ok": false,
+"error": "invalid_target",
+"ms": 839,
+"request_id": "plan-dk-1795437976-3",
+"executor": true,
+"unix_ms": 1795437990083,
+"run": "w53a"
+},
+{
+"tool": "hoi4_production_set",
+"ok": false,
+"error": "input_readback_failed",
+"ms": 3743,
+"request_id": "plan-cv-1795437976-6",
+"executor": true,
+"unix_ms": 1795438006579,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 942,
+"request_id": "plan-op-1795437976-18",
+"executor": true,
+"unix_ms": 1795438080019,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 551,
+"request_id": "plan-op-1795437976-19",
+"executor": true,
+"unix_ms": 1795438080908,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 555,
+"request_id": "plan-op-1795437976-20",
+"executor": true,
+"unix_ms": 1795438081775,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 620,
+"request_id": "plan-op-1795437976-21",
+"executor": true,
+"unix_ms": 1795438082768,
+"run": "w53a"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 5613,
+"request_id": "plan-ab-1795437976-26",
+"executor": true,
+"unix_ms": 1795438126568,
+"run": "w53a"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "rebase_refused",
+"ms": 5178,
+"request_id": "plan-ab-1795437976-27",
+"executor": true,
+"unix_ms": 1795438131748,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 361,
+"request_id": "plan-op-1795437976-32",
+"executor": true,
+"unix_ms": 1795438204281,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 540,
+"request_id": "plan-op-1795437976-33",
+"executor": true,
+"unix_ms": 1795438205126,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 897,
+"request_id": "plan-op-1795437976-36",
+"executor": true,
+"unix_ms": 1795438227086,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 324,
+"request_id": "plan-op-1795437976-38",
+"executor": true,
+"unix_ms": 1795438230804,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 469,
+"request_id": "plan-op-1795437976-39",
+"executor": true,
+"unix_ms": 1795438231500,
+"run": "w53a"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "input_target_not_frontmost",
+"ms": 299,
+"request_id": "plan-ab-1795437976-40",
+"executor": true,
+"unix_ms": 1795438231885,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 1003,
+"request_id": "plan-op-1795437976-42",
+"executor": true,
+"unix_ms": 1795438243583,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 602,
+"request_id": "plan-op-1795437976-44",
+"executor": true,
+"unix_ms": 1795438250904,
+"run": "w53a"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 3513,
+"request_id": "plan-ab-1795437976-45",
+"executor": true,
+"unix_ms": 1795438254768,
+"run": "w53a"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 3255,
+"request_id": "plan-ab-1795437976-49",
+"executor": true,
+"unix_ms": 1795438286122,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 337,
+"request_id": "plan-op-1795437976-51",
+"executor": true,
+"unix_ms": 1795438292015,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 507,
+"request_id": "plan-op-1795437976-52",
+"executor": true,
+"unix_ms": 1795438292756,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 764,
+"request_id": "plan-op-1795437976-53",
+"executor": true,
+"unix_ms": 1795438294772,
+"run": "w53a"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 5985,
+"request_id": "plan-ab-1795437976-67",
+"executor": true,
+"unix_ms": 1795438416375,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 549,
+"request_id": "plan-op-1795437976-73",
+"executor": true,
+"unix_ms": 1795438449026,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 554,
+"request_id": "plan-op-1795437976-76",
+"executor": true,
+"unix_ms": 1795438499544,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 609,
+"request_id": "plan-op-1795437976-78",
+"executor": true,
+"unix_ms": 1795438502492,
+"run": "w53a"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 3152,
+"request_id": "plan-ab-1795437976-79",
+"executor": true,
+"unix_ms": 1795438505986,
+"run": "w53a"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 2601,
+"request_id": "plan-ab-1795437976-81",
+"executor": true,
+"unix_ms": 1795438618705,
+"run": "w53a"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "nothing_to_change",
+"ms": 8,
+"request_id": "plan-ab-1795437976-82",
+"executor": true,
+"unix_ms": 1795438618870,
+"run": "w53a"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 1114,
+"request_id": "plan-pk-1795437976-83",
+"executor": true,
+"unix_ms": 1795438623119,
+"run": "w53a"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 2167,
+"request_id": "plan-ab-1795437976-84",
+"executor": true,
+"unix_ms": 1795438625785,
+"run": "w53a"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": true,
+"error": null,
+"ms": 2295,
+"request_id": "plan-ab-1795437976-85",
+"executor": true,
+"unix_ms": 1795438628082,
+"run": "w53a"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "nothing_to_change",
+"ms": 27,
+"request_id": "plan-ab-1795437976-86",
+"executor": true,
+"unix_ms": 1795438628192,
+"run": "w53a"
+},
+{
+"tool": "hoi4_air_rebase",
+"ok": false,
+"error": "nothing_to_change",
+"ms": 7,
+"request_id": "plan-ab-1795437976-87",
+"executor": true,
+"unix_ms": 1795438628201,
+"run": "w53a"
+},
+{
+"tool": "hoi4_production_set",
+"ok": true,
+"error": null,
+"ms": 1906,
+"request_id": "plan-bl-1795437976-89",
+"executor": true,
+"unix_ms": 1795438647313,
+"run": "w53a"
+},
+{
+"tool": "hoi4_production_add",
+"ok": false,
+"error": "invalid_target",
+"ms": 640,
+"request_id": "plan-dk-1795437976-90",
+"executor": true,
+"unix_ms": 1795438648543,
+"run": "w53a"
+},
+{
+"tool": "hoi4_production_set",
+"ok": false,
+"error": "input_readback_failed",
+"ms": 3569,
+"request_id": "plan-cv-1795437976-91",
+"executor": true,
+"unix_ms": 1795438655061,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 318,
+"request_id": "plan-op-1795437976-94",
+"executor": true,
+"unix_ms": 1795438683782,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 466,
+"request_id": "plan-op-1795437976-95",
+"executor": true,
+"unix_ms": 1795438684441,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 741,
+"request_id": "plan-op-1795437976-96",
+"executor": true,
+"unix_ms": 1795438685688,
+"run": "w53a"
+},
+{
+"tool": "hoi4_army_plan",
+"ok": true,
+"error": null,
+"ms": 575,
+"request_id": "plan-op-1795437976-97",
+"executor": true,
+"unix_ms": 1795438686474,
+"run": "w53a"
+}
+]

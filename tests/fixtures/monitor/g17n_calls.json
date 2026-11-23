@@ -1,0 +1,792 @@
+[
+{
+"utc": 1795390512.705819,
+"tool": "hoi4_observe",
+"args": {
+"since": 0
+},
+"ms": 0.3,
+"isError": false,
+"source": "monitor",
+"body": {
+"now": {
+"date": "1939.08.22.03",
+"paused": true,
+"omissions": [],
+"at_war_with": [],
+"idle_research_slots": 0,
+"civilian_factories_idle": 0,
+"own_states_occupied": []
+}
+}
+},
+{
+"utc": 1795390545.396826,
+"tool": "hoi4_observe",
+"args": {
+"since": 0
+},
+"ms": 0.2,
+"isError": false,
+"source": "monitor",
+"body": {
+"now": {
+"date": "1939.08.22.03",
+"paused": true,
+"omissions": [],
+"at_war_with": [],
+"idle_research_slots": 0,
+"civilian_factories_idle": 0,
+"own_states_occupied": []
+}
+}
+},
+{
+"utc": 1795390575.474578,
+"tool": "hoi4_observe",
+"args": {
+"since": 0
+},
+"ms": 0.2,
+"isError": false,
+"source": "monitor",
+"body": {
+"now": {
+"date": "1939.08.22.03",
+"paused": true,
+"omissions": [],
+"at_war_with": [],
+"idle_research_slots": 0,
+"civilian_factories_idle": 0,
+"own_states_occupied": []
+}
+}
+},
+{
+"utc": 1795390640.928589,
+"tool": "hoi4_politics_options",
+"args": {},
+"ms": 9.5,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_arguments",
+"message": "category must be a string"
+}
+}
+},
+{
+"utc": 1795390651.2174022,
+"tool": "hoi4_politics_options",
+"args": {
+"category": "advisor"
+},
+"ms": 380.3,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_arguments",
+"message": "Unknown category"
+}
+}
+},
+{
+"utc": 1795390656.7611341,
+"tool": "hoi4_politics_options",
+"args": {
+"category": "officer_corps"
+},
+"ms": 202.4,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_arguments",
+"message": "Unknown category"
+}
+}
+},
+{
+"utc": 1795390742.3549628,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "germany_mefo_bills.1",
+"option": "germany_mefo_bills.1.a",
+"request_id": "b90739280-0"
+},
+"ms": 3073.5,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_arguments",
+"message": "option must be 0..7"
+}
+}
+},
+{
+"utc": 1795390743.582573,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "mtg_netherlands.66",
+"option": "mtg_netherlands.66.b",
+"request_id": "b90739280-1"
+},
+"ms": 1226.9,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_arguments",
+"message": "option must be 0..7"
+}
+}
+},
+{
+"utc": 1795390750.400396,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "germany_mefo_bills.1",
+"option": 0,
+"request_id": "b90745792-0"
+},
+"ms": 4607.9,
+"isError": false,
+"source": "player",
+"body": {
+"receipt": {
+"status": "Verified"
+}
+}
+},
+{
+"utc": 1795390758.205791,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "mtg_netherlands.66",
+"option": 0,
+"request_id": "b90745792-1"
+},
+"ms": 7804.9,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_target",
+"message": "Event mtg_netherlands.66 is not open"
+}
+}
+},
+{
+"utc": 1795390793.3889542,
+"tool": "hoi4_politics_options",
+"args": {
+"category": "military_staff"
+},
+"ms": 23953.3,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_arguments",
+"message": "slot must be 0..7"
+}
+}
+},
+{
+"utc": 1795390793.3970351,
+"tool": "hoi4_politics_options",
+"args": {
+"category": "research_production"
+},
+"ms": 7.4,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_arguments",
+"message": "slot must be 0..7"
+}
+}
+},
+{
+"utc": 1795390806.484282,
+"tool": "hoi4_politics_options",
+"args": {
+"category": "military_staff",
+"slot": 0
+},
+"ms": 11384.2,
+"isError": false,
+"source": "player",
+"body": {
+"ok": true
+}
+},
+{
+"utc": 1795390823.53584,
+"tool": "hoi4_politics_options",
+"args": {
+"category": "military_staff",
+"slot": 1
+},
+"ms": 17048.8,
+"isError": false,
+"source": "player",
+"body": {
+"ok": true
+}
+},
+{
+"utc": 1795390823.551214,
+"tool": "hoi4_politics_options",
+"args": {
+"category": "research_production",
+"slot": 0
+},
+"ms": 15.0,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "use_mio_tools",
+"message": "This slot holds a Military Industrial Organization (Arms Against Tyranny), not an advisor: read them with hoi4_mios and assign or change them with hoi4_mio_* tools (hoi4_mio_design_team, hoi4_mio_policy, hoi4_mio_trait). Nothing was clicked."
+}
+}
+},
+{
+"utc": 1795390930.4794931,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "germany.14",
+"option": 0,
+"request_id": "c90929863"
+},
+"ms": 616.1,
+"isError": false,
+"source": "player",
+"body": {
+"receipt": {
+"status": "Verified"
+}
+}
+},
+{
+"utc": 1795390984.141998,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "news.33",
+"option": 0,
+"request_id": "c90974450"
+},
+"ms": 9690.8,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "input_readback_failed",
+"message": "event answered: expected game change not observed"
+}
+}
+},
+{
+"utc": 1795391232.881881,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "BBA_switzerland_trade.8",
+"option": 0,
+"request_id": "c91231167"
+},
+"ms": 1714.2,
+"isError": false,
+"source": "player",
+"body": {
+"receipt": {
+"status": "Verified"
+}
+}
+},
+{
+"utc": 1795391275.821054,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "TOA_ven_blockade.2",
+"option": 0,
+"request_id": "b91273429-0"
+},
+"ms": 2390.9,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_target",
+"message": "Event TOA_ven_blockade.2 is not open"
+}
+}
+},
+{
+"utc": 1795391285.697448,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "bba_news.0",
+"option": 0,
+"request_id": "b91273429-1"
+},
+"ms": 9875.8,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_target",
+"message": "Event bba_news.0 is not open"
+}
+}
+},
+{
+"utc": 1795391336.382863,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "lar_operative_event.6",
+"option": 0,
+"request_id": "b91335119-0"
+},
+"ms": 1263.2,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_target",
+"message": "Event lar_operative_event.6 is not open"
+}
+}
+},
+{
+"utc": 1795391350.01698,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "aat_news.105",
+"option": 0,
+"request_id": "b91335119-1"
+},
+"ms": 13633.6,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_target",
+"message": "Event aat_news.105 is not open"
+}
+}
+},
+{
+"utc": 1795392148.6069171,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "NSB_soviet_soviet_german_trade_agreement.1",
+"option": 0,
+"request_id": "c92148370"
+},
+"ms": 236.3,
+"isError": false,
+"source": "player",
+"body": {
+"receipt": {
+"status": "Verified"
+}
+}
+},
+{
+"utc": 1795392211.706645,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "lar_operative_event.6",
+"option": 0,
+"request_id": "c92205076"
+},
+"ms": 6630.2,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_target",
+"message": "Event lar_operative_event.6 is not open"
+}
+}
+},
+{
+"utc": 1795392386.022573,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "BBA_switzerland_trade.4",
+"option": 0,
+"request_id": "c92385784"
+},
+"ms": 238.3,
+"isError": false,
+"source": "player",
+"body": {
+"receipt": {
+"status": "Verified"
+}
+}
+},
+{
+"utc": 1795392416.167155,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "WW_hungary.26",
+"option": 0,
+"request_id": "c92407864"
+},
+"ms": 8301.9,
+"isError": false,
+"source": "player",
+"body": {
+"receipt": {
+"status": "Verified"
+}
+}
+},
+{
+"utc": 1795392491.507835,
+"tool": "hoi4_politics_options",
+"args": {
+"category": "research_production",
+"slot": 1
+},
+"ms": 11710.0,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "use_mio_tools",
+"message": "This slot holds a Military Industrial Organization (Arms Against Tyranny), not an advisor: read them with hoi4_mios and assign or change them with hoi4_mio_* tools (hoi4_mio_design_team, hoi4_mio_policy, hoi4_mio_trait). Nothing was clicked."
+}
+}
+},
+{
+"utc": 1795392491.516351,
+"tool": "hoi4_politics_options",
+"args": {
+"category": "research_production",
+"slot": 2
+},
+"ms": 7.8,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "use_mio_tools",
+"message": "This slot holds a Military Industrial Organization (Arms Against Tyranny), not an advisor: read them with hoi4_mios and assign or change them with hoi4_mio_* tools (hoi4_mio_design_team, hoi4_mio_policy, hoi4_mio_trait). Nothing was clicked."
+}
+}
+},
+{
+"utc": 1795392491.52429,
+"tool": "hoi4_politics_options",
+"args": {
+"category": "research_production",
+"slot": 3
+},
+"ms": 7.6,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "use_mio_tools",
+"message": "This slot holds a Military Industrial Organization (Arms Against Tyranny), not an advisor: read them with hoi4_mios and assign or change them with hoi4_mio_* tools (hoi4_mio_design_team, hoi4_mio_policy, hoi4_mio_trait). Nothing was clicked."
+}
+}
+},
+{
+"utc": 1795392492.671507,
+"tool": "hoi4_politics_options",
+"args": {
+"category": "research_production",
+"slot": 4
+},
+"ms": 1146.9,
+"isError": false,
+"source": "player",
+"body": {
+"ok": true
+}
+},
+{
+"utc": 1795392522.1552079,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "italy.5",
+"option": 0,
+"request_id": "c92521874"
+},
+"ms": 280.8,
+"isError": false,
+"source": "player",
+"body": {
+"receipt": {
+"status": "Verified"
+}
+}
+},
+{
+"utc": 1795392613.681182,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "germany.20",
+"option": 0,
+"request_id": "c92612977"
+},
+"ms": 703.9,
+"isError": false,
+"source": "player",
+"body": {
+"receipt": {
+"status": "Verified"
+}
+}
+},
+{
+"utc": 1795392642.277048,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "germany.106",
+"option": 1,
+"request_id": "c92639561"
+},
+"ms": 2715.3,
+"isError": false,
+"source": "player",
+"body": {
+"receipt": {
+"status": "Verified"
+}
+}
+},
+{
+"utc": 1795392876.389781,
+"tool": "hoi4_save",
+"args": {
+"request_id": "c92874783"
+},
+"ms": 1606.4,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "events_open",
+"message": "Answer the open event(s) first: DOD_yugoslavia.70"
+}
+}
+},
+{
+"utc": 1795392880.744123,
+"tool": "hoi4_save",
+"args": {
+"request_id": "c92879478"
+},
+"ms": 1265.3,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "events_open",
+"message": "Answer the open event(s) first: DOD_yugoslavia.70"
+}
+}
+},
+{
+"utc": 1795392888.5604858,
+"tool": "hoi4_save",
+"args": {
+"request_id": "c92883824"
+},
+"ms": 4735.4,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "events_open",
+"message": "Answer the open event(s) first: DOD_yugoslavia.70, wuw_GER_legions.8 (a notice behind them stays until then)"
+}
+}
+},
+{
+"utc": 1795392896.154818,
+"tool": "hoi4_save",
+"args": {
+"request_id": "c92891649"
+},
+"ms": 4504.6,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "events_open",
+"message": "Answer the open event(s) first: DOD_yugoslavia.70, wuw_GER_legions.8 (a notice behind them stays until then)"
+}
+}
+},
+{
+"utc": 1795392903.772595,
+"tool": "hoi4_save",
+"args": {
+"request_id": "c92899242"
+},
+"ms": 4530.1,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "events_open",
+"message": "Answer the open event(s) first: DOD_yugoslavia.70, wuw_GER_legions.8 (a notice behind them stays until then)"
+}
+}
+},
+{
+"utc": 1795392911.386815,
+"tool": "hoi4_save",
+"args": {
+"request_id": "c92906861"
+},
+"ms": 4525.3,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "events_open",
+"message": "Answer the open event(s) first: DOD_yugoslavia.70, wuw_GER_legions.8 (a notice behind them stays until then)"
+}
+}
+},
+{
+"utc": 1795392926.148463,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "DOD_yugoslavia.70",
+"option": 0,
+"request_id": "c92924892"
+},
+"ms": 1255.7,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "invalid_target",
+"message": "Event DOD_yugoslavia.70 is not open"
+}
+}
+},
+{
+"utc": 1795392934.565961,
+"tool": "hoi4_event_choose",
+"args": {
+"event": "wuw_GER_legions.8",
+"option": 0,
+"request_id": "c92926217"
+},
+"ms": 8347.9,
+"isError": false,
+"source": "player",
+"body": {
+"receipt": {
+"status": "Verified"
+}
+}
+},
+{
+"utc": 1795393002.295176,
+"tool": "hoi4_save",
+"args": {
+"request_id": "c92936642"
+},
+"ms": 65652.3,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "input_readback_failed",
+"message": "No save file was written within 60 s"
+}
+}
+},
+{
+"utc": 1795393068.601633,
+"tool": "hoi4_save",
+"args": {
+"request_id": "c93005382"
+},
+"ms": 63218.8,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "input_readback_failed",
+"message": "No save file was written within 60 s"
+}
+}
+},
+{
+"utc": 1795393144.74449,
+"tool": "hoi4_save",
+"args": {
+"request_id": "c93071695"
+},
+"ms": 73048.9,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "input_readback_failed",
+"message": "No save file was written within 60 s"
+}
+}
+},
+{
+"utc": 1795393212.0324008,
+"tool": "hoi4_save",
+"args": {
+"request_id": "c93147825"
+},
+"ms": 64206.3,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "input_readback_failed",
+"message": "No save file was written within 60 s"
+}
+}
+},
+{
+"utc": 1795393241.417841,
+"tool": "hoi4_save",
+"args": {
+"request_id": "c93215124"
+},
+"ms": 26293.0,
+"isError": true,
+"source": "player",
+"body": {
+"error": {
+"code": "input_readback_failed",
+"message": "save window: expected game change not observed"
+}
+}
+},
+{
+"utc": 1795393250.90271,
+"tool": "hoi4_save",
+"args": {
+"request_id": "c93244502"
+},
+"ms": 6399.8,
+"isError": false,
+"source": "player",
+"body": {
+"ok": true
+}
+}
+]
