@@ -5,28 +5,7 @@
 pub mod control_snapshot;
 pub(crate) mod controls;
 mod equipment;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) mod output;
-/// Line output needs the macOS/Linux layout tables; other platforms report it as unavailable.
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-pub(crate) mod output {
-    use crate::{error::Result, memory::Reader};
-    use serde_json::{json, Value};
-
-    #[derive(Clone, Copy, Debug, PartialEq)]
-    pub(crate) struct Efficiency;
-
-    pub(crate) fn efficiency_inputs(_: &Reader<'_>, _: u64, _: u64) -> Result<Efficiency> {
-        Err(crate::error::Error::new(
-            "unsupported_platform",
-            "line output reads need the macOS or Linux layout tables",
-        ))
-    }
-
-    pub(crate) fn observe(_: &Reader<'_>, _: u64, _: bool, _: Option<&Efficiency>) -> Value {
-        json!({"unavailable_reason":"unsupported_platform"})
-    }
-}
 use crate::{
     economy,
     error::{Error, Result},
@@ -71,7 +50,6 @@ const MACOS: Layout = Layout {
     variant_type: 0x3e0,
     equipment_type_vtable: 0x357bad8,
 };
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 /// One own equipment line as the input adapters see it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct OwnLine {
@@ -80,7 +58,6 @@ pub(crate) struct OwnLine {
     pub key: Option<String>,
     pub requested: i32,
 }
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 /// Own military/naval equipment lines in collection order, with base equipment
 /// keys where the variant has an exact base type. Caller owns the read bracket.
 pub(crate) fn own_lines(r: &Reader<'_>, base: u64) -> Result<Vec<OwnLine>> {

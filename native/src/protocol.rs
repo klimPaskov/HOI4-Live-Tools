@@ -120,30 +120,14 @@ pub(crate) fn focus_content(
     exe: &str,
 ) -> Result<(std::path::PathBuf, crate::focus_rules::live::Dlcs)> {
     use crate::focus_rules::live::Dlcs;
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    {
-        let found = crate::launch::macos::game_content(exe)?;
-        let dlcs = Dlcs::read(&found.install, found.disabled_dlcs.as_deref());
-        Ok((found.content, dlcs))
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        // No mod layer here: the install that holds the focus files, DLC switches unknown.
-        let install = std::path::Path::new(exe)
-            .ancestors()
-            .find(|d| d.join("common/national_focus").is_dir())
-            .map(std::path::Path::to_path_buf)
-            .ok_or_else(|| Error::new("map_data_unavailable", "Focus files not found"))?;
-        let dlcs = Dlcs::read(&install, None);
-        Ok((install, dlcs))
-    }
+    let found = crate::launch::macos::game_content(exe)?;
+    let dlcs = Dlcs::read(&found.install, found.disabled_dlcs.as_deref());
+    Ok((found.content, dlcs))
 }
 /// The full tool catalogue without a game or session: the common tools plus the platform's
-/// command tools (macOS/Linux builds). Printed by `hoi4-live-native --list-tools`.
+/// command tools. Printed by `hoi4-live-native --list-tools`.
 pub fn list_tools_offline() -> Value {
-    #[allow(unused_mut)]
     let mut value = tools(None);
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     if let Some(list) = value["tools"].as_array_mut() {
         list.extend(crate::launch::macos::mac_tool_list());
     }

@@ -505,7 +505,6 @@ impl Governor {
     pub(crate) fn preparation_check(&mut self) -> Result<()> {
         self.check()
     }
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) fn verify_live_scope(&mut self, scope: &Scope, date_raw: i32) -> Result<()> {
         self.check()?;
         crate::calendar::decode(date_raw)?;

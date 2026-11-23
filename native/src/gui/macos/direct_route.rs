@@ -14,9 +14,7 @@ mod typed;
 mod witness;
 
 // Provisional internal APIs have no public caller or input registration yet.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[allow(unused_imports)]
 pub(crate) use typed::{observe, TypedObservation};
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[allow(unused_imports)]
 pub(crate) use witness::Witness;

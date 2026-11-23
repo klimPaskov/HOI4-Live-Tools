@@ -73,7 +73,6 @@ pub(crate) fn layout(r: &Reader<'_>) -> Result<&'static Layout> {
 
 /// The macOS layout translated through the generated Linux table; every entry
 /// must be mapped or the widget tree is unavailable on this build.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn linux() -> Result<&'static Layout> {
     use crate::xlayout::{fld, img, Class};
     use std::sync::OnceLock;
@@ -132,14 +131,6 @@ fn linux() -> Result<&'static Layout> {
     let layout = translate()?;
     Ok(LINUX.get_or_init(|| layout))
 }
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn linux() -> Result<&'static Layout> {
-    Err(Error::new(
-        "capability_unavailable",
-        "GUI rectangles are not reviewed for this build",
-    ))
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Rect {
     pub x: i32,

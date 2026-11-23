@@ -21,7 +21,6 @@ pub mod learn;
 pub mod memory;
 pub mod operation_rules;
 pub mod own_focus;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) mod pause_guard;
 pub(crate) mod phase;
 pub mod plan_predicate;
@@ -33,13 +32,11 @@ pub mod research;
 pub mod research_folders;
 pub mod research_ui;
 pub mod resident;
-#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
 pub(crate) mod script;
 mod target_node;
 pub mod tech_tree;
 pub mod technology;
 pub mod watch;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) mod xlayout;
 
 pub(crate) mod technology_nodes;
@@ -100,7 +97,6 @@ pub mod daily_governor;
 #[doc(hidden)]
 pub mod daily_observation;
 
-#[cfg(any(target_os = "linux", target_os = "macos", test))]
 mod daily_worker;
 
 #[cfg(any(target_os = "linux", all(test, unix)))]

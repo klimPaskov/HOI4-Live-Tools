@@ -54,7 +54,11 @@ A developer build with `--features dev-table` reads a table from `HOI4_LIVE_DEV_
 (reloaded when it changes) and logs unmapped keys to `HOI4_LIVE_DEV_MISSING`; release
 builds always use the embedded table.
 
-## 3. Live verification (done)
+Tools added after the Linux live check use keys the table does not have yet; they refuse on
+Linux with `layout_unmapped` until mapped. [PORTING_STATUS.md](PORTING_STATUS.md) lists them and
+the steps (`gen_linux_layout.py extend`, then `generate` with the executable).
+
+## 3. Live verification (done for the tools of 5 November 2026)
 
 [LIVE_VERIFICATION_LINUX_1_19_4.md](LIVE_VERIFICATION_LINUX_1_19_4.md) records every tool
 run against the Linux 1.19.4.1 game and the fixes it needed.

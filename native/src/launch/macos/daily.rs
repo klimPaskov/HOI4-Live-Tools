@@ -940,7 +940,6 @@ mod tests {
         serde_json::from_value(json!({"version":1,"revision":1,"entries":[{"id":"one","intent":{"kind":"Research","technology_id":"tech","slot":0}}],"max_actions_per_day":2,"max_observation_age_ms":5000,"review_day":null})).unwrap()
     }
     pub(super) fn dir() -> PathBuf {
-        use std::os::unix::fs::PermissionsExt;
         static N: AtomicUsize = AtomicUsize::new(0);
         let p = std::env::temp_dir().join(format!(
             "hoi4-mac-daily-{}-{}",
@@ -949,7 +948,11 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir(&p).unwrap();
-        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o700)).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
         p
     }
     fn config() -> Config {

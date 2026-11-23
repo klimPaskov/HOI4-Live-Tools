@@ -6,7 +6,6 @@ use crate::error::Result;
 use std::path::Path;
 #[cfg(target_os = "linux")]
 mod linux;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod macos;
 /// Attach to a game the user started: verify the process and write `session.json` (private, owner
 /// only) into the run directory. Returns the session as JSON for the caller to show.
