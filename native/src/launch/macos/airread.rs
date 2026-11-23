@@ -68,7 +68,7 @@ pub(super) const WING: xlayout::Class = xlayout::Class::new("CAirWing", WING_VTA
 /// Aircraft capacity of one air base level.
 const CAPACITY_PER_LEVEL: i32 = 200;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(super) struct Wing {
     pub name: String,
     pub unit: String,

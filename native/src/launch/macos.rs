@@ -3480,7 +3480,14 @@ impl MacClock {
                             let vals = if delta == 0 { vec![] } else { vec![delta] };
                             match ch.post(op, &[line.address], &vals, None, None) {
                                 Ok(reply) if inproc::all_posted(&reply) => return Ok(()),
-                                // refused or not run: the GUI path decides, in this same call
+                                // the game's own check refused it: that is the answer (the GUI's
+                                // buttons post the same refused command)
+                                Ok(reply) if inproc::game_refused(&reply) => {
+                                    return Err(inproc::refused_error(&format!(
+                                        "{key} line to {factories} factories"
+                                    )))
+                                }
+                                // not run or refused by the module: the GUI path decides, in this same call
                                 Ok(_) | Err(_) => bounded_keys.preflight()?,
                             }
                         }
@@ -5273,19 +5280,32 @@ impl MacClock {
                     ));
                 }
                 if let Some(ch) = air_route.as_mut() {
+                    let mut reread = || airact::own(process).ok().map(|(_, w)| w);
                     let done = match &op {
                         Air::Mission {
                             wings: names,
                             region,
                             mask,
                             ..
-                        } => inproc::air_mission(ch, &bases, &wings, names, *region, *mask),
+                        } => inproc::air_mission(
+                            ch,
+                            &bases,
+                            &wings,
+                            names,
+                            *region,
+                            *mask,
+                            &mut reread,
+                        ),
                         Air::Rebase { .. } => inproc::air_rebase(ch, &bases, &wings, &rebase_plans),
-                        _ => None,
+                        _ => inproc::Routed::Gui,
                     };
-                    if let Some(v) = done {
-                        *info.borrow_mut() = v;
-                        return Ok(());
+                    match done {
+                        inproc::Routed::Done(v) => {
+                            *info.borrow_mut() = v;
+                            return Ok(());
+                        }
+                        inproc::Routed::Refused(what) => return Err(inproc::refused_error(&what)),
+                        inproc::Routed::Gui => {}
                     }
                     // refused or not run: the GUI path decides, in this same call
                     bounded_keys.preflight()?;

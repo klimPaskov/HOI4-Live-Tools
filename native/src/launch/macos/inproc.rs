@@ -165,6 +165,34 @@ pub(super) fn route(family: &str) -> Option<Channel> {
     family_usable(&ch.hello, family, m).then_some(ch)
 }
 
+/// What one in-process route decided: every command posted, the game's own check refused the change (the answer:
+/// the GUI would send the same refused order, so it is not tried), or hand the call to the GUI path.
+#[derive(Debug)]
+pub(super) enum Routed {
+    Done(Value),
+    Refused(String),
+    Gui,
+}
+
+/// The game's own "can do" check refused every object and nothing was posted: the change is not legal now (for
+/// example a production line whose factories would pass its cap, or no free dockyard). Any other refusal (not own,
+/// not a live object, the policy, the main thread did not run the job) is the module's and the GUI path decides.
+pub(super) fn game_refused(reply: &Value) -> bool {
+    let objs = reply["per_object"].as_array();
+    reply["posted"].as_i64() == Some(0)
+        && objs.is_some_and(|o| {
+            !o.is_empty() && o.iter().all(|x| x["result"] == "refused_by_game_check")
+        })
+}
+
+/// The typed error for a game-check refusal; the journal reports it unless the read-back shows the change anyway.
+pub(super) fn refused_error(what: &str) -> Error {
+    Error::new(
+        "refused_by_game_check",
+        format!("The game's own check refused this order ({what}); nothing was posted"),
+    )
+}
+
 /// True when every object of the reply was posted (the module refuses whole objects, never parts of one).
 pub(super) fn all_posted(reply: &Value) -> bool {
     reply["ok"].as_bool() == Some(true)
@@ -194,9 +222,25 @@ pub(super) fn mission_steps(
     (to_region, set_bit)
 }
 
-/// Missions in process: one request for the wings lacking the bit, one for the wings not in the region. Some(info)
-/// when every needed command was posted; None hands the whole call to the GUI path (the region object is only known
-/// from an own base's province, so a region with no own base goes through the GUI).
+/// How long the region step waits for the game to execute the mission bits (it executes posted commands at its
+/// next frame, also while paused), and how often it reads.
+const MISSION_BIT_WAIT: Duration = Duration::from_millis(1500);
+const MISSION_BIT_POLL: Duration = Duration::from_millis(15);
+
+/// True when every wing at these addresses carries the mission bit in `wings`.
+pub(super) fn bits_executed(wings: &[super::airread::Wing], addresses: &[u64], mask: i32) -> bool {
+    addresses.iter().all(|a| {
+        wings
+            .iter()
+            .any(|w| w.address == *a && w.mission_mask & mask != 0)
+    })
+}
+
+/// Missions in process: one request for the wings lacking the bit, one for the wings not in the region. The game's
+/// check for the region command reads the wing's mission, so the region request waits until the game has executed
+/// the mission commands (one frame; read back from memory by `reread`), as a player's region click always comes a
+/// frame after the mission button. Gui when a needed object is not known (the region object is only known from an
+/// own base's province, so a region with no own base goes through the GUI) or the bits were not seen in time.
 pub(super) fn air_mission(
     ch: &mut Channel,
     bases: &[super::airread::Base],
@@ -204,11 +248,14 @@ pub(super) fn air_mission(
     names: &[String],
     region: Option<i32>,
     mask: i32,
-) -> Option<Value> {
+    reread: &mut dyn FnMut() -> Option<Vec<super::airread::Wing>>,
+) -> Routed {
     let mut need_bit = Vec::new();
     let mut need_region = Vec::new();
     for n in names {
-        let w = wings.iter().find(|w| &w.name == n && w.address != 0)?;
+        let Some(w) = wings.iter().find(|w| &w.name == n && w.address != 0) else {
+            return Routed::Gui;
+        };
         let (to_region, set_bit) = mission_steps(w.region_id, w.mission_mask, region, mask);
         if set_bit {
             need_bit.push(w.address);
@@ -218,74 +265,108 @@ pub(super) fn air_mission(
         }
     }
     let region_obj = match region {
-        Some(r) if !need_region.is_empty() => Some(
-            bases
+        Some(r) if !need_region.is_empty() => {
+            match bases
                 .iter()
-                .find(|b| b.region_id == Some(r) && b.region_address != 0)?
-                .region_address,
-        ),
+                .find(|b| b.region_id == Some(r) && b.region_address != 0)
+            {
+                Some(b) => Some(b.region_address),
+                None => return Routed::Gui,
+            }
+        }
         _ => None,
     };
     let mut replies = Vec::new();
     if !need_bit.is_empty() {
-        let r = ch
-            .post(
-                "air.set_mission",
-                &need_bit,
-                &[i64::from(mask)],
-                None,
-                Some(1),
-            )
-            .ok()?;
+        let Ok(r) = ch.post(
+            "air.set_mission",
+            &need_bit,
+            &[i64::from(mask)],
+            None,
+            Some(1),
+        ) else {
+            return Routed::Gui;
+        };
+        if game_refused(&r) {
+            return Routed::Refused("the mission for these wings".into());
+        }
         if !all_posted(&r) {
-            return None;
+            return Routed::Gui;
         }
         replies.push(r);
+        if region_obj.is_some() {
+            let start = std::time::Instant::now();
+            let mut seen = false;
+            while start.elapsed() < MISSION_BIT_WAIT {
+                if reread().is_some_and(|now| bits_executed(&now, &need_bit, mask)) {
+                    seen = true;
+                    break;
+                }
+                std::thread::sleep(MISSION_BIT_POLL);
+            }
+            let waited = start.elapsed().as_millis() as u64;
+            replies.push(json!({"mission_bits_executed":seen,"waited_ms":waited}));
+            if !seen {
+                return Routed::Gui;
+            }
+        }
     }
     if let Some(obj) = region_obj {
-        let r = ch
-            .post("air.enable_mission", &need_region, &[], Some(obj), None)
-            .ok()?;
+        let Ok(r) = ch.post("air.enable_mission", &need_region, &[], Some(obj), None) else {
+            return Routed::Gui;
+        };
+        if game_refused(&r) {
+            return Routed::Refused("the region for these wings".into());
+        }
         if !all_posted(&r) {
-            return None;
+            return Routed::Gui;
         }
         replies.push(r);
     }
-    Some(json!({"backend":"inprocess","wings":names,"module":replies}))
+    Routed::Done(json!({"backend":"inprocess","wings":names,"module":replies}))
 }
 
 /// Rebases in process: one air.transfer request per destination base, only for wings not already there or bound
-/// there. Some(info) when every command was posted, None for the GUI path.
+/// there. Done when every command was posted, Refused when the game's own check refused a base's wings, else Gui.
 pub(super) fn air_rebase(
     ch: &mut Channel,
     bases: &[super::airread::Base],
     wings: &[super::airread::Wing],
     plans: &[super::airact::RebasePlan],
-) -> Option<Value> {
+) -> Routed {
     let mut by_base: Vec<(u64, Vec<u64>)> = Vec::new();
     for p in plans {
-        let w = wings.iter().find(|w| w.name == p.wing && w.address != 0)?;
+        let Some(w) = wings.iter().find(|w| w.name == p.wing && w.address != 0) else {
+            return Routed::Gui;
+        };
         if w.base_id == p.to_base_id || w.transfer_base_id == p.to_base_id {
             continue;
         }
-        let b = bases
+        let Some(b) = bases
             .iter()
-            .find(|b| b.id == p.to_base_id && b.address != 0)?
-            .address;
-        match by_base.iter_mut().find(|(a, _)| *a == b) {
+            .find(|b| b.id == p.to_base_id && b.address != 0)
+        else {
+            return Routed::Gui;
+        };
+        match by_base.iter_mut().find(|(a, _)| *a == b.address) {
             Some((_, list)) => list.push(w.address),
-            None => by_base.push((b, vec![w.address])),
+            None => by_base.push((b.address, vec![w.address])),
         }
     }
     let mut replies = Vec::new();
     for (base, list) in &by_base {
-        let r = ch.post("air.transfer", list, &[], Some(*base), None).ok()?;
+        let Ok(r) = ch.post("air.transfer", list, &[], Some(*base), None) else {
+            return Routed::Gui;
+        };
+        if game_refused(&r) && replies.is_empty() {
+            return Routed::Refused("the rebase of these wings".into());
+        }
         if !all_posted(&r) {
-            return None;
+            return Routed::Gui;
         }
         replies.push(r);
     }
-    Some(json!({"backend":"inprocess","module":replies}))
+    Routed::Done(json!({"backend":"inprocess","module":replies}))
 }
 
 #[cfg(test)]
@@ -354,6 +435,36 @@ mod tests {
         assert_eq!(mission_steps(12, 1, Some(12), 1), (false, false));
         assert_eq!(mission_steps(12, 2, Some(12), 1), (false, true));
         assert_eq!(mission_steps(0, 0, None, 2048), (false, true));
+    }
+
+    #[test]
+    fn a_game_check_refusal_is_its_own_answer() {
+        let refused = json!({"ok":false,"posted":0,"objects":1,"refused":1,
+            "per_object":[{"obj":"0x1","result":"refused_by_game_check"}]});
+        assert!(game_refused(&refused));
+        let not_own = json!({"ok":false,"posted":0,"objects":2,"refused":2,"per_object":[
+            {"obj":"0x1","result":"refused_by_game_check"},{"obj":"0x2","result":"not_own"}]});
+        assert!(!game_refused(&not_own));
+        let partly = json!({"ok":false,"posted":1,"objects":2,"refused":1,"per_object":[
+            {"obj":"0x1","result":"refused_by_game_check"},{"obj":"0x2","result":"posted"}]});
+        assert!(!game_refused(&partly));
+        assert!(!game_refused(&json!({"op":"x","result":"not_run"})));
+        assert!(!game_refused(&json!({"posted":0,"per_object":[]})));
+        assert_eq!(refused_error("x").code, "refused_by_game_check");
+    }
+
+    #[test]
+    fn the_region_waits_for_every_mission_bit() {
+        let wing = |address: u64, mask: i32| super::super::airread::Wing {
+            address,
+            mission_mask: mask,
+            ..Default::default()
+        };
+        let now = vec![wing(0x10, 1), wing(0x20, 0), wing(0x30, 3)];
+        assert!(bits_executed(&now, &[0x10, 0x30], 1));
+        assert!(!bits_executed(&now, &[0x10, 0x20], 1));
+        assert!(!bits_executed(&now, &[0x40], 1));
+        assert!(bits_executed(&now, &[0x30], 2));
     }
 
     #[test]
