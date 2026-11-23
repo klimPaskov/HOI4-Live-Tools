@@ -846,14 +846,15 @@ fn split_groups(
     let Some((split, low, high)) = split_parts(state, op, roster, lines) else {
         return Vec::new();
     };
-    let (Some(gl), Some(gh)) = (
-        part_formed(roster, &low, lines),
-        part_formed(roster, &high, lines),
-    ) else {
-        return Vec::new();
-    };
+    // each side whose group is formed fights on its own piece at once (with one side formed the
+    // operation ran as ONE group on the first line army's game group, the other side's formed
+    // group stood without a front: w42u, 23 Nov 2026)
+    let formed: Vec<(String, Vec<String>, bool)> = [(low, true), (high, false)]
+        .into_iter()
+        .filter_map(|(part, is_low)| Some((part_formed(roster, &part, lines)?, part, is_low)))
+        .collect();
     let far = deep(state, id);
-    [(gl, low, true), (gh, high, false)]
+    formed
         .into_iter()
         .map(|(g, part, is_low)| {
             let mut u = unit(g, Role::Group, &op["front"], &op["offensive"]);
@@ -2780,7 +2781,13 @@ fn prepare(
             let fresh = part.iter().all(|n| group_of(roster, n).is_none());
             if !(calm || fresh)
                 || tries >= 6
-                || !part.iter().all(|n| movable(n))
+                // a group of the operation's own line armies is re-formed while its enemies are
+                // at peace even when a division stands beside a country at war: the contact guard
+                // kept the second group from forming for good (its army's front piece touched the
+                // French border state 42: w42u, 23 Nov 2026); never an army another operation owns
+                || !part
+                    .iter()
+                    .all(|n| if calm { !owned_elsewhere(state, id, n) } else { movable(n) })
                 || state.skipped(now, "opgrp", id)
             {
                 break;
@@ -3186,6 +3193,38 @@ fn reconcile(
             state.skip(now, "opdraw", &u.name, 2);
         }
         return Ok(Some(line));
+    }
+    // a side on its own country's border whose front stands on another piece (a group kept from
+    // before the split, its front on the other country's border: w42u, 23 Nov 2026) is cleared
+    // and drawn again on its own piece, at most REDRAWS times
+    if u.own_enemy && peace {
+        let fronts: Vec<&Value> = orders(roster, &u.name)
+            .iter()
+            .filter(|o| o["kind"] == json!("front"))
+            .collect();
+        let off_piece = !fronts.is_empty()
+            && fronts.iter().all(|o| {
+                let st = ints(&o["line"]["states"]);
+                !st.is_empty() && !st.iter().any(|s| u.own_states.contains(s))
+            });
+        let ck = key(id, &format!("offpiece:{}", u.name));
+        let n = state.done.get(&ck).copied().unwrap_or(0);
+        if off_piece && n < REDRAWS {
+            state.done.insert(ck, n + 1);
+            let out = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!(
+                    "clear {} (its front stands off its own piece {:?}): drawn again",
+                    u.name, u.own_states
+                ),
+                "hoi4_army_plan",
+                json!({"army": u.name, "clear_orders": true}),
+            )?;
+            return Ok(Some(out));
+        }
     }
     if u.role == Role::Hold || line.is_empty() {
         return Ok(None);
