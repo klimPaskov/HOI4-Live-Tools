@@ -166,7 +166,7 @@ struct Bmp<'a> {
     bpp: u16,
 }
 
-fn bmp(data: &[u8], want_bpp: u16, name: &'static str) -> Result<Bmp<'_>> {
+fn bmp<'a>(data: &'a [u8], want_bpp: u16, name: &'static str) -> Result<Bmp<'a>> {
     let bad = |m: String| Error::new("map_data_unavailable", m);
     if data.len() < 54 || &data[..2] != b"BM" {
         return Err(bad(format!("{name} is not a BMP")));
