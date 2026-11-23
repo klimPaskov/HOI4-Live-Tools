@@ -296,13 +296,21 @@ class Ops:
         line = [f for f in o.get("formations") or [] if f.get("role") == "line"]
         if not line:
             err("no line formation: the group front and the group offensive need the group's armies")
-        if len(line) > cap_g:
-            err(f"{len(line)} line armies in one group, over the {cap_g} a field marshal commands")
+        # group_cap: the executor splits the line armies into TWO groups of at most group_cap each
+        split = o.get("group_cap") if isinstance(o.get("group_cap"), int) and o.get("group_cap") > 0 else None
+        most = 2 * min(split, cap_g) if split else cap_g
+        if len(line) > most:
+            err(f"{len(line)} line armies in one group, over the {cap_g} a field marshal commands"
+                if not split else f"{len(line)} line armies, over the two groups of {min(split, cap_g)} that "
+                "group_cap splits them into")
+        # regroup_at_war: the group is formed again from the operation's line armies, so a line army outside
+        # army_group joins it before the attack
+        regroup = o.get("regroup_at_war") is True
         for f in o.get("formations") or []:
             a, role = f.get("army"), f.get("role")
             own = "front" in f or "offensive" in f
             if role == "line":
-                if g is not None and a not in members:
+                if g is not None and a not in members and not regroup:
                     err(f"line formation {a!r} is not in army_group {o.get('group')}: it would not follow the group front")
                 if own:
                     err(f"line formation {a!r} has a front or offensive of its own: an army with its own orders "

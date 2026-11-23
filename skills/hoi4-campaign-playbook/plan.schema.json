@@ -2744,6 +2744,14 @@
             "type": "boolean",
             "description": "default true. A wing (an army attacking on its own, not armour) whose every way into its enemy states crosses a river, a fort or rough ground worth -0.4 attack or worse (hoi4_province_graph) keeps its front and planning and attacks only once a way in opens (a neighbouring state taken)"
           },
+          "pockets": {
+            "type": "boolean",
+            "description": "default true. The pocket order: from the encirclement read the best pocket two strike formations can cut off is chosen, both march at its neck, the ring is held while the group reduces it, then the armour returns to its objectives (counted in op:pockets_closed). false: the strike formations never leave their objectives for a pocket"
+          },
+          "wing_stall": {
+            "type": "boolean",
+            "description": "default true. A wing that stood WING_STALL_DAYS at war with no state of its line taken gives the line's first state up (to the group or a pocket) and attacks the next one: its orders are cleared once, the front is clicked at the new line and the offensive drawn again. false: a stalled wing keeps its line"
+          },
           "regroup_at_war": {
             "type": "boolean",
             "description": "true: the group is formed again with the line armies outside it (and reserves released to the operation) while the country is at war with someone else, as long as the operation's own enemies are not at war with us; an army in another group joins too; never an army another running operation owns or one standing in contact with an enemy. Default false: the regroup runs only while the country is at war with nobody"
