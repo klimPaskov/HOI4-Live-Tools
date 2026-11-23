@@ -277,6 +277,23 @@ def _norm(s):
     return re.sub(r"[^a-z]", "", derive._norm(s) if hasattr(derive, "_norm") else s.lower())
 
 
+# the advisor slots of each politics category (common/idea_tags)
+CATEGORY_SLOTS = {"government": {"political_advisor"},
+                  "military_staff": {"army_chief", "navy_chief", "air_chief", "high_command"},
+                  "research_production": {"theorist"}}
+
+
+def _entry(lint, where):
+    """The politics or politics_auto.order entry a `where` label names."""
+    m = re.match(r"^(politics|politics_auto\.order)\[(\d+)\]", where or "")
+    if not m:
+        return None
+    rows = lint.list_of("politics") if m.group(1) == "politics" else \
+        (lint.plan.get("politics_auto") or {}).get("order") or []
+    i = int(m.group(2))
+    return rows[i] if i < len(rows) and isinstance(rows[i], dict) else None
+
+
 def politics(lint, tl):
     w = lint.world
     planned = _planned_ideas(lint)
@@ -288,6 +305,10 @@ def politics(lint, tl):
     chars = {}
     for where, idea, first in planned:
         roles = cond.advisor_conditions(w, lint.tag, idea)
+        # a character with several advisor roles is judged by the role of the category the plan picks it for
+        cat = (_entry(lint, where) or {}).get("category")
+        fit = [r for r in roles if r.get("slot") in CATEGORY_SLOTS.get(cat, ())]
+        roles = fit or roles
         for r in roles:
             chars.setdefault(r["character"], []).append((where, idea, r))
         if not roles:
