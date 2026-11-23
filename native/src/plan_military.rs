@@ -176,7 +176,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Duration;
 
 /// Losses per enemy tag: (own, enemy), in men.
-type Losses = BTreeMap<String, (f64, f64)>;
+pub(super) type Losses = BTreeMap<String, (f64, f64)>;
 
 /// What the runner keeps for these rules besides `done` and the skip timers.
 #[derive(Default)]
@@ -1167,7 +1167,7 @@ fn invasion_step(
 
 /// Own and enemy losses per enemy tag from hoi4_war_stats (the relations with the player);
 /// None when the read has no player.
-fn losses_by_enemy(stats: &Value) -> Option<Losses> {
+pub(super) fn losses_by_enemy(stats: &Value) -> Option<Losses> {
     let me = stats["player"]["tag"].as_str()?;
     let mut out: Losses = BTreeMap::new();
     for war in list(stats, "wars")

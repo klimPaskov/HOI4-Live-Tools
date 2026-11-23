@@ -2918,33 +2918,51 @@ fn a_reserve_left_on_its_old_groups_front_has_that_front_cleared_once() {
 }
 
 #[test]
-fn only_infantry_of_the_line_goes_back_never_the_armour() {
-    let mut read = supply_read(&[(
-        9522,
-        51,
-        4.0,
-        24.0,
-        vec![
-            ("p1", "Panzer", 10.0),
-            ("p2", "Panzer", 10.0),
-            ("m1", "Mitte", 20.0),
-            ("m2", "Mitte", 30.0),
-            ("m3", "Mitte", 40.0),
-            ("m4", "Mitte", 50.0),
-        ],
-    )]);
-    // m1 attacks (an executing plan's division heads for its battle): it may go back too
-    read["divisions"][2]["heading_province"] = json!(6500);
+fn only_standing_infantry_of_the_line_goes_back_never_the_armour_or_its_sector() {
+    let mut read = supply_read(&[
+        (
+            9522,
+            51,
+            4.0,
+            24.0,
+            vec![
+                ("m1", "Mitte", 20.0),
+                ("m2", "Mitte", 30.0),
+                ("m3", "Mitte", 40.0),
+                ("m4", "Mitte", 50.0),
+                ("m5", "Mitte", 55.0),
+                ("m6", "Mitte", 60.0),
+            ],
+        ),
+        // the armour's state: the breakthrough sector keeps its weight
+        (
+            7000,
+            56,
+            2.0,
+            24.0,
+            vec![
+                ("p1", "Panzer", 10.0),
+                ("n1", "Mitte", 10.0),
+                ("n2", "Mitte", 10.0),
+                ("n3", "Mitte", 10.0),
+                ("n4", "Mitte", 10.0),
+                ("n5", "Mitte", 10.0),
+            ],
+        ),
+    ]);
+    // m1 attacks (it heads for its battle): it is never taken out of it
+    read["divisions"][0]["heading_province"] = json!(6500);
     let line: HashSet<String> = ["Mitte".to_string(), "Panzer".to_string()].into();
     let pick: HashSet<String> = ["Mitte".to_string()].into();
     let seen = stack_read(&read, &line, &pick, STACK_MAX);
-    // 6 divisions starving, carry 2: 4 over, half the stack (3) at most, Mitte's most worn first
+    // 9522 starves (a sixth of its need), carries 2 of 6: 4 over, half the stack (3) at most, the
+    // standing m2..m4 most worn first; nothing from the armour's state 56
     assert_eq!(seen.total, 3);
     assert_eq!(
         seen.surplus,
         vec![(
             "Mitte".to_string(),
-            vec!["m1".to_string(), "m2".to_string(), "m3".to_string()]
+            vec!["m2".to_string(), "m3".to_string(), "m4".to_string()]
         )]
     );
 }

@@ -3084,6 +3084,15 @@ fn stack_read(read: &Value, line: &HashSet<String>, pick: &HashSet<String>, max:
         .into_iter()
         .map(|(a, (s, n))| (a, if n > 0.0 { s / n } else { 0.0 }))
         .collect();
+    // the states where the armour (line armies that are not picked: the Panzergruppen) stands
+    let armour_states: HashSet<i64> = rows
+        .values()
+        .filter(|d| {
+            let army = text(&d["army"]);
+            line.contains(army) && !pick.contains(army)
+        })
+        .filter_map(|d| d["state_id"].as_i64())
+        .collect();
     let mut per: HashMap<String, Vec<String>> = HashMap::new();
     for p in list(read, "provinces") {
         let ids: Vec<String> = list(p, "division_ids")
@@ -3102,16 +3111,21 @@ fn stack_read(read: &Value, line: &HashSet<String>, pick: &HashSet<String>, max:
         if !on_line {
             continue;
         }
-        // the divisions that may go back: of an infantry line or wing army (the armour keeps its
-        // concentration). At war a division of an executing plan always heads somewhere (its
-        // attack), so the heading is not asked (w46c1: one echelon in 17 days while 17-19
-        // divisions stood at 16-29% supply in two provinces)
+        // the breakthrough sector keeps its full weight: no province of a state where the
+        // armour stands is thinned (w46d1, 23 Nov 2026: the echelons took 21 divisions out of
+        // the attack and Holland's line held at 11 of 91 points)
+        if armour_states.contains(&p["state_id"].as_i64().unwrap_or(-1)) {
+            continue;
+        }
+        // the divisions that may go back: STANDING divisions (no movement or attack under way:
+        // a division that heads somewhere fights its battle and is never taken out of it) of an
+        // infantry line or wing army (the armour keeps its concentration)
         let mut ours: Vec<(&String, f64, &str)> = ids
             .iter()
             .filter_map(|id| {
                 let d = rows.get(id)?;
                 let army = text(&d["army"]);
-                pick.contains(army)
+                (pick.contains(army) && d["heading_province"].is_null())
                     .then(|| (id, d["organisation"].as_f64().unwrap_or(0.0), army))
             })
             .collect();
