@@ -2665,6 +2665,34 @@
             "minimum": 1,
             "description": "game days without a province gained on the current line before the next line is drawn (default 7)"
           },
+          "stacking": {
+            "description": "default on; false (or {enabled: false}) turns it off. Once the attack executes, no province holds more of the operation's line, wing and group divisions than its supply feeds and a battle's width takes (max_per_province, default 8); a surplus of at least min_surplus (3) seen in two supply reads goes, most worn standing infantry first and at most half an army at once, into one second echelon army per line army with an area defence of its station (an empty state of the enemy border, else the nearest state behind the line; station overrides); it is fed forward when the line has room or its army is worn, and rejoins its army when the operation ends",
+            "type": [
+              "boolean",
+              "object"
+            ],
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "max_per_province": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "min_surplus": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "station": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false
+          },
+          "assault_guard": {
+            "type": "boolean",
+            "description": "default true. A wing (an army attacking on its own, not armour) whose every way into its enemy states crosses a river, a fort or rough ground worth -0.4 attack or worse (hoi4_province_graph) keeps its front and planning and attacks only once a way in opens (a neighbouring state taken)"
+          },
           "regroup_at_war": {
             "type": "boolean",
             "description": "true: the group is formed again with the line armies outside it (and reserves released to the operation) while the country is at war with someone else, as long as the operation's own enemies are not at war with us; an army in another group joins too; never an army another running operation owns or one standing in contact with an enemy. Default false: the regroup runs only while the country is at war with nobody"
@@ -2816,6 +2844,13 @@
           "until": {
             "$ref": "#/definitions/predicate",
             "description": "the entry is over once this holds: it claims no wing and its wings go to the other entries (the next war's)"
+          },
+          "fallback_region": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "strategic region id or name the entry's wings fly when the game refused `mission` over `region` from the wing's base and no base with room lies inside `region` (a refused mission is never sent again unchanged)"
           },
           "then_region": {
             "type": [
