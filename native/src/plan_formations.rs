@@ -440,6 +440,15 @@ pub(super) fn command_step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
+    if (state.war_active || super::plan_operation::active(state))
+        && !state.skipped(now, "command", "stragglers")
+        && !super::plan_strike::owns_armies(state, plan)
+    {
+        state.skip(now, "command", "stragglers", DAY / 4);
+        if let Some(done) = straggler_step(state, tools, plan, lease, now)? {
+            return Ok(Some(done));
+        }
+    }
     // Armies on objective strikes keep their divisions: no merge moves them between armies.
     if (plan["armies"].is_object() || plan["army_layout"].is_array())
         && !state.skipped(now, "command", "armies")
@@ -453,6 +462,115 @@ pub(super) fn command_step(
         return Ok(Some(done));
     }
     plan_military::group_marshal_step(state, tools, plan, lease, now)
+}
+
+/// Whether an army is mobile (motorised or armoured) by the roster's `motorization` share.
+fn mobile(row: &Value) -> bool {
+    row["motorization"].as_f64().unwrap_or(0.0) > 0.5
+}
+
+/// An army with no order at all that no operation names (formation, hold or reserve row) is a
+/// straggler while a war or an operation runs: it joins the nearest army of the same kind
+/// (mobile or not) that has an order and room (hoi4_army_merge), so no division waits a war out
+/// and no new front is drawn (w46e1/f1, w47p1, 23 Nov 2026: Mitte Brandenburg and Army 1 stood
+/// with no order for the whole war; the plan's `armies.concentrate: false` kept the formation
+/// merges off, so nothing took them). Works with concentrate off: the kind keeps infantry out of
+/// the armour.
+fn straggler_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
+    let armies = list(&roster, "armies");
+    let max = plan["armies"]["max"].as_u64().unwrap_or(24);
+    let mut reserved: HashSet<String> = strings(&plan["war"], "reserve").into_iter().collect();
+    for op in list(plan, "operations") {
+        for r in list(op, "reserve") {
+            reserved.insert(text(&r["army"]).to_string());
+        }
+    }
+    let named = |name: &str, state: &State| {
+        let hint = state
+            .layout
+            .iter()
+            .find(|(_, a)| a.as_str() == name)
+            .map(|(h, _)| h.clone());
+        super::plan_operation::names_army(plan, name)
+            || hint.is_some_and(|h| {
+                super::plan_operation::names_army(plan, &h) || reserved.contains(&h)
+            })
+            || reserved.contains(name)
+    };
+    let orderless = |a: &Value| {
+        a["battle_plan_orders"].as_u64().unwrap_or(0) == 0
+            && a["defensive_orders"].as_u64().unwrap_or(0) == 0
+            && a["plan_executing"] != json!(true)
+    };
+    let sailing = super::plan_ship::claimed(state);
+    for a in armies {
+        let name = text(&a["army"]).to_string();
+        let n = a["division_count"].as_u64().unwrap_or(0);
+        if n == 0
+            || !orderless(a)
+            || state.op_owned.contains_key(&name)
+            || named(&name, state)
+            || plan_military::invading(state, plan, &name)
+            || state.skipped(now, "cmerge", &name)
+            || list(a, "divisions")
+                .iter()
+                .any(|d| d.as_str().is_some_and(|id| sailing.contains(id)))
+        {
+            continue;
+        }
+        let here = a["main_state"]
+            .as_i64()
+            .and_then(|s| state.centers.get(&(s as i32)).copied());
+        let target = armies
+            .iter()
+            .filter(|t| {
+                let tn = text(&t["army"]);
+                tn != name
+                    && !orderless(t)
+                    && mobile(t) == mobile(a)
+                    && t["defensive_orders"].as_u64().unwrap_or(0) == 0
+                    && !reserved.contains(tn)
+                    && t["division_count"].as_u64().unwrap_or(0) + n <= max
+            })
+            .map(|t| {
+                let there = t["main_state"]
+                    .as_i64()
+                    .and_then(|s| state.centers.get(&(s as i32)).copied());
+                let d = match (here, there) {
+                    (Some(p), Some(q)) => ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt(),
+                    _ => 1.0e9,
+                };
+                (text(&t["army"]).to_string(), d)
+            })
+            .min_by(|x, y| x.1.total_cmp(&y.1));
+        let Some((target, _)) = target else {
+            state.skip(now, "cmerge", &name, 2 * DAY);
+            continue;
+        };
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_army_merge",
+            json!({"source": name, "target": target}),
+            "cs",
+        )?;
+        state.skip(now, "cmerge", &name, 2 * DAY);
+        if ok {
+            plan_military::forget_army(state, &name);
+        }
+        return Ok(Some(format!(
+            "command: {name} ({n} division(s), no order, named by no operation) joins {target}, the nearest {} army with an order and room: {ok} {why}",
+            if mobile(a) { "mobile" } else { "infantry" }
+        )));
+    }
+    Ok(None)
 }
 
 fn merge_and_lead(
@@ -925,6 +1043,36 @@ mod tests {
             replies: replies.into_iter().collect(),
             actions: RefCell::new(Vec::new()),
         }
+    }
+
+    #[test]
+    fn a_straggler_at_war_joins_the_nearest_army_of_its_kind_even_without_concentration() {
+        let plan = json!({"armies": {"concentrate": false},
+            "operations": [{"id": "op", "formations": [{"army": "Armee Mitte"}, {"army": "PG"}],
+                "reserve": [{"army": "Armee Rhein"}]}]});
+        let tools = game(vec![(
+            "hoi4_armies",
+            json!({"armies": [
+                {"army": "Armee Mitte", "division_count": 20, "battle_plan_orders": 1, "motorization": 0, "main_state": 55},
+                {"army": "PG", "division_count": 9, "battle_plan_orders": 1, "motorization": 1, "main_state": 64},
+                {"army": "Armee Rhein", "division_count": 17, "battle_plan_orders": 0, "motorization": 0, "main_state": 55},
+                {"army": "Mitte Brandenburg", "division_count": 2, "battle_plan_orders": 0, "motorization": 0, "main_state": 64}]}),
+        )]);
+        let mut state = State::default();
+        state.war_active = true;
+        let out = command_step(&mut state, &tools, &plan, "l", 1000)
+            .unwrap()
+            .unwrap();
+        // infantry into the infantry army, never into the armour; the reserve row is left alone
+        assert!(
+            out.starts_with("command: Mitte Brandenburg (2 division(s), no order")
+                && out.contains("joins Armee Mitte"),
+            "{out}"
+        );
+        // at peace with no operation: nothing
+        let mut calm = State::default();
+        let out = command_step(&mut calm, &tools, &plan, "l", 1000).unwrap();
+        assert!(out.is_none_or(|o| !o.contains("no order")));
     }
 
     #[test]

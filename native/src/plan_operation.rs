@@ -2828,7 +2828,7 @@ const ASSAULT_HARD: f64 = -0.4;
 const ASSAULT_SUPERIORITY: i64 = 2;
 /// The longest a guarded wing waits once an attack of its war executes beside it: then it
 /// attacks with it whatever stands there (never held forever).
-const JOINT_MAX_WAIT: GameHour = 10 * DAY;
+const JOINT_MAX_WAIT: GameHour = 21 * DAY;
 /// Attack penalty counted per level of a fort in the province's history (about the defence a
 /// land fort level gives).
 const FORT_STEP: f64 = -0.15;
@@ -3009,10 +3009,32 @@ fn assault_guarded(
     } else {
         Some((now - *state.done.entry(jk).or_insert(now)) / DAY)
     };
-    let even = theirs.is_none_or(|t| ours >= t);
+    // A SECOND DIRECTION: a border state facing the target that was not ours when the guard
+    // first read (the group or the armour took a neighbour of the target): the small country is
+    // cut off and the wing attacks with that attack at once (w47p1, 23 Nov 2026: at even odds
+    // from its own border alone the wing lost 18.2k men to Luxembourg's 0 in 28 days).
+    let mut second: Vec<i64> = Vec::new();
+    for st in &from {
+        let k0 = key(id, &format!("from0:{}:{st}", u.name));
+        if !state.done.contains_key(&k0) {
+            if state
+                .done
+                .contains_key(&key(id, &format!("from0:{}", u.name)))
+            {
+                second.push(*st);
+            } else {
+                state.done.insert(k0, now);
+            }
+        }
+    }
+    state
+        .done
+        .entry(key(id, &format!("from0:{}", u.name)))
+        .or_insert(now);
+    let _ = hard_alone;
     let hard = match joint_days {
         None => true,
-        Some(days) => hard_alone && !even && days < JOINT_MAX_WAIT / DAY,
+        Some(days) => second.is_empty() && days < JOINT_MAX_WAIT / DAY,
     };
     let mut seen: Vec<String> = ways.iter().map(|w| w.3.clone()).collect();
     seen.sort();
@@ -3025,12 +3047,20 @@ fn assault_guarded(
             match (joint_days, hard) {
                 (None, _) => "HOLDS (never alone: no attack of the same war executes)".to_string(),
                 (Some(d), true) => format!(
-                    "HOLDS ({}; the joint attack of {} runs {d} of {} days)",
-                    if weak { "too weak at even odds" } else { "no assault at those odds across that ground" },
+                    "HOLDS (no second direction yet{}; the joint attack of {} runs {d} of {} days)",
+                    if weak { ", too weak alone" } else { "" },
                     joint.join(", "),
                     JOINT_MAX_WAIT / DAY
                 ),
-                (Some(_), false) => format!("ATTACKS together with {}", joint.join(", ")),
+                (Some(_), false) if !second.is_empty() => format!(
+                    "ATTACKS together with {} (a second direction from state(s) {second:?})",
+                    joint.join(", ")
+                ),
+                (Some(_), false) => format!(
+                    "ATTACKS together with {} (the joint attack has run {} days)",
+                    joint.join(", "),
+                    JOINT_MAX_WAIT / DAY
+                ),
             },
             targets,
             ways.len(),

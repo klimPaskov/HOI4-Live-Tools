@@ -3023,18 +3023,35 @@ fn a_guarded_wing_never_attacks_alone_and_never_waits_forever() {
     assert!(guarded(&mut state, 1, START));
     let note = state.op_notes["op_lux:guard:Nord"].clone();
     assert!(note.contains("never alone"), "{note}");
-    // the group's attack on Belgium executes: fifteen French stand there, 7 is under even odds
+    // the group's attack on Belgium executes: from its own border alone it still holds
     game.unit("Mitte", |r| r["plan_executing"] = json!(true));
-    assert!(guarded(&mut state, 15, START + DAY));
+    assert!(guarded(&mut state, 1, START + DAY));
     let note = state.op_notes["op_lux:guard:Nord"].clone();
-    assert!(note.contains("joint attack of Mitte"), "{note}");
-    // ten days of the joint attack: it attacks whatever stands there
-    assert!(!guarded(&mut state, 15, START + 11 * DAY));
-    // at even odds it attacks with the joint attack at once
+    assert!(
+        note.contains("joint attack of Mitte") && note.contains("no second direction"),
+        "{note}"
+    );
+    // three weeks of the joint attack: it attacks whatever stands there
+    assert!(!guarded(&mut state, 15, START + 23 * DAY));
+    // a second direction (the Belgian Ardennes taken): it attacks with the joint attack at once
     let mut fresh = State::default();
     fresh.op_owned.insert("Mitte".into(), "op_low".into());
-    assert!(!guarded(&mut fresh, 4, START));
-    assert!(fresh.op_notes["op_lux:guard:Nord"].contains("ATTACKS together with Mitte"));
+    assert!(guarded(&mut fresh, 4, START));
+    let roster = game.roster.borrow().clone();
+    let two = json!({"wars": {"enemies": ["LUX", "FRA"]}, "borders": [
+        {"neighbour_tag": "LUX", "neighbour_states": [8], "own_border_states": [42, 980],
+         "neighbour_divisions_in_border_states": 1, "hostile_divisions_in_border_states": 4}]});
+    assert!(!assert_guard(
+        &mut fresh,
+        &game,
+        &plan,
+        &op,
+        &u,
+        &roster,
+        &two,
+        START + DAY
+    ));
+    assert!(fresh.op_notes["op_lux:guard:Nord"].contains("second direction from state(s) [980]"));
     // armour is never held
     let mut panzer = u.clone();
     panzer.spear = true;
