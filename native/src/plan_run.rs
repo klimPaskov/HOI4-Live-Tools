@@ -637,6 +637,9 @@ pub struct State {
     act_seconds: Option<u64>,
     /// Whether the last `act` worked (None: no act since the caller reset it).
     last_ok: Option<bool>,
+    /// The `result` of the last act's reply (per-item outcomes of a batched order, e.g. the
+    /// wings of one air mission call and the ones that did not take); Null otherwise.
+    last_result: Value,
 
     boot: u64,
     bad: HashMap<String, GameHour>,
@@ -873,6 +876,7 @@ impl Default for State {
             wall: None,
             act_seconds: None,
             last_ok: None,
+            last_result: Value::Null,
             boot: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs()),
@@ -1379,6 +1383,7 @@ impl State {
             object.insert("lease_token".into(), json!(lease));
         }
         let began = std::time::Instant::now();
+        self.last_result = Value::Null;
         let result = self.dispatch(tools, name, &args);
         let lasted = self
             .act_seconds
@@ -1599,6 +1604,7 @@ impl State {
                 Ok((false, text))
             }
             Ok(body) => {
+                self.last_result = body["result"].clone();
                 let status = body["receipt"]["status"].as_str().unwrap_or("").to_string();
                 match status.as_str() {
                     "Verified" => Ok((true, status)),
@@ -1618,6 +1624,17 @@ impl State {
                                 heading_count(&body)
                             ),
                         ))
+                    }
+                    // an offensive the game drew to other states names them (the tool's
+                    // `missed`): the plan step does not send the same stroke again at once
+                    "Diverged" if body["receipt"]["detail"]["missed"].is_object() => {
+                        let to: Vec<String> = body["receipt"]["detail"]["missed"]["arrows"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .map(|a| a["target_states"].to_string())
+                            .collect();
+                        Ok((false, format!("Diverged: drawn to {}", to.join(" "))))
                     }
                     "NotApplied" | "Diverged" => Ok((false, status)),
                     _ => Err(Error::new(

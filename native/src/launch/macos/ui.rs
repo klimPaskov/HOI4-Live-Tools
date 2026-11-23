@@ -464,6 +464,7 @@ fn save_game_once(
     };
     let before = newest().map(|(t, _)| t);
     clear_notices(process, keys)?;
+    tidy_map(process, keys)?;
     // A menu flag already up before our own Escape is not trusted: with a view or an event open
     // the menu window read visible while the screen showed only the darkened map, and the Save
     // clicks fell through onto the map four to eight times (save probe, 22 Nov 2026). Close it
@@ -498,10 +499,17 @@ fn save_game_once(
     // and the next action then met a paused game behind a menu).
     let result = (|| -> Result<String> {
         let button = settled(process, "save button", |r, i| {
+            map_clear(r, i)?;
             let root = menu_root(r, i)?;
             let b = gui_tree::child(r, i, root, "menu_save_button")?
                 .ok_or_else(|| Error::new("gui_target_unavailable", "Save button not found"))?;
-            gui_tree::rect(r, i, b, (1920, 1080))
+            let rect = gui_tree::rect(r, i, b, (1920, 1080))?;
+            drawn_inside(
+                rect,
+                gui_tree::rect(r, i, root, (1920, 1080))?,
+                "Save button",
+            )?;
+            Ok(rect)
         })?;
         // These buttons are drawn by a text sprite whose width is the text texture's (864 px for
         // "Save Game"), so its centre lies outside the button: click near the left edge instead.
@@ -518,6 +526,17 @@ fn save_game_once(
         )
         .is_err()
         {
+            // The first click took nothing: click again only on a menu still drawn over a clear
+            // map; a closed menu means the click went through to the map (retry from the start).
+            read(process, |r, i| {
+                if !menu_open(r, i)? {
+                    return Err(Error::new(
+                        "invalid_gui",
+                        "The Save click went through to the map: the game menu closed",
+                    ));
+                }
+                map_clear(r, i)
+            })?;
             keys.click((1920, 1080), x, y)?;
             wait(
                 process,
@@ -526,12 +545,19 @@ fn save_game_once(
             )?;
         }
         let confirm = settled(process, "save confirm", |r, i| {
+            map_clear(r, i)?;
             let root =
                 save_root(r, i)?.ok_or_else(|| Error::new("invalid_gui", "Save window closed"))?;
             let b = gui_tree::child(r, i, root, "save")?.ok_or_else(|| {
                 Error::new("gui_target_unavailable", "Save confirm button not found")
             })?;
-            gui_tree::rect(r, i, b, (1920, 1080))
+            let rect = gui_tree::rect(r, i, b, (1920, 1080))?;
+            drawn_inside(
+                rect,
+                gui_tree::rect(r, i, root, (1920, 1080))?,
+                "Save confirm",
+            )?;
+            Ok(rect)
         })?;
         let (x, y) = near_left(confirm);
         keys.click((1920, 1080), x, y)?;
@@ -578,6 +604,57 @@ fn save_game_once(
     crate::phase::sleep(Duration::from_secs(3));
     close_menu(process, keys)?;
     Ok(serde_json::json!({"saved":written,"directory":saves.display().to_string()}))
+}
+/// Leave what the navy and air tools may leave over the map before the game menu opens: a
+/// strategic-region panel, the fleet panel and the naval map mode (the navy tools' own tidy-up),
+/// then the default map mode (F1; the air map mode too). With the North Sea region panel open in
+/// the naval map mode the Save clicks went through onto the map (w53a/saveprobe/paused3.jpg, 23
+/// Nov 2026: 14 of 27 save calls failed first time).
+fn tidy_map(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+    let _phase = crate::phase::enter("tidy");
+    if read(process, map_clear).is_err() {
+        super::navalact::release(process, keys);
+    }
+    keys.press_code(crate::platform::game_input::vk::F1)?;
+    crate::phase::sleep(Duration::from_millis(250));
+    read(process, map_clear)
+}
+/// The naval map mode and the region panel are both gone (read from the GUI).
+fn map_clear(r: &Reader<'_>, image: u64) -> Result<()> {
+    if super::navalui::navy_mode(r, image)? {
+        return Err(Error::new(
+            "invalid_gui",
+            "The naval map mode is on: the menu would be drawn over a live map",
+        ));
+    }
+    if let Some((name, _)) = super::navalui::region_view(r, image)? {
+        return Err(Error::new(
+            "invalid_gui",
+            format!("The region panel {name} is open over the map"),
+        ));
+    }
+    Ok(())
+}
+/// The button is drawn inside its window (a rectangle outside it is a stale layout, and a click
+/// there lands on whatever lies under the window).
+fn drawn_inside(button: gui_tree::Rect, window: gui_tree::Rect, what: &str) -> Result<()> {
+    let inside = button.w > 0
+        && button.h > 0
+        && button.x >= window.x - 2
+        && button.y >= window.y - 2
+        && button.y + button.h <= window.y + window.h + 2
+        && button.x < window.x + window.w;
+    if inside {
+        Ok(())
+    } else {
+        Err(Error::new(
+            "invalid_gui",
+            format!(
+                "{what} at {},{} {}x{} is not drawn inside its window at {},{} {}x{}",
+                button.x, button.y, button.w, button.h, window.x, window.y, window.w, window.h
+            ),
+        ))
+    }
 }
 /// Close the game menu if an earlier input left it open (Escape closes it).
 /// Game menus our input closed so far: the menu pauses the game and closing it leaves the game
@@ -999,6 +1076,46 @@ pub(super) fn settled<T: PartialEq>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_save_target_must_be_drawn_inside_its_window() {
+        let window = gui_tree::Rect {
+            x: 760,
+            y: 200,
+            w: 400,
+            h: 600,
+        };
+        // the Save Game text sprite is wider than the window (864 px): only its start counts
+        let button = gui_tree::Rect {
+            x: 790,
+            y: 400,
+            w: 864,
+            h: 40,
+        };
+        assert!(drawn_inside(button, window, "Save button").is_ok());
+        let off = gui_tree::Rect {
+            x: 100,
+            y: 400,
+            w: 300,
+            h: 40,
+        };
+        let e = drawn_inside(off, window, "Save button").unwrap_err();
+        assert_eq!(e.code, "invalid_gui");
+        assert!(save_retryable(&e));
+        let below = gui_tree::Rect {
+            x: 790,
+            y: 900,
+            w: 300,
+            h: 40,
+        };
+        assert!(drawn_inside(below, window, "Save button").is_err());
+        let empty = gui_tree::Rect {
+            x: 790,
+            y: 400,
+            w: 0,
+            h: 0,
+        };
+        assert!(drawn_inside(empty, window, "Save button").is_err());
+    }
     #[test]
     fn a_save_is_tried_again_only_when_the_sequence_wrote_nothing() {
         assert!(save_retryable(&Error::new(
