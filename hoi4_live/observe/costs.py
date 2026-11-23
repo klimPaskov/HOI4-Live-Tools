@@ -39,7 +39,7 @@ def prices():
     path = os.environ.get("MONITOR_PRICES")
     if path:
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 p.update(json.load(f))
         except (OSError, ValueError):
             pass
@@ -135,7 +135,7 @@ def _snapshots(run_dir):
     out = []
     for path in sorted(glob.glob(os.path.join(run_dir, "state", "*.json"))):
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 s = json.load(f)
         except (OSError, ValueError):
             continue
@@ -204,7 +204,7 @@ def measure(run_dir, monitor_dir=None):
                       and c["args"].get("request_id"))
     stats = {}
     try:
-        with open(os.path.join(monitor_dir, "monitor_stats.json")) as f:
+        with open(os.path.join(monitor_dir, "monitor_stats.json"), encoding="utf-8") as f:
             stats = json.load(f)
     except (OSError, ValueError):
         pass
@@ -279,7 +279,7 @@ def registered_tools(schema_path=None):
     here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     path = schema_path or os.path.join(here, "skills", "hoi4-campaign-playbook", "tools.schema.json")
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             d = json.load(f)
         t = d.get("tools") if isinstance(d, dict) else d
         return sorted(t) if isinstance(t, (dict, list)) else []

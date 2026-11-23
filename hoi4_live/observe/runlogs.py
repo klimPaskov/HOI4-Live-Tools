@@ -163,7 +163,7 @@ class RunLogs:
             if path in self.snap_seen:
                 continue
             try:
-                with open(path) as f:
+                with open(path, encoding="utf-8") as f:
                     snap = json.load(f)
             except (OSError, ValueError):
                 continue  # being written: next poll

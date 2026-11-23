@@ -181,7 +181,7 @@ class Escalator:
     def _ask(self, packet, issue):
         t0 = time.time()
         try:
-            p = subprocess.run(self.answer_cmd, shell=True, input=packet, capture_output=True, text=True,
+            p = subprocess.run(self.answer_cmd, shell=True, input=packet, capture_output=True, text=True, encoding="utf-8",
                                timeout=300)
             out = p.stdout
         except (OSError, subprocess.SubprocessError) as ex:

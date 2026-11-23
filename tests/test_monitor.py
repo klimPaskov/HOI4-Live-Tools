@@ -3,6 +3,7 @@ lessons and costs, over fixtures cut from real runs (tests/fixtures/monitor/).""
 import json
 import os
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -242,7 +243,7 @@ class MonitorTest(unittest.TestCase):
         it = det.issues["dockyards_unassigned"]
         assert it["acts"] == 1 and it["state"] == "acted"
         det.flush()
-        open_rows = json.load(open(tmp_path / "issues_open.json"))["issues"]
+        open_rows = json.load(open(tmp_path / "issues_open.json", encoding="utf-8"))["issues"]
         assert open_rows[0]["lane"] == "dockyards"
 
 
@@ -255,7 +256,7 @@ class MonitorTest(unittest.TestCase):
         esc.lessons.seed(SEED)
         rec = esc.consider("overdue", it, det.date, True)
         assert rec and rec["why"] == "a judgement between named alternatives"
-        packet = open(next((tmp_path / "escalations").glob(f"{it['id']}-*.md"))).read()
+        packet = open(next((tmp_path / "escalations").glob(f"{it['id']}-*.md")), encoding="utf-8").read()
         assert len(packet) <= MAX_PACKET_CHARS and rec["packet_tokens_est"] < 1300
         for part in ("ESCALATION", "WHAT:", "SINCE:", "ALLOWED RESPONSES", "NAMED ALTERNATIVES", "LESSON short_front"):
             assert part in packet, part
@@ -302,7 +303,9 @@ class MonitorTest(unittest.TestCase):
         _, it = overdue_issue(tmp_path)
         env = {"result": '{"kind":"leave","why":"the attack ends tomorrow"}',
                "usage": {"input_tokens": 900, "output_tokens": 30}, "total_cost_usd": 0.0002}
-        cmd = f"cat >/dev/null; printf '%s' '{json.dumps(env)}'"
+        script = tmp_path / "answer.py"
+        script.write_text("import sys\nsys.stdin.read()\nprint(%r)\n" % json.dumps(env))
+        cmd = f'"{sys.executable}" "{script}"'
         esc = Escalator(str(tmp_path), answer_cmd=cmd)
         rec = esc.consider("overdue", it, "1940.05.20.00", True)
         assert rec["answered"] and rec["answer"]["kind"] == "leave"
@@ -318,7 +321,7 @@ class MonitorTest(unittest.TestCase):
     # --- lessons -----------------------------------------------------------------------------------------
 
     def test_seeded_lessons_are_valid_and_general(self):
-        rows = json.load(open(SEED))
+        rows = json.load(open(SEED, encoding="utf-8"))
         assert len(rows) >= 30
         ids = [r["id"] for r in rows]
         assert len(ids) == len(set(ids))
@@ -362,7 +365,7 @@ class MonitorTest(unittest.TestCase):
         it2 = det.issues[it["key"]]
         assert it2["lesson"]["id"] == le["id"] and it2["lesson"]["treat_as"] == "transient"
         det.flush()
-        row = json.load(open(tmp_path / "issues_open.json"))["issues"][0]
+        row = json.load(open(tmp_path / "issues_open.json", encoding="utf-8"))["issues"][0]
         assert row["lesson"]["treat_as"] == "transient" and row["cause"] == "events_open"
         # confirmed again: its confidence rises
         det.action({"id": "plan-air-6", "action": order, "status": "Verified"})
@@ -424,11 +427,11 @@ class MonitorTest(unittest.TestCase):
         for name in ("issues.jsonl", "issues_open.json", "issues_counts.json", "ISSUES.md", "COSTS.md", "COVERAGE.md",
                      "GATE.md", "monitor_stats.json"):
             assert os.path.exists(os.path.join(out, name)), name
-        counts = json.load(open(os.path.join(out, "issues_counts.json")))
+        counts = json.load(open(os.path.join(out, "issues_counts.json"), encoding="utf-8"))
         assert "1940" in counts
-        gate = open(os.path.join(out, "GATE.md")).read()
+        gate = open(os.path.join(out, "GATE.md"), encoding="utf-8").read()
         assert len(gate) < 8000
-        cov = open(os.path.join(out, "COVERAGE.md")).read()
+        cov = open(os.path.join(out, "COVERAGE.md"), encoding="utf-8").read()
         assert "hoi4_save" in cov
 
 
