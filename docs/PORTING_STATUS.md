@@ -14,7 +14,7 @@ Game version: HOI4 1.19.4.1 on macOS and Linux. The tool catalogue has 189 `hoi4
 |---|---|---|---|
 | Tools in the build | all | all (the same modules) | all compiled and unit-tested; none reachable (no Windows game attachment or input yet) |
 | Compiles in CI | yes | yes (x86_64 and aarch64) | yes (the code compiled there) |
-| Memory layout for 1.19.4.1 | native (the canonical values) | generated table: 82 of 94 image keys, 527 of 617 field keys | vtables only, for Windows 1.19.5.0: 181 of 182 vtable keys by RTTI; no globals or fields |
+| Memory layout for 1.19.4.1 | native (the canonical values) | generated table: 82 of 94 image keys, 527 of 617 field keys | vtables only, for Windows 1.20.0.0 (and 1.19.5.0): 181 of 182 vtable keys by RTTI; no globals or fields |
 | Input | CGEvent | X11 XTEST | none in the native runtime |
 | Last proven live | continuously | 5 November 2026: 104 tools verified, 11 refusal-only, 8 not reached | native: never; the separate Python runtime: November 2026 on 1.19.4.2 |
 
@@ -87,14 +87,13 @@ Steps to finish, in order:
    vtable key the sources use (the `Class` tags, the `img()` vtables and the `*vtable*` values of
    the hand-written core layouts) to the PE by RTTI name: the Itanium typeinfo name of the macOS
    address point is rewritten in MSVC form and looked up through the complete object locators.
-   Against Windows 1.19.5.0 (`hoi4.exe` SHA-256 `709f916afbeb...01fce148`, the Steam build on the test
-   machine, one version past macOS 1.19.4.1) it maps 177 keys with high confidence (primary
-   vtable) and 4 with medium (secondary vtables matched by order), leaves one template
-   (`TNullObject<CBuildingTemplate>`) and lists 8 globals it cannot map
-   (`scripts/data/windows-1.19.5.0-vtables.json`, report beside it). RTTI names do not change
-   between versions, so these hold for 1.19.5.0 even though the keys come from 1.19.4.1; a
-   class whose fields changed in 1.19.5.0 still needs its fields checked live. The mapper
-   (`scripts/cross_platform_map.py`)
+   Windows 1.20.0.0 (`hoi4.exe` SHA-256 `1beb2a38fe2d...d2ac1b63a9f`, the current Steam build) and
+   1.19.5.0 (`709f916afbeb...01fce148`) give the same result: 177 keys with high confidence
+   (primary vtable), 4 with medium (secondary vtables matched by order), one template left
+   (`TNullObject<CBuildingTemplate>`) and 8 globals the mapper cannot map
+   (`scripts/data/windows-<version>-vtables.json`, report beside each). RTTI names do not change
+   between versions, so the vtables hold even though the keys come from macOS 1.19.4.1; a class
+   whose fields changed still needs its fields checked live. The mapper
    (`scripts/cross_platform_map.py`) reads Mach-O and ELF only. For a PE executable it can be
    extended for vtables (MSVC RTTI names translate from Itanium names) and for globals reached
    through matched functions, but MSVC code differs from clang code far more than gcc code does,
