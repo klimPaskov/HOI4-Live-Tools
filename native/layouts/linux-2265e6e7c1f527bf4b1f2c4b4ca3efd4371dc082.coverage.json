@@ -7636,6 +7636,12 @@
     "elf": "0x120",
     "how": "bracketed (extend, no binary)"
    }
+  },
+  "CCurrentGameState": {
+   "0x228": {
+    "elf": "0x260",
+    "how": "bracketed (extend, no binary)"
+   }
   }
  }
 }

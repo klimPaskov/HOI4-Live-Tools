@@ -5,7 +5,7 @@ platform, which of its tools exist, compile, have a memory layout for the curren
 and were last proven against the running game, and what is left to finish each port. It is kept
 current by hand; the check in `tests/test_xlayout_coverage.py` keeps the Linux layout list honest.
 
-Game version: HOI4 1.19.4.1 on macOS and Linux. The tool catalogue has 188 `hoi4_*` names (about
+Game version: HOI4 1.19.4.1 on macOS and Linux. The tool catalogue has 189 `hoi4_*` names (about
 181 player tools plus debug tools; `hoi4-live-native --list-tools` prints them).
 
 ## Summary
@@ -14,7 +14,7 @@ Game version: HOI4 1.19.4.1 on macOS and Linux. The tool catalogue has 188 `hoi4
 |---|---|---|---|
 | Tools in the build | all | all (the same modules) | the common read tools only; no game attachment |
 | Compiles in CI | yes | yes (x86_64 and aarch64) | yes (the code compiled there) |
-| Memory layout for 1.19.4.1 | native (the canonical values) | generated table: 82 of 94 image keys, 525 of 598 field keys | none |
+| Memory layout for 1.19.4.1 | native (the canonical values) | generated table: 82 of 94 image keys, 527 of 617 field keys | none |
 | Input | CGEvent | X11 XTEST | none in the native runtime |
 | Last proven live | continuously | 5 November 2026: 104 tools verified, 11 refusal-only, 8 not reached | native: never; the separate Python runtime: November 2026 on 1.19.4.2 |
 
@@ -35,10 +35,10 @@ What works:
   roots (+0x338 views, +0x330 pop-ups) measured on the Linux game.
 
 What is missing:
-- 38 tools were added after the Linux live check (army orders such as gather, detach, attack and
+- 39 tools were added after the Linux live check (battles, army orders such as gather, detach, attack and
   fallback, occupation and its laws, stockpile, war statistics, operations, railways, the learning
   tools, the executor and watcher). None has run on Linux.
-- 12 image keys and 73 field keys those tools use are not in the Linux table. They are listed by
+- 12 image keys and 90 field keys those tools use are not in the Linux table. They are listed by
   source file in `scripts/data/xlayout-unmapped-1.19.4.1.json`; the tools that need them refuse on
   Linux until they are mapped.
 - No screen recorder (the macOS recorder uses ScreenCaptureKit).
