@@ -84,7 +84,10 @@ fn operation_armies(state: &State, plan: &Value) -> BTreeMap<String, (u64, Strin
         {
             continue;
         }
-        let level = op["supply"]["motorization"].as_u64().unwrap_or(FULL).min(FULL);
+        let level = op["supply"]["motorization"]
+            .as_u64()
+            .unwrap_or(FULL)
+            .min(FULL);
         for f in list(op, "formations") {
             let army = text(&f["army"]);
             if !army.is_empty() {
@@ -115,8 +118,8 @@ pub(super) fn hub_wants(
         let Some(level) = a["motorization"].as_u64() else {
             continue;
         };
-        let attacking = a["plan_executing"] == json!(true)
-            || a["battle_plan_orders"].as_u64().unwrap_or(0) > 0;
+        let attacking =
+            a["plan_executing"] == json!(true) || a["battle_plan_orders"].as_u64().unwrap_or(0) > 0;
         let (mean, states) = supplies
             .get(&army)
             .cloned()
@@ -244,12 +247,7 @@ fn hubs_step(
             json!({"army": w.army, "level": w.wanted}),
             "lg",
         )?;
-        state.skip(
-            now,
-            "logi-army",
-            &w.army,
-            if ok { 7 * DAY } else { DAY },
-        );
+        state.skip(now, "logi-army", &w.army, if ok { 7 * DAY } else { DAY });
         stock -= w.trucks;
         if !short.is_empty() {
             super::plan_manage::note(state, "logistics", short.join("; "));
@@ -260,7 +258,11 @@ fn hubs_step(
         )));
     }
     if !short.is_empty() {
-        super::plan_manage::note(state, "logistics", format!("trucks short: {}", short.join("; ")));
+        super::plan_manage::note(
+            state,
+            "logistics",
+            format!("trucks short: {}", short.join("; ")),
+        );
     }
     Ok(None)
 }
@@ -296,7 +298,9 @@ mod tests {
     impl Tools for Fake {
         fn call(&self, name: &str, args: &Value) -> Result<Value> {
             if args.get("request_id").is_some() {
-                self.sent.borrow_mut().push((name.to_string(), args.clone()));
+                self.sent
+                    .borrow_mut()
+                    .push((name.to_string(), args.clone()));
                 return Ok(json!({"receipt": {"status": "Verified"}}));
             }
             Ok(self.replies.get(name).cloned().unwrap_or(json!({})))
@@ -351,25 +355,43 @@ mod tests {
         let plan = json!({"logistics": {"hubs": true}, "war": {"supply_floor": 50}});
         let fake = Fake {
             replies: BTreeMap::from([
-                ("hoi4_armies", json!({"armies": [{"army": "Sud", "motorization": 0}]})),
+                (
+                    "hoi4_armies",
+                    json!({"armies": [{"army": "Sud", "motorization": 0}]}),
+                ),
                 ("hoi4_supply", supply()),
-                ("hoi4_stockpile", json!({"equipment": [
-                    {"archetype": "motorized_equipment", "stockpile": 20.0}]})),
+                (
+                    "hoi4_stockpile",
+                    json!({"equipment": [
+                    {"archetype": "motorized_equipment", "stockpile": 20.0}]}),
+                ),
             ]),
             sent: RefCell::new(Vec::new()),
         };
         let mut state = State::default();
-        assert_eq!(hubs_step(&mut state, &fake, &plan, "l", START).unwrap(), None);
+        assert_eq!(
+            hubs_step(&mut state, &fake, &plan, "l", START).unwrap(),
+            None
+        );
         assert!(fake.sent.borrow().is_empty());
         let note = super::super::plan_manage::digest(&state).unwrap()["logistics"].to_string();
-        assert!(note.contains("needs about 60 trucks, 20 in stock"), "{note}");
+        assert!(
+            note.contains("needs about 60 trucks, 20 in stock"),
+            "{note}"
+        );
         // with the trucks in stock the hub is motorised
         let fake = Fake {
             replies: BTreeMap::from([
-                ("hoi4_armies", json!({"armies": [{"army": "Sud", "motorization": 0}]})),
+                (
+                    "hoi4_armies",
+                    json!({"armies": [{"army": "Sud", "motorization": 0}]}),
+                ),
                 ("hoi4_supply", supply()),
-                ("hoi4_stockpile", json!({"equipment": [
-                    {"archetype": "motorized_equipment", "stockpile": 300.0}]})),
+                (
+                    "hoi4_stockpile",
+                    json!({"equipment": [
+                    {"archetype": "motorized_equipment", "stockpile": 300.0}]}),
+                ),
             ]),
             sent: RefCell::new(Vec::new()),
         };
@@ -384,17 +406,20 @@ mod tests {
 
     #[test]
     fn a_train_line_opens_when_nothing_makes_trains_and_only_with_the_key() {
-        let stock = |lines: u64| {
-            json!({"equipment": [{"archetype": "train_equipment", "stockpile": 71.0, "lines": lines}]})
-        };
+        let stock = |lines: u64| json!({"equipment": [{"archetype": "train_equipment", "stockpile": 71.0, "lines": lines}]});
         let fake = Fake {
             replies: BTreeMap::from([("hoi4_stockpile", stock(0))]),
             sent: RefCell::new(Vec::new()),
         };
         let mut state = State::default();
-        assert_eq!(logistics_step(&mut state, &fake, &json!({}), "l", START).unwrap(), None);
+        assert_eq!(
+            logistics_step(&mut state, &fake, &json!({}), "l", START).unwrap(),
+            None
+        );
         let plan = json!({"logistics": {"trains": {"factories": 1}}});
-        let line = logistics_step(&mut state, &fake, &plan, "l", START).unwrap().unwrap();
+        let line = logistics_step(&mut state, &fake, &plan, "l", START)
+            .unwrap()
+            .unwrap();
         assert!(line.contains("train line with 1 factories"), "{line}");
         assert_eq!(fake.sent.borrow()[0].1["equipment"], "train_equipment");
         // a line already makes trains: nothing
@@ -403,7 +428,10 @@ mod tests {
             sent: RefCell::new(Vec::new()),
         };
         let mut state = State::default();
-        assert_eq!(logistics_step(&mut state, &fake, &plan, "l", START).unwrap(), None);
+        assert_eq!(
+            logistics_step(&mut state, &fake, &plan, "l", START).unwrap(),
+            None
+        );
         assert!(fake.sent.borrow().is_empty());
     }
 }

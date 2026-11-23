@@ -245,7 +245,9 @@ pub(super) fn trains_no_line(read: &Value) -> Option<String> {
     let row = list(read, "equipment")
         .into_iter()
         .find(|r| text(&r["archetype"]) == "train_equipment")?;
-    if row["lines"].as_u64().unwrap_or(0) > 0 || row["produced_per_day"].as_f64().unwrap_or(0.0) > 0.0 {
+    if row["lines"].as_u64().unwrap_or(0) > 0
+        || row["produced_per_day"].as_f64().unwrap_or(0.0) > 0.0
+    {
         return None;
     }
     let stock = row["stockpile"].as_f64().unwrap_or(0.0);
@@ -609,9 +611,13 @@ mod tests {
 
     #[test]
     fn a_missing_train_line_and_a_starving_army_on_low_trucks_are_named() {
-        let read = |lines: u64| json!({"equipment": [{"archetype": "train_equipment",
-            "stockpile": 71.0, "lines": lines, "produced_per_day": 0.0}]});
-        assert!(trains_no_line(&read(0)).unwrap().contains("71 trains in stock"));
+        let read = |lines: u64| {
+            json!({"equipment": [{"archetype": "train_equipment",
+            "stockpile": 71.0, "lines": lines, "produced_per_day": 0.0}]})
+        };
+        assert!(trains_no_line(&read(0))
+            .unwrap()
+            .contains("71 trains in stock"));
         assert_eq!(trains_no_line(&read(1)), None);
         let roster = json!({"armies": [{"army": "A", "motorization": 1},
             {"army": "B", "motorization": 2}, {"army": "C", "motorization": 0}]});
@@ -620,7 +626,9 @@ mod tests {
             {"army": "C", "supply_percent": 90.0}]});
         let low = hubs_low(&roster, &supply, 50.0);
         assert_eq!(low.len(), 1);
-        assert!(low[0].1.contains("A: supply 40% below 50% with hub motorization 1 of 2"));
+        assert!(low[0]
+            .1
+            .contains("A: supply 40% below 50% with hub motorization 1 of 2"));
     }
 
     #[test]
