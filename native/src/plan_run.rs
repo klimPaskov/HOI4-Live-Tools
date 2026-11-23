@@ -9841,7 +9841,7 @@ fn decisions_step(
             text(&d["decision"]) == key
                 && ready(d)
                 && target.as_ref().is_none_or(|t| {
-                    names(*d, &t.to_lowercase()) || name.is_some_and(|n| names(*d, n))
+                    names(d, &t.to_lowercase()) || name.is_some_and(|n| names(d, n))
                 })
         };
         let rows = list(&offered, "decisions");
