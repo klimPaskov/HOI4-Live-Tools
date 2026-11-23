@@ -95,5 +95,18 @@ class VariantTest(unittest.TestCase):
         self.assertEqual(report['summary']['sites']['disabled'], 1)
 
 
+class CommittedMapTest(unittest.TestCase):
+    def test_every_macos_literal_of_the_sources_maps_to_1_20(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        m = json.loads((root / 'native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json').read_text())
+        _, sites, problems = V.plan(root / 'native', m)
+        self.assertEqual(problems, [], 'a macOS game address in native/src has no 1.20 entry in '
+                         'native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json: find it with scripts/macos_resolve.py '
+                         'and add it (docs/GAME_VERSIONS.md, "Adding a macOS game address")')
+        self.assertEqual(m['to']['build_id'], 'ED135FE5-CDA8-38E8-8835-3F7381B79974')
+        self.assertGreater(sum(s['kind'] == 'image' for s in sites), 600)
+        self.assertEqual(sum(s['kind'] == 'identity' for s in sites) >= 3, True)
+
+
 if __name__ == '__main__':
     unittest.main()
