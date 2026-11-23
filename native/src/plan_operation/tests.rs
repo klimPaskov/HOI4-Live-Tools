@@ -1226,7 +1226,7 @@ fn the_groups_front_and_offensive_are_drawn_before_any_assembly_or_march() {
 
 #[test]
 fn a_ready_operation_awaits_its_war_until_it_executes() {
-    let plan = json!({"operations": [{"id": "op_x", "enemies": ["POL"]}]});
+    let plan = json!({"operations": [{"id": "op_x", "enemies": ["POL", "LIT"]}]});
     let mut state = State::default();
     state.done.insert(key("op_x", "prep"), 0);
     assert!(!awaiting_war(&state), "still preparing");
@@ -1235,8 +1235,13 @@ fn a_ready_operation_awaits_its_war_until_it_executes() {
     assert!(awaiting_war_on(&state, &plan, "POL"));
     assert!(!awaiting_war_on(&state, &plan, "FRA"));
     state.done.insert(key("op_x", "exec"), 20);
+    state.done.insert(key("op_x", "fought:POL"), 20);
     assert!(!awaiting_war(&state), "executing");
     assert!(!awaiting_war_on(&state, &plan, "POL"));
+    // the operation's later enemy, not fought yet, still waits for its declaration
+    assert!(awaiting_war_on(&state, &plan, "LIT"));
+    state.done.insert(key("op_x", "end"), 30);
+    assert!(!awaiting_war_on(&state, &plan, "LIT"));
 }
 
 #[test]

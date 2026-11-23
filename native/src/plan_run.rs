@@ -1796,7 +1796,11 @@ fn lanes_tick(
     // A prepared operation waits for its war: the declaration goes first in every tick it is
     // due, ahead of any lane (rs1-rs6, 19 Nov 2026: the prepare read back by 30 August and the
     // declaration came on 7-9 September behind air batches and economy ticks).
-    if war_first && plan_operation::awaiting_war(state) {
+    if war_first
+        && (plan_operation::awaiting_war(state)
+            || (plan_operation::executing_any(state)
+                && plan_affairs::declaration_near(state, tools, plan, now, 0)))
+    {
         if let Some(line) = declare_first(state, tools, plan, lease, now)? {
             state.round.war_last = true;
             return Ok(Tick::Acted(line));

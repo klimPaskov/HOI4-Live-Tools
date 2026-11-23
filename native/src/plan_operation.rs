@@ -1454,10 +1454,18 @@ pub(super) fn awaiting_war(state: &State) -> bool {
 pub(super) fn awaiting_war_on(state: &State, plan: &Value, target: &str) -> bool {
     list(plan, "operations").iter().enumerate().any(|(i, op)| {
         let id = op_id(op, i);
+        let prepared = (state.done.contains_key(&key(&id, "ready"))
+            || state.done.contains_key(&key(&id, "primed")))
+            && !state.done.contains_key(&key(&id, "exec"));
+        // an executing operation whose later enemy is not fought yet waits for that war too
+        // (w42w1, 23 Nov 2026: Belgium went out 7 days after Holland fell and Luxembourg 9 days
+        // after Belgium, behind the economy lanes)
+        let later = state.done.contains_key(&key(&id, "exec"))
+            && !state
+                .done
+                .contains_key(&key(&id, &format!("fought:{target}")));
         strings(op, "enemies").iter().any(|e| e == target)
-            && (state.done.contains_key(&key(&id, "ready"))
-                || state.done.contains_key(&key(&id, "primed")))
-            && !state.done.contains_key(&key(&id, "exec"))
+            && (prepared || later)
             && !state.done.contains_key(&key(&id, "end"))
     })
 }
