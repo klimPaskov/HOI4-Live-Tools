@@ -720,6 +720,9 @@ struct Sched {
     /// The war-first block (or the idle research/focus pass) already ran in this tick, so the
     /// construction domain leaves the triggered build order to it.
     war_ran: bool,
+    /// Open omissions the executor could act on at the last alert read (rows without a written
+    /// reason to wait): the speed rule never waits at speed 4 over one.
+    omissions: usize,
 }
 
 /// What the research and focus stages saw this tick (the digest lines).
@@ -1782,6 +1785,22 @@ fn lanes_tick(
     lease: &str,
     now: GameHour,
 ) -> Result<Tick> {
+    // the management load (plan_speed.rs): the real seconds each action took, by game hour
+    let started = std::time::Instant::now();
+    let out = lanes_tick_inner(state, tools, plan, lease, now)?;
+    if matches!(out, Tick::Acted(_)) {
+        state.round.cost(now, started.elapsed().as_secs_f64());
+    }
+    Ok(out)
+}
+
+fn lanes_tick_inner(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Tick> {
     let war_on = plan["war"].is_object() && plan["war"]["enabled"] != json!(false);
     let war_first = war_on && plan["war"]["first"] != json!(false);
     state.sched.war_ran = war_first;
@@ -1817,7 +1836,7 @@ fn lanes_tick(
                 && plan_affairs::declaration_near(state, tools, plan, now, 0)))
     {
         if let Some(line) = declare_first(state, tools, plan, lease, now)? {
-            state.round.war_last = true;
+            state.round.war_acted(now);
             return Ok(Tick::Acted(line));
         }
     }
@@ -1827,14 +1846,21 @@ fn lanes_tick(
     let declaring = war_first
         && plan_operation::awaiting_war(state)
         && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD);
+    // The war's share is bounded (w46e1/f1, 23 Nov 2026: with an operation preparing or executing
+    // the war lane took every tick, so 4-7 military factories and 2 research slots sat idle and
+    // the speed rule never read for the whole war): at most WAR_SHARE war ticks in a row, and the
+    // lanes get a tick at the latest LANE_MAX_WAIT game hours after their last one. A lane tick
+    // that finds nothing hands the tick back to the war (below), so the share costs the war
+    // nothing when the economy is quiet.
     let war_turn = war_first
-        && (!state.round.war_last
-            || op_war
-            || declaring
-            || plan["scheduler"]["war_every_tick"] == json!(true));
+        && (declaring
+            || (!state.round.lanes_owed(now)
+                && (!state.round.war_last
+                    || op_war
+                    || plan["scheduler"]["war_every_tick"] == json!(true))));
     if war_turn {
         if let Some(line) = war_lane(state, tools, plan, lease, now)? {
-            state.round.war_last = true;
+            state.round.war_acted(now);
             return Ok(Tick::Acted(line));
         }
     }
@@ -1849,6 +1875,7 @@ fn lanes_tick(
         return Ok(Tick::Nothing);
     }
     state.round.war_last = false;
+    state.round.lanes_turn(now);
     // A free research slot and a free focus are checked every tick (cheap reads, each lost day
     // is a day of the slot): a pass of slow GUI orders left the focus idle for 14 game days
     // (g17j 1936.4). They act before the pass resumes.
@@ -1856,6 +1883,7 @@ fn lanes_tick(
         state.last_ok = None;
         if let Some(line) = step(state, tools, plan, lease, now)? {
             state.sched.turns.insert(name, now);
+            state.round.lane_acted(name, now);
             return Ok(Tick::Acted(line));
         }
     }
@@ -1879,7 +1907,12 @@ fn lanes_tick(
         // (an operation active at war or preparing counted too), the design companies were never
         // assigned or given a trait and no network was built from September 1939 on (g17n,
         // g17o, 23 Nov 2026: Germany is at war with Britain from the Polish war to the end).
-        if lane_waits_for_attack(name, plan_operation::executing_any(state)) {
+        if lane_waits_for_attack(
+            name,
+            plan_operation::executing_any(state),
+            state.sched.turns.get(name).copied(),
+            now,
+        ) {
             continue;
         }
         // the air lanes wait while a prepared operation's declaration is near (see
@@ -1891,13 +1924,14 @@ fn lanes_tick(
         state.last_ok = None;
         if let Some(line) = step(state, tools, plan, lease, now)? {
             state.round.acted.push(name);
+            state.round.lane_acted(name, now);
             return Ok(Tick::Acted(line));
         }
     }
     // every lane is quiet: the war takes the turn it left to them
     if war_first && !war_turn {
         if let Some(line) = war_lane(state, tools, plan, lease, now)? {
-            state.round.war_last = true;
+            state.round.war_acted(now);
             return Ok(Tick::Acted(line));
         }
     }
@@ -2584,13 +2618,159 @@ fn lane_of(list: &[Lane], name: &str) -> Lane {
 /// The lanes checked every tick ahead of the pass (see `lanes_tick`).
 const FAST_LANES: [Lane; 2] = [("research", research_lane), ("focus", focus_lane)];
 /// Lanes that wait while an operation executes: slow GUI listings (a design-company trait read
-/// took 54 s of a war's input in pb1) whose work keeps until the war is won.
+/// took 54 s of a war's input in pb1), but never for the whole attack.
 const WAR_DEFERRED_LANES: [&str; 4] = ["mio_lines", "mio", "mio_traits", "intelligence"];
+/// The longest a WAR_DEFERRED_LANES lane waits for an executing attack: then it gets its turn
+/// (an operation executes for months; an unassigned design company loses its trait days).
+const DEFERRED_MAX_WAIT: GameHour = 5 * DAY;
+/// At most this many war-lane ticks in a row while a war or an operation runs (see `lanes_tick`).
+const WAR_SHARE: u32 = 3;
+/// The lanes get a tick at the latest this many game hours after their last one, whatever the war
+/// has to do.
+const LANE_MAX_WAIT: GameHour = DAY;
+
+/// How heavy a lane's action is for the speed rule (plan_speed.rs). MINOR: one to three clicks,
+/// none decides a battle within hours, so speed 4 loses nothing (owner, 23 Nov 2026: "4 speed is
+/// not only when there is nothing to do, but only like minor actions, like choosing a focus,
+/// choosin a research, spending pp, etc"). HEAVY: many inputs or reads, or orders whose timing
+/// matters within a day: speed 3 from its first action until it has been quiet for a while.
+/// A lane not listed is heavy. (lane, minor, why)
+pub(super) const LANE_WEIGHT: [(&str, bool, &str); 47] = [
+    ("research", true, "one pick in the research view"),
+    ("focus", true, "one pick in the focus tree"),
+    ("politics", true, "a law, advisor or idea: one pick"),
+    ("officer_corps", true, "one officer-corps pick"),
+    ("decisions", true, "one decision: one click"),
+    ("extras", true, "a doctrine or a special project: one pick"),
+    ("mio", true, "a design company assigned: one pick"),
+    ("mio_traits", true, "a design company trait: one pick"),
+    (
+        "intelligence",
+        true,
+        "an agency upgrade or operative: one pick",
+    ),
+    ("country", true, "a country-wide setting: one click"),
+    ("occupation", true, "an occupation law: one pick"),
+    ("import_budget", true, "a trade budget setting: one click"),
+    ("fuel", true, "a fuel setting: one click"),
+    ("manage", true, "the alert and ledger reads: no input"),
+    ("diplomacy", true, "one diplomatic action"),
+    ("faction", true, "one faction action"),
+    ("call_allies", true, "one call to arms"),
+    (
+        "incoming",
+        true,
+        "an answer to an incoming request: one click",
+    ),
+    ("decommission", true, "one ship decommissioned"),
+    ("seams", true, "a step waiting for its tool: nothing sent"),
+    (
+        "hold",
+        false,
+        "holding fronts: army orders, timing matters at war",
+    ),
+    (
+        "production",
+        false,
+        "production lines: several inputs per line",
+    ),
+    ("stockpile", false, "production rework for the stockpile"),
+    ("balance", false, "production rebalanced: many lines"),
+    ("naval_queue", false, "the naval queue: several inputs"),
+    ("dockyards", false, "dockyards assigned: several inputs"),
+    ("convoys", false, "convoy production: several inputs"),
+    (
+        "construction",
+        false,
+        "construction queue: a state, a building, a count each",
+    ),
+    ("trade", false, "trade deals: list reads and several clicks"),
+    (
+        "resources",
+        false,
+        "resource trade: list reads and several clicks",
+    ),
+    ("designs", false, "the designer: many inputs"),
+    (
+        "line_designs",
+        false,
+        "production lines switched to new designs",
+    ),
+    (
+        "mio_lines",
+        false,
+        "design companies matched to production lines",
+    ),
+    ("training", false, "training queues: several inputs"),
+    ("templates", false, "the division designer: many inputs"),
+    (
+        "template_cleanup",
+        false,
+        "templates removed: designer inputs",
+    ),
+    (
+        "air_plan",
+        false,
+        "air wings based and given missions: many orders",
+    ),
+    (
+        "air_reserve",
+        false,
+        "new air wings founded: several orders",
+    ),
+    (
+        "air_idle",
+        false,
+        "idle wings given missions: several orders",
+    ),
+    (
+        "overdrawn",
+        false,
+        "equipment overdraw answered: several reads and orders",
+    ),
+    (
+        "equipment",
+        false,
+        "equipment upgrades and lines: several orders",
+    ),
+    ("command", false, "army layout: merges, generals, groups"),
+    ("armies", false, "armies created and assigned: many inputs"),
+    ("war", false, "fronts, offensives, plans: the war's orders"),
+    (
+        "ship",
+        false,
+        "sea transfers: several orders, timing matters",
+    ),
+    (
+        "disband",
+        false,
+        "divisions disbanded: list reads and orders",
+    ),
+    ("army_groups", false, "army groups formed: several orders"),
+];
+
+/// How long the actions' costs are kept for the management load (game hours).
+const LOAD_KEEP: GameHour = 60 * DAY;
+
+/// Whether lane `name` is minor (see LANE_WEIGHT); pure.
+pub(super) fn lane_minor(name: &str) -> bool {
+    LANE_WEIGHT
+        .iter()
+        .find(|(n, _, _)| *n == name)
+        .is_some_and(|(_, minor, _)| *minor)
+}
 
 /// Whether a lane waits this pass: a WAR_DEFERRED_LANES lane waits only while an operation's
-/// attack executes, never for a war or a prepare as such; pure.
-fn lane_waits_for_attack(name: &str, executing: bool) -> bool {
-    executing && WAR_DEFERRED_LANES.contains(&name)
+/// attack executes, and at most DEFERRED_MAX_WAIT after its last turn (`last`); pure.
+fn lane_waits_for_attack(
+    name: &str,
+    executing: bool,
+    last: Option<GameHour>,
+    now: GameHour,
+) -> bool {
+    executing
+        && WAR_DEFERRED_LANES.contains(&name)
+        && last.is_some_and(|at| now.saturating_sub(at) < DEFERRED_MAX_WAIT)
 }
 
 fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
@@ -2706,6 +2886,17 @@ struct Round {
     acted: Vec<&'static str>,
     /// The war-first block acted in the last tick: this tick belongs to a lane.
     war_last: bool,
+    /// War-lane ticks since the lanes last had one (see WAR_SHARE).
+    war_streak: u32,
+    /// The game hour the lanes last had a tick (None: not yet in this run).
+    lanes_at: Option<GameHour>,
+    /// The game hour a lane or the war last acted (the speed rule's empty stretch).
+    acted_at: Option<GameHour>,
+    /// The game days (hours / 24) a HEAVY lane (LANE_WEIGHT) or the war acted, the last few
+    /// weeks (the speed rule's 3).
+    heavy_days: Vec<GameHour>,
+    /// (game hour, real seconds) of every action, the last LOAD_KEEP (the management load).
+    costs: Vec<(GameHour, f64)>,
     /// The game hour the pass began.
     began: GameHour,
     /// The last finished pass that acted: lanes and game hours (the digest's `pass`).
@@ -2713,6 +2904,64 @@ struct Round {
 }
 
 impl Round {
+    /// The war lane acted this tick.
+    fn war_acted(&mut self, now: GameHour) {
+        self.war_last = true;
+        self.acted_at = Some(now);
+        self.heavy_day(now);
+        self.war_streak += 1;
+        self.lanes_at.get_or_insert(now);
+    }
+
+    /// Lane `name` acted (its weight for the speed rule).
+    fn lane_acted(&mut self, name: &str, now: GameHour) {
+        self.acted_at = Some(now);
+        if !lane_minor(name) {
+            self.heavy_day(now);
+        }
+    }
+
+    /// An action took `secs` real seconds at game hour `now` (the last LOAD_KEEP are kept).
+    fn cost(&mut self, now: GameHour, secs: f64) {
+        self.costs.push((now, secs));
+        self.costs.retain(|(at, _)| now - at <= LOAD_KEEP);
+    }
+
+    /// Real seconds of executor work per game day over the last `window` game hours; pure.
+    fn load(&self, now: GameHour, window: GameHour) -> f64 {
+        let sum: f64 = self
+            .costs
+            .iter()
+            .filter(|(at, _)| now - at < window)
+            .map(|(_, s)| s)
+            .sum();
+        sum / (window as f64 / DAY as f64)
+    }
+
+    /// A heavy action today (the last 30 days are kept).
+    fn heavy_day(&mut self, now: GameHour) {
+        let day = now / DAY;
+        if self.heavy_days.last() != Some(&day) {
+            self.heavy_days.push(day);
+        }
+        self.heavy_days.retain(|d| day - d <= 30);
+    }
+
+    /// The lanes have this tick.
+    fn lanes_turn(&mut self, now: GameHour) {
+        self.war_streak = 0;
+        self.lanes_at = Some(now);
+    }
+
+    /// The war has had its share: this tick belongs to the lanes (WAR_SHARE war ticks in a row, or
+    /// LANE_MAX_WAIT game hours since the lanes' last tick); pure.
+    fn lanes_owed(&self, now: GameHour) -> bool {
+        self.war_streak >= WAR_SHARE
+            || self
+                .lanes_at
+                .is_some_and(|at| now.saturating_sub(at) >= LANE_MAX_WAIT)
+    }
+
     /// Close the pass: Some lane acted in it (true) or it was quiet.
     fn end_pass(&mut self, now: GameHour) -> bool {
         self.cursor = 0;
@@ -10283,11 +10532,87 @@ mod tests {
     #[test]
     fn design_companies_and_the_agency_wait_only_while_an_attack_executes() {
         for lane in ["mio_lines", "mio", "mio_traits", "intelligence"] {
-            assert!(super::lane_waits_for_attack(lane, true));
+            assert!(super::lane_waits_for_attack(lane, true, Some(0), DAY));
             // at war, an operation preparing or holding: they run (g17n/g17o never ran them)
-            assert!(!super::lane_waits_for_attack(lane, false));
+            assert!(!super::lane_waits_for_attack(lane, false, Some(0), DAY));
+            // never for the whole attack: after DEFERRED_MAX_WAIT (and on their first turn)
+            assert!(!super::lane_waits_for_attack(
+                lane,
+                true,
+                Some(0),
+                super::DEFERRED_MAX_WAIT
+            ));
+            assert!(!super::lane_waits_for_attack(lane, true, None, DAY));
         }
-        assert!(!super::lane_waits_for_attack("politics", true));
+        assert!(!super::lane_waits_for_attack(
+            "politics",
+            true,
+            Some(0),
+            DAY
+        ));
+    }
+
+    #[test]
+    fn every_lane_has_a_weight_and_the_one_click_picks_are_minor() {
+        let plan = json!({"war": {"enemies": ["FRA"]}, "training": {}, "disband": {}});
+        let mut names: Vec<&str> = super::lanes(&plan, false).iter().map(|l| l.0).collect();
+        names.extend(super::FAST_LANES.iter().map(|l| l.0));
+        names.extend(super::plan_military::LANES.iter().map(|l| l.0));
+        for n in &names {
+            assert!(
+                super::LANE_WEIGHT.iter().any(|(w, _, _)| w == n)
+                    || super::plan_military::LANES.iter().any(|l| l.0 == *n),
+                "lane {n} has no weight"
+            );
+        }
+        for minor in [
+            "research",
+            "focus",
+            "politics",
+            "decisions",
+            "officer_corps",
+            "mio_traits",
+        ] {
+            assert!(super::lane_minor(minor), "{minor}");
+        }
+        for heavy in [
+            "production",
+            "construction",
+            "templates",
+            "air_plan",
+            "command",
+            "war",
+            "unknown",
+        ] {
+            assert!(!super::lane_minor(heavy), "{heavy}");
+        }
+    }
+
+    #[test]
+    fn the_war_share_is_bounded_and_the_lanes_never_wait_a_day() {
+        // the war lane always has an order (an operation executing for 60 days); a war order
+        // costs 2 game hours: the lanes get every (WAR_SHARE + 1)th tick and never wait a day
+        let mut round = super::Round::default();
+        let (mut now, mut war, mut lanes, mut gap, mut last) = (0, 0, 0, 0, 0);
+        while now < 60 * DAY {
+            if round.lanes_owed(now) {
+                round.lanes_turn(now);
+                lanes += 1;
+                gap = gap.max(now - last);
+                last = now;
+            } else {
+                round.war_acted(now);
+                war += 1;
+            }
+            now += 2;
+        }
+        assert!(gap < DAY, "{gap}");
+        assert!(war >= 3 * lanes - 3, "{war} {lanes}");
+        // a lane-free hour: the lanes are owed after a day even inside the share
+        let mut round = super::Round::default();
+        round.war_acted(0);
+        assert!(!round.lanes_owed(DAY - 1));
+        assert!(round.lanes_owed(DAY));
     }
 
     #[test]
@@ -13147,6 +13472,30 @@ mod tests {
         // the war takes the first tick, the idle slot the second (no game hour passes)
         tick(&mut state, &lab, &plan, "l", START).unwrap();
         tick(&mut state, &lab, &plan, "l", START).unwrap();
+        let calls = lab.0.calls.borrow();
+        assert!(
+            calls.iter().any(|(n, _)| n == "hoi4_research_start"),
+            "{calls:?}"
+        );
+    }
+
+    #[test]
+    fn an_idle_research_slot_is_filled_while_an_operation_executes() {
+        // w46e1 (23 Nov 2026): two research slots idle for a whole executing operation
+        let lab = IdleLab(War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        });
+        let mut state = State::default();
+        state.done.insert("op:o:prep".into(), START - 10 * DAY);
+        state.done.insert("op:o:ready".into(), START - 5 * DAY);
+        state.done.insert("op:o:exec".into(), START - DAY);
+        let mut plan = war_plan();
+        plan["research_priority"] = json!(["tech_a"]);
+        for i in 0..(super::WAR_SHARE as i64 + 1) {
+            tick(&mut state, &lab, &plan, "l", START + i).unwrap();
+        }
         let calls = lab.0.calls.borrow();
         assert!(
             calls.iter().any(|(n, _)| n == "hoi4_research_start"),

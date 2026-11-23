@@ -2826,6 +2826,9 @@ const ASSAULT_HARD: f64 = -0.4;
 /// A wing attacks alone only with this many divisions for each enemy division standing in the
 /// target's border states.
 const ASSAULT_SUPERIORITY: i64 = 2;
+/// The longest a guarded wing waits once an attack of its war executes beside it: then it
+/// attacks with it whatever stands there (never held forever).
+const JOINT_MAX_WAIT: GameHour = 10 * DAY;
 /// Attack penalty counted per level of a fort in the province's history (about the defence a
 /// land fort level gives).
 const FORT_STEP: f64 = -0.15;
@@ -2974,7 +2977,43 @@ fn assault_guarded(
         .and_then(|r| r["division_count"].as_i64())
         .unwrap_or(0);
     let weak = theirs.is_some_and(|t| t > 0 && ours < ASSAULT_SUPERIORITY * t);
-    let hard = best.2 <= ASSAULT_HARD || weak;
+    let hard_alone = best.2 <= ASSAULT_HARD || weak;
+    // NEVER ALONE, NEVER FOREVER (w46c1: the wing assaulted alone and bled 26.2k:0.5k; w46e1/f1:
+    // the guard held it all war and Luxembourg was never attacked). The wing attacks together
+    // with an attack of the same war (an army of an operation of the same `war` executes: the
+    // group's or the armour's attack on the neighbours): at once when the ground and the odds
+    // allow, at even odds when they do not, and after JOINT_MAX_WAIT of the joint attack
+    // whatever stands there (the neighbours' attack has drawn them off or never will).
+    let war_of = |owner_id: &str| {
+        list(plan, "operations")
+            .iter()
+            .enumerate()
+            .find(|(i, o)| op_id(o, *i) == owner_id)
+            .map(|(_, o)| text(&o["war"]).to_string())
+    };
+    let my_war = text(&op["war"]).to_string();
+    let joint: Vec<String> = state
+        .op_owned
+        .iter()
+        .filter(|(army, owner)| {
+            **army != u.name
+                && (my_war.is_empty() || war_of(owner).is_some_and(|w| w == my_war))
+                && executing(roster, army)
+        })
+        .map(|(army, _)| army.clone())
+        .collect();
+    let jk = key(id, &format!("joint:{}", u.name));
+    let joint_days = if joint.is_empty() {
+        state.done.remove(&jk);
+        None
+    } else {
+        Some((now - *state.done.entry(jk).or_insert(now)) / DAY)
+    };
+    let even = theirs.is_none_or(|t| ours >= t);
+    let hard = match joint_days {
+        None => true,
+        Some(days) => hard_alone && !even && days < JOINT_MAX_WAIT / DAY,
+    };
     let mut seen: Vec<String> = ways.iter().map(|w| w.3.clone()).collect();
     seen.sort();
     seen.dedup();
@@ -2983,12 +3022,15 @@ fn assault_guarded(
         format!(
             "operation {id}: {} ({ours} divisions) {} {:?}: {} way(s) in, the best {} from {} at {:+.2} ({}); {} enemy division(s) stand there; there: {}",
             u.name,
-            if weak {
-                "HOLDS (too weak to assault alone)"
-            } else if hard {
-                "HOLDS (no assault alone across that ground)"
-            } else {
-                "may attack"
+            match (joint_days, hard) {
+                (None, _) => "HOLDS (never alone: no attack of the same war executes)".to_string(),
+                (Some(d), true) => format!(
+                    "HOLDS ({}; the joint attack of {} runs {d} of {} days)",
+                    if weak { "too weak at even odds" } else { "no assault at those odds across that ground" },
+                    joint.join(", "),
+                    JOINT_MAX_WAIT / DAY
+                ),
+                (Some(_), false) => format!("ATTACKS together with {}", joint.join(", ")),
             },
             targets,
             ways.len(),

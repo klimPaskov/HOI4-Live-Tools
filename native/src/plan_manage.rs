@@ -909,6 +909,12 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
     // marshals, banked power, open doctrine tracks...), longest open first with the rest
     omissions.extend(super::plan_omissions::derived(state, tools, plan, now));
     omissions.sort_by_key(|r| -r["days_open"].as_i64().unwrap_or(0));
+    // what the executor could act on now: a row with its owner's written reason to wait is not,
+    // nor an alert frame no label names (nothing tells what it asks for)
+    state.sched.omissions = omissions
+        .iter()
+        .filter(|r| r["owner_note"].is_null() && !text(&r["item"]).starts_with("frame_"))
+        .count();
     crate::watch::feed().set_omissions(Value::Array(omissions));
     let line = if lines.is_empty() {
         "no alerts".to_string()

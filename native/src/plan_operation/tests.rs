@@ -2996,70 +2996,74 @@ fn a_crossing_counts_the_river_the_ground_and_the_forts() {
 }
 
 #[test]
-fn a_weak_wing_holds_against_the_divisions_standing_there_and_attacks_once_strong_enough() {
+fn a_guarded_wing_never_attacks_alone_and_never_waits_forever() {
     let game = Game::new();
     *game.graph.borrow_mut() = Some(lux_graph());
     game.unit("Nord", |r| r["division_count"] = json!(7));
-    let roster = game.roster.borrow().clone();
-    let plan = json!({"war": {"me": "GER"}});
-    let op = json!({"id": "op_lux", "enemies": ["LUX"]});
+    game.unit("Mitte", |r| r["plan_executing"] = json!(false));
+    let plan = json!({"war": {"me": "GER"}, "operations": [
+        {"id": "op_low", "war": "w", "enemies": ["BEL"]},
+        {"id": "op_lux", "war": "w", "enemies": ["LUX"]}]});
+    let op = plan["operations"][1].clone();
     let mut u = unit("Nord".into(), Role::Wing, &Value::Null, &Value::Null);
     u.enemy = "LUX".into();
     u.line = vec![8];
-    // four French divisions stand in Luxembourg: 7 is under two for each
-    let wars = json!({"wars": {"enemies": ["LUX", "FRA"]}, "borders": [
+    let wars = |french: i64| {
+        json!({"wars": {"enemies": ["LUX", "FRA"]}, "borders": [
         {"neighbour_tag": "LUX", "neighbour_states": [8], "own_border_states": [42],
-         "neighbour_divisions_in_border_states": 1, "hostile_divisions_in_border_states": 4}]});
+         "neighbour_divisions_in_border_states": 1, "hostile_divisions_in_border_states": french}]})
+    };
     let mut state = State::default();
-    assert!(assault_guarded(
-        &mut state, &game, &plan, "op_lux", &op, &u, &roster, &wars, START
-    ));
+    state.op_owned.insert("Mitte".into(), "op_low".into());
+    let guarded = |state: &mut State, french: i64, at: GameHour| {
+        let roster = game.roster.borrow().clone();
+        assert_guard(state, &game, &plan, &op, &u, &roster, &wars(french), at)
+    };
+    // one French division, a dry way in, but no attack of the war executes: never alone
+    assert!(guarded(&mut state, 1, START));
     let note = state.op_notes["op_lux:guard:Nord"].clone();
-    assert!(
-        note.contains("too weak") && note.contains("4 enemy division(s)"),
-        "{note}"
-    );
-    // read once a game day
-    assert!(assault_guarded(
-        &mut state,
-        &game,
-        &plan,
-        "op_lux",
-        &op,
-        &u,
-        &roster,
-        &wars,
-        START + 1
-    ));
-    // the French left: one division, a dry way in: it attacks
-    let wars = json!({"wars": {"enemies": ["LUX"]}, "borders": [
-        {"neighbour_tag": "LUX", "neighbour_states": [8], "own_border_states": [42],
-         "neighbour_divisions_in_border_states": 1, "hostile_divisions_in_border_states": 1}]});
-    assert!(!assault_guarded(
-        &mut state,
-        &game,
-        &plan,
-        "op_lux",
-        &op,
-        &u,
-        &roster,
-        &wars,
-        START + DAY
-    ));
+    assert!(note.contains("never alone"), "{note}");
+    // the group's attack on Belgium executes: fifteen French stand there, 7 is under even odds
+    game.unit("Mitte", |r| r["plan_executing"] = json!(true));
+    assert!(guarded(&mut state, 15, START + DAY));
+    let note = state.op_notes["op_lux:guard:Nord"].clone();
+    assert!(note.contains("joint attack of Mitte"), "{note}");
+    // ten days of the joint attack: it attacks whatever stands there
+    assert!(!guarded(&mut state, 15, START + 11 * DAY));
+    // at even odds it attacks with the joint attack at once
+    let mut fresh = State::default();
+    fresh.op_owned.insert("Mitte".into(), "op_low".into());
+    assert!(!guarded(&mut fresh, 4, START));
+    assert!(fresh.op_notes["op_lux:guard:Nord"].contains("ATTACKS together with Mitte"));
     // armour is never held
     let mut panzer = u.clone();
     panzer.spear = true;
+    let roster = game.roster.borrow().clone();
     assert!(!assault_guarded(
-        &mut state,
+        &mut fresh,
         &game,
         &plan,
         "op_lux",
         &op,
         &panzer,
         &roster,
-        &wars,
+        &wars(15),
         START + 2 * DAY
     ));
+}
+
+#[allow(clippy::too_many_arguments)]
+fn assert_guard(
+    state: &mut State,
+    game: &Game,
+    plan: &Value,
+    op: &Value,
+    u: &Unit,
+    roster: &Value,
+    wars: &Value,
+    at: GameHour,
+) -> bool {
+    assault_guarded(state, game, plan, "op_lux", op, u, roster, wars, at)
 }
 
 #[test]

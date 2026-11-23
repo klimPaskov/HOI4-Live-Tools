@@ -565,7 +565,19 @@ fn merge_and_lead(
                 None => None,
             };
             let here = a["main_state"].as_i64();
-            if placed.is_none() && bound.is_none() && !here.is_some_and(|s| theatre.contains(&s)) {
+            // An army with no order at all (no front, offensive or defensive line) is a straggler
+            // wherever it stands: it joins the nearest formation (w46e1/f1, 23 Nov 2026: Mitte
+            // Brandenburg and Army 1 stood in Brandenburg with no order for the whole war,
+            // outside the theatre, so nothing took them). An army with its own order outside the
+            // theatre keeps it.
+            let orderless = a["battle_plan_orders"].as_u64().unwrap_or(0) == 0
+                && a["defensive_orders"].as_u64().unwrap_or(0) == 0
+                && a["plan_executing"] != json!(true);
+            if placed.is_none()
+                && bound.is_none()
+                && !orderless
+                && !here.is_some_and(|s| theatre.contains(&s))
+            {
                 continue;
             }
             // The formations that may take it, best first: its task's formation; else the one
@@ -916,6 +928,31 @@ mod tests {
     }
 
     #[test]
+    fn an_army_with_no_order_outside_the_theatre_joins_the_nearest_formation() {
+        // w46e1/f1: Mitte Brandenburg (2 divisions) stood in Brandenburg with no order all war
+        let plan = concentrate(&layout_plan()).unwrap();
+        let tools = game(vec![(
+            "hoi4_armies",
+            json!({"armies": [
+                {"army": "Army 1", "division_count": 6, "commander": "Messe", "main_state": 550},
+                {"army": "Army 2", "division_count": 3, "commander": "Vecchiarelli", "main_state": 550},
+                {"army": "Army 3", "division_count": 2, "commander": "Baldassarre", "main_state": 559},
+                {"army": "Stragglers", "division_count": 2, "commander": "X", "main_state": 1}]}),
+        )]);
+        let mut state = State::default();
+        for (h, a) in [("N1", "Army 1"), ("N2", "Army 2"), ("S1", "Army 3")] {
+            state.layout.insert(h.into(), a.into());
+        }
+        let out = command_step(&mut state, &tools, &plan, "l", 1000)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("command: Stragglers (2 division(s)) merged into"),
+            "{out}"
+        );
+    }
+
+    #[test]
     fn task_armies_and_stray_armies_are_merged_into_their_formations() {
         let plan = concentrate(&layout_plan()).unwrap();
         let tools = game(vec![(
@@ -926,7 +963,8 @@ mod tests {
                 {"army": "Army 3", "division_count": 2, "commander": "Baldassarre", "main_state": 559},
                 {"army": "Army 7", "division_count": 2, "commander": null, "main_state": 559},
                 {"army": "Army 5", "division_count": 1, "commander": null, "main_state": 842},
-                {"army": "Home", "division_count": 4, "commander": null, "main_state": 1}]}),
+                {"army": "Home", "division_count": 4, "commander": null, "main_state": 1,
+                 "defensive_orders": 1}]}),
         )]);
         let mut state = State::default();
         for (h, a) in [
@@ -956,7 +994,7 @@ mod tests {
         );
         assert!(!state.layout.contains_key("GA") && !state.war_guard.contains_key("Army 5"));
         state.skip(1001, "cmerge", "Army 5", DAY);
-        // a home army outside the theatre is never touched; no free general is known here, so
+        // a home army with its own order outside the theatre is never touched; no free general is known here, so
         // next comes the theatre's army group over the three formations
         let out = command_step(&mut state, &tools, &plan, "l", 1002)
             .unwrap()
