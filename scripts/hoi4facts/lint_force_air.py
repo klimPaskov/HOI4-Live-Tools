@@ -253,7 +253,9 @@ def _fuel_and_resources(ctx, fought):
     deals = trade if isinstance(trade, list) else (trade.get("deals") or [] if isinstance(trade, dict) else [])
     traded = {d.get("resource") for d in deals if isinstance(d, dict)}
     built = {b for _, b, _ in lint.queued()}
-    fuel_plan = auto_ok or "oil" in traded or bool(built & {"synthetic_refinery", "fuel_silo"})
+    # the trade judgement buys oil for a low fuel ratio (plan_manage.rs trade_judge_rule)
+    judged = isinstance(trade, dict) and isinstance(trade.get("judge"), dict) and trade["judge"].get("on") is not False
+    fuel_plan = auto_ok or judged or "oil" in traded or bool(built & {"synthetic_refinery", "fuel_silo"})
     # sortie fuel: planes x fuel_consumption x FUEL_COST_MULT, against the start fuel gain (the units of
     # fuel_consumption are not confirmed: reported, not judged)
     mult = derive.define(g, "FUEL_COST_MULT", None)
@@ -294,7 +296,7 @@ def _fuel_and_resources(ctx, fought):
                     need[r] += a * n
         for r in ("aluminium", "rubber"):
             have = (res.get(r) or {}).get("available", 0.0)
-            if need[r] > have and r not in traded and not auto_ok:
+            if need[r] > have and r not in traded and not auto_ok and not judged:
                 short.append(f"{w['id']}: {r} {need[r]:g} for the plane lines against {have:g}")
     if short:
         lint.add("warning", "force.air_resources", "trade",

@@ -76,6 +76,18 @@
 //!                    (or enabled:false), wakes the player. With a `budget`, a civilian factory count
 //!                    that moved by `budget_step` (2) since the last check re-reads the view and
 //!                    sends the budget again when the game has cut it (EC27, every 7 game days)
+//!   trade.judge      {"on"?,"names"?,"avoid"?,"prefer"?,"discounts"?,"sea_unsafe_when"?,
+//!                    "min_delivery"?,"civ_worth"?,"accept"?} (never run live): trade as
+//!                    a judgement instead of the game's automatic importing, which goes off once
+//!                    (manual trades need it off; the resource, import-budget and fuel rules stand
+//!                    aside). Every 7 game days the largest deficit is judged: left when the plan
+//!                    accepts it for a time (`accept`, with its reason) or when its lost output
+//!                    (5% per missing unit per short factory) is below the purchase's civilian
+//!                    factories; else bought in whole factories from the best seller: never an
+//!                    enemy, land or a safe and delivering sea route first, a coming enemy only
+//!                    when nobody else sells, then the discount, then fewer convoys. A contract
+//!                    delivering under `min_delivery` (0.8) or one a better-placed seller can
+//!                    replace is cancelled first (trade_judge_rule)
 //!   air_plan         [{"wing"?|"airframe"+"version"?,"region","mission","base_state"?|"base_region"?,
 //!                    "when"?,"switch_when"?,"then_region"?,"then_mission"?|"fallback_mission"?}] every 3
 //!                    game days from hoi4_air: each matching wing (exact `wing`, else every wing of that
@@ -116,8 +128,16 @@
 //!                    "off":["alerts","ledger","manpower","stability","equipment_fill","resources",
 //!                    "stockpile","trucks","overdrawn","convoys","fuel"] switches rules off;
 //!                    "convoys_free":0.1 free convoys (hoi4_convoys) below that share of the stock, or a
-//!                    need above the stock, put idle dockyards on the convoy line (or a new line of
-//!                    the newest convoy design), every 3 game days; no idle dockyard wakes the player;
+//!                    need above the stock, put idle dockyards on the convoy line below the game's
+//!                    15-dockyard cap (or a new line of the newest convoy design), every 3 game days;
+//!                    no idle dockyard wakes the player. Before them the dockyard rule fills the
+//!                    plan's ship lines: production[] ship and convoy families (the newest design the
+//!                    panel offers of a family, so ship_hull_submarine_1 becomes the submarine hull
+//!                    the country builds now; closed families skipped; a refused family rests 30
+//!                    game days and the next is tried), then `navy.programme` roles
+//!                    [{"role":"raid"|"escort"|"control"|"capital"|"carrier"|"convoy","dockyards"?,
+//!                    "equipment"?,"design"?,"when"?}] (what the navy is for, from the wars and the
+//!                    trade routes; never run live: absent, nothing changes);
 //!                    "fuel_floor":0.25 fuel below that share of the capacity (hoi4_resources) turns
 //!                    auto-import on, once a game day; no auto_import, or fuel still low after
 //!                    "deficit_wake_days", wakes the player; "wake_repeat_days":7 one wake per reason;
@@ -199,6 +219,10 @@ pub(super) struct Memory {
     losses: Vec<(GameHour, f64)>,
     /// When the current resource deficit was first seen.
     deficit_since: Option<GameHour>,
+    /// Convoys a coming sea operation reserves (count, operation id; plan_military.rs
+    /// invasion_gates): the convoy rule counts them as needed, so idle dockyards build toward
+    /// the landing's transports before it is due.
+    pub(super) convoy_reserve: Option<(f64, String)>,
     /// Alert name -> the game hour it was first seen in the current unbroken run of days.
     pub(super) alert_since: HashMap<String, GameHour>,
     /// What the executor's own reads find open (plan_omissions.rs), item -> first seen.
@@ -478,7 +502,7 @@ fn stockpile(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Valu
 /// The manage rules as lanes of the pass (plan_run.rs `lanes`), in their old chain order. The
 /// first, `manage`, takes the reads every rule leans on (the failure ledger's wake, the game's
 /// alert row) and never acts.
-pub(super) const LANES: [super::Lane; 19] = [
+pub(super) const LANES: [super::Lane; 20] = [
     ("manage", |state, tools, plan, _, now| {
         // the tick only gets here when no conference is open
         state.manage.peace = None;
@@ -493,6 +517,7 @@ pub(super) const LANES: [super::Lane; 19] = [
     ("import_budget", import_budget_rule),
     ("fuel", fuel_rule),
     ("convoys", convoy_rule),
+    ("trade", trade_judge_rule),
     ("air_plan", air_plan_step),
     ("officer_corps", officer_corps_step),
     ("air_reserve", air_reserve_step),
@@ -2135,6 +2160,489 @@ pub(super) fn peace(
 }
 
 // ---------------------------------------------------------------------------------------------
+// Trade as a judgement (`trade.judge`, never run live: absent, nothing changes).
+//
+// Game facts (1.19 files): one civilian factory buys 8 units (common/resources cic 0.125), a
+// partner's price is that times 1 + its discounts (targeted trade_cost_for_target_factor ideas
+// such as Sweden's -20% for Germany, overlord_trade_cost_factor for a subject), a sea route
+// needs 0.1 convoy per unit (resources convoys 0.1) and delivers only what its convoys carry
+// ("Delivering X by sea using C convoys out of T needed"; raided convoys lose efficiency x1.25 the
+// loss), a country at war with us is never offered ("Relation does not allow to trade"), a route
+// can be blocked outright ("Delivery blocked", "no legal transport path"), and a missing unit
+// costs its lines 5% per factory (PRODUCTION_RESOURCE_LACK_PENALTY -0.05). Manual trades need
+// automatic importing off (the game blocks them while it runs).
+
+/// A seller of one resource as the Trade view lists it (hoi4_trade {resource}).
+#[derive(Clone, Debug, PartialEq)]
+struct Seller {
+    country: String,
+    /// Units it can sell (the right number of "current/available").
+    available: i64,
+    /// Units bought from it now: delivered of contracted ("6/8").
+    delivered: i64,
+    contracted: i64,
+    /// Convoys the trade uses or needs (0: by land).
+    convoys: f64,
+}
+
+/// What the judgement knows about the world (tags and display names both match, case-blind).
+#[derive(Default)]
+struct TradeWorld {
+    /// At war with us now: never.
+    enemies: HashSet<String>,
+    /// The plan's coming wars and `trade.judge.avoid`: only when no other seller exists (trading
+    /// rents our civilian factory to the seller: never fund a future enemy).
+    rivals: HashSet<String>,
+    /// Allies, subjects, the faction (`trade.judge.prefer`): first among equal prices.
+    prefer: HashSet<String>,
+    /// Price factor per country (1 + discount; `trade.judge.discounts` {"SWE": -0.2}).
+    price: HashMap<String, f64>,
+    /// Why sea routes are unsafe now (`trade.judge.sea_unsafe_when` holds: a war with a navy that
+    /// raids the routes, or one about to close them); None: safe.
+    sea_unsafe: Option<String>,
+    /// A partner delivering less than this share of its contract is failing (convoys sunk or the
+    /// route blocked): `trade.judge.min_delivery`, default 0.8 (the game's own AI cancels below
+    /// MIN_DELIVERED_TRADE_FRACTION 0.8).
+    min_delivery: f64,
+}
+
+fn member(set: &HashSet<String>, country: &str) -> bool {
+    let c = country.trim().to_lowercase();
+    set.iter().any(|s| s.to_lowercase() == c)
+}
+
+impl TradeWorld {
+    fn price(&self, country: &str) -> f64 {
+        let c = country.trim().to_lowercase();
+        self.price
+            .iter()
+            .find(|(k, _)| k.to_lowercase() == c)
+            .map_or(1.0, |(_, v)| *v)
+    }
+    /// Why this seller's goods would not arrive: a failing contract, or a sea route while sea
+    /// routes are unsafe.
+    fn unsafe_route(&self, s: &Seller) -> Option<String> {
+        if s.contracted > 0 && (s.delivered as f64) < self.min_delivery * s.contracted as f64 {
+            return Some(format!(
+                "delivers {}/{} (convoys sunk or the route blocked)",
+                s.delivered, s.contracted
+            ));
+        }
+        if s.convoys > 0.0 {
+            if let Some(why) = &self.sea_unsafe {
+                return Some(format!("by sea while {why}"));
+            }
+        }
+        None
+    }
+}
+
+/// The sellers in the order the judgement buys from, each with its reason; the excluded ones with
+/// theirs. Order: never an enemy; reachable first (by land, or by a sea route that is safe and
+/// delivering); not a rival or a coming enemy while another seller exists; then the lower price
+/// (discounts first), allies and subjects first at an equal price; then fewer convoys (land
+/// first); then the larger offer.
+/// A seller's place: unsafe route, rival, price (x1000), not preferred, convoys (x10), -available.
+type SellerKey = (u8, u8, i64, u8, i64, i64);
+
+fn rank_sellers(world: &TradeWorld, sellers: &[Seller]) -> (Vec<(Seller, String)>, Vec<String>) {
+    let mut out: Vec<(SellerKey, Seller, String)> = Vec::new();
+    let mut excluded = Vec::new();
+    for s in sellers {
+        if member(&world.enemies, &s.country) {
+            excluded.push(format!("{}: at war with us", s.country));
+            continue;
+        }
+        if s.available <= 0 && s.contracted <= 0 {
+            continue;
+        }
+        let route = world.unsafe_route(s);
+        let rival = member(&world.rivals, &s.country);
+        let price = world.price(&s.country);
+        let prefer = member(&world.prefer, &s.country);
+        let mut why = vec![if s.convoys > 0.0 {
+            format!("sea, {} convoys", s.convoys)
+        } else {
+            "land".to_string()
+        }];
+        if (price - 1.0).abs() > 1e-9 {
+            why.push(format!("price x{price:.2}"));
+        }
+        if rival {
+            why.push("a coming enemy: last resort".into());
+        }
+        if let Some(r) = &route {
+            why.push(r.clone());
+        }
+        if prefer {
+            why.push("ally or subject".into());
+        }
+        out.push((
+            (
+                u8::from(route.is_some()),
+                u8::from(rival),
+                (price * 1000.0).round() as i64,
+                u8::from(!prefer),
+                (s.convoys * 10.0).round() as i64,
+                -s.available,
+            ),
+            s.clone(),
+            why.join(", "),
+        ));
+    }
+    out.sort_by_key(|a| a.0);
+    (out.into_iter().map(|(_, s, w)| (s, w)).collect(), excluded)
+}
+
+/// What the judgement does for one short resource.
+#[derive(Debug, PartialEq)]
+enum TradeAct {
+    /// Cancel a failing or worse-placed contract (country, why).
+    Cancel(String, String),
+    /// Buy `units` from the country (why).
+    Buy(String, i64, String),
+    /// Leave the deficit (why).
+    Accept(String),
+}
+
+/// Whether to buy at all: the deficit's lost output against the purchase. A missing unit costs
+/// the lines short of it 5% per factory (PRODUCTION_RESOURCE_LACK_PENALTY), up to all of them;
+/// buying costs units/8 civilian factories at the partner's price. Value judgement: a civilian
+/// factory spent on trade is weighed one to one against a military factory's output
+/// (`trade.judge.civ_worth` changes the weight with its reason); a deficit whose lost output is
+/// below the purchase's cost is left, and said so: 1-2 units on a minor line).
+fn worth_buying(deficit: f64, short_factories: f64, price: f64, civ_worth: f64) -> (bool, String) {
+    let lost = short_factories * (0.05 * deficit).min(1.0);
+    let civs = (deficit / 8.0).ceil().max(1.0) * price;
+    let cost = civs * civ_worth;
+    (
+        lost > cost,
+        format!(
+            "deficit {deficit:.1} costs about {lost:.1} factories of output on {short_factories:.0} short; buying costs {civs:.2} civilian factories"
+        ),
+    )
+}
+
+/// The judgement for one resource: cancel the first contract that fails (delivers too little)
+/// or that a better-placed seller can replace (a rival, or a sea route gone unsafe, while a safe
+/// non-rival seller has units), then buy the deficit from the best seller.
+fn trade_decide(
+    world: &TradeWorld,
+    sellers: &[Seller],
+    deficit: f64,
+    buy: (bool, String),
+) -> Option<TradeAct> {
+    let (ranked, _) = rank_sellers(world, sellers);
+    let good = |s: &Seller| world.unsafe_route(s).is_none() && !member(&world.rivals, &s.country);
+    let alternative = ranked
+        .iter()
+        .any(|(s, _)| good(s) && s.available > s.contracted);
+    for (s, why) in &ranked {
+        if s.contracted <= 0 {
+            continue;
+        }
+        let failing =
+            s.contracted > 0 && (s.delivered as f64) < world.min_delivery * s.contracted as f64;
+        if failing || (!good(s) && alternative) {
+            return Some(TradeAct::Cancel(s.country.clone(), why.clone()));
+        }
+    }
+    if deficit <= 0.0 {
+        return None;
+    }
+    if !buy.0 {
+        return Some(TradeAct::Accept(buy.1));
+    }
+    let (best, why) = ranked.iter().find(|(s, _)| s.available > s.contracted)?;
+    // whole civilian factories: a seller with less than 8 left still costs one
+    let want = ((deficit / 8.0).ceil() * 8.0) as i64 + best.contracted;
+    let units = want.min(best.available);
+    Some(TradeAct::Buy(best.country.clone(), units, why.clone()))
+}
+
+/// The tags (and names) the plan's wars name: `war.enemies`, operations[].enemies, diplomacy
+/// declarations and their accepted joiners, plus
+/// `trade.judge.avoid`; with display names from `trade.judge.names` {"ENG":"United Kingdom"}.
+fn plan_rivals(plan: &Value) -> Vec<String> {
+    let mut tags: Vec<String> = strings(&plan["war"], "enemies");
+    for op in list(plan, "operations") {
+        tags.extend(strings(op, "enemies"));
+    }
+    for d in list(plan, "diplomacy") {
+        if text(&d["action"]) == "declare" {
+            tags.push(text(&d["target"]).to_string());
+            tags.extend(strings(d, "joiners_ok"));
+        }
+    }
+    tags.extend(strings(&plan["trade"]["judge"], "avoid"));
+    tags.retain(|t| !t.trim().is_empty());
+    tags.sort();
+    tags.dedup();
+    tags
+}
+
+fn with_names(plan: &Value, tags: &[String]) -> HashSet<String> {
+    let names = &plan["trade"]["judge"]["names"];
+    let mut out: HashSet<String> = tags.iter().cloned().collect();
+    for t in tags {
+        if let Some(n) = names[t.as_str()].as_str() {
+            out.insert(n.to_string());
+        }
+    }
+    out
+}
+
+/// "6/8" -> (6, 8); "8" -> (8, 8); else (0, 0).
+fn pair(t: &str) -> (i64, i64) {
+    let nums: Vec<i64> = t
+        .split(|c: char| !c.is_ascii_digit())
+        .filter_map(|p| p.parse().ok())
+        .collect();
+    match nums.as_slice() {
+        [a, b, ..] => (*a, *b),
+        [a] => (*a, *a),
+        _ => (0, 0),
+    }
+}
+
+fn first_number(t: &str) -> f64 {
+    t.split(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .find_map(|p| p.parse().ok())
+        .unwrap_or(0.0)
+}
+
+/// Rule: trade as a judgement (`trade.judge` {"on":true, ...}; plan_affairs' `trade[]` deals and
+/// the auto-import rules stand aside while it runs). Every `days` (7) game days: automatic
+/// importing goes off once (manual trades need it off); the short resources (hoi4_resources) are
+/// judged one per check, the largest deficit first, unless the plan accepts it
+/// (`accept` {"rubber":{"units":3,"until":<predicate>,"why"}}: left while the deficit is within
+/// `units` and `until` does not hold) or the value judgement says the purchase costs more than
+/// the deficit (`worth_buying`); a fuel ratio below `manage.fuel_floor` counts as an oil
+/// deficit of one factory. The resource's sellers (hoi4_trade {resource}) are ranked
+/// (`rank_sellers`); a failing contract (delivered below `min_delivery` of contracted: raided
+/// or blocked) or one a better-placed seller can replace is cancelled first (hoi4_trade_set
+/// amount 0), then the deficit is bought from the best seller in whole factories. Every check
+/// says in the digest what it bought, left or cancelled and why.
+fn trade_judge_rule(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let judge = &plan["trade"]["judge"];
+    if !judge.is_object() || judge["on"] == json!(false) || off(plan, "trade") {
+        return Ok(None);
+    }
+    if state.skipped(now, "mtradej", "x") {
+        return Ok(None);
+    }
+    let every = judge["days"].as_i64().filter(|d| *d > 0).unwrap_or(7);
+    state.skip(now, "mtradej", "x", every * DAY);
+    // manual trades need automatic importing off
+    if !state.done.contains_key("tradej:auto_off") {
+        if let Ok(read) = tools.call("hoi4_auto_import", &json!({"lease_token": lease})) {
+            if read["auto_import"]["enabled"] == json!(true) {
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_auto_import",
+                    json!({"enabled": false}),
+                    "tj",
+                )?;
+                if ok {
+                    state.done.insert("tradej:auto_off".into(), now);
+                } else {
+                    state.skip(now, "mtradej", "x", DAY);
+                }
+                note(
+                    state,
+                    "trade",
+                    format!("automatic importing off for the judgement: {ok} {why}"),
+                );
+                return Ok(Some(format!("trade: automatic importing off: {ok} {why}")));
+            }
+            state.done.insert("tradej:auto_off".into(), now);
+        }
+    }
+    // the deficits, largest first
+    let Ok(resources) = tools.call("hoi4_resources", &json!({})) else {
+        note(state, "trade", "unknown: hoi4_resources unreadable");
+        return Ok(None);
+    };
+    let mut deficits: Vec<(String, f64)> = resources["resources"]
+        .as_object()
+        .map(|m| {
+            m.iter()
+                .filter(|(_, r)| r["shortage"]["short"] == json!(true))
+                .map(|(k, r)| (k.clone(), r["shortage"]["deficit"].as_f64().unwrap_or(0.0)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let floor = fraction(&plan["manage"]["fuel_floor"], 0.25);
+    if resources["fuel"]["ratio"]
+        .as_f64()
+        .is_some_and(|r| r < floor)
+        && !deficits.iter().any(|(k, _)| k == "oil")
+    {
+        deficits.push(("oil".into(), 8.0));
+    }
+    deficits.sort_by(|a, b| b.1.total_cmp(&a.1));
+    let shortages = tools.call("hoi4_production_shortages", &json!({})).ok();
+    // the world as the plan sees it
+    let rivals_tags = plan_rivals(plan);
+    let mut enemies_tags = Vec::new();
+    for tag in &rivals_tags {
+        if when_holds(state, tools, &json!(format!("at_war_with:{tag}")), now) == Truth::True {
+            enemies_tags.push(tag.clone());
+        }
+    }
+    let sea_unsafe = if judge["sea_unsafe_when"].is_null() {
+        None
+    } else {
+        (when_holds(state, tools, &judge["sea_unsafe_when"], now) == Truth::True).then(|| {
+            judge["sea_unsafe_why"]
+                .as_str()
+                .unwrap_or("sea routes are raided (trade.judge.sea_unsafe_when)")
+                .to_string()
+        })
+    };
+    let world = TradeWorld {
+        enemies: with_names(plan, &enemies_tags),
+        rivals: with_names(plan, &rivals_tags),
+        prefer: with_names(plan, &strings(judge, "prefer")),
+        price: judge["discounts"]
+            .as_object()
+            .map(|m| {
+                let mut out: HashMap<String, f64> = HashMap::new();
+                for (k, v) in m {
+                    let f = 1.0 + v.as_f64().unwrap_or(0.0);
+                    out.insert(k.clone(), f);
+                    if let Some(n) = judge["names"][k.as_str()].as_str() {
+                        out.insert(n.to_string(), f);
+                    }
+                }
+                out
+            })
+            .unwrap_or_default(),
+        sea_unsafe,
+        min_delivery: fraction(&judge["min_delivery"], 0.8),
+    };
+    let civ_worth = judge["civ_worth"]
+        .as_f64()
+        .filter(|v| *v > 0.0)
+        .unwrap_or(1.0);
+    let mut left: Vec<String> = Vec::new();
+    for (resource, deficit) in deficits {
+        let accept = &judge["accept"][resource.as_str()];
+        if accept.is_object()
+            && deficit <= accept["units"].as_f64().unwrap_or(f64::INFINITY)
+            && when_holds(state, tools, &accept["until"], now) != Truth::True
+            && !accept["until"].is_null()
+        {
+            left.push(format!(
+                "{resource} {deficit:.1} left: {}",
+                text(&accept["why"])
+            ));
+            continue;
+        }
+        let short_factories: f64 = shortages
+            .as_ref()
+            .map(|r| {
+                list(r, "lines")
+                    .iter()
+                    .filter(|l| strings(l, "short_of").contains(&resource))
+                    .filter_map(|l| l["factories"].as_f64())
+                    .sum()
+            })
+            .unwrap_or(0.0);
+        let Ok(view) = tools.call(
+            "hoi4_trade",
+            &json!({"resource": resource, "lease_token": lease, "limit": 60}),
+        ) else {
+            left.push(format!("{resource}: hoi4_trade unreadable"));
+            continue;
+        };
+        let sellers: Vec<Seller> = list(&view, "partners")
+            .iter()
+            .map(|p| {
+                let (delivered, contracted) = pair(text(&p["delivered_over_contracted"]));
+                Seller {
+                    country: text(&p["country"]).trim().to_string(),
+                    available: pair(text(&p["available"])).1,
+                    delivered,
+                    contracted,
+                    convoys: first_number(
+                        &p["convoys"]
+                            .as_str()
+                            .map_or_else(|| p["convoys"].to_string(), String::from),
+                    ),
+                }
+            })
+            .filter(|s| !s.country.is_empty())
+            .collect();
+        let (ranked, excluded) = rank_sellers(&world, &sellers);
+        let best_price = ranked.first().map_or(1.0, |(s, _)| world.price(&s.country));
+        let buy = if short_factories > 0.0 {
+            worth_buying(deficit, short_factories, best_price, civ_worth)
+        } else {
+            // a country-wide need no line shows (coal for energy, oil for fuel): bought
+            (
+                true,
+                format!("deficit {deficit:.1} outside the lines (energy or fuel)"),
+            )
+        };
+        let act = trade_decide(&world, &sellers, deficit, buy);
+        let order = match &act {
+            None => {
+                left.push(format!(
+                    "{resource}: no seller offers it{}",
+                    if excluded.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" ({})", excluded.join("; "))
+                    }
+                ));
+                continue;
+            }
+            Some(TradeAct::Accept(why)) => {
+                left.push(format!("{resource} left as a temporary deficit: {why}"));
+                continue;
+            }
+            Some(TradeAct::Cancel(country, why)) => (country.clone(), 0, format!("cancel ({why})")),
+            Some(TradeAct::Buy(country, units, why)) => {
+                (country.clone(), *units, format!("buy ({why})"))
+            }
+        };
+        let (country, amount, what) = order;
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_trade_set",
+            json!({"resource": resource, "country": country, "amount": amount}),
+            "tj",
+        )?;
+        if !ok {
+            state.skip(now, "mtradej", "x", DAY);
+        }
+        let line = format!("{resource} {deficit:.1} short: {what} {amount} from {country}: {ok}");
+        note(state, "trade", format!("{line}; {}", left.join("; ")));
+        return Ok(Some(format!("trade: {line} {why}")));
+    }
+    if !left.is_empty() {
+        note(state, "trade", left.join("; "));
+    } else {
+        note(state, "trade", "no deficit");
+    }
+    Ok(None)
+}
+
+/// Whether the trade judgement runs (the auto-import rules stand aside then).
+fn trade_judged(plan: &Value) -> bool {
+    plan["trade"]["judge"].is_object() && plan["trade"]["judge"]["on"] != json!(false)
+}
+
+// ---------------------------------------------------------------------------------------------
 // Rule 16 / W1-12: resource deficits and automatic importing.
 
 fn resources_step(
@@ -2146,6 +2654,7 @@ fn resources_step(
 ) -> Result<Option<String>> {
     if (plan["auto_import"].is_null() && !plan["manage"].is_object())
         || off(plan, "resources")
+        || trade_judged(plan)
         || state.skipped(now, "mres", "x")
     {
         return Ok(None);
@@ -2463,7 +2972,7 @@ fn import_budget_rule(
     let Some(want) = budget.filter(|_| allowed) else {
         return Ok(None);
     };
-    if off(plan, "resources") || state.skipped(now, "mimpb", "x") {
+    if off(plan, "resources") || trade_judged(plan) || state.skipped(now, "mimpb", "x") {
         return Ok(None);
     }
     state.skip(now, "mimpb", "x", 7 * DAY);
@@ -2588,7 +3097,9 @@ fn fuel_rule(
     now: GameHour,
 ) -> Result<Option<String>> {
     let m = &plan["manage"];
-    if !m.is_object() || off(plan, "fuel") || state.skipped(now, "mfuel", "x") {
+    // the trade judgement buys oil for a low fuel ratio itself
+    if !m.is_object() || off(plan, "fuel") || trade_judged(plan) || state.skipped(now, "mfuel", "x")
+    {
         return Ok(None);
     }
     state.skip(now, "mfuel", "x", DAY);
@@ -2704,7 +3215,9 @@ fn convoy_rule(
         return Ok(None);
     };
     let needed = counts.and_then(|c| c["needed"].as_f64()).unwrap_or(0.0);
-    let floor = (share * total.max(needed)).ceil();
+    // a coming sea operation's transports are needed too (they stay free until it sails)
+    let reserve = state.manage.convoy_reserve.as_ref().map_or(0.0, |r| r.0);
+    let floor = (share * total.max(needed)).ceil() + reserve;
     // Enough convoys: dockyards no line uses still build convoys (more trade and sea supply for
     // every war overseas) unless the plan keeps them (`manage.idle_dockyards`: "keep"). Without
     // this owner the free-dockyards alert stayed open all campaign (live 15 Nov 2026).
@@ -2792,13 +3305,20 @@ fn convoy_rule(
     }
     let step = m["rebalance_step"].as_i64().filter(|n| *n > 0).unwrap_or(3);
     let give = idle.min(step);
+    // A line at the game's cap (MAX_CONVOY_NAV_FACTORIES_PER_LINE 15) takes no more dockyards:
+    // g17n/g17o asked convoy_1 for 15+3 eight times ("expected game change not observed");
+    // a new line takes them instead.
     let line = lines
         .iter()
         .filter(|l| l["convoy"] == json!(true) && l["line_index"].is_i64())
+        .filter(|l| {
+            l["requested_factories"].as_i64().unwrap_or(0) < dockyard_cap(text(&l["equipment"]))
+        })
         .min_by_key(|l| l["requested_factories"].as_i64().unwrap_or(0));
     let (ok, why, what) = if let Some(l) = line {
         let equipment = text(&l["equipment"]).to_string();
         let has = l["requested_factories"].as_i64().unwrap_or(0);
+        let give = give.min(dockyard_cap(&equipment) - has);
         let (ok, why) = state.act(
             tools,
             lease,
@@ -5909,35 +6429,217 @@ fn dockyard_cap(equipment: &str) -> i64 {
 enum DockAct {
     /// Raise a naval line (entry index, equipment, new requested dockyards).
     Set(i64, String, i64),
-    /// Start a line of this equipment with this many dockyards.
-    Add(String, i64),
+    /// Start a line of this equipment with this many dockyards, of this design
+    /// (hoi4_naval_production_options `design_id`; None: the first the panel lists).
+    Add(String, i64, Option<i64>),
 }
 
-/// Idle dockyards (`naval` total minus what the naval lines request) go to the naval lines the
-/// plan names (`production[]` with a ship or convoy equipment), the least-manned first, up to the
-/// game's cap per line; a planned equipment without a line gets one. What no planned line takes
-/// is the convoy rule's (convoys, or `manage.idle_dockyards: "keep"`). Free dockyards stood open
-/// 300+ days in gr1-gr6 while the plan's own ship lines ran on one dockyard each.
-fn dockyard_decide(lines: &[(i64, String, i64)], planned: &[String], idle: i64) -> Option<DockAct> {
-    if idle <= 0 || planned.is_empty() {
-        return None;
-    }
-    let pick = lines
+/// A ship or convoy design the Production panel can build (hoi4_naval_production_options).
+#[derive(Clone, Debug, PartialEq)]
+struct Offered {
+    equipment: String,
+    design: Option<i64>,
+    name: String,
+}
+
+/// One family of ship or convoy the dockyards are asked to build, in the plan's order.
+#[derive(Clone, Debug, PartialEq)]
+struct DockWant {
+    /// The equipment family (`family` of the key: ship_hull_submarine for ship_hull_submarine_1).
+    family: String,
+    /// Dockyards the plan wants on the family (production[].factories, the programme's
+    /// `dockyards`): above one line's cap a second line is started. None: one line.
+    target: Option<i64>,
+    /// A design the plan names (design id or name); else the newest the panel offers.
+    design: Option<String>,
+    /// Where the want comes from, for the notes ("production[]", "programme raid: why").
+    source: String,
+}
+
+/// The generation of an equipment key: its trailing number (ship_hull_submarine_2 -> 2; none 0).
+fn generation(key: &str) -> u32 {
+    key.rsplit_once('_')
+        .and_then(|(_, tail)| tail.parse().ok())
+        .unwrap_or(0)
+}
+
+/// The design of a want: the one the plan names (design name or id number) when the panel offers
+/// it, else the newest the panel offers of the family (highest generation, then the highest design
+/// id, the newest design of that hull): an idle dockyard builds nothing, so a named design not yet
+/// offered (a plan designs[] id, a design still to be made) does not keep the family idle; the
+/// line switches to it later (production[].design, hoi4_design_set_production).
+fn offered_for<'a>(offered: &'a [Offered], want: &DockWant) -> Option<&'a Offered> {
+    let of_family: Vec<&Offered> = offered
         .iter()
+        .filter(|o| family(&o.equipment) == want.family)
+        .collect();
+    if let Some(named) = &want.design {
+        if let Some(o) = of_family.iter().find(|o| {
+            o.name == *named || o.design.map(|d| d.to_string()).as_deref() == Some(named.as_str())
+        }) {
+            return Some(o);
+        }
+    }
+    of_family
+        .into_iter()
+        .max_by_key(|o| (generation(&o.equipment), o.design.unwrap_or(0)))
+}
+
+/// Idle dockyards (`naval` total minus what the naval lines request) go to the wanted families
+/// (the plan's `production[]` ship and convoy lines, then `navy.programme`), in this order:
+/// 1. a line of a wanted family below the game's cap per line, the least-manned first, raised up
+///    to the cap (an idle dockyard builds nothing: a planned line above its plan number still
+///    builds what the plan wants);
+/// 2. a wanted family without a line gets one of the design the plan names, else the newest the
+///    Production panel offers of that family: a plan written for ship_hull_submarine_1 builds
+///    the submarine hull the country can build now. A family the panel offers nothing of is
+///    passed over (returned in the skipped list, with the reason) and the next family is tried;
+/// 3. a family whose lines are all at the cap and below the plan's dockyards gets another line.
+///
+/// Families in `resting` (refused within the last 30 game days) are passed over too. What no
+/// wanted family takes is the convoy rule's (convoys, or `manage.idle_dockyards: "keep"`). Free
+/// dockyards stood open 300+ days in gr1-gr6 while the plan's own ship lines ran on one dockyard
+/// each, and all of g17n/g17o while ship_hull_submarine_1 was asked 13 times and never offered.
+fn dockyard_decide(
+    lines: &[(i64, String, i64)],
+    wants: &[DockWant],
+    offered: &[Offered],
+    resting: &HashSet<String>,
+    idle: i64,
+) -> (Option<DockAct>, Vec<String>) {
+    let mut skipped = Vec::new();
+    if idle <= 0 || wants.is_empty() {
+        return (None, skipped);
+    }
+    let live: Vec<&DockWant> = wants
+        .iter()
+        .filter(|w| {
+            let rest = resting.contains(&w.family);
+            if rest {
+                skipped.push(format!("{}: refused lately, resting", w.family));
+            }
+            !rest
+        })
+        .collect();
+    let of = |w: &DockWant| -> Vec<&(i64, String, i64)> {
+        lines.iter().filter(|l| family(&l.1) == w.family).collect()
+    };
+    let pick = live
+        .iter()
+        .flat_map(|w| of(w))
         .filter(|l| l.2 < dockyard_cap(&l.1))
-        .filter(|l| planned.iter().any(|p| l.1.starts_with(family(p))))
         .min_by_key(|l| l.2);
     if let Some((index, equipment, have)) = pick {
         let to = (have + idle).min(dockyard_cap(equipment));
-        return Some(DockAct::Set(*index, equipment.clone(), to));
+        return (Some(DockAct::Set(*index, equipment.clone(), to)), skipped);
     }
-    let missing = planned
-        .iter()
-        .find(|p| !lines.iter().any(|l| l.1.starts_with(family(p))))?;
-    Some(DockAct::Add(
-        missing.clone(),
-        idle.min(dockyard_cap(missing)),
-    ))
+    for w in &live {
+        let own = of(w);
+        let on: i64 = own.iter().map(|l| l.2).sum();
+        let wants_more = own.is_empty() || w.target.is_some_and(|t| t > on);
+        if !wants_more {
+            continue;
+        }
+        let Some(design) = offered_for(offered, w) else {
+            skipped.push(format!(
+                "{}: no buildable design offered ({})",
+                w.family, w.source
+            ));
+            continue;
+        };
+        let cap = dockyard_cap(&design.equipment);
+        // a first line takes what it can (as many idle dockyards as fit); a further line only
+        // the plan's dockyards the full lines leave
+        let room = match w.target {
+            Some(t) if !own.is_empty() => (t - on).clamp(1, cap),
+            _ => cap,
+        };
+        return (
+            Some(DockAct::Add(
+                design.equipment.clone(),
+                idle.min(room),
+                design.design,
+            )),
+            skipped,
+        );
+    }
+    (None, skipped)
+}
+
+/// The hull families a `navy.programme` role builds, best first (vanilla keys; an entry's
+/// `equipment` names the family for a mod). raid: submarines cut the enemy's trade; escort:
+/// destroyers cover the own convoys; control: destroyers then cruisers patrol for dominance (an
+/// invasion route, home waters); capital and carrier: the battle line; convoy: convoys for trade,
+/// sea supply and landings.
+fn role_families(role: &str) -> &'static [&'static str] {
+    match role {
+        "raid" => &["ship_hull_submarine"],
+        "escort" => &["ship_hull_light"],
+        "control" => &["ship_hull_light", "ship_hull_cruiser"],
+        "capital" => &["ship_hull_heavy"],
+        "carrier" => &["ship_hull_carrier"],
+        "convoy" => &["convoy"],
+        _ => &[],
+    }
+}
+
+/// The plan's naval wants in order: `production[]` ship and convoy entries that are due (`from`),
+/// except families the plan closes (a `remove:true` entry with no later entry of the family
+/// adding it again), then the `navy.programme` entries whose `when` holds.
+fn dock_wants(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) -> Vec<DockWant> {
+    let entries = list(plan, "production");
+    let naval = |e: &Value| {
+        let k = text(&e["equipment"]);
+        k.starts_with("ship_hull") || k.starts_with("convoy")
+    };
+    let mut out: Vec<DockWant> = Vec::new();
+    for (i, e) in entries.iter().enumerate() {
+        if !naval(e) || e["remove"] == json!(true) || !super::reached(e, now) {
+            continue;
+        }
+        let fam = family(text(&e["equipment"])).to_string();
+        // a later remove entry closes the family (an earlier one is undone by this entry)
+        let closed = entries[i + 1..].iter().any(|later| {
+            later["remove"] == json!(true) && family(text(&later["equipment"])) == fam
+        });
+        if closed || out.iter().any(|w| w.family == fam) {
+            continue;
+        }
+        out.push(DockWant {
+            family: fam,
+            target: e["factories"].as_i64(),
+            design: e["design"]
+                .as_str()
+                .map(String::from)
+                .or_else(|| e["design"].as_i64().map(|d| d.to_string())),
+            source: "production[]".into(),
+        });
+    }
+    for entry in list(&plan["navy"], "programme") {
+        if when_holds(state, tools, &entry["when"], now) != Truth::True {
+            continue;
+        }
+        let role = text(&entry["role"]).to_string();
+        let families: Vec<String> = match entry["equipment"].as_str() {
+            Some(k) => vec![family(k).to_string()],
+            None => role_families(&role).iter().map(|f| f.to_string()).collect(),
+        };
+        for fam in families {
+            if out.iter().any(|w| w.family == fam) {
+                continue;
+            }
+            out.push(DockWant {
+                family: fam,
+                target: entry["dockyards"].as_i64(),
+                design: entry["design"]
+                    .as_str()
+                    .map(String::from)
+                    .or_else(|| entry["design"].as_i64().map(|d| d.to_string())),
+                source: format!("programme {role}: {}", text(&entry["why"])),
+            });
+        }
+    }
+    out
 }
 
 /// What the naval queue rule (PR06/PR07) does with the ship lines the plan does not name.
@@ -6072,7 +6774,12 @@ fn naval_queue_rule(
     }
 }
 
-/// Rule: no idle dockyard (manage.off "dockyards").
+/// Rule: no idle dockyard (manage.off "dockyards"). Every 3 game days: idle dockyards go to the
+/// plan's naval wants (`dockyard_decide`). A refused order rests its family for 30 game days (a
+/// value judgement: the panel offers the same designs until research or a new design changes
+/// them) and the next family is tried at the next check, so a refusal changes what is tried next
+/// instead of repeating it. Families passed over are noted with the reason; when no want can take
+/// the dockyards they are the convoy rule's.
 fn dockyard_rule(
     state: &mut State,
     tools: &dyn Tools,
@@ -6105,22 +6812,49 @@ fn dockyard_rule(
         })
         .collect();
     let idle = total - naval.iter().map(|l| l.2).sum::<i64>();
-    let planned: Vec<String> = list(plan, "production")
+    if idle <= 0 {
+        return Ok(None);
+    }
+    let wants = dock_wants(state, tools, plan, now);
+    if wants.is_empty() {
+        return Ok(None);
+    }
+    let offered: Vec<Offered> = match tools.call("hoi4_naval_production_options", &json!({})) {
+        Ok(options) => list(&options, "designs")
+            .iter()
+            .filter(|d| !text(&d["equipment"]).is_empty())
+            .map(|d| Offered {
+                equipment: text(&d["equipment"]).to_string(),
+                design: d["design_id"].as_i64(),
+                name: text(&d["name"]).to_string(),
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    let resting: HashSet<String> = wants
         .iter()
-        .map(|e| text(&e["equipment"]).to_string())
-        .filter(|e| e.starts_with("ship_hull") || e.starts_with("convoy"))
+        .filter(|w| state.skipped(now, "mdockno", &w.family))
+        .map(|w| w.family.clone())
         .collect();
-    let Some(act) = dockyard_decide(&naval, &planned, idle) else {
-        if idle > 0 {
-            note(
-                state,
-                "dockyards",
-                format!("{idle} idle dockyards; every planned ship line is at its cap: the convoy rule's"),
-            );
-        }
+    let (act, skipped) = dockyard_decide(&naval, &wants, &offered, &resting, idle);
+    let passed = if skipped.is_empty() {
+        String::new()
+    } else {
+        format!(" (passed over: {})", skipped.join("; "))
+    };
+    let Some(act) = act else {
+        let offers: Vec<&str> = offered.iter().map(|o| o.equipment.as_str()).collect();
+        note(
+            state,
+            "dockyards",
+            format!(
+                "{idle} idle dockyards; no wanted ship line can take them{passed}; offered: {}: the convoy rule's",
+                offers.join(", ")
+            ),
+        );
         return Ok(None);
     };
-    let (ok, why, line) = match &act {
+    let (ok, why, line, fam) = match &act {
         DockAct::Set(index, equipment, to) => {
             let (ok, why) = state.act(
                 tools,
@@ -6133,23 +6867,34 @@ fn dockyard_rule(
                 ok,
                 why,
                 format!("{equipment} line {index} -> {to} dockyards"),
+                family(equipment).to_string(),
             )
         }
-        DockAct::Add(equipment, n) => {
-            let (ok, why) = state.act(
-                tools,
-                lease,
-                "hoi4_production_add",
-                json!({"equipment": equipment, "factories": n}),
-                "dk",
-            )?;
-            (ok, why, format!("new {equipment} line with {n} dockyards"))
+        DockAct::Add(equipment, n, design) => {
+            let mut args = json!({"equipment": equipment, "factories": n});
+            if let Some(d) = design {
+                args["design"] = json!(d);
+            }
+            let (ok, why) = state.act(tools, lease, "hoi4_production_add", args, "dk")?;
+            let of = design.map_or(String::new(), |d| format!(" (design {d})"));
+            (
+                ok,
+                why,
+                format!("new {equipment} line{of} with {n} dockyards"),
+                family(equipment).to_string(),
+            )
         }
     };
     if !ok {
-        state.skip(now, "mdock", "x", 14 * DAY);
+        state.skip(now, "mdockno", &fam, 30 * DAY);
+        // the next family at the next check, not the same order again
+        state.skip(now, "mdock", "x", DAY);
     }
-    note(state, "dockyards", format!("{idle} idle: {line}: {ok}"));
+    note(
+        state,
+        "dockyards",
+        format!("{idle} idle: {line}: {ok}{passed}"),
+    );
     Ok(Some(format!("dockyards {idle} idle: {line}: {ok} {why}")))
 }
 
@@ -10448,25 +11193,402 @@ mod tests {
         }
     }
 
+    fn want(family: &str) -> DockWant {
+        DockWant {
+            family: family.into(),
+            target: None,
+            design: None,
+            source: "production[]".into(),
+        }
+    }
+
+    fn offer(equipment: &str, design: i64, name: &str) -> Offered {
+        Offered {
+            equipment: equipment.into(),
+            design: Some(design),
+            name: name.into(),
+        }
+    }
+
     #[test]
     fn idle_dockyards_go_to_the_planned_ship_lines_up_to_their_cap() {
         let lines = vec![
             (8, "ship_hull_submarine_1".to_string(), 1),
             (9, "ship_hull_heavy_2".to_string(), 5),
         ];
-        let planned = vec!["ship_hull_submarine".to_string()];
+        let none = HashSet::new();
+        let offered = vec![
+            offer("ship_hull_light_1", 3, "Z1934"),
+            offer("ship_hull_light_2", 11, "Z1936"),
+            offer("ship_hull_light_2", 14, "Z1936A"),
+        ];
+        let wants = vec![want("ship_hull_submarine")];
         assert_eq!(
-            dockyard_decide(&lines, &planned, 3),
+            dockyard_decide(&lines, &wants, &offered, &none, 3).0,
             Some(DockAct::Set(8, "ship_hull_submarine_1".into(), 4))
         );
-        // a planned equipment without a line gets one; nothing planned: the convoy rule's
-        let planned = vec!["ship_hull_light_2".to_string()];
+        // a planned family without a line gets one of the newest design offered;
+        // nothing planned: the convoy rule's
+        let wants = vec![want("ship_hull_light")];
         assert_eq!(
-            dockyard_decide(&lines, &planned, 4),
-            Some(DockAct::Add("ship_hull_light_2".into(), 4))
+            dockyard_decide(&lines, &wants, &offered, &none, 4).0,
+            Some(DockAct::Add("ship_hull_light_2".into(), 4, Some(14)))
         );
-        assert_eq!(dockyard_decide(&lines, &[], 4), None);
-        assert_eq!(dockyard_decide(&lines, &planned, 0), None);
+        assert_eq!(dockyard_decide(&lines, &[], &offered, &none, 4).0, None);
+        assert_eq!(dockyard_decide(&lines, &wants, &offered, &none, 0).0, None);
+        // a design the plan names wins over the newest
+        let mut named = want("ship_hull_light");
+        named.design = Some("Z1936".into());
+        assert_eq!(
+            dockyard_decide(&lines, &[named], &offered, &none, 4).0,
+            Some(DockAct::Add("ship_hull_light_2".into(), 4, Some(11)))
+        );
+    }
+
+    #[test]
+    fn a_hull_the_panel_does_not_offer_is_passed_over_for_the_next_want() {
+        // g17n/g17o: production[] named ship_hull_submarine_1; the panel offered convoy_1,
+        // ship_hull_heavy_2, ship_hull_cruiser_panzerschiff, ...; the same add was refused 13 times
+        let lines = vec![(2, "convoy_1".to_string(), 15)];
+        let none = HashSet::new();
+        let offered = vec![
+            offer("convoy_1", 1, "Convoy"),
+            offer("ship_hull_submarine_2", 21, "Type VII"),
+            offer("ship_hull_light_2", 14, "Z1936A"),
+        ];
+        // the plan's ship_hull_submarine_1 becomes the submarine hull the country builds now
+        let wants = vec![want("ship_hull_submarine"), want("ship_hull_light")];
+        assert_eq!(
+            dockyard_decide(&lines, &wants, &offered, &none, 6).0,
+            Some(DockAct::Add("ship_hull_submarine_2".into(), 6, Some(21)))
+        );
+        // no submarine design at all: the destroyers, with the reason noted
+        let no_subs: Vec<Offered> = offered
+            .iter()
+            .filter(|o| !o.equipment.contains("submarine"))
+            .cloned()
+            .collect();
+        let (act, skipped) = dockyard_decide(&lines, &wants, &no_subs, &none, 6);
+        assert_eq!(
+            act,
+            Some(DockAct::Add("ship_hull_light_2".into(), 6, Some(14)))
+        );
+        assert!(skipped[0].contains("ship_hull_submarine: no buildable design offered"));
+        // a family refused lately rests: the next one is tried
+        let resting: HashSet<String> = ["ship_hull_submarine".to_string()].into();
+        let (act, skipped) = dockyard_decide(&lines, &wants, &offered, &resting, 6);
+        assert_eq!(
+            act,
+            Some(DockAct::Add("ship_hull_light_2".into(), 6, Some(14)))
+        );
+        assert!(skipped[0].contains("resting"));
+        // above one line's cap the plan's dockyards start a second line
+        let lines = vec![(4, "ship_hull_submarine_2".to_string(), 10)];
+        let mut big = want("ship_hull_submarine");
+        big.target = Some(16);
+        assert_eq!(
+            dockyard_decide(&lines, &[big.clone()], &offered, &none, 9).0,
+            Some(DockAct::Add("ship_hull_submarine_2".into(), 6, Some(21)))
+        );
+        // without a target one capped line is enough
+        assert_eq!(
+            dockyard_decide(&lines, &[want("ship_hull_submarine")], &offered, &none, 9).0,
+            None
+        );
+    }
+
+    #[test]
+    fn dockyard_wants_follow_the_plan_order_dates_removals_and_the_programme() {
+        let tools = fake(vec![]);
+        let mut state = State::default();
+        let plan = json!({
+            "production": [
+                {"equipment": "ship_hull_submarine_1", "factories": 4},
+                {"equipment": "ship_hull_light_2", "factories": 5},
+                {"equipment": "ship_hull_cruiser_2", "factories": 2},
+                {"equipment": "ship_hull_cruiser_2", "remove": true, "from": "1937.12.15"},
+                {"equipment": "ship_hull_heavy_2", "factories": 5, "from": "1950.1.1"},
+                {"equipment": "infantry_equipment_1", "factories": 20}],
+            "navy": {"programme": [
+                {"role": "convoy", "why": "Norway iron by sea"},
+                {"role": "raid", "dockyards": 20, "why": "British trade"},
+                {"role": "escort", "when": "date >= 1950.1.1", "why": "later"}]}});
+        let wants = dock_wants(&mut state, &tools, &plan, START);
+        let families: Vec<&str> = wants.iter().map(|w| w.family.as_str()).collect();
+        // the removed cruiser and the undated-yet battleship are not wanted; the programme's
+        // raid adds nothing new (submarines are planned already), convoys come last
+        assert_eq!(
+            families,
+            vec!["ship_hull_submarine", "ship_hull_light", "convoy"]
+        );
+        assert_eq!(wants[0].target, Some(4));
+        assert!(wants[2].source.starts_with("programme convoy"));
+    }
+
+    fn seller(country: &str, available: i64, contract: (i64, i64), convoys: f64) -> Seller {
+        Seller {
+            country: country.into(),
+            available,
+            delivered: contract.0,
+            contracted: contract.1,
+            convoys,
+        }
+    }
+
+    fn world() -> TradeWorld {
+        TradeWorld {
+            min_delivery: 0.8,
+            ..TradeWorld::default()
+        }
+    }
+
+    #[test]
+    fn a_land_seller_beats_a_cheaper_sea_seller_while_the_sea_is_raided() {
+        let sellers = vec![
+            seller("Brazil", 40, (0, 0), 3.0),
+            seller("Sweden", 20, (0, 0), 0.0),
+        ];
+        let mut w = world();
+        w.price.insert("Brazil".into(), 0.8);
+        w.price.insert("Sweden".into(), 1.0);
+        // peace: the discount wins
+        let (ranked, _) = rank_sellers(&w, &sellers);
+        assert_eq!(ranked[0].0.country, "Brazil");
+        // the Royal Navy raids the Atlantic: the land seller first, dearer or not
+        w.sea_unsafe = Some("at war with ENG".into());
+        let (ranked, _) = rank_sellers(&w, &sellers);
+        assert_eq!(ranked[0].0.country, "Sweden");
+        assert!(ranked[1].1.contains("by sea while at war with ENG"));
+        // equal routes: the discount first, then fewer convoys
+        let mut w = world();
+        w.price.insert("Sweden".into(), 0.8);
+        let sellers = vec![
+            seller("Romania", 20, (0, 0), 0.0),
+            seller("Sweden", 20, (0, 0), 0.0),
+            seller("Spain", 20, (0, 0), 2.0),
+        ];
+        let (ranked, _) = rank_sellers(&w, &sellers);
+        let order: Vec<&str> = ranked.iter().map(|(s, _)| s.country.as_str()).collect();
+        assert_eq!(order, vec!["Sweden", "Romania", "Spain"]);
+    }
+
+    #[test]
+    fn a_rival_or_a_coming_enemy_sells_only_when_nobody_else_does_and_an_enemy_never() {
+        let mut w = world();
+        w.rivals = ["ENG".to_string(), "United Kingdom".to_string()].into();
+        w.price.insert("United Kingdom".into(), 0.7);
+        let sellers = vec![
+            seller("United Kingdom", 40, (0, 0), 0.0),
+            seller("Romania", 8, (0, 0), 0.0),
+        ];
+        let act = trade_decide(&w, &sellers, 8.0, (true, String::new()));
+        assert!(
+            matches!(act, Some(TradeAct::Buy(ref c, 8, _)) if c == "Romania"),
+            "{act:?}"
+        );
+        // nobody else: the rival, said so
+        let only = vec![seller("United Kingdom", 40, (0, 0), 0.0)];
+        match trade_decide(&w, &only, 8.0, (true, String::new())) {
+            Some(TradeAct::Buy(c, _, why)) => {
+                assert_eq!(c, "United Kingdom");
+                assert!(why.contains("a coming enemy: last resort"));
+            }
+            other => panic!("{other:?}"),
+        }
+        // a contract with the rival is replaced once a neutral seller has units
+        let held = vec![
+            seller("United Kingdom", 40, (8, 8), 0.0),
+            seller("Romania", 16, (0, 0), 0.0),
+        ];
+        assert!(matches!(
+            trade_decide(&w, &held, 3.0, (true, String::new())),
+            Some(TradeAct::Cancel(ref c, _)) if c == "United Kingdom"
+        ));
+        // at war: never, even alone
+        w.enemies = ["United Kingdom".to_string()].into();
+        let (ranked, excluded) = rank_sellers(&w, &only);
+        assert!(ranked.is_empty());
+        assert!(excluded[0].contains("at war with us"));
+    }
+
+    #[test]
+    fn a_blocked_or_raided_contract_is_cancelled_and_bought_elsewhere() {
+        let w = world();
+        let sellers = vec![
+            seller("Netherlands", 30, (1, 8), 2.0),
+            seller("Romania", 16, (0, 0), 0.0),
+        ];
+        // 1 of 8 delivered: convoys sunk or the route blocked
+        assert!(matches!(
+            trade_decide(&w, &sellers, 7.0, (true, String::new())),
+            Some(TradeAct::Cancel(ref c, ref why)) if c == "Netherlands" && why.contains("delivers 1/8")
+        ));
+        // once cancelled: bought from the land seller in whole factories
+        let after = vec![
+            seller("Netherlands", 30, (0, 0), 2.0),
+            seller("Romania", 16, (0, 0), 0.0),
+        ];
+        assert_eq!(
+            trade_decide(&w, &after, 7.0, (true, String::new())),
+            Some(TradeAct::Buy("Romania".into(), 8, "land".into()))
+        );
+    }
+
+    #[test]
+    fn a_short_cheap_deficit_is_left_and_a_costly_one_bought() {
+        // 1 unit short on a 2-factory line: 0.1 factories of output against one civilian factory
+        let (buy, why) = worth_buying(1.0, 2.0, 1.0, 1.0);
+        assert!(!buy, "{why}");
+        let w = world();
+        let sellers = vec![seller("Romania", 16, (0, 0), 0.0)];
+        assert!(matches!(
+            trade_decide(&w, &sellers, 1.0, (buy, why)),
+            Some(TradeAct::Accept(ref r)) if r.contains("buying costs 1.00 civilian factories")
+        ));
+        // 3 rubber short on 30 truck factories: 4.5 factories of output for one civilian factory
+        assert!(worth_buying(3.0, 30.0, 1.0, 1.0).0);
+        // a discount makes a marginal purchase worth it
+        assert!(!worth_buying(2.0, 9.0, 1.0, 1.0).0);
+        assert!(worth_buying(2.0, 9.0, 0.8, 1.0).0);
+    }
+
+    #[test]
+    fn the_trade_judgement_turns_auto_import_off_then_buys_by_its_ranking() {
+        let tools = fake(vec![
+            (
+                "hoi4_auto_import",
+                json!({"auto_import": {"enabled": true, "budget": 12}}),
+            ),
+            (
+                "hoi4_resources",
+                json!({"resources": {"rubber": {"shortage": {"short": true, "deficit": 6.0}}},
+                       "fuel": {"ratio": 0.9}}),
+            ),
+            (
+                "hoi4_production_shortages",
+                json!({"lines": [{"equipment": "motorized_equipment_1", "factories": 20,
+                                  "short_of": ["rubber"]}]}),
+            ),
+            (
+                "hoi4_trade",
+                json!({"partners": [
+                    {"country": "United Kingdom", "delivered_over_contracted": "0/0",
+                     "available": "0/40", "convoys": "0"},
+                    {"country": "Netherlands", "delivered_over_contracted": "0/0",
+                     "available": "0/30", "convoys": "3"},
+                    {"country": "Sweden", "delivered_over_contracted": "0/0",
+                     "available": "0/12", "convoys": "0"}]}),
+            ),
+        ]);
+        let plan = json!({
+            "war": {"enemies": ["POL"]},
+            "diplomacy": [{"action": "declare", "target": "POL", "joiners_ok": ["ENG", "FRA"]}],
+            "trade": {"judge": {"on": true, "names": {"ENG": "United Kingdom"},
+                                "discounts": {"SWE": -0.2}, "sea_unsafe_when": "",
+                                "sea_unsafe_why": "the Royal Navy raids"}}});
+        let mut state = State::default();
+        let out = trade_judge_rule(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("automatic importing off: true"), "{out}");
+        assert_eq!(actions(&tools)[0].1["enabled"], false);
+        // a week later: rubber from Sweden (land, discount), never the coming enemy's cheap offer
+        let out = trade_judge_rule(&mut state, &tools, &plan, "l", START + 7 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("buy (land) 8 from Sweden: true"), "{out}");
+        let acts = actions(&tools);
+        assert_eq!(acts[1].0, "hoi4_trade_set");
+        assert_eq!(acts[1].1["country"], "Sweden");
+        assert_eq!(acts[1].1["amount"], 8);
+        // the auto-import rules stand aside
+        assert!(trade_judged(&plan));
+        assert_eq!(
+            resources_step(&mut state, &tools, &plan, "l", START + 7 * DAY).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn a_convoy_line_at_the_game_cap_gets_a_new_line_not_more_dockyards() {
+        // g17n/g17o: convoy_1 at 15 was asked for 15+3 eight times
+        let options = json!({
+            "designs": [{"design_id": 7, "equipment": "convoy_1", "convoy": true}],
+            "naval_lines": [
+                {"line_index": 5, "equipment": "convoy_1", "convoy": true, "requested_factories": 15},
+                {"line_index": 6, "equipment": "convoy_1", "convoy": true, "requested_factories": 14}]});
+        let tools = fake(vec![
+            (
+                "hoi4_convoys",
+                json!({"convoys": {"total": 200, "in_use": 195, "free": 5, "needed": 150}}),
+            ),
+            ("hoi4_naval_production_options", options.clone()),
+            (
+                "hoi4_economy",
+                json!({"factory_trigger_count": {"naval": 35}}),
+            ),
+        ]);
+        let plan = json!({"manage": {"convoys_free": 0.1}});
+        let mut state = State::default();
+        let out = convoy_rule(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        // the line below the cap takes only what fits
+        assert!(out.contains("convoy_1 line 14+1"), "{out}");
+        let mut full = options.clone();
+        full["naval_lines"][1]["requested_factories"] = json!(15);
+        set_reply(&tools, "hoi4_naval_production_options", full);
+        let mut state = State::default();
+        let out = convoy_rule(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("new convoy_1 line with 3"), "{out}");
+        let acts = actions(&tools);
+        assert_eq!(acts[1].0, "hoi4_production_add");
+    }
+
+    #[test]
+    fn a_refused_dockyard_order_rests_its_family_and_the_next_is_tried() {
+        let options = json!({"designs": [
+            {"design_id": 21, "equipment": "ship_hull_submarine_2", "name": "Type VII", "convoy": false},
+            {"design_id": 14, "equipment": "ship_hull_light_2", "name": "Z1936A", "convoy": false}],
+            "naval_lines": []});
+        let tools = fake(vec![
+            (
+                "hoi4_economy",
+                json!({"factory_trigger_count": {"naval": 6}}),
+            ),
+            ("hoi4_production_lines", json!({"lines": []})),
+            ("hoi4_naval_production_options", options),
+        ]);
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_production_add".into(), "invalid_target");
+        let plan = json!({"production": [
+            {"equipment": "ship_hull_submarine_1", "factories": 4},
+            {"equipment": "ship_hull_light_2", "factories": 5}]});
+        let mut state = State::default();
+        let out = dockyard_rule(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.contains("new ship_hull_submarine_2 line (design 21) with 6 dockyards: false"),
+            "{out}"
+        );
+        // a day later: not the same order again, the destroyers instead
+        let out = dockyard_rule(&mut state, &tools, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.contains("new ship_hull_light_2 line (design 14)"),
+            "{out}"
+        );
+        let acts = actions(&tools);
+        assert_eq!(acts.len(), 2);
+        assert_eq!(acts[0].1["design"], 21);
+        assert_eq!(acts[1].1["equipment"], "ship_hull_light_2");
+        assert!(state.manage.notes["dockyards"].contains("refused lately, resting"));
     }
 
     #[test]

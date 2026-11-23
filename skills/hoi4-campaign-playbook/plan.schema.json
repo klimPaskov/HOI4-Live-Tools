@@ -4989,6 +4989,24 @@
             ]
           }
         },
+        "programme": {
+          "type": "array",
+          "description": "what the dockyards build when the production[] ship lines are capped, closed or not offered (plan_manage.rs dockyard_rule): entries in order, the first whose `when` holds and whose hull the Production panel offers gets the idle dockyards (the newest offered design of the role's hull family, or `design`). Roles: raid (submarines: the enemy's trade), escort (destroyers: the own convoys), control (destroyers, then cruisers: dominance for an invasion route or home waters), capital, carrier, convoy. Derived from the plan's wars and trade routes, never a fixed build list. Absent: idle dockyards are the convoy rule's",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": {"type": "string", "enum": ["raid", "escort", "control", "capital", "carrier", "convoy"]},
+              "equipment": {"type": "string", "minLength": 1, "description": "an equipment key whose family replaces the role's hull families (a mod's hull)"},
+              "design": {"type": ["string", "integer"], "description": "a design id or name (hoi4_naval_production_options) instead of the newest offered"},
+              "dockyards": {"type": "integer", "minimum": 1, "description": "dockyards wanted on the role: above one line's cap (10 screens and submarines, 5 capitals, 15 convoys) another line is started; absent: one line filled to its cap"},
+              "when": {"$ref": "#/definitions/predicate"},
+              "why": {"type": "string", "description": "Free text for people and the player; never read by the executor."},
+              "note": {"type": "string", "description": "Free text for people and the player; never read by the executor."}
+            },
+            "additionalProperties": false,
+            "required": ["role"]
+          }
+        },
         "convoy_escort": {
           "type": "object",
           "properties": {
@@ -5201,6 +5219,37 @@
             "minimum": 1,
             "default": 30,
             "description": "abort after this many game days without a landing"
+          },
+          "route_regions": {
+            "type": "array",
+            "items": {"$ref": "#/definitions/sea_region"},
+            "description": "sea regions the transports cross (facts navy.route_regions): added to `fleet`'s area before its invasion support (hoi4_fleet_region); their patrol time is the dominance proxy of `gates`. Never run live: absent, nothing changes"
+          },
+          "execute_when": {
+            "$ref": "#/definitions/predicate",
+            "description": "the prepared landing executes only once this holds (e.g. at_war_with:NOR: drawn and prepared before the declaration, launched at it); the execute_days clock runs from then"
+          },
+          "gates": {
+            "type": "object",
+            "properties": {
+              "convoys_per_division": {"type": "number", "minimum": 0, "default": 6, "description": "transports per landing division (NAI ESTIMATED_CONVOYS_PER_DIVISION 6; the army card shows the game's own Reserved Convoys VAL/NEED): free convoys below divisions x this hold the execute; the need is reserved for the convoy rule from the start"},
+              "patrol_days": {"type": "integer", "minimum": 0, "default": 50, "description": "days the route regions are patrolled before the execute while no tool reads the dominance (DOMINANCE_DAILY_GAIN_FACTOR 0.02: full in about 50 days)"},
+              "when": {"$ref": "#/definitions/predicate", "description": "dominance and cover (e.g. naval_dominance:<region> >= 0.6 for each route region, the 60% control rule): false holds the execute; unknown falls back to patrol_days"},
+              "why": {"type": "string", "description": "Free text for people and the player; never read by the executor."}
+            },
+            "additionalProperties": false,
+            "description": "what must hold before the execute (plan_military.rs invasion_gates); the game still refuses a landing without dominance or transports"
+          },
+          "follow_up": {
+            "type": "object",
+            "properties": {
+              "reinforce": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "armies (names or army_layout name_hints) moved to the taken state once landed (by sea through the port: no dominance needed once a port is held)"},
+              "watch_days": {"type": "integer", "minimum": 1, "default": 30, "description": "game days the beachhead is watched after the landing"},
+              "on_cut_off": {"type": "string", "enum": ["reinforce", "withdraw", "wake"], "default": "wake", "description": "a lost beachhead: send the reinforcements again, bring the landing armies back to from_state, or only wake the player (always woken)"},
+              "why": {"type": "string", "description": "Free text for people and the player; never read by the executor."}
+            },
+            "additionalProperties": false,
+            "description": "after the landing; the front on the beachhead is an operations[] entry whose `when` is controls_state:<target_state>"
           },
           "why": {
             "type": "string",
@@ -5684,6 +5733,21 @@
       "x-owner": "executor",
       "description": "military-industrial organisations per organisation in order (plan_affairs.rs mio_step, W2-8): design team once, policy once, then the traits in list order, one per action"
     },
+    "resource_sources": {
+      "type": "object",
+      "properties": {
+        "oil": {"$ref": "#/definitions/resource_source_list"},
+        "aluminium": {"$ref": "#/definitions/resource_source_list"},
+        "rubber": {"$ref": "#/definitions/resource_source_list"},
+        "tungsten": {"$ref": "#/definitions/resource_source_list"},
+        "steel": {"$ref": "#/definitions/resource_source_list"},
+        "chromium": {"$ref": "#/definitions/resource_source_list"},
+        "coal": {"$ref": "#/definitions/resource_source_list"}
+      },
+      "additionalProperties": false,
+      "x-owner": "player",
+      "description": "resources as strategy (lint_resources.py economy.resource_source; the player reads it to know which state is taken for what and which deficit is meant): per resource, the named sources that cover what the planned lines need beyond the own output: states taken by a date, synthetic refineries, a trade partner with its route, or a temporary deficit with its reason (facts.py resource-states lists states, owners, reach and discounts)"
+    },
     "trade": {
       "type": [
         "array",
@@ -5698,6 +5762,25 @@
           "items": {
             "$ref": "#/definitions/trade_deal"
           }
+        },
+        "judge": {
+          "type": "object",
+          "properties": {
+            "on": {"type": "boolean", "default": true, "description": "false switches the judgement off (plan_manage.rs trade_judge_rule; never run live)"},
+            "days": {"type": "integer", "minimum": 1, "default": 7, "description": "game days between checks"},
+            "names": {"type": "object", "additionalProperties": {"type": "string"}, "description": "tag -> display name as the Trade view lists it (localisation), so the plan's tags match the partner rows"},
+            "avoid": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "tags never bought from while another seller exists, besides the plan's wars (war.enemies, operations[].enemies, declarations and their accepted joiners): trading rents a civilian factory to the seller"},
+            "prefer": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "allies, subjects and faction members: first among equal prices"},
+            "discounts": {"type": "object", "additionalProperties": {"type": "number", "minimum": -1, "maximum": 1}, "description": "tag -> trade cost change for us (-0.2: 20% cheaper), from the game files' trade_cost_for_target_factor ideas, overlord_trade_cost_factor and the like (facts)"},
+            "sea_unsafe_when": {"$ref": "#/definitions/predicate", "description": "while this holds, sea routes are unsafe (an enemy raids them, or a coming war closes them): land sellers first, sea sellers only when no other seller exists"},
+            "sea_unsafe_why": {"type": "string", "description": "the reason quoted in the digest"},
+            "min_delivery": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.8, "description": "a contract delivering less than this share (convoys sunk, route blocked) is cancelled and re-sourced (the game's AI cancels below MIN_DELIVERED_TRADE_FRACTION 0.8)"},
+            "civ_worth": {"type": "number", "exclusiveMinimum": 0, "default": 1, "description": "how many military factories' output one civilian factory on trade is weighed against when a deficit is judged (value judgement; say why when changed)"},
+            "accept": {"type": "object", "additionalProperties": {"type": "object", "properties": {"units": {"type": "number", "minimum": 0}, "until": {"$ref": "#/definitions/predicate"}, "why": {"type": "string", "minLength": 1}}, "required": ["until", "why"], "additionalProperties": false}, "description": "resource -> a temporary deficit left on purpose: within `units` and until `until` holds, with its reason"},
+            "why": {"type": "string", "description": "Free text for people and the player; never read by the executor."}
+          },
+          "additionalProperties": false,
+          "description": "trade as a judgement: deficits bought from the best-placed seller (never an enemy; land or a safe sea route first; not a coming enemy while another seller exists; discounts, then fewer convoys), failing contracts re-sourced, cheap deficits left with their reason. Automatic importing goes off and the auto-import rules stand aside while it runs"
         },
         "why": {
           "type": "string",
@@ -7340,6 +7423,25 @@
         ]
       },
       "description": "ordered spends of one experience pool (pools cap at 500)"
+    },
+    "resource_source_list": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {"enum": ["own", "conquest", "synthetic", "trade", "deficit"]},
+          "states": {"type": "array", "items": {"type": "integer"}, "description": "conquest: the states taken for this resource"},
+          "by": {"type": "string", "description": "the date the source gives from"},
+          "refineries": {"type": "integer", "minimum": 0, "description": "synthetic: refineries built by `by` (rubber per refinery from the building and the research path's techs)"},
+          "partner": {"type": "string", "description": "trade: the seller's tag"},
+          "route": {"enum": ["land", "sea"], "description": "trade: how it arrives (sea: convoys, raiding, blocked routes)"},
+          "units": {"type": "number", "minimum": 0},
+          "until": {"type": "string", "description": "the date the source ends (a deficit's end, a trade the coming war closes)"},
+          "why": {"type": "string", "description": "Free text for people and the player; never read by the executor."}
+        },
+        "required": ["source"],
+        "additionalProperties": false
+      }
     },
     "sea_region": {
       "type": [

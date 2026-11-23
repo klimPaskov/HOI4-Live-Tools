@@ -841,6 +841,27 @@ def cmd_resources(args):
     return emit(args, r, text)
 
 
+def cmd_resource_states(args):
+    from . import resources as resmod
+    w = world(args, args.TAG)
+    r = resmod.facts(w, args.TAG, args.resource, args.limit)
+
+    def text(x):
+        out = [f"{x['tag']}: states with {x['resource'] or 'strategic resources'} (owner, reach, units)"]
+        for s in x["states"]:
+            out.append(f"state {s['id']} {s['name']} {s['owner']} {s['reach']}: "
+                       + " ".join(f"{k} {v:g}" for k, v in s["resources"].items()))
+        for d in x["discounts"]:
+            out.append(f"discount {d['idea']} {d['factor']:+g} for {x['tag']} [{d['file']}]")
+        sr = x["synthetic_refinery"]
+        out.append(f"synthetic refinery: cost {sr['base_cost']}, rubber {sr['rubber_base']:g} base, up to "
+                   f"{sr['rubber_max']:g} with " + ", ".join(sr["rubber_per_tech"]) + f"; {sr['state_max']} a state")
+        out.append("method: " + x["d"])
+        return out
+
+    return emit(args, r, text)
+
+
 def cmd_effect(args):
     w = world(args)
     e = scenariomod.effect_body(w, args.name)
@@ -1622,6 +1643,9 @@ def parser():
     add("event", cmd_event, "id")
     add("effect", cmd_effect, "name")
     add("resources", cmd_resources, "TAG")
+    p = add("resource-states", cmd_resource_states, "TAG")
+    p.add_argument("--resource", choices=("oil", "aluminium", "rubber", "tungsten", "steel", "chromium", "coal"))
+    p.add_argument("--limit", type=int, default=30)
     p = add("grep", cmd_grep, "token")
     p.add_argument("--limit", type=int, default=200)
     p.add_argument("--folder", action="append", help="limit to a content folder (repeat)")

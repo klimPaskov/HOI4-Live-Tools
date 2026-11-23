@@ -416,6 +416,9 @@ module's docstring has the detail:
                            (divisions against the AI: info, the count reported; the floor is force.readiness)
   economy.unbacked         (warning) targets above what the plan's own levers give (facts.economy.forecast)
   economy.below_forecast   (warning) targets below what the plan's own levers give
+  economy.resource_source  a resource the lines need beyond the own output with no named source (conquest by a
+                           date, synthetic refineries, a trade partner with its route) or temporary deficit
+                           (lint_resources.py; an error when the plan keeps resource_sources, else a warning)
   construction.switch      (warning) military factories queued from the first day while the switch is later
   force.required           a dated war and no force_design, or a war it does not name
   force.breakthrough       an offensive war against a defended line without the armoured and mobile divisions
@@ -6109,6 +6112,8 @@ class Lint:
         __import__((__package__ or "hoi4facts") + ".lint_manage", fromlist=["check"]).check(self)  # manage.owner
         # production over all lines sized to the need, construction capacity, the AI baseline
         __import__((__package__ or "hoi4facts") + ".lint_economy", fromlist=["check"]).check(self)
+        # every resource the lines need covered by a named source (economy.resource_source)
+        __import__((__package__ or "hoi4facts") + ".lint_resources", fromlist=["check"]).check(self)
         # the force against what the plan's wars need (force.py): breakthrough, air, landings, the force table
         __import__((__package__ or "hoi4facts") + ".lint_force", fromlist=["check"]).check(self)
         order = {s: i for i, s in enumerate(SEVERITIES)}
