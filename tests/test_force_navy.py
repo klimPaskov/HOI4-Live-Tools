@@ -52,6 +52,15 @@ class GameFacts(unittest.TestCase):
         self.assertEqual(navy.role_of(g, "ship_hull_carrier_1"), "carrier")
         self.assertEqual(navy.role_of(g, "ship_hull_submarine_1"), "submarine")
 
+    def test_atlantic_regions_without_naval_terrain_are_sea(self):
+        lint = lint_plan.Lint(germany_against_britain(), self.game)
+        regs, unknown = navy.resolve_regions(lint, ["Western Approaches", {"region": "Bay of Biscay"}, "North Sea",
+                                                   "Nowhere Sea"])
+        self.assertEqual([r["id"] for r in regs], [43, 42, 16])
+        self.assertEqual(unknown, ["Nowhere Sea"])
+        land = next(r for r in lint.world.strategic_regions().values() if r.get("name") == "North-West Germany")
+        self.assertFalse(navy.is_sea_region(lint, land))
+
     def test_carrier_planes_and_sea_zones(self):
         g = self.game
         self.assertTrue(navy.carrier_plane(g, "cv_small_plane_naval_bomber_airframe_1"))
@@ -145,6 +154,21 @@ class Britain(unittest.TestCase):
     def test_a_sea_won_from_the_air_needs_wings_over_every_region(self):
         cover = [x for x in self.rules(self.planned, "force.sea_air_cover") if "sea_lion" in x["where"]]
         self.assertTrue(cover)  # the hand plan flies no naval strike over the route
+
+    def test_a_switched_ship_line_is_judged_as_its_new_type(self):
+        plan = germany_against_britain()
+        plan["production"] = [x for x in plan.get("production") or [] if "submarine" not in x.get("equipment", "")]
+        plan["production"] += [
+            {"equipment": "ship_hull_submarine_1", "factories": 4, "from": "1936.1.1"},
+            {"equipment": "ship_hull_submarine_1", "replace": "ship_hull_submarine_2", "from": "1936.1.1"}]
+        plan["force_design"] = {"wars": [{"id": "war_pol", "enemies": ["POL"], "kind": "offensive", "axes": 3}],
+                                "sea": [{"id": "raid", "kind": "raid", "by": "1940.6.1", "war": "war_pol",
+                                         "enemies": ["ENG"], "regions": ["Western Approaches"],
+                                         "means": ["submarine"]}]}
+        out = lint_plan.lint(plan, self.game)
+        found = [x["message"] for x in out["findings"] if x["rule"] == "force.navy_unused"
+                 and "submarine" in x["message"]]
+        self.assertFalse(any("ship_hull_submarine_1" in m for m in found), found)
 
     def test_tools_are_ordered_by_reliance(self):
         tools = self.planned["facts"]["force"]["navy"]["tools"]
