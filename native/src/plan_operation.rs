@@ -2899,6 +2899,19 @@ fn prepare(
         .map(|u| &u.name)
         .chain(released.iter())
         .any(|n| army_row(roster, n).is_some_and(outside_of) && movable(n));
+    // a reserve row's army (not yet released) the source left inside the operation's group: the
+    // group's front holds it on the line whatever its own orders say (w43n1, 23 Nov 2026: Armee
+    // Süd's 20 divisions stayed on the Dutch border in Army Group 1 after its orders were cleared
+    // and its march read back), so the group is formed again from the line armies alone
+    let held_back: Vec<String> = reserve_names(state, op, roster)
+        .into_iter()
+        .filter(|n| !released.contains(n))
+        .collect();
+    let reserve_inside = group.is_some()
+        && held_back
+            .iter()
+            .any(|n| army_row(roster, n).is_some_and(|r| r["army_group"].as_str() == group));
+    let outside = outside || reserve_inside;
     let regroup_key = key(id, "group_again");
     let regroups = state.done.get(&regroup_key).copied().unwrap_or(0);
     let calm = if at_war_regroup {
@@ -2952,9 +2965,10 @@ fn prepare(
         && !state.skipped(now, "opgrp", id)
     {
         let joins = |n: &str| -> bool {
-            army_row(roster, n).is_some_and(|r| {
-                (outside_of(r) && movable(n)) || (regroup && r["army_group"].as_str() == group)
-            })
+            !held_back.iter().any(|h| h == n)
+                && army_row(roster, n).is_some_and(|r| {
+                    (outside_of(r) && movable(n)) || (regroup && r["army_group"].as_str() == group)
+                })
         };
         let mut names: Vec<String> = line_armies.iter().map(|u| u.name.clone()).collect();
         let planned = list(plan, "army_group")

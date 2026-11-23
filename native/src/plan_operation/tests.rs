@@ -2552,3 +2552,26 @@ fn a_reserve_left_on_its_groups_front_is_cleared_and_marches_back_from_the_borde
         .iter()
         .any(|(n, a)| n == "hoi4_army_move" && a["state_id"] == json!(55)));
 }
+
+#[test]
+fn a_reserve_inside_the_operations_group_is_left_out_when_the_group_is_formed_again() {
+    // w43n1 (23 Nov 2026): the reserve's own orders cleared and its march read back, its
+    // divisions stayed on the group's front: only a group of the line armies frees it
+    let mut plan = plan();
+    plan["operations"][0]["regroup_at_war"] = json!(true);
+    plan["operations"][0]["reserve_orders"] = json!(true);
+    plan["operations"][0]["formations"] =
+        json!([{"army": "Mitte", "role": "line"}, {"army": "Nord", "role": "line"}]);
+    plan["operations"][0]["reserve"] = json!([{"army": "Sued", "station": 55}]);
+    let game = Game::new();
+    *game.enemies.borrow_mut() = vec!["ENG"];
+    let mut state = State {
+        war_active: true,
+        ..State::default()
+    };
+    burst(&mut state, &game, &plan, START);
+    assert_eq!(
+        group_creates(&game).first(),
+        Some(&json!({"armies": ["Mitte", "Nord"]}))
+    );
+}
