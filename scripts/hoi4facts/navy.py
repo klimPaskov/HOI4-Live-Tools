@@ -345,11 +345,36 @@ def deck_size(lint):
 
 
 # ---------------------------------------------------------------------------------------------- operations
+def sea_provinces(game):
+    """Sea and lake province ids from map/definition.csv (id;r;g;b;type;...), empty without a map."""
+    def load():
+        path = game.file("map/definition.csv")
+        out = set()
+        if not path:
+            return out
+        with open(path, encoding="latin-1") as fh:
+            for line in fh:
+                parts = line.split(";")
+                if len(parts) > 4 and parts[0].strip().isdigit() and parts[4].strip() in ("sea", "lake"):
+                    out.add(int(parts[0]))
+        return out
+    return game.cached("sea_provinces", load) if hasattr(game, "cached") else load()
+
+
+def is_sea_region(lint, r):
+    """A strategic region is naval when it declares naval_terrain or its provinces are all sea (several Atlantic
+    regions, e.g. 42 Bay of Biscay and 43 Western Approaches, carry no naval_terrain line)."""
+    if r.get("naval_terrain"):
+        return True
+    provs = r.get("provinces") or []
+    return bool(provs) and set(provs) <= sea_provinces(lint.game)
+
+
 def _region_index(lint):
     regions = lint.world.strategic_regions()
     by_name = {}
     for rid, r in regions.items():
-        if r.get("naval_terrain"):
+        if is_sea_region(lint, r):
             by_name[str(r.get("name") or rid).strip().lower()] = rid
             by_name[str(rid)] = rid
     return regions, by_name

@@ -52,6 +52,15 @@ class GameFacts(unittest.TestCase):
         self.assertEqual(navy.role_of(g, "ship_hull_carrier_1"), "carrier")
         self.assertEqual(navy.role_of(g, "ship_hull_submarine_1"), "submarine")
 
+    def test_atlantic_regions_without_naval_terrain_are_sea(self):
+        lint = lint_plan.Lint(germany_against_britain(), self.game)
+        regs, unknown = navy.resolve_regions(lint, ["Western Approaches", {"region": "Bay of Biscay"}, "North Sea",
+                                                   "Nowhere Sea"])
+        self.assertEqual([r["id"] for r in regs], [43, 42, 16])
+        self.assertEqual(unknown, ["Nowhere Sea"])
+        land = next(r for r in lint.world.strategic_regions().values() if r.get("name") == "North-West Germany")
+        self.assertFalse(navy.is_sea_region(lint, land))
+
     def test_carrier_planes_and_sea_zones(self):
         g = self.game
         self.assertTrue(navy.carrier_plane(g, "cv_small_plane_naval_bomber_airframe_1"))
