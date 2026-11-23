@@ -852,7 +852,7 @@ mod chord_tests {
         // 0 -> 23: +10, +10, +1, +1, +1 = 5 clicks instead of 23
         assert_eq!(clicks_needed(0, 23), (5, 23));
         assert_eq!(clicks_needed(4, 19), (2, 15));
-        assert_eq!(clicks_needed(15, 0), (3, 15));
+        assert_eq!(clicks_needed(15, 0), (2, 15));
         assert_eq!(clicks_needed(3, 3), (0, 0));
     }
 }
