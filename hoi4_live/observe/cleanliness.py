@@ -1,6 +1,7 @@
 """CLEANLINESS per game year of a run: what the executor did twice, what it retried unchanged
 after a refusal, how long it stood still while something was assignable, how the player spent
-its calls, and how often the game speed changed.
+its calls, how often the game speed changed, and what each action kind costs per element
+(calls, elements changed, wall seconds, seconds per element: the batching measure).
 
 Sources (all in the run directory, read only):
   game-actions.jsonl  the executor's actions (one record per status: Dispatching, then the final
@@ -93,6 +94,75 @@ def _assignable(snap):
     if rows:
         out[""] = f"{len(rows)} omissions ({', '.join(str(o.get('item')) for o in rows[:4])})"
     return out
+
+
+# the list arguments that name the elements one action acts on (wings, divisions, states, ...)
+ELEMENT_KEYS = ("wings", "divisions", "states", "lines", "armies", "provinces", "traits",
+                "trait_indices", "items", "orders")
+
+
+def _elements(action):
+    """How many elements an action names (1 when it names no list)."""
+    for key in ELEMENT_KEYS:
+        v = (action or {}).get(key)
+        if isinstance(v, list):
+            return len(v)
+    return 1
+
+
+def _changed(final, asked):
+    """Elements a final receipt shows changed: the receipt's own count (`changed`, or the
+    length of an `unchanged` list taken from the asked count) when it gives one; else all asked
+    when Verified, none otherwise."""
+    detail = final.get("detail")
+    if isinstance(detail, dict):
+        if isinstance(detail.get("changed"), int):
+            return max(0, detail["changed"])
+        if isinstance(detail.get("unchanged"), list):
+            return max(0, asked - len(detail["unchanged"]))
+    return asked if final.get("status") == "Verified" else 0
+
+
+def per_kind(actions):
+    """Per action kind: calls, elements asked, elements changed, wall seconds (Dispatching to
+    the final receipt) and seconds per changed element. Returns {kind: dict}."""
+    started = {}
+    out = defaultdict(lambda: {"calls": 0, "elements": 0, "changed": 0, "seconds": 0.0})
+    for a in sorted(actions, key=lambda a: a.get("unix_ms") or 0):
+        rid = a.get("id")
+        status = a.get("status")
+        if status == "Dispatching":
+            started.setdefault(rid, a)
+            continue
+        if status not in FINAL and status != "Diverged":
+            continue
+        first = started.pop(rid, None)
+        action = (first or a).get("action") or {}
+        kind = str(action.get("kind", "")) or "?"
+        k = out[kind]
+        asked = _elements(action)
+        k["calls"] += 1
+        k["elements"] += asked
+        k["changed"] += _changed(a, asked)
+        if first is not None and a.get("unix_ms") and first.get("unix_ms"):
+            k["seconds"] += max(0.0, (a["unix_ms"] - first["unix_ms"]) / 1000.0)
+    for k in out.values():
+        k["per_element"] = k["seconds"] / k["changed"] if k["changed"] else None
+    return dict(out)
+
+
+def render_per_kind(kinds, top=16):
+    """The per-action-kind table, costliest kinds first."""
+    if not kinds:
+        return []
+    lines = ["  per action kind (calls, elements asked, elements changed, wall s, s per changed element):"]
+    for kind, k in sorted(kinds.items(), key=lambda kv: -kv[1]["seconds"])[:top]:
+        per = f"{k['per_element']:.1f}" if k["per_element"] is not None else "-"
+        lines.append(
+            f"    {kind}: {k['calls']} calls, {k['elements']} asked, {k['changed']} changed, "
+            f"{k['seconds']:.0f} s, {per} s/element"
+        )
+    return lines
 
 
 def measure(run_dir, snaps):
@@ -193,6 +263,7 @@ def render(run_dir, snaps):
     if not years:
         return ""
     lines = ["", "CLEANLINESS (per game year; executor ledger game-actions.jsonl, calls.jsonl, snapshots)"]
+    lines += render_per_kind(per_kind(_jsonl(os.path.join(run_dir, "game-actions.jsonl"))))
     for year in sorted(years):
         y = years[year]
         reps = sum(y["repeats"].values())

@@ -15,6 +15,30 @@ class CleanlinessTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             _check(pathlib.Path(d))
 
+    def test_per_kind_counts_elements_seconds_and_unchanged(self):
+        wings = {"kind": "air_mission", "wings": ["a", "b", "c", "d"], "mission": "cas"}
+        line = {"kind": "production_set", "line": 1, "equipment": "x", "factories": 9}
+        kinds = cleanliness.per_kind([
+            {"id": "1", "action": wings, "status": "Dispatching", "unix_ms": 1000},
+            {"id": "1", "action": wings, "status": "Diverged", "unix_ms": 5000,
+             "detail": {"unchanged": [{"element": "d", "why": "out of range"}]}},
+            {"id": "2", "action": line, "status": "Dispatching", "unix_ms": 6000},
+            {"id": "2", "action": line, "status": "Verified", "unix_ms": 7500},
+            {"id": "3", "action": line, "status": "Dispatching", "unix_ms": 8000},
+            {"id": "3", "action": line, "status": "NotApplied", "unix_ms": 9000},
+        ])
+        air = kinds["air_mission"]
+        self.assertEqual((air["calls"], air["elements"], air["changed"]), (1, 4, 3))
+        self.assertAlmostEqual(air["seconds"], 4.0)
+        self.assertAlmostEqual(air["per_element"], 4.0 / 3)
+        prod = kinds["production_set"]
+        self.assertEqual((prod["calls"], prod["changed"]), (2, 1))
+        self.assertAlmostEqual(prod["per_element"], 2.5)
+        rows = cleanliness.render_per_kind(kinds)
+        self.assertIn("air_mission: 1 calls, 4 asked, 3 changed, 4 s, 1.3 s/element", "\n".join(rows))
+        # a receipt's own count wins
+        self.assertEqual(cleanliness._changed({"status": "Verified", "detail": {"changed": 2}}, 5), 2)
+
 
 def _check(tmp_path):
     act = {"kind": "event_choose", "event": "e.1", "option": 0}
