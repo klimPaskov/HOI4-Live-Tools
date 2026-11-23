@@ -12,7 +12,7 @@ Game version: HOI4 1.19.4.1 on macOS and Linux. The tool catalogue has 189 `hoi4
 
 | | macOS | Linux | Windows |
 |---|---|---|---|
-| Tools in the build | all | all (the same modules) | the common read tools only; no game attachment |
+| Tools in the build | all | all (the same modules) | all compiled and unit-tested; none reachable (no Windows game attachment or input yet) |
 | Compiles in CI | yes | yes (x86_64 and aarch64) | yes (the code compiled there) |
 | Memory layout for 1.19.4.1 | native (the canonical values) | generated table: 82 of 94 image keys, 527 of 617 field keys | none |
 | Input | CGEvent | X11 XTEST | none in the native runtime |
@@ -70,28 +70,32 @@ Two runtimes exist:
   Windows HOI4 1.19.4.2. It has no memory reads and is not a campaign runtime.
 - The native runtime has a read-only Windows process reader (`native/src/platform/windows/`) with
   an empty build allowlist. It attaches to no game, sends no input, has no launcher and no layout.
-  The management tools are not compiled for Windows.
+  The management tools are compiled and unit-tested on Windows, but nothing binds them there yet.
+  Their journals hold the exclusive lock on a sibling `<journal>.lock` file on Windows (a Windows
+  lock on the journal itself would stop every other reader); the daily plan store still refuses on
+  Windows (its owner-only atomic writes are not verified there).
 
 Steps to finish, in order:
-1. Compile the tool modules on Windows (they are platform-neutral apart from a few POSIX file
-   calls) so Windows CI runs their unit tests.
-2. A `Process` for an owned Windows game on top of the existing reader, and a launcher that starts
+1. Done: the tool modules compile on Windows and Windows CI runs their unit tests.
+2. The private-file checks (controller state, daily plan store) for Windows: owner-only ACLs
+   instead of POSIX modes.
+3. A `Process` for an owned Windows game on top of the existing reader, and a launcher that starts
    the game without Steam variables in a private user folder, like the Linux launcher.
-3. A `GameInput` for Windows (`SendInput` to the owned, foreground window; client geometry, DPI,
+4. A `GameInput` for Windows (`SendInput` to the owned, foreground window; client geometry, DPI,
    keyboard layout), with the modifier timing the Linux backend needed.
-4. A layout table for the Windows build of the same game version as macOS. The mapper
+5. A layout table for the Windows build of the same game version as macOS. The mapper
    (`scripts/cross_platform_map.py`) reads Mach-O and ELF only. For a PE executable it can be
    extended for vtables (MSVC RTTI names translate from Itanium names) and for globals reached
    through matched functions, but MSVC code differs from clang code far more than gcc code does,
    so field offsets will mostly come from live reads: MSVC `std::string` is 32 bytes like
    libstdc++ but `std::map`, `std::list` and hash containers have other sizes and layouts.
-5. Live checks of every tool on a Windows game, recorded like the Linux record.
+6. Live checks of every tool on a Windows game, recorded like the Linux record.
 
 ## Continuous integration
 
 | Workflow | macOS | Linux | Windows |
 |---|---|---|---|
-| Native Rust | fmt, clippy `-D warnings`, `cargo test` | the same, plus aarch64 clippy, the Yama-gated reader test and an Xvfb input fixture | fmt, clippy, `cargo test` of the modules compiled there, the owned reader fixture |
+| Native Rust | fmt, clippy `-D warnings`, `cargo test` | the same, plus aarch64 clippy, the Yama-gated reader test and an Xvfb input fixture | the same full set (six daily-store tests ignored with the reason), plus the owned reader fixture |
 | Python | unit tests on 3.9 and 3.13, plan-key check, protocol smoke | the same | the same |
 
 `tests/test_xlayout_coverage.py` (Python workflow, every platform) fails when the sources use a
