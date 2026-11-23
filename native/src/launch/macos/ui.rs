@@ -422,7 +422,9 @@ pub(super) fn save_game(
             }
             Err(e) if tries < SAVE_TRIES && save_retryable(&e) => {
                 tries += 1;
-                crate::phase::sleep(Duration::from_millis(800));
+                // a refused input check sent nothing; the OS window list settles within a second
+                let wait = if input_refused(&e) { 1500 } else { 800 };
+                crate::phase::sleep(Duration::from_millis(wait));
             }
             Err(e) => return Err(e),
         }
@@ -441,6 +443,15 @@ fn save_retryable(e: &Error) -> bool {
     matches!(
         e.code,
         "input_readback_failed" | "invalid_gui" | "gui_target_unavailable"
+    ) || input_refused(e)
+}
+/// The input check before every press refused it, so nothing reached the game: the OS window
+/// list did not show exactly one owned window on the game's content rectangle for a moment
+/// (v60b paused4, 23 Nov 2026: 2.6 s into a save, the next call saved normally).
+fn input_refused(e: &Error) -> bool {
+    matches!(
+        e.code,
+        "input_geometry_unverified" | "input_target_not_frontmost"
     )
 }
 /// How long the save window may take to show after the Save button closed the menu.
@@ -1318,6 +1329,10 @@ mod tests {
         assert!(save_retryable(&Error::new(
             "input_readback_failed",
             "No save file was written within 30 s"
+        )));
+        assert!(save_retryable(&Error::new(
+            "input_geometry_unverified",
+            "One owned OS window must match the fresh native content rectangle"
         )));
         assert!(!save_retryable(&Error::new(
             "events_open",
