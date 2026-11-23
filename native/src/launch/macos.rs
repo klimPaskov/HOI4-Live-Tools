@@ -1167,6 +1167,7 @@ impl MacClock {
             && process.identity() == self.process.identity();
         let scope = guard_pause.then(|| self.pause.begin());
         let menus_before = ui::menus_closed();
+        let sent_before = crate::pause_guard::sent_on_this_thread();
         let started = std::time::Instant::now();
         // A direct player order on an army takes it from the executor's war rules for a while.
         if name.starts_with("hoi4_army_") && !crate::autopilot::autopilot().in_step() {
@@ -1216,7 +1217,11 @@ impl MacClock {
         let Some(scope) = scope else {
             return result;
         };
-        let verdict = end_pause_scope(self.process.as_ref(), &*self.keys, scope, menus_before);
+        let verdict = if crate::pause_guard::sent_on_this_thread() == sent_before {
+            scope.untouched()
+        } else {
+            end_pause_scope(self.process.as_ref(), &*self.keys, scope, menus_before)
+        };
         // One context line per action for the run report: which actions changed the pause
         // state, whether the change was our own input and whether it was put back.
         eprintln!(
@@ -6202,6 +6207,16 @@ impl MacClock {
             let game_dir = mapdata::game_dir(&epoch.game.exe)?;
             let nodes = || ui::read(process, |r, i| armies::plan_nodes(r, i, army));
             let before = nodes()?;
+            let read_plan = || {
+                ui::read(process, |r, i| {
+                    armies::orders::of_named(r, i, army, &Default::default())
+                })
+                .map(Value::from)
+                .unwrap_or(Value::Null)
+            };
+            let plan_before = read_plan();
+            // the states the new arrow must reach: the line's states, or the one target state
+            let want: Vec<i32> = across.clone().unwrap_or_else(|| vec![state]);
             let retry = actions.receipt_exists(id);
             if !retry {
                 self.keys.preflight()?;
@@ -6220,13 +6235,18 @@ impl MacClock {
             let mut settle = || {
                 let now = nodes()?;
                 // the plan read back from the game: the new line's target states and width
-                let plan = ui::read(process, |r, i| {
-                    armies::orders::of_named(r, i, army, &Default::default())
-                })
-                .map(Value::from)
-                .unwrap_or(Value::Null);
-                let detail = json!({"army":army,"plan_orders":now,"plan":plan});
+                let plan = read_plan();
+                let miss = offensive_miss(&plan_before, &plan, &want, spearhead);
+                let mut detail = json!({"army":army,"plan_orders":now,"plan":plan});
+                if let Some(m) = &miss {
+                    detail["missed"] = m.clone();
+                }
                 Ok(if retry {
+                    journal::Outcome::Diverged(detail)
+                } else if miss.is_some() && now > before {
+                    // an arrow was drawn but the game took it elsewhere (s55a, 23 Nov 2026: four
+                    // strokes into state 34 read back over 18 and 980 and were each called done,
+                    // so the same stroke went out again and five arrows stood on one front)
                     journal::Outcome::Diverged(detail)
                 } else {
                     settle::order_growth(before, now).outcome(detail)
@@ -7410,6 +7430,84 @@ impl MacClock {
         };
         let receipt = journal.execute(id, &epoch, action, &mut backend, Duration::from_secs(10))?;
         Ok(json!({"receipt":receipt}))
+    }
+}
+
+/// The new offensive arrows of a plan read back after a draw (ids absent `before`) when none of
+/// them reaches a wanted state: the arrow's target states (a spearhead's path as well). None
+/// when no new arrow stands or one reaches the line.
+fn offensive_miss(before: &Value, now: &Value, want: &[i32], spearhead: bool) -> Option<Value> {
+    let arrows = |plan: &Value| -> Vec<Value> {
+        plan.as_array()
+            .into_iter()
+            .flatten()
+            .flat_map(|front| front["offensives"].as_array().cloned().unwrap_or_default())
+            .collect()
+    };
+    let old: std::collections::HashSet<i64> = arrows(before)
+        .iter()
+        .filter_map(|o| o["id"].as_i64())
+        .collect();
+    let new: Vec<Value> = arrows(now)
+        .into_iter()
+        .filter(|o| o["id"].as_i64().is_some_and(|id| !old.contains(&id)))
+        .collect();
+    if new.is_empty() {
+        return None;
+    }
+    let states = |v: &Value| -> Vec<i32> {
+        v.as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|x| x.as_i64().map(|n| n as i32))
+            .collect()
+    };
+    let reach = |o: &Value| -> Vec<i32> {
+        let mut r = states(&o["target"]["states"]);
+        if spearhead {
+            r.extend(states(&o["path_states"]));
+        }
+        r
+    };
+    if new
+        .iter()
+        .any(|o| reach(o).iter().any(|s| want.contains(s)))
+    {
+        return None;
+    }
+    Some(json!({
+        "wanted_states": want,
+        "arrows": new
+            .iter()
+            .map(|o| json!({"id": o["id"], "target_states": o["target"]["states"]}))
+            .collect::<Vec<_>>(),
+        "why": "the game drew the line to other states (the wanted ones are not reachable from this front as drawn)"
+    }))
+}
+
+#[cfg(test)]
+mod offensive_miss_tests {
+    use super::*;
+
+    fn plan(arrows: &[(i64, &[i64])]) -> Value {
+        json!([{"kind": "front", "offensives": arrows
+            .iter()
+            .map(|(id, t)| json!({"id": id, "target": {"states": t}, "path_states": [42, 8]}))
+            .collect::<Vec<_>>()}])
+    }
+
+    #[test]
+    fn an_arrow_drawn_to_other_states_is_a_miss() {
+        // s55a: a stroke into 34 read back over 18 (the front at 42-8)
+        let before = plan(&[(115, &[18])]);
+        let now = plan(&[(115, &[18]), (121, &[18]), (123, &[980])]);
+        let m = offensive_miss(&before, &now, &[34], false).expect("a miss");
+        assert_eq!(m["arrows"].as_array().unwrap().len(), 2);
+        assert!(offensive_miss(&before, &now, &[34, 980], false).is_none());
+        // no new arrow: nothing to judge
+        assert!(offensive_miss(&now, &now, &[34], false).is_none());
+        // a spearhead reaches through its path
+        assert!(offensive_miss(&before, &now, &[8], true).is_none());
     }
 }
 

@@ -1124,7 +1124,7 @@ fn assign_boxes(
     army: &str,
 ) -> Result<()> {
     clear_notices(process, keys)?;
-    default_map_mode(keys)?;
+    default_map_mode(process, keys)?;
     find_state(process, keys, plan.state)?;
     let expected = plan.unassigned + plan.target_here;
     // Divisions stand anywhere in the state, so try the usual box first and
@@ -1534,7 +1534,7 @@ fn create_once(
     clear_notices(process, keys)?;
     // The selection box stays clear of the left-hand panels; Escape is not used
     // because on a free map it opens the game menu.
-    default_map_mode(keys)?;
+    default_map_mode(process, keys)?;
     find_state(process, keys, state)?;
     // Unassigned divisions can stand anywhere in the state: when the usual box
     // does not hold exactly them, try wider boxes (a new drag replaces the
@@ -4503,10 +4503,8 @@ pub(super) fn divisions_heading_for(
 /// selection holds exactly `expected` divisions; refuses with `selection_mismatch` otherwise.
 /// Back to the default map mode (F1, mapmodes_interface.gui): in the air map mode left by the
 /// air tools the division counters are hidden and a box selection picks nothing.
-fn default_map_mode(keys: &dyn GameInput) -> Result<()> {
-    keys.press_code(crate::platform::game_input::vk::F1)?;
-    crate::phase::sleep(std::time::Duration::from_millis(250));
-    Ok(())
+fn default_map_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+    super::ui::leave_strategic_modes(process, keys).map(|_| ())
 }
 pub(super) fn box_select_exact(
     process: &dyn Process,
@@ -4514,7 +4512,7 @@ pub(super) fn box_select_exact(
     state: i32,
     expected: usize,
 ) -> Result<()> {
-    default_map_mode(keys)?;
+    default_map_mode(process, keys)?;
     find_state(process, keys, state)?;
     let mut sizes = Vec::new();
     for (from, to) in ASSIGN_BOXES {

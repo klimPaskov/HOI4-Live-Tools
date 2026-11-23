@@ -4746,7 +4746,22 @@ fn reconcile(
         },
     )?;
     if state.last_ok == Some(false) {
-        state.skip(now, "opdraw", &u.name, 2);
+        // the game drew the stroke to other states: the line is out of this front's reach as it
+        // stands; the same stroke waits until the front has moved (s55a, 23 Nov 2026: Panzergruppe
+        // Ost's stroke into state 34 went out five times in two weeks, each arrow standing over
+        // 18 or 980, five arrows on one front)
+        if line.contains("Diverged: drawn to") {
+            state.skip(now, "opdraw", &u.name, 2 * DAY);
+            state.op_notes.insert(
+                format!("{id}:{}", u.name),
+                format!(
+                    "{}: the stroke {tag} is drawn elsewhere by the game ({line}); held 2 days",
+                    u.name
+                ),
+            );
+        } else {
+            state.skip(now, "opdraw", &u.name, 2);
+        }
     }
     Ok(Some(line))
 }

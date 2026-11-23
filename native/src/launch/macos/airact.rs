@@ -33,7 +33,6 @@ use serde_json::{json, Value};
 use std::time::Duration;
 
 const GAME: (u32, u32) = airui::GAME;
-const F1: u16 = 122;
 const F3: u16 = 99;
 
 // ---- memory ------------------------------------------------------------------------------------
@@ -604,8 +603,8 @@ fn enter_air_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<bool> {
 }
 fn leave_air_mode(process: &dyn Process, keys: &dyn GameInput, entered: bool) {
     if entered {
-        let _ = keys.press_code(F1);
-        let _ = wait(process, "default map mode", |r, i| Ok(!icons_shown(r, i)?));
+        // F3 toggles the air mode off (F1 is the first map-mode slot, not a political key)
+        let _ = super::ui::leave_strategic_modes(process, keys);
     }
 }
 /// Tidy: close the wing window and the selection toolbar (best effort).
