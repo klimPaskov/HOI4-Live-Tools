@@ -316,6 +316,11 @@ Pass: P1-P8 clean on both beds. Then set `IPC_LIVE_PASSED` for production and ai
 `auto` on for them), record the numbers in NOTES-1116.md ("stage 2 passed: production, air"), and the next families
 follow (MIO, construction, training, air wing creation: INPROCESS-COMMANDS-1123.md).
 
+- [x] S2 PASSED 24 Nov (runs s2c-s2i, w69b/w69c): production and air on the 1940 and 1936 beds; soak 30 min with 60
+  in-process changes Verified (production median 47.6 ms, air missions 122.7 ms); reload with the families on; the
+  save loads without the module; 21-day wars in process vs GUI 2.3 vs 1.7 actions per game day, air orders 12 in 65 s
+  vs 3 in 66 s; `IPC_LIVE_PASSED` set for both, `auto` checked live (s2i). Numbers in NOTES-1116.md.
+
 ## Session S2-MP (later; two clients on two machines): stage 2 in multiplayer
 
 Not before S1-MP and S2 pass. The module still refuses every stage-2 post unless the server is `CDummyServer`; this
