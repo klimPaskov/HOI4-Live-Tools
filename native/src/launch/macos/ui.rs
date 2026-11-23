@@ -445,6 +445,98 @@ fn save_retryable(e: &Error) -> bool {
 }
 /// How long the save window may take to show after the Save button closed the menu.
 const SAVE_WINDOW: Duration = Duration::from_secs(12);
+/// The game menu's fade-in (ingamemenu.gui fade_time 500 ms) and a frame to spare.
+const MENU_FADE: Duration = Duration::from_millis(600);
+
+/// The game menu's Save button: its rectangle and raw button state.
+fn menu_save_button(r: &Reader<'_>, i: u64) -> Result<(gui_tree::Rect, i32)> {
+    map_clear(r, i)?;
+    let root = menu_root(r, i)?;
+    let b = gui_tree::child(r, i, root, "menu_save_button")?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Save button not found"))?;
+    let rect = gui_tree::rect(r, i, b, (1920, 1080))?;
+    // the window's own rectangle when the layout gives one (some window classes have no
+    // reviewed renderer: then only the button's own rectangle is checked)
+    match gui_tree::rect(r, i, root, (1920, 1080)) {
+        Ok(window) => drawn_inside(rect, window, "Save button")?,
+        Err(_) if rect.w > 0 && rect.h > 0 => {}
+        Err(e) => return Err(e),
+    }
+    Ok((rect, gui_tree::button_state(r, b)?))
+}
+/// The save window's own Save (confirm) button: its rectangle and raw button state.
+fn save_confirm_button(r: &Reader<'_>, i: u64) -> Result<(gui_tree::Rect, i32)> {
+    map_clear(r, i)?;
+    let root = save_root(r, i)?.ok_or_else(|| Error::new("invalid_gui", "Save window closed"))?;
+    let b = gui_tree::child(r, i, root, "save")?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Save confirm button not found"))?;
+    let rect = gui_tree::rect(r, i, b, (1920, 1080))?;
+    match gui_tree::rect(r, i, root, (1920, 1080)) {
+        Ok(window) => drawn_inside(rect, window, "Save confirm")?,
+        Err(_) if rect.w > 0 && rect.h > 0 => {}
+        Err(e) => return Err(e),
+    }
+    Ok((rect, gui_tree::button_state(r, b)?))
+}
+/// A raw button state the game gives a button under the cursor (0 is normal, 3 disabled).
+fn hovered(state: i32) -> bool {
+    state != 0 && state != 3
+}
+/// Click `at` only when the button there really takes the cursor: resting at `away` (inside the
+/// same window, off the button) it must read normal, and with the cursor on it, hovered, before
+/// the press. A window whose shown flag is up while it is not drawn keeps its buttons' last state
+/// whatever the cursor does, so nothing is clicked on it (v55w, 23 Nov 2026: the game menu read
+/// open, the Save click fell on Jylland and opened its state view; save 1 of 10 paused).
+fn click_proven(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    what: &str,
+    away: (f64, f64),
+    at: (f64, f64),
+    state: impl Fn(&Reader<'_>, u64) -> Result<i32>,
+) -> Result<()> {
+    let not_drawn = |away: i32, on: Option<i32>| {
+        Error::new(
+            "gui_target_unavailable",
+            format!(
+                "{what} does not take the cursor (state {away} beside it, {} on it): its window reads shown but is not drawn; nothing was clicked",
+                on.map_or("not tried".to_string(), |s| s.to_string())
+            ),
+        )
+    };
+    keys.scroll((1920, 1080), away, 0)?;
+    let deadline = Instant::now() + Duration::from_millis(600);
+    loop {
+        let s = read(process, &state)?;
+        if !hovered(s) {
+            break;
+        }
+        if Instant::now() >= deadline {
+            return Err(not_drawn(s, None));
+        }
+        crate::phase::sleep(Duration::from_millis(40));
+    }
+    keys.click_checked((1920, 1080), at.0, at.1, &|| {
+        // a window fading in (the game menu: 500 ms) takes the cursor once it is drawn
+        let deadline = Instant::now() + Duration::from_millis(1200);
+        loop {
+            let s = read(process, &state)?;
+            if hovered(s) {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(not_drawn(0, Some(s)));
+            }
+            crate::phase::sleep(Duration::from_millis(30));
+        }
+    })?;
+    Ok(())
+}
+/// These buttons are drawn by a text sprite whose width is the text texture's (864 px for
+/// "Save Game"), so its centre lies outside the button: the click goes near the left edge.
+fn near_left(r: gui_tree::Rect) -> (f64, f64) {
+    (f64::from(r.x) + 40.0, f64::from(r.y) + f64::from(r.h) / 2.0)
+}
 
 fn save_game_once(
     process: &dyn Process,
@@ -458,7 +550,9 @@ fn save_game_once(
             .filter_map(|e| e.ok())
             .filter_map(|e| {
                 let name = e.file_name().to_string_lossy().to_string();
-                if !name.ends_with(".hoi4") {
+                // the game writes NAME_temp.hoi4 first and renames it when done (v60b, 23 Nov
+                // 2026: a save reported the temp name): only the finished file counts
+                if !name.ends_with(".hoi4") || name.ends_with("_temp.hoi4") {
                     return None;
                 }
                 Some((e.metadata().ok()?.modified().ok()?, name))
@@ -468,139 +562,126 @@ fn save_game_once(
     let before = newest().map(|(t, _)| t);
     clear_notices(process, keys)?;
     tidy_map(process, keys)?;
-    // A menu flag already up before our own Escape is not trusted: with a view or an event open
-    // the menu window read visible while the screen showed only the darkened map, and the Save
-    // clicks fell through onto the map four to eight times (save probe, 22 Nov 2026). Close it
-    // first so the menu we click in is one our own press opened.
-    let mut closes = 0;
-    while read(process, menu_open)? && closes < 4 {
-        keys.press(Key::Escape)?;
-        closes += 1;
-        let deadline = Instant::now() + Duration::from_millis(900);
-        while Instant::now() < deadline && read(process, menu_open)? {
-            crate::phase::sleep(Duration::from_millis(50));
-        }
-    }
-    // Escape first closes whatever view is open (a trade or politics view left open took the
-    // only Escape live, 6 Nov 2026), so press it until the menu itself is open.
-    let mut presses = 0;
-    while !read(process, menu_open)? {
-        if presses == 4 {
-            return Err(Error::new(
-                "input_readback_failed",
-                "game menu open: four Escape presses did not open the game menu",
-            ));
-        }
-        keys.press(Key::Escape)?;
-        presses += 1;
-        let deadline = Instant::now() + Duration::from_millis(900);
-        while Instant::now() < deadline && !read(process, menu_open)? {
-            crate::phase::sleep(Duration::from_millis(50));
-        }
-    }
-    // Any failure from here closes the game menu again (it was left open on the error path,
-    // and the next action then met a paused game behind a menu).
+    // The menu's shown flag is no proof that the menu is on screen: it read open while the
+    // screen showed only the map (v55w, 23 Nov 2026), and it read open before the fade-in let a
+    // click through. So the Save button is clicked only once it takes the cursor; an Escape is
+    // pressed while it does not (Escape first closes whatever view is open, and opens the menu
+    // on a clear map), four at most.
+    let mut escapes = 0;
+    let mut menu_clicks = 0;
+    let mut why: Option<Error> = None;
     let result = (|| -> Result<String> {
-        let button = settled(process, "save button", |r, i| {
-            map_clear(r, i)?;
-            let root = menu_root(r, i)?;
-            let b = gui_tree::child(r, i, root, "menu_save_button")?
-                .ok_or_else(|| Error::new("gui_target_unavailable", "Save button not found"))?;
-            let rect = gui_tree::rect(r, i, b, (1920, 1080))?;
-            // the window's own rectangle when the layout gives one (some window classes have
-            // no reviewed renderer: then only the button's own rectangle is checked)
-            match gui_tree::rect(r, i, root, (1920, 1080)) {
-                Ok(window) => drawn_inside(rect, window, "Save button")?,
-                Err(_) if rect.w > 0 && rect.h > 0 => {}
-                Err(e) => return Err(e),
-            }
-            Ok(rect)
-        })?;
-        // These buttons are drawn by a text sprite whose width is the text texture's (864 px for
-        // "Save Game"), so its centre lies outside the button: click near the left edge instead.
-        let near_left =
-            |r: gui_tree::Rect| (f64::from(r.x) + 40.0, f64::from(r.y) + f64::from(r.h) / 2.0);
-        let (x, y) = near_left(button);
-        keys.click((1920, 1080), x, y)?;
-        // The Save button closes the game menu and opens the save window, which lists the save
-        // folder first and can take seconds to show (v55v, 23 Nov 2026: the click at 856,379
-        // landed on the button read at 816,361 864x36, the menu closed, and the 3 s wait for the
-        // window ran out: the try was called "went through to the map" and the window closed by
-        // the clean-up). So: a menu that closed is waited on for the window up to SAVE_WINDOW;
-        // one more click only on a menu still open (i18a, 18 Nov 2026: the first click opened
-        // nothing).
-        let opened = |r: &Reader<'_>, i: u64| -> Result<bool> {
-            Ok(save_root(r, i)?.is_some() || !menu_open(r, i)?)
-        };
-        if wait(process, "save window", opened).is_err() {
-            read(process, map_clear)?;
-            keys.click((1920, 1080), x, y)?;
-            wait(process, "save window", opened)?;
-        }
-        if read(process, |r, i| Ok(save_root(r, i)?.is_none()))? {
-            wait_up_to(process, "save window (slow)", SAVE_WINDOW, |r, i| {
-                Ok(save_root(r, i)?.is_some())
-            })
-            .map_err(|_| {
-                Error::new(
-                    "invalid_gui",
-                    format!(
-                        "The Save click at {x:.0},{y:.0} (button read at {},{} {}x{}) closed the game menu and no save window showed within {} s",
-                        button.x, button.y, button.w, button.h, SAVE_WINDOW.as_secs()
-                    ),
-                )
-            })?;
-        }
-        let confirm = settled(process, "save confirm", |r, i| {
-            map_clear(r, i)?;
-            let root =
-                save_root(r, i)?.ok_or_else(|| Error::new("invalid_gui", "Save window closed"))?;
-            let b = gui_tree::child(r, i, root, "save")?.ok_or_else(|| {
-                Error::new("gui_target_unavailable", "Save confirm button not found")
-            })?;
-            let rect = gui_tree::rect(r, i, b, (1920, 1080))?;
-            // the window's own rectangle when the layout gives one (some window classes have
-            // no reviewed renderer: then only the button's own rectangle is checked)
-            match gui_tree::rect(r, i, root, (1920, 1080)) {
-                Ok(window) => drawn_inside(rect, window, "Save confirm")?,
-                Err(_) if rect.w > 0 && rect.h > 0 => {}
-                Err(e) => return Err(e),
-            }
-            Ok(rect)
-        })?;
-        let (x, y) = near_left(confirm);
-        keys.click((1920, 1080), x, y)?;
-        // Overwriting a save of the same name asks for confirmation.
-        let _ = accept_command(process, keys);
-        let started = Instant::now();
-        let deadline = started + Duration::from_secs(SAVE_WRITE_SECS);
-        let mut reclicked = false;
-        let written = loop {
-            if let Some((t, name)) = newest() {
-                if before.is_none_or(|b| t > b) {
-                    break name;
+        let (button, (x, y)) = loop {
+            if read(process, menu_open)? {
+                let (rect, _) = settled(process, "save button", menu_save_button)?;
+                let at = near_left(rect);
+                let away = (f64::from(rect.x) - 8.0, at.1);
+                match click_proven(
+                    process,
+                    keys,
+                    "The game menu's Save button",
+                    away,
+                    at,
+                    |r, i| Ok(menu_save_button(r, i)?.1),
+                ) {
+                    Ok(()) => break (rect, at),
+                    Err(e) if e.code == "gui_target_unavailable" => why = Some(e),
+                    Err(e) => return Err(e),
                 }
             }
-            // the confirm click that did not take: the save window still shows with nothing
-            // written (a save that works writes in about 5 s; the next whole try after a 60 s
-            // wait saved in 4.7 s, save probe 22 Nov 2026), so click it once more
-            if !reclicked
-                && started.elapsed() >= Duration::from_secs(6)
-                && read(process, |r, i| Ok(save_root(r, i)?.is_some())).unwrap_or(false)
-            {
-                reclicked = true;
-                keys.click((1920, 1080), x, y)?;
-                let _ = accept_command(process, keys);
+            // The top bar's own menu button opens the menu with one click (v60a, 23 Nov 2026:
+            // after an Escape the screen darkened and the menu closed again within 0.6 s in 13
+            // of 16 presses, so no Save button was ever drawn); Escape only when it is not there.
+            if menu_clicks == 0 {
+                if let Ok(rect) = read(process, |r, i| topbar_rect(r, i, "menu_button")) {
+                    let (bx, by) = rect.center();
+                    keys.click((1920, 1080), bx, by)?;
+                    menu_clicks += 1;
+                    let _ =
+                        wait_up_to(process, "game menu", Duration::from_millis(1500), |r, i| {
+                            menu_open(r, i)
+                        });
+                    continue;
+                }
             }
-            // a save of the same name (paused saves within one game hour share the name the game
-            // proposes) asks to overwrite: that dialog may come after accept_command's 1.2 s
-            // (v55t, 23 Nov 2026: paused4 after paused3's save, nothing written in 30 s)
+            if escapes == 3 {
+                return Err(why.take().unwrap_or_else(|| {
+                    Error::new(
+                        "input_readback_failed",
+                        "game menu open: the menu button and three Escape presses did not open the game menu",
+                    )
+                }));
+            }
+            let was = read(process, menu_open)?;
+            keys.press(Key::Escape)?;
+            escapes += 1;
+            let deadline = Instant::now() + Duration::from_millis(900);
+            while Instant::now() < deadline && read(process, menu_open)? == was {
+                crate::phase::sleep(Duration::from_millis(50));
+            }
+        };
+        // The Save button closes the menu and opens the save window, which lists the save folder
+        // first and can take seconds to show (v55v: up to several seconds). Its own Save button is
+        // clicked the same way: only once it takes the cursor.
+        let deadline = Instant::now() + SAVE_WINDOW;
+        loop {
+            let shown = read(process, |r, i| Ok(save_root(r, i)?.is_some()))?;
+            if shown {
+                let tried =
+                    settled(process, "save confirm", save_confirm_button).and_then(|(rect, _)| {
+                        let at = near_left(rect);
+                        let away = (at.0, f64::from(rect.y) - 30.0);
+                        click_proven(
+                            process,
+                            keys,
+                            "The save window's Save button",
+                            away,
+                            at,
+                            |r, i| Ok(save_confirm_button(r, i)?.1),
+                        )
+                    });
+                match tried {
+                    Ok(()) => break,
+                    Err(e) if Instant::now() < deadline && save_retryable(&e) => {}
+                    Err(e) => return Err(e),
+                }
+            } else if Instant::now() >= deadline {
+                return Err(Error::new(
+                    "invalid_gui",
+                    format!(
+                        "The Save click at {x:.0},{y:.0} (button read at {},{} {}x{}) showed no save window within {} s",
+                        button.x, button.y, button.w, button.h, SAVE_WINDOW.as_secs()
+                    ),
+                ));
+            }
+            crate::phase::sleep(Duration::from_millis(200));
+        }
+        // Wait for the file. A save of the name the game proposes again (saves within one game
+        // hour share it) asks "Overwrite Save Game", a window in no pop-up list the reader knows
+        // (v55w paused3/4, 23 Nov 2026: it stood open for 30 s and nothing was written). RETURN
+        // is that question's OK shortcut and the save window's own Save shortcut, so while the
+        // save window still shows with nothing written, one RETURN answers whichever is in front.
+        let started = Instant::now();
+        let deadline = started + Duration::from_secs(SAVE_WRITE_SECS);
+        let mut returns = 0;
+        loop {
+            if let Some((t, name)) = newest() {
+                if before.is_none_or(|b| t > b) {
+                    return Ok(name);
+                }
+            }
             if read(process, |r, i| command_dialog(r, i, "accept_button"))
                 .ok()
                 .flatten()
                 .is_some()
             {
                 let _ = accept_command(process, keys);
+            } else if returns < 2
+                && started.elapsed() >= Duration::from_millis([2500, 8000][returns])
+                && read(process, |r, i| Ok(save_root(r, i)?.is_some())).unwrap_or(false)
+            {
+                keys.press(Key::Return)?;
+                returns += 1;
             }
             if Instant::now() >= deadline {
                 return Err(Error::new(
@@ -608,21 +689,106 @@ fn save_game_once(
                     format!("No save file was written within {SAVE_WRITE_SECS} s"),
                 ));
             }
-            crate::phase::sleep(Duration::from_millis(500));
-        };
-        Ok(written)
+            crate::phase::sleep(Duration::from_millis(300));
+        }
     })();
     let written = match result {
         Ok(w) => w,
         Err(e) => {
-            let _ = close_menu(process, keys);
+            let _ = close_menu_drawn(process, keys);
             return Err(e);
         }
     };
-    // Let the writer finish, then close the menu.
-    crate::phase::sleep(Duration::from_secs(3));
-    close_menu(process, keys)?;
-    Ok(serde_json::json!({"saved":written,"directory":saves.display().to_string()}))
+    // Let the writer finish, then close the menu if the save left it on screen.
+    crate::phase::sleep(Duration::from_secs(2));
+    close_menu_drawn(process, keys)?;
+    Ok(
+        serde_json::json!({"saved":written,"directory":saves.display().to_string(),"escapes":escapes}),
+    )
+}
+/// Close the game menu only when it is on screen: a shown flag left up by a menu that is not
+/// drawn would make the Escape OPEN the menu (v55w: the menu showed only after the clean-up's
+/// Escapes). A Save button that does not take the cursor means no menu to close.
+fn close_menu_drawn(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+    use crate::platform::game_input::Key;
+    // a save window left open (its Back button's shortcut is Escape) goes back to the menu
+    if read(process, |r, i| Ok(save_root(r, i)?.is_some())).unwrap_or(false) {
+        keys.press(Key::Escape)?;
+        let _ = wait(process, "save window closed", |r, i| {
+            Ok(save_root(r, i)?.is_none())
+        });
+        crate::phase::sleep(MENU_FADE);
+    }
+    if !read(process, menu_open)? {
+        return Ok(());
+    }
+    let Ok((rect, _)) = settled(process, "save button", menu_save_button) else {
+        return close_menu(process, keys);
+    };
+    let at = near_left(rect);
+    let away = (f64::from(rect.x) - 8.0, at.1);
+    let state = |r: &Reader<'_>, i: u64| Ok(menu_save_button(r, i)?.1);
+    let holds = |want: bool, bound: u64| -> Result<bool> {
+        let deadline = Instant::now() + Duration::from_millis(bound);
+        loop {
+            if hovered(read(process, state)?) == want {
+                return Ok(true);
+            }
+            if Instant::now() >= deadline {
+                return Ok(false);
+            }
+            crate::phase::sleep(Duration::from_millis(40));
+        }
+    };
+    keys.scroll((1920, 1080), away, 0)?;
+    if !holds(false, 600)? {
+        return Ok(());
+    }
+    keys.scroll((1920, 1080), at, 0)?;
+    if holds(true, 700)? {
+        close_menu(process, keys)?;
+    }
+    Ok(())
+}
+/// A map-mode read (true while the mode is on).
+type ModeRead = dyn Fn(&Reader<'_>, u64) -> Result<bool>;
+/// Leave the Strategic Navy (F2) and Strategic Air (F3) map modes, each read first and pressed
+/// off by its OWN key, then read back. A map-mode key toggles its slot: F1 is the first slot, not
+/// a "political" key (live engineer 55, 23 Nov 2026), so a blind F1 could switch a mode ON;
+/// no tool presses it unless a mode it reads is still on after its own key. Returns whether
+/// the map is free of both (a mode that stays on is reported, not pressed again).
+pub(super) fn leave_strategic_modes(process: &dyn Process, keys: &dyn GameInput) -> Result<bool> {
+    use crate::platform::game_input::vk;
+    let air = |r: &Reader<'_>, i: u64| -> Result<bool> {
+        Ok(super::airui::base_icons(r, i)?.iter().any(|b| b.strategic))
+    };
+    let modes: [(u16, &ModeRead); 2] = [(vk::F2, &super::navalui::navy_mode), (vk::F3, &air)];
+    let mut free = true;
+    for (key, on) in modes {
+        if !read(process, on).unwrap_or(false) {
+            continue;
+        }
+        keys.press_code(key)?;
+        if wait_up_to(
+            process,
+            "map mode off",
+            Duration::from_millis(1500),
+            |r, i| Ok(!on(r, i)?),
+        )
+        .is_err()
+        {
+            // the slot key did not toggle it: the first slot (the default map mode) once
+            keys.press_code(vk::F1)?;
+            free &= wait_up_to(
+                process,
+                "map mode off",
+                Duration::from_millis(1500),
+                |r, i| Ok(!on(r, i)?),
+            )
+            .is_ok();
+        }
+    }
+    Ok(free)
 }
 /// Leave what the navy and air tools may leave over the map before the game menu opens: a
 /// strategic-region panel, the fleet panel and the naval map mode (the navy tools' own tidy-up),
@@ -639,8 +805,7 @@ fn tidy_map(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if read(process, map_clear).is_ok() {
         return Ok(());
     }
-    keys.press_code(crate::platform::game_input::vk::F1)?;
-    crate::phase::sleep(Duration::from_millis(250));
+    leave_strategic_modes(process, keys)?;
     read(process, map_clear)
 }
 /// The naval map mode and the region panel are both gone (read from the GUI).

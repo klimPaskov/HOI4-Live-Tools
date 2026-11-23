@@ -9739,6 +9739,14 @@ mod tests {
             .unwrap()
             .unwrap_or_default();
         assert_eq!(line.matches("rebase to state 57").count(), 3, "{line}");
+        // one call for the base, every wing in it (69 single-wing calls in the 23 Nov runs)
+        let sent: Vec<(String, Value)> = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_air_rebase")
+            .collect();
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!(sent[0].1["wings"], json!(["JG 1", "JG 2", "JG 3"]));
+        assert_eq!(sent[0].1["state_id"], 57);
     }
 
     #[test]

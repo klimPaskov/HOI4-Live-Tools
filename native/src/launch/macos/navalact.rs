@@ -6,7 +6,7 @@
 //! verify every step; nothing is ever retried after possible input.
 //!
 //! Routes mapped and verified live on 26 October 2026 (Germany, 15 October 1938, 1920x1080):
-//! * F2 shows the fleet bar (`navy_leader_window`); F1 restores the default map mode;
+//! * F2 shows the fleet bar (`navy_leader_window`) and F2 again leaves it (each map-mode key toggles its slot);
 //! * a fleet card (`portrait_frame`) opens the fleet panel; a task force entry's `select_btn`
 //!   (label "Select" -> "Back") narrows the mission bar to that task force ("Missions - <name>");
 //! * a mission button alone sets the task force's mission (patrol, strike force, convoy
@@ -43,7 +43,6 @@ pub(super) const MISSIONS: [(&str, &str, i32, bool); 9] = [
     ("training", "btn_mission7", 7, true),
     ("invasion_support", "btn_mission9", 9, true),
 ];
-const F1: u16 = 122;
 const F2: u16 = 120;
 
 pub(super) fn own_fleets(process: &dyn Process) -> Result<Vec<Fleet>> {
@@ -310,11 +309,11 @@ pub(super) fn enter_navy_mode(process: &dyn Process, keys: &dyn GameInput) -> Re
 }
 /// Back to the default map mode.
 pub(super) fn leave_navy_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
-    if read(process, nui::navy_mode)? {
-        keys.press_code(F1)?;
-        wait(process, "default map mode", |r, i| {
-            Ok(!nui::navy_mode(r, i)?)
-        })?;
+    if read(process, nui::navy_mode)? && !super::ui::leave_strategic_modes(process, keys)? {
+        return Err(Error::new(
+            "input_readback_failed",
+            "The Strategic Navy map mode stayed on after F2 and F1",
+        ));
     }
     Ok(())
 }
