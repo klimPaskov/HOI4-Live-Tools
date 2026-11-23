@@ -258,6 +258,28 @@ const ATOMS: &[(&str, Kind, bool)] = &[
     ("province_controller", Kind::Tag, true),
 ];
 
+/// An enemy that still controls only a remnant: at most REMNANT_SHARE of its victory points (a
+/// colony or two across the sea). Its war is over in practice and the next declaration may go
+/// (w42s3, 23 Nov 2026: the Netherlands held Suriname and Curacao, 2 of 91 victory points, for 24
+/// days after Holland fell; the Belgian declaration waited on capitulated:HOL that never read true).
+const REMNANT_SHARE: f64 = 0.05;
+
+fn remnant(rows: &[Value], tag: &str) -> bool {
+    let (mut held, mut total) = (0.0, 0.0);
+    for v in rows
+        .iter()
+        .filter_map(|r| r["victory_points"].as_array())
+        .flatten()
+    {
+        let points = v["victory_points"].as_f64().unwrap_or(0.0);
+        total += points;
+        if v["controller"].as_str() == Some(tag) {
+            held += points;
+        }
+    }
+    total > 0.0 && held <= total * REMNANT_SHARE
+}
+
 fn bad(message: impl Into<String>) -> Error {
     Error::new("invalid_predicate", message)
 }
@@ -1263,7 +1285,7 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
                                 .any(|v| v["controller"].as_str() == Some(tag.as_str()))
                         })
                 });
-                return Ok(Reading::Flag(landless));
+                return Ok(Reading::Flag(landless || remnant(rows, &tag)));
             }
             let conference = ctx
                 .read("hoi4_events", &json!({}))
@@ -1548,6 +1570,33 @@ mod tests {
                 "wars_won": ["POL"]}}),
         );
         assert_eq!(eval(&f, json!("capitulated:POL")), Truth::True);
+    }
+    #[test]
+    fn an_enemy_left_with_a_remnant_of_its_victory_points_is_out() {
+        let states = |colonies: &str| {
+            json!({"HOL": {"states": [
+                {"state_id": 7, "owner": "HOL", "controller": "GER",
+                 "victory_points": [{"province": 391, "victory_points": 40.0, "controller": "GER"},
+                                    {"province": 9498, "victory_points": 49.0, "controller": "GER"}]},
+                {"state_id": 309, "owner": "HOL", "controller": colonies,
+                 "victory_points": [{"province": 10906, "victory_points": 2.0, "controller": colonies}]}]}})
+        };
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": true, "enemies": ["HOL"], "wars_won": []}}),
+        );
+        f.replies.insert("hoi4_states", states("HOL"));
+        // 2 of 91 victory points across the sea: out
+        assert_eq!(eval(&f, json!("capitulated:HOL")), Truth::True);
+        // Holland still held: not out
+        f.replies.insert(
+            "hoi4_states",
+            json!({"HOL": {"states": [{"state_id": 7, "owner": "HOL", "controller": "HOL",
+                "victory_points": [{"province": 391, "victory_points": 40.0, "controller": "HOL"},
+                                   {"province": 9498, "victory_points": 49.0, "controller": "GER"}]}]}}),
+        );
+        assert_eq!(eval(&f, json!("capitulated:HOL")), Truth::False);
     }
     #[test]
     fn surrender_progress_is_unknown_until_hoi4_wars_maps_it() {
