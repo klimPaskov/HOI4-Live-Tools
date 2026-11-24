@@ -3299,7 +3299,8 @@ impl Tools for Roster {
 fn a_role_formed_in_the_same_paused_hour_becomes_the_operations_at_once() {
     // s7m: Panzergruppe Nord formed after the first ownership read of the paused setup hour, an
     // idle hold sent it back, its march never ended and the declaration waited
-    let plan = json!({"operations": [{"id": "op_pol", "formations": [{"army": "Nord"}, {"army": "Pz"}]}]});
+    let plan =
+        json!({"operations": [{"id": "op_pol", "formations": [{"army": "Nord"}, {"army": "Pz"}]}]});
     let mut state = State::default();
     state.done.insert(key("op_pol", "prep"), START);
     state.layout.insert("Nord".into(), "Army 2".into());
@@ -3308,5 +3309,8 @@ fn a_role_formed_in_the_same_paused_hour_becomes_the_operations_at_once() {
     assert!(!state.op_owned.contains_key("Army 9"));
     state.layout.insert("Pz".into(), "Army 9".into());
     refresh(&mut state, &Roster, &plan, START);
-    assert_eq!(state.op_owned.get("Army 9").map(String::as_str), Some("op_pol"));
+    assert_eq!(
+        state.op_owned.get("Army 9").map(String::as_str),
+        Some("op_pol")
+    );
 }
