@@ -24,8 +24,8 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                 0 /* orders (engineer 73): delete, execute, set_path, new_front (S4-ORDERS) */,
                                 0 /* orders2 (engineer 74): new_root, assign, unassign, fallback, edit_root, invasion/paradrop
                                    * target, spearhead (S5-PLAN) */,
-                                0 /* units (engineer 75): new army, transfer, leader, rename, army group new / into / out of,
-                                   * delete a shell (S6-UNITS) */,
+                                1 /* units (engineer 75): new army, transfer, leader, rename, army group new / into / out of,
+                                   * delete a shell (S6-UNITS PASSED live 24 Nov 2026) */,
                                 0 /* picks (engineer 75): a national focus (S7-PICKS) */};
 
 int ipc_family_of(const char *op) {
