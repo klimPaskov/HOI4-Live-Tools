@@ -4386,7 +4386,9 @@ fn layout_step(
     let Some(entries) = plan["army_layout"].as_array() else {
         return Ok(None);
     };
-    if !land_orders(plan) {
+    // land orders off leave the fronts to the operations' drawn plans; their armies still come
+    // from the layout (plan_operation::layout_needed)
+    if !land_orders(plan) && !plan_operation::layout_needed(plan) {
         return Ok(None);
     }
     if state.skipped(now, "layout", "all") {
@@ -19693,6 +19695,41 @@ mod tests {
             layout_step(&mut state, &tools, &plan, "l", now).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn land_orders_off_still_binds_the_layout_roles_an_operation_names() {
+        // t1939a (24 Nov 2026): the 1939 bookmark entered the Poland phase (land orders off)
+        // before any role was bound, and op_poland waited for "Armee Nord" all war
+        let plan = json!({"war": {"land_orders": false},
+            "army_layout": [{"name_hint": "Armee Nord", "state": 5, "role": "strike", "count": 2}],
+            "operations": [{"id": "op_poland", "formations": [{"army": "Armee Nord", "role": "line"}]}]});
+        assert!(plan_operation::layout_needed(&plan));
+        let tools = fake(vec![(
+            "hoi4_armies",
+            json!({"armies": [
+                {"army": "Army 6", "division_count": 21, "main_state": 5},
+                {"army": "Army 2", "division_count": 19, "main_state": 42}]}),
+        )]);
+        let mut state = State::default();
+        let now = hour("1939.10.27");
+        let out = layout_step(&mut state, &tools, &plan, "l", now).unwrap();
+        assert_eq!(out.as_deref(), Some("layout: Army 6 is Armee Nord"));
+        assert_eq!(
+            state.layout.get("Armee Nord").map(String::as_str),
+            Some("Army 6")
+        );
+        // and the operations wait for a role the layout has not bound yet
+        let mut fresh = State::default();
+        assert_eq!(
+            plan_operation::layout_pending(&mut fresh, &plan, now),
+            Some(vec!["Armee Nord".to_string()])
+        );
+        // a plan without operations naming a role keeps the old meaning: nothing at all
+        let bare = json!({"war": {"land_orders": false},
+            "army_layout": [{"name_hint": "Armee Nord", "state": 5, "role": "strike"}]});
+        assert!(!plan_operation::layout_needed(&bare));
+        assert_eq!(plan_operation::layout_pending(&mut fresh, &bare, now), None);
     }
 
     #[test]
