@@ -24,8 +24,11 @@ mod fair_facts;
 mod inproc;
 mod inproc_diplomacy;
 mod inproc_events;
+mod inproc_holds;
 mod inproc_orders;
 mod inproc_picks;
+mod inproc_politics;
+mod inproc_research;
 mod inproc_units;
 mod operation_act;
 mod railway;
@@ -3174,12 +3177,23 @@ impl MacClock {
             let process: &dyn Process = &fence;
             let action = json!({"kind":"research_start","technology":key,"slot":slot});
             let before = research::assignments(process)?;
+            // engineer 79: in process (family `research`): SetResearch(own tag, the template, the slot) after the
+            // game's own check; the template from the game's technology database, no view opened
+            let mut research_route = if actions.receipt_exists(id) {
+                None
+            } else {
+                inproc::route("research")
+            };
             if actions.receipt_exists(id) {
                 // A retry only settles or replays its receipt; it never refuses on new state.
             } else {
                 research::check(&before, key, slot, replace)?;
-                bounded_keys.preflight()?;
+                if research_route.is_none() {
+                    bounded_keys.preflight()?;
+                }
             }
+            let had_research_route = research_route.is_some();
+            let mut research_reply = None;
             let keys = &bounded_keys;
             let mut settle = || {
                 let now = research::assignments(process)?;
@@ -3194,11 +3208,22 @@ impl MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                research_reply = module_in_process(&mut research_route, |ch| {
+                    let template =
+                        ui::read(process, |r, i| crate::research::template_address(r, i, key))?;
+                    Ok(inproc_research::start(ch, template, slot))
+                })?;
+                if research_reply.is_some() {
+                    return Ok(());
+                }
+                if had_research_route {
+                    keys.preflight()?;
+                }
                 research::start(process, keys, key, slot)
             };
             let receipt =
                 actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, research_reply));
         }
         if name == "hoi4_production_priority" {
             allowed(
@@ -6614,7 +6639,41 @@ impl MacClock {
                 }
             }
             let mut inproc_route = line.as_ref().and_then(|_| inproc::route("orders2"));
-            if !retry && inproc_route.is_none() {
+            // engineer 79: an area-defence order through the module (family `holds`): one map click per state, the
+            // first makes the order, the rest go into its id
+            let mut holds_route = if fallback || retry {
+                None
+            } else {
+                inproc::route("holds")
+            };
+            if holds_route.is_some() {
+                // the map tool takes battle-plan orders only from an army led by a general; a state the player does
+                // not control is not a click the tool takes (refused before anything is posted)
+                let view = armies::armies(process)?;
+                let leaderless = view["armies"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|a| a["army"].as_str() == Some(army))
+                    .is_some_and(|a| a["commander"].is_null());
+                if leaderless {
+                    return Err(Error::new(
+                        "no_commander",
+                        format!(
+                            "{army} has no commander: the game takes battle-plan orders only from an army led by a \
+                             general (hoi4_army_commander first); nothing was posted"
+                        ),
+                    ));
+                }
+                let controlled = armies::controlled_state_ids(process)?;
+                if let Some(bad) = states.iter().find(|s| !controlled.contains(s)) {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        format!("state {bad} is not controlled by the player: an area order covers own states"),
+                    ));
+                }
+            }
+            if !retry && inproc_route.is_none() && holds_route.is_none() {
                 self.keys.preflight()?;
             }
             let mut inproc_reply = Value::Null;
@@ -6664,6 +6723,17 @@ impl MacClock {
                     }
                     inproc_reply = reply;
                     return Ok(());
+                }
+                if let Some(ch) = holds_route.as_mut() {
+                    let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+                    match inproc_holds::area(ch, group, &states) {
+                        inproc::Routed::Done(v) => {
+                            inproc_reply = v;
+                            return Ok(());
+                        }
+                        inproc::Routed::Refused(what) => return Err(inproc::refused_error(&what)),
+                        inproc::Routed::Gui => keys.preflight()?,
+                    }
                 }
                 if fallback {
                     armies::fallback(process, keys, &game_dir, army, &states)
@@ -7849,7 +7919,25 @@ impl MacClock {
             }
             let id = string(args, "request_id")?;
             let retry = actions.receipt_exists(id);
-            if !retry {
+            // engineer 79: in process (family `politics`): a law (an idea of the game's idea database) by the politics
+            // view's own command, the objects from the game's lists (the idea database, the own active ideas), no panel;
+            // a key that is no idea (an advisor, staff: characters) goes to the mouse path
+            let mut law_route = if retry {
+                None
+            } else {
+                inproc::route("politics")
+            };
+            let law = match law_route {
+                Some(_) => ui::read(process, |r, i| inproc_politics::law(r, i, idea))?,
+                None => None,
+            };
+            if law.is_none() {
+                law_route = None;
+            }
+            let law_before = law
+                .as_ref()
+                .and_then(|l| l.current.as_ref().map(|c| c.1.clone()));
+            if !retry && law.is_none() {
                 if before.as_deref() == Some(idea)
                     || politics::holder(process, category, idea)?.is_some()
                 {
@@ -7860,10 +7948,27 @@ impl MacClock {
                 }
                 self.keys.preflight()?;
             }
+            let in_process = law.is_some();
             let action =
                 json!({"kind":"politics_choose","category":category,"slot":index,"idea":idea});
             let keys = &self.keys;
             let mut settle = || {
+                if in_process {
+                    // the own active ideas: the law active = Reached; the replaced one still active = Unchanged
+                    let own = ui::read(process, inproc_politics::active)?;
+                    let keys_now: Vec<&str> = own.iter().map(|(_, k)| k.as_str()).collect();
+                    let detail = json!({"active_ideas":keys_now,"replaced":law_before});
+                    return Ok(if keys_now.contains(&idea) {
+                        journal::Outcome::Reached(detail)
+                    } else if law_before
+                        .as_deref()
+                        .is_none_or(|old| keys_now.contains(&old))
+                    {
+                        journal::Outcome::Unchanged(detail)
+                    } else {
+                        journal::Outcome::Diverged(detail)
+                    });
+                }
                 let now = politics::current(process, category, index)?;
                 let held = politics::holder(process, category, idea)?;
                 let detail = json!({"current":now,"held_in_slot":held});
@@ -7875,12 +7980,21 @@ impl MacClock {
                     journal::Outcome::Diverged(detail)
                 })
             };
+            let mut law_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(l) = law.as_ref() {
+                    law_reply =
+                        module_in_process(&mut law_route, |ch| Ok(inproc_politics::take(ch, l)))?;
+                    if law_reply.is_some() {
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 politics::choose(process, keys, category, index, idea)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, law_reply));
         }
         if name == "hoi4_construction_add" {
             allowed(

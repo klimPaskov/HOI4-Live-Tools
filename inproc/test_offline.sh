@@ -15,6 +15,12 @@ S1=(auth_slot=0x98 speed_type_id=0x2f42 speed_payload=0x24 speed_field=0x47c spe
 # stage 2 (hand-found in the 1.19.4.1 disassembly, 23 Nov e68): 5 command types on; the UI's validity slot; Post's
 # executing byte; the per-frame gate's player-tag field; a line's factories; a region's id
 S2=(valid_slot=0x50 exec_flag=0x624 player_tag=0x4d8 line_factories=0xe8 region_id=0x58)
+# (engineer 79, 24 Nov: politics = CAddIdea / CReplaceIdea by the politics view's own constructors, ideas by exact class 5CIdea)
+# (engineer 79, 24 Nov: research = CSetResearchCommand by the research view's own constructor, the template by exact class
+#  19CTechnologyTemplate, flags (0, 1, 0) as the slot-selected click and the factory)
+# (engineer 79, 24 Nov: holds = the area-defence order as the battle-plan map tool's state click posts it,
+#  CEditAreaDefenseStateCommand by the tool's own constructor (1.20 0x10094a330, UI 0x1025b7f80); the area kind, the order's
+#  state list +0xe0/+0xec and settings +0xf8 from the click's own execution; hand-checked in both disassemblies)
 # (engineer 76, 24 Nov: events = the answer of an open event, CSelectEventOptionCommand built by the event window's own
 #  constructor; the window's fields from its option click, the option test from its per-frame update (a CEventWindow
 #  virtual), the pending-event records from the answer's authorisation slot; hand-checked in both disassemblies: 1.20 click
@@ -54,10 +60,12 @@ S2N=(regions_arr=0x2a8 regions_cnt=0x2b4 on:airwing.split=1 on:airwing.merge=1 o
      diplo_date_off=0x428 diplo_act_date_off=0x40 wg_holder_off=0xd30 wg_list_off=0x68 wg_count_off=0x74 wg_target_off=0x3c
      act_type:diplomacy.guarantee=0x28da act_type:diplomacy.military_access=0x2934 act_type:diplomacy.offer_military_access=0x2fc8
      act_type:diplomacy.non_aggression=0x2fbc act_type:diplomacy.improve_relations=0x2cd7 act_type:diplomacy.declare_war=0x277f
-     act_size:diplomacy.guarantee=0x70 act_size:diplomacy.declare_war=0x78 act_goal_off:diplomacy.declare_war=0x6c)
-S2_1194=(stage2_on=42 diplo_make_cmd=0x100f80940 diplo_country_of=0x101277b90 diplo_date_vt=0x103503020 ctor:diplomacy.guarantee=0x100f99c60 ctor:diplomacy.declare_war=0x100f8bce0 ctor:events.answer=0x1005ecc00 events_vt_window=0x1035e5c40 events_avail=0x1005f4230 ctor:units.new_army=0x1009287a0 ctor:units.leader=0x100946ae0 ctor:units.rename=0x100926280 ctor:units.army_group_new=0x100929ed0 ctor:units.to_army_group=0x10092b5f0 ctor:units.from_army_group=0x10092c110 orders_vt=0x103512bf0 orders_lookup=0x10095a510 ctor:orders.set_path=0x1009355a0 ctor:orders.new_front=0x100940c60 ctor:production2.add_line=0x1001eef30 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
+     act_size:diplomacy.guarantee=0x70 act_size:diplomacy.declare_war=0x78 act_goal_off:diplomacy.declare_war=0x6c
+     on:holds.area_defense=1 type:holds.area_defense=13873 holds_ok=1 holds_kind=5 holds_area_off=0xe0 holds_area_cnt=0xec
+     holds_setting_off=0xf8 on:research.start=1 type:research.start=12144 on:politics.add=1 type:politics.add=12303 on:politics.replace=1 type:politics.replace=13017)
+S2_1194=(stage2_on=46 ctor:politics.add=0x1002059f0 ctor:politics.replace=0x1002096b0 ctor:research.start=0x1001fff00 ctor:holds.area_defense=0x100949320 diplo_make_cmd=0x100f80940 diplo_country_of=0x101277b90 diplo_date_vt=0x103503020 ctor:diplomacy.guarantee=0x100f99c60 ctor:diplomacy.declare_war=0x100f8bce0 ctor:events.answer=0x1005ecc00 events_vt_window=0x1035e5c40 events_avail=0x1005f4230 ctor:units.new_army=0x1009287a0 ctor:units.leader=0x100946ae0 ctor:units.rename=0x100926280 ctor:units.army_group_new=0x100929ed0 ctor:units.to_army_group=0x10092b5f0 ctor:units.from_army_group=0x10092c110 orders_vt=0x103512bf0 orders_lookup=0x10095a510 ctor:orders.set_path=0x1009355a0 ctor:orders.new_front=0x100940c60 ctor:production2.add_line=0x1001eef30 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
          ctor:airwing.detach=0x100a293b0 ti_orders_group=0x103516d08)
-S2_120=(stage2_on=42 diplo_make_cmd=0x100f83c10 diplo_country_of=0x10127b0c0 diplo_date_vt=0x1035074c0 ctor:diplomacy.guarantee=0x100f9cf30 ctor:diplomacy.declare_war=0x100f8efb0 ctor:events.answer=0x1005ed6d0 events_vt_window=0x1035ead60 events_avail=0x1005f4d00 ctor:units.new_army=0x1009297b0 ctor:units.leader=0x100947af0 ctor:units.rename=0x100927290 ctor:units.army_group_new=0x10092aee0 ctor:units.to_army_group=0x10092c600 ctor:units.from_army_group=0x10092d120 orders_vt=0x1035173b8 orders_lookup=0x10095b520 ctor:orders.set_path=0x1009365b0 ctor:orders.new_front=0x100941c70 ctor:production2.add_line=0x1001ef670 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
+S2_120=(stage2_on=46 ctor:politics.add=0x100206130 ctor:politics.replace=0x100209df0 ctor:research.start=0x100200640 ctor:holds.area_defense=0x10094a330 diplo_make_cmd=0x100f83c10 diplo_country_of=0x10127b0c0 diplo_date_vt=0x1035074c0 ctor:diplomacy.guarantee=0x100f9cf30 ctor:diplomacy.declare_war=0x100f8efb0 ctor:events.answer=0x1005ed6d0 events_vt_window=0x1035ead60 events_avail=0x1005f4d00 ctor:units.new_army=0x1009297b0 ctor:units.leader=0x100947af0 ctor:units.rename=0x100927290 ctor:units.army_group_new=0x10092aee0 ctor:units.to_army_group=0x10092c600 ctor:units.from_army_group=0x10092d120 orders_vt=0x1035173b8 orders_lookup=0x10095b520 ctor:orders.set_path=0x1009365b0 ctor:orders.new_front=0x100941c70 ctor:production2.add_line=0x1001ef670 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
         ctor:airwing.detach=0x100a2a3c0 ti_orders_group=0x10351b6b0)
 fail=0
 echo "== 1.19.4.1 f584 ($NEW)"

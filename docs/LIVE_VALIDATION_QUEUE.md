@@ -725,3 +725,86 @@ game does); record the tool ms against the mouse path's ~10-20 s.
 G5 save + reload with the family on; a plain load without the module.
 Stop at once (endrun.sh s10d) on: a crash, a hang, any `unexplained` post2, an action sent to a country the request did not
 name, a war declared without the requested confirm, G3's own-tag or no-war-goal request posted.
+
+## Session S11-HOLDS: the in-process module, area-defence holds (family `holds`; about 25 minutes) -- FIRST of the e79 sessions
+
+Built by engineer 79 (24 Nov 2026), offline-proven only: stage 2 43/43 types on 1.20.0.0 and 1.19.4.1 macOS; Linux and
+Windows 1.20 CEditAreaDefenseStateCommand by RTTI with the same id (13873) (the full scan is macOS-only). OFF under `auto`
+until this session passes. Why first: every army must hold an order before a declaration, and the mouse path's area
+tool failed on led armies until the select-first fix (live engineer 77).
+- The map tool's area button only arms the tool; EVERY LEFT CLICK on a state posts one CEditAreaDefenseStateCommand
+  through the tool's own constructor (1.20 0x10094a330, UI 0x1025b7f80): (army, order id, the state's id, the tool's
+  settings mask). Order id 0 (no area order being edited) -> the execution creates a NEW area-defence order (kind 5) of the
+  army with that state; an order's id -> the state is TOGGLED in it. The module: one command per state; a new order takes
+  exactly one state, then the MCP adds the others to the new order's id (the module reads it back: `area_order_id`). The
+  module refuses a state already in the order (a click would remove it), an order of another kind or group, and checks
+  the army with the game's resolver and owner; the game's own "can do" (the army resolves as a COrdersGroup) decides.
+  The settings mask is the fresh tool's 0 for a new order and the order's own mask (+0xf8) for an added state.
+- MCP: hoi4_army_area_defense (same name, schema, Verified read-back: new battle-plan orders on the army) refuses a
+  leaderless army with `no_commander` and a state the player does not control with `invalid_arguments` before anything
+  is posted; reply `in_process.module.area_order_id` and `in_process.added` (the other states). The module's handing back
+  (`Gui`) before the first click runs the mouse path in the same call; after the first click nothing is redrawn by mouse.
+Needs: the module and reader from branch e79/inproc-holds (contains e78); PREV-1939 = bed1939-0814 (armies carved by S6,
+generals assigned) or any save with a led army and own states behind the front.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,units,holds ./inproc_stage2.sh PREV-1939 s11h`; hello shows
+`"holds":{"on":true,"live_passed":false}`. `C="python3 -I inproc/tools/inproc_client.py s11h/inproc.sock"`.
+H1 paused, `HOI4_BACKEND=inprocess` (5 min): `hoi4_army_area_defense {"army":"<a led army>","states":[<one own state>]}`:
+receipt Verified, `in_process.module.per_object[0].result:"posted"`, `area_order_id` > 0; hoi4_armies shows an
+`area_defense` order with exactly that state; the map shows the area (screenshot). Tool ms against the mouse (~2-6 s).
+H2 three states (5 min): `{"army":"<another led army>","states":[a,b,c]}` -> one new order holding a, b, c (in_process.added
+posted 2); no second area order on the army.
+H3 refusals (5 min): a leaderless army -> `no_commander`, nothing posted; a foreign state -> `invalid_arguments`; by the
+client `$C post2 holds.area_defense <army> --vals <area order id>,<a state already in it>` -> refused by the module ("already in
+area order"), the order unchanged; `$C post2 holds.area_defense <army> --vals 0,<s1>,<s2>` -> refused by policy (a new order
+takes one state); an order id of a FRONT order -> refused ("not an area-defence order").
+H4 running at speed 2 (5 min): H1 on a third army; Verified within 3 s; the divisions move to the area.
+H5 save + reload with the family on (the area orders stand); a plain load without the module.
+Stop at once (endrun.sh s11h) on: a crash, a hang, any `unexplained` post2, a state REMOVED from an order, an area order on
+an army the request did not name, a second area order created by one call, a leaderless army given an order.
+Pass -> IPC_LIVE_PASSED entry 13 (holds) = 1 and the family is used under `auto`.
+
+## Session S12-RESEARCH: the in-process module, research in a slot (family `research`; about 15 minutes) -- after S11-HOLDS
+
+Built by engineer 79 (24 Nov 2026), offline-proven only: stage 2 44/44 on 1.20.0.0 and 1.19.4.1 macOS; Linux/Windows 1.20
+CSetResearchCommand by RTTI (12144). OFF under `auto` until this session passes.
+- CSetResearchCommand through the research view's own constructor (1.20 0x100200640, 1.19.4.1 0x1001fff00): (own tag, the
+  technology TEMPLATE (exact class 19CTechnologyTemplate, from the game's technology database by key), slot, XP boost 0,
+  b35 1, UI byte 0) = the slot-selected click's flags and the factory's defaults. The game's "can do" (slot exists; the
+  country can research it now) decides; refused -> the MCP's mouse path (an exclusive pair is switched by
+  CSetXORResearchCommand, which the module does not post). b35 = 1 makes the slot run the game's follow-up routine
+  (0x1017ae070) exactly as the view's click: UNVERIFIED what it changes besides the slot (R2 checks the other slots).
+- MCP: hoi4_research_start (same schema, Verified = the slot holds the technology) routes in process without opening the
+  research view; reply `in_process.module`.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,research ./inproc_stage2.sh PREV-1936 s12r`.
+R1 paused, `HOI4_BACKEND=inprocess`: `hoi4_research_start {"technology":"<an available tech>"}` into the first empty slot:
+Verified, `per_object[0].result:"posted"`, the research view (opened by hand after) shows it; tool ms vs mouse (~3-6 s).
+R2 replace: `{"technology":"<another>","slot":0,"replace":true}` on a busy slot: Verified; the old technology's progress
+kept in its own record (hoi4_research shows it unresearched with its progress); no other slot changed.
+R3 refusals: an already researched tech -> `already_researched` before posting; a tech whose prerequisites are missing ->
+the game's check refuses, the mouse path then reports its own result (no in-process post); an exclusive alternative of a
+tech in progress -> no in-process post (mouse).
+R4 running at speed 3: R1 on another slot: Verified within 3 s. R5 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, a slot changed that the request did not name, XP spent (army/navy/air XP drop).
+Pass -> IPC_LIVE_PASSED entry 14 (research) = 1.
+
+## Session S13-POLITICS: the in-process module, laws (family `politics`; about 15 minutes) -- after S12-RESEARCH
+
+Built by engineer 79 (24 Nov 2026), offline-proven only: stage 2 46/46 on 1.20.0.0 and 1.19.4.1 macOS; Linux/Windows 1.20
+CAddIdeaCommand 12303 / CReplaceIdeaCommand 13017 by RTTI. OFF under `auto` until this session passes.
+- The politics view's own commands (UI 1.20 0x10234a8c0): the slot's current idea active -> ReplaceIdea(own tag, current,
+  new) (ctor 1.20 0x100209df0 / 1.19.4.1 0x1002096b0); else AddIdea(own tag, idea) (0x100206130 / 0x1002059f0). The
+  objects come from the game's lists, no panel: the new idea from TGameItemDatabase<CIdeaDatabase> (+0x60) by key, the
+  current one = the own ACTIVE idea (country+0xd38 -> +0x50) of the same category (+0x908). The game's "can do" decides
+  (same category, PP cost, the law's conditions). A key that is no idea (advisors, staff = characters) -> mouse path.
+- MCP: hoi4_politics_choose (same schema; the slot index is not used in process: the idea's category is the slot);
+  Verified = the idea among the own active ideas; reply `in_process.module`.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,politics ./inproc_stage2.sh PREV-1936 s13p` (Germany 1936).
+P1 paused, `HOI4_BACKEND=inprocess`, enough PP: `hoi4_politics_choose {"category":"government","slot":<economy>,
+"idea":"partial_economic_mobilisation"}`: Verified; `per_object[0].result:"posted"`, `cmd` politics.replace; PP drops by
+the law's cost; hoi4_politics_options shows it; the old law no longer active.
+P2 trade law (`limited_exports`), P3 conscription (`limited_conscription`): same.
+P4 refusals: a law the country may not take (e.g. `war_economy` in peace) -> `game_refused` (nothing posted, no PP
+spent); too little PP -> `game_refused`; an active law -> `invalid_target` before posting.
+P5 an advisor key -> the mouse path serves it in the same call (no in-process post). P6 save + reload; a plain load.
+Stop at once on: a crash, any `unexplained`, PP spent without the law, two laws of one category active.
+Pass -> IPC_LIVE_PASSED entry 15 (politics) = 1.

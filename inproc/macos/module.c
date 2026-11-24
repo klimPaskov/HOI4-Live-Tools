@@ -387,6 +387,10 @@ typedef void (*ctor_divs_theatre)(void *, const pdx_array *, void *, void *);
 typedef void (*ctor_leader)(void *, void *, void *, int);
 typedef void (*ctor_group_name)(void *, void *, const void *);
 typedef void (*ctor_event_option)(void *, int32_t, void *, const int32_t *, const void *, int32_t); /* engineer 76 */
+typedef void (*ctor_area_state)(void *, void *, int32_t, int32_t, int32_t); /* engineer 79: (cmd, group, order id, state, settings) */
+typedef void (*ctor_research)(void *, const int32_t *, void *, int32_t, int, int, int); /* engineer 79: (cmd, &tag, template, slot, b34, b35, b36) */
+typedef void (*ctor_idea)(void *, const int32_t *, void *);           /* engineer 79: AddIdea (cmd, &tag, idea) */
+typedef void (*ctor_idea2)(void *, const int32_t *, void *, void *);  /* engineer 79: ReplaceIdea (cmd, &tag, old, new) */
 typedef unsigned char (*option_test_fn)(void *, const void *, unsigned char);
 typedef void (*ctor_groups_obj)(void *, const pdx_array *, void *);
 typedef void (*ctor_groups_obj_i32)(void *, const pdx_array *, void *, int32_t);
@@ -424,6 +428,9 @@ typedef struct {
     /* events (engineer 76): the window's pending id, event, its handle, the country, the option chosen (shown place ->
      * the event's own option index) */
     int32_t ev_id, ev_country, ev_option; uint64_t ev_event, ev_handle;
+    /* holds (engineer 79): the area order's settings mask the click carries, the group's area-order ids before a new
+     * order is created (the read-back finds the one new id), the new order's id */
+    int32_t hold_setting, hold_before[64], new_order_id; int hold_nbefore;
     long long ran_us, post_us;
     char reason[200], queue_type[64], server_type[64];
     dispatch_semaphore_t done;
@@ -815,6 +822,61 @@ static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint6
     return NULL;
 }
 
+/* engineer 79: the ids of the group's area-defence orders (the kind the state click's execution creates), from the
+ * group's own order lists (top, fallback, area); -1 on a read fault */
+static int hold_area_ids(uint64_t grp, int32_t *ids, int max) {
+    const orders_facts *of = &g_t.st2.orders;
+    uint64_t vt = of->vt_order + (uint64_t)g_slide;
+    int n = 0;
+    for (int l = 0; l < 3; l++) {
+        uint64_t d = 0; int32_t cnt = 0;
+        if (!sq(grp + of->list_off[l], &d) || !sread(grp + of->list_cnt[l], &cnt, 4) || cnt < 0 || cnt > 512) return -1;
+        for (int32_t e = 0; e < cnt; e++) {
+            uint64_t o = 0, v = 0; int32_t k = 0, id = 0;
+            if (!sq(d + 8 * (uint64_t)e, &o) || !sq(o, &v) || v != vt) return -1;
+            if (!sread(o + of->kind_off, &k, 4) || !sread(o + of->id_off, &id, 4)) return -1;
+            if ((uint32_t)k == g_t.st2.holds.kind_area && n < max) ids[n++] = id;
+        }
+    }
+    return n;
+}
+/* 1 when the area order holds this state id (its own list, the one the click toggles), 0 when not, -1 on a fault */
+static int hold_has_state(uint64_t order, int32_t state) {
+    const holds_facts *hf = &g_t.st2.holds;
+    uint64_t d = 0; int32_t cnt = 0;
+    if (!sq(order + hf->area_off, &d) || !sread(order + hf->area_cnt, &cnt, 4) || cnt < 0 || cnt > 4096) return -1;
+    for (int32_t e = 0; e < cnt; e++) { int32_t x = 0; if (!sread(d + 4 * (uint64_t)e, &x, 4)) return -1; if (x == state) return 1; }
+    return 0;
+}
+/* engineer 79: an area-defence click. A NEW order (id 0): the tool's fresh settings (0) and the group's area orders
+ * before (the read-back finds the new one). An existing order: the game's own order lookup finds it in THIS group, it is
+ * of the area kind, and the state is not in it yet (the click toggles: a state already there would be REMOVED); the
+ * click carries the order's own settings mask, as the tool does. NULL when ready. */
+static const char *holds_prep(job2_t *j, int i) {
+    const orders_facts *of = &g_t.st2.orders;
+    const holds_facts *hf = &g_t.st2.holds;
+    static char why[160];
+    uint64_t grp = j->obj[i];
+    if (!j->order_id) {
+        if (i == 0) { j->hold_setting = 0; j->hold_nbefore = hold_area_ids(grp, j->hold_before, 64); if (j->hold_nbefore < 0) return "the army's orders are unreadable"; }
+        return NULL;
+    }
+    if (!j->order) {
+        uint64_t lk = of->lookup_fn + (uint64_t)g_slide, v = 0, own = 0; int32_t k = 0;
+        if (!code_ptr(lk)) return "the order lookup is not game code";
+        uint64_t o = (uint64_t)(uintptr_t)((order_lookup_fn)(uintptr_t)lk)((void *)(uintptr_t)grp, j->order_id);
+        if (!o || !sq(o, &v) || v != of->vt_order + (uint64_t)g_slide) { snprintf(why, sizeof why, "order %d is not in this army's plan", j->order_id); return why; }
+        if (!sq(o + of->owner_off, &own) || own != grp) { snprintf(why, sizeof why, "order %d belongs to another orders group", j->order_id); return why; }
+        if (!sread(o + of->kind_off, &k, 4) || (uint32_t)k != hf->kind_area) { snprintf(why, sizeof why, "order %d is not an area-defence order (kind %d)", j->order_id, k); return why; }
+        if (!sread(o + hf->setting_off, &j->hold_setting, 4)) return "the order's settings are unreadable";
+        j->order = o;
+    }
+    int has = hold_has_state(j->order, j->provs[i]);
+    if (has < 0) return "the order's states are unreadable";
+    if (has) { snprintf(why, sizeof why, "state %d is already in area order %d (a click would remove it)", j->provs[i], j->order_id); return why; }
+    return NULL;
+}
+
 static void run_job2(void *ctx) {
     job2_t *j = (job2_t *)ctx;
     const stage2_common *c = &g_t.st2.common;
@@ -895,6 +957,12 @@ static void run_job2(void *ctx) {
             for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
             snprintf(j->reason, sizeof j->reason, "obj2 is not a live army (COrdersGroup)"); finish2(j); return;
         }
+    } else if (k2 == OBJ2_SAME_PTR) { /* engineer 79: exactly the first object's class (the idea a law replaces) */
+        uint64_t v2 = 0;
+        if (!ct->vt_obj || !plausible(j->obj2) || !sq(j->obj2, &v2) || v2 != ct->vt_obj + (uint64_t)g_slide || j->obj2 == j->obj[0]) {
+            for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
+            snprintf(j->reason, sizeof j->reason, "obj2 is not another live %s", ct->spec->obj_cast); finish2(j); return;
+        }
     } else if (k2 == OBJ2_CAST) { /* engineer 75: a leader / an army group, as the type's own check casts it */
         uint64_t nr = 0, ref = j->obj2 + ct->hint2, lk = ct->lookup_fn + (uint64_t)g_slide;
         if (!g_dyncast) g_dyncast = (dyncast_fn)dlsym(RTLD_DEFAULT, "__dynamic_cast");
@@ -951,6 +1019,10 @@ static void run_job2(void *ctx) {
                 if (why != j->reason) snprintf(j->reason, sizeof j->reason, "%s", why);
                 continue;
             }
+        }
+        if (!strcmp(ct->spec->family, "holds")) { /* engineer 79: the area order and the state's place in it */
+            const char *why = holds_prep(j, i);
+            if (why) { j->res[i] = R_BAD_OBJ2; j->refused++; snprintf(j->reason, sizeof j->reason, "%s", why); continue; }
         }
         if (!strcmp(ct->spec->family, "orders") || !strcmp(ct->spec->family, "orders2")) {
             const char *why = orders_prep(j);
@@ -1019,7 +1091,9 @@ static void run_job2(void *ctx) {
             uint64_t data = 1; int32_t size = 1;
             if (ct->spec->ctor == CTOR_ADDLINE) /* no list: the variant's handle field still holds the empty handle */
                 ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &data) && data == nullref;
-            else if (ct->spec->ctor == CTOR_LEADER || ct->spec->ctor == CTOR_GROUP_NAME || ct->spec->ctor == CTOR_EVENT_OPTION) { /* no list: every handle still empty */
+            else if (ct->spec->ctor == CTOR_LEADER || ct->spec->ctor == CTOR_GROUP_NAME || ct->spec->ctor == CTOR_EVENT_OPTION ||
+                     ct->spec->ctor == CTOR_RESEARCH || ct->spec->ctor == CTOR_IDEA_ADD || ct->spec->ctor == CTOR_IDEA_REPLACE) {
+                /* no list: every handle still empty */
                 for (int k = 0; k < ct->spec->nf && ok; k++)
                     if (ct->spec->f[k].kind == FK_REF) ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[k].off, &data) && data == nullref;
             } else
@@ -1050,6 +1124,12 @@ static void run_job2(void *ctx) {
                     ((ctor_divs_theatre)(uintptr_t)ctor)(cmd, &da, obj, NULL); break;
                 }
                 case CTOR_LEADER: ((ctor_leader)(uintptr_t)ctor)(cmd, (void *)(uintptr_t)j->obj2, obj, 0); break;
+                case CTOR_IDEA_ADD: ((ctor_idea)(uintptr_t)ctor)(cmd, &j->player_tag, obj); break;
+                case CTOR_IDEA_REPLACE: ((ctor_idea2)(uintptr_t)ctor)(cmd, &j->player_tag, (void *)(uintptr_t)j->obj2, obj); break;
+                case CTOR_RESEARCH: /* engineer 79: the research view's call: own tag, the template, the slot, (0, 1, 0) */
+                    ((ctor_research)(uintptr_t)ctor)(cmd, &j->player_tag, obj, (int32_t)j->val[0], 0, 1, 0); break;
+                case CTOR_AREA_STATE: /* engineer 79: the map tool's click: group, order id (0 = new), the state, settings */
+                    ((ctor_area_state)(uintptr_t)ctor)(cmd, obj, j->order_id, j->provs[i], j->hold_setting); break;
                 case CTOR_EVENT_OPTION: /* the window's own fields, as its option click passes them */
                     ((ctor_event_option)(uintptr_t)ctor)(cmd, j->ev_id, (void *)(uintptr_t)j->ev_event,
                                                          (const int32_t *)(uintptr_t)(j->obj[i] + g_t.st2.events.win_country_off),
@@ -1111,6 +1191,31 @@ static void run_job2(void *ctx) {
                      sq((uint64_t)(uintptr_t)cmd + e->ev_handle_off, &hv) && hv == j->ev_handle &&
                      sread((uint64_t)(uintptr_t)cmd + e->cmd_country_off, &b, 4) && b == j->player_tag &&
                      sread((uint64_t)(uintptr_t)cmd + e->cmd_option_off, &d, 4) && d == j->ev_option;
+                if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+            } else if (ok && (ct->spec->ctor == CTOR_IDEA_ADD || ct->spec->ctor == CTOR_IDEA_REPLACE)) { /* engineer 79 */
+                int32_t tg = 0; uint64_t a = 0, b = 0; int rep = ct->spec->ctor == CTOR_IDEA_REPLACE;
+                ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x24, &tg, 4) && tg == j->player_tag &&
+                     sq((uint64_t)(uintptr_t)cmd + 0x28, &a) && a == (rep ? j->obj2 : j->obj[i]) &&
+                     (!rep || (sq((uint64_t)(uintptr_t)cmd + 0x30, &b) && b == j->obj[i]));
+                if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+            } else if (ok && ct->spec->ctor == CTOR_RESEARCH) { /* engineer 79: tag, template, slot, bytes 0/1/0 */
+                int32_t tg = 0, sl = -1; uint64_t tp = 0; uint8_t b[3] = {9, 9, 9};
+                ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x24, &tg, 4) && tg == j->player_tag &&
+                     sq((uint64_t)(uintptr_t)cmd + 0x28, &tp) && tp == j->obj[i] &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x30, &sl, 4) && sl == (int32_t)j->val[0] &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x34, b, 3) && b[0] == 0 && b[1] == 1 && b[2] == 0;
+                if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+            } else if (ok && ct->spec->ctor == CTOR_AREA_STATE) { /* engineer 79: exactly one click's payload */
+                uint64_t hg = 0, d = 0; int32_t oid = -1, cnt = -1, x = 0, st = -1; uint8_t b[2] = {9, 9};
+                ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
+                     sq((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &hg) && hg == h &&
+                     sread((uint64_t)(uintptr_t)cmd + ct->spec->f[2].off, &oid, 4) && oid == j->order_id &&
+                     sq((uint64_t)(uintptr_t)cmd + ct->spec->f[0].off, &d) && sread((uint64_t)(uintptr_t)cmd + ct->spec->f[0].count_off, &cnt, 4) &&
+                     cnt == 1 && sread(d, &x, 4) && x == j->provs[i] &&
+                     sread((uint64_t)(uintptr_t)cmd + ct->spec->f[4].off, b, 2) && b[0] == 0 && b[1] == 1 &&
+                     sread((uint64_t)(uintptr_t)cmd + ct->spec->f[3].off, &st, 4) && st == j->hold_setting;
                 if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
             } else if (ok && ct->spec->ctor >= CTOR_DIVS_THEATRE) { /* engineer 75: army structure */
                 int filtered = 0;
@@ -1337,6 +1442,41 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             else if (parse_list_u64(obj2, o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0];
         }
         if (!why && !strcmp(op, "units.to_army_group") && !j->obj2) why = "obj2: the army group";
+    } else if (!strncmp(op, "politics.", 9)) {
+        /* engineer 79: objs = ONE idea (exact CIdea); replace: obj2 = the slot's current idea (same class) */
+        int rep = !strcmp(op, "politics.replace");
+        if (j->n != 1) why = "politics: exactly one idea";
+        else if (nv || flag || (provs && *provs) || (divs && *divs)) why = "politics ops take no vals, flag, provs or divs";
+        else if (!rep && obj2 && *obj2) why = "politics.add takes no obj2";
+        else if (rep) { uint64_t o2[1]; if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: the current idea's hex address"; else j->obj2 = o2[0]; }
+    } else if (!strncmp(op, "research.", 9)) {
+        /* engineer 79: objs = ONE technology template (exact class); vals = the research slot (0..31: the game's own check
+         * reads the country's slot count) */
+        if (j->n != 1) why = "research.start: exactly one technology";
+        else if (nv != 1 || j->val[0] < 0 || j->val[0] > 31) why = "vals: one research slot index (0..31)";
+        else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "research.start takes no flag, obj2, provs or divs";
+    } else if (!strncmp(op, "holds.", 6)) {
+        /* engineer 79: an area-defence order, one map click per state. objs = ONE army (or army group); vals = the area
+         * order's id (0 = a new area-defence order: exactly one state, its first click) then the state ids (one command
+         * each, in order). The states are the MCP's own-controlled reads; the module checks the army, the order and that
+         * no state is in the order already (the click toggles) */
+        if (j->n != 1) why = "holds.area_defense: exactly one army";
+        else if (nv < 2 || nv > 9) why = "vals: the area order's id (0 = new) then 1..8 state ids";
+        else if (j->val[0] < 0 || j->val[0] > 100000000) why = "vals[0]: an area order's id or 0 (a new order)";
+        else if (j->val[0] == 0 && nv != 2) why = "a new area order takes exactly one state (its first click): add the others to its id";
+        else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "holds ops take no flag, obj2, provs or divs";
+        else {
+            uint64_t g = j->obj[0];
+            j->order_id = (int32_t)j->val[0];
+            j->nprov = nv - 1;
+            for (int k = 0; k < j->nprov && !why; k++) {
+                if (j->val[k + 1] < 1 || j->val[k + 1] > 100000) why = "a state id is outside 1..100000";
+                j->provs[k] = (int32_t)j->val[k + 1];
+                for (int e = 0; e < k && !why; e++) if (j->provs[e] == j->provs[k]) why = "a state is listed twice (a second click would remove it)";
+            }
+            j->n = j->nprov; /* one command per state, each for the same army */
+            for (int k = 0; k < j->n; k++) j->obj[k] = g;
+        }
     } else if (!strncmp(op, "picks.", 6)) {
         /* engineer 75: the player's own picks. focus: objs = ONE CNationalFocus of the own tree (exact vtable; the game's
          * own "can start" with the player's country decides) */
@@ -1362,7 +1502,7 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         uint64_t o2[1];
         if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0];
     }
-    for (int a = 0; !why && a < j->n; a++) for (int b = a + 1; b < j->n; b++) if (j->obj[a] == j->obj[b]) why = "an object is listed twice (no duplicate orders)";
+    for (int a = 0; !why && strncmp(op, "holds.", 6) && a < j->n; a++) for (int b = a + 1; b < j->n; b++) if (j->obj[a] == j->obj[b]) why = "an object is listed twice (no duplicate orders)";
     if (why) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused_by_policy\",\"reason\":\"%s\"", op, why); free(j); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
     long long t0 = mono_us();
     j->done = dispatch_semaphore_create(0);
@@ -1513,6 +1653,38 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         else {
             reads_t r; do_reads(&r);
             if (!(r.ok && r.has_date && r.paused)) snprintf(j->reason, sizeof j->reason, "posted; not seen executed after 3 s in a running game");
+            else snprintf(j->reason, sizeof j->reason, "posted; not executed yet (game paused)");
+        }
+    }
+    /* holds (engineer 79): every posted state is in the area order (an existing order: its own list; a new order: the
+     * one area order of the army that was not there before holds the state, and its id is returned). 3 s, paused-aware */
+    if (!strncmp(op, "holds.", 6) && j->posted) {
+        const orders_facts *of = &g_t.st2.orders;
+        uint64_t vt = of->vt_order + (uint64_t)g_slide, g = j->obj[0];
+        long long start = mono_us();
+        pending = 1;
+        while (pending && mono_us() - start < 3000000) {
+            if (j->order_id) {
+                int all = orders_find(of, sread, vt, g, j->order_id) == j->order;
+                for (int i = 0; all && i < j->n; i++) if (j->res[i] == R_POSTED && hold_has_state(j->order, j->provs[i]) != 1) all = 0;
+                pending = !all;
+            } else {
+                int32_t ids[64]; int n2 = hold_area_ids(g, ids, 64);
+                for (int a = 0; a < n2 && pending; a++) {
+                    int old = 0;
+                    for (int b = 0; b < j->hold_nbefore; b++) if (j->hold_before[b] == ids[a]) old = 1;
+                    uint64_t o = old ? 0 : orders_find(of, sread, vt, g, ids[a]);
+                    if (o && hold_has_state(o, j->provs[0]) == 1) { pending = 0; j->new_order_id = ids[a]; }
+                }
+            }
+            if (pending) usleep(2000);
+        }
+        if (!pending) {
+            executed = j->posted; rb_us = mono_us() - t0;
+            snprintf(rbx, sizeof rbx, ",\"area_order_id\":%d,\"states_added\":%d", j->order_id ? j->order_id : j->new_order_id, j->posted);
+        } else {
+            reads_t r; do_reads(&r);
+            if (!(r.ok && r.has_date && r.paused)) snprintf(j->reason, sizeof j->reason, "posted; the states are not in the area order after 3 s in a running game");
             else snprintf(j->reason, sizeof j->reason, "posted; not executed yet (game paused)");
         }
     }
