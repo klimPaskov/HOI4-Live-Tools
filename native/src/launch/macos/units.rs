@@ -1031,6 +1031,29 @@ pub(super) fn leaders(r: &Reader<'_>, image: u64) -> Result<Vec<Leader>> {
     Ok(out)
 }
 
+/// engineer 75: the own army leader with exactly this name (for the in-process commander pick); refused when none or
+/// more than one leader carries it.
+pub(super) fn leader_address(r: &Reader<'_>, image: u64, name: &str) -> Result<u64> {
+    let l = layout(r)?;
+    let country = own_country(r, image)?;
+    let characters = r.u64(country + l.country_characters)?;
+    if !is_ptr(characters) {
+        return Err(Error::new("invalid_type", "Country characters unavailable"));
+    }
+    r.object_type(characters, "CCountryCharacters")?;
+    let mut found = None;
+    for leader in r.pointer_array(characters + l.characters_army_leaders)? {
+        exact(r, image, leader, l.leader_vtable, "army leader")?;
+        if r.string_bounded(leader + l.leader_name, 128)? == name {
+            if found.is_some() {
+                return Err(Error::new("ambiguous_commander", "Two own leaders carry this name"));
+            }
+            found = Some(leader);
+        }
+    }
+    found.ok_or_else(|| Error::new("unknown_commander", "No own army leader has this name"))
+}
+
 /// One consistent bracket of reads for the tools.
 pub(super) fn snapshot<T>(
     process: &dyn Process,

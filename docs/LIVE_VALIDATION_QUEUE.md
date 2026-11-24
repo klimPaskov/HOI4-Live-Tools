@@ -528,3 +528,60 @@ list (+0x30) element kind and the +0x48 settings mask; (d) the invasion SOURCE c
 Stop at once (endrun.sh s5p) on: a crash, a hang, any "unexplained" post2, a root or order on a group the request did
 not name, any order that changes on an allied or enemy group, a `fronts` read that disagrees with the map.
 Pass: P1-P6 clean on both beds -> `IPC_LIVE_PASSED` for `orders2` (7th entry), "S5 PASS: orders2".
+
+## Session S6-UNITS: the in-process module, army structure (family `units`; about 45 minutes) -- FIRST in the queue
+
+Built by engineer 75 (24 Nov 2026), offline-proven only: stage 2 33/33 types on with every check on 1.20.0.0 and
+1.19.4.1 macOS (the 8 units types and their UI constructors found on both); Linux and Windows 1.20 8/8 classes by RTTI
+with the same protocol ids. OFF under `auto` until this session passes. It does not need S4/S5 (no order is written; a
+transfer only NAMES the order the UI would pick).
+Which commands carry membership (static, both builds): COrderGroupCommand 11983 = a NEW army of the given divisions
+(the new-army card: the constructor takes the selected divisions, the first one's theatre, no theater group; it keeps
+only divisions the theatre's country owns and that may change army); COrderAssignCommand 12350 = divisions INTO an
+existing army (the right click on its card posts Assign(divisions, that army, the order the UI picks or 0)); army groups:
+CArmyGroupCommand 14433 (new, from armies of one theatre), CAssignToArmyGroupCommand 14470 (into, index -1 as every UI
+caller), CRemoveFromArmyGroupCommand 14471 (out). CMoveCommand is the map MOVE order (not membership); CMergeArmiesCommand
+merges DIVISIONS ("cannot merge less than 2 armies": CArmy is the division class), not armies.
+- `units.new_army FIRST --divs D1,..` (FIRST = D1), read back: every division in ONE army none of them was in before
+  (reply `army`, `divisions`). A division the game's own filter drops -> `refused_by_game_check`, nothing posted.
+- `units.transfer ARMY --divs D,..` (up to 512 per command), read back: every division in ARMY.
+- `units.leader GROUP --obj2 LEADER` (none = unassign), `units.rename GROUP --vals codes` (1..22 printable ASCII bytes),
+  `units.army_group_new A1,A2,..`, `units.to_army_group A1,.. --obj2 AG`, `units.from_army_group A1,..`,
+  `units.delete_group GROUP`: posted after the game's own check; the MCP tools' Verified reads are the proof.
+- MCP (same names, schemas, Verified reads; mouse fallback in the same call): hoi4_army_detach (no `into` = one new
+  army, `into` = one transfer), hoi4_army_merge (all of source into target, one transfer), hoi4_army_split (the first N
+  roster divisions, one new army), hoi4_army_group_create (one command), hoi4_army_commander (leader by exact name),
+  hoi4_army_rename (names up to 22 ASCII bytes; others typed by the mouse). Replies carry `in_process`.
+
+Needs: the game slot, Steam closed; module and reader built from branch e75/inproc-picks; PREV-1939 = a run folder whose
+last save is the 1939 bookmark start (Germany, the one army of ~121 divisions; e.g. a copy of t1939g's first save).
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,units ./inproc_stage2.sh PREV-1939 s6u`; the hello must
+show `"units":{"on":true,"live_passed":false}`, `common.unit_theatre_off:664`, `group_parent_ptr_off:432`.
+`C="python3 -I inproc/tools/inproc_client.py s6u/inproc.sock"`. Tool calls through the broker with
+`HOI4_BACKEND=inprocess HOI4_INPROC_SOCK=$PWD/s6u/inproc.sock` (deploybin.sh, as S2 did), and the same with
+`HOI4_BACKEND=gui` for the mouse timings.
+
+U1 one new army, paused (5 min). `hoi4_armies`: pick the big army and 3 division ids. `hoi4_army_detach {"army":BIG,
+"divisions":[3 ids]}` -> receipt Verified, `in_process.module.army`, tool ms. `hoi4_armies`: a new army of exactly
+those 3; BIG lost exactly 3. Screenshot of the army bar.
+U2 THE CARVE, paused (15 min): the 1939 plan's five named formations out of the 121-division army, in one call
+sequence, each formation's divisions named by id (take them from `hoi4_armies`/`hoi4_supply`: e.g. Nord 18+6, Pommern
+18+6, Mitte 18+6, Sued 18+6, Panzergruppe 14): per formation `hoi4_army_detach {"army":BIG,"divisions":[<=18]}`
+(new army), then `hoi4_army_detach {"army":BIG,"divisions":[rest],"into":NEW}`, `hoi4_army_rename {"army":NEW,
+"name":"Armee Nord"}`, `hoi4_army_commander {"army":"Armee Nord","general":G}`; then `hoi4_army_group_create
+{"armies":[Nord,Pommern]}` and a field marshal on it. READ-BACK: `hoi4_armies` shows each named army with EXACTLY its
+divisions, each general, the group; nothing else moved. TIME: total wall time and per call (inproc.log post2
+`total_ms`), against the mouse path on the same save reloaded (`HOI4_BACKEND=gui`, the same sequence: the t1939f
+mouse detach of 14 moved 2 and diverged; record what it does now).
+U3 merge and split, paused (5 min). `hoi4_army_split {"army":"Armee Nord","count":4}` -> a new army of the roster's
+first 4; `hoi4_army_merge {"source":<that>,"target":"Armee Nord"}` -> back; the empty shell: does it vanish (record); if
+not, `$C post2 units.delete_group SHELL` and record the game check's answer.
+U4 refusals (5 min). A division of a FOREIGN country in `--divs` -> `not a live division` or the game filter's refusal
+(record which); `units.army_group_new` of two armies in different theatres -> refused before posting; a leader of
+another country (obj2) -> refused before posting; a name of 23 bytes -> the mouse path types it.
+U5 running speed 2 (5 min): repeat U1 and one transfer while the game runs; read-back within 3 s.
+U6 save + reload with the family on; plain load without the module (the save opens; the carved armies stand).
+Stop at once (endrun.sh s6u) on: a crash, a hang, any `unexplained` post2, a division in an army the request did not
+name, any change to a foreign army, a Dropped command in game.log.
+Pass: U1-U6 clean -> `IPC_LIVE_PASSED` for `units` (8th entry), "S6 PASS: units"; the executor's layout may then name
+the divisions of each role in one call sequence (DETACH_MAX stays 18 per call: the tool's schema).

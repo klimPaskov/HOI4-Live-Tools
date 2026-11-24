@@ -23,6 +23,7 @@ mod construction_find;
 mod fair_facts;
 mod inproc;
 mod inproc_orders;
+mod inproc_units;
 mod operation_act;
 mod railway;
 // Internal prospective click opener; no tool/configuration registration.
@@ -5795,7 +5796,9 @@ impl MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            if !actions.receipt_exists(id) {
+            let mut units_route = inproc::route("units");
+            let had_route = units_route.is_some();
+            if !actions.receipt_exists(id) && !had_route {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"army_detach","army":army,"divisions":ids,"into":into});
@@ -5831,14 +5834,32 @@ impl MacClock {
                     journal::Outcome::Diverged(detail)
                 })
             };
+            let mut units_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // engineer 75: in process = one command (a new army of these divisions, or Assign into `into`)
+                units_reply = units_in_process(&mut units_route, |ch| {
+                    let divs = ui::read(process, |r, i| armies::detach_targets(r, i, army, &ids))?;
+                    Ok(match into {
+                        Some(t) => {
+                            let g = ui::read(process, |r, i| armies::group_address(r, i, t))?;
+                            inproc_units::transfer(ch, g, &divs)
+                        }
+                        None => inproc_units::new_army(ch, &divs),
+                    })
+                })?;
+                if units_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 let name = armies::detach(process, keys, army, &ids, into)?;
                 *moved_to.borrow_mut() = Some(name);
                 Ok(())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, units_reply));
         }
         if name == "hoi4_army_rename" {
             allowed(args, &["army", "name", "request_id", "lease_token"])?;
@@ -5856,6 +5877,10 @@ impl MacClock {
                 if let Some(refusal) = armies::rename_refusal(&view, army, new_name) {
                     return Err(refusal);
                 }
+            }
+            let mut units_route = inproc::route("units");
+            let had_route = units_route.is_some();
+            if !actions.receipt_exists(id) && !had_route {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"army_rename","army":army,"name":new_name});
@@ -5872,15 +5897,26 @@ impl MacClock {
                     journal::Outcome::Diverged(body)
                 })
             };
+            let mut units_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 if army == new_name {
                     return Ok(());
                 }
+                units_reply = units_in_process(&mut units_route, |ch| {
+                    let g = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+                    Ok(inproc_units::rename(ch, g, new_name))
+                })?;
+                if units_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 armies::rename(process, keys, army, new_name)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, units_reply));
         }
         if name == "hoi4_army_motorization" {
             allowed(args, &["army", "level", "request_id", "lease_token"])?;
@@ -5969,6 +6005,10 @@ impl MacClock {
                         format!("{source} ({a}) + {target} ({b}) would exceed {} divisions; split first", armies::ARMY_CAP),
                     ));
                 }
+            }
+            let mut units_route = inproc::route("units");
+            let had_route = units_route.is_some();
+            if !actions.receipt_exists(id) && !had_route {
                 self.keys.preflight()?;
             }
             let mut settle = || {
@@ -5978,12 +6018,27 @@ impl MacClock {
                         .outcome(now),
                 )
             };
+            let mut units_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // engineer 75: every division of the source into the target (the right click on its card), one command
+                units_reply = units_in_process(&mut units_route, |ch| {
+                    let (s, t) = ui::read(process, |r, i| {
+                        Ok((armies::group_address(r, i, source)?, armies::group_address(r, i, target)?))
+                    })?;
+                    let divs = ui::read(process, |r, i| armies::group_division_ptrs(r, i, s))?;
+                    Ok(inproc_units::transfer(ch, t, &divs))
+                })?;
+                if units_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 armies::merge(process, keys, source, target)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, units_reply));
         }
         if name == "hoi4_army_gather" {
             allowed(args, &["army", "max", "request_id", "lease_token"])?;
@@ -6039,7 +6094,9 @@ impl MacClock {
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
             let retry = actions.receipt_exists(id);
-            if !retry {
+            let mut units_route = inproc::route("units");
+            let had_route = units_route.is_some();
+            if !retry && !had_route {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"army_split","army":army,"count":count});
@@ -6056,14 +6113,30 @@ impl MacClock {
                     verdict.outcome(now)
                 })
             };
+            let mut units_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // engineer 75: the army's first `count` divisions (the roster's order) as one new army, one command
+                units_reply = units_in_process(&mut units_route, |ch| {
+                    let view = armies::armies(process)?;
+                    let ids = armies::first_divisions(&view, army, count).ok_or_else(|| {
+                        Error::new("army_unknown", "No own army with this name and that many divisions")
+                    })?;
+                    let divs = ui::read(process, |r, i| armies::division_ptrs(r, i, &ids))?;
+                    Ok(inproc_units::new_army(ch, &divs))
+                })?;
+                if units_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 armies::split(process, keys, army, count)?;
                 verified.set(true);
                 Ok(())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, units_reply));
         }
         if name == "hoi4_army_group_create" {
             allowed(args, &["armies", "request_id", "lease_token"])?;
@@ -6087,7 +6160,9 @@ impl MacClock {
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
             let retry = actions.receipt_exists(id);
-            if !retry {
+            let mut units_route = inproc::route("units");
+            let had_route = units_route.is_some();
+            if !retry && !had_route {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"army_group_create","armies":names});
@@ -6104,14 +6179,28 @@ impl MacClock {
                     verdict.outcome(now)
                 })
             };
+            let mut units_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // engineer 75: one ArmyGroup command over the armies (they share a theatre; the module checks it)
+                units_reply = units_in_process(&mut units_route, |ch| {
+                    let groups = ui::read(process, |r, i| {
+                        names.iter().map(|n| armies::group_address(r, i, n)).collect::<Result<Vec<_>>>()
+                    })?;
+                    Ok(inproc_units::army_group_new(ch, &groups))
+                })?;
+                if units_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 armies::create_group(process, keys, &names)?;
                 verified.set(true);
                 Ok(())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, units_reply));
         }
         if name == "hoi4_army_commander" {
             allowed(
@@ -6137,8 +6226,12 @@ impl MacClock {
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
             let retry = actions.receipt_exists(id);
+            let mut units_route = inproc::route("units");
+            let had_route = units_route.is_some();
             if !retry {
-                self.keys.preflight()?;
+                if !had_route {
+                    self.keys.preflight()?;
+                }
                 commanders::precheck(process, army, general, reassign)?;
             }
             let action = json!({"kind":"army_commander","army":army,"general":general});
@@ -6159,12 +6252,26 @@ impl MacClock {
                     },
                 )
             };
+            let mut units_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // engineer 75: SetArmyLeader(the leader by name, the army or army group), one command
+                units_reply = units_in_process(&mut units_route, |ch| {
+                    let (g, l) = ui::read(process, |r, i| {
+                        Ok((armies::group_address(r, i, army)?, units::leader_address(r, i, general)?))
+                    })?;
+                    Ok(inproc_units::leader(ch, g, Some(l)))
+                })?;
+                if units_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 armies::assign_commander(process, keys, army, general)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, units_reply));
         }
         if name == "hoi4_army_exercise" {
             allowed(
@@ -8222,6 +8329,31 @@ fn offensive_in_process(
         ));
     }
     Ok(reply)
+}
+
+/// engineer 75: one army-structure change through the module when the `units` family is usable (never under `auto`
+/// before its live pass): Some(the module's reply) when every command was posted, None when the mouse path runs,
+/// the typed refusal when the game's own check refused the change (the mouse would send the same refused order).
+fn units_in_process(
+    route: &mut Option<inproc::Channel>,
+    f: impl FnOnce(&mut inproc::Channel) -> Result<inproc::Routed>,
+) -> Result<Option<Value>> {
+    let Some(ch) = route.as_mut() else {
+        return Ok(None);
+    };
+    match f(ch)? {
+        inproc::Routed::Done(v) => Ok(Some(v)),
+        inproc::Routed::Refused(what) => Err(inproc::refused_error(&what)),
+        inproc::Routed::Gui => Ok(None),
+    }
+}
+
+/// The receipt with the module's reply when the change went in process.
+fn with_inproc(receipt: Value, reply: Option<Value>) -> Value {
+    match reply {
+        Some(r) => json!({"receipt":receipt,"in_process":r}),
+        None => json!({"receipt":receipt}),
+    }
 }
 
 /// engineer 74: a plan root for an own army or army group through the module: the section of the group's theatre
