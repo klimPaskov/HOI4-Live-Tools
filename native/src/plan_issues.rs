@@ -273,9 +273,14 @@ fn usable_treat(le: &Value) -> Option<Treat> {
     let version = le["learned_on"]["game_version"].as_str().unwrap_or("");
     if !version.is_empty()
         && le["version_independent"] != json!(true)
-        && !crate::builds::SUPPORTED
-            .iter()
-            .any(|b| b.game_version == version)
+        && !crate::builds::current().map_or_else(
+            || {
+                crate::builds::SUPPORTED
+                    .iter()
+                    .any(|b| b.game_version == version)
+            },
+            |b| b.game_version == version,
+        )
     {
         return None;
     }
