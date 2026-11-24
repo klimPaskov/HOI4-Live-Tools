@@ -388,6 +388,9 @@ typedef void (*ctor_leader)(void *, void *, void *, int);
 typedef void (*ctor_group_name)(void *, void *, const void *);
 typedef void (*ctor_event_option)(void *, int32_t, void *, const int32_t *, const void *, int32_t); /* engineer 76 */
 typedef void (*ctor_area_state)(void *, void *, int32_t, int32_t, int32_t); /* engineer 79: (cmd, group, order id, state, settings) */
+typedef void (*ctor_research)(void *, const int32_t *, void *, int32_t, int, int, int); /* engineer 79: (cmd, &tag, template, slot, b34, b35, b36) */
+typedef void (*ctor_idea)(void *, const int32_t *, void *);           /* engineer 79: AddIdea (cmd, &tag, idea) */
+typedef void (*ctor_idea2)(void *, const int32_t *, void *, void *);  /* engineer 79: ReplaceIdea (cmd, &tag, old, new) */
 typedef unsigned char (*option_test_fn)(void *, const void *, unsigned char);
 typedef void (*ctor_groups_obj)(void *, const pdx_array *, void *);
 typedef void (*ctor_groups_obj_i32)(void *, const pdx_array *, void *, int32_t);
@@ -948,6 +951,12 @@ static void run_job2(void *ctx) {
             for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
             snprintf(j->reason, sizeof j->reason, "obj2 is not a live army (COrdersGroup)"); finish2(j); return;
         }
+    } else if (k2 == OBJ2_SAME_PTR) { /* engineer 79: exactly the first object's class (the idea a law replaces) */
+        uint64_t v2 = 0;
+        if (!ct->vt_obj || !plausible(j->obj2) || !sq(j->obj2, &v2) || v2 != ct->vt_obj + (uint64_t)g_slide || j->obj2 == j->obj[0]) {
+            for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
+            snprintf(j->reason, sizeof j->reason, "obj2 is not another live %s", ct->spec->obj_cast); finish2(j); return;
+        }
     } else if (k2 == OBJ2_CAST) { /* engineer 75: a leader / an army group, as the type's own check casts it */
         uint64_t nr = 0, ref = j->obj2 + ct->hint2, lk = ct->lookup_fn + (uint64_t)g_slide;
         if (!g_dyncast) g_dyncast = (dyncast_fn)dlsym(RTLD_DEFAULT, "__dynamic_cast");
@@ -1076,7 +1085,9 @@ static void run_job2(void *ctx) {
             uint64_t data = 1; int32_t size = 1;
             if (ct->spec->ctor == CTOR_ADDLINE) /* no list: the variant's handle field still holds the empty handle */
                 ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &data) && data == nullref;
-            else if (ct->spec->ctor == CTOR_LEADER || ct->spec->ctor == CTOR_GROUP_NAME || ct->spec->ctor == CTOR_EVENT_OPTION) { /* no list: every handle still empty */
+            else if (ct->spec->ctor == CTOR_LEADER || ct->spec->ctor == CTOR_GROUP_NAME || ct->spec->ctor == CTOR_EVENT_OPTION ||
+                     ct->spec->ctor == CTOR_RESEARCH || ct->spec->ctor == CTOR_IDEA_ADD || ct->spec->ctor == CTOR_IDEA_REPLACE) {
+                /* no list: every handle still empty */
                 for (int k = 0; k < ct->spec->nf && ok; k++)
                     if (ct->spec->f[k].kind == FK_REF) ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[k].off, &data) && data == nullref;
             } else
@@ -1107,6 +1118,10 @@ static void run_job2(void *ctx) {
                     ((ctor_divs_theatre)(uintptr_t)ctor)(cmd, &da, obj, NULL); break;
                 }
                 case CTOR_LEADER: ((ctor_leader)(uintptr_t)ctor)(cmd, (void *)(uintptr_t)j->obj2, obj, 0); break;
+                case CTOR_IDEA_ADD: ((ctor_idea)(uintptr_t)ctor)(cmd, &j->player_tag, obj); break;
+                case CTOR_IDEA_REPLACE: ((ctor_idea2)(uintptr_t)ctor)(cmd, &j->player_tag, (void *)(uintptr_t)j->obj2, obj); break;
+                case CTOR_RESEARCH: /* engineer 79: the research view's call: own tag, the template, the slot, (0, 1, 0) */
+                    ((ctor_research)(uintptr_t)ctor)(cmd, &j->player_tag, obj, (int32_t)j->val[0], 0, 1, 0); break;
                 case CTOR_AREA_STATE: /* engineer 79: the map tool's click: group, order id (0 = new), the state, settings */
                     ((ctor_area_state)(uintptr_t)ctor)(cmd, obj, j->order_id, j->provs[i], j->hold_setting); break;
                 case CTOR_EVENT_OPTION: /* the window's own fields, as its option click passes them */
@@ -1170,6 +1185,21 @@ static void run_job2(void *ctx) {
                      sq((uint64_t)(uintptr_t)cmd + e->ev_handle_off, &hv) && hv == j->ev_handle &&
                      sread((uint64_t)(uintptr_t)cmd + e->cmd_country_off, &b, 4) && b == j->player_tag &&
                      sread((uint64_t)(uintptr_t)cmd + e->cmd_option_off, &d, 4) && d == j->ev_option;
+                if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+            } else if (ok && (ct->spec->ctor == CTOR_IDEA_ADD || ct->spec->ctor == CTOR_IDEA_REPLACE)) { /* engineer 79 */
+                int32_t tg = 0; uint64_t a = 0, b = 0; int rep = ct->spec->ctor == CTOR_IDEA_REPLACE;
+                ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x24, &tg, 4) && tg == j->player_tag &&
+                     sq((uint64_t)(uintptr_t)cmd + 0x28, &a) && a == (rep ? j->obj2 : j->obj[i]) &&
+                     (!rep || (sq((uint64_t)(uintptr_t)cmd + 0x30, &b) && b == j->obj[i]));
+                if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+            } else if (ok && ct->spec->ctor == CTOR_RESEARCH) { /* engineer 79: tag, template, slot, bytes 0/1/0 */
+                int32_t tg = 0, sl = -1; uint64_t tp = 0; uint8_t b[3] = {9, 9, 9};
+                ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x24, &tg, 4) && tg == j->player_tag &&
+                     sq((uint64_t)(uintptr_t)cmd + 0x28, &tp) && tp == j->obj[i] &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x30, &sl, 4) && sl == (int32_t)j->val[0] &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x34, b, 3) && b[0] == 0 && b[1] == 1 && b[2] == 0;
                 if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
             } else if (ok && ct->spec->ctor == CTOR_AREA_STATE) { /* engineer 79: exactly one click's payload */
                 uint64_t hg = 0, d = 0; int32_t oid = -1, cnt = -1, x = 0, st = -1; uint8_t b[2] = {9, 9};
@@ -1406,6 +1436,19 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             else if (parse_list_u64(obj2, o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0];
         }
         if (!why && !strcmp(op, "units.to_army_group") && !j->obj2) why = "obj2: the army group";
+    } else if (!strncmp(op, "politics.", 9)) {
+        /* engineer 79: objs = ONE idea (exact CIdea); replace: obj2 = the slot's current idea (same class) */
+        int rep = !strcmp(op, "politics.replace");
+        if (j->n != 1) why = "politics: exactly one idea";
+        else if (nv || flag || (provs && *provs) || (divs && *divs)) why = "politics ops take no vals, flag, provs or divs";
+        else if (!rep && obj2 && *obj2) why = "politics.add takes no obj2";
+        else if (rep) { uint64_t o2[1]; if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: the current idea's hex address"; else j->obj2 = o2[0]; }
+    } else if (!strncmp(op, "research.", 9)) {
+        /* engineer 79: objs = ONE technology template (exact class); vals = the research slot (0..31: the game's own check
+         * reads the country's slot count) */
+        if (j->n != 1) why = "research.start: exactly one technology";
+        else if (nv != 1 || j->val[0] < 0 || j->val[0] > 31) why = "vals: one research slot index (0..31)";
+        else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "research.start takes no flag, obj2, provs or divs";
     } else if (!strncmp(op, "holds.", 6)) {
         /* engineer 79: an area-defence order, one map click per state. objs = ONE army (or army group); vals = the area
          * order's id (0 = a new area-defence order: exactly one state, its first click) then the state ids (one command

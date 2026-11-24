@@ -223,6 +223,33 @@ const cmd_spec CMD2_SPECS[] = {
      * constructor writes 0: toggle), has-settings +0x49 (1), settings +0x4c (0x2b5d). The "can do": the group resolves
      * as a COrdersGroup (and an order named with the replace byte exists). CCreateAreaDefenseCommand (the order's own
      * create button path: an EMPTY order) is not used: the click is what places states. */
+    /* ---- research (engineer 79, 24 Nov): a technology into a research slot, as the research view posts it. Read from 1.20.0.0
+     * and 1.19.4.1. CSetResearchCommand 12144 (0x38): tag +0x24 (0x289a; the sender must control it), the technology
+     * TEMPLATE by raw pointer +0x28 (0x285f, a CTechnologyTemplate of the game's technology database), slot +0x30 (0x2f71),
+     * bytes +0x34 (0x3c0a: spend XP to boost; the template must be boostable), +0x35 (0x456f), +0x36 (0x33e3: UI feedback
+     * only). The view's helper builds it with the UI constructor (1.20 0x100200640, 1.19.4.1 0x1001fff50) and the
+     * slot-selected click passes (0, 1, view mode); the factory's own defaults are the same (0, 1, 0). The module posts
+     * (player tag, template, slot, 0, 1, 0). The "can do": the slot exists (0 <= slot < the country's slot count) and the
+     * country can research the template now (prerequisites, availability, not done, no exclusive alternative). An
+     * exclusive pair is switched by another command (CSetXORResearchCommand): refused here, the mouse path serves it. */
+    {"research", "research.start", "CSetResearchCommand", 0x38, BUILD_CTOR, CTOR_RESEARCH, 0, 0x24, "19CTechnologyTemplate", 6,
+     {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"technology", 0x28, FK_PTR, 0, 0x285f, 0}, {"slot", 0x30, FK_I32, 0, 0x2f71, -1, 1},
+      {"xp_boost", 0x34, FK_U8, 0, 0x3c0a, 0}, {"b35", 0x35, FK_U8, 0, 0x456f, 1}, {"ui", 0x36, FK_U8, 0, 0x33e3, 0}},
+     OBJ2_NONE, 0, AUTH_TAG_PTR, "19CTechnologyTemplate"},
+    /* ---- politics (engineer 79, 24 Nov): laws and other idea slots, as the politics view posts them (UI 1.20 0x10234a8c0:
+     * the selection item's click). Read from 1.20.0.0 and 1.19.4.1 (offsets identical). Ideas are raw CIdea pointers of the
+     * game's idea database (TGameItemDatabase<CIdeaDatabase>, ideas +0x60/+0x6c, the serialized token +0x8); the
+     * country's active ideas are country+0xd38 -> +0x50/+0x5c; an idea's category +0x908. The view: the slot's current
+     * idea active -> CReplaceIdeaCommand 13017 (0x38; ctor 1.20 0x100209e40: tag +0x24 (0x289a), old +0x28 (0x332e), new
+     * +0x30 (0x331a)) behind its confirmation popup; else CAddIdeaCommand 12303 (0x30; ctor 0x100206170: tag, idea +0x28
+     * (0x28fb)). The "can do" (replace 0x10020a3c0): both real ideas, the SAME category (+0x908), the old one active and
+     * the new one not, the political power cost (0x1013d7d50), the old one removable (0x1013de680), the new one allowed
+     * (0x1013dac30, 0x1013de2e0); add 0x100206c20: not active, cost, allowed. */
+    {"politics", "politics.add", "CAddIdeaCommand", 0x30, BUILD_CTOR, CTOR_IDEA_ADD, 0, 0x24, "5CIdea", 2,
+     {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"idea", 0x28, FK_PTR, 0, 0x28fb, 0}}, OBJ2_NONE, 0, AUTH_TAG_PTR, "5CIdea"},
+    {"politics", "politics.replace", "CReplaceIdeaCommand", 0x38, BUILD_CTOR, CTOR_IDEA_REPLACE, 0, 0x24, "5CIdea", 3,
+     {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"old", 0x28, FK_PTR, 0, 0x332e, 0}, {"idea", 0x30, FK_PTR, 0, 0x331a, 0}},
+     OBJ2_SAME_PTR, 0, AUTH_TAG_PTR, "5CIdea"},
     {"holds", "holds.area_defense", "CEditAreaDefenseStateCommand", 0x50, BUILD_CTOR, CTOR_AREA_STATE, 0, 0x24, "12COrdersGroup", 5,
      {{"states", 0x30, FK_I32_ARRAY, 0x3c, 0x1b7, 0}, {"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0},
       {"settings", 0x4c, FK_I32, 0, 0x2b5d, 0}, {"replace", 0x48, FK_U8, 0, 0x29f1, 0}}, OBJ2_NONE, 0},
@@ -574,6 +601,11 @@ static int find_ctor(const scan_image *im, const cmd_spec *s, cmd_type *o) {
             {CTOR_GROUPS_OBJ, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 28 49 89 f7 48 89 fb", "4c 8d 73 30"},
             {CTOR_GROUPS_OBJ_I32, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 28 41 89 cf 49 89 f4 48 89 fb", "44 89 7b 48"},
             {CTOR_GROUPS, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 28 c6 47 08 00", "49 89 f4"},
+            /* engineer 79: research: the stack byte first, then tag (by reference), template, slot and the three bytes */
+            {CTOR_RESEARCH, "55 48 89 e5 0f b6 45 10 c6 47 08 00", "44 88 4f 35 88 47 36"},
+            /* engineer 79: the idea commands: no frame, the tag by reference, then the pointers (and nothing else); <= 12 bytes */
+            {CTOR_IDEA_ADD, "55 48 89 e5 c6 47 08 00", "8b 06 89 47 24 48 89 57 28 5d c3"},
+            {CTOR_IDEA_REPLACE, "55 48 89 e5 c6 47 08 00", "89 47 24 48 89 57 28 48 89 4f 30 5d"},
             /* engineer 76: the event answer: option r9d -> ebx, scope r8 -> r12, country * rcx -> r14, cmd -> r13; the
              * option index stored at +0xe8 (the serializer's offset of field 0x2966) */
             {CTOR_EVENT_OPTION, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 18 44 89 cb 4d 89 c4 49 89 ce 49 89 fd",

@@ -234,6 +234,32 @@ fn observe(
     value["freshness"] = json!({"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes});
     Ok((value, context))
 }
+/// engineer 79: the technology TEMPLATE of `key` in the game's technology database: the object the research view hands
+/// to the research command (the in-process module checks its exact class again). Checked by its exact vtable and its
+/// own database index.
+pub(crate) fn template_address(r: &Reader<'_>, base: u64, key: &str) -> Result<u64> {
+    let g = game::layout(r);
+    let l = layout(r);
+    let db = r.u64(base + g.technology_db_global)?;
+    exact(r, db, base + l.database_vtable)?;
+    let templates = array(r, db + l.database_templates, 8192)?;
+    for (index, t) in templates.pointers.iter().copied().enumerate() {
+        if t == 0 || r.u64(t).ok() != Some(base + l.template_vtable) {
+            continue;
+        }
+        if r.i32(t + l.template_index).ok() != i32::try_from(index).ok() {
+            continue;
+        }
+        if r.string_bounded(t + 8, 256).ok().as_deref() == Some(key) {
+            return Ok(t);
+        }
+    }
+    Err(Error::new(
+        "invalid_target",
+        format!("No technology {key} in the game's technology database"),
+    ))
+}
+
 /// Own slot assignments (technology key per slot) and the complete researched
 /// set, validated page by page from one reader. Caller owns the process bracket.
 pub(crate) fn assignments(

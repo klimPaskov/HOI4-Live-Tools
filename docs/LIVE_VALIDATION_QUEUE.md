@@ -754,3 +754,49 @@ H5 save + reload with the family on (the area orders stand); a plain load withou
 Stop at once (endrun.sh s11h) on: a crash, a hang, any `unexplained` post2, a state REMOVED from an order, an area order on
 an army the request did not name, a second area order created by one call, a leaderless army given an order.
 Pass -> IPC_LIVE_PASSED entry 13 (holds) = 1 and the family is used under `auto`.
+
+## Session S12-RESEARCH: the in-process module, research in a slot (family `research`; about 15 minutes) -- after S11-HOLDS
+
+Built by engineer 79 (24 Nov 2026), offline-proven only: stage 2 44/44 on 1.20.0.0 and 1.19.4.1 macOS; Linux/Windows 1.20
+CSetResearchCommand by RTTI (12144). OFF under `auto` until this session passes.
+- CSetResearchCommand through the research view's own constructor (1.20 0x100200640, 1.19.4.1 0x1001fff00): (own tag, the
+  technology TEMPLATE (exact class 19CTechnologyTemplate, from the game's technology database by key), slot, XP boost 0,
+  b35 1, UI byte 0) = the slot-selected click's flags and the factory's defaults. The game's "can do" (slot exists; the
+  country can research it now) decides; refused -> the MCP's mouse path (an exclusive pair is switched by
+  CSetXORResearchCommand, which the module does not post). b35 = 1 makes the slot run the game's follow-up routine
+  (0x1017ae070) exactly as the view's click: UNVERIFIED what it changes besides the slot (R2 checks the other slots).
+- MCP: hoi4_research_start (same schema, Verified = the slot holds the technology) routes in process without opening the
+  research view; reply `in_process.module`.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,research ./inproc_stage2.sh PREV-1936 s12r`.
+R1 paused, `HOI4_BACKEND=inprocess`: `hoi4_research_start {"technology":"<an available tech>"}` into the first empty slot:
+Verified, `per_object[0].result:"posted"`, the research view (opened by hand after) shows it; tool ms vs mouse (~3-6 s).
+R2 replace: `{"technology":"<another>","slot":0,"replace":true}` on a busy slot: Verified; the old technology's progress
+kept in its own record (hoi4_research shows it unresearched with its progress); no other slot changed.
+R3 refusals: an already researched tech -> `already_researched` before posting; a tech whose prerequisites are missing ->
+the game's check refuses, the mouse path then reports its own result (no in-process post); an exclusive alternative of a
+tech in progress -> no in-process post (mouse).
+R4 running at speed 3: R1 on another slot: Verified within 3 s. R5 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, a slot changed that the request did not name, XP spent (army/navy/air XP drop).
+Pass -> IPC_LIVE_PASSED entry 14 (research) = 1.
+
+## Session S13-POLITICS: the in-process module, laws (family `politics`; about 15 minutes) -- after S12-RESEARCH
+
+Built by engineer 79 (24 Nov 2026), offline-proven only: stage 2 46/46 on 1.20.0.0 and 1.19.4.1 macOS; Linux/Windows 1.20
+CAddIdeaCommand 12303 / CReplaceIdeaCommand 13017 by RTTI. OFF under `auto` until this session passes.
+- The politics view's own commands (UI 1.20 0x10234a8c0): the slot's current idea active -> ReplaceIdea(own tag, current,
+  new) (ctor 1.20 0x100209df0 / 1.19.4.1 0x1002096b0); else AddIdea(own tag, idea) (0x100206130 / 0x1002059f0). The
+  objects come from the game's lists, no panel: the new idea from TGameItemDatabase<CIdeaDatabase> (+0x60) by key, the
+  current one = the own ACTIVE idea (country+0xd38 -> +0x50) of the same category (+0x908). The game's "can do" decides
+  (same category, PP cost, the law's conditions). A key that is no idea (advisors, staff = characters) -> mouse path.
+- MCP: hoi4_politics_choose (same schema; the slot index is not used in process: the idea's category is the slot);
+  Verified = the idea among the own active ideas; reply `in_process.module`.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,politics ./inproc_stage2.sh PREV-1936 s13p` (Germany 1936).
+P1 paused, `HOI4_BACKEND=inprocess`, enough PP: `hoi4_politics_choose {"category":"government","slot":<economy>,
+"idea":"partial_economic_mobilisation"}`: Verified; `per_object[0].result:"posted"`, `cmd` politics.replace; PP drops by
+the law's cost; hoi4_politics_options shows it; the old law no longer active.
+P2 trade law (`limited_exports`), P3 conscription (`limited_conscription`): same.
+P4 refusals: a law the country may not take (e.g. `war_economy` in peace) -> `game_refused` (nothing posted, no PP
+spent); too little PP -> `game_refused`; an active law -> `invalid_target` before posting.
+P5 an advisor key -> the mouse path serves it in the same call (no in-process post). P6 save + reload; a plain load.
+Stop at once on: a crash, any `unexplained`, PP spent without the law, two laws of one category active.
+Pass -> IPC_LIVE_PASSED entry 15 (politics) = 1.

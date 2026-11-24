@@ -72,7 +72,13 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
        CTOR_DIPLO_SIMPLE = 17, CTOR_DIPLO_WAR = 18,
        /* engineer 79 (24 Nov): an area-defence state click, the map tool's own constructor (cmd, group, order id or 0 =
         * a new area-defence order, state id, the order's settings mask): ONE state toggled into the order */
-       CTOR_AREA_STATE = 19 };
+       CTOR_AREA_STATE = 19,
+       /* engineer 79: research in a slot, the research view's own constructor (cmd, const tag *, technology template,
+        * slot, XP boost byte, b35, UI byte on the stack) */
+       CTOR_RESEARCH = 20,
+       /* engineer 79: laws (ideas): the politics view's own constructors (cmd, const tag *, idea) and
+        * (cmd, const tag *, the slot's current idea, the new idea) */
+       CTOR_IDEA_ADD = 21, CTOR_IDEA_REPLACE = 22 };
 /* engineer 74: BUILD_FIELDS also fills CPdxArray fields (a division handle list, a province list): the fresh object's
  * array is empty ({data 0, capacity 0, size 0} and its allocator set by the factory); the module allocates the
  * elements through THAT allocator's own allocate slot (read from the game's array growth code), so the command's
@@ -97,7 +103,8 @@ enum { AUTH_HANDLE = 0, AUTH_TAG = 1,
 enum { OBJ2_NONE = 0, OBJ2_AIR_BASE, OBJ2_REGION, OBJ2_ORDERS_GROUP,
        OBJ2_REGION_ID, /* a strategic region given by id in vals (0 = none: hold), looked up as the game's check does */
        OBJ2_FRONT,       /* engineer 74: a CFront of the group's own theatre (exact vtable, its handle resolves to it) */
-       OBJ2_CAST };      /* engineer 75: an object the type's own "can do" casts to spec->obj2_cast (its handle resolves to it,
+       OBJ2_CAST,
+       OBJ2_SAME_PTR };  /* engineer 79: a raw pointer of exactly the class of the first object (the idea a law replaces) */      /* engineer 75: an object the type's own "can do" casts to spec->obj2_cast (its handle resolves to it,
                           * the C++ cast with the check's own typeinfo accepts it); optional where the spec says so */
 
 /* def: the factory's default for an FK_I32 / FK_U8 / FK_I64 field (checked before the module writes the field; 0 unless

@@ -15,8 +15,8 @@
 #include <time.h>
 #include <unistd.h>
 
-const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds"};
-const int IPC_ALLOWED_COUNT = 13;
+const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics"};
+const int IPC_ALLOWED_COUNT = 15;
 /* airwing (engineer 71, 24 Nov): split, merge, disband, attach, detach, region by id / hold; OFF in auto until its
  * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
 const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */, 0 /* airwing */,
@@ -32,7 +32,9 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                 1 /* decisions (engineer 76): an untargeted decision (S9-DECISIONS PASSED live 24 Nov 2026) */,
                                 0 /* diplomacy (engineer 78): guarantee, ask / offer military access, non-aggression pact,
                                    * improve relations, declare war on an own war goal (S10-DIPLOMACY) */,
-                                0 /* holds (engineer 79): an area-defence order, one map click per state (S11-HOLDS) */};
+                                0 /* holds (engineer 79): an area-defence order, one map click per state (S11-HOLDS) */,
+                                0 /* research (engineer 79): a technology into a research slot (S12-RESEARCH) */,
+                                0 /* politics (engineer 79): a law / an idea slot (S13-POLITICS) */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;
