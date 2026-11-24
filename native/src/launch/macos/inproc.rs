@@ -768,7 +768,8 @@ mod tests {
             assert!(family_usable(&hello, fam, Mode::InProcess));
             assert!(!family_usable(&hello, fam, Mode::Gui));
         }
-        let off = json!({"post":{"enabled":true},"families":{"units":{"on":false,"live_passed":true}}});
+        let off =
+            json!({"post":{"enabled":true},"families":{"units":{"on":false,"live_passed":true}}});
         assert!(!family_usable(&off, "units", Mode::InProcess));
     }
 

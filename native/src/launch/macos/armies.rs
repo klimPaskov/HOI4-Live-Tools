@@ -2515,7 +2515,12 @@ pub(super) fn group_division_ptrs(r: &Reader<'_>, image: u64, group: u64) -> Res
 
 /// engineer 75: the mouse detach's own refusals (a division not in the army, the army emptied), then the divisions'
 /// addresses for the in-process path, so both paths refuse the same calls.
-pub(super) fn detach_targets(r: &Reader<'_>, image: u64, army: &str, ids: &[String]) -> Result<Vec<u64>> {
+pub(super) fn detach_targets(
+    r: &Reader<'_>,
+    image: u64,
+    army: &str,
+    ids: &[String],
+) -> Result<Vec<u64>> {
     let source = group_named(r, image, army)?;
     let members = membership(r, image)?;
     for id in ids {

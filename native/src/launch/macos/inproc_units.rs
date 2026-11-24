@@ -26,15 +26,27 @@ pub(super) fn request(
         return Err(Error::new("invalid_arguments", "1..32 objects per request"));
     }
     if divs.len() > MAX_DIVS {
-        return Err(Error::new("invalid_arguments", "at most 512 divisions per request"));
+        return Err(Error::new(
+            "invalid_arguments",
+            "at most 512 divisions per request",
+        ));
     }
-    let hex = |v: &[u64]| v.iter().map(|o| format!("0x{o:x}")).collect::<Vec<_>>().join(",");
+    let hex = |v: &[u64]| {
+        v.iter()
+            .map(|o| format!("0x{o:x}"))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
     let mut req = json!({"op":"post","cmd":op,"objs":hex(objs)});
     if !divs.is_empty() {
         req["divs"] = json!(hex(divs));
     }
     if !vals.is_empty() {
-        req["vals"] = json!(vals.iter().map(i64::to_string).collect::<Vec<_>>().join(","));
+        req["vals"] = json!(vals
+            .iter()
+            .map(i64::to_string)
+            .collect::<Vec<_>>()
+            .join(","));
     }
     if let Some(o) = obj2 {
         req["obj2"] = json!(format!("0x{o:x}"));
@@ -46,7 +58,9 @@ pub(super) fn request(
 pub(super) fn name_codes(name: &str) -> Option<Vec<i64>> {
     let ok = !name.is_empty()
         && name.len() <= NAME_MAX
-        && name.bytes().all(|b| (32..=126).contains(&b) && b != b'"' && b != b'\\');
+        && name
+            .bytes()
+            .all(|b| (32..=126).contains(&b) && b != b'"' && b != b'\\');
     ok.then(|| name.bytes().map(i64::from).collect())
 }
 
@@ -83,14 +97,22 @@ pub(super) fn new_army(ch: &mut Channel, divs: &[u64]) -> Routed {
     if divs.len() > MAX_DIVS {
         return Routed::Gui;
     }
-    post(ch, request("units.new_army", &[*first], divs, &[], None), "a new army of these divisions")
+    post(
+        ch,
+        request("units.new_army", &[*first], divs, &[], None),
+        "a new army of these divisions",
+    )
 }
 
 /// Divisions into an existing army (the right click on its card), up to 512 per command.
 pub(super) fn transfer(ch: &mut Channel, army: u64, divs: &[u64]) -> Routed {
     let mut replies = Vec::new();
     for part in chunks(divs) {
-        match post(ch, request("units.transfer", &[army], part, &[], None), "these divisions into this army") {
+        match post(
+            ch,
+            request("units.transfer", &[army], part, &[], None),
+            "these divisions into this army",
+        ) {
             Routed::Done(v) => replies.push(v),
             other if replies.is_empty() => return other,
             // a later chunk failed after earlier ones moved: the settle read judges the whole (never re-sent)
@@ -102,7 +124,11 @@ pub(super) fn transfer(ch: &mut Channel, army: u64, divs: &[u64]) -> Routed {
 
 /// A general for an army or a field marshal for an army group (None = unassign).
 pub(super) fn leader(ch: &mut Channel, group: u64, leader: Option<u64>) -> Routed {
-    post(ch, request("units.leader", &[group], &[], &[], leader), "this commander for this army")
+    post(
+        ch,
+        request("units.leader", &[group], &[], &[], leader),
+        "this commander for this army",
+    )
 }
 
 /// A new name for an army or army group; Gui when the name cannot travel (the mouse path types it).
@@ -110,7 +136,11 @@ pub(super) fn rename(ch: &mut Channel, group: u64, name: &str) -> Routed {
     let Some(codes) = name_codes(name) else {
         return Routed::Gui;
     };
-    post(ch, request("units.rename", &[group], &[], &codes, None), "this name")
+    post(
+        ch,
+        request("units.rename", &[group], &[], &codes, None),
+        "this name",
+    )
 }
 
 /// A new army group of these armies (they must share a theatre; the module checks it).
@@ -118,12 +148,11 @@ pub(super) fn army_group_new(ch: &mut Channel, armies: &[u64]) -> Routed {
     if armies.len() < 2 || armies.len() > MAX_OBJS {
         return Routed::Gui;
     }
-    post(ch, request("units.army_group_new", armies, &[], &[], None), "a new army group of these armies")
-}
-
-/// Armies into an existing army group.
-pub(super) fn to_army_group(ch: &mut Channel, armies: &[u64], group: u64) -> Routed {
-    post(ch, request("units.to_army_group", armies, &[], &[], Some(group)), "these armies into this army group")
+    post(
+        ch,
+        request("units.army_group_new", armies, &[], &[], None),
+        "a new army group of these armies",
+    )
 }
 
 #[cfg(test)]

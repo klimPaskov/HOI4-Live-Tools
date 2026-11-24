@@ -1046,7 +1046,10 @@ pub(super) fn leader_address(r: &Reader<'_>, image: u64, name: &str) -> Result<u
         exact(r, image, leader, l.leader_vtable, "army leader")?;
         if r.string_bounded(leader + l.leader_name, 128)? == name {
             if found.is_some() {
-                return Err(Error::new("ambiguous_commander", "Two own leaders carry this name"));
+                return Err(Error::new(
+                    "ambiguous_commander",
+                    "Two own leaders carry this name",
+                ));
             }
             found = Some(leader);
         }

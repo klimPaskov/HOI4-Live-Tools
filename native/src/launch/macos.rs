@@ -23,8 +23,8 @@ mod construction_find;
 mod fair_facts;
 mod inproc;
 mod inproc_orders;
-mod inproc_units;
 mod inproc_picks;
+mod inproc_units;
 mod operation_act;
 mod railway;
 // Internal prospective click opener; no tool/configuration registration.
@@ -6025,7 +6025,10 @@ impl MacClock {
                 // engineer 75: every division of the source into the target (the right click on its card), one command
                 units_reply = module_in_process(&mut units_route, |ch| {
                     let (s, t) = ui::read(process, |r, i| {
-                        Ok((armies::group_address(r, i, source)?, armies::group_address(r, i, target)?))
+                        Ok((
+                            armies::group_address(r, i, source)?,
+                            armies::group_address(r, i, target)?,
+                        ))
                     })?;
                     let divs = ui::read(process, |r, i| armies::group_division_ptrs(r, i, s))?;
                     Ok(inproc_units::transfer(ch, t, &divs))
@@ -6121,7 +6124,10 @@ impl MacClock {
                 units_reply = module_in_process(&mut units_route, |ch| {
                     let view = armies::armies(process)?;
                     let ids = armies::first_divisions(&view, army, count).ok_or_else(|| {
-                        Error::new("army_unknown", "No own army with this name and that many divisions")
+                        Error::new(
+                            "army_unknown",
+                            "No own army with this name and that many divisions",
+                        )
                     })?;
                     let divs = ui::read(process, |r, i| armies::division_ptrs(r, i, &ids))?;
                     Ok(inproc_units::new_army(ch, &divs))
@@ -6186,7 +6192,10 @@ impl MacClock {
                 // engineer 75: one ArmyGroup command over the armies (they share a theatre; the module checks it)
                 units_reply = module_in_process(&mut units_route, |ch| {
                     let groups = ui::read(process, |r, i| {
-                        names.iter().map(|n| armies::group_address(r, i, n)).collect::<Result<Vec<_>>>()
+                        names
+                            .iter()
+                            .map(|n| armies::group_address(r, i, n))
+                            .collect::<Result<Vec<_>>>()
                     })?;
                     Ok(inproc_units::army_group_new(ch, &groups))
                 })?;
@@ -6259,7 +6268,10 @@ impl MacClock {
                 // engineer 75: SetArmyLeader(the leader by name, the army or army group), one command
                 units_reply = module_in_process(&mut units_route, |ch| {
                     let (g, l) = ui::read(process, |r, i| {
-                        Ok((armies::group_address(r, i, army)?, units::leader_address(r, i, general)?))
+                        Ok((
+                            armies::group_address(r, i, army)?,
+                            units::leader_address(r, i, general)?,
+                        ))
                     })?;
                     Ok(inproc_units::leader(ch, g, Some(l)))
                 })?;
