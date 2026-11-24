@@ -24,11 +24,11 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                 0 /* orders (engineer 73): delete, execute, set_path, new_front (S4-ORDERS) */,
                                 0 /* orders2 (engineer 74): new_root, assign, unassign, fallback, edit_root, invasion/paradrop
                                    * target, spearhead (S5-PLAN) */,
-                                0 /* units (engineer 75): new army, transfer, leader, rename, army group new / into / out of,
-                                   * delete a shell (S6-UNITS) */,
+                                1 /* units (engineer 75): new army, transfer, leader, rename, army group new / into / out of,
+                                   * delete a shell (S6-UNITS PASSED 24 Nov, live engineer 77: s6u/s6v/s6w) */,
                                 0 /* picks (engineer 75): a national focus (S7-PICKS) */,
                                 0 /* events (engineer 76): the answer of an open event window (S8-EVENTS) */,
-                                0 /* decisions (engineer 76): an untargeted decision (S9-DECISIONS) */};
+                                1 /* decisions (engineer 76): an untargeted decision (S9-DECISIONS PASSED 24 Nov: s6v/s6w) */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;
