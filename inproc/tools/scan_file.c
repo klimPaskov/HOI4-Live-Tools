@@ -77,6 +77,49 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "player_tag")) got = t.st2.common.player_tag_off;
         else if (!strcmp(argv[a], "line_factories")) got = t.st2.common.line_factories_off;
         else if (!strcmp(argv[a], "region_id")) got = t.st2.common.region_id_off;
+        else if (!strcmp(argv[a], "regions_arr")) got = t.st2.common.regions_arr_off;
+        else if (!strcmp(argv[a], "regions_cnt")) got = t.st2.common.regions_cnt_off;
+        else if (!strcmp(argv[a], "ti_orders_group")) got = t.st2.common.ti_orders_group;
+        /* engineer 73: the battle-plan order tree facts */
+        else if (!strcmp(argv[a], "orders_ok")) got = (uint64_t)t.st2.orders.ok;
+        else if (!strcmp(argv[a], "orders_vt")) got = t.st2.orders.vt_order;
+        else if (!strcmp(argv[a], "orders_lookup")) got = t.st2.orders.lookup_fn;
+        else if (!strcmp(argv[a], "order_id_off")) got = t.st2.orders.id_off;
+        else if (!strcmp(argv[a], "order_provs_off")) got = t.st2.orders.provs_off;
+        else if (!strcmp(argv[a], "order_divs_off")) got = t.st2.orders.divs_off;
+        else if (!strcmp(argv[a], "order_children_off")) got = t.st2.orders.child_off[0];
+        else if (!strcmp(argv[a], "group_lists_off")) got = t.st2.orders.list_off[0];
+        /* engineer 74: the fronts a plan root binds to; the array allocator; a division as Assign's check reads it */
+        else if (!strcmp(argv[a], "fronts_ok")) got = (uint64_t)t.st2.fronts.ok;
+        else if (!strcmp(argv[a], "group_parent_off")) got = t.st2.fronts.group_parent_off;
+        else if (!strcmp(argv[a], "theatre_fronts_off")) got = t.st2.fronts.theatre_fronts_off;
+        else if (!strcmp(argv[a], "front_sections_off")) got = t.st2.fronts.front_sections_off;
+        else if (!strcmp(argv[a], "section_provs_off")) got = t.st2.fronts.section_provs_off;
+        else if (!strcmp(argv[a], "province_id_off")) got = t.st2.fronts.province_id_off;
+        else if (!strcmp(argv[a], "root_front_off")) got = t.st2.fronts.root_front_off;
+        else if (!strcmp(argv[a], "root_range_off")) got = t.st2.fronts.root_range_off;
+        else if (!strcmp(argv[a], "alloc_slot")) got = t.st2.common.alloc_slot;
+        else if (!strcmp(argv[a], "unit_group_off")) got = t.st2.common.unit_group_off;
+        else if (!strcmp(argv[a], "unit_hint")) got = t.st2.common.unit_hint;
+        else if (!strcmp(argv[a], "unit_theatre_off")) got = t.st2.common.unit_theatre_off;
+        else if (!strcmp(argv[a], "group_parent_ptr_off")) got = t.st2.common.group_parent_ptr_off;
+        /* engineer 76: the event window and the pending-event records */
+        else if (!strcmp(argv[a], "events_ok")) got = (uint64_t)t.st2.events.ok;
+        else if (!strcmp(argv[a], "events_vt_window")) got = t.st2.events.vt_window;
+        else if (!strcmp(argv[a], "events_avail")) got = t.st2.events.avail_fn;
+        else if (!strcmp(argv[a], "win_event_off")) got = t.st2.events.win_event_off;
+        else if (!strcmp(argv[a], "win_open_off")) got = t.st2.events.win_open_off;
+        else if (!strcmp(argv[a], "win_flag_off")) got = t.st2.events.win_flag_off;
+        else if (!strcmp(argv[a], "ev_opts_off")) got = t.st2.events.ev_opts_off;
+        else if (!strcmp(argv[a], "opt_index_off")) got = t.st2.events.opt_index_off;
+        else if (!strcmp(argv[a], "pend_arr_off")) got = t.st2.events.pend_arr_off;
+        else if (!strncmp(argv[a], "ctor:", 5) || !strncmp(argv[a], "on:", 3) || !strncmp(argv[a], "type:", 5)) {
+            /* per stage-2 op (engineer 71): ctor:OP = the UI constructor found, on:OP = 1 when every check resolved,
+             * type:OP = the protocol type id */
+            const cmd_type *x = stage2_find(&t.st2, strchr(argv[a], ':') + 1);
+            found = x != NULL;
+            if (x) got = argv[a][0] == 'c' ? x->ctor : argv[a][0] == 'o' ? (uint64_t)x->ok : x->type_id;
+        }
         else {
             found = 0;
             for (int i = 0; i < CAP_COUNT; i++)

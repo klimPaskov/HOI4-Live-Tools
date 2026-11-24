@@ -337,3 +337,350 @@ host-only). Same roles and checks as S1-MP (no out-of-sync indicator, the hourly
 no "NOT in sync", "Validity of command changed non-deterministically", "COMMAND LOST" or "Dropped" lines, never flagged
 by `CMarkModifiedClientCommand`), with the module on the client: P1 and P4 above, each change seen on BOTH machines
 (the host's reads of the client's country) at the same game hour.
+
+## Session S3-AIRWING: the in-process module, the rest of air (family `airwing`; about 40 minutes plus a 15-minute soak)
+
+Built by engineer 71 (24 Nov 2026), offline-proven only (`inproc/test_offline.sh` ALL PASS: 6 new types on 1.19.4.1 and
+1.20.0.0 macOS, every constructor hand-checked in both disassemblies). One family, OFF under `auto` until this session
+passes. Ops (module request -> command, the UI action it replaces, the MCP tool):
+`airwing.split` -> `CStratAirSplitCommand(wing, aircraft/2)` (Split button; `hoi4_air_wing_split`);
+`airwing.merge` -> ONE `CStratAirConsolidateCommand(list of wings)` (Merge button; `hoi4_air_wing_merge`);
+`airwing.disband` -> `CDeleteAirWingCommand(&own tag, wing)` (Disband; `hoi4_air_wing_disband`);
+`airwing.attach` -> `CAttachAirWingToArmyCommand(wing, army)` (right click on the army card; `hoi4_air_attach`);
+`airwing.detach` -> `CDetachAirWingFromArmyCommand(wing)` (module only; no MCP tool yet);
+`airwing.region` -> `CStratAirEnableMissionCommand(wing, region id, NULL)` with the region looked up by id the way the
+command's own check reads it (game state +0x2a8 array, +0x2b4 count): a mission over a region with NO own air base
+(`hoi4_air_mission`, which used the GUI for those) and region 0 = Hold (`hoi4_air_hold`; a wing flying a transfer stays
+on the GUI: the game's hold helper cancels the transfer first).
+Wing creation from the reserve (`CDeployAirWingCommand`, 0xa8 bytes, a nested equipment id) is NOT in this family.
+
+Needs: the module built from branch e71/inproc-families (`inproc/build.sh`, sha in NOTES-1116.md "engineer 71"); the
+reader built from the same branch (cargo under the lock: `mkdir cargo.lock.d`, then
+`CARGO_BUILD_JOBS=2 ./buildbin120.sh <this worktree> v120-e71a` for 1.20 or the usual new-v* build for
+1.19.4.1, then `rmdir cargo.lock.d`); the opt-in with the new family:
+`HOI4_INPROC_FAMILIES=set_game_speed,production,air,airwing ./inproc_stage2.sh PREV s3a`; calls through the broker
+(`zsh deploybin.sh s3a BIN HOI4_BACKEND=inprocess HOI4_INPROC_SOCK=$PWD/s3a/inproc.sock`) as in S2 (s2a/tool.sh lacks
+`--mac-input`). Beds: the May 1940 Germany bed (s2c's source save) and a 1936 start.
+
+A1 hold, paused (5 min): two wings on a mission: `hoi4_air_hold` in process -> Verified (region 0 in memory), `post2`
+`airwing.region` posted 1; a wing already standing by -> `nothing_to_change` before posting; then a mission again via
+`air` and Hold via `gui` for the timing.
+A2 region with no own base, running speed 3 (5 min): three fighters `air_superiority` over a region with no own air base
+(region 5 in the s2 beds): in process -> `air.set_mission` then `airwing.region` (vals = region id), Verified; then a region
+out of range: must come back `refused_by_game_check` (the game's range check), nothing posted, no GUI retry.
+A3 split and merge, paused (10 min): split a 100-plane wing -> two wings of 50 at the base, Verified; merge them back
+(`hoi4_air_wing_merge` with `with`) -> one wing of 100, Verified; merge of a group of three of one type; a 1-plane wing
+split -> `nothing_to_change` before posting. Compare each with `gui`.
+A4 attach and disband (10 min): attach 2 CAS wings to an own army in process -> both links read the army (Verified);
+attach a strategic bomber -> `refused_by_game_check`; disband a spare wing -> gone from memory, its aircraft in the reserve
+(production view); a disbanded wing's address reused in a second request -> `not_a_live_object`.
+A5 UI check: screenshot of the Air Forces Overview after A3 and A4 (the split/merged/attached wings as the module left them).
+A6 soak (15 min, speed 3): each minute one hold + mission over a no-base region pair and one split + merge pair in process,
+all Verified; one save and reload in the middle (the family on again after reload); P8-style plain load of the end save.
+Timings: report median/p90 per op in process vs GUI (GUI medians from s2: hold ~8 s, mission ~7.8-25 s, split/merge
+~10 s by the S2 pattern).
+Stop at once on the S2 stop list (crash/hang, posting_off, family_off, inert, `unexplained`, an in-process call that is
+not Verified while the GUI's is, "Dropped command" / "during command execution" in game.log, a save that will not load).
+Pass: A1-A6 clean on both beds: set `IPC_LIVE_PASSED` for `airwing` (4th entry in `inproc/core/ipc.c`), rebuild, and
+record "S3 PASS: airwing" in NOTES-1116.md with the numbers.
+
+## Session S3-PROD2: the in-process module, new production lines and priority (family `production2`; about 30 minutes)
+
+Built by engineer 71 (24 Nov 2026), offline-proven only (both types on with every check on 1.19.4.1 and 1.20.0.0 macOS;
+the add-line constructor hand-checked: 1.20 0x1001ef670, 1.19.4.1 0x1001eef30). OFF under `auto` until this session passes.
+`production2.add_line` -> `CAddProductionLineCommand(&own tag, design, NULL, at_top 0)` (the production view's Add with a
+design chosen; the line's organisation stays empty: the module cannot name an organisation object yet), then the
+factories through `production.add_factories` (live-passed). The command's authorisation is "the sender controls the tag";
+the module checks the design with the game's lookup and the C++ cast the "can do" check makes (CEquipmentVariant); the
+game's check decides whether the country may produce it. `production2.priority` ->
+`CChangeProductionLinePriorityCommand(line, place)` with the absolute place (the UI passes 0 for top, count-1 for bottom).
+MCP: `hoi4_production_add` WITH `design` (without it the GUI picks the selection window's first design: stays GUI) and
+`hoi4_production_priority` (read-back in process from the country's own line order, no view needed).
+
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,production2 ./inproc_stage2.sh PREV s3p`; broker as in S2.
+B1 paused: `hoi4_designs` -> pick an own design id of a type that has no line; `hoi4_production_add` in process with
+`design` and `factories` 5 -> Verified (a new line of that design with 5 factories); the module log shows
+`production2.add_line` posted 1, then `production.add_factories` posted 1. Same with `gui` for the timing.
+B2 the at-top question: in B1 the new line lands at the BOTTOM of the list (flag 0); record where it lands (if at the top,
+the flag's meaning is the reverse: fix the comment, the flag stays 0).
+B3 refusals: a design of another country (if one is readable) -> `not_a_live_object`/`refused_by_game_check`; an
+obsolete or unproducible design -> `refused_by_game_check`, nothing posted.
+B4 priority: with 6+ lines: `hoi4_production_priority` top, down, up, bottom in process -> each Verified; compare the
+country's own order (the in-process read-back) with the production view's shown order (open the view, screenshot): they
+must agree; if the own list order is NOT the priority order, the route is wrong: stop and record it.
+B5 soak 10 min at speed 3: one add (then remove via hoi4_production_set factories 0) and two priority moves per minute,
+all Verified; save, reload, plain load.
+Pass: B1-B5 clean on the 1940 and a 1936 bed -> `IPC_LIVE_PASSED` for `production2` (5th entry), "S3 PASS: production2".
+
+## Session S4-ORDERS: the in-process module, battle plans (family `orders`; about 60 minutes plus a 20-day war twice)
+
+Built by engineer 73 (24 Nov 2026), offline-proven only: the order-tree facts and the four types are on with every
+check on 1.20.0.0 and 1.19.4.1 macOS (stage 2 17/17); `orders_test` (a plan laid out with the scanned offsets: tree,
+lookup by id, the new-front division rule) ALL PASS on both. OFF under `auto` until this session passes.
+- READ `orders` (op, not a command): the order tree of one own army or army group, between two frames, in the external
+  read's model (lists top / fallback / area; per order kind, id, executing, spearhead, withdraw, locked, drawing group,
+  provinces in order, divisions, children = arrows and target lines).
+- `orders.delete` (`COrderDeleteCommand(group, id)`), `orders.execute` (`COrderExecuteCommand(group, id, execute)`;
+  id 0 = the whole plan; flag 1 execute, 0 stop), `orders.set_path` (the UI's own `COrderSetPathCommand` constructor:
+  an existing order gets a new province path, keeps its id; refused by the game while the order is locked),
+  `orders.new_front` (the UI's own `COrderNewFrontCommand` constructor: a front under a parent order, with the parent's
+  divisions that no child holds yet, as the front tool hands them; no spearhead, no withdraw, no "+0x6c" flag).
+- MCP: `hoi4_army_front` WITH `provinces` (explicit, drawing order) or `against` (+ `own_states`), optional
+  `parent_order` / `replace_order`. Without them the tool stays on the drag. The journal's Verified (one more order on
+  the army, external read) is unchanged.
+
+Needs: the game slot, Steam closed; module and reader built from branch e73/inproc-plans; the 1940 Germany bed of
+Session 1 (PREV-1940) and a 1936 bed at war or one day before a war (PREV-WAR: e.g. Italy vs Ethiopia, the Italy runs).
+Find a group's address: `HOI4_BIN/macprobe SESSION dbg_army_bytes:ARMY:8` -> `"address"`.
+
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,orders ./inproc_stage2.sh PREV-1940 s4o`; the hello must show
+`"orders":{"on":true,"live_passed":false}` and `stage2.orders.ok:true`. Client:
+`C="python3 -I inproc/tools/inproc_client.py s4o/inproc.sock"`.
+
+O1 reader, paused (10 min). For one army with a front and an offensive, one army group, one army with no plan:
+`$C orders GROUP` and `zsh s4o/tool.sh gui hoi4_armies '{}'` (external read) and a screenshot of the plan (UI).
+Pass: same orders, ids, kinds, provinces (counts and ends), divisions, executing; read_ms < 5. An enemy or allied
+group's address -> `not_own`; a random heap address -> `not_a_live_object`.
+O2 delete and execute, paused (10 min). `$C post2 orders.execute GROUP --vals ID --flag 1` on one front -> the reply's
+read-back `executing:true`, the UI's play button shows it; `--flag 0` -> stop. `--vals 0` -> the whole plan. Then
+`orders.delete` on one offensive arrow (not the front): the arrow is gone in `orders`, in `hoi4_armies` and on the map;
+the front keeps its id. Same by mouse (the arrow's X, the plan's play button) for the timing.
+O3 new front with provinces, paused (10 min). On an army whose front covers its whole border: take the first 4
+provinces of its front (`orders` output) and `zsh s4o/tool.sh inprocess hoi4_army_front '{"army":A,"state_id":S,
+"provinces":[p1,p2,p3,p4],"request_id":"o3a","lease_token":L}'` -> Verified; `orders` shows one more child of the
+parent with exactly those provinces and the free divisions; the map shows the line. Then `"against":"TAG"` for a
+whole border (one front per connected stretch; record the chain counts the reply gives against the map) and with
+`own_states` for a piece. Then `"replace_order":ID` with a shorter list: the same id, the new provinces.
+O4 refusals (5 min): a province in a state the country does not control -> `invalid_arguments` before posting (the
+game's check only counts provinces; its execution drops foreign ones, so the tool checks control first); then the
+same list straight through `$C post2 orders.new_front` (no tool check): record what the game does (no order, or an
+order with fewer provinces) and whether anything else changed; a parent id not in the plan -> refused before
+posting; `replace_order` on a LOCKED order (executing with combat: set_path's check reads the lock handle) ->
+`refused_by_game_check`; a 1025-province list -> invalid_arguments. Nothing posted in any case (inproc.log).
+O5 the field-marshal question (the REQUEST in NOTES-1116 "engineer 73"): with an army group of 2+ armies, by mouse,
+draw the group's front along one border WITHOUT Shift, `$C orders GROUP` and `$C orders ARMY` for each army; delete;
+draw again WITH Shift (Shift+click), read again. Record per order: drawer, blitz, withdraw, parent, children, divisions;
+and whether each army got its own sub-front. This answers what "without sub-army fronts" is in state.
+O6 timings: 20 x (set_path back and forth) in process vs 5 x by mouse: wall ms per change.
+O7 the 20-day war (PREV-WAR, twice, same save, speed 3, executor off, by hand from the same script): run A with the
+drag (`gui`), run B with `inprocess` and `against` fronts + `orders.execute`. Record per run: fronts placed per minute,
+fronts placed where asked (orders vs request), provinces taken by day 20, casualties ratio.
+Stop at once (endrun.sh s4o) on: a crash, a hang, an `orders` read that disagrees with the external read on ids or
+provinces, any post2 with result "unexplained", a front that appears where the request did not ask, any order that
+changes on an ALLIED or enemy group.
+Pass: O1-O7 clean on both beds -> `IPC_LIVE_PASSED` for `orders` (6th entry), "S4 PASS: orders".
+
+## Session S5-PLAN: the in-process module, the rest of the battle plan (family `orders2`; about 75 minutes)
+
+Built by engineer 74 (24 Nov 2026), offline-proven only: stage 2 25/25 types on with every check on 1.20.0.0 and
+1.19.4.1 macOS; the 8 orders2 classes found by RTTI with the same protocol ids on Linux and Windows 1.20 (10/10 with
+CAutoMergeOrders and COrderConnect); the front facts (theatre -> fronts -> sections -> provinces), the array allocator
+slot and Assign's division facts scanned on both macOS builds; `orders_test` (fronts read, section check, holder,
+root-on-section) ALL PASS on both. OFF under `auto` until this session passes. Run S4-ORDERS first (orders2 builds on
+its tree read).
+- READ `fronts GROUP`: the fronts of the group's theatre: `{"theatre","fronts":[{"front":ADDR,"sections":[{"id",
+  "provinces":[..]}]}]}` (the things a plan root binds to; the module never makes a front).
+- `orders2.new_root` (COrderNewRootCommand: group, divisions, the front's handle, section, range from/to 0..100000,
+  split): a plan root for an army or army group. split 1 = an army group's line divided among its armies (what a plain
+  click on the front does), 0 = one field-marshal line (Shift+click; the only value an army's click sends). Static
+  answer to the O5 question of S4-ORDERS; O5 below checks it. Read-back: the group's root bound to (front, section).
+- `orders2.assign` / `orders2.unassign` (divisions to an order / out of every order), read back on the order's own
+  division list / the plan's holders. Every division is checked first the way the game's Assign check reads it (its
+  handle resolves to it, CUnit cast, its army is a live own group).
+- `orders2.fallback` (COrderNewFallbackCommand: group, divisions, provinces): read back as one more fallback order.
+- `orders2.edit_root` (the root's range on its section): read back on the root's range.
+- `orders2.spearhead` (the UI's NewFront constructor with the spearhead byte): read back as one more child whose line
+  carries the spearhead byte.
+- `orders2.invasion_target` / `orders2.paradrop_target` (group, order, province): posted after the game's check; the
+  module has no read of the target field yet (reply `target_read:"not mapped"`): the external read is the proof.
+- MCP: `hoi4_army_front` with `provinces`/`against` on an EMPTY plan now posts the root first (split 0), then the fronts;
+  `hoi4_army_fallback` WITH `provinces`; `hoi4_army_offensive` WITH `target_provinces` and `spearhead:true` (new
+  spearhead under `parent_order`) or `replace_order` (new path, family `orders`). Without the new arguments the tools
+  stay on the mouse. The journal's Verified reads are unchanged.
+
+Needs: the game slot, Steam closed; module and reader built from branch e74/inproc-plan-orders; PREV-1940 (Germany, an
+army group of 2+ armies) and PREV-WAR. Addresses: `HOI4_BIN/macprobe SESSION dbg_army_bytes:ARMY:8` -> `"address"`;
+divisions: the `orders` read's `division_ptrs`, or `macprobe SESSION dbg_army_words:ARMY` (division list).
+
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,orders,orders2 ./inproc_stage2.sh PREV-1940 s5p`; the hello
+must show `"orders2":{"on":true,"live_passed":false}`, `stage2.fronts.ok:true`, `common.alloc_slot:16`,
+`unit_group_off:192`. `C="python3 -I inproc/tools/inproc_client.py s5p/inproc.sock"`.
+
+P1 fronts read, paused (5 min). `$C fronts GROUP` for an army group and one of its armies: the same theatre; every
+front the map shows (screenshot, front-line map mode) with its provinces; read_ms < 5 (inproc.log `fronts_read`).
+P2 root, paused (15 min). On an army with NO plan: `$C fronts ARMY`, pick the section on its border, then
+`$C post2 orders2.new_root ARMY --vals SEC,0,100000,0 --obj2 FRONT --divs D1,D2,..` -> `root_id`; `$C orders ARMY`
+shows one top order of kind 2 with the section's provinces and the divisions; `hoi4_armies` shows the front; the map
+shows the line. Delete it (`orders.delete`). Same by mouse (front tool, one click) and compare the two `orders` reads
+field by field (range, provinces, divisions, drawer). Then the army group, twice: `--vals SEC,0,100000,1` and
+`...,0`: record per army whether it got its own sub-front (O5 of S4-ORDERS by command), and compare with a plain click
+and a Shift+click by mouse. Then `hoi4_army_front` in process on an empty plan with `provinces` (root, then the front).
+P3 assign/unassign, paused (10 min). Two divisions of the army: `orders2.unassign ARMY --divs D1,D2` ->
+`divisions_moved:2`; `orders` shows them in no order; the army card's front counter drops. `orders2.assign ARMY --vals
+ROOT --divs D1,D2` -> back. A division of ANOTHER army -> refused before posting ("not in an own army" is not enough:
+the game's check refuses a division of another group; record which). A foreign division -> `not a live division`.
+P4 fallback and edit_root, paused (10 min). `orders2.fallback ARMY --provs p1,..,p6` (own provinces behind the
+front) -> `fallback_orders` +1; `hoi4_army_fallback` with `provinces` the same way; by mouse (C, one stroke) for the
+timing. `orders2.edit_root ARMY --vals ROOT,20000,80000` -> `range:[20000,80000]`; the map line is shorter.
+P5 spearhead, paused (10 min). `hoi4_army_offensive {"army":A,"state_id":S,"spearhead":true,"target_provinces":[..]}`
+on an army with a root -> one more child with the spearhead byte; the map shows a spearhead arrow; by mouse (Shift+X).
+Then `"replace_order":ID` with a new target line.
+P6 invasion/paradrop target, paused (5 min). Draw a naval invasion by mouse (hoi4_naval_invasion), read `orders`, then
+`orders2.invasion_target ARMY --vals ORDER,PROV` with another coastal enemy province: record what the external read and
+the map show (a second target, or the target moved). Same for a paradrop with a paratrooper army if the bed has one.
+P7 LIVE MAPPING (no command yet, observe only, 15 min): (a) a new plain OFFENSIVE by mouse (X, one stroke): `orders`
+before and after, and the inproc.log of the game's own posts if the post hook logs types (expected: NewFront under the
+root with the arrow/line pair, or COrderConnect 13233, or SetPath creating the target); (b) the execution mode buttons
+(careful/balanced/rush) by mouse: which command type the post hook sees; (c) area defence (V): the CreateAreaDefense
+list (+0x30) element kind and the +0x48 settings mask; (d) the invasion SOURCE command (+0x30 int and +0x50 byte).
+Stop at once (endrun.sh s5p) on: a crash, a hang, any "unexplained" post2, a root or order on a group the request did
+not name, any order that changes on an allied or enemy group, a `fronts` read that disagrees with the map.
+Pass: P1-P6 clean on both beds -> `IPC_LIVE_PASSED` for `orders2` (7th entry), "S5 PASS: orders2".
+
+## Session S6-UNITS: the in-process module, army structure (family `units`; about 45 minutes) -- FIRST in the queue
+
+Built by engineer 75 (24 Nov 2026), offline-proven only: stage 2 33/33 types on with every check on 1.20.0.0 and
+1.19.4.1 macOS (the 8 units types and their UI constructors found on both); Linux and Windows 1.20 8/8 classes by RTTI
+with the same protocol ids. OFF under `auto` until this session passes. It does not need S4/S5 (no order is written; a
+transfer only NAMES the order the UI would pick).
+Which commands carry membership (static, both builds): COrderGroupCommand 11983 = a NEW army of the given divisions
+(the new-army card: the constructor takes the selected divisions, the first one's theatre, no theater group; it keeps
+only divisions the theatre's country owns and that may change army); COrderAssignCommand 12350 = divisions INTO an
+existing army (the right click on its card posts Assign(divisions, that army, the order the UI picks or 0)); army groups:
+CArmyGroupCommand 14433 (new, from armies of one theatre), CAssignToArmyGroupCommand 14470 (into, index -1 as every UI
+caller), CRemoveFromArmyGroupCommand 14471 (out). CMoveCommand is the map MOVE order (not membership); CMergeArmiesCommand
+merges DIVISIONS ("cannot merge less than 2 armies": CArmy is the division class), not armies.
+- `units.new_army FIRST --divs D1,..` (FIRST = D1), read back: every division in ONE army none of them was in before
+  (reply `army`, `divisions`). A division the game's own filter drops -> `refused_by_game_check`, nothing posted.
+- `units.transfer ARMY --divs D,..` (up to 512 per command), read back: every division in ARMY.
+- `units.leader GROUP --obj2 LEADER` (none = unassign), `units.rename GROUP --vals codes` (1..22 printable ASCII bytes),
+  `units.army_group_new A1,A2,..`, `units.to_army_group A1,.. --obj2 AG`, `units.from_army_group A1,..`,
+  `units.delete_group GROUP`: posted after the game's own check; the MCP tools' Verified reads are the proof.
+- MCP (same names, schemas, Verified reads; mouse fallback in the same call): hoi4_army_detach (no `into` = one new
+  army, `into` = one transfer), hoi4_army_merge (all of source into target, one transfer), hoi4_army_split (the first N
+  roster divisions, one new army), hoi4_army_group_create (one command), hoi4_army_commander (leader by exact name),
+  hoi4_army_rename (names up to 22 ASCII bytes; others typed by the mouse). Replies carry `in_process`.
+
+Needs: the game slot, Steam closed; module and reader built from branch e75/inproc-picks; PREV-1939 = a run folder whose
+last save is the 1939 bookmark start (Germany, the one army of ~121 divisions; e.g. a copy of t1939g's first save).
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,units ./inproc_stage2.sh PREV-1939 s6u`; the hello must
+show `"units":{"on":true,"live_passed":false}`, `common.unit_theatre_off:664`, `group_parent_ptr_off:432`.
+`C="python3 -I inproc/tools/inproc_client.py s6u/inproc.sock"`. Tool calls through the broker with
+`HOI4_BACKEND=inprocess HOI4_INPROC_SOCK=$PWD/s6u/inproc.sock` (deploybin.sh, as S2 did), and the same with
+`HOI4_BACKEND=gui` for the mouse timings.
+
+U1 one new army, paused (5 min). `hoi4_armies`: pick the big army and 3 division ids. `hoi4_army_detach {"army":BIG,
+"divisions":[3 ids]}` -> receipt Verified, `in_process.module.army`, tool ms. `hoi4_armies`: a new army of exactly
+those 3; BIG lost exactly 3. Screenshot of the army bar.
+U2 THE CARVE, paused (15 min): the 1939 plan's five named formations out of the 121-division army, in one call
+sequence, each formation's divisions named by id (take them from `hoi4_armies`/`hoi4_supply`: e.g. Nord 18+6, Pommern
+18+6, Mitte 18+6, Sued 18+6, Panzergruppe 14): per formation `hoi4_army_detach {"army":BIG,"divisions":[<=18]}`
+(new army), then `hoi4_army_detach {"army":BIG,"divisions":[rest],"into":NEW}`, `hoi4_army_rename {"army":NEW,
+"name":"Armee Nord"}`, `hoi4_army_commander {"army":"Armee Nord","general":G}`; then `hoi4_army_group_create
+{"armies":[Nord,Pommern]}` and a field marshal on it. READ-BACK: `hoi4_armies` shows each named army with EXACTLY its
+divisions, each general, the group; nothing else moved. TIME: total wall time and per call (inproc.log post2
+`total_ms`), against the mouse path on the same save reloaded (`HOI4_BACKEND=gui`, the same sequence: the t1939f
+mouse detach of 14 moved 2 and diverged; record what it does now).
+U3 merge and split, paused (5 min). `hoi4_army_split {"army":"Armee Nord","count":4}` -> a new army of the roster's
+first 4; `hoi4_army_merge {"source":<that>,"target":"Armee Nord"}` -> back; the empty shell: does it vanish (record); if
+not, `$C post2 units.delete_group SHELL` and record the game check's answer.
+U4 refusals (5 min). A division of a FOREIGN country in `--divs` -> `not a live division` or the game filter's refusal
+(record which); `units.army_group_new` of two armies in different theatres -> refused before posting; a leader of
+another country (obj2) -> refused before posting; a name of 23 bytes -> the mouse path types it.
+U5 running speed 2 (5 min): repeat U1 and one transfer while the game runs; read-back within 3 s.
+U6 save + reload with the family on; plain load without the module (the save opens; the carved armies stand).
+Stop at once (endrun.sh s6u) on: a crash, a hang, any `unexplained` post2, a division in an army the request did not
+name, any change to a foreign army, a Dropped command in game.log.
+Pass: U1-U6 clean -> `IPC_LIVE_PASSED` for `units` (8th entry), "S6 PASS: units"; the executor's layout may then name
+the divisions of each role in one call sequence (DETACH_MAX stays 18 per call: the tool's schema).
+
+## Session S7-PICKS: the in-process module, the player's picks (family `picks`; about 15 minutes) -- after S6-UNITS
+
+Built by engineer 75 (24 Nov 2026), offline-proven only: stage 2 34/34 types on 1.20.0.0 and 1.19.4.1 macOS; Linux and
+Windows 1.20 CSetNationalFocusCommand by RTTI with the same id (13245). OFF under `auto` until this session passes.
+- `picks.focus FOCUS` = CSetNationalFocusCommand(own tag +0x24, the focus by POINTER +0x28): what the focus tree's
+  start button posts. The module checks the object is exactly a CNationalFocus (RTTI vtable), fills the player's tag,
+  then the game's own check: the focus's virtual "can start" (vtable +0x50) with the player's country (prerequisites,
+  exclusivity, availability, already done). Refused = deleted, never posted.
+- MCP: hoi4_focus_start (same name, schema, Verified read: the active focus) takes the focus's address from the own
+  tree walk (the catalog's validated walk: exact vtables, own tree membership, unique keys); reply `in_process`. The
+  mouse path (open tree, pan, click) stays the fallback in the same call.
+
+Needs: module and reader from branch e75/inproc-picks; PREV-1936 (Germany, no focus running) and PREV-1939.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,picks ./inproc_stage2.sh PREV-1936 s7p`; the hello must
+show `"picks":{"on":true,"live_passed":false}`. `C="python3 -I inproc/tools/inproc_client.py s7p/inproc.sock"`.
+F1 a focus, paused (3 min). `hoi4_focus_start {"focus":"GER_rheinland"}` (any available root focus) with
+`HOI4_BACKEND=inprocess`: receipt Verified, `in_process.module.per_object[0].result:"posted"`, tool ms (the mouse path:
+3.7 s); the focus tree shows it running; no window opened.
+F2 refusals (3 min). A focus whose prerequisite is not done -> `refused_by_game_check`, nothing posted (the active focus
+unchanged); a focus while another runs -> the tool's own refusal before posting; a CNationalFocus of ANOTHER country's
+tree by `$C post2 picks.focus ADDR` (address from a foreign tree) -> record the game check's answer (expected refused;
+if it posts, STOP: the module must check own-tree membership first).
+F3 running speed 2 (3 min): F1 while the game runs; the Verified read within 3 s.
+F4 save + reload with the family on; plain load without the module.
+Stop at once (endrun.sh s7p) on: a crash, a hang, any `unexplained` post2, a focus started that the request did not
+name, F2's foreign focus posted.
+Pass: F1-F4 clean -> `IPC_LIVE_PASSED` for `picks` (9th entry), "S7 PASS: picks".
+
+## Session S8-EVENTS: the in-process module, event answers (family `events`; about 25 minutes) -- after S7-PICKS
+
+Built by engineer 76 (24 Nov 2026), offline-proven only: stage 2 35/35 types on 1.20.0.0 and 1.19.4.1 macOS; Linux and
+Windows 1.20 CSelectEventOptionCommand by RTTI with the same id (10645); the window facts are not ported there (the full
+scan is macOS-only, as for every family). OFF under `auto` until this session passes.
+- `events.answer WINDOW --vals PLACE,COUNT` = CSelectEventOptionCommand built by the event window's own constructor with
+  the window's own fields (pending id +0x58, event +0x60, &country +0x68, &scope +0x70) and the option's own index, as
+  the window's option click builds it. The module checks: the object is exactly a CEventWindow (RTTI vtable); the window
+  accepts a click now (its byte +0x330, the click's own gate); its country is the player's; its event resolves (generic
+  lookup, the auth slot's cast to CEvent); the game state holds the pending record of the id with that event; every
+  option's own index equals its place; the game's option test (the window's per-frame test, 1.20 0x1005f4d00) passes
+  exactly COUNT options (else GUI path) and the PLACE-th of them is taken (none: refused); then the command's "can do"
+  and Post. Read-back in the module: the pending record is gone within 3 s.
+- MCP: hoi4_event_choose (same name, schema, Verified read: exactly that window closes) takes the window from the events
+  read (the popup entry's secondary base + offset-to-top) and the shown option count; reply `in_process`. The mouse path
+  stays the fallback in the same call; two windows of one event id go to the mouse.
+
+Needs: module and reader from branch e76/inproc-events; a save with an open choice event (PREV-1936 shortly before
+1936.03.07 has the Rhineland chain; or any save with 2+ open events, a news event among them).
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,events ./inproc_stage2.sh PREV-1936 s8e`; the hello must show
+`"events":{"on":true,"live_passed":false}`. `C="python3 -I inproc/tools/inproc_client.py s8e/inproc.sock"`.
+E1 a two-option choice event, paused (5 min). `hoi4_events` -> pick option 1 by key; `hoi4_event_choose
+{"event":ID,"option":KEY}` with `HOI4_BACKEND=inprocess`: receipt Verified, `in_process.module.per_object[0].result:
+"posted"`, `executed:1`, `pending_id`, `option_index` = the key's index in the event script; the window closes on its
+own within 2 s (if the window stays open while the record is gone: STOP, the window needs the click's own close: record
+the window's +0x330 and visibility); the option's effect is applied (the tooltip's change, e.g. a flag or a law).
+E2 a news event (one option), paused (2 min): the same call with option 0; window closes.
+E3 refusals (5 min): an option whose trigger fails -> the window does not show it: COUNT differs -> `second_object_invalid`
+and the mouse path answers (record it); `$C post2 events.answer WINDOW 0,COUNT` on a window already answered ->
+`second_object_invalid` "does not accept a click now", nothing posted; a forged address -> `not_a_live_object`.
+E4 stacked windows (5 min): three open events, answer the BOTTOM one first in process (the mouse path needs the covering
+ones first: compare the receipts' tool ms and order); none of the others changes.
+E5 running at speed 2 (3 min): E1 while the game runs; Verified within 3 s; then save + reload with the family on, and a
+plain load without the module.
+Stop at once (endrun.sh s8e) on: a crash, a hang, any `unexplained` post2, an option taken that the request did not name,
+an event answered for another country, a window left open with its record gone.
+Pass: E1-E5 clean -> `IPC_LIVE_PASSED` for `events` (10th entry), "S8 PASS: events".
+
+## Session S9-DECISIONS: the in-process module, decisions (family `decisions`; about 15 minutes) -- after S8-EVENTS
+
+Built by engineer 76 (24 Nov 2026), offline-proven only: stage 2 36/36 types on 1.20.0.0 and 1.19.4.1 macOS; Linux and
+Windows 1.20 CSelectDecisionCommand by RTTI with the same id (14345). OFF under `auto` until this session passes.
+- `decisions.take DECISION` = CSelectDecisionCommand(own tag +0x24, the decision by POINTER +0x28): what the decisions
+  panel's select posts (after its confirmation). The module checks the object is exactly a CDecision (RTTI vtable),
+  fills the player's tag, then the game's own "can do" (the decision's allowed/visible test with the player's country,
+  active state, cost). Refused = deleted, never posted. Targeted decisions stay on the mouse path (another command).
+- MCP: hoi4_decision_take (same name, schema, Verified read: PP spent, timer or entry gone) opens the panel as before,
+  takes the row's decision object and posts it in process; reply `in_process`; the mouse path in the same call.
+Needs: branch e76/inproc-events; PREV-1936 (Germany has untargeted decisions with a PP cost).
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,decisions ./inproc_stage2.sh PREV-1936 s9d`; hello shows
+`"decisions":{"on":true,"live_passed":false}`. `C="python3 -I inproc/tools/inproc_client.py s9d/inproc.sock"`.
+D1 an affordable untargeted decision, paused (3 min): `hoi4_decision_take {"decision":KEY}` with `HOI4_BACKEND=inprocess`:
+receipt Verified, `in_process.module.per_object[0].result:"posted"`, PP spent by the script cost, no confirmation window
+left open, tool ms (mouse: record).
+D2 refusals (4 min): a decision whose cost is above the PP held (the tool's own refusal first; then `$C post2
+decisions.take ADDR` -> `refused_by_game_check`, nothing posted); a decision already active -> refused; a CDecision of
+another country's category by address -> record the check's answer (expected refused; if it posts, STOP).
+D3 a targeted decision: the mouse path answers (reply without `in_process`).
+D4 running at speed 2 + save/reload with the family on; a plain load without the module.
+Stop at once (endrun.sh s9d) on: a crash, a hang, any `unexplained` post2, a decision taken that the request did not name,
+D2's foreign decision posted.
+Pass: D1-D4 clean -> `IPC_LIVE_PASSED` for `decisions` (11th entry), "S9 PASS: decisions".

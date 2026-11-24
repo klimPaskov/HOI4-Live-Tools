@@ -104,6 +104,23 @@ const DEEP_CLUSTER: f64 = 45.0;
 /// column flipped between Warsaw and Krakow every four days and took neither).
 const STRIKE_MAX_DAYS: f64 = 10.0;
 
+/// Exact province lists to the army order tools (engineer 74, design only; OFF until the module's `orders` and
+/// `orders2` families pass S4-ORDERS and S5-PLAN). When on, the operation's keys would map to in-process commands
+/// through the EXISTING tools, the mouse path staying the fallback:
+/// - `front` (a formation's own line) -> `hoi4_army_front` with `provinces` (the side_line/solo_line province ids) or
+///   `against` + `own_states`: `orders2.new_root` (split 0) on an empty plan, then `orders.new_front` per chain;
+///   `replace_arrows` / a changed line -> `replace_order` (`orders.set_path`, keeps the id and the planning bonus).
+/// - `offensive` / `f["target"]` / `path_states` -> `hoi4_army_offensive` with `target_provinces`: with `armour` or
+///   `spearheads(op)` `spearhead:true` (`orders2.spearhead` under the front's id); a moved target ->
+///   `replace_order` (`orders.set_path`); a new plain offensive stays on the stroke (no command mapped yet).
+/// - `execute_on` -> `orders.execute` (id 0 = the whole plan); `execution` (careful/balanced/rush) stays on the bar
+///   (no command mapped yet).
+/// - `reserve_orders` / hold groups' fallback -> `hoi4_army_fallback` with `provinces` (`orders2.fallback`).
+/// - `group_cap` / hand-overs between formations -> `orders2.unassign` + `orders2.assign` (divisions to an order,
+///   no new army, no general churn); area defence and naval invasion keep the mouse path.
+#[allow(dead_code)]
+const IN_PROCESS_PLAN_ARGS: bool = false;
+
 /// Land order tools another step may not send for an owned army (by its `army` argument).
 const LAND_ORDERS: [&str; 11] = [
     "hoi4_army_move",
@@ -324,8 +341,12 @@ pub(super) fn layout_pending(
         .iter()
         .filter(|e| e["when"].is_null())
         .map(|e| text(&e["name_hint"]).to_string())
+        // only the roles an operation names: a guard no operation names forms later and must not
+        // hold the operations back (t1939i, 24 Nov 2026: the guards held the prepare 14 days and
+        // no line was drawn by 11 September)
         .filter(|h| {
             !h.is_empty()
+                && names_army(plan, h)
                 && !state.layout.contains_key(h)
                 && !state.done.contains_key(&format!("layout:impossible:{h}"))
         })

@@ -8,6 +8,27 @@
         (--vals one delta per line), production.remove_line, air.transfer (--obj2 the CAirBase), air.set_mission
         (--vals one mission mask, --flag 1 enable / 0 disable), air.enable_mission (--obj2 the CStrategicRegion).
         The module checks every object with the game's resolver and owner getter, then the game's own validity check.
+  inproc_client.py SOCK orders GROUP
+        engineer 73: the battle-plan order tree of one own army or army group (hex address, e.g. from hoi4_armies'
+        debug words or the reader's group list), read by the module between two frames
+  inproc_client.py SOCK post2 orders.OP GROUP --vals ORDER_ID [--provs P,P,..] [--obj2 DRAWER] [--flag 0|1]
+        orders.delete / orders.execute (--vals 0 = the whole plan; --flag 1 execute, 0 stop) / orders.set_path /
+        orders.new_front (--provs the provinces in drawing order; --obj2 the drawing group, default the group)
+  inproc_client.py SOCK fronts GROUP
+        engineer 74: the fronts of the group's theatre (front address, sections with id and province ids): what a
+        plan root binds to
+  inproc_client.py SOCK post2 orders2.OP GROUP [--vals V,..] [--provs P,..] [--divs D,..] [--obj2 FRONT]
+        orders2.new_root (--vals SECTION,FROM,TO,SPLIT --obj2 FRONT [--divs]) / orders2.assign (--vals ORDER --divs) /
+        orders2.unassign (--divs) / orders2.fallback (--provs [--divs]) / orders2.edit_root (--vals ORDER,FROM,TO) /
+        orders2.invasion_target and orders2.paradrop_target (--vals ORDER,PROVINCE) / orders2.spearhead (--vals PARENT
+  inproc_client.py SOCK post2 units.OP OBJS [--divs D,..] [--vals V,..] [--obj2 ADDR]   (engineer 75: army structure)
+        units.new_army FIRST_DIV --divs D1,D2,.. (FIRST_DIV = D1: its theatre, as the UI reads it) / units.transfer ARMY
+        --divs D,.. / units.leader GROUP [--obj2 LEADER] (none = unassign) / units.rename GROUP --vals 65,114,.. (the
+        name's character codes) / units.army_group_new A1,A2,.. / units.to_army_group A1,.. --obj2 ARMY_GROUP /
+        units.from_army_group A1,.. / units.delete_group GROUP
+  inproc_client.py SOCK post2 picks.focus FOCUS   (engineer 75: a national focus of the own tree, by address)
+        --provs). FROM/TO 0..100000 along the section; SPLIT 1 = an army group's line divided among its armies (a plain
+        click), 0 = one line (Shift+click); divisions are hex CUnit addresses (the `orders` read's division_ptrs)
   inproc_client.py SOCK stage1 OUTDIR --external CMD [--shot CMD]
         Part A of the stage-1 session: hello, probe, one post and its read-back by the module AND by the external
         runtime (CMD prints hoi4_overview's JSON body), undo by the same route, 20 timed repetitions. Writes
@@ -195,12 +216,14 @@ def main(argv):
         print(json.dumps(ch.call(op), indent=1)); return 0
     if op == 'post':
         print(json.dumps(ch.post_speed(int(argv[3])), indent=1)); return 0
+    if op in ('orders', 'fronts'):
+        print(json.dumps(ch.call(op, group=argv[3]), indent=1)); return 0
     if op == 'post2':
         # stage 2, one family op: post2 OP OBJS [--vals V,V] [--obj2 ADDR] [--flag 0|1]
         # e.g. post2 production.add_factories 0x6000abc0 --vals 5 ; post2 air.transfer 0x6001,0x6002 --obj2 0x7000
         rest = argv[5:]
         kw = {'cmd': argv[3], 'objs': argv[4]}
-        for k in ('vals', 'obj2'):
+        for k in ('vals', 'obj2', 'provs', 'divs'):
             if '--' + k in rest: kw[k] = rest[rest.index('--' + k) + 1]
         if '--flag' in rest: kw['flag'] = int(rest[rest.index('--flag') + 1])
         print(json.dumps(ch.call('post', **kw), indent=1)); return 0

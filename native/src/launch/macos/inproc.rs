@@ -121,6 +121,26 @@ impl Channel {
     }
 }
 
+impl Channel {
+    /// One request as built by the caller (the orders read and posts of `inproc_orders`).
+    pub(super) fn call_raw(&mut self, req: Value) -> Result<Value> {
+        self.call(req)
+    }
+
+    /// A stage-2 post built by the caller, spaced and retried once on a rate limit like `post`.
+    pub(super) fn post_raw(&mut self, req: Value) -> Result<Value> {
+        for attempt in 0..2 {
+            space_posts();
+            let reply = self.call(req.clone())?;
+            if attempt == 0 && rate_limited(&reply) {
+                continue;
+            }
+            return Ok(reply);
+        }
+        unreachable!()
+    }
+}
+
 /// The module's minimum gap between stage-2 requests is 50 ms; 60 leaves room for clock skew.
 const POST_GAP: Duration = Duration::from_millis(60);
 static LAST_POST: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
@@ -150,7 +170,7 @@ pub(super) fn rate_limited(reply: &Value) -> bool {
 }
 
 /// The module's parser takes one flat object of at most 8 members, strings without escapes or integers, one line
-/// under 1 KiB; lists travel as comma-separated strings.
+/// under about 9 KB; lists travel as comma-separated strings.
 pub(super) fn post_request(
     op: &str,
     objs: &[u64],
@@ -185,7 +205,9 @@ pub(super) fn post_request(
 fn request_line(req: &Value) -> Result<String> {
     let line =
         serde_json::to_string(req).map_err(|e| Error::new("inproc_channel", e.to_string()))? + "\n";
-    if line.len() > 1000 || line.contains('\\') {
+    // the module reads lines up to about 9 KB (engineer 73: a front's province list); older modules 1 KiB, but they
+    // have no orders family, so no long request reaches them
+    if line.len() > 8800 || line.contains('\\') {
         return Err(Error::new(
             "invalid_arguments",
             "request too long for the channel",
@@ -246,6 +268,88 @@ pub(super) fn production_op(requested_now: i32, wanted: i32) -> Option<(&'static
         (_, 0) => None,
         (_, d) => Some(("production.add_factories", i64::from(d))),
     }
+}
+
+/// A new production line in process (family production2 for the line, production for its factories): one
+/// AddProductionLine(own tag, variant, no organisation, not at the top), read until the new line shows, then one
+/// AddProductionLineFactories for the difference to `factories`, read until it shows. `new_line` answers the new line's
+/// (address, requested factories). Gui when the line did not appear (nothing else posted).
+pub(super) fn add_line(
+    ch: &mut Channel,
+    variant: u64,
+    factories: i32,
+    new_line: &mut dyn FnMut() -> Option<(u64, i32)>,
+) -> Routed {
+    let Ok(r) = ch.post("production2.add_line", &[variant], &[], None, Some(0)) else {
+        return Routed::Gui;
+    };
+    if game_refused(&r) {
+        return Routed::Refused("a line of this design".into());
+    }
+    if !all_posted(&r) {
+        return Routed::Gui;
+    }
+    let start = std::time::Instant::now();
+    let mut line = None;
+    while start.elapsed() < MISSION_BIT_WAIT {
+        line = new_line();
+        if line.is_some() {
+            break;
+        }
+        std::thread::sleep(MISSION_BIT_POLL);
+    }
+    let Some((address, requested)) = line else {
+        // posted but not seen: the journal's settle decides (never post a second line)
+        return Routed::Done(json!({"backend":"inprocess","module":[r,{"line_seen":false}]}));
+    };
+    let mut replies = vec![
+        r,
+        json!({"line_seen":true,"waited_ms":start.elapsed().as_millis() as u64}),
+    ];
+    if let Some((op, delta)) = production_op(requested, factories) {
+        if op == "production.add_factories" {
+            if let Ok(f) = ch.post(op, &[address], &[delta], None, None) {
+                let t = std::time::Instant::now();
+                while t.elapsed() < MISSION_BIT_WAIT
+                    && new_line().map(|(_, n)| n) != Some(factories)
+                {
+                    std::thread::sleep(MISSION_BIT_POLL);
+                }
+                replies.push(f);
+            }
+        }
+    }
+    Routed::Done(json!({"backend":"inprocess","module":replies}))
+}
+
+/// A line's priority in process (family production2): ChangePriority(line, place), then read until `at_place` holds.
+pub(super) fn priority_post(
+    ch: &mut Channel,
+    line: u64,
+    place: usize,
+    at_place: &mut dyn FnMut() -> Option<bool>,
+) -> Routed {
+    let Ok(r) = ch.post("production2.priority", &[line], &[place as i64], None, None) else {
+        return Routed::Gui;
+    };
+    if game_refused(&r) {
+        return Routed::Refused("this line's priority".into());
+    }
+    if !all_posted(&r) {
+        return Routed::Gui;
+    }
+    let start = std::time::Instant::now();
+    let mut seen = false;
+    while start.elapsed() < MISSION_BIT_WAIT {
+        if at_place() == Some(true) {
+            seen = true;
+            break;
+        }
+        std::thread::sleep(MISSION_BIT_POLL);
+    }
+    Routed::Done(
+        json!({"backend":"inprocess","module":[r,{"executed":seen,"waited_ms":start.elapsed().as_millis() as u64}]}),
+    )
 }
 
 /// The air mission plan per wing: (assign the region, set the mission bit). Posted in the UI's order: the mission
@@ -316,13 +420,18 @@ pub(super) fn air_mission(
             need_region.push(w.address);
         }
     }
+    // the region: the object found through an own base's province (family air), else, when the airwing family is
+    // usable, the region id itself (the map's region click needs no own base; the module looks the region up the way
+    // the command's own check does); else the GUI
+    let by_id = family_usable(&ch.hello, "airwing", mode());
     let region_obj = match region {
         Some(r) if !need_region.is_empty() => {
             match bases
                 .iter()
                 .find(|b| b.region_id == Some(r) && b.region_address != 0)
             {
-                Some(b) => Some(b.region_address),
+                Some(b) => Some(RegionRef::Object(b.region_address)),
+                None if by_id && r > 0 => Some(RegionRef::Id(r)),
                 None => return Routed::Gui,
             }
         }
@@ -363,8 +472,16 @@ pub(super) fn air_mission(
             }
         }
     }
-    if let Some(obj) = region_obj {
-        let Ok(r) = ch.post("air.enable_mission", &need_region, &[], Some(obj), None) else {
+    if let Some(rr) = region_obj {
+        let posted = match rr {
+            RegionRef::Object(obj) => {
+                ch.post("air.enable_mission", &need_region, &[], Some(obj), None)
+            }
+            RegionRef::Id(id) => {
+                ch.post("airwing.region", &need_region, &[i64::from(id)], None, None)
+            }
+        };
+        let Ok(r) = posted else {
             return Routed::Gui;
         };
         if game_refused(&r) {
@@ -391,6 +508,172 @@ pub(super) fn air_mission(
         }
     }
     Routed::Done(json!({"backend":"inprocess","wings":names,"module":replies}))
+}
+
+/// How a mission's region reaches the module: the region object (read through an own base), or its id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RegionRef {
+    Object(u64),
+    Id(i32),
+}
+
+/// Post one wing-structure request (family airwing) and return only once the game has executed it: `done` reads the
+/// wings again until it holds (the call's Verified read-back follows at once; a read right after the post can still
+/// see the old state, s2d/s2g 24 Nov 2026). Refused when the game's own check refused every object; Gui on any other
+/// refusal or silence (the GUI path decides in the same call).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn airwing_post(
+    ch: &mut Channel,
+    op: &str,
+    objs: &[u64],
+    vals: &[i64],
+    obj2: Option<u64>,
+    what: &str,
+    reread: &mut dyn FnMut() -> Option<Vec<super::airread::Wing>>,
+    done: &dyn Fn(&[super::airread::Wing]) -> bool,
+) -> Routed {
+    let Ok(r) = ch.post(op, objs, vals, obj2, None) else {
+        return Routed::Gui;
+    };
+    if game_refused(&r) {
+        return Routed::Refused(what.into());
+    }
+    if !all_posted(&r) {
+        return Routed::Gui;
+    }
+    let start = std::time::Instant::now();
+    let mut seen = false;
+    while start.elapsed() < MISSION_BIT_WAIT {
+        if reread().is_some_and(|now| done(&now)) {
+            seen = true;
+            break;
+        }
+        std::thread::sleep(MISSION_BIT_POLL);
+    }
+    let waited = start.elapsed().as_millis() as u64;
+    Routed::Done(
+        json!({"backend":"inprocess","op":op,"module":[r,{"executed":seen,"waited_ms":waited}]}),
+    )
+}
+
+/// The address of an own wing by name (0 or absent: not known, the GUI path runs).
+pub(super) fn wing_address(wings: &[super::airread::Wing], name: &str) -> Option<u64> {
+    wings
+        .iter()
+        .find(|w| w.name == name && w.address != 0)
+        .map(|w| w.address)
+}
+
+/// Hold in process: the Hold button's command, EnableMission(wing, region 0). A wing flying a transfer stays on the
+/// GUI path (the game's hold helper cancels the transfer first: a second command this family does not post).
+pub(super) fn air_hold(
+    ch: &mut Channel,
+    wings: &[super::airread::Wing],
+    wing: &str,
+    reread: &mut dyn FnMut() -> Option<Vec<super::airread::Wing>>,
+) -> Routed {
+    let Some(w) = wings.iter().find(|w| w.name == wing && w.address != 0) else {
+        return Routed::Gui;
+    };
+    if w.transfer_base_id != 0 {
+        return Routed::Gui;
+    }
+    let a = w.address;
+    airwing_post(
+        ch,
+        "airwing.region",
+        &[a],
+        &[0],
+        None,
+        "the hold of this wing",
+        reread,
+        &|now| now.iter().any(|x| x.address == a && x.region_id <= 0),
+    )
+}
+
+/// The aircraft the Split button moves to the new wing: half, rounded down (the UI's helper: count / 2).
+pub(super) fn split_count(planes: i32) -> i64 {
+    i64::from(planes / 2)
+}
+
+/// Split in process: Split(wing, aircraft / 2), as the toolbar's Split button. Done once a new wing stands at the base
+/// and the original holds fewer aircraft.
+pub(super) fn air_split(
+    ch: &mut Channel,
+    wings: &[super::airread::Wing],
+    plan: &super::airact::SplitPlan,
+    reread: &mut dyn FnMut() -> Option<Vec<super::airread::Wing>>,
+) -> Routed {
+    let Some(a) = wing_address(wings, &plan.wing) else {
+        return Routed::Gui;
+    };
+    let n = split_count(plan.planes);
+    if n < 1 {
+        return Routed::Gui;
+    }
+    airwing_post(
+        ch,
+        "airwing.split",
+        &[a],
+        &[n],
+        None,
+        "the split of this wing",
+        reread,
+        &|now| super::airact::settle_split(plan, now).0 == super::settle::Verdict::Reached,
+    )
+}
+
+/// Merge in process: ONE Consolidate command for the whole group (the first named wing first), as the Merge button.
+pub(super) fn air_merge(
+    ch: &mut Channel,
+    wings: &[super::airread::Wing],
+    plan: &super::airact::MergePlan,
+    reread: &mut dyn FnMut() -> Option<Vec<super::airread::Wing>>,
+) -> Routed {
+    let mut order = vec![plan.wing.clone()];
+    order.extend(plan.group.iter().filter(|n| **n != plan.wing).cloned());
+    let mut objs = Vec::new();
+    for n in &order {
+        match wing_address(wings, n) {
+            Some(a) => objs.push(a),
+            None => return Routed::Gui,
+        }
+    }
+    if objs.len() < 2 {
+        return Routed::Gui;
+    }
+    airwing_post(
+        ch,
+        "airwing.merge",
+        &objs,
+        &[],
+        None,
+        "the merge of these wings",
+        reread,
+        &|now| super::airact::settle_merge(plan, now) == super::settle::Verdict::Reached,
+    )
+}
+
+/// Disband in process: Delete(owner tag, wing), as the overview's Disband button; the aircraft go to the reserve.
+pub(super) fn air_disband(
+    ch: &mut Channel,
+    wings: &[super::airread::Wing],
+    wing: &str,
+    reread: &mut dyn FnMut() -> Option<Vec<super::airread::Wing>>,
+) -> Routed {
+    let Some(a) = wing_address(wings, wing) else {
+        return Routed::Gui;
+    };
+    airwing_post(
+        ch,
+        "airwing.disband",
+        &[a],
+        &[],
+        None,
+        "the disbanding of this wing",
+        reread,
+        &|now| !now.iter().any(|x| x.address == a),
+    )
 }
 
 /// Rebases in process: one air.transfer request per destination base, only for wings not already there or bound
@@ -474,6 +757,50 @@ mod tests {
         assert_eq!(mode_from(Some("gui")), Mode::Gui);
         assert_eq!(mode_from(Some("inprocess")), Mode::InProcess);
         assert_eq!(mode_from(Some("anything")), Mode::Auto);
+    }
+
+    #[test]
+    fn units_and_picks_stay_off_in_auto_until_their_live_pass() {
+        let hello = json!({"post":{"enabled":true},"families":{
+            "units":{"on":true,"live_passed":false},"picks":{"on":true,"live_passed":false}}});
+        for fam in ["units", "picks"] {
+            assert!(!family_usable(&hello, fam, Mode::Auto));
+            assert!(family_usable(&hello, fam, Mode::InProcess));
+            assert!(!family_usable(&hello, fam, Mode::Gui));
+        }
+        let off =
+            json!({"post":{"enabled":true},"families":{"units":{"on":false,"live_passed":true}}});
+        assert!(!family_usable(&off, "units", Mode::InProcess));
+    }
+
+    #[test]
+    fn split_moves_half_rounded_down() {
+        assert_eq!(split_count(100), 50);
+        assert_eq!(split_count(41), 20);
+        assert_eq!(split_count(2), 1);
+        assert_eq!(split_count(1), 0);
+    }
+
+    #[test]
+    fn airwing_is_off_in_auto_until_its_live_pass() {
+        // the module's hello as built by engineer 71: airwing on (opted in, resolved) but not live-passed
+        let hello = json!({"post":{"enabled":true},"families":{
+            "air":{"on":true,"live_passed":true},"airwing":{"on":true,"live_passed":false}}});
+        assert!(!family_usable(&hello, "airwing", Mode::Auto));
+        assert!(family_usable(&hello, "airwing", Mode::InProcess));
+        assert!(family_usable(&hello, "air", Mode::Auto));
+    }
+
+    #[test]
+    fn production2_is_off_in_auto_and_a_new_line_needs_both_families() {
+        let hello = json!({"post":{"enabled":true},"families":{
+            "production":{"on":true,"live_passed":true},"production2":{"on":true,"live_passed":false}}});
+        assert!(!family_usable(&hello, "production2", Mode::Auto));
+        assert!(family_usable(&hello, "production2", Mode::InProcess));
+        // the add path posts the line (production2) and then its factories (production)
+        assert!(family_usable(&hello, "production", Mode::InProcess));
+        // the factories of the new line: from 0 to 5 is one add_factories of 5
+        assert_eq!(production_op(0, 5), Some(("production.add_factories", 5)));
     }
 
     #[test]
