@@ -1516,6 +1516,8 @@ pub(super) fn idle_holds(
             || state.op_owned.contains_key(&name)
             || has_orders(roster, &name)
             || state.skipped(now, "idlehold", &name)
+            // no battle-plan order takes without a general (the command step gives one first)
+            || row["commander"].is_null()
         {
             continue;
         }

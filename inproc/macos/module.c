@@ -701,7 +701,13 @@ static const char *events_prep(job2_t *j, uint64_t gs, int *unavailable) {
     if (!sread(w + e->win_open_off, &open, 1) || !open) return "the event window does not accept a click now";
     if (!sread(w + e->win_id_off, &j->ev_id, 4) || !sq(w + e->win_event_off, &ev) || !plausible(ev) ||
         !sread(w + e->win_country_off, &j->ev_country, 4) || !sread(w + e->win_flag_off, &flag, 1)) return "the window is unreadable";
-    if (j->ev_country != j->player_tag) return "the event is not the player's country's";
+    if (j->ev_country != j->player_tag) {
+        /* s6v (24 Nov): a news event (news.184) was refused here: the values go into the reason for the next look */
+        static char why[128];
+        snprintf(why, sizeof why, "the event is not the player's country's (window +0x%x: %d, player %d, id %d)",
+                 (unsigned)e->win_country_off, j->ev_country, j->player_tag, j->ev_id);
+        return why;
+    }
     if (!g_dyncast) g_dyncast = (dyncast_fn)dlsym(RTLD_DEFAULT, "__dynamic_cast");
     if (!g_dyncast || !code_ptr(lk) || !sq(ev + g_t.st2.common.cref_handle_off, &h) || !h || (uint64_t)(uintptr_t)((resolve_fn2)(uintptr_t)lk)(&h) != ev ||
         (uint64_t)(uintptr_t)g_dyncast((void *)(uintptr_t)ev, (void *)(uintptr_t)(e->ti_reference + (uint64_t)g_slide),
