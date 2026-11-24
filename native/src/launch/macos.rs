@@ -9,6 +9,7 @@ mod action_fence;
 mod agency_act;
 mod air;
 mod airact;
+mod airattach;
 mod airread;
 mod airui;
 mod alerts;
@@ -835,7 +836,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         railway::tool(),
         json!({"name":"hoi4_army_attack","description":"Front line, offensive line and execute for one army in one call (the same steps as hoi4_army_front, hoi4_army_offensive and hoi4_army_plan execute:true, each verified and journalled as <request_id>:front, :offensive, :execute). Skip a step with front:false (the army already holds a front), offensive:false or execute:false. Stops at the first failing step and says which steps were done.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"front":{"type":"boolean"},"offensive":{"type":"boolean"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_construction_order","description":"Reorder or remove one own construction line with its row buttons in the construction panel: action top (Shift+Click on the up arrow), up, down, bottom or remove (the row's close button). `line` is the 0-based index as hoi4_construction_queue lists the lines; the first lines get the civilian factories (15 per line), so put the supply hub or railway the front needs first. Verified by the line's new position in the own queue (or its absence after remove).","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":127},"action":{"type":"string","enum":["top","up","down","bottom","remove"]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","action","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_save","description":"Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games. Use it at the end of a campaign segment so the next launch continues exactly from this point (no turns are replayed). The game stays paused if it was paused.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_save","description":"Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games. Use it at the end of a campaign segment so the next launch continues exactly from this point (no turns are replayed). The game stays paused if it was paused; a game that was running is unpaused again after the save (resumed:true).","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_war_risk","description":"Read-only, before justifying or declaring war on `country`: which countries would join that war on its side (its faction, every country guaranteeing it, its overlord and subjects) and which of our borders with them are not held (need a division in every border state and two per state). hoi4_diplomacy_act declare_war refuses with war_would_widen in that case unless accept_widening:true. Memory and map files only; no input.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"}},"required":["country"],"additionalProperties":false}}),
         json!({"name":"hoi4_diplomacy_act","description":"Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, call_to_arms, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices, e.g. volunteers groups), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"try_anyway":{"type":"boolean"},"accept_widening":{"type":"boolean"},"confirm":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["action","request_id","lease_token"],"additionalProperties":false}}),
         commanders::tool(),
@@ -866,6 +867,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_air_wing_split","description":"Split one own air wing in two halves with the toolbar's Split button (shortcut D) after selecting it in the Air Forces Overview: the original keeps half of its aircraft, a new wing of the same type, base and orders takes the rest and gets the game's default name. Typed refusals before input: wing_unknown, wing_ambiguous, wing_in_transfer, nothing_to_change (fewer than 2 aircraft); split_unavailable if the game disables the button. Verified from memory: one more wing at the base and fewer aircraft in the original. This and hoi4_air_wing_create (up to 100 aircraft per click) are the ways to size wings; hoi4_air_wing_merge joins them again.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_merge","description":"Merge own air wings of one aircraft type at one air base with the toolbar's Merge button. The game's map stack and merge work on every wing of that type at the base, so `wing` is joined with all others of its type there; give `with` to name the single expected partner (refused with merge_group_larger when more than two wings of the type are there). The first wing is selected through its Air Forces Overview row, the stack item of the type beside the base circle joins with a Shift click, the game's selection array decides that exactly the group is selected, then Merge; the first wing survives with the aircraft (a wing holds at most 100: merging 40+80+40 bombers left wings of 100 and 60). Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (same wing twice), merge_different_base, merge_different_type, no_merge_partner, merge_group_larger, wing_in_transfer; merge_unavailable if the game disables the button, selection_lost if the group could not be selected (nothing is merged then). Verified from memory: fewer wings of the group left holding all their aircraft.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"with":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_hold","description":"Stop an own air wing's mission (the toolbar's Hold Air Wings button, shortcut H): the wing keeps its base and stands by (its panel row reads 'Standing by', the Air Forces Overview's Area column empties); its assigned region is cleared, the last mission selection stays in memory. Typed refusals before input: wing_unknown, wing_ambiguous, nothing_to_change (already standing by); hold_unavailable if the game disables the button. Verified from the wing's assigned region pointer in memory.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_air_attach","description":"Attach own air wings to an army the game's way: each wing is selected alone (its Air Forces Overview row) and the army's card is right-clicked (\"Right-Click to attach Airwings to Army\"). An attached wing flies for that army's battles and follows it. Fighters and close air support attach; naval and strategic bombers and wings in pilot exercises cannot. Read back from memory: the wing's attached-army link must name the army's object after the click (a wing already linked to it is left alone, already:true); the result lists per wing attached and ms. Attaching to another army moves the wing. A wing loaded attached from a save may read unlinked and is then attached again. Refused before input: an unknown army.","inputSchema":{"type":"object","properties":{"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24},"army":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wings","army","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_region_probe","description":"What the player's air map shows for one strategic air region: Find view centres `state_id`, a left click on the region opens the game's region window, which is read (region name, active aircraft by type for us and the enemy: fighters, bombers, close air support, anti-air guns; detection and efficiency percentages) and closed again; `region` (id or display name) instead of `state_id` picks a state inside it from the game files. Adds enemy_air_superiority_estimate: the enemy's share of the active fighters weighted by each side's efficiency shown (theirs / (ours + theirs)), null with no fighter on either side; an estimate from what the window shows, not the game's own superiority figure (not located in memory). Orders nothing; moves the cursor and clicks, so it needs the input lease. Only what the air map displays; no hidden enemy information.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"anyOf":[{"type":"string","maxLength":96},{"type":"integer","minimum":1,"maximum":4095}]},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_regions","description":"Own wings and air bases grouped by strategic air region, read from memory and the game's map files (no input, never pauses): per region its name, own wings assigned (aircraft, type, missions, base state), aircraft total and the own air bases inside with capacity, aircraft stationed and free capacity; plus the wings that have no region. Enemy presence is not in memory: use hoi4_air_region_probe for the regions that matter. regions[].enemy_air_superiority is not yet built: always null with enemy_air_superiority_reason.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
         json!({"name":"hoi4_army_group_create","description":"Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card). Give it a field marshal with hoi4_army_commander using the army group's name. Verified when all the armies belong to one new army group.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string"},"minItems":2,"maxItems":12},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","request_id","lease_token"],"additionalProperties":false}}),
@@ -1043,6 +1045,7 @@ impl Commands for MacClock {
                     | "hoi4_air_wing_create"
                     | "hoi4_air_wing_disband"
                     | "hoi4_air_hold"
+                    | "hoi4_air_attach"
                     | "hoi4_air_wing_split"
                     | "hoi4_air_wing_merge"
                     | "hoi4_air_region_probe"
@@ -1167,6 +1170,7 @@ impl MacClock {
             && process.identity() == self.process.identity();
         let scope = guard_pause.then(|| self.pause.begin());
         let menus_before = ui::menus_closed();
+        let sent_before = crate::pause_guard::sent_on_this_thread();
         let started = std::time::Instant::now();
         // A direct player order on an army takes it from the executor's war rules for a while.
         if name.starts_with("hoi4_army_") && !crate::autopilot::autopilot().in_step() {
@@ -1216,7 +1220,11 @@ impl MacClock {
         let Some(scope) = scope else {
             return result;
         };
-        let verdict = end_pause_scope(self.process.as_ref(), &*self.keys, scope, menus_before);
+        let verdict = if crate::pause_guard::sent_on_this_thread() == sent_before {
+            scope.untouched()
+        } else {
+            end_pause_scope(self.process.as_ref(), &*self.keys, scope, menus_before)
+        };
         // One context line per action for the run report: which actions changed the pause
         // state, whether the change was our own input and whether it was put back.
         eprintln!(
@@ -1342,6 +1350,32 @@ pub(super) fn end_pause_scope(
         }
         keys.press_clock(Key::Pause)
     })
+}
+/// Unpause a game the save left paused: one clock key, read back within 1.5 s. True when it
+/// runs again (or was never paused by the save).
+fn resume_after_save(process: &dyn Process, keys: &dyn GameInput) -> bool {
+    let paused = || crate::game::clock_context(process).map(|c| c.paused).ok();
+    let settle = std::time::Instant::now() + std::time::Duration::from_millis(600);
+    while std::time::Instant::now() < settle {
+        if paused() == Some(true) {
+            break;
+        }
+        crate::phase::sleep(std::time::Duration::from_millis(50));
+    }
+    if paused() != Some(true) {
+        return true;
+    }
+    if keys.press_clock(Key::Pause).is_err() {
+        return false;
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1500);
+    while std::time::Instant::now() < deadline {
+        if paused() == Some(false) {
+            return true;
+        }
+        crate::phase::sleep(std::time::Duration::from_millis(50));
+    }
+    false
 }
 /// Army names are checked before anything is journaled: a typo used to become an uncertain
 /// dispatch that blocked every later action (seen live: "Army 1 1 ").
@@ -3854,7 +3888,16 @@ impl MacClock {
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
             self.keys.preflight()?;
-            return ui::save_game(process, &self.keys, &save_folder(&self.directory));
+            let running_before = crate::game::clock_context(process)
+                .map(|c| !c.paused)
+                .unwrap_or(false);
+            let mut saved = ui::save_game(process, &self.keys, &save_folder(&self.directory))?;
+            // The game's menu pauses it and the save leaves it paused (live 23 Nov 2026, s1b: a
+            // running game read paused after every save); a game that was running runs again.
+            if running_before {
+                saved["resumed"] = json!(resume_after_save(process, &self.keys));
+            }
+            return Ok(saved);
         }
         if name == "hoi4_trade" {
             allowed(args, &["resource", "limit", "lease_token"])?;
@@ -4733,6 +4776,30 @@ impl MacClock {
             authority.authorize(token, &epoch)?;
             self.keys.preflight()?;
             return air::list(process, &self.keys);
+        }
+        if name == "hoi4_air_attach" {
+            allowed(args, &["wings", "army", "request_id", "lease_token"])?;
+            let wings: Vec<String> = args
+                .get("wings")
+                .and_then(Value::as_array)
+                .filter(|a| (1..=24).contains(&a.len()))
+                .ok_or_else(|| Error::new("invalid_arguments", "wings must list 1..24 wing names"))?
+                .iter()
+                .map(|v| {
+                    v.as_str()
+                        .filter(|t| {
+                            !t.is_empty() && t.len() <= 128 && !t.chars().any(char::is_control)
+                        })
+                        .map(str::to_string)
+                        .ok_or_else(|| Error::new("invalid_arguments", "Invalid wing name"))
+                })
+                .collect::<Result<_>>()?;
+            let army = airact::text_arg(args, "army", 128)?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            self.keys.preflight()?;
+            return airattach::attach(process, &self.keys, &wings, &army);
         }
         if name == "hoi4_air_region_probe" {
             allowed(args, &["state_id", "region", "lease_token"])?;
@@ -6202,6 +6269,16 @@ impl MacClock {
             let game_dir = mapdata::game_dir(&epoch.game.exe)?;
             let nodes = || ui::read(process, |r, i| armies::plan_nodes(r, i, army));
             let before = nodes()?;
+            let read_plan = || {
+                ui::read(process, |r, i| {
+                    armies::orders::of_named(r, i, army, &Default::default())
+                })
+                .map(Value::from)
+                .unwrap_or(Value::Null)
+            };
+            let plan_before = read_plan();
+            // the states the new arrow must reach: the line's states, or the one target state
+            let want: Vec<i32> = across.clone().unwrap_or_else(|| vec![state]);
             let retry = actions.receipt_exists(id);
             if !retry {
                 self.keys.preflight()?;
@@ -6220,13 +6297,18 @@ impl MacClock {
             let mut settle = || {
                 let now = nodes()?;
                 // the plan read back from the game: the new line's target states and width
-                let plan = ui::read(process, |r, i| {
-                    armies::orders::of_named(r, i, army, &Default::default())
-                })
-                .map(Value::from)
-                .unwrap_or(Value::Null);
-                let detail = json!({"army":army,"plan_orders":now,"plan":plan});
+                let plan = read_plan();
+                let miss = offensive_miss(&plan_before, &plan, &want, spearhead);
+                let mut detail = json!({"army":army,"plan_orders":now,"plan":plan});
+                if let Some(m) = &miss {
+                    detail["missed"] = m.clone();
+                }
                 Ok(if retry {
+                    journal::Outcome::Diverged(detail)
+                } else if miss.is_some() && now > before {
+                    // an arrow was drawn but the game took it elsewhere (s55a, 23 Nov 2026: four
+                    // strokes into state 34 read back over 18 and 980 and were each called done,
+                    // so the same stroke went out again and five arrows stood on one front)
                     journal::Outcome::Diverged(detail)
                 } else {
                     settle::order_growth(before, now).outcome(detail)
@@ -7410,6 +7492,84 @@ impl MacClock {
         };
         let receipt = journal.execute(id, &epoch, action, &mut backend, Duration::from_secs(10))?;
         Ok(json!({"receipt":receipt}))
+    }
+}
+
+/// The new offensive arrows of a plan read back after a draw (ids absent `before`) when none of
+/// them reaches a wanted state: the arrow's target states (a spearhead's path as well). None
+/// when no new arrow stands or one reaches the line.
+fn offensive_miss(before: &Value, now: &Value, want: &[i32], spearhead: bool) -> Option<Value> {
+    let arrows = |plan: &Value| -> Vec<Value> {
+        plan.as_array()
+            .into_iter()
+            .flatten()
+            .flat_map(|front| front["offensives"].as_array().cloned().unwrap_or_default())
+            .collect()
+    };
+    let old: std::collections::HashSet<i64> = arrows(before)
+        .iter()
+        .filter_map(|o| o["id"].as_i64())
+        .collect();
+    let new: Vec<Value> = arrows(now)
+        .into_iter()
+        .filter(|o| o["id"].as_i64().is_some_and(|id| !old.contains(&id)))
+        .collect();
+    if new.is_empty() {
+        return None;
+    }
+    let states = |v: &Value| -> Vec<i32> {
+        v.as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|x| x.as_i64().map(|n| n as i32))
+            .collect()
+    };
+    let reach = |o: &Value| -> Vec<i32> {
+        let mut r = states(&o["target"]["states"]);
+        if spearhead {
+            r.extend(states(&o["path_states"]));
+        }
+        r
+    };
+    if new
+        .iter()
+        .any(|o| reach(o).iter().any(|s| want.contains(s)))
+    {
+        return None;
+    }
+    Some(json!({
+        "wanted_states": want,
+        "arrows": new
+            .iter()
+            .map(|o| json!({"id": o["id"], "target_states": o["target"]["states"]}))
+            .collect::<Vec<_>>(),
+        "why": "the game drew the line to other states (the wanted ones are not reachable from this front as drawn)"
+    }))
+}
+
+#[cfg(test)]
+mod offensive_miss_tests {
+    use super::*;
+
+    fn plan(arrows: &[(i64, &[i64])]) -> Value {
+        json!([{"kind": "front", "offensives": arrows
+            .iter()
+            .map(|(id, t)| json!({"id": id, "target": {"states": t}, "path_states": [42, 8]}))
+            .collect::<Vec<_>>()}])
+    }
+
+    #[test]
+    fn an_arrow_drawn_to_other_states_is_a_miss() {
+        // s55a: a stroke into 34 read back over 18 (the front at 42-8)
+        let before = plan(&[(115, &[18])]);
+        let now = plan(&[(115, &[18]), (121, &[18]), (123, &[980])]);
+        let m = offensive_miss(&before, &now, &[34], false).expect("a miss");
+        assert_eq!(m["arrows"].as_array().unwrap().len(), 2);
+        assert!(offensive_miss(&before, &now, &[34, 980], false).is_none());
+        // no new arrow: nothing to judge
+        assert!(offensive_miss(&now, &now, &[34], false).is_none());
+        // a spearhead reaches through its path
+        assert!(offensive_miss(&before, &now, &[8], true).is_none());
     }
 }
 

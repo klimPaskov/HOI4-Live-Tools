@@ -12,7 +12,7 @@ import os
 import time
 from collections import deque
 
-from . import cleanliness, costs
+from . import answer, budget, cleanliness, costs
 from .escalation import Escalator, gate_kind, gate_packet
 from .issues import Detector, _atomic
 from .lessons import LessonStore, lessons_from_issue, store_dir
@@ -42,7 +42,12 @@ class Monitor:
         hist = history if history is not None else _load(os.path.join(self.store_path, "tool_stats.json"), {})
         self.lessons = LessonStore(self.store_path, game_version or os.environ.get("HOI4_GAME_VERSION", ""))
         self.det = Detector(self.out, plan=self.plan, plan_state=self._plan_state(), history=hist)
-        self.esc = Escalator(self.out, per_year=per_year or 24, lessons=self.lessons, run_name=self.name)
+        self.esc = Escalator(self.out, per_year=per_year or 24, lessons=self.lessons, run_name=self.name,
+                             live=not replay)
+        self.budget = budget.Budget()
+        self.reviews = {}            # game year -> gate reviews asked
+        self.last_sync = 0.0
+        self.stop_written = False
         self.det.listeners.append(self._on_event)
         self.det.lessons = self.lessons
         self.logs = RunLogs(run_dir)
@@ -65,7 +70,7 @@ class Monitor:
             rec = self.esc.consider(event, issue, self.det.date, self.det.at_war)
             if rec:
                 self.det._emit("escalated", issue, tier=1, why=rec.get("why"))
-        if event in ("resolved", "recurred", "overdue"):
+        if event in ("resolved", "recurred", "overdue", "repeated"):
             le = lessons_from_issue(self.lessons, issue, event, self.name, self.plan_name, self.country)
             if le:
                 self.lesson_events += 1
@@ -128,8 +133,25 @@ class Monitor:
         if kind:
             self.gate(kind, snap)
 
+    def _outcomes(self):
+        """New lines of RUN/issue_outcomes.jsonl (the executor's typed answers to offered issues)."""
+        path = os.path.join(self.run, "issue_outcomes.jsonl")
+        try:
+            with open(path, encoding="utf-8") as f:
+                f.seek(getattr(self, "outcome_pos", 0))
+                lines = f.readlines()
+                self.outcome_pos = f.tell()
+        except OSError:
+            return
+        for line in lines:
+            try:
+                self.det.outcome(json.loads(line))
+            except ValueError:
+                continue
+
     def poll(self):
         t0 = time.perf_counter()
+        self._outcomes()
         polled = self.logs.poll()
         for r in polled["rss"]:
             self.det.rss(r)
@@ -137,6 +159,10 @@ class Monitor:
         self.det.flush()
         self.poll_ms.append(round((time.perf_counter() - t0) * 1000, 2))
         del self.poll_ms[:-500]
+        try:
+            self.budget_poll()
+        except Exception as ex:  # the ledger is a report and a guard; it never stops the watch
+            print(time.strftime("%H:%M:%S"), "budget poll failed:", repr(ex)[:200], flush=True)
         self._stats()
         return polled
 
@@ -148,6 +174,7 @@ class Monitor:
         for i in range(0, len(rows), 200):
             self.feed(rows[i:i + 200])
             self.det.flush()
+        self._outcomes()
         for r in polled["rss"]:
             self.det.rss(r)
         self.det.flush()
@@ -165,8 +192,8 @@ class Monitor:
             snaps_line = cleanliness.render(self.run, snaps)
         except Exception:  # the gate is written whatever the cleanliness block does
             snaps_line = ""
-        costs_line = self._costs_line()
-        text = gate_packet(kind, snap, self.det, self.last_gate_seq, costs_line, snaps_line)
+        text = gate_packet(kind, snap, self.det, self.last_gate_seq, self._costs_line(), snaps_line,
+                           budget_line=self.budget.line(self.name))
         os.makedirs(os.path.join(self.out, "gates"), exist_ok=True)
         name = f"{str(snap.get('date') or 'end').replace('.', '')}-{kind}.md"
         _atomic(os.path.join(self.out, "gates", name), text)
@@ -174,10 +201,57 @@ class Monitor:
         self.last_gate_seq = self.det.seq
         self.gates.append({"kind": kind, "date": snap.get("date"), "chars": len(text)})
         if not self.replaying:
+            self._review(kind, snap, text, name)
+        if not self.replaying:
             try:
                 _atomic(os.path.join(self.out, "COSTS.md"), costs.render_costs(self.run, self.out))
             except Exception as ex:  # costs are a report, never a reason to stop watching
                 _atomic(os.path.join(self.out, "COSTS.md"), f"costs failed: {ex!r}\n")
+
+    def _review(self, kind, snap, text, name):
+        """Tier 2: a strong model reviews the gate packet (API key, budget checked, at most
+        REVIEWS_PER_YEAR a game year; never in a replay). The review goes beside the packet."""
+        if kind not in REVIEW_KINDS or answer.available() is not None:
+            return
+        year = str(snap.get("date") or "?")[:4]
+        if self.reviews.get(year, 0) >= REVIEWS_PER_YEAR:
+            return
+        self.reviews[year] = self.reviews.get(year, 0) + 1
+        out = answer.ask(text, tier=2, run=self.name, role="review")
+        row = {"date": snap.get("date"), "kind": kind, "role": "review"}
+        if "error" in out:
+            row["error"] = out["error"]
+        else:
+            u = out["usage"]
+            row.update({"model": out["model"], "input": u["input_tokens"], "output": u["output_tokens"],
+                        "cache_read": u["cache_read_input_tokens"], "cache_write": u["cache_creation_input_tokens"],
+                        "seconds": out["seconds"], "usd": out["usd"]})
+            review = f"# Review of {name}\n\n{out['result']}\n"
+            _atomic(os.path.join(self.out, "gates", name.replace(".md", "-review.md")), review)
+            _atomic(os.path.join(self.out, "GATE.md"), text + "\n\n" + review)
+        with open(os.path.join(self.out, "reviews.jsonl"), "a", encoding="utf-8") as f:
+            f.write(json.dumps(row) + "\n")
+
+    def budget_poll(self, force=False):
+        """The player's spend from its own stream into the ledger (every 5 minutes), and the stop
+        flag when the run, the day or the whole key is out of budget: RUN/budget_stop.json, which the
+        launchers read (the run goes on executor-only; under the floor the player falls back to the
+        subscription)."""
+        if not self.budget.active or self.replaying:
+            return None
+        if not force and time.time() - self.last_sync < 300:
+            return None
+        self.last_sync = time.time()
+        if budget.player_billed_to_key(self.run):
+            self.budget.set_role(self.name, "player", budget.player_rows(self.run))
+        code, why = self.budget.check(self.name, "player")
+        path = os.path.join(self.run, "budget_stop.json")
+        if code != budget.OK and not self.stop_written:
+            _atomic(path, json.dumps({"code": code, "why": why, "floor": code == budget.FLOOR,
+                                      "at": time.strftime("%Y-%m-%d %H:%M:%S"), "date": self.det.date}))
+            self.stop_written = True
+            return why
+        return None
 
     def _costs_line(self):
         try:
@@ -200,6 +274,11 @@ class Monitor:
         return st
 
     def close(self, write_history=True):
+        if not self.replaying:
+            try:
+                self.budget_poll(force=True)
+            except Exception:
+                pass
         snap = self.prev[-1] if self.prev else {"date": self.det.date, "trigger": "end"}
         self.gate("run_end", dict(snap, trigger="end"))
         self.det.flush()
@@ -216,6 +295,10 @@ class Monitor:
                 h["fail"] += fail
             os.makedirs(self.store_path, exist_ok=True)
             _atomic(path, json.dumps(hist, indent=1, sort_keys=True))
+
+
+REVIEW_KINDS = ("war_declared", "capitulated", "new_year", "failure", "run_end")
+REVIEWS_PER_YEAR = 8
 
 
 def _mean(v):

@@ -168,6 +168,9 @@ pick:
 | Play a campaign through the interface | Python tools, recorded attempts only | Native, about 104 tools tested live, experimental | Native, about 120 tools tested live, experimental |
 | Game builds accepted | No build gate; tested on 1.19.4.1 | HOI4 1.19.4.1 x86_64 only | HOI4 1.19.4.1 x86_64 under Rosetta only |
 
+When Steam updates the game, the native runtime refuses the new build until a table for it ships;
+[Game versions](docs/GAME_VERSIONS.md) says what to do meanwhile and how a new build is brought up.
+
 Things every modder should know:
 
 - **Test mode.** The server starts in campaign mode, which refuses the console,

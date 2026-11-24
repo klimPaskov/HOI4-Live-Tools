@@ -60,9 +60,40 @@ flow. The executor reads `issues_open.json` at its tick and offers the lanes tha
 before its routine work, at most once per game day per lane. When an order of that lane passes,
 the issue becomes "acted"; when the snapshot no longer shows it, "resolved".
 
+"Acted" means an order of the lane passed, not that the lane had a turn. When the executor offers
+a lane an issue it writes the lane's typed answer to `RUN/issue_outcomes.jsonl` (`acted`, `refused`,
+`waiting` or `cannot`, with the lane's own note as the reason); the monitor keeps it on the issue
+(`lane_outcome`, `lane_reason`; for an executor omission row the rule's own note is the reason).
+An issue its lane was offered that is still open past its deadline is escalated whatever its
+severity: the Tier 1 packet carries `LANE SAYS: <the lane's reason>` beside the allowed responses.
+A lane's further overdue issues within two game weeks join that lane's packet (`ALSO ...`), so a
+backlog is weighed in one answer inside the yearly budget.
+
+### Sinks and slots
+
+`sinks.py` judges every spendable or assignable thing the snapshot shows (with `gamerules.py`
+reading the game's own files: experience caps, spirit slot costs, the mastery a subdoctrine's
+rewards need, the laws with their costs, modifiers and the conditions a snapshot can judge):
+`experience_unspent` (per pool, with the days to the pool's cap at the observed gain),
+`doctrine_track_complete` (a track past its last reward reserves only part of its mastery),
+`doctrine_track_no_mastery` (a subdoctrine whose arm never fights), `manpower_idle` (free men and
+no division in training, with what binds: equipment or the training rows), `conscription_above_need`
+(the law in force has a penalty in the files that a lower law drops while men sit idle),
+`fleet_training_at_war`, `reserve_fleet_ships`, `operatives_home_only`, `decryption_unread` /
+`decryption_idle`, `mio_state_unread`, `special_project_kind_without_facility`, and
+`lane_wait_outlived` (an omission row whose rule has said the same thing past the row's own
+deadline). The recorder also writes the derived read `politics.laws_affordable` (every law of each
+group with its cost against the power and whether its conditions hold) into each snapshot. The
+detector computes these on every full snapshot, so a replay of an older run shows them too.
+
 A refused order is looked up in the lessons before it is retried: a cause a lesson calls transient
 (an event was open) is retried soon and never given up; one it calls permanent is not sent again
-unchanged, and the player is told what to do instead. Issues the executor cannot act on (a plan
+unchanged, and the player is told what to do instead. The second identical refusal of an order
+(the same tool, arguments and cause; or a read-back without the change, or a wrong call) writes a
+lesson of the run (`scope: run:<run>`, confidence 0.5) with the order's arguments, what was tried,
+the refusal and what to do instead: a wrong call or an order for what already holds is not sent
+again, a precondition rests a week, a GUI or read-back failure of that order rests two days for a
+war order and two weeks for any other. The executor uses a run's own lessons in that run only. Issues the executor cannot act on (a plan
 decision, a tool fault) appear in the player's wake list with their packet.
 
 ## Escalation (Tier 1 and Tier 2)
@@ -91,6 +122,46 @@ escalation is logged with its tokens and seconds in `escalations.jsonl`.
 At each gate (war declared, capitulation, new year, failure, run end) a one-page gate packet sums
 up the issues since the last gate, the run's cleanliness, and the costs so far, for a review by a
 stronger model or a person.
+
+## Model calls and the budget
+
+The monitor calls a model only for Tier 1 escalations and Tier 2 gate reviews, and only when an API
+key is configured. Put your own key in a file readable only by you and point the monitor at it:
+
+```sh
+export HOI4_LIVE_ANTHROPIC_KEY_FILE=/path/to/anthropic.key   # chmod 600; never committed
+```
+
+The key is read from that file for each call only; it is never printed, logged or put in the
+environment of other processes. Without the file no model is called and everything else works the
+same. Calls need the `anthropic` Python package (`pip install anthropic`).
+
+- Tier 1: `MONITOR_TIER1_MODEL` (default `claude-haiku-5-5`), low effort, at most 2,000 output
+  tokens, 24 a game year.
+- Tier 2: `MONITOR_TIER2_MODEL` (default `claude-opus-5-5`), medium effort, at most 6,000 output
+  tokens, at a declaration of war, a capitulation, a new year, a failure or the run's end, at most 8
+  a game year. The review is written beside the gate packet (`gates/<date>-<kind>-review.md`).
+- A replay (`observe.py monitor`) never calls a model.
+- `MONITOR_ANSWER_CMD` replaces the Tier 1 call with your own command (packet on stdin);
+  `python -m hoi4_live.observe.answer --tier 1 --run NAME` is the built-in one in that form.
+
+Every call billed to the key is written to a ledger beside the key file (`api-ledger.json`, or the
+folder `HOI4_LIVE_API_LEDGER` names): per run, role (player, escalation, review) and model, the
+tokens the response reports and the money at the list prices in `costs.py` (dated, to be verified
+against your billing). An optional `budget.json` in the same folder sets the caps:
+
+```json
+{"total": 200, "run_cap": 15, "day_cap": 40, "floor": 20}
+```
+
+Before every call the monitor checks them: a run that has spent `run_cap`, or a day that has spent
+`day_cap`, stops calling models and goes on with the executor only; when the remaining total falls
+under `floor`, nothing more is called on the key. The player's spend is read from its own stream
+log every five minutes; when a cap is reached the monitor writes `RUN/budget_stop.json` for the
+launcher that runs the player. `observe.py budget status`, `observe.py budget check --run NAME`
+(exit 0 allowed, 3 at a run or day cap, 4 under the floor) and `observe.py budget sync RUN` give the
+same answers to scripts. The first line of `COSTS.md` and of every gate packet is the budget line:
+spent this run, today, in all runs, and what remains.
 
 ## Lessons
 

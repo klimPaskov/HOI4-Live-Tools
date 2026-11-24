@@ -100,7 +100,7 @@ pub(super) const STATS: [(&str, u64); 33] = [
 pub(super) fn require_libcxx(r: &Reader<'_>) -> Result<()> {
     match r.string_abi() {
         StringAbi::LibCxx => Ok(()),
-        StringAbi::LibStdCxx => Err(Error::new(
+        StringAbi::LibStdCxx | StringAbi::Msvc => Err(Error::new(
             "capability_unavailable",
             "Naval, air and design reads are reviewed for the macOS build only",
         )),

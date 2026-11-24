@@ -12,6 +12,12 @@ pub fn validate_read_batch(requests: &[(u64, usize)]) -> Result<usize> {
         total = total
             .checked_add(size)
             .ok_or_else(|| Error::new("read_bound", "Batch byte overflow"))?;
+        if address >> 40 == DISABLED_BASE >> 40 {
+            return Err(Error::new(
+                "layout_disabled",
+                crate::builds::disabled_message(),
+            ));
+        }
         if size > 1 << 20
             || total > 32 << 20
             || !(0x10000..=0x7fff_ffff_0000).contains(&address)
@@ -31,6 +37,9 @@ pub enum StringAbi {
     /// form {capacity|1, size, data}, otherwise byte 0 holds size << 1 and up
     /// to 22 bytes follow inline.
     LibCxx,
+    /// MSVC STL (Windows PE): a 16-byte union of the inline buffer and the data
+    /// pointer, then size and capacity; 32 bytes. Inline while capacity < 16.
+    Msvc,
 }
 pub trait ReadMemory {
     fn read(&self, address: u64, size: usize) -> Result<Vec<u8>>;
@@ -53,6 +62,10 @@ pub trait ReadMemory {
         Ok(results)
     }
 }
+/// Base of the address range a generated runtime gives a game address its migration map could not
+/// resolve (`scripts/macos_build_variant.py`): a read there is refused as `layout_disabled` with the
+/// module's reason instead of reaching another build's address.
+pub const DISABLED_BASE: u64 = 0x00de_ad00_0000_0000;
 pub struct Reader<'a> {
     memory: &'a dyn ReadMemory,
     abi: StringAbi,
@@ -74,6 +87,12 @@ impl<'a> Reader<'a> {
             .get()
             .checked_add(size)
             .ok_or_else(|| Error::new("read_bound", "Size overflow"))?;
+        if address >> 40 == DISABLED_BASE >> 40 {
+            return Err(Error::new(
+                "layout_disabled",
+                crate::builds::disabled_message(),
+            ));
+        }
         if size > 1 << 20
             || total > 32 << 20
             || !(0x10000..=0x7fff_ffff_0000).contains(&address)
@@ -117,6 +136,11 @@ impl<'a> Reader<'a> {
         if self.abi == StringAbi::LibCxx {
             return self.libcxx_string(a, limit);
         }
+        if self.abi == StringAbi::Msvc {
+            let bytes = self.msvc_string(a, limit, 1)?;
+            return String::from_utf8(bytes)
+                .map_err(|_| Error::new("invalid_string", "Invalid UTF-8"));
+        }
         let header = self.read(a, 32)?;
         let ptr = u64::from_le_bytes(header[..8].try_into().unwrap());
         let size = u64::from_le_bytes(header[8..16].try_into().unwrap());
@@ -138,6 +162,16 @@ impl<'a> Reader<'a> {
     /// A libstdc++ `std::wstring` (four-byte code points; pointer, length, then a 16-byte buffer
     /// that holds up to three characters inline), at most `limit` characters.
     pub fn wstring_bounded(&self, a: u64, limit: usize) -> Result<String> {
+        if self.abi == StringAbi::Msvc && limit <= 1024 {
+            // MSVC wchar_t is UTF-16.
+            let units: Vec<u16> = self
+                .msvc_string(a, limit, 2)?
+                .chunks_exact(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .collect();
+            return String::from_utf16(&units)
+                .map_err(|_| Error::new("invalid_string", "Invalid UTF-16"));
+        }
         if self.abi != StringAbi::LibStdCxx || limit > 1024 {
             return Err(Error::new(
                 "invalid_string",
@@ -165,6 +199,33 @@ impl<'a> Reader<'a> {
             .map(|c| char::from_u32(u32::from_le_bytes(c.try_into().unwrap())))
             .collect::<Option<String>>()
             .ok_or_else(|| Error::new("invalid_string", "Invalid UTF-32"))
+    }
+    /// MSVC `std::basic_string` of `unit`-byte characters: the raw character bytes.
+    /// Inline (in the first 16 bytes) while capacity < 16 / unit.
+    fn msvc_string(&self, a: u64, limit: usize, unit: usize) -> Result<Vec<u8>> {
+        let header = self.read(a, 32)?;
+        let size = u64::from_le_bytes(header[16..24].try_into().unwrap());
+        let capacity = u64::from_le_bytes(header[24..32].try_into().unwrap());
+        let inline = 16 / unit as u64;
+        if size > limit as u64 || size > capacity {
+            return Err(Error::new("invalid_string", "Invalid bounded MSVC string"));
+        }
+        let n = size as usize * unit;
+        let bytes = if capacity < inline {
+            header[..n].to_vec()
+        } else if size == 0 {
+            Vec::new()
+        } else {
+            let ptr = u64::from_le_bytes(header[..8].try_into().unwrap());
+            if ptr % unit as u64 != 0 {
+                return Err(Error::new("invalid_string", "Misaligned MSVC string data"));
+            }
+            self.read(ptr, n)?
+        };
+        if self.read(a, 32)? != header {
+            return Err(Error::new("torn_read", "String header changed"));
+        }
+        Ok(bytes)
     }
     fn libcxx_string(&self, a: u64, limit: usize) -> Result<String> {
         let header = self.read(a, 24)?;
@@ -257,9 +318,34 @@ impl<'a> Reader<'a> {
                 "Invalid type information pointer",
             ));
         }
+        if self.string_abi() == StringAbi::Msvc {
+            return self.msvc_object_type(info, name);
+        }
         let text = self.u64(info + 8)?;
         let encoded = format!("{}{name}", name.len());
         let bytes = self.read(text, encoded.len() + 1)?;
+        if bytes[..encoded.len()] != *encoded.as_bytes() || bytes[encoded.len()] != 0 {
+            return Err(Error::new("invalid_type", format!("Expected {name}")));
+        }
+        Ok(())
+    }
+    /// MSVC x64: the slot before the vtable points to the complete object locator
+    /// (signature 1, offset of this vtable in the object, then image-relative
+    /// offsets of the type descriptor at +12 and of the locator itself at +20).
+    /// The type descriptor's name is `.?AV<name>@@` for a class.
+    fn msvc_object_type(&self, locator: u64, name: &str) -> Result<()> {
+        let head = self.read(locator, 24)?;
+        let word = |o: usize| u32::from_le_bytes(head[o..o + 4].try_into().unwrap());
+        let invalid = || Error::new("invalid_type", "Invalid complete object locator");
+        if word(0) != 1 || word(4) != 0 {
+            return Err(invalid());
+        }
+        let image = locator
+            .checked_sub(u64::from(word(20)))
+            .ok_or_else(invalid)?;
+        let descriptor = image + u64::from(word(12));
+        let encoded = format!(".?AV{name}@@");
+        let bytes = self.read(descriptor + 16, encoded.len() + 1)?;
         if bytes[..encoded.len()] != *encoded.as_bytes() || bytes[encoded.len()] != 0 {
             return Err(Error::new("invalid_type", format!("Expected {name}")));
         }
@@ -303,6 +389,142 @@ mod tests {
             torn,
             calls: Cell::new(0),
         })
+    }
+    struct Msvc(Fake);
+    impl ReadMemory for Msvc {
+        fn read(&self, a: u64, n: usize) -> Result<Vec<u8>> {
+            self.0.read(a, n)
+        }
+        fn string_abi(&self) -> StringAbi {
+            StringAbi::Msvc
+        }
+    }
+    /// A 32-byte MSVC string header at 0x10000 (buffer or pointer, size, capacity) with
+    /// `tail` stored at 0x10040.
+    fn msvc(first: &[u8], size: u64, capacity: u64, tail: &[u8], torn: bool) -> Msvc {
+        let mut data = vec![0; 128];
+        data[..first.len()].copy_from_slice(first);
+        data[16..24].copy_from_slice(&size.to_le_bytes());
+        data[24..32].copy_from_slice(&capacity.to_le_bytes());
+        data[64..64 + tail.len()].copy_from_slice(tail);
+        Msvc(Fake {
+            data,
+            torn,
+            calls: Cell::new(0),
+        })
+    }
+    /// Image at 0x10000: object +0x100 -> vtable +0x208, locator +0x300 (self RVA
+    /// `self_rva`), type descriptor +0x400 named `type_name`.
+    fn msvc_object(type_name: &str, signature: u32, self_rva: u32) -> Msvc {
+        let mut data = vec![0; 0x500];
+        data[0x100..0x108].copy_from_slice(&0x10208u64.to_le_bytes());
+        data[0x200..0x208].copy_from_slice(&0x10300u64.to_le_bytes());
+        data[0x300..0x304].copy_from_slice(&signature.to_le_bytes());
+        data[0x30c..0x310].copy_from_slice(&0x400u32.to_le_bytes());
+        data[0x314..0x318].copy_from_slice(&self_rva.to_le_bytes());
+        data[0x410..0x410 + type_name.len()].copy_from_slice(type_name.as_bytes());
+        Msvc(Fake {
+            data,
+            torn: false,
+            calls: Cell::new(0),
+        })
+    }
+    #[test]
+    fn msvc_object_type_reads_the_complete_object_locator() {
+        let r = msvc_object(".?AVCCountry@@", 1, 0x300);
+        Reader::new(&r).object_type(0x10100, "CCountry").unwrap();
+        for (name, sig, self_rva) in [
+            (".?AVCCountryX@@", 1, 0x300), // another class
+            (".?AVCCountry@@", 0, 0x300),  // 32-bit locator form
+            (".?AVCCountry@@", 1, 0x310),  // self offset disagrees with the image
+        ] {
+            let r = msvc_object(name, sig, self_rva);
+            assert_eq!(
+                Reader::new(&r)
+                    .object_type(0x10100, "CCountry")
+                    .unwrap_err()
+                    .code,
+                "invalid_type"
+            );
+        }
+        let r = msvc_object(".?AVCCountry@@", 1, 0x300);
+        assert!(Reader::new(&r).object_type(0x10100, "CCount").is_err());
+    }
+    #[test]
+    fn msvc_inline_and_heap_strings_decode_and_bound() {
+        let r = msvc(b"GER", 3, 15, b"", false);
+        assert_eq!(Reader::new(&r).string(0x10000).unwrap(), "GER");
+        let r = msvc(
+            &0x10040u64.to_le_bytes(),
+            18,
+            31,
+            b"generic_infantry_2",
+            false,
+        );
+        assert_eq!(
+            Reader::new(&r).string(0x10000).unwrap(),
+            "generic_infantry_2"
+        );
+        let r = msvc(b"", 0, 15, b"", false);
+        assert_eq!(Reader::new(&r).string(0x10000).unwrap(), "");
+        // size beyond capacity, beyond the caller's bound, or a changed header
+        let r = msvc(b"GER", 16, 15, b"", false);
+        assert_eq!(
+            Reader::new(&r).string(0x10000).unwrap_err().code,
+            "invalid_string"
+        );
+        let r = msvc(
+            &0x10040u64.to_le_bytes(),
+            18,
+            31,
+            b"generic_infantry_2",
+            false,
+        );
+        assert_eq!(
+            Reader::new(&r).string_bounded(0x10000, 8).unwrap_err().code,
+            "invalid_string"
+        );
+        let r = msvc(b"GER", 3, 15, b"", true);
+        assert_eq!(
+            Reader::new(&r).string(0x10000).unwrap_err().code,
+            "torn_read"
+        );
+    }
+    #[test]
+    fn msvc_wide_strings_are_utf16() {
+        let text: Vec<u8> = "Berlin"
+            .encode_utf16()
+            .flat_map(|u| u.to_le_bytes())
+            .collect();
+        // 6 units do not fit inline (7 units do, capacity 7): stored on the heap here
+        let r = msvc(&0x10040u64.to_le_bytes(), 6, 15, &text, false);
+        assert_eq!(
+            Reader::new(&r).wstring_bounded(0x10000, 64).unwrap(),
+            "Berlin"
+        );
+        let short: Vec<u8> = "Rom".encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
+        let r = msvc(&short, 3, 7, b"", false);
+        assert_eq!(Reader::new(&r).wstring_bounded(0x10000, 64).unwrap(), "Rom");
+        let r = msvc(&0x10041u64.to_le_bytes(), 6, 15, &text, false);
+        assert_eq!(
+            Reader::new(&r)
+                .wstring_bounded(0x10000, 64)
+                .unwrap_err()
+                .code,
+            "invalid_string"
+        );
+    }
+    #[test]
+    fn a_disabled_module_address_is_refused_before_any_read() {
+        let memory = cxx(b"", b"", false);
+        let r = Reader::new(&memory);
+        // The generator writes DISABLED_BASE + the old address; the image base is added at the call site.
+        let e = r
+            .u64(0x1_0000_0000 + DISABLED_BASE + 0x384b760)
+            .unwrap_err();
+        assert_eq!(e.code, "layout_disabled");
+        assert!(e.message.contains("GAME_VERSIONS"));
+        assert_eq!(memory.0.calls.get(), 0);
     }
     #[test]
     fn libcxx_short_and_long_strings_decode_and_bound() {

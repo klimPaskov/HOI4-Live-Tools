@@ -1,6 +1,7 @@
 //! Independently recovered current Linux own Army list/handle/location getters.
 //! Consulted smerss/Clausewitz-MCP calling/{game,combat,unitorders}.py, MIT;
 //! ../LICENSE.clausewitz. No native calls or action eligibility.
+use crate::xlayout::UNMAPPED;
 use crate::{
     error::{Error, Result},
     game,
@@ -38,10 +39,21 @@ const MACOS: Layout = Layout {
     organisation: 0x420,
     province_id: 0x9c,
 };
+/// Windows PE hoi4.exe 1.20.0.0 (MSVC), read live on 24 November 2026: the own country's
+/// division list holds only CArmy objects (vtable by RTTI name); strength and organisation sit
+/// where Linux has them. The province is not measured and fails with `read_bound`.
+const WINDOWS: Layout = Layout {
+    country_divisions: 0x290,
+    division_vtable: 0x29db9c8,
+    strength: 0x420,
+    organisation: 0x428,
+    province_id: UNMAPPED,
+};
 fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {
         crate::memory::StringAbi::LibStdCxx => &LINUX,
         crate::memory::StringAbi::LibCxx => &MACOS,
+        crate::memory::StringAbi::Msvc => &WINDOWS,
     }
 }
 fn exact(r: &Reader<'_>, p: u64, v: u64) -> Result<()> {

@@ -21,6 +21,7 @@ retried, what a packet shows and what a lint warns about.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -166,8 +167,11 @@ class LessonStore:
               confidence=0.4):
         """Write a lesson, or confirm the one with the same situation and statement; a lesson whose
         situation matches with the opposite outcome is contradicted."""
+        sig = ""
+        if situation.get("args") is not None:
+            sig = "_" + hashlib.sha1(json.dumps(situation["args"], sort_keys=True).encode()).hexdigest()[:8]
         lid = slug(f"{situation.get('code') or ''}_{situation.get('tool') or ''}_{situation.get('cause') or ''}_"
-                   f"{outcome}")
+                   f"{outcome}") + sig
         same = self.get(lid)
         run = str(evidence).split(" ", 1)[0]
         opposite = "failed" if outcome == "worked" else "worked" if outcome == "failed" else None
@@ -291,6 +295,8 @@ def lessons_from_issue(store, issue, event, run_name, plan_name=None, country=No
     from .issue_rules import error_kind
     code = issue.get("code") or ""
     tried = "; ".join(issue.get("tried") or [])[:300]
+    if event == "repeated":
+        return repeat_lesson(store, issue, run_name)
     if issue["class"] in ("idling", "gameplay") and not code.startswith(("frame_", "game_alert")) \
             and issue.get("origin") != "log":
         if event == "resolved" and issue.get("acts") and (issue.get("overdue") or issue.get("recurrences")):
@@ -327,3 +333,60 @@ def lessons_from_issue(store, issue, event, run_name, plan_name=None, country=No
                            executor={"treat_as": "permanent",
                                      "advice": f"change the order: {tool} with {cause} does not pass unchanged"})
     return None
+
+
+# tools whose orders are war orders: a technical refusal of one rests days, not weeks
+WAR_TOOL_PREFIXES = ("hoi4_army_", "hoi4_air_", "hoi4_fleet_", "hoi4_naval_")
+
+
+def repeat_lesson(store, issue, run_name):
+    """The same order refused twice for the same reason (refusal_retried_unchanged, a read-back
+    without the change, a tool failing in a row, a wrong call): a lesson of this run with the
+    order's signature, what was tried, the refusal and what to do instead, which the executor
+    consults before the next try (native plan_issues.rs: run-scope lessons of the current run,
+    matched on tool, cause and the order's arguments)."""
+    from .issue_rules import error_kind
+    tool = issue.get("tool")
+    if not tool:
+        return None
+    nums = issue.get("numbers") or {}
+    code = issue.get("code") or ""
+    cause = nums.get("code") or ("" if code == "readback_no_change" else code)
+    key = issue.get("key") or ""
+    args = None
+    brace = key.find("{")
+    if brace >= 0:
+        try:
+            args = json.loads(key[brace:])
+            args = {k: v for k, v in args.items() if k not in ("kind", "lease", "request_id")}
+        except ValueError:
+            args = None
+    kind = "technical" if code == "readback_no_change" else ("tool_use" if code == "invalid_arguments"
+                                                             else error_kind(cause))
+    war = tool.startswith(WAR_TOOL_PREFIXES)
+    if kind == "noop":
+        treat = {"treat_as": "permanent", "advice": f"{tool} asks for what already holds: do not send it again"}
+    elif kind == "tool_use":
+        treat = {"treat_as": "permanent",
+                 "advice": f"the call is wrong ({cause}): change its arguments or use the tool the refusal names"}
+    elif kind == "precondition":
+        treat = {"treat_as": "wait", "days": 7,
+                 "advice": f"stop until the cause changes ({cause}); the lane says what it waits for"}
+    else:
+        treat = {"treat_as": "wait", "days": 2 if war else 14,
+                 "advice": (f"the order does not take or cannot be read back ({cause or 'no change read'}): stop "
+                            f"until the tool or the read that verifies it is fixed (live); do not resend unchanged")}
+    n = nums.get("times") or nums.get("in_row") or 2
+    ev = f"{run_name} {issue.get('last_seen')}: {tool} refused {n} times with {cause or code}"
+    if args is None and treat["treat_as"] == "wait":
+        # a GUI or precondition failure of the whole tool (not of one order) is evidence for review,
+        # never a rest on every order of the tool: one stuck order must not hold the others
+        return store.learn({"tool": tool, "cause": cause, "code": code},
+                           f"{tool} failed {n} times in a row with {cause or code}", "failed", ev,
+                           f"run:{run_name}", tried="; ".join(issue.get("tried") or [])[:300],
+                           source="detector-repeat", confidence=0.4)
+    return store.learn({"tool": tool, "cause": cause, "args": args, "code": code},
+                       f"{tool} {json.dumps(args, ensure_ascii=False)[:120] if args else ''} refused {n} times with "
+                       f"{cause or code}: {treat['advice']}", "failed", ev, f"run:{run_name}",
+                       tried="; ".join(issue.get("tried") or [])[:300] or key[:200], executor=treat,
+                       source="detector-repeat", confidence=0.5)

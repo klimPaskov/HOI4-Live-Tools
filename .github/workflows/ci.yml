@@ -41,3 +41,6 @@ jobs:
       # Every key the plan schema accepts has a reader: the executor, the planning tools or people.
       - run: python scripts/hoi4facts/plan_keys.py check
       - run: python scripts/protocol_smoke.py
+      # Static check of every layout table whose game executable is in the reference folder. No game
+      # file may be kept here, so CI only proves the tables load; developers run it with their references.
+      - run: python scripts/game_migrate.py refcheck

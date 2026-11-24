@@ -640,6 +640,9 @@ pub struct State {
     act_seconds: Option<u64>,
     /// Whether the last `act` worked (None: no act since the caller reset it).
     last_ok: Option<bool>,
+    /// The `result` of the last act's reply (per-item outcomes of a batched order, e.g. the
+    /// wings of one air mission call and the ones that did not take); Null otherwise.
+    last_result: Value,
 
     boot: u64,
     bad: HashMap<String, GameHour>,
@@ -878,6 +881,7 @@ impl Default for State {
             wall: None,
             act_seconds: None,
             last_ok: None,
+            last_result: Value::Null,
             boot: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs()),
@@ -1385,6 +1389,7 @@ impl State {
             object.insert("lease_token".into(), json!(lease));
         }
         let began = std::time::Instant::now();
+        self.last_result = Value::Null;
         let result = self.dispatch(tools, name, &args);
         let lasted = self
             .act_seconds
@@ -1412,7 +1417,7 @@ impl State {
                     Err(_) => String::new(),
                 };
                 self.issues.refresh();
-                let lesson = self.issues.advice(name, &cause);
+                let lesson = self.issues.advice(name, &cause, Some(&args));
                 let run = self.failed_run.entry(signature.clone()).or_default();
                 run.0 += 1;
                 run.1 = cause.clone();
@@ -1561,7 +1566,10 @@ impl State {
         // what the run's lessons say about this refusal (docs/MONITORING.md): a transient cause
         // rests briefly and is never given up, a permanent one rests as given up, a wait its days
         self.issues.refresh();
-        if let Some(adv) = self.issues.advice(tool, &cause) {
+        let order_args: Option<Value> = signature
+            .split_once(' ')
+            .and_then(|(_, a)| serde_json::from_str(a).ok());
+        if let Some(adv) = self.issues.advice(tool, &cause, order_args.as_ref()) {
             match adv.treat {
                 plan_issues::Treat::Transient => {
                     rest = rest.min(plan_issues::TRANSIENT_REST);
@@ -1641,6 +1649,7 @@ impl State {
                 Ok((false, text))
             }
             Ok(body) => {
+                self.last_result = body["result"].clone();
                 let status = body["receipt"]["status"].as_str().unwrap_or("").to_string();
                 match status.as_str() {
                     "Verified" => Ok((true, status)),
@@ -1660,6 +1669,17 @@ impl State {
                                 heading_count(&body)
                             ),
                         ))
+                    }
+                    // an offensive the game drew to other states names them (the tool's
+                    // `missed`): the plan step does not send the same stroke again at once
+                    "Diverged" if body["receipt"]["detail"]["missed"].is_object() => {
+                        let to: Vec<String> = body["receipt"]["detail"]["missed"]["arrows"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .map(|a| a["target_states"].to_string())
+                            .collect();
+                        Ok((false, format!("Diverged: drawn to {}", to.join(" "))))
                     }
                     "NotApplied" | "Diverged" => Ok((false, status)),
                     _ => Err(Error::new(
@@ -2096,7 +2116,28 @@ fn issue_lanes(
         }
         state.sched.turns.insert(name, now);
         state.last_ok = None;
-        if let Some(line) = step(state, tools, plan, lease, now)? {
+        let before = plan_manage::notes_snapshot(state);
+        let result = step(state, tools, plan, lease, now)?;
+        // the lane's typed answer for the issues it owns (docs/MONITORING.md): an order passed,
+        // was refused, or the lane wrote why it waits; a lane that neither acts nor says why has
+        // no rule for the issue
+        let changed: Vec<String> = plan_manage::notes_snapshot(state)
+            .into_iter()
+            .filter(|(k, v)| before.get(k) != Some(v))
+            .map(|(k, v)| format!("{k}: {v}"))
+            .collect();
+        let (outcome, reason) = match (&result, state.last_ok) {
+            (Some(line), Some(true)) => ("acted", line.clone()),
+            (Some(line), Some(false)) => ("refused", line.clone()),
+            (Some(line), None) => ("acted", line.clone()),
+            (None, _) if !changed.is_empty() => ("waiting", changed.join("; ")),
+            (None, _) => (
+                "cannot",
+                format!("lane {name} had its turn and found nothing to do or wait for"),
+            ),
+        };
+        state.issues.record_outcome(name, outcome, &reason, now);
+        if let Some(line) = result {
             state.round.lane_acted(name, now);
             return Ok(Some(format!("{line} (monitor issue {id})")));
         }
@@ -4369,7 +4410,9 @@ fn layout_step(
     let Some(entries) = plan["army_layout"].as_array() else {
         return Ok(None);
     };
-    if !land_orders(plan) {
+    // land orders off leave the fronts to the operations' drawn plans; their armies still come
+    // from the layout (plan_operation::layout_needed)
+    if !land_orders(plan) && !plan_operation::layout_needed(plan) {
         return Ok(None);
     }
     if state.skipped(now, "layout", "all") {
@@ -6668,6 +6711,11 @@ fn air_war_step(
             return Ok(Some(line));
         }
         return air_war_missions(state, tools, plan, lease, now);
+    }
+    // wings to the attacking armies before the air plan and the default missions take the rest (once a game day: the
+    // rule skips itself; as a plain lane it first ran on war day 14 in w69a/w69b, 24 Nov 2026, behind the other lanes)
+    if let Some(line) = plan_military::air_attach_rule(state, tools, plan, lease, now)? {
+        return Ok(Some(line));
     }
     if let Some(line) = plan_manage::air_plan_step(state, tools, plan, lease, now)? {
         return Ok(Some(line));
@@ -9795,14 +9843,25 @@ fn decisions_step(
             && affordable(d)
     };
     for (id, key, target, taken, skip) in rules {
-        let wanted_row = |d: &&Value| {
+        let names = |d: &Value, word: &str| text(&d["title"]).to_lowercase().contains(word);
+        let wanted_row = |d: &&Value, name: Option<&str>| {
             text(&d["decision"]) == key
                 && ready(d)
-                && target
-                    .as_ref()
-                    .is_none_or(|t| text(&d["title"]).to_lowercase().contains(&t.to_lowercase()))
+                && target.as_ref().is_none_or(|t| {
+                    names(d, &t.to_lowercase()) || name.is_some_and(|n| names(d, n))
+                })
         };
-        if !list(&offered, "decisions").iter().any(|d| wanted_row(&d)) {
+        let rows = list(&offered, "decisions");
+        // a target is a tag; the row's title carries the country's name ("Netherlands", not
+        // HOL): p65a's GER_operational_planning waited 28 days on a target no title named
+        let found = rows.iter().any(|d| wanted_row(&d, None))
+            || (target.is_some()
+                && rows.iter().any(|d| text(&d["decision"]) == key)
+                && target
+                    .as_deref()
+                    .and_then(|t| plan_affairs::country_name(tools, t))
+                    .is_some_and(|n| rows.iter().any(|d| wanted_row(&d, Some(&n)))));
+        if !found {
             continue;
         }
         let mut args = json!({"decision": key});
@@ -19671,6 +19730,41 @@ mod tests {
             layout_step(&mut state, &tools, &plan, "l", now).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn land_orders_off_still_binds_the_layout_roles_an_operation_names() {
+        // t1939a (24 Nov 2026): the 1939 bookmark entered the Poland phase (land orders off)
+        // before any role was bound, and op_poland waited for "Armee Nord" all war
+        let plan = json!({"war": {"land_orders": false},
+            "army_layout": [{"name_hint": "Armee Nord", "state": 5, "role": "strike", "count": 2}],
+            "operations": [{"id": "op_poland", "formations": [{"army": "Armee Nord", "role": "line"}]}]});
+        assert!(plan_operation::layout_needed(&plan));
+        let tools = fake(vec![(
+            "hoi4_armies",
+            json!({"armies": [
+                {"army": "Army 6", "division_count": 21, "main_state": 5},
+                {"army": "Army 2", "division_count": 19, "main_state": 42}]}),
+        )]);
+        let mut state = State::default();
+        let now = hour("1939.10.27");
+        let out = layout_step(&mut state, &tools, &plan, "l", now).unwrap();
+        assert_eq!(out.as_deref(), Some("layout: Army 6 is Armee Nord"));
+        assert_eq!(
+            state.layout.get("Armee Nord").map(String::as_str),
+            Some("Army 6")
+        );
+        // and the operations wait for a role the layout has not bound yet
+        let mut fresh = State::default();
+        assert_eq!(
+            plan_operation::layout_pending(&mut fresh, &plan, now),
+            Some(vec!["Armee Nord".to_string()])
+        );
+        // a plan without operations naming a role keeps the old meaning: nothing at all
+        let bare = json!({"war": {"land_orders": false},
+            "army_layout": [{"name_hint": "Armee Nord", "state": 5, "role": "strike"}]});
+        assert!(!plan_operation::layout_needed(&bare));
+        assert_eq!(plan_operation::layout_pending(&mut fresh, &bare, now), None);
     }
 
     #[test]
