@@ -60,7 +60,10 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
        CTOR_GROUP_NAME = 12,   /* (cmd, group, const std::string *): rename an army or army group */
        CTOR_GROUPS_OBJ = 13,   /* (cmd, const CPdxArray<COrdersGroup *> *, theatre): a new army group of these armies */
        CTOR_GROUPS_OBJ_I32 = 14, /* (cmd, const CPdxArray<COrdersGroup *> *, army group, -1): armies into an army group */
-       CTOR_GROUPS = 15 };     /* (cmd, const CPdxArray<COrdersGroup *> *): armies out of their army group */
+       CTOR_GROUPS = 15,       /* (cmd, const CPdxArray<COrdersGroup *> *): armies out of their army group */
+       /* engineer 76 (24 Nov): an event answer, the event window's own call (cmd, pending id, CEvent *, const int *country,
+        * const scope *, option index): the scope is copied by the game's own copy routine */
+       CTOR_EVENT_OPTION = 16 };
 /* engineer 74: BUILD_FIELDS also fills CPdxArray fields (a division handle list, a province list): the fresh object's
  * array is empty ({data 0, capacity 0, size 0} and its allocator set by the factory); the module allocates the
  * elements through THAT allocator's own allocate slot (read from the game's array growth code), so the command's
@@ -70,7 +73,12 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
 enum { AUTH_HANDLE = 0, AUTH_TAG = 1,
        /* engineer 75: the sender must control the tag (as AUTH_TAG); the object is a raw pointer of exactly the class
         * obj_cast names (its RTTI vtable), e.g. a national focus the command carries by pointer and writes by name */
-       AUTH_TAG_PTR = 2 };
+       AUTH_TAG_PTR = 2,
+       /* engineer 76: an event answer (CSelectEventOptionCommand): the sender must control the country at +auth_off, the
+        * event handle resolves to a CEvent with options, and the game state's pending-event record of the command's id
+        * holds that event. The object the request names is the open event WINDOW (exact vtable of obj_cast); the
+        * module takes every field from it, as the window's own option click does */
+       AUTH_EVENT = 3 };
 /* the second object a type takes, checked before posting */
 enum { OBJ2_NONE = 0, OBJ2_AIR_BASE, OBJ2_REGION, OBJ2_ORDERS_GROUP,
        OBJ2_REGION_ID, /* a strategic region given by id in vals (0 = none: hold), looked up as the game's check does */
@@ -152,11 +160,32 @@ typedef struct {
 } stage2_common;
 
 
+/* engineer 76: the event window and the pending-event records, each read from the code that uses it:
+ *   - the option click of the event window (the only caller of the answer's constructor thunk): the window's pending id,
+ *     event, country, scope, the "accepts a click" byte, and the option's own index field;
+ *   - the window's per-frame update (a virtual of the window's class): the event's options array and count, the
+ *     window's flag byte and the game's own option test it calls for every option (the same function decides what the
+ *     window shows);
+ *   - the answer's authorisation slot: the event's typeinfo, the pending-event lookup over the game state (array, count,
+ *     record size, the record's event pointer) */
+typedef struct {
+    int ok;
+    uint64_t vt_window;                 /* CEventWindow primary vtable (unslid) */
+    uint64_t thunk, avail_fn;           /* the constructor's thunk; option test (option, scope *, flag) (unslid) */
+    uint64_t ti_reference, ti_event;    /* the auth slot's cast CReferenceObject -> CEvent */
+    uint32_t win_id_off, win_event_off, win_country_off, win_scope_off, win_open_off, win_flag_off;
+    uint32_t ev_handle_off, ev_opts_off, ev_nopts_off, opt_index_off;
+    uint32_t pend_arr_off, pend_cnt_off, pend_size, pend_event_off;
+    uint32_t cmd_id_off, cmd_country_off, cmd_option_off;
+    char evidence[300];
+} events_facts;
+
 #define CMD2_MAX 48
 typedef struct {
     stage2_common common;
     orders_facts orders;      /* engineer 73: the battle-plan order tree (core/orders.c) */
     fronts_facts fronts;      /* engineer 74: the theatre fronts a plan root binds to (core/orders.c) */
+    events_facts events;      /* engineer 76: the event window and the pending-event records */
     int n;
     cmd_type t[CMD2_MAX];
 } stage2_table;

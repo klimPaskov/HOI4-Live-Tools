@@ -174,6 +174,16 @@ const cmd_spec CMD2_SPECS[] = {
     {"picks", "picks.focus", "CSetNationalFocusCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "14CNationalFocus", 2,
      {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"focus", 0x28, FK_PTR, 0, 0x33b7, 0}}, OBJ2_NONE, 0,
      AUTH_TAG_PTR, "14CNationalFocus"},
+    /* ---- events (engineer 76, 24 Nov): an event answer, as the event window's option click posts it (UI 1.20 0x101a91d60):
+     * SelectEventOption(window's pending id, window's event, &window's country, &window's scope, the option's index).
+     * Fields (1.20.0.0 and 1.19.4.1, identical): pending id +0x24 (0xb), event handle +0x28 (0x1b8), country +0x30
+     * (0x292e; the sender must control it), scope +0x38..+0xe8 (0x2996, copied by the game's routine), option +0xe8
+     * (0x2966). The "can do": the event resolves to a CEvent with options, the country is set, the game state holds a
+     * pending record of the id, 0 <= option < the event's option count. The module adds the window's own gate (it posts
+     * only while the window accepts a click) and the game's option test for the option (what the window shows). */
+    {"events", "events.answer", "CSelectEventOptionCommand", 0xf0, BUILD_CTOR, CTOR_EVENT_OPTION, 0, 0x30, "6CEvent", 4,
+     {{"id", 0x24, FK_I32, 0, 0xb, 0}, {"event", 0x28, FK_REF, 0, 0x1b8, 0}, {"country", 0x30, FK_I32, 0, 0x292e, 0},
+      {"option", 0xe8, FK_I32, 0, 0x2966, 0}}, OBJ2_NONE, 0, AUTH_EVENT, "12CEventWindow"},
 };
 const int CMD2_NSPECS = (int)(sizeof CMD2_SPECS / sizeof CMD2_SPECS[0]);
 
@@ -383,6 +393,8 @@ static int serial_has2(const scan_image *im, uint64_t fn, uint32_t id, uint16_t 
             if (j == i) continue;
             uint8_t d = b[j + 1];
             if ((d == off || (off2 && d == off2)) && d < 0x80 && (b[j] & 0xc0) == 0x40) return 1;
+            /* engineer 76: a field past +0x7f is addressed with a 32-bit displacement ([reg + 0xe8]) */
+            if (off >= 0x80 && (b[j] & 0xc0) == 0x80 && (b[j] & 7) != 4 && j + 5 <= 0x200 && rd32(b + j + 1) == off) return 1;
             if ((b[j] == 0x48 || b[j] == 0x49) && b[j + 1] == 0x83 && (b[j + 2] & 0xf8) == 0xc0 && j + 3 < 0x200 &&
                 (b[j + 3] == off || (off2 && b[j + 3] == off2)))
                 return 1;
@@ -520,6 +532,10 @@ static int find_ctor(const scan_image *im, const cmd_spec *s, cmd_type *o) {
             {CTOR_GROUPS_OBJ, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 28 49 89 f7 48 89 fb", "4c 8d 73 30"},
             {CTOR_GROUPS_OBJ_I32, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 28 41 89 cf 49 89 f4 48 89 fb", "44 89 7b 48"},
             {CTOR_GROUPS, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 28 c6 47 08 00", "49 89 f4"},
+            /* engineer 76: the event answer: option r9d -> ebx, scope r8 -> r12, country * rcx -> r14, cmd -> r13; the
+             * option index stored at +0xe8 (the serializer's offset of field 0x2966) */
+            {CTOR_EVENT_OPTION, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 18 44 89 cb 4d 89 c4 49 89 ce 49 89 fd",
+             "41 89 9d e8 00 00 00"},
         };
         for (size_t u = 0; u < sizeof UC / sizeof UC[0]; u++) {
             if (s->ctor != UC[u].kind || !cmd_pmatch(pre, 0x40, UC[u].pre, c, 8)) continue;
@@ -557,7 +573,20 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
         const uint8_t *g = scan_ptr(im, gate_fn, 8); uint32_t c[2];
         if (!(g && cmd_pmatch(g, 8, "55 48 89 e5 b0 01 5d c3", c, 2))) o->conf |= C_SLOTS;
     }
-    if (s->auth_kind == AUTH_TAG_PTR) {
+    if (s->auth_kind == AUTH_EVENT) {
+        /* engineer 76: controls(cmd, &cmd[country], err) first, then the event handle's offset (lea r13, [r14 + H]); the
+         * rest of the slot (cast, option count, pending record) is read by scan_events_facts */
+        uint32_t c[6];
+        const uint8_t *ab = (o->conf & C_SLOTS) ? scan_ptr(im, o->auth_fn, 0x40) : NULL;
+        if (ab && cmd_pmatch(ab, 0x34, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 18 48 89 f3 49 89 fe 4c 8d 67 B "
+                                       "4c 89 e6 48 89 da e8 D 84 c0 0f 84 D 4d 8d 6e B", c, 6) && c[0] == s->auth_off) {
+            o->controls_fn = o->auth_fn + 0x26 + (int64_t)(int32_t)c[1];
+            o->target_hint = c[3]; /* the event handle's offset in the command */
+            o->conf |= C_AUTH;
+        }
+        scan_cap vc;
+        if ((o->conf & C_AUTH) && scan_class_vtable(im, s->obj_cast, &vc) && vc.value) { o->vt_obj = vc.value; o->conf |= C_RESOLVER; }
+    } else if (s->auth_kind == AUTH_TAG_PTR) {
         /* auth as AUTH_TAG; the object: a raw pointer of exactly the class obj_cast names (RTTI vtable) */
         uint32_t c[4];
         const uint8_t *ab = (o->conf & C_SLOTS) ? scan_ptr(im, o->auth_fn, 0x12) : NULL;
@@ -628,6 +657,106 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
     return o->ok;
 }
 
+/* engineer 76: the event window and the pending-event records (see events_facts in cmd2.h). ev = the resolved
+ * events.answer type (its ctor, auth and "can do" slots). Every fact comes from the code that uses it, and the facts
+ * read from different functions must agree (the option count offset from the auth slot, the "can do" and the window's
+ * update; the scope offset from the click and the update; the game-state global from stage 1). */
+static int scan_events_facts(const scan_image *im, uint64_t gs_global, uint64_t generic_lookup, const cmd_type *ev, events_facts *o) {
+    memset(o, 0, sizeof *o);
+    char *e = o->evidence; size_t en = sizeof o->evidence;
+    uint32_t c[8]; unsigned n;
+    if (!ev || !(ev->conf & C_AUTH) || !ev->ctor || !ev->vt_obj) { snprintf(e, en, "answer type unresolved"); return 0; }
+    o->vt_window = ev->vt_obj;
+    o->ev_handle_off = ev->target_hint;
+    o->cmd_country_off = ev->spec->auth_off;
+    /* 1. the auth slot: the cast to CEvent, the option count, the pending lookup over the game state, the record's event */
+    uint64_t a = ev->auth_fn;
+    long k = pfind_at(im, a, 0x200, "48 8d 35 D 48 8d 15 D 48 89 c7 31 c9 e8", c, 8, &n);
+    if (k < 0) { snprintf(e, en, "auth: no cast"); return 0; }
+    {
+        uint64_t at = a + (uint64_t)k, src = at + 7 + (int64_t)(int32_t)c[0], dst = at + 14 + (int64_t)(int32_t)c[1];
+        char sn[64], dn[64];
+        if (!ti_name(im, src, sn, sizeof sn) || strcmp(sn, "16CReferenceObject") || !ti_name(im, dst, dn, sizeof dn) ||
+            strcmp(dn, ev->spec->target)) { snprintf(e, en, "auth: the cast is not CReferenceObject -> %s", ev->spec->target); return 0; }
+        o->ti_reference = src; o->ti_event = dst;
+    }
+    /* every resolve the slot makes of the event handle (mov rdi, r13; call L) uses the generic lookup */
+    unsigned calls = 0, other = 0;
+    const uint8_t *ab = scan_ptr(im, a, 0x200);
+    for (size_t i = 0; ab && i + 8 <= 0x200; i++)
+        if (cmd_pmatch(ab + i, 8, "4c 89 ef e8 D", c, 8)) {
+            if (a + i + 8 + (int64_t)(int32_t)c[0] == generic_lookup) calls++; else other++;
+        }
+    if (!calls || other) { snprintf(e, en, "auth: event resolves %u by the generic lookup, %u otherwise", calls, other); return 0; }
+    if (pfind_at(im, a, 0x200, "83 b8 D 00 0f 84", c, 8, &n) < 0 || n != 1 || c[0] > 0x2000) { snprintf(e, en, "auth: option count check"); return 0; }
+    o->ev_nopts_off = c[0];
+    k = pfind_at(im, a, 0x280, "48 8d 05 D 48 8b 38 41 8b 76 B e8 D 48 85 c0", c, 8, &n);
+    if (k < 0 || n != 1) { snprintf(e, en, "auth: pending lookup call"); return 0; }
+    uint64_t at = a + (uint64_t)k;
+    if (at + 7 + (int64_t)(int32_t)c[0] != gs_global) { snprintf(e, en, "auth: the pending lookup is not over the game state"); return 0; }
+    o->cmd_id_off = c[1];
+    uint64_t pend = at + 19 + (int64_t)(int32_t)c[2];
+    const uint8_t *pb = in_text(im, pend) ? scan_ptr(im, pend, 0x20) : NULL;
+    if (!pb || !cmd_pmatch(pb, 0x20, "55 48 89 e5 48 63 8f D 48 85 c9 74 ?? 48 8b 87 D 48 6b c9 B", c, 8) ||
+        c[0] > 0x4000 || c[1] > 0x4000 || c[2] < 0x10 || c[2] > 0x100) { snprintf(e, en, "pending lookup body"); return 0; }
+    o->pend_cnt_off = c[0]; o->pend_arr_off = c[1]; o->pend_size = c[2];
+    if (pfind_at(im, a, 0x280, "48 3b 47 B 74", c, 8, &n) < 0 || n != 1 || c[0] + 8 > o->pend_size) { snprintf(e, en, "auth: record's event"); return 0; }
+    o->pend_event_off = c[0];
+    /* 2. the "can do": 0 <= option < count, the same count offset */
+    if (pfind_at(im, ev->valid_fn, 0x300, "41 8b 86 D 85 c0 78 ?? 41 3b 84 24 D", c, 8, &n) < 0 || n != 1 || c[1] != o->ev_nopts_off) {
+        snprintf(e, en, "can-do: option range"); return 0;
+    }
+    o->cmd_option_off = c[0];
+    if (o->cmd_option_off != ev->spec->f[3].off || o->cmd_id_off != ev->spec->f[0].off || o->ev_handle_off != ev->spec->f[1].off) {
+        snprintf(e, en, "code offsets differ from the serializer's"); return 0;
+    }
+    /* 3. the thunk right after the constructor (push rbp; mov rbp,rsp; pop rbp; jmp ctor) and its ONE caller: the window's
+     *    option click, which loads every argument from the window and the option's index from the clicked option */
+    const uint8_t *z = scan_ptr(im, ev->ctor, 0x800);
+    for (size_t i = 0; z && i + 10 <= 0x800 && !o->thunk; i++)
+        if (cmd_pmatch(z + i, 10, "55 48 89 e5 5d e9 D", c, 8) && ev->ctor + i + 10 + (int64_t)(int32_t)c[0] == ev->ctor) o->thunk = ev->ctor + i;
+    if (!o->thunk) { snprintf(e, en, "constructor thunk"); return 0; }
+    const uint8_t *tx = scan_ptr(im, im->text_addr, im->text_size);
+    unsigned sites = 0, good = 0;
+    for (uint64_t i = 0x80; tx && i + 5 <= im->text_size; i++) {
+        if (tx[i] != 0xe8 || im->text_addr + i + 5 + (int64_t)(int32_t)rd32(tx + i + 1) != o->thunk) continue;
+        sites++;
+        /* mov esi,[rbx+ID]; mov rdx,[rbx+EV]; lea rcx,[rbx+CO]; lea r8,[rbx+SC]; mov r9d,[r12+OPT]; mov rdi,rax; call */
+        if (!cmd_pmatch(tx + i - 26, 26, "8b 73 B 48 8b 53 B 48 8d 4b B 4c 8d 43 B 45 8b 8c 24 D 48 89 c7", c, 8)) continue;
+        uint32_t w[5] = {c[0], c[1], c[2], c[3], c[4]};
+        uint32_t gate = 0;
+        for (uint64_t b = i - 0x80; b < i - 26 && !gate; b++)
+            if (cmd_pmatch(tx + b, 7, "80 bb D 00", c, 8) && c[0] < 0x2000) gate = c[0];
+        if (!gate) continue;
+        if (good && (w[0] != o->win_id_off || w[1] != o->win_event_off || w[2] != o->win_country_off || w[3] != o->win_scope_off ||
+                     w[4] != o->opt_index_off || gate != o->win_open_off)) { snprintf(e, en, "option clicks disagree"); return 0; }
+        o->win_id_off = w[0]; o->win_event_off = w[1]; o->win_country_off = w[2]; o->win_scope_off = w[3]; o->opt_index_off = w[4];
+        o->win_open_off = gate; good++;
+    }
+    if (good < 1 || sites > 8) { snprintf(e, en, "constructor thunk: %u callers, %u option clicks", sites, good); return 0; }
+    /* 4. the window's per-frame update, a virtual of CEventWindow: the event's options, the window flag, the option test
+     *    called with the window's scope (the click's scope offset) for each option */
+    for (int sl = 0; sl < 80 && !o->avail_fn; sl++) {
+        uint64_t f = 0;
+        if (!scan_q(im, o->vt_window + 8 * (uint64_t)sl, &f) || !in_text(im, f)) continue;
+        long r = pfind_at(im, f, 0x800, "4c 63 a8 D 4d 85 ed 74 ?? 4c 8b b0 D 49 83 c4 B 49 c1 e5 03 31 db 4d 8b 3c 1e "
+                                        "48 8b 45 ?? 0f b6 90 D 4c 89 ff 4c 89 e6 e8 D 84 c0", c, 8, &n);
+        if (r < 0 || n != 1) continue;
+        if (c[0] != o->ev_nopts_off || c[2] != o->win_scope_off || c[3] > 0x4000 || c[1] > 0x2000) { snprintf(e, en, "window update disagrees"); return 0; }
+        o->ev_opts_off = c[1]; o->win_flag_off = c[3];
+        o->avail_fn = f + (uint64_t)r + 55 + (int64_t)(int32_t)c[4];
+        if (!in_text(im, o->avail_fn)) o->avail_fn = 0;
+    }
+    if (!o->avail_fn) { snprintf(e, en, "window update (option test) not found in CEventWindow's vtable"); return 0; }
+    o->ok = 1;
+    snprintf(e, en, "window id +0x%x event +0x%x country +0x%x scope +0x%x open +0x%x flag +0x%x; options +0x%x/+0x%x index "
+             "+0x%x; pending gs+0x%x/+0x%x size 0x%x event +0x%x; test 0x%llx",
+             o->win_id_off, o->win_event_off, o->win_country_off, o->win_scope_off, o->win_open_off, o->win_flag_off,
+             o->ev_opts_off, o->ev_nopts_off, o->opt_index_off, o->pend_arr_off, o->pend_cnt_off, o->pend_size,
+             o->pend_event_off, (unsigned long long)o->avail_fn);
+    return 1;
+}
+
 int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global, stage2_table *t) {
     memset(t, 0, sizeof *t);
     scan_stage2_common(im, pl, gs_global, &t->common);
@@ -641,6 +770,12 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
     /* AUTH_TAG types: the generic lookup (for the module's own object check) is the one every handle type uses */
     for (int i = 1; i < t->n; i++)
         if (t->t[i].spec->auth_kind != AUTH_HANDLE && t->t[0].ok) t->t[i].lookup_fn = t->t[0].lookup_fn;
+    /* engineer 76: the event window and pending records (the answer type's own slots, the generic lookup) */
+    {
+        const cmd_type *ev = NULL;
+        for (int i = 0; i < t->n; i++) if (t->t[i].spec->auth_kind == AUTH_EVENT) ev = &t->t[i];
+        if (ev && t->t[0].ok) scan_events_facts(im, gs_global, t->t[0].lookup_fn, ev, &t->events);
+    }
     /* every type must agree on the "sender controls" check and the generic lookup (one game, one rule) */
     for (int i = 1; i < t->n; i++)
         if (t->t[i].ok && t->t[0].ok &&
@@ -708,6 +843,7 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
         if (!strcmp(fam, "units") && t->t[i].ok &&
             (!t->orders.ok || !t->fronts.ok || !t->common.alloc_slot || !t->common.ti_unit || !t->common.unit_group_off ||
              !t->common.unit_theatre_off || !t->common.group_parent_ptr_off || !t->common.ti_reference)) { t->t[i].ok = 0; on--; }
+        if (!strcmp(fam, "events") && !t->events.ok && t->t[i].ok) { t->t[i].ok = 0; on--; }
         if (t->t[i].spec->obj2 == OBJ2_ORDERS_GROUP && (!t->common.ti_reference || !t->common.ti_orders_group) && t->t[i].ok) { t->t[i].ok = 0; on--; }
     }
     return on;
@@ -755,6 +891,17 @@ const char *stage2_json(const stage2_table *t, char *buf, size_t n) {
     if (at < n) { orders_facts_json(&t->orders, buf + at, n - at); at += strlen(buf + at); }
     if (at < n) at += (size_t)snprintf(buf + at, n - at, ",\"fronts\":");
     if (at < n) { fronts_facts_json(&t->fronts, buf + at, n - at); at += strlen(buf + at); }
+    if (at < n) {
+        const events_facts *e = &t->events;
+        at += (size_t)snprintf(buf + at, n - at,
+                               ",\"events\":{\"ok\":%s,\"vt_window\":\"0x%llx\",\"avail\":\"0x%llx\",\"thunk\":\"0x%llx\",\"win\":[%u,%u,%u,%u,%u,%u],"
+                               "\"event\":[%u,%u,%u],\"option_index\":%u,\"pending\":[%u,%u,%u,%u],\"cmd\":[%u,%u,%u],\"evidence\":\"%s\"}",
+                               e->ok ? "true" : "false", (unsigned long long)e->vt_window, (unsigned long long)e->avail_fn,
+                               (unsigned long long)e->thunk, e->win_id_off, e->win_event_off, e->win_country_off, e->win_scope_off,
+                               e->win_open_off, e->win_flag_off, e->ev_handle_off, e->ev_opts_off, e->ev_nopts_off, e->opt_index_off,
+                               e->pend_arr_off, e->pend_cnt_off, e->pend_size, e->pend_event_off, e->cmd_id_off,
+                               e->cmd_country_off, e->cmd_option_off, e->evidence);
+    }
     if (at < n) snprintf(buf + at, n - at, "}");
     return buf;
 }

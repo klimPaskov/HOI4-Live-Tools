@@ -613,3 +613,41 @@ F4 save + reload with the family on; plain load without the module.
 Stop at once (endrun.sh s7p) on: a crash, a hang, any `unexplained` post2, a focus started that the request did not
 name, F2's foreign focus posted.
 Pass: F1-F4 clean -> `IPC_LIVE_PASSED` for `picks` (9th entry), "S7 PASS: picks".
+
+## Session S8-EVENTS: the in-process module, event answers (family `events`; about 25 minutes) -- after S7-PICKS
+
+Built by engineer 76 (24 Nov 2026), offline-proven only: stage 2 35/35 types on 1.20.0.0 and 1.19.4.1 macOS; Linux and
+Windows 1.20 CSelectEventOptionCommand by RTTI with the same id (10645); the window facts are not ported there (the full
+scan is macOS-only, as for every family). OFF under `auto` until this session passes.
+- `events.answer WINDOW --vals PLACE,COUNT` = CSelectEventOptionCommand built by the event window's own constructor with
+  the window's own fields (pending id +0x58, event +0x60, &country +0x68, &scope +0x70) and the option's own index, as
+  the window's option click builds it. The module checks: the object is exactly a CEventWindow (RTTI vtable); the window
+  accepts a click now (its byte +0x330, the click's own gate); its country is the player's; its event resolves (generic
+  lookup, the auth slot's cast to CEvent); the game state holds the pending record of the id with that event; every
+  option's own index equals its place; the game's option test (the window's per-frame test, 1.20 0x1005f4d00) passes
+  exactly COUNT options (else GUI path) and the PLACE-th of them is taken (none: refused); then the command's "can do"
+  and Post. Read-back in the module: the pending record is gone within 3 s.
+- MCP: hoi4_event_choose (same name, schema, Verified read: exactly that window closes) takes the window from the events
+  read (the popup entry's secondary base + offset-to-top) and the shown option count; reply `in_process`. The mouse path
+  stays the fallback in the same call; two windows of one event id go to the mouse.
+
+Needs: module and reader from branch e76/inproc-events; a save with an open choice event (PREV-1936 shortly before
+1936.03.07 has the Rhineland chain; or any save with 2+ open events, a news event among them).
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,events ./inproc_stage2.sh PREV-1936 s8e`; the hello must show
+`"events":{"on":true,"live_passed":false}`. `C="python3 -I inproc/tools/inproc_client.py s8e/inproc.sock"`.
+E1 a two-option choice event, paused (5 min). `hoi4_events` -> pick option 1 by key; `hoi4_event_choose
+{"event":ID,"option":KEY}` with `HOI4_BACKEND=inprocess`: receipt Verified, `in_process.module.per_object[0].result:
+"posted"`, `executed:1`, `pending_id`, `option_index` = the key's index in the event script; the window closes on its
+own within 2 s (if the window stays open while the record is gone: STOP, the window needs the click's own close: record
+the window's +0x330 and visibility); the option's effect is applied (the tooltip's change, e.g. a flag or a law).
+E2 a news event (one option), paused (2 min): the same call with option 0; window closes.
+E3 refusals (5 min): an option whose trigger fails -> the window does not show it: COUNT differs -> `second_object_invalid`
+and the mouse path answers (record it); `$C post2 events.answer WINDOW 0,COUNT` on a window already answered ->
+`second_object_invalid` "does not accept a click now", nothing posted; a forged address -> `not_a_live_object`.
+E4 stacked windows (5 min): three open events, answer the BOTTOM one first in process (the mouse path needs the covering
+ones first: compare the receipts' tool ms and order); none of the others changes.
+E5 running at speed 2 (3 min): E1 while the game runs; Verified within 3 s; then save + reload with the family on, and a
+plain load without the module.
+Stop at once (endrun.sh s8e) on: a crash, a hang, any `unexplained` post2, an option taken that the request did not name,
+an event answered for another country, a window left open with its record gone.
+Pass: E1-E5 clean -> `IPC_LIVE_PASSED` for `events` (10th entry), "S8 PASS: events".

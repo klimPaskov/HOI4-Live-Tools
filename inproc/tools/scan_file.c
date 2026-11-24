@@ -103,6 +103,16 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "unit_hint")) got = t.st2.common.unit_hint;
         else if (!strcmp(argv[a], "unit_theatre_off")) got = t.st2.common.unit_theatre_off;
         else if (!strcmp(argv[a], "group_parent_ptr_off")) got = t.st2.common.group_parent_ptr_off;
+        /* engineer 76: the event window and the pending-event records */
+        else if (!strcmp(argv[a], "events_ok")) got = (uint64_t)t.st2.events.ok;
+        else if (!strcmp(argv[a], "events_vt_window")) got = t.st2.events.vt_window;
+        else if (!strcmp(argv[a], "events_avail")) got = t.st2.events.avail_fn;
+        else if (!strcmp(argv[a], "win_event_off")) got = t.st2.events.win_event_off;
+        else if (!strcmp(argv[a], "win_open_off")) got = t.st2.events.win_open_off;
+        else if (!strcmp(argv[a], "win_flag_off")) got = t.st2.events.win_flag_off;
+        else if (!strcmp(argv[a], "ev_opts_off")) got = t.st2.events.ev_opts_off;
+        else if (!strcmp(argv[a], "opt_index_off")) got = t.st2.events.opt_index_off;
+        else if (!strcmp(argv[a], "pend_arr_off")) got = t.st2.events.pend_arr_off;
         else if (!strncmp(argv[a], "ctor:", 5) || !strncmp(argv[a], "on:", 3) || !strncmp(argv[a], "type:", 5)) {
             /* per stage-2 op (engineer 71): ctor:OP = the UI constructor found, on:OP = 1 when every check resolved,
              * type:OP = the protocol type id */

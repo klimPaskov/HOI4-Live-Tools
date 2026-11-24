@@ -386,6 +386,8 @@ typedef void *(*order_lookup_fn)(void *, int32_t);
 typedef void (*ctor_divs_theatre)(void *, const pdx_array *, void *, void *);
 typedef void (*ctor_leader)(void *, void *, void *, int);
 typedef void (*ctor_group_name)(void *, void *, const void *);
+typedef void (*ctor_event_option)(void *, int32_t, void *, const int32_t *, const void *, int32_t); /* engineer 76 */
+typedef unsigned char (*option_test_fn)(void *, const void *, unsigned char);
 typedef void (*ctor_groups_obj)(void *, const pdx_array *, void *);
 typedef void (*ctor_groups_obj_i32)(void *, const pdx_array *, void *, int32_t);
 /* engineer 74: a CPdxArray allocator's allocate slot: alloc(allocator, bytes, align) */
@@ -419,6 +421,9 @@ typedef struct {
     /* units (engineer 75): each division's army before the post (the read-back compares), a new name (std::string
      * short form: at most 22 bytes), divisions not yet in an army are legal for a new army / a transfer */
     uint64_t grp_before[J2_DIVS]; char name[24]; int nname; int allow_free;
+    /* events (engineer 76): the window's pending id, event, its handle, the country, the option chosen (shown place ->
+     * the event's own option index) */
+    int32_t ev_id, ev_country, ev_option; uint64_t ev_event, ev_handle;
     long long ran_us, post_us;
     char reason[200], queue_type[64], server_type[64];
     dispatch_semaphore_t done;
@@ -438,6 +443,11 @@ static dyncast_fn g_dyncast;
 static int roundtrip(const cmd_type *ct, uint64_t obj, uint64_t *handle) {
     const stage2_common *c = &g_t.st2.common;
     uint64_t h;
+    if (ct->spec->auth_kind == AUTH_EVENT) { /* engineer 76: an open event window, by its exact class */
+        uint64_t vt = 0;
+        *handle = 0;
+        return g_t.st2.events.ok && plausible(obj) && sq(obj, &vt) && vt == g_t.st2.events.vt_window + (uint64_t)g_slide;
+    }
     if (ct->spec->auth_kind == AUTH_TAG_PTR) { /* engineer 75: a raw pointer of exactly the class the spec names */
         uint64_t vt = 0;
         *handle = 0;
@@ -677,6 +687,53 @@ static int fill_array(char *cmd, const cmd_field *f, const void *src, int n, int
     return 1;
 }
 
+/* engineer 76: an event answer, everything taken from the open window as its own option click takes it. The window
+ * must accept a click now (its gate byte), name the player's country, hold an event that resolves (generic lookup, the
+ * auth slot's cast to CEvent) and has a pending record of the window's id in the game state (the record holds that
+ * event). The option: vals[0] = its place among the shown options, vals[1] = how many the window shows; the module
+ * walks the event's options with the game's own option test (the window's own per-frame test) and refuses (GUI path)
+ * when its count differs from the shown count. Returns NULL when ready; *unavailable = 1 when the game's test says no. */
+static const char *events_prep(job2_t *j, uint64_t gs, int *unavailable) {
+    const events_facts *e = &g_t.st2.events;
+    uint64_t w = j->obj[0], ev = 0, h = 0, lk = j->ct->lookup_fn + (uint64_t)g_slide, arr = 0;
+    uint8_t open = 0, flag = 0; int32_t cnt = 0, nopt = 0;
+    *unavailable = 0;
+    if (!sread(w + e->win_open_off, &open, 1) || !open) return "the event window does not accept a click now";
+    if (!sread(w + e->win_id_off, &j->ev_id, 4) || !sq(w + e->win_event_off, &ev) || !plausible(ev) ||
+        !sread(w + e->win_country_off, &j->ev_country, 4) || !sread(w + e->win_flag_off, &flag, 1)) return "the window is unreadable";
+    if (j->ev_country != j->player_tag) return "the event is not the player's country's";
+    if (!g_dyncast) g_dyncast = (dyncast_fn)dlsym(RTLD_DEFAULT, "__dynamic_cast");
+    if (!g_dyncast || !code_ptr(lk) || !sq(ev + g_t.st2.common.cref_handle_off, &h) || !h || (uint64_t)(uintptr_t)((resolve_fn2)(uintptr_t)lk)(&h) != ev ||
+        (uint64_t)(uintptr_t)g_dyncast((void *)(uintptr_t)ev, (void *)(uintptr_t)(e->ti_reference + (uint64_t)g_slide),
+                                       (void *)(uintptr_t)(e->ti_event + (uint64_t)g_slide), -1) != ev)
+        return "the window's event is not a live CEvent";
+    if (!sread(gs + e->pend_cnt_off, &cnt, 4) || cnt < 0 || cnt > 4096 || !sq(gs + e->pend_arr_off, &arr) || (cnt && !plausible(arr)))
+        return "the pending events are unreadable";
+    int found = 0;
+    for (int32_t i = 0; i < cnt && !found; i++) {
+        int32_t id = 0; uint64_t pe = 0, rec = arr + (uint64_t)i * e->pend_size;
+        if (sread(rec, &id, 4) && id == j->ev_id && sq(rec + e->pend_event_off, &pe) && pe == ev) found = 1;
+    }
+    if (!found) return "no pending record of this event (already answered?)";
+    if (!sread(ev + e->ev_nopts_off, &nopt, 4) || nopt < 1 || nopt > 64 || !sq(ev + e->ev_opts_off, &arr) || !plausible(arr))
+        return "the event's options are unreadable";
+    uint64_t tf = e->avail_fn + (uint64_t)g_slide;
+    if (!code_ptr(tf)) return "the option test is not game code";
+    int shown = 0, pick = -1;
+    for (int32_t i = 0; i < nopt; i++) {
+        uint64_t opt = 0; int32_t idx = -1;
+        if (!sq(arr + 8 * (uint64_t)i, &opt) || !plausible(opt) || !sread(opt + e->opt_index_off, &idx, 4) || idx != i)
+            return "an option's own index differs from its place";
+        if (!((option_test_fn)(uintptr_t)tf)((void *)(uintptr_t)opt, (const void *)(uintptr_t)(w + e->win_scope_off), flag)) continue;
+        if (shown == (int)j->val[0]) pick = i;
+        shown++;
+    }
+    if (shown != (int)j->val[1]) { snprintf(j->reason, sizeof j->reason, "the game's option test passes %d options, the window shows %d", shown, (int)j->val[1]); return j->reason; }
+    if (pick < 0) { *unavailable = 1; return "the option is not available"; }
+    j->ev_option = pick; j->ev_event = ev; j->ev_handle = h;
+    return NULL;
+}
+
 static void run_job2(void *ctx) {
     job2_t *j = (job2_t *)ctx;
     const stage2_common *c = &g_t.st2.common;
@@ -799,6 +856,15 @@ static void run_job2(void *ctx) {
             if (why) { j->res[i] = R_BAD_OBJ2; j->refused++; snprintf(j->reason, sizeof j->reason, "%s", why); continue; }
             j->order_id = oid; j->val[0] = oid;
         }
+        if (ct->spec->auth_kind == AUTH_EVENT) {
+            int unavailable = 0;
+            const char *why = events_prep(j, gs, &unavailable);
+            if (why) {
+                j->res[i] = unavailable ? R_INVALID : R_BAD_OBJ2; j->refused++;
+                if (why != j->reason) snprintf(j->reason, sizeof j->reason, "%s", why);
+                continue;
+            }
+        }
         if (!strcmp(ct->spec->family, "orders") || !strcmp(ct->spec->family, "orders2")) {
             const char *why = orders_prep(j);
             if (!why && !strcmp(ct->spec->family, "orders2") && j->ndiv && strcmp(op, "orders2.spearhead")) why = orders2_divisions(j);
@@ -866,7 +932,7 @@ static void run_job2(void *ctx) {
             uint64_t data = 1; int32_t size = 1;
             if (ct->spec->ctor == CTOR_ADDLINE) /* no list: the variant's handle field still holds the empty handle */
                 ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &data) && data == nullref;
-            else if (ct->spec->ctor == CTOR_LEADER || ct->spec->ctor == CTOR_GROUP_NAME) { /* no list: every handle still empty */
+            else if (ct->spec->ctor == CTOR_LEADER || ct->spec->ctor == CTOR_GROUP_NAME || ct->spec->ctor == CTOR_EVENT_OPTION) { /* no list: every handle still empty */
                 for (int k = 0; k < ct->spec->nf && ok; k++)
                     if (ct->spec->f[k].kind == FK_REF) ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[k].off, &data) && data == nullref;
             } else
@@ -897,6 +963,11 @@ static void run_job2(void *ctx) {
                     ((ctor_divs_theatre)(uintptr_t)ctor)(cmd, &da, obj, NULL); break;
                 }
                 case CTOR_LEADER: ((ctor_leader)(uintptr_t)ctor)(cmd, (void *)(uintptr_t)j->obj2, obj, 0); break;
+                case CTOR_EVENT_OPTION: /* the window's own fields, as its option click passes them */
+                    ((ctor_event_option)(uintptr_t)ctor)(cmd, j->ev_id, (void *)(uintptr_t)j->ev_event,
+                                                         (const int32_t *)(uintptr_t)(j->obj[i] + g_t.st2.events.win_country_off),
+                                                         (const void *)(uintptr_t)(j->obj[i] + g_t.st2.events.win_scope_off), j->ev_option);
+                    break;
                 case CTOR_GROUP_NAME: { /* a libc++ std::string in its short form, on our stack; the constructor copies it */
                     uint8_t sso[24] = {0};
                     sso[0] = (uint8_t)(2 * j->nname); memcpy(sso + 1, j->name, (size_t)j->nname);
@@ -944,6 +1015,15 @@ static void run_job2(void *ctx) {
                     ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[3].off, &dd) && sread((uint64_t)(uintptr_t)cmd + ct->spec->f[3].count_off, &dn, 4) &&
                          dn == j->ndiv && sread((uint64_t)(uintptr_t)cmd + 0x6c, fl, 3) && !fl[0] && fl[1] == (j->blitz ? 1 : 0) && !fl[2];
                 } else if (ok) ok = sread((uint64_t)(uintptr_t)cmd + 0x48, &top, 1) && top == 1;
+                if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+            } else if (ok && ct->spec->ctor == CTOR_EVENT_OPTION) { /* engineer 76: id, event handle, country, option */
+                const events_facts *e = &g_t.st2.events;
+                int32_t a = 0, b = 0, d = -1; uint64_t hv = 0;
+                ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
+                     sread((uint64_t)(uintptr_t)cmd + e->cmd_id_off, &a, 4) && a == j->ev_id &&
+                     sq((uint64_t)(uintptr_t)cmd + e->ev_handle_off, &hv) && hv == j->ev_handle &&
+                     sread((uint64_t)(uintptr_t)cmd + e->cmd_country_off, &b, 4) && b == j->player_tag &&
+                     sread((uint64_t)(uintptr_t)cmd + e->cmd_option_off, &d, 4) && d == j->ev_option;
                 if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
             } else if (ok && ct->spec->ctor >= CTOR_DIVS_THEATRE) { /* engineer 75: army structure */
                 int filtered = 0;
@@ -1167,6 +1247,13 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         if (nv) why = "this op takes no vals";
         else if (j->n != 1) why = "picks.focus: exactly one focus";
         else if (obj2 && *obj2) why = "this op takes no obj2";
+    } else if (!strncmp(op, "events.", 7)) {
+        /* engineer 76: an event answer. objs = ONE open event window (CEventWindow); vals = the option's place among the
+         * shown options (0..7) and how many the window shows (1..8: the module's option test must agree) */
+        if (j->n != 1) why = "events.answer: exactly one event window";
+        else if (nv != 2 || j->val[0] < 0 || j->val[0] > 7 || j->val[1] < 1 || j->val[1] > 8 || j->val[0] >= j->val[1])
+            why = "vals: the option's shown place (0..7) and the shown option count (1..8)";
+        else if (flag || (obj2 && *obj2) || (provs && *provs)) why = "events.answer takes no flag, obj2 or provs";
     } else if (nv) why = "this op takes no vals";
     if (!why && divs && *divs && strncmp(op, "orders2.", 8) && strncmp(op, "units.", 6)) why = "only orders2 and units ops take divs";
     if (!why && !strcmp(op, "airwing.merge") && j->n < 2) why = "a merge takes at least two wings";
@@ -1325,6 +1412,31 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         else {
             reads_t r; do_reads(&r);
             if (!(r.ok && r.has_date && r.paused)) snprintf(j->reason, sizeof j->reason, "posted; not seen executed after 3 s in a running game");
+            else snprintf(j->reason, sizeof j->reason, "posted; not executed yet (game paused)");
+        }
+    }
+    /* events (engineer 76): executed = the game state no longer holds the pending record of the window's id with that
+     * event (the answer's own "can do" reads the same records). Within 3 s, paused-aware */
+    if (!strcmp(op, "events.answer") && j->posted) {
+        const events_facts *e = &g_t.st2.events;
+        long long start = mono_us();
+        pending = 1;
+        while (pending && mono_us() - start < 3000000) {
+            uint64_t gs = 0, arr = 0; int32_t cnt = 0; int still = 0;
+            if (sq(g_gs_glob + (uint64_t)g_slide, &gs) && sread(gs + e->pend_cnt_off, &cnt, 4) && cnt >= 0 && cnt <= 4096 &&
+                sq(gs + e->pend_arr_off, &arr)) {
+                for (int32_t i = 0; i < cnt && !still; i++) {
+                    int32_t id = 0; uint64_t pe = 0, rec = arr + (uint64_t)i * e->pend_size;
+                    if (sread(rec, &id, 4) && id == j->ev_id && sq(rec + e->pend_event_off, &pe) && pe == j->ev_event) still = 1;
+                }
+                pending = still;
+            }
+            if (pending) usleep(2000);
+        }
+        if (!pending) { executed = j->posted; rb_us = mono_us() - t0; snprintf(rbx, sizeof rbx, ",\"pending_id\":%d,\"option_index\":%d", j->ev_id, j->ev_option); }
+        else {
+            reads_t r; do_reads(&r);
+            if (!(r.ok && r.has_date && r.paused)) snprintf(j->reason, sizeof j->reason, "posted; the event is still pending after 3 s in a running game");
             else snprintf(j->reason, sizeof j->reason, "posted; not executed yet (game paused)");
         }
     }

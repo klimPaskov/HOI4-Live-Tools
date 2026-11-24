@@ -251,6 +251,11 @@ int scan_command_factory(const scan_image *im, const char *cls, scan_cap *factor
         if (!factory->extra && f[i] == 0xbf) factory->extra = rd32(f + i + 1); /* mov edi, size (operator new) */
         if (riprel(f, i, 0xa0, factory->value, 1, &tg) && tg >= im->dconst_addr &&
             tg < im->dconst_addr + im->dconst_size && rtti_name_is(im, tg, mangled)) { vtable->value = tg; break; }
+        /* engineer 76: lea rax, [vtable object]; add rax, 0x10; mov [rbx], rax (CSelectEventOptionCommand's factory
+         * addresses the vtable object, then steps over offset-to-top and the typeinfo to its address point) */
+        if (riprel(f, i, 0xa0, factory->value, 1, &tg) && i + 11 <= 0xa0 && f[i + 7] == 0x48 && f[i + 8] == 0x83 &&
+            f[i + 9] == 0xc0 && f[i + 10] == 0x10 && tg + 0x10 >= im->dconst_addr && tg + 0x10 < im->dconst_addr + im->dconst_size &&
+            rtti_name_is(im, tg + 0x10, mangled)) { vtable->value = tg + 0x10; break; }
     }
     /* engineer 75: a factory that calls a separate default constructor (CArmyGroupCommand: operator new, then call
      * ctor): the vtable store is in that constructor; follow the first direct call after the allocation */
@@ -291,10 +296,23 @@ int scan_class_vtable(const scan_image *im, const char *mangled, scan_cap *cap) 
     cap_init(cap, mangled, "rtti");
     uint64_t name = find_string(im, im->tconst_addr, im->tconst_size, mangled);
     if (!name) name = find_string(im, im->cstr_addr, im->cstr_size, mangled);
-    if (!name) { snprintf(cap->evidence, sizeof cap->evidence, "type name absent"); return 0; }
     const uint8_t *d = scan_ptr(im, im->dconst_addr, im->dconst_size);
     if (!d) return 0;
     uint64_t ti = 0, vt = 0; unsigned nti = 0, nvt = 0;
+    if (!name) {
+        /* engineer 76: a type name packed right after other constant data (12CEventWindow follows a float in
+         * __TEXT,__const): every occurrence of the exact name, kept only when exactly one typeinfo points at it */
+        const uint8_t *b = scan_ptr(im, im->tconst_addr, im->tconst_size);
+        size_t ln = strlen(mangled) + 1; unsigned hits = 0;
+        for (uint64_t i = 0; b && i + ln <= im->tconst_size; i++) {
+            if (b[i] != (uint8_t)mangled[0] || memcmp(b + i, mangled, ln)) continue;
+            unsigned refs = 0;
+            for (uint64_t k = 8; k + 8 <= im->dconst_size; k += 8) if (rd64(d + k) == im->tconst_addr + i) refs++;
+            if (refs == 1) { name = im->tconst_addr + i; hits++; }
+        }
+        if (hits != 1) name = 0;
+    }
+    if (!name) { snprintf(cap->evidence, sizeof cap->evidence, "type name absent"); return 0; }
     for (uint64_t i = 8; i + 8 <= im->dconst_size; i += 8)
         if (rd64(d + i) == name) { ti = im->dconst_addr + i - 8; nti++; }
     if (nti == 1)
