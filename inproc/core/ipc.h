@@ -41,7 +41,7 @@ typedef struct {
     void (*log)(const char *json_members);
 } ipc_backend;
 
-#define IPC_MAX_FAMILIES 16
+#define IPC_MAX_FAMILIES 32
 typedef struct {
     int post_enabled;           /* opt-in given AND every capability resolved */
     /* stage 2: per family (IPC_ALLOWED[1..]), opted in by the launcher AND every command type of it resolved */

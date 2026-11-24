@@ -24,6 +24,7 @@ mod fair_facts;
 mod inproc;
 mod inproc_diplomacy;
 mod inproc_events;
+mod inproc_holds;
 mod inproc_orders;
 mod inproc_picks;
 mod inproc_units;
@@ -6572,7 +6573,41 @@ impl MacClock {
             let before = nodes()?;
             let retry = actions.receipt_exists(id);
             let mut inproc_route = line.as_ref().and_then(|_| inproc::route("orders2"));
-            if !retry && inproc_route.is_none() {
+            // engineer 79: an area-defence order through the module (family `holds`): one map click per state, the
+            // first makes the order, the rest go into its id
+            let mut holds_route = if fallback || retry {
+                None
+            } else {
+                inproc::route("holds")
+            };
+            if holds_route.is_some() {
+                // the map tool takes battle-plan orders only from an army led by a general; a state the player does
+                // not control is not a click the tool takes (refused before anything is posted)
+                let view = armies::armies(process)?;
+                let leaderless = view["armies"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|a| a["army"].as_str() == Some(army))
+                    .is_some_and(|a| a["commander"].is_null());
+                if leaderless {
+                    return Err(Error::new(
+                        "no_commander",
+                        format!(
+                            "{army} has no commander: the game takes battle-plan orders only from an army led by a \
+                             general (hoi4_army_commander first); nothing was posted"
+                        ),
+                    ));
+                }
+                let controlled = armies::controlled_state_ids(process)?;
+                if let Some(bad) = states.iter().find(|s| !controlled.contains(s)) {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        format!("state {bad} is not controlled by the player: an area order covers own states"),
+                    ));
+                }
+            }
+            if !retry && inproc_route.is_none() && holds_route.is_none() {
                 self.keys.preflight()?;
             }
             let mut inproc_reply = Value::Null;
@@ -6622,6 +6657,17 @@ impl MacClock {
                     }
                     inproc_reply = reply;
                     return Ok(());
+                }
+                if let Some(ch) = holds_route.as_mut() {
+                    let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+                    match inproc_holds::area(ch, group, &states) {
+                        inproc::Routed::Done(v) => {
+                            inproc_reply = v;
+                            return Ok(());
+                        }
+                        inproc::Routed::Refused(what) => return Err(inproc::refused_error(&what)),
+                        inproc::Routed::Gui => keys.preflight()?,
+                    }
                 }
                 if fallback {
                     armies::fallback(process, keys, &game_dir, army, &states)

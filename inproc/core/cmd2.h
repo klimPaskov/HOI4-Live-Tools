@@ -69,7 +69,10 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
         * action into a CDiplomaticActionCommand):
         *   SIMPLE (action, const tag *sender, const tag *receiver, const CDate *): guarantee, access, pact, relations;
         *   WAR    (action, const tag *sender, const tag *receiver, war goal object, flag byte, const CDate *) */
-       CTOR_DIPLO_SIMPLE = 17, CTOR_DIPLO_WAR = 18 };
+       CTOR_DIPLO_SIMPLE = 17, CTOR_DIPLO_WAR = 18,
+       /* engineer 79 (24 Nov): an area-defence state click, the map tool's own constructor (cmd, group, order id or 0 =
+        * a new area-defence order, state id, the order's settings mask): ONE state toggled into the order */
+       CTOR_AREA_STATE = 19 };
 /* engineer 74: BUILD_FIELDS also fills CPdxArray fields (a division handle list, a province list): the fresh object's
  * array is empty ({data 0, capacity 0, size 0} and its allocator set by the factory); the module allocates the
  * elements through THAT allocator's own allocate slot (read from the game's array growth code), so the command's
@@ -213,13 +216,24 @@ typedef struct {
     char evidence[300];
 } diplo_facts;
 
-#define CMD2_MAX 64
+/* engineer 79: an area-defence order (COrderInstance of the area kind), each fact from the code that uses it: the
+ * state-click command's execution creates the order with "create order of kind K" (mov esi,K), walks the order's state
+ * list (+area_off data, +area_cnt count: toggles each named state) and stores the settings through a one-store setter
+ * (+setting_off) */
+typedef struct {
+    int ok;
+    uint32_t kind_area, area_off, area_cnt, setting_off;
+    char evidence[200];
+} holds_facts;
+
+#define CMD2_MAX 96
 typedef struct {
     stage2_common common;
     orders_facts orders;      /* engineer 73: the battle-plan order tree (core/orders.c) */
     fronts_facts fronts;      /* engineer 74: the theatre fronts a plan root binds to (core/orders.c) */
     events_facts events;      /* engineer 76: the event window and the pending-event records */
     diplo_facts diplo;        /* engineer 78: the command maker, the date, the war goals */
+    holds_facts holds;        /* engineer 79: the area-defence order */
     int n;
     cmd_type t[CMD2_MAX];
 } stage2_table;

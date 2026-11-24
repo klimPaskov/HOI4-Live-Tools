@@ -118,6 +118,12 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[a], "act_size:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_size : 0; }
         else if (!strncmp(argv[a], "act_type:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_type : 0; }
         else if (!strncmp(argv[a], "act_goal_off:", 13)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 13); got = x ? x->act_goal_off : 0; }
+        /* engineer 79: the area-defence order */
+        else if (!strcmp(argv[a], "holds_ok")) { got = (uint64_t)t.st2.holds.ok; fprintf(stderr, "holds: %s\n", t.st2.holds.evidence); }
+        else if (!strcmp(argv[a], "holds_kind")) got = t.st2.holds.kind_area;
+        else if (!strcmp(argv[a], "holds_area_off")) got = t.st2.holds.area_off;
+        else if (!strcmp(argv[a], "holds_area_cnt")) got = t.st2.holds.area_cnt;
+        else if (!strcmp(argv[a], "holds_setting_off")) got = t.st2.holds.setting_off;
         /* engineer 76: the event window and the pending-event records */
         else if (!strcmp(argv[a], "events_ok")) got = (uint64_t)t.st2.events.ok;
         else if (!strcmp(argv[a], "events_vt_window")) got = t.st2.events.vt_window;

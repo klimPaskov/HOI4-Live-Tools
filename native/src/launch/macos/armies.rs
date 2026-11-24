@@ -3043,6 +3043,10 @@ fn own_states(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
     Ok(out)
 }
 /// Map position of the target state's province nearest the army's divisions.
+/// engineer 79: the own-controlled state ids (the area-defence order's states must be among them).
+pub(super) fn controlled_state_ids(process: &dyn Process) -> Result<Vec<i32>> {
+    read(process, controlled_states)
+}
 /// Own-controlled state ids (controller is the player, whoever owns them).
 fn controlled_states(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
     let g = game::layout(r);

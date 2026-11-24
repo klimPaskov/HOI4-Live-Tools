@@ -213,6 +213,19 @@ const cmd_spec CMD2_SPECS[] = {
      * whose target is the receiver (the list the dialog shows) */
     {"diplomacy", "diplomacy.declare_war", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_DIPLO_WAR, 0, 0x28,
      "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "17CDeclareWarAction"},
+    /* ---- holds (engineer 79, 24 Nov): the AREA DEFENCE order, as the battle-plan map tool posts it. Read from 1.20.0.0
+     * and 1.19.4.1 (identical layout and code). The area button only arms the tool; each left click on a state posts
+     * EditAreaDefenseState(group, order id, the state's id, settings) through the tool's own constructor (1.20 0x10094a330,
+     * UI 0x1025b7f80): order id 0 = no area order is being edited -> the execution creates a NEW area-defence order of the
+     * group with that state; an order id = the state is TOGGLED in that order (added when absent, removed when present).
+     * The settings mask is the tool's (0 on a fresh tool; an edited order's own mask). Fields: group +0x24 (0x3f), order
+     * id +0x2c (0x3036), the state list +0x30/+0x3c (one int per click, 0x1b7), replace byte +0x48 (0x29f1, the
+     * constructor writes 0: toggle), has-settings +0x49 (1), settings +0x4c (0x2b5d). The "can do": the group resolves
+     * as a COrdersGroup (and an order named with the replace byte exists). CCreateAreaDefenseCommand (the order's own
+     * create button path: an EMPTY order) is not used: the click is what places states. */
+    {"holds", "holds.area_defense", "CEditAreaDefenseStateCommand", 0x50, BUILD_CTOR, CTOR_AREA_STATE, 0, 0x24, "12COrdersGroup", 5,
+     {{"states", 0x30, FK_I32_ARRAY, 0x3c, 0x1b7, 0}, {"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0},
+      {"settings", 0x4c, FK_I32, 0, 0x2b5d, 0}, {"replace", 0x48, FK_U8, 0, 0x29f1, 0}}, OBJ2_NONE, 0},
 };
 const int CMD2_NSPECS = (int)(sizeof CMD2_SPECS / sizeof CMD2_SPECS[0]);
 
@@ -566,6 +579,19 @@ static int find_ctor(const scan_image *im, const cmd_spec *s, cmd_type *o) {
             {CTOR_EVENT_OPTION, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 18 44 89 cb 4d 89 c4 49 89 ce 49 89 fd",
              "41 89 9d e8 00 00 00"},
         };
+        /* engineer 79: the area-defence state click: settings r8d -> r15d, state ecx -> [rbp-0x30], order id edx -> r13d,
+         * group rsi -> r12; then the order id into +0x2c and the replace/has-settings word 0x100 into +0x48 */
+        if (s->ctor == CTOR_AREA_STATE &&
+            cmd_pmatch(pre, 0x1d, "55 48 89 e5 41 57 41 56 41 55 41 54 53 50 45 89 c7 89 4d d0 41 89 d5 49 89 f4 48 89 fb", c, 8)) {
+            const uint8_t *all = scan_ptr(im, fs, 0x200);
+            int idw = 0, word = 0, set = 0;
+            for (size_t k = 0; all && k + 6 <= 0x200; k++) {
+                if (cmd_pmatch(all + k, 4, "44 89 6b 2c", c, 8)) idw = 1;
+                if (cmd_pmatch(all + k, 6, "66 c7 43 48 00 01", c, 8)) word = 1;
+                if (cmd_pmatch(all + k, 4, "44 89 7b 4c", c, 8)) set = 1;
+            }
+            if (idw && word && set) { o->ctor = fs; return 1; }
+        }
         for (size_t u = 0; u < sizeof UC / sizeof UC[0]; u++) {
             if (s->ctor != UC[u].kind || !cmd_pmatch(pre, 0x40, UC[u].pre, c, 8)) continue;
             const uint8_t *all = scan_ptr(im, fs, 0x200);
@@ -912,6 +938,28 @@ static void scan_diplo_facts(const scan_image *im, const stage2_table *t, diplo_
              o->wg_holder_off, o->wg_list_off, o->wg_count_off, o->wg_target_off);
 }
 
+/* engineer 79: the area-defence order facts (see holds_facts in cmd2.h), from the state click's own execution (vtable
+ * +0x58): mov rdi,r14; mov esi,KIND; call create  /  mov eax,[r14+CNT]; test eax,eax; jle; mov rcx,[r14+ARR]  /
+ * mov esi,[rbx+0x4c]; mov rdi,r15; call SET where SET = push rbp; mov rbp,rsp; mov [rdi+OFF],esi; pop rbp; ret */
+static void scan_holds_facts(const scan_image *im, const cmd_type *ad, holds_facts *o) {
+    memset(o, 0, sizeof *o);
+    uint64_t ex = 0; uint32_t c[4]; unsigned m = 0;
+    if (!ad || !(ad->conf & C_FACTORY) || !scan_q(im, ad->vtable + 0x58, &ex) || !in_text(im, ex)) { snprintf(o->evidence, sizeof o->evidence, "no execution slot"); return; }
+    long k = pfind_at(im, ex, 0x400, "4c 89 f7 be D e8 D", c, 4, &m);
+    if (k >= 0 && c[0] >= 1 && c[0] < 32) o->kind_area = c[0];
+    long a = pfind_at(im, ex, 0x400, "41 8b 86 D 85 c0 7e ?? 49 8b 8e D", c, 4, &m);
+    if (a >= 0 && c[0] < 0x400 && c[1] < 0x400 && c[1] < c[0]) { o->area_cnt = c[0]; o->area_off = c[1]; }
+    long st = pfind_at(im, ex, 0x400, "8b 73 4c 4c 89 ff e8 D", c, 4, &m);
+    if (st >= 0) {
+        uint64_t f = ex + (uint64_t)st + 11 + (int64_t)(int32_t)c[0];
+        const uint8_t *fb = in_text(im, f) ? scan_ptr(im, f, 12) : NULL;
+        if (fb && cmd_pmatch(fb, 12, "55 48 89 e5 89 b7 D 5d c3", c, 4) && c[0] < 0x400) o->setting_off = c[0];
+    }
+    o->ok = o->kind_area && o->area_off && o->area_cnt && o->setting_off;
+    snprintf(o->evidence, sizeof o->evidence, "exec 0x%llx: area kind %u, states +0x%x count +0x%x, settings +0x%x",
+             (unsigned long long)ex, o->kind_area, o->area_off, o->area_cnt, o->setting_off);
+}
+
 int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global, stage2_table *t) {
     memset(t, 0, sizeof *t);
     scan_stage2_common(im, pl, gs_global, &t->common);
@@ -932,6 +980,7 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
         if (ev && t->t[0].ok) scan_events_facts(im, gs_global, t->t[0].lookup_fn, ev, &t->events);
     }
     scan_diplo_facts(im, t, &t->diplo); /* engineer 78 */
+    scan_holds_facts(im, stage2_find(t, "holds.area_defense"), &t->holds); /* engineer 79 */
     /* every type must agree on the "sender controls" check and the generic lookup (one game, one rule) */
     for (int i = 1; i < t->n; i++)
         if (t->t[i].ok && t->t[0].ok &&
@@ -1000,6 +1049,8 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
             (!t->orders.ok || !t->fronts.ok || !t->common.alloc_slot || !t->common.ti_unit || !t->common.unit_group_off ||
              !t->common.unit_theatre_off || !t->common.group_parent_ptr_off || !t->common.ti_reference)) { t->t[i].ok = 0; on--; }
         if (!strcmp(fam, "events") && !t->events.ok && t->t[i].ok) { t->t[i].ok = 0; on--; }
+        /* holds: the area order's facts, the order tree (the order named by id), the array allocator is the ctor's own */
+        if (!strcmp(fam, "holds") && t->t[i].ok && (!t->holds.ok || !t->orders.ok)) { t->t[i].ok = 0; on--; }
         /* diplomacy: the command maker and the date; declare war also the war-goal list */
         if (t->t[i].spec->auth_kind == AUTH_DIPLO && t->t[i].ok &&
             (!t->diplo.ok || (t->t[i].spec->ctor == CTOR_DIPLO_WAR && !t->diplo.war_ok))) { t->t[i].ok = 0; on--; }
