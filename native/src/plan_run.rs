@@ -3728,6 +3728,22 @@ fn declare_first(
     Ok(None)
 }
 
+/// Whether a role an operation names (undated) has no army yet, or a carved role still waits for
+/// its top-up to join.
+fn operation_roles_missing(state: &State, plan: &Value) -> bool {
+    if state.done.keys().any(|k| k.starts_with("layoutmerge:")) {
+        return true;
+    }
+    list(plan, "army_layout").iter().any(|e| {
+        let h = text(&e["name_hint"]);
+        e["when"].is_null()
+            && !h.is_empty()
+            && !state.layout.contains_key(h)
+            && !state.done.contains_key(&format!("layout:impossible:{h}"))
+            && plan_operation::names_army(plan, h)
+    })
+}
+
 /// The war-first block: layout, war executive, triggered build order, armies, early disbands.
 fn war_first_steps(
     state: &mut State,
@@ -3739,7 +3755,17 @@ fn war_first_steps(
     if let Some(line) = declare_first(state, tools, plan, lease, now)? {
         return Ok(Some(line));
     }
-    let steps: [Step; 12] = [
+    let steps: [Step; 13] = [
+        // the roles an operation names form before anything else while they are missing: they
+        // are the operation's armies (t1939e, 24 Nov 2026: behind the operations step and its air
+        // burst the layout formed Armee Mitte on 7 September, a week into the war)
+        |state, tools, plan, lease, now| {
+            if operation_roles_missing(state, plan) {
+                layout_step(state, tools, plan, lease, now)
+            } else {
+                Ok(None)
+            }
+        },
         // the operations: prepare, execute, advance (plan_operation.rs); the air burst follows in
         // the same tick (o1d: the operation acted in every tick of the first war days and the
         // air step behind it first ran on day 3, every wing still on its peace training)
@@ -4914,9 +4940,18 @@ fn form_strike_role(
     if state.skipped(now, "layoutentry", hint) {
         return Ok(None);
     }
+    // nearest first needs the own states' centres (in peace no other step may have read them)
+    if let Some(home) = entry["state"].as_i64() {
+        if !state.centers.contains_key(&(home as i32)) {
+            let me = plan_operation::player(tools, plan);
+            plan_operation::learn_centres(state, tools, &[me]);
+        }
+    }
     let cands = layout_candidates(state, tools, plan, entry, hint, full, None)?;
     if cands.is_empty() {
-        state.skip(now, "layoutentry", hint, 10 * DAY);
+        // an operation's role looks again the next game day (a start's divisions may stand in no
+        // army yet: t1939e waited 10 days per role behind a refused gather)
+        state.skip(now, "layoutentry", hint, if named { DAY } else { 10 * DAY });
         return Ok(None);
     }
     let count = entry["count"].as_u64().unwrap_or(1).max(1) as usize;
@@ -5245,7 +5280,10 @@ fn layout_candidates(
                 continue;
             }
             let Some(id) = d["id"].as_str() else { continue };
-            let at = d["state"].as_i64().or(a["main_state"].as_i64());
+            let at = d["state_id"]
+                .as_i64()
+                .or(d["state"].as_i64())
+                .or(a["main_state"].as_i64());
             let mut dist = plan_military::state_distance(state, at, home);
             if at.is_some() && at == home {
                 dist = 0.0;
@@ -16762,6 +16800,22 @@ mod tests {
             "{:?}",
             state.layout
         );
+    }
+
+    #[test]
+    fn the_layout_goes_first_while_a_role_an_operation_names_is_missing() {
+        let plan = bookmark_plan();
+        let mut state = State::default();
+        assert!(operation_roles_missing(&state, &plan));
+        for h in ["Armee Mitte", "Armee Süd", "Armee West", "Panzergruppe"] {
+            state.layout.insert(h.into(), format!("{h} army"));
+        }
+        // the dated Garnison does not count; a pending top-up does
+        assert!(!operation_roles_missing(&state, &plan));
+        state
+            .done
+            .insert("layoutmerge:Armee Süd\u{1}Army 9".into(), 1);
+        assert!(operation_roles_missing(&state, &plan));
     }
 
     #[test]
