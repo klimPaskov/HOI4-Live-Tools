@@ -3768,6 +3768,36 @@ fn operation_roles_missing(state: &State, plan: &Value) -> bool {
     })
 }
 
+/// A role an operation names whose `owner:` clause holds now and that has no army yet: the layout
+/// goes first for it as for a role without a clause (s7l, 24 Nov 2026: Panzergruppe Nord,
+/// `when` owner:62=GER, stayed unformed behind the operations' prepare while its three
+/// Panzer-Divisionen stood in other armies). The clause is read from the game once a game day.
+fn owner_roles_missing(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) -> bool {
+    let mut missing = false;
+    for e in list(plan, "army_layout") {
+        let h = text(&e["name_hint"]);
+        if h.is_empty()
+            || !text(&e["when"]).starts_with("owner:")
+            || state.layout.contains_key(h)
+            || state.done.contains_key(&format!("layout:impossible:{h}"))
+            || !plan_operation::names_army(plan, h)
+        {
+            continue;
+        }
+        let k = format!("layoutopen:{h}");
+        if !state.skipped(now, "layoutwhen", h) {
+            if layout_when_open(tools, e) {
+                state.done.insert(k.clone(), now);
+            } else {
+                state.done.remove(&k);
+            }
+            state.skip(now, "layoutwhen", h, DAY);
+        }
+        missing |= state.done.contains_key(&k);
+    }
+    missing
+}
+
 /// The war-first block: layout, war executive, triggered build order, armies, early disbands.
 fn war_first_steps(
     state: &mut State,
@@ -3784,7 +3814,7 @@ fn war_first_steps(
         // are the operation's armies (t1939e, 24 Nov 2026: behind the operations step and its air
         // burst the layout formed Armee Mitte on 7 September, a week into the war)
         |state, tools, plan, lease, now| {
-            if operation_roles_missing(state, plan) {
+            if operation_roles_missing(state, plan) || owner_roles_missing(state, tools, plan, now) {
                 layout_step(state, tools, plan, lease, now)
             } else {
                 layout_pool_step(state, tools, plan, lease, now)
@@ -17194,6 +17224,36 @@ mod tests {
         let (target, quota) =
             role_target(&state, &plan, &plan["army_layout"][1], "Nord", &rest, &open);
         assert_eq!((target, quota["Pz"]), (3, 3));
+    }
+
+    #[test]
+    fn a_named_role_whose_owner_clause_holds_puts_the_layout_first() {
+        // s7l: Panzergruppe Nord (owner:62=GER, true on the bookmark) stayed unformed
+        struct Owners(std::cell::Cell<usize>);
+        impl Tools for Owners {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                assert_eq!(name, "hoi4_states");
+                self.0.set(self.0.get() + 1);
+                let owner = if args["query"] == "62" { "GER" } else { "POL" };
+                Ok(json!({"states": [{"owner": owner}]}))
+            }
+        }
+        let plan = json!({
+            "army_layout": [
+                {"name_hint": "Nord", "templates": ["Pz"], "when": "owner:62=GER"},
+                {"name_hint": "Later", "templates": ["Pz"], "when": "owner:10=GER"},
+                {"name_hint": "Free", "templates": ["Inf"], "when": "owner:62=GER"}
+            ],
+            "operations": [{"formations": [{"army": "Nord"}, {"army": "Later"}]}]
+        });
+        let tools = Owners(std::cell::Cell::new(0));
+        let mut state = State::default();
+        assert!(owner_roles_missing(&mut state, &tools, &plan, 100));
+        // read once a game day: Nord and Later, not Free (no operation names it)
+        assert!(owner_roles_missing(&mut state, &tools, &plan, 110));
+        assert_eq!(tools.0.get(), 2);
+        state.layout.insert("Nord".into(), "Army 9".into());
+        assert!(!owner_roles_missing(&mut state, &tools, &plan, 111));
     }
 
     #[test]

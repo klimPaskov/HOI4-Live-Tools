@@ -4330,7 +4330,8 @@ pub(super) fn fallback(
             ),
         ));
     };
-    select_for_orders(process, keys, army)?;
+    // no second card click: on a selected army it centres the camera on the army and the framed
+    // ends go stale (the area defence's fault, s7l 24 Nov 2026)
     keys.press(Key::letter('c')?)?;
     crate::phase::sleep(std::time::Duration::from_millis(300));
     keys.right_drag(GAME, from, to)?;
@@ -4371,6 +4372,12 @@ pub(super) fn area_defense(
         Ok(division_provinces(r, i)?.into_values().flatten().collect())
     })
     .unwrap_or_default();
+    // The army is selected FIRST, then each state is centred and its point read: a click on the
+    // card of an army already selected centres the camera on that army, so a point read before
+    // the selection was stale and the click selected a state instead (s7l, 24 Nov 2026: Armee
+    // West Süd at 75 over [978]/[75] and Army 1 over [68] failed after a commander or rename
+    // call had selected them; the same order by hand, card - V - click, placed at once).
+    select_for_orders(process, keys, army)?;
     let mut clicked = 0;
     for state in states {
         let all: Vec<i32> = super::mapdata::state_provinces(game_dir, *state)?;
@@ -4409,7 +4416,6 @@ pub(super) fn area_defense(
         if !(420.0..1700.0).contains(&x) || !(140.0..880.0).contains(&y) {
             continue;
         }
-        select_for_orders(process, keys, army)?;
         keys.press(Key::letter('v')?)?;
         crate::phase::sleep(std::time::Duration::from_millis(300));
         // a click toggles the state: a second click on a state already in the order removes it
