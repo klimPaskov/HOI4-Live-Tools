@@ -55,9 +55,9 @@ values moved with the same matcher; values in the older GUI diagnostics that no 
 took the shift of the mapped neighbours on both sides.
 
 Live check on 24 November 2026 (owned 1.20.0.0 game on Xvfb, GER 1936, management tools bound):
-27 read tools were called. 46 fields the move had left out were confirmed: carried unchanged from
+32 read tools were called. 46 fields the move had left out were confirmed: carried unchanged from
 1.19.4.1, each made a tool that refused without it return the right GER values
-(`scripts/data/xlayout-live-1.20.0.0.json` names the tool and the values). With them, 22 of the 27
+(`scripts/data/xlayout-live-1.20.0.0.json` names the tool and the values). With them, 23 of the 32
 tools read; `hoi4_stockpile`, `hoi4_commanders`, `hoi4_armies`, `hoi4_wars`, `hoi4_events`,
 `hoi4_occupation`, `hoi4_war_stats`, `hoi4_convoys` and `hoi4_battles` refuse on keys that were
 already unmapped on 1.19.4.1.
