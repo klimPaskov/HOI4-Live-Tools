@@ -360,8 +360,16 @@ impl<A: Api> OwnedReader<A> {
     pub(crate) fn read_many(&self, requests: &[(u64, usize)]) -> Result<Vec<Vec<u8>>> {
         self.read_many_checked(requests, || Ok(()))
     }
-    /// One full ownership/mapping bracket per batch. A caller may supply its
-    /// original cancellation/deadline/lease check; this module never renews it.
+    /// The full ownership census (`check`: owner, parent, executable files, module list) runs
+    /// at the snapshot boundaries: `Process::begin_snapshot` and the tools' closing `check`.
+    /// Between them every read is bracketed by the held handles alone: each must still be a
+    /// live process (a zero-timeout wait) with the pinned creation time. An open handle keeps
+    /// its process object, so its PID cannot be reused while the reader holds it, and a live
+    /// process cannot change its owner, parent or mapped executable; a process that exits or
+    /// is replaced is refused at the next read. A census costs tens of milliseconds; one per
+    /// batch made a multi-read snapshot of a running game tear on its moving clock.
+    /// A caller may supply its original cancellation/deadline/lease check; this module never
+    /// renews it.
     pub(crate) fn read_many_checked(
         &self,
         requests: &[(u64, usize)],
@@ -373,7 +381,12 @@ impl<A: Api> OwnedReader<A> {
         }
         let result = (|| {
             boundary()?;
-            self.check()?;
+            if self.poisoned.load(Ordering::Acquire) {
+                return Err(error(
+                    "ownership_changed",
+                    "Windows reader lifetime is quarantined",
+                ));
+            }
             let mut checkpoint = || -> Result<()> {
                 boundary()?;
                 self.api.check_handle(&self.game, &self.session.game)?;
@@ -411,14 +424,12 @@ impl<A: Api> OwnedReader<A> {
                 }
                 Ok(values)
             })();
-            // Always finish the full original bracket, even on a short read or
+            // Always finish with the handle bracket, even on a short read or
             // cancellation. Nothing from an incomplete batch is returned.
-            let final_owner = self.check();
             let final_boundary = checkpoint();
             match observed {
                 Err(cause) => Err(cause),
                 Ok(values) => {
-                    final_owner?;
                     final_boundary?;
                     Ok(values)
                 }
