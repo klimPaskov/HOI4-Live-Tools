@@ -3468,6 +3468,16 @@ impl MacClock {
                 bounded_keys.preflight()?;
             }
             let keys = &bounded_keys;
+            // an order posted in process runs on the game's next frame: a read in the same
+            // millisecond still shows the old line (s7n, 24 Nov 2026: a line closed in process read
+            // back unchanged 4 ms later, NotApplied, and the balance rested two game days with 27
+            // factories idle). Unchanged counts only after IPC_SETTLE.
+            let ipc_posted: std::cell::Cell<Option<std::time::Instant>> = std::cell::Cell::new(None);
+            let ipc_early = || {
+                ipc_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE)
+            };
             let mut settle = || {
                 let now = production::lines(process)?;
                 let detail = json!({"lines":now.iter().map(|l| json!({"equipment":l.key,"factories":l.requested})).collect::<Vec<_>>()});
@@ -3506,6 +3516,8 @@ impl MacClock {
                                 .any(|l| l.key.as_deref() == Some(key) && l.requested == factories)
                         {
                             journal::Outcome::Reached(detail)
+                        } else if added.is_empty() && ipc_early() {
+                            journal::Outcome::Unknown
                         } else if added.is_empty() {
                             journal::Outcome::Unchanged(detail)
                         } else {
@@ -3517,6 +3529,9 @@ impl MacClock {
                         match now.iter().find(|l| l.handle == line.handle) {
                             Some(l) if l.requested == factories => {
                                 journal::Outcome::Reached(detail)
+                            }
+                            Some(l) if l.requested == line.requested && ipc_early() => {
+                                journal::Outcome::Unknown
                             }
                             Some(l) if l.requested == line.requested => {
                                 journal::Outcome::Unchanged(detail)
@@ -3544,7 +3559,10 @@ impl MacClock {
                         })
                     };
                     match inproc::add_line(ch, variant, factories, &mut new_line) {
-                        inproc::Routed::Done(_) => return Ok(()),
+                        inproc::Routed::Done(_) => {
+                            ipc_posted.set(Some(std::time::Instant::now()));
+                            return Ok(());
+                        }
                         inproc::Routed::Refused(what) => return Err(inproc::refused_error(&what)),
                         inproc::Routed::Gui => bounded_keys.preflight()?,
                     }
@@ -3556,7 +3574,10 @@ impl MacClock {
                         Some((op, delta)) => {
                             let vals = if delta == 0 { vec![] } else { vec![delta] };
                             match ch.post(op, &[line.address], &vals, None, None) {
-                                Ok(reply) if inproc::all_posted(&reply) => return Ok(()),
+                                Ok(reply) if inproc::all_posted(&reply) => {
+                                    ipc_posted.set(Some(std::time::Instant::now()));
+                                    return Ok(());
+                                }
                                 // the game's own check refused it: that is the answer (the GUI's
                                 // buttons post the same refused command)
                                 Ok(reply) if inproc::game_refused(&reply) => {
