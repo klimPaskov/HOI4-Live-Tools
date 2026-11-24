@@ -230,9 +230,18 @@ mod tests {
             spender_when(&plan, &json!({"ref": "template:t_inf_art"})),
             json!("date >= 1939.10.15")
         );
-        assert_eq!(spender_when(&plan, &json!({"ref": "design:d1"})), Value::Null);
-        assert_eq!(spender_when(&plan, &json!({"ref": "spirit:x"})), Value::Null);
-        assert_eq!(spender_when(&plan, &json!({"ref": "template:none"})), Value::Null);
+        assert_eq!(
+            spender_when(&plan, &json!({"ref": "design:d1"})),
+            Value::Null
+        );
+        assert_eq!(
+            spender_when(&plan, &json!({"ref": "spirit:x"})),
+            Value::Null
+        );
+        assert_eq!(
+            spender_when(&plan, &json!({"ref": "template:none"})),
+            Value::Null
+        );
     }
 
     #[test]

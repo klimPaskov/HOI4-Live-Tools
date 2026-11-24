@@ -227,6 +227,12 @@ pub(super) fn war_reason(
     if !ops.is_empty() {
         return Some(format!("operation {} executes", ops.join(", ")));
     }
+    // a dated declaration from DECLARE_LEAD before its day until it is out: the opening is war
+    // work (t1939l, 24 Nov 2026: the rule went 3 -> 4 "with only minor work due" eight days after
+    // the Polish declaration's date while one slow step held the war's start)
+    if let Some(tag) = dated_declaration_near(plan, &at_war, now) {
+        return Some(format!("the declaration on {tag} is due"));
+    }
     let declared: Vec<&String> = planned
         .iter()
         .filter(|t| {
@@ -331,6 +337,57 @@ pub(super) fn next_phase(now_phase: Option<&str>, war: bool, c: Calm) -> &'stati
 }
 
 /// Game hours to every future date in the plan, from any string value; pure.
+/// How long before a dated declaration its opening counts as war work (game hours).
+pub(super) const DECLARE_LEAD: GameHour = 3 * 24;
+/// How long after its date a declaration not yet out still counts as due (game hours).
+const DECLARE_TAIL: GameHour = 30 * 24;
+
+/// The target of a planned declaration (`diplomacy` rows with action `declare`) whose earliest
+/// date clause lies within DECLARE_LEAD ahead of `now` or up to DECLARE_TAIL behind it, while the
+/// target is not at war with us yet. Pure.
+pub(super) fn dated_declaration_near(
+    plan: &Value,
+    at_war: &[String],
+    now: GameHour,
+) -> Option<String> {
+    for row in list(plan, "diplomacy") {
+        if row["action"].as_str() != Some("declare") {
+            continue;
+        }
+        let target = row["target"].as_str().unwrap_or_default();
+        if target.is_empty() || at_war.iter().any(|t| t == target) {
+            continue;
+        }
+        let mut at: Vec<GameHour> = Vec::new();
+        // the game hours of its date clauses ("date >= Y.M.D", "date:Y.M.D")
+        date_clauses(&row["when"], &mut at);
+        let Some(day) = at.into_iter().max() else {
+            continue;
+        };
+        if now + DECLARE_LEAD >= day && now <= day + DECLARE_TAIL {
+            return Some(target.to_string());
+        }
+    }
+    None
+}
+
+fn date_clauses(when: &Value, out: &mut Vec<GameHour>) {
+    match when {
+        Value::String(t) => {
+            let t = t.trim();
+            if let Some(rest) = t.strip_prefix("date") {
+                let rest = rest.trim_start_matches([' ', ':', '>', '=']);
+                if let Some(h) = super::date_hour(rest) {
+                    out.push(h);
+                }
+            }
+        }
+        Value::Array(items) => items.iter().for_each(|v| date_clauses(v, out)),
+        Value::Object(map) => map.values().for_each(|v| date_clauses(v, out)),
+        _ => {}
+    }
+}
+
 fn plan_dates(plan: &Value, now: GameHour, out: &mut Vec<GameHour>) {
     match plan {
         Value::String(t) => {
@@ -654,6 +711,35 @@ fn real_secs() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// t1939l (24 Nov 2026): from three days before a dated declaration until it is out, the
+    /// opening is war work.
+    #[test]
+    fn a_dated_declaration_is_war_work_from_three_days_before() {
+        let plan = json!({"diplomacy": [
+            {"action": "declare", "target": "POL", "when": "date >= 1939.9.1"},
+            {"action": "declare", "target": "HOL", "when": {"all": ["date >= 1940.5.10", "capitulated:POL"]}},
+            {"action": "guarantee", "target": "HUN", "when": "date >= 1939.8.20"}]});
+        let day = super::super::date_hour("1939.9.1").unwrap();
+        assert_eq!(dated_declaration_near(&plan, &[], day - 4 * 24), None);
+        assert_eq!(
+            dated_declaration_near(&plan, &[], day - 2 * 24).as_deref(),
+            Some("POL")
+        );
+        assert_eq!(
+            dated_declaration_near(&plan, &[], day + 8 * 24).as_deref(),
+            Some("POL")
+        );
+        assert_eq!(
+            dated_declaration_near(&plan, &["POL".into()], day + 8 * 24),
+            None
+        );
+        let may = super::super::date_hour("1940.5.10").unwrap();
+        assert_eq!(
+            dated_declaration_near(&plan, &["POL".into()], may - 24).as_deref(),
+            Some("HOL")
+        );
+    }
 
     fn wars(enemies: &[&str], borders: &[&str]) -> Value {
         json!({"wars": {"enemies": enemies, "wars_won": []},
