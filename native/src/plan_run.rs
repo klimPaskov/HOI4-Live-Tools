@@ -7845,10 +7845,19 @@ fn air_war_missions(
                 let name = text(&wing["wing"]).to_string();
                 // a wing training in peace (plan_manage air_idle_step) is free for the war
                 let training_only = strings(wing, "missions") == ["training"];
-                if (wing["standing_by"] != json!(true) && !training_only)
-                    || plan_manage::air_plan_claims(plan, wing)
-                {
+                if wing["standing_by"] != json!(true) && !training_only {
+                    state.done.remove(&format!("airidle:{name}"));
                     continue;
+                }
+                // a wing an `air_plan` entry claims is the entry's while it orders it; one it has
+                // left on the ground for AIR_CLAIM_IDLE (its entry full at max_wings, or not due)
+                // takes the default mission: 6 fighter/CAS and 3 naval bomber wings stood by all
+                // the way to the Polish war (t1939v1, 24 Nov 2026)
+                if plan_manage::air_plan_claims(plan, wing) {
+                    let since = *state.done.entry(format!("airidle:{name}")).or_insert(now);
+                    if now - since < AIR_CLAIM_IDLE {
+                        continue;
+                    }
                 }
                 if state.skipped(now, "airwing", &name) {
                     waiting = true;
@@ -8140,6 +8149,8 @@ fn operation_targets(tools: &dyn Tools) -> Vec<i64> {
 /// The state a war wing based in `base` flies over: an operation target across the border its
 /// base lies on, else the first operation target, else the first enemy state across its border,
 /// else (no enemy states listed) the front state itself.
+/// Game hours a wing an `air_plan` entry claims may stand by before it takes the default mission.
+const AIR_CLAIM_IDLE: GameHour = 2 * DAY;
 /// Wings one air mission order takes at most (`hoi4_air_mission` wings).
 const AIR_BATCH: usize = 12;
 

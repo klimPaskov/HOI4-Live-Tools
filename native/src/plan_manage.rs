@@ -10697,6 +10697,29 @@ mod tests {
             Some("air 1 wing(s) air_superiority over state 550 (3. Stormo): true Verified"),
             "1. Stormo belongs to the air plan"
         );
+        // left on the ground by its entry for two game days, 1. Stormo takes the default mission
+        // (t1939v1: claimed wings stood by to the war)
+        let mut later = State::default();
+        let mut flying = air_read();
+        flying["wings"][0]["air_base"] = json!({"base_id": 3, "state_id": 550});
+        let tools = fake(vec![
+            ("hoi4_air", flying),
+            (
+                "hoi4_wars",
+                json!({"borders": [{"hostile": true, "own_border_states": [550]}]}),
+            ),
+        ]);
+        let _ = extras_step(&mut later, &tools, &plan, "l", START).unwrap();
+        assert!(later.done.contains_key("airidle:1. Stormo"));
+        later
+            .done
+            .insert("airidle:1. Stormo".into(), START - 3 * DAY);
+        later.bad.clear();
+        let out = extras_step(&mut later, &tools, &plan, "l", START + 1).unwrap();
+        assert!(
+            out.as_deref().is_some_and(|o| o.contains("1. Stormo")),
+            "{out:?}"
+        );
     }
 
     fn war_stats(total: f64) -> Value {
