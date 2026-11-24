@@ -19715,7 +19715,10 @@ mod tests {
         let now = hour("1939.10.27");
         let out = layout_step(&mut state, &tools, &plan, "l", now).unwrap();
         assert_eq!(out.as_deref(), Some("layout: Army 6 is Armee Nord"));
-        assert_eq!(state.layout.get("Armee Nord").map(String::as_str), Some("Army 6"));
+        assert_eq!(
+            state.layout.get("Armee Nord").map(String::as_str),
+            Some("Army 6")
+        );
         // and the operations wait for a role the layout has not bound yet
         let mut fresh = State::default();
         assert_eq!(
