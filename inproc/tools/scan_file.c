@@ -124,6 +124,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "build_tmpl")) got = ((uint64_t)t.st2.build.tmpl_real_off << 32) | ((uint64_t)t.st2.build.tmpl_prov_off << 8) | t.st2.build.tmpl_id_off;
         else if (!strcmp(argv[a], "build_loc")) got = ((uint64_t)t.st2.build.state_id_off << 16) | t.st2.build.prov_id_off;
         else if (!strcmp(argv[a], "build_ref_vt")) got = t.st2.build.ref_vt;
+        else if (!strcmp(argv[a], "train_ok")) { got = (uint64_t)t.st2.train.ok; fprintf(stderr, "training: %s\n", t.st2.train.evidence); }
+        else if (!strcmp(argv[a], "train_can")) got = t.st2.train.can_train;
+        else if (!strcmp(argv[a], "train_offs")) got = ((uint64_t)t.st2.train.deploy_off << 16) | t.st2.train.tmpl_body_off;
         else if (!strcmp(argv[a], "holds_ok")) { got = (uint64_t)t.st2.holds.ok; fprintf(stderr, "holds: %s\n", t.st2.holds.evidence); }
         else if (!strcmp(argv[a], "holds_kind")) got = t.st2.holds.kind_area;
         else if (!strcmp(argv[a], "holds_area_off")) got = t.st2.holds.area_off;

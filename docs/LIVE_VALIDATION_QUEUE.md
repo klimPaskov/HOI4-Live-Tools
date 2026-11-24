@@ -835,3 +835,30 @@ C6 running at speed 3: C1 and C4 again: Verified within 3 s. C7 save + reload; a
 Stop at once on: a crash, any `unexplained`, a line placed in another state / province than named, a line changed that the
 request did not name, civilian factories assigned wrongly (queue rows' factories differ from the game's own after C4).
 Pass -> IPC_LIVE_PASSED entry 16 (construction) = 1.
+
+## Session S15-TRAINING: the in-process module, training queues (family `training`; about 25 minutes) -- after S14-CONSTRUCTION
+
+Built by engineer 82 (24 Nov 2026), offline-proven only: stage 2 55/55 on 1.20.0.0 and 1.19.4.1 macOS; Linux/Windows 1.20
+CCreateConveyor 13479 / CSetConveyorSeries 13483 / CAddConveyorLine 13484 / CSetConveyorLocation 13481 / CDeployConveyor
+13600 / CRemoveConveyor 13601 by RTTI (6/6 each). OFF under `auto` until this session passes.
+- create: the template row's Train button: the module first calls the game's own can_train(deployment, template body, 1,
+  0) (1.20 0x1014876a0, read from the add-line command's own check) and refuses without posting when it says no; then
+  CreateConveyor(template, 0). series: SetConveyorSeries(queue, 1) (a new queue trains forever). add_lines: AddConveyorLine
+  (queue, n) at most 5 per command (Shift-click); its "can do" is can_train with n. location: SetConveyorLocation(queue,
+  province id) as the map click; read back from the queue's +0x3c (UNVERIFIED live: the panel's "No location set" label
+  should match +0x3c == 0). deploy / remove: the queue's deploy / cancel buttons (module ops; no MCP tool names them).
+- MCP: hoi4_train (Verified = the new queue's lines; the in-process reply lists the four posts) and hoi4_deploy_locations
+  (in process: the queues' province field is the read-back; mouse: the panel's labels). The location is the deploy
+  state's first province from the game files' state definition.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,training ./inproc_stage2.sh PREV-1936 s15t` (Germany 1936).
+T1 paused, `HOI4_BACKEND=inprocess`: `hoi4_train {"template":"Infanterie-Division","count":3,"deploy_state_id":64}`:
+Verified; `in_process.posts` = create, series, add_lines, location; open the panel by hand AFTER: one queue, 3 lines,
+1 division each, location Brandenburg (not "No location set").
+T2 count 7 (two add_lines commands of 5 and 1? no: one of 5 + one of 1 = 6 extra): Verified, 7 lines.
+T3 a template the game cannot train now (e.g. one needing equipment the country cannot produce, or no manpower) ->
+`game_refused`, nothing posted, no queue added. A template name that does not exist -> the mouse path's own error.
+T4 hoi4_deploy_locations: create a queue by hand without a location; `{"state_id":64}`: Verified, the label set.
+T5 running at speed 3: T1 again, Verified within 3 s per step. T6 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, two queues for one request, a queue at "No location set" while +0x3c > 0
+(then the read-back offset is wrong: fix before passing), manpower or equipment changed by anything but the queue.
+Pass -> IPC_LIVE_PASSED entry 17 (training) = 1.

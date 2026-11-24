@@ -242,6 +242,16 @@ typedef struct {
  * +tmpl_real_off set), its province-level count +tmpl_prov_off decides the location kind (> 0: a province id, else a
  * state id), its id +tmpl_id_off goes into the reference. The reference's own class vtable (18CBuildingReference) is the
  * one the command's constructor stores */
+/* engineer 82: training: the "can train" check the deployment view makes before its Train click (the add-line command's
+ * own "can do" calls it with the line count): can_train(country deployment, template body, count, 0); the country from
+ * the tag (country_of), its deployment status at +deploy_off, the template's body at +tmpl_body_off */
+typedef struct {
+    int ok;
+    uint64_t can_train, country_of, template_of;
+    uint32_t deploy_off, tmpl_body_off;
+    char evidence[200];
+} training_facts;
+
 typedef struct {
     int ok;
     uint32_t tmpl_real_off, tmpl_prov_off, tmpl_id_off, state_id_off, prov_id_off;
@@ -258,6 +268,7 @@ typedef struct {
     diplo_facts diplo;        /* engineer 78: the command maker, the date, the war goals */
     holds_facts holds;        /* engineer 79: the area-defence order */
     construction_facts build; /* engineer 82: the building reference */
+    training_facts train;     /* engineer 82: the Train click's "can train" */
     int n;
     cmd_type t[CMD2_MAX];
 } stage2_table;

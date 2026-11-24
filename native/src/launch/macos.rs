@@ -24,6 +24,7 @@ mod fair_facts;
 mod inproc;
 mod inproc_construction;
 mod inproc_diplomacy;
+mod inproc_training;
 mod inproc_events;
 mod inproc_holds;
 mod inproc_orders;
@@ -7780,7 +7781,20 @@ impl MacClock {
                 ids
             };
             let retry = actions.receipt_exists(id);
-            if !retry {
+            // engineer 82: in process (family `training`): the Train button's command, then the new queue's series,
+            // lines and location, no panel; the deploy state's first own province as the location click
+            let mut train_route = if retry { None } else { inproc::route("training") };
+            let train_province = match train_route {
+                Some(_) => mapdata::game_dir(&epoch.game.exe)
+                    .and_then(|d| mapdata::state_provinces(&d, deploy_state))
+                    .ok()
+                    .and_then(|p| p.first().copied()),
+                None => None,
+            };
+            if train_province.is_none() {
+                train_route = None;
+            }
+            if !retry && train_route.is_none() {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"train","template":template,"count":count});
@@ -7798,13 +7812,22 @@ impl MacClock {
                     settle::queue_growth(0, added as i64, count as i64).outcome(detail)
                 })
             };
+            let mut train_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(p) = train_province {
+                    train_reply =
+                        inproc_training::train(process, &mut train_route, template, count, p)?;
+                    if train_reply.is_some() {
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 deployment::train(process, keys, template, count)?;
                 deployment::set_locations(process, keys, deploy_state).map(|_| ())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, train_reply));
         }
         if name == "hoi4_deploy_locations" {
             allowed(args, &["state_id", "request_id", "lease_token"])?;
@@ -7818,10 +7841,30 @@ impl MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            let unlocated = || ui::read(process, deployment::unlocated);
-            let start = unlocated()?;
             let retry = actions.receipt_exists(id);
-            if !retry {
+            // engineer 82: in process (family `training`): the location command for every queue without one, the
+            // state's first own province as the click; the queues' own province field is the read-back (no panel)
+            let mut locate_route = if retry { None } else { inproc::route("training") };
+            let locate_province = match locate_route {
+                Some(_) => mapdata::game_dir(&epoch.game.exe)
+                    .and_then(|d| mapdata::state_provinces(&d, state))
+                    .ok()
+                    .and_then(|p| p.first().copied()),
+                None => None,
+            };
+            if locate_province.is_none() {
+                locate_route = None;
+            }
+            let in_memory = locate_route.is_some();
+            let unlocated = || {
+                if in_memory {
+                    inproc_training::unlocated(process)
+                } else {
+                    ui::read(process, deployment::unlocated)
+                }
+            };
+            let start = unlocated()?;
+            if !retry && !in_memory {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"deploy_locations","state_id":state});
@@ -7835,12 +7878,20 @@ impl MacClock {
                     settle::locations(start, now).outcome(detail)
                 })
             };
+            let mut locate_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(p) = locate_province {
+                    locate_reply = inproc_training::locate(process, &mut locate_route, p)?;
+                    if locate_reply.is_some() {
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 deployment::set_locations(process, keys, state).map(|_| ())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, locate_reply));
         }
         if name == "hoi4_decisions_list" {
             allowed(args, &["lease_token"])?;

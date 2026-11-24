@@ -15,8 +15,8 @@
 #include <time.h>
 #include <unistd.h>
 
-const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics", "construction"};
-const int IPC_ALLOWED_COUNT = 16;
+const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics", "construction", "training"};
+const int IPC_ALLOWED_COUNT = 17;
 /* airwing (engineer 71, 24 Nov): split, merge, disband, attach, detach, region by id / hold; OFF in auto until its
  * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
 const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */, 0 /* airwing */,
@@ -38,7 +38,9 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                    * 24 Nov 2026, s81b: start, replace, refusals, running) */,
                                 0 /* politics (engineer 79): a law / an idea slot (S13-POLITICS) */,
                                 0 /* construction (engineer 82): add in a state or on a province (supply hubs included),
-                                   * remove a line, move a line (S14-CONSTRUCTION) */};
+                                   * remove a line, move a line (S14-CONSTRUCTION) */,
+                                0 /* training (engineer 82): a training queue of a template, its series, lines, location,
+                                   * deploy, cancel (S15-TRAINING) */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;

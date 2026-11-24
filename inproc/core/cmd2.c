@@ -280,6 +280,35 @@ const cmd_spec CMD2_SPECS[] = {
     {"construction", "construction.move", "CSetProductionLinePlacementCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
      "22CGeneralProductionLine", 3, {{"line", 0x24, FK_REF, 0, 0x2fb3, 0}, {"index", 0x2c, FK_I32, 0, 0x2f72, -1, 1},
       {"grouped", 0x30, FK_U8, 0, 0x32ed, 0, 2}}, OBJ2_NONE, 0},
+    /* ---- training (engineer 82, 24 Nov): the deployment view's posts, read from 1.20.0.0 and 1.19.4.1 (identical field
+     * ids). Objects: the division template as the view holds it (27CReferencedDivisionTemplate, the country's template
+     * list) and the training queue (27CMilitaryDeploymentConveyor, the country's deployment status).
+     * create: the template row's Train button (UI 1.20 0x1024519e0): can_train(deployment, template body, 1, 0) first
+     * (the module makes the same call: training facts), then CreateConveyor(template, 0) (ctor 1.20 0x100825b00):
+     * CCreateConveyorCommand 13479 (0x30): template handle +0x24 (0x3142), +0x2c (0x37c7) the UI's 0. Its "can do" only
+     * resolves the template. The new queue is read back by the MCP. */
+    {"training", "training.create", "CCreateConveyorCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "27CReferencedDivisionTemplate", 2,
+     {{"template", 0x24, FK_REF, 0, 0x3142, 0}, {"group", 0x2c, FK_I32, 0, 0x37c7, 0, 0, 1}}, OBJ2_NONE, 0},
+    /* series: the queue's + / - (UI 0x1022bd290: SetConveyorSeries(queue, amount +- 1); 0 = trains forever):
+     * CSetConveyorSeriesCommand 13483: queue +0x24 (0x34b4), amount +0x2c (0x1a1) */
+    {"training", "training.series", "CSetConveyorSeriesCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "27CMilitaryDeploymentConveyor", 2,
+     {{"queue", 0x24, FK_REF, 0, 0x34b4, 0}, {"amount", 0x2c, FK_I32, 0, 0x1a1, 0}}, OBJ2_NONE, 0},
+    /* add_lines: the queue's Add Unit (UI 0x1022bd450: 1 line, 5 with Shift, clamped by the game's max): AddConveyorLine
+     * (queue, lines) CAddConveyorLineCommand 13484: queue +0x24 (0x34b4), lines +0x2c (0x1a1); its "can do" is
+     * can_train(deployment, template body, lines, 0). The module posts at most 5 per command, as Shift-clicks. */
+    {"training", "training.add_lines", "CAddConveyorLineCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "27CMilitaryDeploymentConveyor", 2,
+     {{"queue", 0x24, FK_REF, 0, 0x34b4, 0}, {"lines", 0x2c, FK_I32, 0, 0x1a1, 0}}, OBJ2_NONE, 0},
+    /* location: the map click in the queue's location mode (UI 0x1025d4b80: (queue, the clicked province's id)):
+     * CSetConveyorLocationCommand 13481: queue +0x24 (0x34b4), province id +0x2c (0x286d); its "can do": a province id
+     * in range and allowed for the template. Execution stores it in the queue (+0x3c, 1.20 0x1014a42a0). */
+    {"training", "training.location", "CSetConveyorLocationCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "27CMilitaryDeploymentConveyor", 2,
+     {{"queue", 0x24, FK_REF, 0, 0x34b4, 0}, {"province", 0x2c, FK_I32, 0, 0x286d, 0, 1}}, OBJ2_NONE, 0},
+    /* deploy: the queue's deploy button (UI 0x1022bd630), remove: its cancel (UI 0x1022bd6d0): the queue alone.
+     * CDeployConveyorCommand 13600, CRemoveConveyorCommand 13601: queue +0x24 (0x34b4) */
+    {"training", "training.deploy", "CDeployConveyorCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "27CMilitaryDeploymentConveyor", 1,
+     {{"queue", 0x24, FK_REF, 0, 0x34b4, 0}}, OBJ2_NONE, 0},
+    {"training", "training.remove", "CRemoveConveyorCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "27CMilitaryDeploymentConveyor", 1,
+     {{"queue", 0x24, FK_REF, 0, 0x34b4, 0}}, OBJ2_NONE, 0},
     {"holds", "holds.area_defense", "CEditAreaDefenseStateCommand", 0x50, BUILD_CTOR, CTOR_AREA_STATE, 0, 0x24, "12COrdersGroup", 5,
      {{"states", 0x30, FK_I32_ARRAY, 0x3c, 0x1b7, 0}, {"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0},
       {"settings", 0x4c, FK_I32, 0, 0x2b5d, 0}, {"replace", 0x48, FK_U8, 0, 0x29f1, 0}}, OBJ2_NONE, 0},
@@ -1058,6 +1087,30 @@ static void scan_construction_facts(const scan_image *im, const cmd_type *add, c
              (unsigned long long)cls, (unsigned long long)stored);
 }
 
+/* engineer 82: the "can train" call, read from the add-line command's own "can do" (its tail: the queue's owner, the
+ * country from it, the deployment status at +D, the queue's template, its body at +B, then jmp can_train(deployment,
+ * body, lines +0x2c, 0)). The Train button makes the same call with 1 line before posting CreateConveyor. */
+static void scan_training_facts(const scan_image *im, const cmd_type *add, const diplo_facts *dp, training_facts *o) {
+    memset(o, 0, sizeof *o);
+    uint32_t c[8]; unsigned m = 0;
+    long k = add && add->valid_fn ? pfind_at(im, add->valid_fn, 0xe0,
+        "e8 D 48 89 c7 e8 D 48 89 c7 e8 D 4c 8b b8 D 41 83 3e 00 75 ?? 83 7b 28 00 74 ?? 4c 89 f7 e8 D 48 89 c7 e8 D "
+        "48 8d 70 B 8b 53 2c 4c 89 ff 31 c9 48 83 c4 08 5b 41 5e 41 5f 5d e9 D", c, 8, &m) : -1;
+    if (k >= 0 && m == 1) {
+        uint64_t at = add->valid_fn + (uint64_t)k;
+        o->country_of = at + 21 + (int64_t)(int32_t)c[2];
+        o->deploy_off = c[3];
+        o->template_of = at + 56 + (int64_t)(int32_t)c[5];
+        o->tmpl_body_off = c[6];
+        o->can_train = at + 83 + (int64_t)(int32_t)c[7];
+    }
+    int agree = !dp || !dp->country_of || dp->country_of == o->country_of;
+    o->ok = k >= 0 && m == 1 && agree && o->deploy_off && o->deploy_off < 0x4000 && o->tmpl_body_off && o->tmpl_body_off < 0x100;
+    snprintf(o->evidence, sizeof o->evidence, "can_train 0x%llx (deployment +0x%x, template body +0x%x, template_of 0x%llx), "
+             "country_of 0x%llx (%s the diplomacy scan's)", (unsigned long long)o->can_train, o->deploy_off, o->tmpl_body_off,
+             (unsigned long long)o->template_of, (unsigned long long)o->country_of, agree ? "agrees with" : "DISAGREES with");
+}
+
 int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global, stage2_table *t) {
     memset(t, 0, sizeof *t);
     scan_stage2_common(im, pl, gs_global, &t->common);
@@ -1080,6 +1133,7 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
     scan_diplo_facts(im, t, &t->diplo); /* engineer 78 */
     scan_holds_facts(im, stage2_find(t, "holds.area_defense"), &t->holds); /* engineer 79 */
     scan_construction_facts(im, stage2_find(t, "construction.add"), &t->build); /* engineer 82 */
+    scan_training_facts(im, stage2_find(t, "training.add_lines"), &t->diplo, &t->train); /* engineer 82 */
     /* every type must agree on the "sender controls" check and the generic lookup (one game, one rule) */
     for (int i = 1; i < t->n; i++)
         if (t->t[i].ok && t->t[0].ok &&
@@ -1152,6 +1206,8 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
         if (!strcmp(fam, "holds") && t->t[i].ok && (!t->holds.ok || !t->orders.ok)) { t->t[i].ok = 0; on--; }
         /* construction: the building reference (add) */
         if (!strcmp(t->t[i].spec->op, "construction.add") && t->t[i].ok && !t->build.ok) { t->t[i].ok = 0; on--; }
+        /* training: create needs the Train button's own "can train" call */
+        if (!strcmp(t->t[i].spec->op, "training.create") && t->t[i].ok && !t->train.ok) { t->t[i].ok = 0; on--; }
         /* diplomacy: the command maker and the date; declare war also the war-goal list */
         if (t->t[i].spec->auth_kind == AUTH_DIPLO && t->t[i].ok &&
             (!t->diplo.ok || (t->t[i].spec->ctor == CTOR_DIPLO_WAR && !t->diplo.war_ok))) { t->t[i].ok = 0; on--; }

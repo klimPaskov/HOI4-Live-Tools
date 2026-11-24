@@ -435,6 +435,7 @@ typedef struct {
     /* construction (engineer 82): the building reference the click builds (location id, building id) and the kind of
      * location the request names (0 a state, 1 a province) */
     int32_t bld_loc, bld_id, bld_kind;
+    uint64_t deploy; /* training (engineer 82): the player's deployment status the Train check reads */
     long long ran_us, post_us;
     char reason[200], queue_type[64], server_type[64];
     dispatch_semaphore_t done;
@@ -988,6 +989,19 @@ static void run_job2(void *ctx) {
         const char *w = units_theatre(j);
         if (w) { for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2; snprintf(j->reason, sizeof j->reason, "%s", w); finish2(j); return; }
     }
+    if (!strcmp(op, "training.create")) { /* engineer 82: the Train button's own check, can_train(deployment, body, 1, 0) */
+        const training_facts *tf = &g_t.st2.train;
+        uint64_t sl = (uint64_t)g_slide;
+        if (!tf->ok || !code_ptr(tf->can_train + sl) || !code_ptr(tf->country_of + sl)) {
+            j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "training facts are not game code"); finish2(j); return;
+        }
+        void *pc = ((country_of_fn)(uintptr_t)(tf->country_of + sl))(&j->player_tag);
+        uint64_t dep = 0;
+        if (!pc || !sq((uint64_t)(uintptr_t)pc + tf->deploy_off, &dep) || !plausible(dep)) {
+            j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the player's deployment status is unreadable"); finish2(j); return;
+        }
+        j->deploy = dep; /* the check itself runs per template after its round trip */
+    }
     if (!strcmp(op, "construction.add")) { /* engineer 82: the template as the game's reference constructors read it */
         const construction_facts *bf = &g_t.st2.build;
         uint8_t real = 0; int32_t prov = 0, bid = 0; uint64_t vt = 0;
@@ -1015,6 +1029,14 @@ static void run_job2(void *ctx) {
         /* AUTH_TAG: the command names the player's own tag; whether the country may use the object is the game's check */
         if (ct->spec->auth_kind == AUTH_HANDLE &&
             (!code_ptr(owner_f) || ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)j->obj[i]) != j->player_tag)) { j->res[i] = R_NOT_OWN; j->refused++; continue; }
+        if (!strcmp(op, "training.create")) { /* engineer 82: a live own template: the Train button's can_train(deployment, body, 1, 0) */
+            typedef unsigned char (*can_train_fn2)(void *, const void *, int32_t, int32_t);
+            const training_facts *tf = &g_t.st2.train;
+            if (!((can_train_fn2)(uintptr_t)(tf->can_train + (uint64_t)g_slide))((void *)(uintptr_t)j->deploy,
+                                                                               (const void *)(uintptr_t)(j->obj[i] + tf->tmpl_body_off), 1, 0)) {
+                j->res[i] = R_INVALID; j->refused++; continue;
+            }
+        }
         if (!strcmp(op, "units.transfer")) { /* the divisions (in an army or in none), then the order the UI would name */
             j->allow_free = 1;
             const char *why = orders2_divisions(j);
@@ -1485,6 +1507,31 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         if (j->n != 1) why = "research.start: exactly one technology";
         else if (nv != 1 || j->val[0] < 0 || j->val[0] > 31) why = "vals: one research slot index (0..31)";
         else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "research.start takes no flag, obj2, provs or divs";
+    } else if (!strncmp(op, "training.", 9)) {
+        /* engineer 82: training (the deployment view).
+         *   create:    objs = own division templates (1..8, exact CReferencedDivisionTemplate); no vals
+         *   series:    objs = own training queues; vals = the series amount each (0 = forever .. 1000)
+         *   add_lines: objs = ONE own training queue; vals = the lines to add (1..24: Shift-clicks of at most 5 each)
+         *   location:  objs = own training queues (1..32); vals = ONE province id (1..65535) for all
+         *   deploy, remove: objs = own training queues (1..32); no vals */
+        if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "training ops take no flag, obj2, provs or divs";
+        else if (!strcmp(op, "training.create")) { if (j->n > 8) why = "training.create: 1..8 templates"; else if (nv) why = "training.create takes no vals"; }
+        else if (!strcmp(op, "training.series")) {
+            if (nv != j->n) why = "vals: the series amount for each queue";
+            else for (int k = 0; k < j->n; k++) if (j->val[k] < 0 || j->val[k] > 1000) why = "series amount outside 0..1000";
+        } else if (!strcmp(op, "training.add_lines")) {
+            if (j->n != 1) why = "training.add_lines: exactly one queue";
+            else if (nv != 1 || j->val[0] < 1 || j->val[0] > 24) why = "vals: the lines to add (1..24)";
+            else {
+                uint64_t q = j->obj[0]; int64_t left = j->val[0]; int k = 0;
+                for (; left > 0 && k < 5; k++) { j->obj[k] = q; j->val[k] = left > 5 ? 5 : left; left -= j->val[k]; }
+                j->n = k;
+            }
+        } else if (!strcmp(op, "training.location")) {
+            if (nv != 1 || j->val[0] < 1 || j->val[0] > 65535) why = "vals: one province id (1..65535)";
+        } else if (!strcmp(op, "training.deploy") || !strcmp(op, "training.remove")) { if (nv) why = "this op takes no vals"; }
+        else why = "unknown training op";
+        nv = 0;
     } else if (!strncmp(op, "construction.", 13)) {
         /* engineer 82: construction.
          *   add:    objs = ONE building template (exact CBuildingTemplate); vals = the location id, its kind (0 a state id, 1 a
@@ -1559,7 +1606,7 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         uint64_t o2[1];
         if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0];
     }
-    for (int a = 0; !why && strncmp(op, "holds.", 6) && strcmp(op, "construction.add") && a < j->n; a++) for (int b = a + 1; b < j->n; b++) if (j->obj[a] == j->obj[b]) why = "an object is listed twice (no duplicate orders)";
+    for (int a = 0; !why && strncmp(op, "holds.", 6) && strcmp(op, "construction.add") && strcmp(op, "training.add_lines") && a < j->n; a++) for (int b = a + 1; b < j->n; b++) if (j->obj[a] == j->obj[b]) why = "an object is listed twice (no duplicate orders)";
     if (why) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused_by_policy\",\"reason\":\"%s\"", op, why); free(j); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
     long long t0 = mono_us();
     j->done = dispatch_semaphore_create(0);
