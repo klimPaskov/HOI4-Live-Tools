@@ -430,7 +430,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_area_defense": {
-   "description": "Give an own army an area defence order over own states (the army spreads over them and holds what the order covers): army card, area defence (V), one right-click on each state (Find view first). Verified by new battle-plan orders on the army. `settings` (the order window's toggles: victory_points, ports, coastlines, airbases, borders, forts, rail, facility) is not yet built: refused with not_yet_built; the game's defaults apply.",
+   "description": "Give an own army an area defence order over own states (the army spreads over them and holds what the order covers): army card, area defence (V), one right-click on each state (Find view first). Verified by new battle-plan orders on the army. Refused before input with no_commander when the army has no general (the game takes battle-plan orders only from a led army). `settings` (the order window's toggles: victory_points, ports, coastlines, airbases, borders, forts, rail, facility) is not yet built: refused with not_yet_built; the game's defaults apply.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {

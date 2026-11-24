@@ -17261,9 +17261,30 @@ mod tests {
                 {"army": "Armee Mitte", "role": "line"}]}]});
         let mut state = State::default();
         state.op_owned.insert("Armee Mitte".into(), "op".into());
-        let roster = board.call("hoi4_armies", &json!({})).unwrap();
+        let mut roster = board.call("hoi4_armies", &json!({})).unwrap();
         let active = vec![("op".to_string(), plan["operations"][0].clone())];
         let now = hour("1939.08.20");
+        // an army without a general takes no battle-plan order: it waits for the command step
+        for a in roster["armies"].as_array_mut().unwrap() {
+            a["commander"] = Value::Null;
+        }
+        assert_eq!(
+            plan_operation::idle_holds(
+                &mut state,
+                &board,
+                &plan,
+                &active,
+                &roster,
+                &json!({}),
+                "l",
+                now
+            )
+            .unwrap(),
+            None
+        );
+        for a in roster["armies"].as_array_mut().unwrap() {
+            a["commander"] = json!("Erwin Rommel");
+        }
         let line = plan_operation::idle_holds(
             &mut state,
             &board,
