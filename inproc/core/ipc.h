@@ -37,6 +37,9 @@ typedef struct {
     /* engineer 74: the fronts of an own group's theatre (the CFront sections a plan root binds to): a pure read of the
      * player's own theatre, served whenever the front facts resolved */
     int (*fronts)(const char *group, char *out, size_t n);
+    /* engineer 84: the player's own military-industrial organisations (traits, queue, policies, points): a pure read of
+     * the player's own country, served whenever the organisation facts resolved */
+    int (*mios)(char *out, size_t n);
     int (*killed)(void);
     void (*log)(const char *json_members);
 } ipc_backend;

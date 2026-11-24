@@ -22,6 +22,7 @@
  * the channel closes) within about 2 s. */
 #include "../core/caps.h"
 #include "../core/ipc.h"
+#include "../core/mio.h"
 #include <dispatch/dispatch.h>
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -436,6 +437,9 @@ typedef struct {
      * location the request names (0 a state, 1 a province) */
     int32_t bld_loc, bld_id, bld_kind;
     uint64_t deploy; /* training (engineer 82): the player's deployment status the Train check reads */
+    /* mio (engineer 84): the player's organisation manager, the token the command carries (a trait, a policy or the
+     * empty token = detach), the before-state the read-back compares, the organisation's handle (line) */
+    uint64_t mio_mgr, mio_h2; int32_t mio_tok, mio_before;
     long long ran_us, post_us;
     char reason[200], queue_type[64], server_type[64];
     dispatch_semaphore_t done;
@@ -851,6 +855,96 @@ static int hold_has_state(uint64_t order, int32_t state) {
  * before (the read-back finds the new one). An existing order: the game's own order lookup finds it in THIS group, it is
  * of the area kind, and the state is not in it yet (the click toggles: a state already there would be REMOVED); the
  * click carries the order's own settings mask, as the tool does. NULL when ready. */
+/* engineer 84: the organisations. The game's own functions, called on the main thread: tok2str (the name of a token),
+ * can_unlock (the unlock command's own check), the policy item's click gate (cooldown, political power, allowed) */
+typedef const void *(*tok2str_fn)(int32_t);
+typedef unsigned char (*can_unlock_fn)(void *, const void *, const void *, int32_t, void *);
+typedef unsigned char (*policy_gate_fn)(void *);
+static int mio_rd_cb(uint64_t a, void *b, size_t n) { return sread(a, b, n); }
+static uint64_t mio_name_cb(void *ctx, int32_t tok) {
+    (void)ctx;
+    uint64_t f = g_t.st2.mio.tok2str + (uint64_t)g_slide;
+    return code_ptr(f) ? (uint64_t)(uintptr_t)((tok2str_fn)(uintptr_t)f)(tok) : 0;
+}
+static int mio_can_cb(void *ctx, uint64_t org, uint64_t trait) {
+    (void)ctx;
+    uint64_t f = g_t.st2.mio.can_unlock + (uint64_t)g_slide;
+    return code_ptr(f) && ((can_unlock_fn)(uintptr_t)f)((void *)(uintptr_t)org, (const void *)(uintptr_t)trait,
+                                                        (const void *)(uintptr_t)(org + g_t.st2.mio.unlocked_off), 1, NULL) != 0;
+}
+/* the policy window's item as its click reads it: the policy token and the organisation's handle; the gate reads
+ * nothing else of the item (1.20 0x101ed8bf0: +0x70 and +0x74 only) */
+static int mio_policy_cb(void *ctx, uint64_t org, uint64_t handle, int32_t policy) {
+    (void)ctx; (void)org;
+    const mio_facts *f = &g_t.st2.mio;
+    uint64_t g = f->policy_gate + (uint64_t)g_slide;
+    _Alignas(16) uint8_t item[0x200];
+    if (!code_ptr(g) || f->gate_policy_off + 4 > sizeof item || f->gate_org_off + 8 > sizeof item) return 0;
+    memset(item, 0, sizeof item);
+    memcpy(item + f->gate_policy_off, &policy, 4);
+    memcpy(item + f->gate_org_off, &handle, 8);
+    return ((policy_gate_fn)(uintptr_t)g)(item) != 0;
+}
+/* the player's organisation manager: country_of(tag) -> +mgr_off */
+static uint64_t mio_manager(int32_t tag) {
+    const mio_facts *f = &g_t.st2.mio;
+    uint64_t cf = f->country_of + (uint64_t)g_slide, mgr = 0;
+    if (!f->ok || !code_ptr(cf)) return 0;
+    void *pc = ((country_of_fn)(uintptr_t)cf)(&tag);
+    if (!pc || !sq((uint64_t)(uintptr_t)pc + f->mgr_off, &mgr) || !plausible(mgr)) return 0;
+    return mgr;
+}
+/* an organisation of the player's own list, of its exact class, its owner tag the player's */
+static int mio_own_org(uint64_t mgr, uint64_t org, int32_t tag) {
+    const mio_facts *f = &g_t.st2.mio;
+    uint64_t vt = 0; int32_t t = 0;
+    return plausible(org) && sq(org, &vt) && vt == f->vt_org + (uint64_t)g_slide && sread(org + f->tag_off, &t, 4) && t == tag &&
+           mio_in_list(f, mio_rd_cb, mgr, org);
+}
+/* per object, after its round trip: what the organisation views allow before the click (the type's own "can do" runs
+ * again before the post) */
+static const char *mio_prep(job2_t *j, int i, int *invalid) {
+    const mio_facts *f = &g_t.st2.mio;
+    const char *op = j->ct->spec->op;
+    static char why[200];
+    *invalid = 0;
+    if (!j->mio_mgr && !(j->mio_mgr = mio_manager(j->player_tag))) return "the player's organisation manager is unreadable";
+    if (!strcmp(op, "mio.line")) { /* the line passed its resolver and owner; the organisation (if named) is own */
+        if (j->obj2 && !mio_own_org(j->mio_mgr, j->obj2, j->player_tag)) return "obj2 is not one of the player's own organisations";
+        if (j->obj2 && !sq(j->obj2 + g_t.st2.common.cref_handle_off, &j->mio_h2)) return "the organisation's handle is unreadable";
+        if (!j->obj2 && !sq(g_t.st2.common.null_ref_global + (uint64_t)g_slide, &j->mio_h2)) return "the empty handle is unreadable";
+        return NULL;
+    }
+    uint64_t org = j->obj[i], h = 0;
+    if (!mio_own_org(j->mio_mgr, org, j->player_tag)) return "not one of the player's own organisations";
+    if (!sq(org + g_t.st2.common.cref_handle_off, &h)) return "the organisation's handle is unreadable";
+    int32_t tok = (int32_t)j->val[0];
+    if (!strcmp(op, "mio.policy")) {
+        int32_t cur = 0;
+        if (!sread(org + f->policy_off, &cur, 4)) return "the attached policy is unreadable";
+        /* the gate's cost routine reads the policy object unchecked: only a policy of the country's own list */
+        if (!mio_policy(f, mio_rd_cb, j->mio_mgr, tok)) { snprintf(why, sizeof why, "policy %d is not one of the country's policies", tok); *invalid = 1; return why; }
+        if (!mio_policy_cb(NULL, org, h, tok)) {
+            *invalid = 1;
+            return cur == tok ? "the policy window refuses to detach (its cooldown)" : "the policy window refuses (cooldown, political power or not allowed)";
+        }
+        j->mio_tok = cur == tok ? f->empty_tok : tok; /* the attached policy's item detaches (the UI sends the empty token) */
+        j->val[0] = j->mio_tok;
+        j->mio_before = cur;
+        return NULL;
+    }
+    if (!mio_trait(f, mio_rd_cb, org, tok)) { snprintf(why, sizeof why, "trait %d is not in this organisation's tree", tok); *invalid = 1; return why; }
+    j->mio_tok = tok;
+    if (!strcmp(op, "mio.queue_trait")) {
+        if (mio_queued(f, mio_rd_cb, org, tok) == 1) { *invalid = 1; return "the trait is queued already"; }
+    } else {
+        int u = mio_unlocked(f, mio_rd_cb, org, tok);
+        if (u == 1) { *invalid = 1; return "the trait is unlocked already"; }
+        if (u < 0) return "the unlocked traits are unreadable";
+    }
+    return NULL;
+}
+
 static const char *holds_prep(job2_t *j, int i) {
     const orders_facts *of = &g_t.st2.orders;
     const holds_facts *hf = &g_t.st2.holds;
@@ -1053,6 +1147,11 @@ static void run_job2(void *ctx) {
                 if (why != j->reason) snprintf(j->reason, sizeof j->reason, "%s", why);
                 continue;
             }
+        }
+        if (!strcmp(ct->spec->family, "mio")) { /* engineer 84: the player's own organisation, the tree, the policy gate */
+            int inv = 0;
+            const char *why = mio_prep(j, i, &inv);
+            if (why) { j->res[i] = inv ? R_INVALID : R_BAD_OBJ2; j->refused++; snprintf(j->reason, sizeof j->reason, "%s", why); continue; }
         }
         if (!strcmp(ct->spec->family, "holds")) { /* engineer 79: the area order and the state's place in it */
             const char *why = holds_prep(j, i);
@@ -1581,6 +1680,23 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             j->n = j->nprov; /* one command per state, each for the same army */
             for (int k = 0; k < j->n; k++) j->obj[k] = g;
         }
+    } else if (!strncmp(op, "mio.", 4)) {
+        /* engineer 84: the organisations.
+         *   queue_trait / unlock_trait: objs = ONE own organisation; vals = the trait's token (from the mios read)
+         *   policy:      objs = ONE own organisation; vals = the policy item's token (the attached policy's own item detaches)
+         *   line:        objs = own equipment production lines (1..32); obj2 = ONE own organisation, or none (produce without) */
+        if (flag || (provs && *provs) || (divs && *divs)) why = "mio ops take no flag, provs or divs";
+        else if (!strcmp(op, "mio.line")) {
+            uint64_t o2[1];
+            if (nv) why = "mio.line takes no vals";
+            else if (obj2 && *obj2 && parse_list_u64(obj2, o2, 1) != 1) why = "obj2: one hex address (an own organisation) or none";
+            else j->obj2 = obj2 && *obj2 ? o2[0] : 0;
+        } else if (!strcmp(op, "mio.queue_trait") || !strcmp(op, "mio.unlock_trait") || !strcmp(op, "mio.policy")) {
+            if (j->n != 1) why = "exactly one organisation";
+            else if (obj2 && *obj2) why = "this op takes no obj2";
+            else if (nv != 1 || j->val[0] <= 0 || j->val[0] > 0x7fffffff) why = "vals: one token from the organisations read";
+        } else why = "unknown mio op";
+        nv = 0;
     } else if (!strncmp(op, "picks.", 6)) {
         /* engineer 75: the player's own picks. focus: objs = ONE CNationalFocus of the own tree (exact vtable; the game's
          * own "can start" with the player's country decides) */
@@ -1817,6 +1933,39 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             else snprintf(j->reason, sizeof j->reason, "posted; not executed yet (game paused)");
         }
     }
+    /* mio (engineer 84): the organisation's own fields: the queue holds the trait, the unlocked set holds it, the attached
+     * policy is the token sent, each line's organisation handle is the one sent. 3 s, paused-aware */
+    if (!strncmp(op, "mio.", 4) && j->posted) {
+        const mio_facts *f = &g_t.st2.mio;
+        long long start = mono_us();
+        pending = 1;
+        while (pending && mono_us() - start < 3000000) {
+            if (!strcmp(op, "mio.queue_trait")) pending = mio_queued(f, mio_rd_cb, j->obj[0], j->mio_tok) != 1;
+            else if (!strcmp(op, "mio.unlock_trait")) pending = mio_unlocked(f, mio_rd_cb, j->obj[0], j->mio_tok) != 1;
+            else if (!strcmp(op, "mio.policy")) { int32_t cur = 0; pending = !(sread(j->obj[0] + f->policy_off, &cur, 4) && cur == j->mio_tok); }
+            else {
+                int all = 1;
+                for (int i = 0; i < j->n && all; i++) {
+                    uint64_t hh = 0;
+                    if (j->res[i] == R_POSTED && !(sq(j->obj[i] + f->line_org_off, &hh) && hh == j->mio_h2)) all = 0;
+                }
+                pending = !all;
+            }
+            if (pending) usleep(2000);
+        }
+        if (!pending) {
+            executed = j->posted; rb_us = mono_us() - t0;
+            if (!strcmp(op, "mio.policy"))
+                snprintf(rbx, sizeof rbx, ",\"policy\":%d,\"policy_before\":%d,\"detached\":%s", j->mio_tok, j->mio_before,
+                         j->mio_tok == f->empty_tok ? "true" : "false");
+            else if (strcmp(op, "mio.line")) snprintf(rbx, sizeof rbx, ",\"trait\":%d", j->mio_tok);
+            else snprintf(rbx, sizeof rbx, ",\"organisation\":\"0x%llx\"", (unsigned long long)j->obj2);
+        } else {
+            reads_t r; do_reads(&r);
+            if (!(r.ok && r.has_date && r.paused)) snprintf(j->reason, sizeof j->reason, "posted; the organisation does not show it after 3 s in a running game");
+            else snprintf(j->reason, sizeof j->reason, "posted; not executed yet (game paused)");
+        }
+    }
     *unexplained = j->unexplained;
     size_t at = (size_t)snprintf(out, n, "\"op\":\"%s\",\"type_id\":%u,\"objects\":%d,\"posted\":%d,\"refused\":%d,\"executed\":%d,"
                                  "\"result\":\"%s\",\"reason\":\"%s\",\"main_wait_ms\":%.2f,\"requeues\":%d,\"forbid\":%d,"
@@ -1898,13 +2047,57 @@ static int be_tree(const char *group, char *out, size_t n, int fronts) {
     return ok;
 }
 
+/* engineer 84: the organisations read. A main-thread job (a consistent snapshot between frames) over the player's OWN
+ * organisation list only; the game's own functions name the tokens and decide "can be unlocked now" and "the policy
+ * window allows this item" (core/mio.c). Served whenever the organisation facts resolved, no opt-in: it reads only the
+ * player's own country and posts nothing. */
+typedef struct { int refs, ok, n; char reason[160]; char *out; size_t cap; dispatch_semaphore_t done; } jobm_t;
+static void jobm_release(jobm_t *j) {
+    if (__atomic_sub_fetch(&j->refs, 1, __ATOMIC_ACQ_REL) == 0) { dispatch_release(j->done); free(j->out); free(j); }
+}
+static void run_jobm(void *ctx) {
+    jobm_t *j = (jobm_t *)ctx;
+    uint64_t gs = 0, vp = 0, mgr = 0; int32_t tag = 0;
+    if (killed()) snprintf(j->reason, sizeof j->reason, "kill switch");
+    else if (!g_t.st2.mio.ok) snprintf(j->reason, sizeof j->reason, "organisation facts unresolved on this build");
+    else if (!g_gs_glob || !sq(g_gs_glob + (uint64_t)g_slide, &gs) || !sq(gs, &vp) || vp != g_vt_gs ||
+             !sread(gs + g_t.st2.common.player_tag_off, &tag, 4) || tag <= 0)
+        snprintf(j->reason, sizeof j->reason, "no loaded game with a player country");
+    else if (!(mgr = mio_manager(tag))) snprintf(j->reason, sizeof j->reason, "the player's organisation manager is unreadable");
+    else {
+        mio_env e = {mio_rd_cb, mio_name_cb, mio_can_cb, mio_policy_cb, NULL, g_t.st2.mio.vt_org + (uint64_t)g_slide};
+        j->n = mio_json(&g_t.st2.mio, &e, mgr, tag, j->out, j->cap);
+        j->ok = j->n >= 0;
+        if (!j->ok) snprintf(j->reason, sizeof j->reason, "an organisation is not what the facts say (nothing guessed)");
+    }
+    dispatch_semaphore_signal(j->done);
+    jobm_release(j);
+}
+static int be_mios(char *out, size_t n) {
+    jobm_t *j = (jobm_t *)calloc(1, sizeof *j);
+    if (!j || !(j->out = (char *)malloc(n))) { free(j); return 0; }
+    j->refs = 2; j->cap = n - 64; j->done = dispatch_semaphore_create(0);
+    long long t0 = mono_us();
+    dispatch_async_f(dispatch_get_main_queue(), j, run_jobm);
+    if (dispatch_semaphore_wait(j->done, dispatch_time(DISPATCH_TIME_NOW, 1500 * NSEC_PER_MSEC))) {
+        snprintf(out, n, "\"reason\":\"the main thread did not run the read within 1.5 s\"");
+        jobm_release(j); return 0;
+    }
+    int ok = j->ok;
+    if (ok) snprintf(out, n, "%s,\"read_ms\":%.2f", j->out, (mono_us() - t0) / 1000.0);
+    else snprintf(out, n, "\"reason\":\"%s\"", j->reason);
+    logj("\"event\":\"mios_read\",\"ok\":%s,\"n\":%d,\"ms\":%.2f", ok ? "true" : "false", j->n, (mono_us() - t0) / 1000.0);
+    jobm_release(j);
+    return ok;
+}
+
 static int be_orders(const char *group, char *out, size_t n) { return be_tree(group, out, n, 0); }
 static int be_fronts(const char *group, char *out, size_t n) { return be_tree(group, out, n, 1); }
 static void be_log(const char *members) { logj("%s", members); }
 
 static void *ipc_thread(void *arg) {
     pthread_setname_np("hoi4-live-inproc-ipc");
-    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, be_post2, be_orders, be_fronts, killed, be_log};
+    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, be_post2, be_orders, be_fronts, be_mios, killed, be_log};
     ipc_serve((const char *)arg, &be, &g_policy);
     return NULL;
 }

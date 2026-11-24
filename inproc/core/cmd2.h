@@ -259,6 +259,31 @@ typedef struct {
     char evidence[200];
 } construction_facts;
 
+/* engineer 84: military-industrial organisations, each fact read from the code that uses it (identical on 1.20.0.0 and
+ * 1.19.4.1):
+ *   - the country's organisation list as the "any/every organisation" trigger collects it: country_of(tag) -> country
+ *     +mgr_off (the organisation manager) -> organisations +orgs_off (COrganisation *), count +orgs_cnt;
+ *   - the country's policies as the attach command's execution finds one: manager +pol_off (CPolicy *), count +pol_cnt,
+ *     a policy's token +8;
+ *   - COrganisation (exact class): owner tag +tag_off and attached policy token +policy_off (the attach execution), the
+ *     key token +key_off (the unlock check names it), funds +funds_off (int64, the add-funds routine), size +size_off and
+ *     unspent trait points +points_off (the size-up and unlock routines), the unlocked-trait set +unlocked_off (a libc++
+ *     std::set of STraitId: begin, end node, size), the unlock queue +queue_off / +queue_cnt (STraitId 0x10: token +8),
+ *     the trait tree +tree_off (array +tree_arr / +tree_cnt of trait templates of stride trait_stride, token +8);
+ *   - the game's own functions: tok2str(token) -> const std::string * (the unlock check's name), can_unlock(org, trait,
+ *     &unlocked, 1, NULL) (the unlock command's "can do"), the policy list item's click gate (the UI's legality of attaching
+ *     or detaching: item +gate_policy_off policy token, +gate_org_off organisation handle);
+ *   - a production line's organisation handle +line_org_off (the line's organisation setter) */
+typedef struct {
+    int ok;
+    uint64_t country_of, tok2str, can_unlock, policy_gate, vt_org;
+    uint32_t mgr_off, orgs_off, orgs_cnt, pol_off, pol_cnt;
+    uint32_t tag_off, policy_off, key_off, funds_off, size_off, points_off, unlocked_off, queue_off, queue_cnt;
+    uint32_t tree_off, tree_arr, tree_cnt, trait_stride, gate_policy_off, gate_org_off, line_org_off;
+    int32_t empty_tok; /* the factory's "no trait / no policy" token (the command fields' default; detach sends it) */
+    char evidence[400];
+} mio_facts;
+
 #define CMD2_MAX 96
 typedef struct {
     stage2_common common;
@@ -269,6 +294,7 @@ typedef struct {
     holds_facts holds;        /* engineer 79: the area-defence order */
     construction_facts build; /* engineer 82: the building reference */
     training_facts train;     /* engineer 82: the Train click's "can train" */
+    mio_facts mio;            /* engineer 84: the organisations */
     int n;
     cmd_type t[CMD2_MAX];
 } stage2_table;

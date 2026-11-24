@@ -862,3 +862,37 @@ T5 running at speed 3: T1 again, Verified within 3 s per step. T6 save + reload;
 Stop at once on: a crash, any `unexplained`, two queues for one request, a queue at "No location set" while +0x3c > 0
 (then the read-back offset is wrong: fix before passing), manpower or equipment changed by anything but the queue.
 Pass -> IPC_LIVE_PASSED entry 17 (training) = 1.
+
+## Session S16-MIO: the in-process module, military-industrial organisations (family `mio`; about 25 minutes) -- after S15-TRAINING
+
+Built by engineer 84 (24 Nov 2026), offline-proven only: stage 2 59/59 on 1.20.0.0 and 1.19.4.1 macOS (identical offsets);
+Linux/Windows 1.20 CAddIndustrialOrgTraitToQueueCommand 16412 / CUnlockIndustrialOrganisationTrait 14495 /
+CAttachPolicyToIndustrialOrgCommand 16260 / CSetIndustrialManufacturerCommand 14496 and COrganisation by RTTI (5/5 each).
+OFF under `auto` until this session passes.
+- the read (`{"op":"mios"}`, no opt-in): the player's own organisation list (country_of(tag) +0xd10 -> +0x130/+0x13c),
+  each organisation's key, funds_raw (+0x108, scale UNVERIFIED), size (+0x110), unspent trait points (+0x114), attached
+  policy (+0x170), queue (+0x138/+0x144), the trait tree in the game's order (+0xf0 -> +0x28/+0x34, stride 0x380) with
+  states u (the unlocked std::set +0x120) / q / a (the game's can_unlock, as the unlock command's check calls it) / l,
+  and per organisation the policies the policy window's own gate (1.20 0x101ed8bf0) allows.
+- unlock_trait / queue_trait: the tree's click; the MCP unlocks when a point is free and the trait is `a`, else queues.
+  policy: the policy item's token; the module calls the item's gate first (cooldown, political power, allowed) and posts
+  nothing when it says no; the attached policy's item detaches (the empty token). line: a production line's roster row
+  (the line's resolver + owner, the organisation in the own list; "can do" checks the organisation makes the design).
+- MCP: hoi4_mio_trait (trait_index, trait_indices, auto, list), hoi4_mio_policy, hoi4_mio_line (organization given as its
+  KEY; the first offered organisation, a localised name, list:true and naval lines stay on the mouse path); hoi4_mios adds
+  `state` and `mio_system.unspent_trait_points`.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,mio ./inproc_stage2.sh PREV-1936 s16m` (Germany 1936).
+T0 hoi4_mios (any backend): `mio_system.state_read` true; Germany's organisations listed with keys; compare ONE organisation
+by hand in the politics view: size, trait points, attached policy, the queued traits; the trait tree's ORDER against the
+window (index 0 = which icon?). If the order differs: record it, list:true and trait_index still agree with each other.
+T1 paused, `HOI4_BACKEND=inprocess`: `hoi4_mio_trait {"organization":"<an org with trait_points>0>","trait_index":<an a
+trait>}`: Verified; the window shows the trait unlocked, the points one less. Then an `l` trait: Verified as queued.
+T2 `trait_indices` of 3 (one already queued): Verified, the queued one counted as reached, the others queued/unlocked.
+T3 `hoi4_mio_policy` with a policy in `policies_allowed`: Verified, political power down by its cost; again at once ->
+nothing posted, Verified (attached). A policy NOT in `policies_allowed` (cooldown) -> `refused_by_game_check`, nothing posted.
+T4 `hoi4_mio_line {"line":<an infantry_equipment line>,"equipment":"infantry_equipment","organization":"<a small-arms org
+key>"}`: Verified; the line's row shows the organisation. A tank organisation on that line -> `refused_by_game_check`.
+T5 running at speed 3: T1 again, Verified within 3 s. T6 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, a trait unlocked with no point (points negative), political power spent on a
+refused policy, an organisation of another country in the read, a read whose sizes or points differ from the window.
+Pass -> IPC_LIVE_PASSED entry 18 (mio) = 1.

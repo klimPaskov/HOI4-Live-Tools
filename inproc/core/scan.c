@@ -252,9 +252,10 @@ int scan_command_factory(const scan_image *im, const char *cls, scan_cap *factor
         if (riprel(f, i, 0xa0, factory->value, 1, &tg) && tg >= im->dconst_addr &&
             tg < im->dconst_addr + im->dconst_size && rtti_name_is(im, tg, mangled)) { vtable->value = tg; break; }
         /* engineer 76: lea rax, [vtable object]; add rax, 0x10; mov [rbx], rax (CSelectEventOptionCommand's factory
-         * addresses the vtable object, then steps over offset-to-top and the typeinfo to its address point) */
+         * addresses the vtable object, then steps over offset-to-top and the typeinfo to its address point; engineer 84:
+         * in any register, e.g. add rcx, 0x10 in the organisation commands' factories) */
         if (riprel(f, i, 0xa0, factory->value, 1, &tg) && i + 11 <= 0xa0 && f[i + 7] == 0x48 && f[i + 8] == 0x83 &&
-            f[i + 9] == 0xc0 && f[i + 10] == 0x10 && tg + 0x10 >= im->dconst_addr && tg + 0x10 < im->dconst_addr + im->dconst_size &&
+            (f[i + 9] & 0xf8) == 0xc0 && f[i + 10] == 0x10 && tg + 0x10 >= im->dconst_addr && tg + 0x10 < im->dconst_addr + im->dconst_size &&
             rtti_name_is(im, tg + 0x10, mangled)) { vtable->value = tg + 0x10; break; }
     }
     /* engineer 75: a factory that calls a separate default constructor (CArmyGroupCommand: operator new, then call

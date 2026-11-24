@@ -127,6 +127,16 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "train_ok")) { got = (uint64_t)t.st2.train.ok; fprintf(stderr, "training: %s\n", t.st2.train.evidence); }
         else if (!strcmp(argv[a], "train_can")) got = t.st2.train.can_train;
         else if (!strcmp(argv[a], "train_offs")) got = ((uint64_t)t.st2.train.deploy_off << 16) | t.st2.train.tmpl_body_off;
+        /* engineer 84: the organisation facts */
+        else if (!strcmp(argv[a], "mio_ok")) { got = (uint64_t)t.st2.mio.ok; fprintf(stderr, "mio: %s\n", t.st2.mio.evidence); }
+        else if (!strcmp(argv[a], "mio_list")) got = ((uint64_t)t.st2.mio.mgr_off << 32) | ((uint64_t)t.st2.mio.orgs_off << 16) | t.st2.mio.orgs_cnt;
+        else if (!strcmp(argv[a], "mio_pol")) got = ((uint64_t)t.st2.mio.pol_off << 16) | t.st2.mio.pol_cnt;
+        else if (!strcmp(argv[a], "mio_org")) got = ((uint64_t)t.st2.mio.tag_off << 32) | ((uint64_t)t.st2.mio.key_off << 16) | t.st2.mio.policy_off;
+        else if (!strcmp(argv[a], "mio_scalars")) got = ((uint64_t)t.st2.mio.funds_off << 32) | ((uint64_t)t.st2.mio.size_off << 16) | t.st2.mio.points_off;
+        else if (!strcmp(argv[a], "mio_traits")) got = ((uint64_t)t.st2.mio.unlocked_off << 48) | ((uint64_t)t.st2.mio.queue_off << 32) | ((uint64_t)t.st2.mio.queue_cnt << 16) | t.st2.mio.tree_off;
+        else if (!strcmp(argv[a], "mio_tree")) got = ((uint64_t)t.st2.mio.tree_arr << 32) | ((uint64_t)t.st2.mio.tree_cnt << 16) | t.st2.mio.trait_stride;
+        else if (!strcmp(argv[a], "mio_gate")) got = ((uint64_t)t.st2.mio.gate_policy_off << 32) | ((uint64_t)t.st2.mio.gate_org_off << 16) | t.st2.mio.line_org_off;
+        else if (!strcmp(argv[a], "mio_fns")) got = t.st2.mio.policy_gate;
         else if (!strcmp(argv[a], "holds_ok")) { got = (uint64_t)t.st2.holds.ok; fprintf(stderr, "holds: %s\n", t.st2.holds.evidence); }
         else if (!strcmp(argv[a], "holds_kind")) got = t.st2.holds.kind_area;
         else if (!strcmp(argv[a], "holds_area_off")) got = t.st2.holds.area_off;

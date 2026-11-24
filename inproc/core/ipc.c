@@ -15,8 +15,8 @@
 #include <time.h>
 #include <unistd.h>
 
-const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics", "construction", "training"};
-const int IPC_ALLOWED_COUNT = 17;
+const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics", "construction", "training", "mio"};
+const int IPC_ALLOWED_COUNT = 18;
 /* airwing (engineer 71, 24 Nov): split, merge, disband, attach, detach, region by id / hold; OFF in auto until its
  * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
 const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */, 0 /* airwing */,
@@ -40,7 +40,9 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                 0 /* construction (engineer 82): add in a state or on a province (supply hubs included),
                                    * remove a line, move a line (S14-CONSTRUCTION) */,
                                 0 /* training (engineer 82): a training queue of a template, its series, lines, location,
-                                   * deploy, cancel (S15-TRAINING) */};
+                                   * deploy, cancel (S15-TRAINING) */,
+                                0 /* mio (engineer 84): an organisation's trait queue / unlock, its policy, a production
+                                   * line's organisation (S16-MIO) */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;
@@ -275,6 +277,7 @@ static void handle(int fd, const ipc_backend *b, ipc_policy *p, rate_state *rs, 
                 if (!g || g->is_num || !g->str[0]) err = "group: the hex address of an own army or army group";
                 else ok = b->fronts(g->str, frag, sizeof frag);
             }
+            else if (!strcmp(op->str, "mios")) ok = b->mios ? b->mios(frag, sizeof frag) : 0; /* engineer 84: a pure read */
             else if (!strcmp(op->str, "post")) {
                 const ipc_member *c = get(m, nm, "cmd"), *sp = get(m, nm, "speed");
                 int allowed = 0, fam = c && !c->is_num ? ipc_family_of(c->str) : -1;
