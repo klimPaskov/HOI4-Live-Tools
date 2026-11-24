@@ -770,8 +770,9 @@ pub struct State {
     /// The bulk paths the plan turns on (`manage.bulk`): `act` passes `bulk: true` to the tools
     /// that have one.
     bulk: HashSet<String>,
-    /// The game hour `op_owned` was last worked out.
-    op_owned_at: Option<GameHour>,
+    /// The game hour `op_owned` was last worked out, with the layout it was worked out from (a
+    /// role formed or renamed in the same game hour, as in the paused setup, works it out again).
+    op_owned_at: Option<(GameHour, String)>,
     /// The operation step sends the order (its own armies pass the ownership guard).
     op_acting: bool,
     /// an operation order was refused for an open event: the next event pass answers at once
@@ -1242,6 +1243,8 @@ fn game_rule_refusal(code: &str) -> bool {
             "already",
             "at_war",
             "not_at_war",
+            // the in-process route: the game's own can-do check refused the command
+            "refused_by_game_check",
         ]
         .iter()
         .any(|c| code.contains(c))
@@ -1714,6 +1717,19 @@ impl State {
                 }
             }
         }
+        // The game refused the same order twice by its own rules and no game hour has passed
+        // since: nothing the rules read can have changed, so the third is not sent until the
+        // clock moves (s7m, 24 Nov 2026: a focus refused twice while paused went a third time 8 s
+        // later, before the monitor's lesson arrived; the wall-time rest let it through). A step
+        // that knows the game changed under the order forgets it (ledger_forget).
+        if let Some((code, n, at)) = self.refusal_hold.get(signature) {
+            if *n >= REPEAT_HOLD_AFTER && game_rule_refusal(code) && clock <= *at {
+                return Some(format!(
+                    "skipped: the game refused this order {n} times by its rules ({code}) and \
+                     no game hour has passed since; it is not sent unchanged until the clock moves"
+                ));
+            }
+        }
         if rest <= 0 {
             return None;
         }
@@ -1966,10 +1982,34 @@ pub fn tick(
         let prefix = format!("hoi4_event_choose {{\"event\":{}", json!(key));
         state.failed_run.keys().any(|k| k.starts_with(&prefix))
     };
+    // An answer refused as covered by an event that is still open is not sent again until that
+    // event is answered: the click cannot reach it (s7m, 24 Nov 2026: AAT_Sweden_ball_bearing.4
+    // and denmark_trade_deal.1 lay under germany_mefo_bills, a choice the model had two days
+    // for, and were sent ten times in three game days).
+    let open_keys: Vec<String> = list(&events, "events")
+        .iter()
+        .map(|e| text(&e["event"]).to_string())
+        .collect();
+    let covered: HashSet<String> = open_keys
+        .iter()
+        .filter(|key| {
+            let prefix = format!("hoi4_event_choose {{\"event\":{}", json!(key));
+            state.failed_run.iter().any(|(k, (_, cause))| {
+                k.starts_with(&prefix)
+                    && cause.contains("event_covered")
+                    && open_keys.iter().any(|o| o != *key && cause.contains(o.as_str()))
+            })
+        })
+        .cloned()
+        .collect();
     let mut order: Vec<&Value> = list(&events, "events").iter().rev().collect();
     order.sort_by_key(|top| refused(text(&top["event"])));
     for top in order {
         let key = text(&top["event"]).to_string();
+        if covered.contains(&key) {
+            waiting.get_or_insert((key, false));
+            continue;
+        }
         let new = !state.seen.contains_key(&key);
         let first = *state.seen.entry(key.clone()).or_insert(now);
         let auto = plan["auto_events"] != json!(false);
@@ -2177,7 +2217,20 @@ fn lanes_tick_inner(
     // (g17j 1936.4). They act before the pass resumes.
     for (name, step) in FAST_LANES {
         state.last_ok = None;
-        if let Some(line) = step(state, tools, plan, lease, now)? {
+        let result = step(state, tools, plan, lease, now)?;
+        // the fast lanes answer the issues they own too (s7m, 24 Nov 2026: the focus issues
+        // escalated with no lane outcome while the lesson held the refused focus): an order
+        // passed or was refused, or the lane's stage says what it waits for
+        let said = match (&result, state.last_ok) {
+            (Some(line), Some(false)) => Some(("refused", line.clone())),
+            (Some(line), _) => Some(("acted", line.clone())),
+            (None, _) if name == "focus" => state.stages.focus.as_ref().map(|(t, _)| ("waiting", t.clone())),
+            (None, _) => None,
+        };
+        if let Some((outcome, reason)) = said {
+            state.issues.record_outcome(name, outcome, &reason, now);
+        }
+        if let Some(line) = result {
             state.sched.turns.insert(name, now);
             state.round.lane_acted(name, now);
             return Ok(Tick::Acted(line));
@@ -2861,6 +2914,7 @@ fn focus_lane(
             // Anything else (a torn read, a readback) ends the focus step for this tick: going on
             // to the next key started focuses out of plan order (w24).
             let blocked = why.contains("focus_not_available")
+                || why.contains("refused_by_game_check")
                 || why.contains("prerequisite")
                 || why.contains("exclusive")
                 || why.contains("invalid_target");
@@ -5008,7 +5062,63 @@ fn layout_pool_step(
         let count = a["division_count"].as_u64().unwrap_or(0);
         let cap = command_cap(&a["division_limit"], max, cfg);
         if count <= cap {
-            continue;
+            // A leaderless pool within limits takes no order (the game takes battle-plan orders
+            // only from an army led by a general, and generals who lead nothing are not read):
+            // its divisions go to the holds, guard roles first, then roles no operation owns,
+            // the army with the most room first (s7m, 24 Nov 2026: Army 1, 24 divisions, stood
+            // with no general and no order through the declaration).
+            let ordered = !list(a, "plan").is_empty()
+                || a["battle_plan_orders"].as_i64().unwrap_or(0) > 0
+                || a["defensive_orders"].as_i64().unwrap_or(0) > 0;
+            if count == 0 || !a["commander"].is_null() || ordered || a["army_group"].is_string() {
+                continue;
+            }
+            let guard = |army: &str| {
+                state.layout.iter().any(|(h, x)| {
+                    x == army
+                        && list(plan, "army_layout")
+                            .iter()
+                            .any(|e| text(&e["name_hint"]) == h.as_str() && text(&e["role"]) == "guard")
+                })
+            };
+            let mut room: Vec<(bool, u64, String)> = full
+                .iter()
+                .filter(|r| {
+                    let n = text(&r["army"]);
+                    roles.contains(n) && !state.op_owned.contains_key(n) && !r["commander"].is_null()
+                })
+                .filter_map(|r| {
+                    let n = text(&r["army"]).to_string();
+                    let cap = command_cap(&r["division_limit"], max, cfg);
+                    let left = cap.saturating_sub(r["division_count"].as_u64().unwrap_or(0));
+                    (left > 0).then(|| (guard(&n), left, n))
+                })
+                .collect();
+            room.sort_by(|x, y| y.0.cmp(&x.0).then(y.1.cmp(&x.1)));
+            let Some((_, left, into)) = room.into_iter().next() else {
+                continue;
+            };
+            let ids: Vec<String> = strings(a, "divisions")
+                .into_iter()
+                .take(left.min(18) as usize)
+                .collect();
+            if ids.is_empty() {
+                continue;
+            }
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_army_detach",
+                json!({"army": name, "divisions": ids, "into": into}),
+                "lp",
+            )?;
+            if !ok {
+                state.skip(now, "layoutpool", &name, 2 * DAY);
+            }
+            return Ok(Some(format!(
+                "layout: {name} has no general and no order: {} division(s) to the hold {into}: {ok} {why}",
+                ids.len()
+            )));
         }
         let chunk = (count - cap).clamp(1, 19);
         let (ok, why) = state.act(
@@ -12214,6 +12324,32 @@ mod tests {
     }
 
     #[test]
+    fn a_game_check_refused_twice_on_a_still_clock_is_not_sent_a_third_time() {
+        // s7m: the third went 8 s after the second while paused, before the monitor's lesson
+        let tools = fake(vec![]);
+        tools.refuse_with(
+            "hoi4_focus_start",
+            "refused_by_game_check",
+            "The game's own check refused this order",
+        );
+        let mut state = State::default();
+        let focus = json!({"focus": "GER_a_strong_successor"});
+        state.clock = hour("1939.08.14");
+        // the clock stands still (the paused setup); a minute of wall time between tries
+        for i in 0..5 {
+            state.wall = Some(1_000_000 + 60 * i);
+            state.act(&tools, "l", "hoi4_focus_start", focus.clone(), "fo").unwrap();
+        }
+        let sends = || tools.calls.borrow().iter().filter(|(c, _)| c == "hoi4_focus_start").count();
+        assert_eq!(sends(), 2);
+        let sig = format!("hoi4_focus_start {focus}");
+        assert_eq!(state.repeats_stopped[&sig].1, 3, "stopped by the ledger");
+        // the clock moves: the ledger's rests answer it again
+        state.clock += 1;
+        assert!(state.backing_off(&sig).is_none_or(|why| !why.contains("no game hour")));
+    }
+
+    #[test]
     fn without_a_lesson_a_forget_no_longer_resets_a_tool_fault_and_a_rule_refusal_is_freed() {
         let tools = fake(vec![]);
         tools.refuse_with(
@@ -12663,6 +12799,26 @@ mod tests {
             matches!(&step, Tick::Acted(s) if s.starts_with("event AAT_norway_news.2 option 0")),
             "{step:?}"
         );
+    }
+
+    #[test]
+    fn an_event_covered_by_one_still_open_is_not_sent_again() {
+        // s7m: the covered answers went ten times while the covering choice waited for the model
+        let events = json!({"events": [
+            {"event": "germany_mefo_bills.3", "options": ["a", "b"]},
+            {"event": "AAT_Sweden_ball_bearing.4", "options": ["ok"]}]});
+        let tools = fake(vec![("hoi4_events", events)]);
+        let mut state = State::default();
+        let sig = format!(
+            "hoi4_event_choose {}",
+            json!({"event": "AAT_Sweden_ball_bearing.4", "option": 0})
+        );
+        state.failed_run.insert(
+            sig,
+            (1, "event_covered: An option of germany_mefo_bills.3 lies on the same spot".into()),
+        );
+        let step = tick(&mut state, &tools, &json!({}), "l", START).unwrap();
+        assert!(!matches!(&step, Tick::Acted(s) if s.contains("AAT_Sweden")), "{step:?}");
     }
 
     #[test]
@@ -17254,6 +17410,31 @@ mod tests {
         assert_eq!(tools.0.get(), 2);
         state.layout.insert("Nord".into(), "Army 9".into());
         assert!(!owner_roles_missing(&mut state, &tools, &plan, 111));
+    }
+
+    #[test]
+    fn a_leaderless_pool_within_limits_goes_to_the_hold_with_room() {
+        // s7m: Army 1 (24, no general, no order) stood through the declaration
+        let roster = json!({"armies": [
+            {"army": "Army 1", "division_count": 3, "commander": null, "divisions": ["a", "b", "c"]},
+            {"army": "West", "division_count": 14, "commander": "W"},
+            {"army": "Line", "division_count": 10, "commander": "L"},
+            {"army": "Op", "division_count": 2, "commander": "O"}]});
+        let tools = fake(vec![("hoi4_armies", roster)]);
+        let plan = json!({"armies": {"max": 24}, "army_layout": [
+            {"name_hint": "West", "role": "guard"}, {"name_hint": "Line", "role": "strike"},
+            {"name_hint": "Op", "role": "strike"}]});
+        let mut state = State::default();
+        for h in ["West", "Line", "Op"] {
+            state.layout.insert(h.into(), h.into());
+        }
+        state.op_owned.insert("Op".into(), "op".into());
+        let line = layout_pool_step(&mut state, &tools, &plan, "l", START).unwrap().unwrap();
+        assert!(line.contains("to the hold West"), "{line}");
+        let calls = tools.calls.borrow();
+        let (_, args) = calls.iter().find(|(n, _)| n == "hoi4_army_detach").unwrap();
+        assert_eq!(args["into"], "West");
+        assert_eq!(args["divisions"], json!(["a", "b", "c"]));
     }
 
     #[test]
