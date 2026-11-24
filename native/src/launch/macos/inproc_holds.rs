@@ -59,6 +59,39 @@ pub(super) fn area(ch: &mut Channel, group: u64, states: &[i32]) -> Routed {
     Routed::Done(json!({"backend":"inprocess","module":first_reply["module"],"added":more}))
 }
 
+/// The army's standing area-defence order in the roster read (hoi4_armies): its id and states. The game keeps one per
+/// army; a second order replaces it.
+pub(super) fn standing_area(view: &Value, army: &str) -> Option<(i32, Vec<i32>)> {
+    let row = view["armies"]
+        .as_array()?
+        .iter()
+        .find(|a| a["army"].as_str() == Some(army))?;
+    row["plan"].as_array()?.iter().find_map(|o| {
+        if o["kind"].as_str() != Some("area_defense") {
+            return None;
+        }
+        let id = i32::try_from(o["id"].as_i64()?).ok().filter(|v| *v > 0)?;
+        let states = o["line"]["states"]
+            .as_array()
+            .or_else(|| o["states"].as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_i64().and_then(|v| i32::try_from(v).ok())).collect())
+            .unwrap_or_default();
+        Some((id, states))
+    })
+}
+
+/// States into the army's standing area order `order_id` (each one a click on the order: only states not in it).
+pub(super) fn area_into(ch: &mut Channel, group: u64, order_id: i32, states: &[i32]) -> Routed {
+    if states.is_empty() {
+        return Routed::Gui;
+    }
+    let reply = match area_request(group, order_id, states).and_then(|r| ch.post_raw(r)) {
+        Ok(r) => r,
+        Err(_) => return Routed::Gui,
+    };
+    routed(reply, "these states into the army's area order")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -82,5 +115,14 @@ mod tests {
         );
         assert_eq!(area_order_id(&json!({"posted":1})), None);
         assert_eq!(area_order_id(&json!({"area_order_id":0})), None);
+    }
+
+    #[test]
+    fn the_standing_area_order_is_found_with_its_states() {
+        let view = json!({"armies": [{"army": "Army 2", "plan": [
+            {"kind": "front", "id": 7},
+            {"kind": "area_defense", "id": 1, "line": {"states": [55]}}]}]});
+        assert_eq!(standing_area(&view, "Army 2"), Some((1, vec![55])));
+        assert_eq!(standing_area(&view, "Army 3"), None);
     }
 }

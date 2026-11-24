@@ -6641,6 +6641,7 @@ impl MacClock {
             let mut inproc_route = line.as_ref().and_then(|_| inproc::route("orders2"));
             // engineer 79: an area-defence order through the module (family `holds`): one map click per state, the
             // first makes the order, the rest go into its id
+            let mut area_existing: Option<(i32, Vec<i32>)> = None;
             let mut holds_route = if fallback || retry {
                 None
             } else {
@@ -6672,6 +6673,18 @@ impl MacClock {
                         format!("state {bad} is not controlled by the player: an area order covers own states"),
                     ));
                 }
+                // ONE AREA ORDER PER ARMY: a new order replaces the army's old one in the game (s81b, 24 Nov 2026:
+                // Army 2's order over 55 was dropped when [64,58] made a new one). The states go into the army's
+                // standing area order by its id; those already in it are not clicked (a click removes a state)
+                area_existing = inproc_holds::standing_area(&view, army);
+                if let Some((_, held)) = &area_existing {
+                    if states.iter().all(|s| held.contains(s)) {
+                        return Err(Error::new(
+                            "nothing_to_change",
+                            format!("{army}'s area order already holds {states:?}"),
+                        ));
+                    }
+                }
             }
             if !retry && inproc_route.is_none() && holds_route.is_none() {
                 self.keys.preflight()?;
@@ -6687,6 +6700,16 @@ impl MacClock {
             let mut settle = || {
                 let now = nodes()?;
                 let detail = json!({"army":army,"plan_orders":now});
+                // an area order is proven by its states: the army's area order holds every state asked for
+                // (adding to a standing order does not change the order count)
+                if !fallback {
+                    let view = armies::armies(process)?;
+                    if let Some((_, held)) = inproc_holds::standing_area(&view, army) {
+                        if states.iter().all(|s| held.contains(s)) {
+                            return Ok(journal::Outcome::Reached(json!({"army":army,"area_states":held})));
+                        }
+                    }
+                }
                 Ok(if retry {
                     journal::Outcome::Diverged(detail)
                 } else {
@@ -6726,7 +6749,15 @@ impl MacClock {
                 }
                 if let Some(ch) = holds_route.as_mut() {
                     let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
-                    match inproc_holds::area(ch, group, &states) {
+                    let routed = match &area_existing {
+                        Some((oid, held)) => {
+                            let add: Vec<i32> =
+                                states.iter().copied().filter(|s| !held.contains(s)).collect();
+                            inproc_holds::area_into(ch, group, *oid, &add)
+                        }
+                        None => inproc_holds::area(ch, group, &states),
+                    };
+                    match routed {
                         inproc::Routed::Done(v) => {
                             inproc_reply = v;
                             return Ok(());
@@ -7952,14 +7983,24 @@ impl MacClock {
             let action =
                 json!({"kind":"politics_choose","category":category,"slot":index,"idea":idea});
             let keys = &self.keys;
+            // a law posted in process takes effect on the game's next frame: a read 90 ms later still
+            // showed the old law (s81b, 24 Nov 2026: limited_exports and service_by_requirement read
+            // back NotApplied, PP spent and both active a moment later). Unchanged counts only after
+            // IPC_SETTLE, as for production.
+            let ipc_posted: std::cell::Cell<Option<std::time::Instant>> = std::cell::Cell::new(None);
             let mut settle = || {
                 if in_process {
                     // the own active ideas: the law active = Reached; the replaced one still active = Unchanged
                     let own = ui::read(process, inproc_politics::active)?;
                     let keys_now: Vec<&str> = own.iter().map(|(_, k)| k.as_str()).collect();
                     let detail = json!({"active_ideas":keys_now,"replaced":law_before});
+                    let early = ipc_posted
+                        .get()
+                        .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
                     return Ok(if keys_now.contains(&idea) {
                         journal::Outcome::Reached(detail)
+                    } else if early {
+                        journal::Outcome::Unknown
                     } else if law_before
                         .as_deref()
                         .is_none_or(|old| keys_now.contains(&old))
@@ -7987,6 +8028,7 @@ impl MacClock {
                     law_reply =
                         module_in_process(&mut law_route, |ch| Ok(inproc_politics::take(ch, l)))?;
                     if law_reply.is_some() {
+                        ipc_posted.set(Some(std::time::Instant::now()));
                         return Ok(());
                     }
                     keys.preflight()?;

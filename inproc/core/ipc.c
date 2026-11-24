@@ -30,10 +30,12 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                 0 /* events (engineer 76): the answer of an open event window (S8-EVENTS stopped live 24 Nov
                                    * 2026: the answer executes but the window stays open) */,
                                 1 /* decisions (engineer 76): an untargeted decision (S9-DECISIONS PASSED live 24 Nov 2026) */,
-                                0 /* diplomacy (engineer 78): guarantee, ask / offer military access, non-aggression pact,
-                                   * improve relations, declare war on an own war goal (S10-DIPLOMACY) */,
+                                1 /* diplomacy (engineer 78): guarantee, ask / offer military access, non-aggression pact,
+                                   * improve relations, declare war on an own war goal (S10-DIPLOMACY PASSED live 24 Nov
+                                   * 2026, s81b: improve relations 93 ms, declare war on Poland 200 ms, refusals unposted) */,
                                 0 /* holds (engineer 79): an area-defence order, one map click per state (S11-HOLDS) */,
-                                0 /* research (engineer 79): a technology into a research slot (S12-RESEARCH) */,
+                                1 /* research (engineer 79): a technology into a research slot (S12-RESEARCH PASSED live
+                                   * 24 Nov 2026, s81b: start, replace, refusals, running) */,
                                 0 /* politics (engineer 79): a law / an idea slot (S13-POLITICS) */};
 
 int ipc_family_of(const char *op) {
