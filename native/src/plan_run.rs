@@ -1417,7 +1417,7 @@ impl State {
                     Err(_) => String::new(),
                 };
                 self.issues.refresh();
-                let lesson = self.issues.advice(name, &cause);
+                let lesson = self.issues.advice(name, &cause, Some(&args));
                 let run = self.failed_run.entry(signature.clone()).or_default();
                 run.0 += 1;
                 run.1 = cause.clone();
@@ -1566,7 +1566,10 @@ impl State {
         // what the run's lessons say about this refusal (docs/MONITORING.md): a transient cause
         // rests briefly and is never given up, a permanent one rests as given up, a wait its days
         self.issues.refresh();
-        if let Some(adv) = self.issues.advice(tool, &cause) {
+        let order_args: Option<Value> = signature
+            .split_once(' ')
+            .and_then(|(_, a)| serde_json::from_str(a).ok());
+        if let Some(adv) = self.issues.advice(tool, &cause, order_args.as_ref()) {
             match adv.treat {
                 plan_issues::Treat::Transient => {
                     rest = rest.min(plan_issues::TRANSIENT_REST);
@@ -2113,7 +2116,28 @@ fn issue_lanes(
         }
         state.sched.turns.insert(name, now);
         state.last_ok = None;
-        if let Some(line) = step(state, tools, plan, lease, now)? {
+        let before = plan_manage::notes_snapshot(state);
+        let result = step(state, tools, plan, lease, now)?;
+        // the lane's typed answer for the issues it owns (docs/MONITORING.md): an order passed,
+        // was refused, or the lane wrote why it waits; a lane that neither acts nor says why has
+        // no rule for the issue
+        let changed: Vec<String> = plan_manage::notes_snapshot(state)
+            .into_iter()
+            .filter(|(k, v)| before.get(k) != Some(v))
+            .map(|(k, v)| format!("{k}: {v}"))
+            .collect();
+        let (outcome, reason) = match (&result, state.last_ok) {
+            (Some(line), Some(true)) => ("acted", line.clone()),
+            (Some(line), Some(false)) => ("refused", line.clone()),
+            (Some(line), None) => ("acted", line.clone()),
+            (None, _) if !changed.is_empty() => ("waiting", changed.join("; ")),
+            (None, _) => (
+                "cannot",
+                format!("lane {name} had its turn and found nothing to do or wait for"),
+            ),
+        };
+        state.issues.record_outcome(name, outcome, &reason, now);
+        if let Some(line) = result {
             state.round.lane_acted(name, now);
             return Ok(Some(format!("{line} (monitor issue {id})")));
         }
@@ -9819,14 +9843,25 @@ fn decisions_step(
             && affordable(d)
     };
     for (id, key, target, taken, skip) in rules {
-        let wanted_row = |d: &&Value| {
+        let names = |d: &Value, word: &str| text(&d["title"]).to_lowercase().contains(word);
+        let wanted_row = |d: &&Value, name: Option<&str>| {
             text(&d["decision"]) == key
                 && ready(d)
-                && target
-                    .as_ref()
-                    .is_none_or(|t| text(&d["title"]).to_lowercase().contains(&t.to_lowercase()))
+                && target.as_ref().is_none_or(|t| {
+                    names(d, &t.to_lowercase()) || name.is_some_and(|n| names(d, n))
+                })
         };
-        if !list(&offered, "decisions").iter().any(|d| wanted_row(&d)) {
+        let rows = list(&offered, "decisions");
+        // a target is a tag; the row's title carries the country's name ("Netherlands", not
+        // HOL): p65a's GER_operational_planning waited 28 days on a target no title named
+        let found = rows.iter().any(|d| wanted_row(&d, None))
+            || (target.is_some()
+                && rows.iter().any(|d| text(&d["decision"]) == key)
+                && target
+                    .as_deref()
+                    .and_then(|t| plan_affairs::country_name(tools, t))
+                    .is_some_and(|n| rows.iter().any(|d| wanted_row(&d, Some(&n)))));
+        if !found {
             continue;
         }
         let mut args = json!({"decision": key});

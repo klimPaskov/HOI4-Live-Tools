@@ -62,6 +62,10 @@ pub struct Issues {
     lessons: Vec<Value>,
     /// lane -> game day it was last offered for an issue
     offered: HashMap<String, GameHour>,
+    /// the run folder's name: the monitor's lessons of this run carry `scope: run:<name>`
+    run_name: Option<String>,
+    /// (issue id) -> the last outcome line written, so a repeated answer is not written again
+    answered: HashMap<String, String>,
 }
 
 fn mtime(path: &Path) -> Option<SystemTime> {
@@ -93,6 +97,7 @@ impl Issues {
     pub fn set_run_dir(&mut self, dir: &Path) {
         if self.run_dir.as_deref() != Some(dir) {
             self.run_dir = Some(dir.to_path_buf());
+            self.run_name = dir.file_name().and_then(|n| n.to_str()).map(str::to_string);
             self.store = Some(crate::learn::skills::store_dir(dir).join("lessons"));
             self.checked = None;
             self.open_mtime = None;
@@ -156,27 +161,36 @@ impl Issues {
 
     /// What the lessons say about a refusal of `tool` with `cause` (the most specific usable
     /// lesson, then the most confident).
-    pub fn advice(&self, tool: &str, cause: &str) -> Option<Advice> {
+    ///
+    /// A lesson that names the order's arguments (`situation.args`, written by the monitor after
+    /// the second identical refusal) holds only for an order with those arguments, and is the
+    /// most specific kind.
+    pub fn advice(&self, tool: &str, cause: &str, args: Option<&Value>) -> Option<Advice> {
         if cause.is_empty() {
             return None;
         }
         let mut best: Option<(u8, f64, Advice)> = None;
         for le in &self.lessons {
-            let Some(treat) = usable_treat(le) else {
+            let Some(treat) = usable_treat(le, self.run_name.as_deref()) else {
                 continue;
             };
             let s = &le["situation"];
             let Some(c) = s["cause"].as_str() else {
                 continue;
             };
-            if !cause.starts_with(c) {
+            let by_args = s["args"].is_object();
+            if by_args && !args_match(&s["args"], args) {
+                continue;
+            }
+            // an empty cause matches every cause: only for one named order
+            if !cause.starts_with(c) || (c.is_empty() && !by_args) {
                 continue;
             }
             let lt = s["tool"].as_str().unwrap_or("*");
             if lt != "*" && lt != tool {
                 continue;
             }
-            let specific = u8::from(lt == tool);
+            let specific = u8::from(lt == tool) + 2 * u8::from(by_args);
             let conf = le["confidence"].as_f64().unwrap_or(0.0);
             if best
                 .as_ref()
@@ -259,7 +273,72 @@ fn load_lessons(dir: &Path) -> Vec<Value> {
 }
 
 /// The ledger effect of a lesson, if the executor may use it.
-fn usable_treat(le: &Value) -> Option<Treat> {
+/// Every argument the lesson names that the order also carries is equal (nulls in the lesson are
+/// left out), and at least one is compared.
+fn args_match(want: &Value, args: Option<&Value>) -> bool {
+    let (Some(want), Some(args)) = (want.as_object(), args.and_then(Value::as_object)) else {
+        return false;
+    };
+    let mut compared = 0;
+    for (k, v) in want {
+        if v.is_null() {
+            continue;
+        }
+        match args.get(k) {
+            Some(a) if a == v => compared += 1,
+            Some(_) => return false,
+            None => {}
+        }
+    }
+    compared > 0
+}
+
+impl Issues {
+    /// Record what an offered lane did with the open issues it owns (docs/MONITORING.md): the
+    /// monitor reads `RUN/issue_outcomes.jsonl` and keeps the answer on the issue, so "acted"
+    /// means an order passed and a lane that waits says what for. A repeated answer is not
+    /// written again.
+    pub fn record_outcome(&mut self, lane: &str, outcome: &str, reason: &str, now: GameHour) {
+        let Some(dir) = self.run_dir.clone() else {
+            return;
+        };
+        let ids: Vec<String> = self
+            .open
+            .iter()
+            .filter(|i| i["state"] != json!("resolved"))
+            .filter(|i| i["lane"].as_str().map(executor_lane) == Some(lane))
+            .filter_map(|i| i["id"].as_str().map(str::to_string))
+            .collect();
+        let reason: String = reason.chars().take(400).collect();
+        let mut lines = String::new();
+        for id in ids {
+            let said = format!("{outcome}|{reason}");
+            if self.answered.get(&id) == Some(&said) {
+                continue;
+            }
+            self.answered.insert(id.clone(), said);
+            lines.push_str(
+                &json!({"id": id, "lane": lane, "outcome": outcome,
+                                   "reason": reason, "hour": now})
+                .to_string(),
+            );
+            lines.push('\n');
+        }
+        if lines.is_empty() {
+            return;
+        }
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("issue_outcomes.jsonl"))
+        {
+            let _ = f.write_all(lines.as_bytes());
+        }
+    }
+}
+
+fn usable_treat(le: &Value, run: Option<&str>) -> Option<Treat> {
     if le["status"].as_str().unwrap_or("active") != "active" {
         return None;
     }
@@ -267,8 +346,11 @@ fn usable_treat(le: &Value) -> Option<Treat> {
         return None;
     }
     let scope = le["scope"].as_str().unwrap_or("any");
-    if scope != "any" && !scope.starts_with("country:") && !scope.starts_with("plan:") {
-        return None; // a run's own lesson is evidence for review, not a rule for other runs
+    let own_run = scope
+        .strip_prefix("run:")
+        .is_some_and(|r| run.is_some_and(|name| name == r));
+    if scope != "any" && !scope.starts_with("country:") && !scope.starts_with("plan:") && !own_run {
+        return None; // another run's lesson is evidence for review, not a rule for this run
     }
     let version = le["learned_on"]["game_version"].as_str().unwrap_or("");
     if !version.is_empty()
@@ -326,20 +408,24 @@ mod tests {
             lesson("weak", "hoi4_air_rebase", "events_open", "permanent", 0.3),
         ]);
         let a = is
-            .advice("hoi4_air_mission", "events_open: an event is open")
+            .advice("hoi4_air_mission", "events_open: an event is open", None)
             .unwrap();
         assert_eq!((a.id.as_str(), a.treat), ("any_events", Treat::Transient));
         // the weak specific lesson is below the bar: the general one still answers
         assert_eq!(
-            is.advice("hoi4_air_rebase", "events_open").unwrap().id,
+            is.advice("hoi4_air_rebase", "events_open", None)
+                .unwrap()
+                .id,
             "any_events"
         );
         assert_eq!(
-            is.advice("hoi4_air_rebase", "air_base_full").unwrap().treat,
+            is.advice("hoi4_air_rebase", "air_base_full", None)
+                .unwrap()
+                .treat,
             Treat::Permanent
         );
-        assert!(is.advice("hoi4_air_rebase", "").is_none());
-        assert!(is.advice("hoi4_save", "invalid_gui").is_none());
+        assert!(is.advice("hoi4_air_rebase", "", None).is_none());
+        assert!(is.advice("hoi4_save", "invalid_gui", None).is_none());
     }
 
     #[test]
@@ -351,10 +437,61 @@ mod tests {
         let mut retired = lesson("ret", "*", "events_open", "transient", 0.9);
         retired["status"] = json!("retired");
         assert!(with(vec![old.clone(), run, retired])
-            .advice("hoi4_x", "events_open")
+            .advice("hoi4_x", "events_open", None)
             .is_none());
         old["version_independent"] = json!(true);
-        assert!(with(vec![old]).advice("hoi4_x", "events_open").is_some());
+        assert!(with(vec![old])
+            .advice("hoi4_x", "events_open", None)
+            .is_some());
+    }
+
+    #[test]
+    fn a_runs_own_repeat_lesson_holds_for_that_order_in_that_run_only() {
+        let mut le = lesson(
+            "mio",
+            "hoi4_mio_policy",
+            "input_readback_failed",
+            "wait",
+            0.5,
+        );
+        le["scope"] = json!("run:p65a");
+        le["situation"]["args"] = json!({"organization": "O", "policy": "P", "line": null});
+        let mut is = with(vec![le]);
+        let same = json!({"organization": "O", "policy": "P"});
+        let other = json!({"organization": "O", "policy": "Q"});
+        // another run: evidence only
+        assert!(is
+            .advice("hoi4_mio_policy", "input_readback_failed", Some(&same))
+            .is_none());
+        is.run_name = Some("p65a".into());
+        assert!(is
+            .advice("hoi4_mio_policy", "input_readback_failed: x", Some(&same))
+            .is_some());
+        assert!(is
+            .advice("hoi4_mio_policy", "input_readback_failed", Some(&other))
+            .is_none());
+        assert!(is
+            .advice("hoi4_mio_policy", "input_readback_failed", None)
+            .is_none());
+    }
+
+    #[test]
+    fn an_offered_lanes_answer_is_written_once_per_issue() {
+        let dir = std::env::temp_dir().join(format!("issues-outcome-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut is = Issues::default();
+        is.set_run_dir(&dir);
+        is.open = vec![
+            json!({"id": "I1", "lane": "navy", "state": "overdue"}),
+            json!({"id": "I2", "lane": "politics", "state": "open"}),
+        ];
+        is.record_outcome("ship", "waiting", "navy: region North Sea not found", 24);
+        is.record_outcome("ship", "waiting", "navy: region North Sea not found", 48);
+        let text = std::fs::read_to_string(dir.join("issue_outcomes.jsonl")).unwrap();
+        assert_eq!(text.lines().count(), 1);
+        assert!(text.contains("\"I1\"") && text.contains("waiting"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -367,7 +504,7 @@ mod tests {
             0.6,
         )]);
         assert_eq!(
-            is.advice("hoi4_production_add", "invalid_target")
+            is.advice("hoi4_production_add", "invalid_target", None)
                 .unwrap()
                 .treat,
             Treat::Wait(30 * 24)
@@ -446,7 +583,7 @@ mod tests {
         is.store = Some(root.join("learned/lessons"));
         is.refresh();
         assert_eq!(is.open.len(), 1);
-        assert!(is.advice("hoi4_save", "events_open").is_some());
+        assert!(is.advice("hoi4_save", "events_open", None).is_some());
         std::fs::remove_dir_all(&root).ok();
     }
 }

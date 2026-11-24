@@ -353,6 +353,11 @@ pub(super) fn digest(state: &State) -> Option<Value> {
     (!state.manage.notes.is_empty()).then(|| json!(state.manage.notes))
 }
 
+/// A copy of every rule's last status line (to see what a step wrote).
+pub(super) fn notes_snapshot(state: &State) -> BTreeMap<String, String> {
+    state.manage.notes.clone()
+}
+
 /// The rule's status line in the run result's `manage` digest (the last one per rule).
 pub(super) fn note(state: &mut State, rule: &str, line: impl Into<String>) {
     state.manage.notes.insert(rule.to_string(), line.into());
@@ -4192,8 +4197,18 @@ fn air_idle_step(
 }
 
 /// Experience a spirit slot costs by its place in the branch (common/idea_tags/00_idea.txt
-/// slot costs 20, 35, 50; the window shows the real cost and an entry's `cost` overrides).
+/// idea_categories: army and navy slots 20, 35, 50; every air slot 50 on 1.20, so an air spirit
+/// priced 20 was tried and refused below 50). An entry's `cost` overrides.
 const SPIRIT_SLOT_COST: [f64; 3] = [20.0, 35.0, 50.0];
+const AIR_SPIRIT_SLOT_COST: f64 = 50.0;
+
+fn spirit_slot_cost(branch: &str, index: &str) -> f64 {
+    if branch == "air" {
+        AIR_SPIRIT_SLOT_COST
+    } else {
+        SPIRIT_SLOT_COST[index.parse::<usize>().unwrap_or(0).min(2)]
+    }
+}
 
 /// The refusals an officer corps pick has had (plan_xp.rs: a dropped pick holds nothing back).
 pub(super) fn ofc_refused(state: &State, key: &str) -> u32 {
@@ -4281,7 +4296,7 @@ fn officer_corps_step(
         let (branch, index) = slot.split_once(':').unwrap_or((slot, "0"));
         let cost = entry["cost"]
             .as_f64()
-            .unwrap_or_else(|| SPIRIT_SLOT_COST[index.parse::<usize>().unwrap_or(0).min(2)]);
+            .unwrap_or_else(|| spirit_slot_cost(branch, index));
         let reserve = plan["manage"]["xp_reserve"][branch].as_f64().unwrap_or(0.0);
         let (before, names) = super::plan_xp::ahead(
             state,
@@ -7935,6 +7950,13 @@ mod tests {
     use std::cell::RefCell;
 
     const START: GameHour = 1_000_000;
+
+    #[test]
+    fn an_air_spirit_slot_costs_fifty_and_the_others_by_place() {
+        assert_eq!(spirit_slot_cost("air", "0"), 50.0);
+        assert_eq!(spirit_slot_cost("navy", "0"), 20.0);
+        assert_eq!(spirit_slot_cost("army", "2"), 50.0);
+    }
 
     /// Reads answer from `replies`; actions are Verified unless `refuse` names their tool.
     struct Fake {
