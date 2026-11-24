@@ -68,6 +68,10 @@ pub(crate) fn layout(r: &Reader<'_>) -> Result<&'static Layout> {
     match r.string_abi() {
         StringAbi::LibCxx => Ok(&MACOS),
         StringAbi::LibStdCxx => linux(),
+        StringAbi::Msvc => Err(Error::new(
+            "layout_unmapped",
+            "The widget tree has no reviewed Windows layout",
+        )),
     }
 }
 

@@ -444,7 +444,7 @@ pub(super) fn catalog(r: &Reader<'_>, image: u64) -> Result<Vec<Def>> {
     // reader takes the first candidate whose every entry is a sub-unit definition.
     let candidates: Vec<u64> = match r.string_abi() {
         StringAbi::LibCxx => MACOS_CATALOGS.to_vec(),
-        StringAbi::LibStdCxx => vec![l.subunit_catalog],
+        StringAbi::LibStdCxx | StringAbi::Msvc => vec![l.subunit_catalog],
     };
     let list = pick_catalog(
         candidates
