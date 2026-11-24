@@ -299,7 +299,12 @@ class Detector:
             low = []
             for a in land.get("armies") or []:
                 pl = (a.get("planning") or {}).get("mean")
-                if a.get("orders") and pl is not None and pl < 0.1 and (a.get("divisions") or 0) > 0:
+                # only an attacking army plans for the war's first blow: a hold (area defence, a
+                # front with no offensive) builds no planning to spend (s7n: the Westwall armies
+                # were counted as attackers with 0 planning)
+                attacking = any(o.get("offensives") or o.get("kind") in ("offensive", "spearhead")
+                                for o in a.get("orders") or [])
+                if attacking and pl is not None and pl < 0.1 and (a.get("divisions") or 0) > 0:
                     low.append((a.get("army"), pl))
             if low:
                 key = "planning_low_at_declaration:" + trig

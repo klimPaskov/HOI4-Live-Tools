@@ -5934,6 +5934,42 @@ pub(super) fn rebalance_step(
     Ok((!lines.is_empty()).then(|| lines.join("; ")))
 }
 
+/// The fast lane for free military factories (plan_run FAST_LANES): two memory reads a tick;
+/// with factories on no line the balance rule (or, with it off, the priority feed) gives them
+/// all in this turn. Quiet for 6 game hours when none is free or the rules found nothing.
+pub(super) fn free_factories_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if !(plan["production"].is_array() || plan["production_priority"].is_array())
+        || state.skipped(now, "freefac", "x")
+    {
+        return Ok(None);
+    }
+    let Ok(economy) = tools.call("hoi4_economy", &json!({})) else {
+        return Ok(None);
+    };
+    let Ok((_, idle)) = military_lines(tools, &economy) else {
+        return Ok(None);
+    };
+    if idle <= 0 {
+        state.skip(now, "freefac", "x", 6);
+        return Ok(None);
+    }
+    let out = if !off(plan, "balance") && !off(plan, "stockpile") {
+        balance_rule(state, tools, plan, lease, now)?
+    } else {
+        rebalance_step(state, tools, plan, lease, now, &economy)?
+    };
+    if out.is_none() {
+        state.skip(now, "freefac", "x", 6);
+    }
+    Ok(out)
+}
+
 /// Before the first unpause (the game paused at the hour this server first saw, no work done
 /// yet, a plan with `production` or `production_priority`): free military factories go to the
 /// starting lines the plan keeps, first up to a `production[]` entry's factories for an existing
@@ -7325,7 +7361,11 @@ fn floor_decide<'a>(
         let Some(line) = line_of(arche) else {
             continue;
         };
+        // a line whose own equipment the divisions lack gives nothing, whatever its floor (s7n,
+        // 24 Nov 2026: rifles went 15 -> 5 for a medium-tank floor while the divisions lacked
+        // 7,293 rifles and the stockpile was empty)
         let surplus = |l: &ProdLine| match b.floors.get(&l.archetype) {
+            Some(_) if fill_days(b, &l.archetype) > 0.0 => 0,
             Some(f) => l.requested - f,
             None if b.removed.contains(&l.archetype) => l.requested,
             None if fill_days(b, &l.archetype) <= 0.0 && !b.targets.contains_key(&l.archetype) => {
@@ -10657,6 +10697,29 @@ mod tests {
             Some("air 1 wing(s) air_superiority over state 550 (3. Stormo): true Verified"),
             "1. Stormo belongs to the air plan"
         );
+        // left on the ground by its entry for two game days, 1. Stormo takes the default mission
+        // (t1939v1: claimed wings stood by to the war)
+        let mut later = State::default();
+        let mut flying = air_read();
+        flying["wings"][0]["air_base"] = json!({"base_id": 3, "state_id": 550});
+        let tools = fake(vec![
+            ("hoi4_air", flying),
+            (
+                "hoi4_wars",
+                json!({"borders": [{"hostile": true, "own_border_states": [550]}]}),
+            ),
+        ]);
+        let _ = extras_step(&mut later, &tools, &plan, "l", START).unwrap();
+        assert!(later.done.contains_key("airidle:1. Stormo"));
+        later
+            .done
+            .insert("airidle:1. Stormo".into(), START - 3 * DAY);
+        later.bad.clear();
+        let out = extras_step(&mut later, &tools, &plan, "l", START + 1).unwrap();
+        assert!(
+            out.as_deref().is_some_and(|o| o.contains("1. Stormo")),
+            "{out:?}"
+        );
     }
 
     fn war_stats(total: f64) -> Value {
@@ -12020,8 +12083,6 @@ mod tests {
         ] {
             b.floors.insert(a.into(), f);
         }
-        b.need.insert("motorized_equipment".into(), 900.0);
-        b.per_day.insert("motorized_equipment".into(), 10.0);
         // support is 3 short and the trucks 3 above: the trucks give the support its line
         match balance_decide(&b) {
             Some(BalanceAct::Set {
@@ -12029,6 +12090,11 @@ mod tests {
             }) => assert_eq!((index, factories), (2, 7)),
             other => panic!("{other:?}"),
         }
+        // trucks the divisions lack are no donor, whatever their floor (s7n: rifles 15 -> 5
+        // for a tank floor with 7,293 rifles missing)
+        b.need.insert("motorized_equipment".into(), 900.0);
+        b.per_day.insert("motorized_equipment".into(), 10.0);
+        assert_eq!(balance_decide(&b), None);
         // idle factories go to the floors before the trucks' shortfall
         b.lines[1].requested = 7;
         b.lines[3].requested = 5;

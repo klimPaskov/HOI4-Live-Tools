@@ -299,8 +299,12 @@ def land(snap, prev):
 def air(snap, prev, state_regions=None):
     out = []
     a = snap.get("air") or {}
-    if a.get("wings_without_mission"):
-        w = a["wings_without_mission"]
+    # transport wings fly only a paradrop or an air supply, both need a target the plan names:
+    # standing by is their normal state, not idling
+    transport = {x.get("wing") for x in a.get("wings") or []
+                 if "transport" in str(x.get("airframe") or x.get("type") or "")}
+    w = [n for n in a.get("wings_without_mission") or [] if n not in transport]
+    if w:
         out.append(F("air_wings_without_mission", "medium",
                      f"{len(w)} air wing(s) have no mission ({', '.join(w[:3])}): planes on the ground do "
                      f"nothing", wings=len(w)))
