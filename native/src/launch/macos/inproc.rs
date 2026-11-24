@@ -261,6 +261,10 @@ pub(super) fn all_posted(reply: &Value) -> bool {
         && reply["posted"].as_i64() == reply["objects"].as_i64()
 }
 
+/// How long an order posted in process may read back unchanged before it counts as not applied:
+/// the game runs it on its next frame (16 ms at 60 fps; a busy frame takes longer).
+pub(super) const IPC_SETTLE: std::time::Duration = std::time::Duration::from_millis(1_000);
+
 /// The production delta for a line: factories asked minus factories requested now; 0 removes the line.
 pub(super) fn production_op(requested_now: i32, wanted: i32) -> Option<(&'static str, i64)> {
     match (wanted, wanted - requested_now) {
