@@ -232,14 +232,22 @@ static void handle(int fd, const ipc_backend *b, ipc_policy *p, rate_state *rs, 
                     authed = 1;
                     char h[6000] = "";
                     b->hello(h, sizeof h);
-                    char allow[200] = ""; size_t aa = 0;
-                    for (int i = 0; i < IPC_ALLOWED_COUNT; i++)
-                        aa += (size_t)snprintf(allow + aa, sizeof allow - aa, "%s\"%s\"", i ? "," : "", IPC_ALLOWED[i]);
-                    char fams[900] = ""; size_t fa = 0;
-                    for (int i = 1; i < IPC_ALLOWED_COUNT && i < IPC_MAX_FAMILIES; i++)
-                        fa += (size_t)snprintf(fams + fa, sizeof fams - fa, "%s\"%s\":{\"on\":%s,\"live_passed\":%s,\"reason\":\"%s\"}",
+                    /* sized for every family; each append is bounded (a 200-byte list overflowed into the
+                       families once 16 names were allowed: live engineer 81, s81a hello not JSON) */
+                    char allow[1024] = ""; size_t aa = 0;
+                    for (int i = 0; i < IPC_ALLOWED_COUNT && aa < sizeof allow - 1; i++) {
+                        int n = snprintf(allow + aa, sizeof allow - aa, "%s\"%s\"", i ? "," : "", IPC_ALLOWED[i]);
+                        if (n < 0 || (size_t)n >= sizeof allow - aa) { allow[aa] = 0; break; }
+                        aa += (size_t)n;
+                    }
+                    char fams[4096] = ""; size_t fa = 0;
+                    for (int i = 1; i < IPC_ALLOWED_COUNT && i < IPC_MAX_FAMILIES && fa < sizeof fams - 1; i++) {
+                        int n = snprintf(fams + fa, sizeof fams - fa, "%s\"%s\":{\"on\":%s,\"live_passed\":%s,\"reason\":\"%s\"}",
                                                i > 1 ? "," : "", IPC_ALLOWED[i], p->fam_on[i] ? "true" : "false",
                                                IPC_LIVE_PASSED[i] ? "true" : "false", p->fam_reason[i]);
+                        if (n < 0 || (size_t)n >= sizeof fams - fa) { fams[fa] = 0; break; }
+                        fa += (size_t)n;
+                    }
                     snprintf(frag, sizeof frag,
                              "\"protocol\":%d,%s,\"post\":{\"enabled\":%s,\"reason\":\"%s\",\"allow\":[%s],"
                              "\"min_interval_ms\":%ld,\"max_per_minute\":%d},\"families\":{%s},"
