@@ -1352,6 +1352,10 @@ pub(super) fn learn_centres(state: &mut State, tools: &dyn Tools, tags: &[String
                 ) {
                     state.centers.insert(id as i32, (x, z));
                 }
+                if let (Some(id), Some(region)) = (row["state_id"].as_i64(), row["region"].as_i64())
+                {
+                    state.regions.insert(id as i32, region);
+                }
             }
             state.centre_tags.insert(tag.clone());
         }
@@ -4603,18 +4607,60 @@ fn reconcile(
         );
         return Ok(None);
     }
-    if !has_front(roster, &u.name) {
+    let clicked = key(id, &format!("lastclick:{}", u.name));
+    if has_front(roster, &u.name) {
+        // a front that read back starts its click's count afresh: a front the game removes later
+        // (its segment's border gone as the line moves) is drawn again, never left orderless by
+        // the draws an earlier loss used (t1939j, 24 Nov 2026: Panzergruppe Ost's click had four
+        // draws from two losses and the formation stood without an order to the capitulation)
+        if let Some(c) = state.done.remove(&clicked) {
+            state
+                .done
+                .remove(&key(id, &format!("fronts:{}:{c}", u.name)));
+        }
+    } else {
         // at war the front is clicked at the line to take: the nearest highlighted border there
-        // is the contact line, not the pre-war border
-        let at_line = if peace {
-            None
+        // is the contact line, not the pre-war border; then the contact state nearest the army
+        // itself, then the line's first state: a click whose draws ran out gives way to the next
+        let candidates: Vec<i64> = if peace {
+            click_state(state, wars, u)
+                .into_iter()
+                .chain(line.first().copied())
+                .collect()
         } else {
-            contact_state(state, wars, &u.enemy, line).or_else(|| line.first().copied())
+            let stands: Vec<i64> = army_row(roster, &u.name)
+                .and_then(|r| r["states"].as_object())
+                .map(|m| m.keys().filter_map(|k| k.parse().ok()).collect())
+                .unwrap_or_default();
+            contact_state(state, wars, &u.enemy, line)
+                .into_iter()
+                .chain(contact_state(state, wars, &u.enemy, &stands))
+                .chain(line.first().copied())
+                .chain(click_state(state, wars, u))
+                .collect()
         };
-        let Some(click) = at_line
-            .or_else(|| click_state(state, wars, u))
-            .or_else(|| line.first().copied())
+        let count = |state: &State, c: i64| {
+            state
+                .done
+                .get(&key(id, &format!("fronts:{}:{c}", u.name)))
+                .copied()
+                .unwrap_or(0)
+        };
+        let Some(click) = candidates
+            .iter()
+            .copied()
+            .find(|c| count(state, *c) < 3 * REDRAWS)
         else {
+            if !candidates.is_empty() {
+                state.op_notes.insert(
+                    format!("{id}:{}", u.name),
+                    format!(
+                        "{}: no front reads back at any of {candidates:?} after {} draws each",
+                        u.name,
+                        3 * REDRAWS
+                    ),
+                );
+            }
             return Ok(None);
         };
         // the draws are counted per clicked state: a plan edit that moves the click (or a click
@@ -4622,17 +4668,8 @@ fn reconcile(
         // that does not touch the border used the count up for good and the edited click was
         // never sent); `fronts:<unit>` keeps the count of the latest click
         let fk = key(id, &format!("fronts:{}:{click}", u.name));
-        let fronts = state.done.get(&fk).copied().unwrap_or(0);
-        state
-            .done
-            .insert(key(id, &format!("fronts:{}", u.name)), fronts);
-        if fronts >= 3 * REDRAWS {
-            state.op_notes.insert(
-                format!("{id}:{}", u.name),
-                format!("{}: no front reads back after {fronts} draws", u.name),
-            );
-            return Ok(None);
-        }
+        let fronts = count(state, click);
+        state.done.insert(clicked, click);
         state.done.insert(fk, fronts + 1);
         state
             .done
@@ -4640,17 +4677,21 @@ fn reconcile(
         // at war a mobile or wing army's front is the segment of the own border state it stands
         // in, facing its line (a spearhead's short front), not the plain click that takes the
         // whole border (w43r1, 23 Nov 2026: both Panzergruppen and the Belgian wing each drew a
-        // front over the whole Belgian border, 16 divisions in one Ardennes province); a segment
-        // refused twice gives way to the plain click
+        // front over the whole Belgian border, 16 divisions in one Ardennes province). A segment
+        // the game refused once in this operation gives way to the plain click AT ONCE, in the
+        // same call: an army without a front fights nowhere (t1939j, 24 Nov 2026: four segment
+        // drags at war refused one by one, each followed by a rest, Panzergruppe Ost stood
+        // without an order for days each time)
+        let segfail = key(id, &format!("segfail:{}", u.name));
         let stand = (!peace && matches!(u.role, Role::Mobile | Role::Wing))
             .then(|| standing_border_state(roster, wars, &u.enemy, &u.name))
             .flatten()
-            .filter(|_| fronts < 2);
+            .filter(|_| fronts < 2 && !state.done.contains_key(&segfail));
         let args = match stand {
             Some(own) => json!({"army": u.name, "state_id": click, "from_state": own}),
             None => front_args(u, click, peace),
         };
-        let line = order(
+        let mut line = order(
             state,
             tools,
             lease,
@@ -4663,6 +4704,19 @@ fn reconcile(
             "hoi4_army_front",
             args,
         )?;
+        if state.last_ok == Some(false) && stand.is_some() {
+            state.done.insert(segfail, now);
+            let plain = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("front of {} near state {click}", u.name),
+                "hoi4_army_front",
+                front_args(u, click, peace),
+            )?;
+            line = format!("{line}; {plain}");
+        }
         if state.last_ok == Some(false) {
             state.skip(now, "opdraw", &u.name, 2);
         }
@@ -4808,7 +4862,40 @@ fn reconcile(
     // a spearhead's divisions stay on the order they were given (a second arrow on the same front
     // gets none: spr1, 19 Nov 2026): a spear whose order no longer reaches its line is cleared
     // and painted again at war too
-    if stale && u.spear && redraws >= 1 {
+    // AT WAR A SPEARHEAD IS RE-AIMED, ITS FRONT STAYS: a spearhead whose line moved on (its state
+    // taken, or given up) loses only its arrow (the bar's delete on that arrow), and the next one
+    // is painted on the standing front; the unit's orders are never cleared at war (t1939j, 24
+    // Nov 2026: each new line cleared Panzergruppe Ost's orders, the front would not draw again
+    // where the army stood, and it fought without an order from 24 September to the capitulation)
+    if stale && u.spear && !peace && redraws == 0 {
+        state.done.insert(k.clone(), 1);
+        let nodelete = key(id, &format!("nodelete:{}", u.name));
+        let miss: Option<i64> = offensives(roster, &u.name)
+            .into_iter()
+            .find(|off| !aims(u, off, line))
+            .and_then(|off| off["id"].as_i64());
+        if let Some(oid) = miss.filter(|_| !state.done.contains_key(&nodelete)) {
+            let out = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!(
+                    "delete the spearhead {oid} of {} (its line is now {tag}); the front stays",
+                    u.name
+                ),
+                "hoi4_army_plan",
+                json!({"army": u.name, "delete_order": oid}),
+            )?;
+            if state.last_ok == Some(false) {
+                state.done.insert(nodelete, now);
+            }
+            return Ok(Some(out));
+        }
+        // an arrow the game would not delete stays (its divisions keep fighting on the front)
+        // and the new spearhead is painted beside it below
+    }
+    if stale && u.spear && redraws >= 1 && (peace || !nodelete_set(state, id, u)) {
         state
             .done
             .insert(key(id, &format!("nospear:{}", u.name)), now);
@@ -4819,7 +4906,7 @@ fn reconcile(
         state.op_notes.insert(id.to_string(), line.clone());
         return Ok(Some(line));
     }
-    if stale && (peace || u.spear) {
+    if stale && peace {
         if redraws >= REDRAWS && line.len() >= 2 {
             // o1f: the stroke Lodz-Warsaw read back over Gdynia twice; one state at a time
             state
@@ -4941,6 +5028,13 @@ fn reconcile(
 }
 
 /// The operation replaces an arrow that misses its line instead of adding one (`replace_arrows`).
+/// Whether the game refused to delete one of the unit's arrows alone in this operation.
+fn nodelete_set(state: &State, id: &str, u: &Unit) -> bool {
+    state
+        .done
+        .contains_key(&key(id, &format!("nodelete:{}", u.name)))
+}
+
 fn op_replaces(state: &State, id: &str) -> bool {
     state.done.get(&key(id, "replace_arrows")) == Some(&1)
 }

@@ -753,6 +753,9 @@ pub struct State {
     /// country has gained some (a refusal is usually a missing few points).
     pol_pp_at_fail: HashMap<String, f64>,
     centers: HashMap<i32, (f64, f64)>,
+    /// State -> strategic region id, read with the centres (hoi4_states `region`, when the
+    /// platform's read gives it).
+    regions: HashMap<i32, i64>,
     /// Country tags whose state centres were read into `centers` in this server life.
     centre_tags: HashSet<String>,
     con: ConState,
@@ -945,6 +948,7 @@ impl Default for State {
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
             centers: HashMap::new(),
+            regions: HashMap::new(),
             centre_tags: HashSet::new(),
             con: ConState::default(),
             date_stop: None,
