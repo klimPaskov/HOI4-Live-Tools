@@ -50,6 +50,10 @@ same-platform migration (`scripts/linux_build_migrate.py`). Linux 1.19.3 is no l
 accepted. The older Linux-only GUI diagnostics written for 1.19.3 fail closed on 1.19.4.1
 (classes they use were removed); the management tools replace them.
 
+The same migration moved everything to Linux 1.20.0.0 (GNU build ID 71806afa): the table with
+`linux_build_migrate.py --table` (fields only where matched code confirms them) and the core
+modules' Linux values with its literal mode. Linux 1.19.4.1 is no longer accepted.
+
 A developer build with `--features dev-table` reads a table from `HOI4_LIVE_DEV_TABLE`
 (reloaded when it changes) and logs unmapped keys to `HOI4_LIVE_DEV_MISSING`; release
 builds always use the embedded table.

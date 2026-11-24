@@ -5,7 +5,7 @@ platform, which of its tools exist, compile, have a memory layout for the curren
 and were last proven against the running game, and what is left to finish each port. It is kept
 current by hand; the check in `tests/test_xlayout_coverage.py` keeps the Linux layout list honest.
 
-Game version: HOI4 1.19.4.1 on macOS and Linux. The tool catalogue has 189 `hoi4_*` names (about
+Game version: HOI4 1.19.4.1 on macOS, 1.20.0.0 on Linux. The tool catalogue has 189 `hoi4_*` names (about
 181 player tools plus debug tools; `hoi4-live-native --list-tools` prints them).
 
 ## Summary
@@ -14,7 +14,7 @@ Game version: HOI4 1.19.4.1 on macOS and Linux. The tool catalogue has 189 `hoi4
 |---|---|---|---|
 | Tools in the build | all | all (the same modules) | all compiled and unit-tested; none reachable (no Windows game attachment or input yet) |
 | Compiles in CI | yes | yes (x86_64 and aarch64) | yes (the code compiled there) |
-| Memory layout for 1.19.4.1 | native (the canonical values) | generated table: 82 of 94 image keys, 527 of 617 field keys | vtables only, for Windows 1.19.5.0: 181 of 182 vtable keys by RTTI; no globals or fields |
+| Memory layout | 1.19.4.1, native (the canonical values) | 1.20.0.0: the 1.19.4.1 table moved by `linux_build_migrate.py --table`: 82 of 94 image keys, 441 of 618 field keys the sources use | vtables only, for Windows 1.19.5.0: 181 of 182 vtable keys by RTTI; no globals or fields |
 | Input | CGEvent | X11 XTEST | none in the native runtime |
 | Last proven live | continuously | 5 November 2026: 104 tools verified, 11 refusal-only, 8 not reached | native: never; the separate Python runtime: November 2026 on 1.19.4.2 |
 
@@ -38,24 +38,29 @@ What is missing:
 - 39 tools were added after the Linux live check (battles, army orders such as gather, detach, attack and
   fallback, occupation and its laws, stockpile, war statistics, operations, railways, the learning
   tools, the executor and watcher). None has run on Linux.
-- 12 image keys and 90 field keys those tools use are not in the Linux table. They are listed by
-  source file in `scripts/data/xlayout-unmapped-1.19.4.1.json`; the tools that need them refuse on
-  Linux until they are mapped.
+- 12 image keys and 177 field keys the tools use are not in the Linux 1.20.0.0 table. They are
+  listed by source file in `scripts/data/xlayout-unmapped-1.20.0.0.json`; the tools that need them
+  refuse on Linux until they are mapped. 87 of the field keys were in the 1.19.4.1 table: the move to
+  1.20.0.0 kept only what the matched code confirms (every confirmed field kept its offset), and the
+  rest (struct strides, GUI helper objects without RTTI, a few single-vote members) waits for live
+  reads.
 - No screen recorder (the macOS recorder uses ScreenCaptureKit).
 
+The Linux build is 1.20.0.0 (GNU build ID `71806afa707a46fb72f0738a719c3f1c3f5e2e42`, SHA-256
+`f8fe17fb1047cc94a64e7cc8f13780494e8eb111b9c3a3468256bfbc4f499874`). Its table was moved from the
+1.19.4.1 one (build ID `2265e6e7`) with `scripts/linux_build_migrate.py OLD NEW --table
+native/layouts/linux-2265e6e7....json --hints scripts/data/xlayout-hints-1.19.4.1.json`: all 182 image
+values mapped, 2,998 of 3,098 fields confirmed (all at their 1.19.4.1 offsets), 4 more by the bracketed
+rule. The report is `native/layouts/linux-71806afa....coverage.json`. The core modules' own Linux
+values moved with the same matcher; values in the older GUI diagnostics that no code match covers
+took the shift of the mapped neighbours on both sides.
+
 Steps to finish, in order:
-1. Get the Linux 1.19.4.1 executable (GNU build ID `2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082`,
-   SHA-256 `36a69ea446df3903baa0d1b2dec1331cfd2fe16eacee482d84cc36e5b6f9b5da`) next to the macOS
-   one. Only the `hoi4` file is needed for mapping. Steam's current Linux build may be newer; a
-   newer build needs a new table (and the macOS build of the same version).
-2. Regenerate the table with both binaries, keeping the live entries:
-   `python3 scripts/gen_linux_layout.py generate MACHO ELF --hints scripts/data/xlayout-hints-1.19.4.1.json --live scripts/data/xlayout-live-1.19.4.1.json`.
-   Then `extend --unmapped` (below) lists what is still missing; add owner hints for classes
-   without a vtable, and live entries for what the static match cannot resolve.
-3. Run the new tools against the Linux game (any x86_64 Linux with an X server; a virtual display
+1. Live reads on 1.20.0.0 for the keys the move left out, added as live entries with their evidence.
+2. Run the new tools against the Linux game (any x86_64 Linux with an X server; a virtual display
    such as Xvfb with software rendering works but is slow in war) and add what differs to
-   `scripts/data/xlayout-live-1.19.4.1.json` with its evidence.
-4. A recorder for X11 (for example ffmpeg `x11grab` on the owned display) if Linux campaigns are to
+   the live entries with its evidence.
+3. A recorder for X11 (for example ffmpeg `x11grab` on the owned display) if Linux campaigns are to
    be filmed.
 
 Without the executable, `python3 scripts/gen_linux_layout.py extend native/layouts/linux-<id>.json`
