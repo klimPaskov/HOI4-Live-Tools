@@ -26357,11 +26357,24 @@
    "0xc730": "field offset (design view)",
    "0xfcb0": "field offset (design view)",
    "0xfcc8": "field offset (design view)",
-   "0xd478": "field offset (design view)"
+   "0xd478": "field offset (design view)",
+   "0x20002": "CGEventFlags shift|device",
+   "0x40001": "CGEventFlags control|device",
+   "0x100008": "CGEventFlags command|device",
+   "0x80020": "CGEventFlags option|device",
+   "0x800000": "CGEventFlags numeric pad",
+   "0xdf0000": "CGEventFlags modifier mask (CGEventSourceFlagsState)"
   },
   "shared_key_files": [
    "native/src/production_lines/output.rs"
   ],
-  "disabled": {}
+  "disabled": {},
+  "not_macos": {
+   "native/src/gui.rs": "Linux/ELF-era literal checks; the numeric match with a macOS 1.19.4.1 key is not established and the neighbours in the same check have no 1.20 entry; kept as in the working 1.20 reader v120-e69c (resolve with scripts/macos_resolve.py before treating as macOS)",
+   "native/src/politics_focus.rs": "Linux/ELF-era literal checks; the numeric match with a macOS 1.19.4.1 key is not established and the neighbours in the same check have no 1.20 entry; kept as in the working 1.20 reader v120-e69c (resolve with scripts/macos_resolve.py before treating as macOS)",
+   "native/src/info_research_button.rs": "Linux/ELF-era literal checks; the numeric match with a macOS 1.19.4.1 key is not established and the neighbours in the same check have no 1.20 entry; kept as in the working 1.20 reader v120-e69c (resolve with scripts/macos_resolve.py before treating as macOS)",
+   "native/src/production_panel.rs": "Linux/ELF-era literal checks; the numeric match with a macOS 1.19.4.1 key is not established and the neighbours in the same check have no 1.20 entry; kept as in the working 1.20 reader v120-e69c (resolve with scripts/macos_resolve.py before treating as macOS)",
+   "native/src/construction/controls/binding.rs": "Linux/ELF-era literal checks; the numeric match with a macOS 1.19.4.1 key is not established and the neighbours in the same check have no 1.20 entry; kept as in the working 1.20 reader v120-e69c (resolve with scripts/macos_resolve.py before treating as macOS)"
+  }
  }
 }

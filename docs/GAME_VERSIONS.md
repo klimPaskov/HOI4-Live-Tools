@@ -148,6 +148,26 @@ A new macOS literal in `native/src` needs its 1.20 value in the map, or the test
 prints the new value, method and confidence; add it to the map's `image` table (`high` only when two
 signals agree: aligned code or references, and the neighbouring delta).
 
+What the generator rewrites, and the leftover check:
+
+- a literal in a macOS context (a macOS path, or an item named MACOS/Mac) in the image range;
+- anywhere else, a literal that is an exact key of the map's `image` table (a canonical key passed
+  through `xlayout::img`, a match arm comparing a rewritten layout value), unless it stands in an item
+  named for another platform (LINUX, ELF, WINDOWS) or its file or `file:line` is listed in
+  `variant.not_macos` with a reason;
+- test code is skipped per item: `#[cfg(test)]` covers the item after it (and the files of a
+  `#[cfg(test)] mod x;`), never the rest of the file. (Before this rule, one `#[cfg(test)] use` near the
+  top of `own_focus.rs`, `launch/macos/focus/binding.rs` or `construction/mac_find.rs` hid every literal
+  below it: the 1.20 focus reads failed with `invalid_focus_type`.)
+
+After writing the copy the generator re-reads it and refuses (exit 1, copy removed) when any production
+literal is still an old key. The same check runs on its own:
+
+    python3 scripts/macos_build_variant.py MAP.json --verify OUT_DIR
+
+Build scripts run it before cargo, so a variant with a 1.19.4.1 address left in production code never
+compiles. Flag values and offsets that fall in the image range go in `variant.not_image`.
+
 ### Planned: one binary for every build
 
 The generated runtime is the small safe step. The runtime should instead choose the table when it
