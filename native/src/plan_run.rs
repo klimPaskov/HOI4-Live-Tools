@@ -3787,7 +3787,7 @@ fn war_first_steps(
             if operation_roles_missing(state, plan) {
                 layout_step(state, tools, plan, lease, now)
             } else {
-                Ok(None)
+                layout_pool_step(state, tools, plan, lease, now)
             }
         },
         // the operations: prepare, execute, advance (plan_operation.rs); the air burst follows in
@@ -4891,6 +4891,10 @@ fn layout_step(
     if let Some(step) = layout_top_up(state, tools, plan, lease, now, &full)? {
         return Ok(Some(step));
     }
+    // the pool the roles were carved from is held to its commander's limit the same day
+    if let Some(step) = layout_pool_step(state, tools, plan, lease, now)? {
+        return Ok(Some(step));
+    }
     // Generals named by the layout, only where the army has none (no reassignment churn).
     for e in entries {
         let hint = text(&e["name_hint"]);
@@ -4935,6 +4939,61 @@ fn layout_step(
                 "layout general {general} -> {army}: {ok} {why}"
             )));
         }
+    }
+    Ok(None)
+}
+
+/// Once the roles an operation names stand, an army without a role above its commander's limit
+/// gives the surplus to a new army (`hoi4_army_split`, as the armies step does), inside the
+/// layout's own day-one burst: the armies step sits behind the operations and their air in
+/// every tick before a war (t1939i, 24 Nov 2026: the pool Army 1 kept 28 of 24 divisions from
+/// 14 August to the war; the monitor's army_over_limit row stayed open 12 days).
+fn layout_pool_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if !plan["armies"].is_object()
+        || plan["army_layout"].as_array().is_none_or(|v| v.is_empty())
+        || operation_roles_missing(state, plan)
+    {
+        return Ok(None);
+    }
+    let roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
+    let full = list(&roster, "armies");
+    let cfg = &plan["armies"];
+    let max = cfg["max"].as_u64().unwrap_or(24);
+    let roles: HashSet<String> = state.layout.values().cloned().collect();
+    for a in full {
+        let name = text(&a["army"]).to_string();
+        if name.is_empty()
+            || roles.contains(&name)
+            || state.op_owned.contains_key(&name)
+            || state.skipped(now, "layoutpool", &name)
+        {
+            continue;
+        }
+        let count = a["division_count"].as_u64().unwrap_or(0);
+        let cap = command_cap(&a["division_limit"], max, cfg);
+        if count <= cap {
+            continue;
+        }
+        let chunk = (count - cap).clamp(1, 19);
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_army_split",
+            json!({"army": name, "count": chunk, "over_limit": true}),
+            "lp",
+        )?;
+        if !ok {
+            state.skip(now, "layoutpool", &name, 2 * DAY);
+        }
+        return Ok(Some(format!(
+            "layout: {name} holds {count} of {cap}: {chunk} split off: {ok} {why}"
+        )));
     }
     Ok(None)
 }
@@ -4999,13 +5058,25 @@ fn form_strike_role(
     }
     let count = entry["count"].as_u64().unwrap_or(1).max(1) as usize;
     let need = if named {
-        let target = role_target(state, plan, entry, hint, cands.len());
+        let open = |x: &Value| layout_when_open(tools, x);
+        let (target, quota) = role_target(state, plan, entry, hint, &cands, &open);
         state
             .done
             .insert(format!("layouttarget:{hint}"), target as GameHour);
+        for (t, q) in &quota {
+            state
+                .done
+                .insert(format!("layoutquota:{hint}\u{1}{t}"), *q as GameHour);
+        }
+        state.done.insert(format!("layoutquota:{hint}"), now);
         target
     } else {
         count
+    };
+    // the role's share of each template (role_target): nearest first, never past its quota
+    let cands = match state.done.get(&format!("layoutquota:{hint}")) {
+        Some(_) if named => quota_filter(&cands, &layout_quota(state, hint)),
+        _ => cands,
     };
     let (donor, pick) = best_donor(&cands, need);
     let donor_size = full
@@ -5132,8 +5203,26 @@ fn layout_top_up(
         let cands = layout_candidates(state, tools, plan, e, hint, full, Some(&army))?;
         // a donor without a role gives at most all but one (the game keeps a lone division in
         // its army); a role's army keeps more than it gives
-        let usable: Vec<(String, String, f64)> =
-            cands.into_iter().filter(|(d, _, _)| d != &army).collect();
+        let usable: Vec<Cand> = cands
+            .into_iter()
+            .filter(|(d, _, _, _)| d != &army)
+            .collect();
+        // the top-up keeps to the role's share of each template too (layoutquota:)
+        let usable = if state.done.contains_key(&format!("layoutquota:{hint}")) {
+            let mut quota = layout_quota(state, hint);
+            // what the role's army already holds counts against its quota
+            for d in list(
+                &tools.call("hoi4_supply", &json!({"army": army}))?,
+                "divisions",
+            ) {
+                if let Some(q) = quota.get_mut(text(&d["template"])) {
+                    *q = q.saturating_sub(1);
+                }
+            }
+            quota_filter(&usable, &quota)
+        } else {
+            usable
+        };
         if usable.is_empty() {
             state.done.insert(format!("layouttopped:{hint}"), now);
             continue;
@@ -5292,7 +5381,7 @@ fn layout_candidates(
     hint: &str,
     full: &[Value],
     own: Option<&str>,
-) -> Result<Vec<(String, String, f64)>> {
+) -> Result<Vec<Cand>> {
     let templates = strings(entry, "templates");
     if templates.is_empty() {
         return Ok(Vec::new());
@@ -5340,7 +5429,7 @@ fn layout_candidates(
             continue;
         }
         let detail = tools.call("hoi4_supply", &json!({"army": name}))?;
-        let mut spare: Vec<(String, String, f64)> = Vec::new();
+        let mut spare: Vec<Cand> = Vec::new();
         for d in list(&detail, "divisions") {
             let template = text(&d["template"]);
             if text(&d["army"]) != name || !templates.iter().any(|t| t == template) {
@@ -5359,7 +5448,7 @@ fn layout_candidates(
             if name != gather {
                 dist += 1e-6;
             }
-            let row = (name.to_string(), id.to_string(), dist);
+            let row = (name.to_string(), id.to_string(), dist, template.to_string());
             if wanted.iter().any(|t| *t == template) {
                 out.push(row);
             } else {
@@ -5388,35 +5477,119 @@ fn own_role_size(state: &State, plan: &Value, hint: &str, row: &Value) -> usize 
     cap.min(limit) as usize
 }
 
-/// The divisions an operation's role aims at: its share of `available` divisions of its
-/// templates split evenly between the operation roles still forming that want any of them (this
-/// one included), at least its `count`, at most the plan's `armies.max` (default 24).
-fn role_target(state: &State, plan: &Value, entry: &Value, hint: &str, available: usize) -> usize {
+/// A layout candidate: (donor army, division id, squared distance to the role's state, template).
+type Cand = (String, String, f64, String);
+
+/// The divisions an operation's role aims at, and its share of each template: every template
+/// among the candidates is split between the operation roles still forming that want it (this
+/// one included; a role whose `when` holds now counts: `owner:` clauses are read from the game)
+/// in proportion to the divisions of that template their operation formation asks for (1 when
+/// it names none). At least the role's `count`, at most the plan's `armies.max` (default 24).
+/// (t1939h/i, 24 Nov 2026: Panzergruppe Nord's `when` kept it out of the split, so Panzergruppe
+/// Ost took all 7 Panzer-Divisionen and Nord never formed.)
+fn role_target(
+    state: &State,
+    plan: &Value,
+    entry: &Value,
+    hint: &str,
+    cands: &[Cand],
+    open: &dyn Fn(&Value) -> bool,
+) -> (usize, HashMap<String, usize>) {
     let templates = strings(entry, "templates");
-    let wanting = list(plan, "army_layout")
+    let others: Vec<&Value> = list(plan, "army_layout")
         .iter()
         .filter(|x| {
             let h = text(&x["name_hint"]);
-            h == hint
-                || (x["when"].is_null()
-                    && !state.layout.contains_key(h)
-                    && plan_operation::names_army(plan, h)
-                    && strings(x, "templates")
-                        .iter()
-                        .any(|t| templates.contains(t)))
+            h != hint
+                && !h.is_empty()
+                && !state.layout.contains_key(h)
+                && !state.done.contains_key(&format!("layout:impossible:{h}"))
+                && plan_operation::names_army(plan, h)
+                && open(x)
         })
-        .count()
-        .max(1);
+        .collect();
+    let mut quota = HashMap::new();
+    for t in &templates {
+        let available = cands.iter().filter(|c| &c.3 == t).count();
+        if available == 0 {
+            continue;
+        }
+        let mine = formation_weight(plan, hint, t);
+        let all: usize = mine
+            + others
+                .iter()
+                .filter(|x| strings(x, "templates").contains(t))
+                .map(|x| formation_weight(plan, text(&x["name_hint"]), t))
+                .sum::<usize>();
+        quota.insert(t.clone(), (available * mine).div_ceil(all.max(1)));
+    }
     let cap = plan["armies"]["max"].as_u64().unwrap_or(24).max(1) as usize;
     let count = entry["count"].as_u64().unwrap_or(1).max(1) as usize;
-    available.div_ceil(wanting).max(count).min(cap)
+    let total: usize = quota.values().sum();
+    (total.max(count).min(cap), quota)
+}
+
+/// How many divisions of `template` the operation formation of `hint` asks for (its
+/// `divisions` map), 1 when it names none.
+fn formation_weight(plan: &Value, hint: &str, template: &str) -> usize {
+    list(plan, "operations")
+        .iter()
+        .flat_map(|op| list(op, "formations").iter())
+        .find(|f| text(&f["army"]) == hint)
+        .and_then(|f| f["divisions"][template].as_u64())
+        .map_or(1, |n| n.max(1) as usize)
+}
+
+/// A role's template quota as role_target stored it (`layoutquota:HINT\u{1}TEMPLATE`).
+fn layout_quota(state: &State, hint: &str) -> HashMap<String, usize> {
+    let prefix = format!("layoutquota:{hint}\u{1}");
+    state
+        .done
+        .iter()
+        .filter_map(|(k, v)| {
+            k.strip_prefix(&prefix)
+                .map(|t| (t.to_string(), *v as usize))
+        })
+        .collect()
+}
+
+/// The candidates within the quota, nearest first (a template without a quota: none).
+fn quota_filter(cands: &[Cand], quota: &HashMap<String, usize>) -> Vec<Cand> {
+    let mut used: HashMap<&str, usize> = HashMap::new();
+    cands
+        .iter()
+        .filter(|c| {
+            let n = used.entry(c.3.as_str()).or_insert(0);
+            *n += 1;
+            *n <= quota.get(&c.3).copied().unwrap_or(0)
+        })
+        .cloned()
+        .collect()
+}
+
+/// Whether an army_layout entry's `when` holds now: none, or `owner:<state>=<TAG>` as the game
+/// shows it (the layout's own reading of that clause); any other clause: no.
+fn layout_when_open(tools: &dyn Tools, e: &Value) -> bool {
+    if e["when"].is_null() {
+        return true;
+    }
+    let Some(rest) = text(&e["when"]).strip_prefix("owner:") else {
+        return false;
+    };
+    let (id, tag) = rest.split_once('=').unwrap_or(("0", ""));
+    tools
+        .call("hoi4_states", &json!({"query": id.trim()}))
+        .map(|v| {
+            text(&list(&v, "states").first().cloned().unwrap_or_default()["owner"]) == tag.trim()
+        })
+        .unwrap_or(false)
 }
 
 /// The donor giving the most of the `need` nearest candidates, with its picks (nearest first).
-fn best_donor(cands: &[(String, String, f64)], need: usize) -> (String, Vec<String>) {
+fn best_donor(cands: &[Cand], need: usize) -> (String, Vec<String>) {
     let nearest = &cands[..need.min(cands.len())];
     let mut by: Vec<(String, usize, usize)> = Vec::new();
-    for (i, (d, _, _)) in nearest.iter().enumerate() {
+    for (i, (d, _, _, _)) in nearest.iter().enumerate() {
         match by.iter_mut().find(|(n, _, _)| n == d) {
             Some(row) => row.1 += 1,
             None => by.push((d.clone(), 1, i)),
@@ -5427,8 +5600,8 @@ fn best_donor(cands: &[(String, String, f64)], need: usize) -> (String, Vec<Stri
     // the donor's own nearest divisions, up to the need (not only those in the global nearest)
     let pick: Vec<String> = cands
         .iter()
-        .filter(|(d, _, _)| *d == donor)
-        .map(|(_, id, _)| id.clone())
+        .filter(|(d, _, _, _)| *d == donor)
+        .map(|(_, id, _, _)| id.clone())
         .take(need)
         .collect();
     (donor, pick)
@@ -16973,6 +17146,54 @@ mod tests {
         assert_eq!(got("Armee Mitte"), 24, "{:?}", state.layout);
         assert_eq!(got("Armee Süd"), 24, "{:?}", state.layout);
         assert!(board.sent("hoi4_army_merge") >= 2);
+    }
+
+    #[test]
+    fn two_armour_roles_split_the_panzer_divisions_by_their_formations() {
+        // t1939h/i: Panzergruppe Nord's `when` kept it out of the split; Ost took all 7 Panzer
+        let plan = json!({
+            "armies": {"max": 24},
+            "army_layout": [
+                {"name_hint": "Ost", "templates": ["Pz", "Mot"], "count": 4, "when": "owner:64=GER"},
+                {"name_hint": "Nord", "templates": ["Pz"], "count": 1, "when": "owner:62=GER"},
+                {"name_hint": "Later", "templates": ["Pz"], "when": "owner:88=GER"}
+            ],
+            "operations": [{"formations": [
+                {"army": "Ost", "divisions": {"Pz": 12}},
+                {"army": "Nord", "divisions": {"Pz": 12}},
+                {"army": "Later", "divisions": {"Pz": 12}}
+            ]}]
+        });
+        let state = State::default();
+        let cand =
+            |id: &str, t: &str, d: f64| ("Army 1".to_string(), id.to_string(), d, t.to_string());
+        let mut cands: Vec<Cand> = (0..7)
+            .map(|i| cand(&format!("p{i}"), "Pz", i as f64))
+            .collect();
+        cands.extend((0..4).map(|i| cand(&format!("m{i}"), "Mot", 10.0 + i as f64)));
+        cands.sort_by(|x, y| x.2.total_cmp(&y.2));
+        // Later's owner clause does not hold yet: it takes no share
+        let open = |x: &Value| text(&x["when"]) != "owner:88=GER";
+        let (target, quota) =
+            role_target(&state, &plan, &plan["army_layout"][0], "Ost", &cands, &open);
+        assert_eq!(quota["Pz"], 4);
+        assert_eq!(quota["Mot"], 4);
+        assert_eq!(target, 8);
+        let picked = quota_filter(&cands, &quota);
+        assert_eq!(picked.iter().filter(|c| c.3 == "Pz").count(), 4);
+        assert_eq!(picked.len(), 8);
+        // Nord, Ost formed: the 3 left are all its own
+        let mut state = State::default();
+        state.layout.insert("Ost".into(), "Army 2".into());
+        let rest: Vec<Cand> = cands
+            .iter()
+            .filter(|c| c.3 == "Pz")
+            .skip(4)
+            .cloned()
+            .collect();
+        let (target, quota) =
+            role_target(&state, &plan, &plan["army_layout"][1], "Nord", &rest, &open);
+        assert_eq!((target, quota["Pz"]), (3, 3));
     }
 
     #[test]

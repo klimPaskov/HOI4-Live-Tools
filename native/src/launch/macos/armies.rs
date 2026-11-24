@@ -1791,8 +1791,9 @@ fn name_box_point(r: &Reader<'_>, image: u64, army: &str) -> Result<(f64, f64)> 
     }
     Err(last.unwrap_or_else(|| Error::new("gui_target_unavailable", "Army name box not placed")))
 }
-/// Most characters of an army name typed into the badge's name box (135 px wide).
-pub(super) const NAME_MAX: usize = 24;
+/// Most characters of an army name: the game's name box keeps 20 (s6u, 24 Nov 2026: 23 typed, "Reserve Armee Ostpre"
+/// kept, the read-back failed), so a longer name is refused before any input on both paths.
+pub(super) const NAME_MAX: usize = 20;
 /// Why `name` cannot become the name of `army` (checked before any input): not typable, too
 /// long, or the name of another own army or army group.
 pub(super) fn rename_refusal(view: &Value, army: &str, name: &str) -> Option<Error> {
