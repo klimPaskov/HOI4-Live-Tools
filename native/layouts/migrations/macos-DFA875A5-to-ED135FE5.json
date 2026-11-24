@@ -2,18 +2,20 @@
  "system": "macos",
  "from": {
   "build_id": "DFA875A5-25BA-35E0-9736-627F8A5C4396",
-  "game_version": "1.19.4.1"
+  "game_version": "1.19.4.1",
+  "sha256": "d440ad8823e1ca5106b2ff87bc5135acf1b40d56f6bf0a76b52b5b247a668e07"
  },
  "to": {
   "build_id": "ED135FE5-CDA8-38E8-8835-3F7381B79974",
   "game_version": "1.20.0.0",
   "sha256": "9727f0933a0286b94d815c34211e1c25c25830385b58b56db5a647ffe52aaba5"
  },
- "status": "static only: not proven live; the sources still use the 1.19.4.1 values as keys",
+ "status": "static: every production macOS literal resolves (high or medium); not proven live until the 1.20 self-check (NOTES-1116 24 Nov engineer 70). Keys stay the 1.19.4.1 values: tables for other builds and platforms are never re-keyed; macOS 1.20 is a table like any other build.",
  "notes": [
   "fields: every entry the matcher mapped is unchanged (confidence unchanged); keys it did not reach are assumed unchanged (confidence assumed), as on Linux 1.20, where 2,821 of 2,827 entries were identical",
   "image: game_migrate table entries, then macos_build_migrate (vtables, symbols, sections, cstrings) and the matcher (globals, functions) for literals outside the tool modules",
-  "fields_default identity: a field key not listed keeps its value (the structures did not move)"
+  "fields_default identity: a field key not listed keeps its value (the structures did not move)",
+  "engineer 70: 17 macOS literals resolved or confirmed by scripts/game_migrate resolution (aligned code / aligned RIP references) and the neighbouring delta; the rest of the old unresolved list is Linux-only or not an address"
  ],
  "image": {
   "0x202b0": {
@@ -1973,8 +1975,8 @@
   },
   "0x3708e00": {
    "new": "0x370df80",
-   "confidence": "medium",
-   "how": "matcher:global"
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs+neighbour-delta"
   },
   "0x370ce20": {
    "new": "0x3711fa0",
@@ -2048,13 +2050,13 @@
   },
   "0x37ea608": {
    "new": "0x37ef798",
-   "confidence": "medium",
-   "how": "matcher:global"
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs+neighbour-delta"
   },
   "0x37ea778": {
    "new": "0x37ef908",
-   "confidence": "medium",
-   "how": "matcher:global"
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs+neighbour-delta"
   },
   "0x37ea780": {
    "new": "0x37ef910",
@@ -2093,8 +2095,8 @@
   },
   "0x384a500": {
    "new": "0x384f6a0",
-   "confidence": "medium",
-   "how": "matcher:global"
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs+neighbour-delta"
   },
   "0x384b168": {
    "new": "0x3850308",
@@ -2135,6 +2137,73 @@
    "new": "0x38508f8",
    "confidence": "high",
    "how": "matcher:global"
+  },
+  "0x384b760": {
+   "new": "0x3850900",
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs+neighbour-delta"
+  },
+  "0x37ed910": {
+   "new": "0x37f2aa0",
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs+neighbour-delta"
+  },
+  "0x3844d10": {
+   "new": "0x3849eb0",
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs+neighbour-delta"
+  },
+  "0x37ed950": {
+   "new": "0x37f2ae0",
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs+neighbour-delta"
+  },
+  "0x384a9a8": {
+   "new": "0x384fb48",
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs+neighbour-delta",
+   "note": "aligned-rip-refs (struct base 0x384a99c +0xc)"
+  },
+  "0x384a72b": {
+   "new": "0x384f8cb",
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs+neighbour-delta",
+   "note": "aligned-rip-refs (struct base 0x384a702 +0x29)"
+  },
+  "0x22b03c0": {
+   "new": "0x22b3410",
+   "confidence": "high",
+   "how": "e70:aligned-code+neighbour-delta"
+  },
+  "0x2460fb0": {
+   "new": "0x2464000",
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs+neighbour-delta"
+  },
+  "0x26e9f50": {
+   "new": "0x26ecfd0",
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs"
+  },
+  "0x27bc4c0": {
+   "new": "0x27bf540",
+   "confidence": "high",
+   "how": "e70:aligned-code+neighbour-delta"
+  },
+  "0x27bcdc0": {
+   "new": "0x27bfe40",
+   "confidence": "high",
+   "how": "e70:aligned-code+neighbour-delta"
+  },
+  "0x36dcdf8": {
+   "new": "0x36e1f58",
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs+neighbour-delta"
+  },
+  "0x36dcd98": {
+   "new": "0x36e1ef8",
+   "confidence": "high",
+   "how": "e70:aligned-rip-refs+neighbour-delta"
   }
  },
  "fields": {
@@ -26006,216 +26075,293 @@
  "unresolved_image": [
   {
    "old": "0x1000007",
-   "source": "native/src/platform/macos.rs:47"
+   "source": "native/src/platform/macos.rs:47",
+   "status": "not an address: CPU_TYPE_X86_64"
   },
   {
    "old": "0x1527710",
-   "source": "native/src/focus_node_binding.rs:241"
+   "source": "native/src/focus_node_binding.rs:241",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x1527740",
-   "source": "native/src/focus_node_binding.rs:240"
+   "source": "native/src/focus_node_binding.rs:240",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x1599270",
-   "source": "native/src/category_ui.rs:287"
+   "source": "native/src/category_ui.rs:287",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x1599290",
-   "source": "native/src/node_reuse.rs:86"
+   "source": "native/src/node_reuse.rs:86",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x15994c0",
-   "source": "native/src/node_reuse.rs:86"
+   "source": "native/src/node_reuse.rs:86",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x15a56e0",
-   "source": "native/src/category_ui.rs:276"
+   "source": "native/src/category_ui.rs:276",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x15a5710",
-   "source": "native/src/category_ui.rs:275"
+   "source": "native/src/category_ui.rs:275",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x15b7bb0",
-   "source": "native/src/slot_control.rs:134"
+   "source": "native/src/slot_control.rs:134",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x15b7be0",
-   "source": "native/src/slot_control.rs:133"
+   "source": "native/src/slot_control.rs:133",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x15d9440",
-   "source": "native/src/focus_node_binding.rs:239"
+   "source": "native/src/focus_node_binding.rs:239",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x15d9680",
-   "source": "native/src/focus_node_binding.rs:239"
+   "source": "native/src/focus_node_binding.rs:239",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x15dedf0",
-   "source": "native/src/own_focus/search/control.rs:101"
+   "source": "native/src/own_focus/search/control.rs:101",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x15df350",
-   "source": "native/src/own_focus/search/control.rs:103"
+   "source": "native/src/own_focus/search/control.rs:103",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x15df390",
-   "source": "native/src/own_focus/search/control.rs:104"
+   "source": "native/src/own_focus/search/control.rs:104",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x168a260",
-   "source": "native/src/slot_control.rs:150"
+   "source": "native/src/slot_control.rs:150",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x1693130",
-   "source": "native/src/politics_focus.rs:128"
+   "source": "native/src/politics_focus.rs:128",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x1693160",
-   "source": "native/src/politics_focus.rs:127"
+   "source": "native/src/politics_focus.rs:127",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x18157a0",
-   "source": "native/src/production_lines/controls.rs:193"
+   "source": "native/src/production_lines/controls.rs:193",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x18157d0",
-   "source": "native/src/production_lines/controls.rs:192"
+   "source": "native/src/production_lines/controls.rs:192",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x186d470",
-   "source": "native/src/construction/controls/binding.rs:90"
+   "source": "native/src/construction/controls/binding.rs:90",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x1886560",
-   "source": "native/src/construction/controls/binding.rs:90"
+   "source": "native/src/construction/controls/binding.rs:90",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x18aafe0",
-   "source": "native/src/production_lines/controls.rs:210"
+   "source": "native/src/production_lines/controls.rs:210",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x20811a0",
-   "source": "native/src/politics_focus.rs:269"
+   "source": "native/src/politics_focus.rs:269",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x22b03c0",
-   "source": "native/src/construction/mac_find/opener/button.rs:289"
+   "source": "native/src/construction/mac_find/opener/button.rs:289",
+   "status": "resolved: see image (aligned code or aligned RIP references, checked against the neighbouring delta)"
   },
   {
    "old": "0x2460fb0",
-   "source": "native/src/construction/mac_panel.rs:157"
+   "source": "native/src/construction/mac_panel.rs:157",
+   "status": "resolved: see image (aligned code or aligned RIP references, checked against the neighbouring delta)"
   },
   {
    "old": "0x26e9f50",
-   "source": "native/src/gui/macos/source_point.rs:125"
+   "source": "native/src/gui/macos/source_point.rs:125",
+   "status": "resolved: see image (aligned code or aligned RIP references, checked against the neighbouring delta)"
   },
   {
    "old": "0x27bc4c0",
-   "source": "native/src/gui/macos.rs:164"
+   "source": "native/src/gui/macos.rs:164",
+   "status": "resolved: see image (aligned code or aligned RIP references, checked against the neighbouring delta)"
   },
   {
    "old": "0x27bcdc0",
-   "source": "native/src/gui/macos.rs:164"
+   "source": "native/src/gui/macos.rs:164",
+   "status": "resolved: see image (aligned code or aligned RIP references, checked against the neighbouring delta)"
   },
   {
    "old": "0x282ffe0",
-   "source": "native/src/focus_start_binding.rs:117"
+   "source": "native/src/focus_start_binding.rs:117",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x2839080",
-   "source": "native/src/focus_start_binding.rs:118"
+   "source": "native/src/focus_start_binding.rs:118",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x283a030",
-   "source": "native/src/focus_start_binding.rs:117"
+   "source": "native/src/focus_start_binding.rs:117",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x283a060",
-   "source": "native/src/focus_start_binding.rs:117"
+   "source": "native/src/focus_start_binding.rs:117",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x283a0d0",
-   "source": "native/src/focus_start_binding.rs:118"
+   "source": "native/src/focus_start_binding.rs:118",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x283a100",
-   "source": "native/src/focus_start_binding.rs:118"
+   "source": "native/src/focus_start_binding.rs:118",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x290cce0",
-   "source": "native/src/info_research_button.rs:163"
+   "source": "native/src/info_research_button.rs:163",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x29166d0",
-   "source": "native/src/info_research_button.rs:148"
+   "source": "native/src/info_research_button.rs:148",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x297df40",
-   "source": "native/src/construction/controls/binding.rs:91"
+   "source": "native/src/construction/controls/binding.rs:91",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x307e0d0",
-   "source": "native/src/gui.rs"
+   "source": "native/src/gui.rs",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x3119a20",
-   "source": "native/src/gui.rs"
+   "source": "native/src/gui.rs",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x3186960",
-   "source": "native/src/gui.rs"
+   "source": "native/src/gui.rs",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x31e99f0",
-   "source": "native/src/gui.rs"
+   "source": "native/src/gui.rs",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x367e000",
-   "source": "native/src/game.rs"
+   "source": "native/src/game.rs",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x3682000",
-   "source": "native/src/category_ui.rs"
+   "source": "native/src/category_ui.rs",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x3682100",
-   "source": "native/src/category_ui.rs"
+   "source": "native/src/category_ui.rs",
+   "status": "not a macOS address: a Linux ELF literal in a Linux-only check (macOS never reaches it)"
   },
   {
    "old": "0x36dcd98",
-   "source": "native/src/gui/macos.rs"
+   "source": "native/src/gui/macos.rs",
+   "status": "resolved: see image (aligned code or aligned RIP references, checked against the neighbouring delta)"
   },
   {
    "old": "0x36dcdf8",
-   "source": "native/src/gui/macos.rs"
+   "source": "native/src/gui/macos.rs",
+   "status": "resolved: see image (aligned code or aligned RIP references, checked against the neighbouring delta)"
   },
   {
    "old": "0x37ed910",
-   "source": "native/src/construction/mac_find/opener/button.rs"
+   "source": "native/src/construction/mac_find/opener/button.rs",
+   "status": "resolved: see image (aligned code or aligned RIP references, checked against the neighbouring delta)"
   },
   {
    "old": "0x37ed950",
-   "source": "native/src/construction/mac_panel/cancel.rs"
+   "source": "native/src/construction/mac_panel/cancel.rs",
+   "status": "resolved: see image (aligned code or aligned RIP references, checked against the neighbouring delta)"
   },
   {
    "old": "0x3844d10",
-   "source": "native/src/construction/mac_map_point.rs:186"
+   "source": "native/src/construction/mac_map_point.rs:186",
+   "status": "resolved: see image (aligned code or aligned RIP references, checked against the neighbouring delta)"
   },
   {
    "old": "0x384a72b",
-   "source": "native/src/construction/mac_panel/cancel.rs:320"
+   "source": "native/src/construction/mac_panel/cancel.rs:320",
+   "status": "resolved: see image (aligned code or aligned RIP references, checked against the neighbouring delta)"
   },
   {
    "old": "0x384a9a8",
-   "source": "native/src/construction/mac_panel/cancel.rs:319"
+   "source": "native/src/construction/mac_panel/cancel.rs:319",
+   "status": "resolved: see image (aligned code or aligned RIP references, checked against the neighbouring delta)"
   },
   {
    "old": "0x384b760",
-   "source": "native/src/construction/mac_find/characters.rs:43"
+   "source": "native/src/construction/mac_find/characters.rs:43",
+   "status": "resolved: see image (aligned code or aligned RIP references, checked against the neighbouring delta)"
   }
  ],
- "fields_default": "identity"
+ "fields_default": "identity",
+ "variant": {
+  "note": "scripts/macos_build_variant.py: which literals the generator rewrites for this build",
+  "image_range": [
+   "0x8dd0",
+   "0x39d4db0"
+  ],
+  "not_image": {
+   "0x10000": "pointer floor in range checks",
+   "0x100000": "test anchors in controller_epoch",
+   "0x100001": "test anchors in controller_epoch",
+   "0x110000": "test anchors in controller_epoch",
+   "0x120000": "test anchors in controller_epoch",
+   "0x1000007": "CPU_TYPE_X86_64",
+   "0x2c5b0": "field offset (graphics + 0x2c5b0)",
+   "0xc730": "field offset (design view)",
+   "0xfcb0": "field offset (design view)",
+   "0xfcc8": "field offset (design view)",
+   "0xd478": "field offset (design view)"
+  },
+  "shared_key_files": [
+   "native/src/production_lines/output.rs"
+  ],
+  "disabled": {}
+ }
 }

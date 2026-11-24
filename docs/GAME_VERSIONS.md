@@ -12,7 +12,7 @@ reading the game compare.
 | Linux | 1.19.4.1 | GNU build ID `2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082` | supported (generated table) | not available |
 | Windows | any | | not yet (see [Windows](#windows)) | supported, last run on 1.19.4.2 |
 | Windows | 1.20.0.0 (checksum 0c4f) | CodeView `3A4878DC2F3A481EA5375E5943C5541C1` | vtables only (164 of 168); no attachment yet | supported |
-| macOS | 1.20.0.0 (checksum 0c4f) | Mach-O UUID `ED135FE5-CDA8-38E8-8835-3F7381B79974` | table generated, not yet proven live or used by the runtime | |
+| macOS | 1.20.0.0 (checksum 0c4f) | Mach-O UUID `ED135FE5-CDA8-38E8-8835-3F7381B79974` | its own runtime binary, generated from the migration map ([below](#macos-120-a-generated-runtime-per-build)); live self-check pending | |
 | Linux | 1.20.0.0 (checksum 0c4f) | GNU build ID `71806afa707a46fb72f0738a719c3f1c3f5e2e42` | table generated, not yet proven live or used by the runtime | not available |
 
 `hoi4-live-native --supported-builds` prints the same list as JSON.
@@ -113,6 +113,58 @@ found five static entries in the 1.19.4.1 Linux table that contradict its own li
 A patch release (for example 1.19.4.1 to 1.19.4.2) moves every image address but usually few struct
 members, as 1.20 shows.
 
+## macOS 1.20: a generated runtime per build
+
+The runtime's sources keep the macOS 1.19.4.1 values. A runtime for macOS 1.20.0.0 is generated from
+them and the migration map, so both builds stay supported side by side and nothing is rewritten by hand:
+
+    python3 scripts/macos_build_variant.py native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json --out OUT
+    (cd OUT/native && cargo build --release)
+
+The generator copies the crate and replaces every production macOS image literal (vtables, globals,
+functions, code addresses, strings and Objective-C ivar offsets in macOS code, and the canonical keys of
+`variant.shared_key_files`) by the map's 1.20 value, and the build identity (Mach-O UUID, SHA-256 and
+`builds::READER_BUILD`). Field offsets stay (`fields_default: identity`). It accepts only entries of
+confidence `high` or `medium`; an unresolved or `low` literal stops it, unless the map lists that file in
+`variant.disabled` with a reason: then that literal becomes an address in `memory::DISABLED_BASE`, which
+the Reader refuses as `layout_disabled` with the reason (also in `--supported-builds`), so the module
+stops with a message instead of reading another build's address. `variant.not_image` lists the numbers in
+the image range that are not addresses (pointer floors, a CPU type, field offsets). The report
+(`--report`) lists every rewritten site with its old and new value, method and confidence.
+
+For 1.20.0.0 the map covers all 681 sites: 675 high, 1 medium (an address quoted in a tool's
+description text), 5 identity strings; no module is disabled. Every vtable the macOS code uses (254)
+has the same slot count and slot functions in 1.20. Of the 53 literals first left unresolved, 13 were
+resolved by aligned code or aligned RIP references and checked against the neighbouring delta
+(`scripts/macos_resolve.py`); the other 40 are Linux ELF literals in Linux-only checks or plain numbers.
+A unit test fails when a macOS address in `native/src` has no 1.20 entry.
+
+### Adding a macOS game address
+
+A new macOS literal in `native/src` needs its 1.20 value in the map, or the test above fails:
+
+    xmap-venv/bin/python scripts/macos_resolve.py CANONICAL_MACHO HOI4_1_20_MACHO native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json 0xADDRESS
+
+prints the new value, method and confidence; add it to the map's `image` table (`high` only when two
+signals agree: aligned code or references, and the neighbouring delta).
+
+### Planned: one binary for every build
+
+The generated runtime is the small safe step. The runtime should instead choose the table when it
+attaches, by the running build's UUID, so one binary reads every supported build:
+
+1. `xlayout::img`/`fld` translate on macOS too: the table of the attached build (identity for 1.19.4.1,
+   the migration map's `image` for 1.20), chosen by the UUID `platform::macos` already reads at attach.
+2. The core layouts (`game`, `own_focus`, `construction`, `research`, `army`, `production_lines`,
+   `gui_tree`, `launch/macos/units`) translate their image fields at first use per build, as
+   `gui_tree` already does for Linux.
+3. The remaining literals (about 250 sites outside `img()`: `base + 0x...` comparisons, match arms on
+   vtables, Objective-C ivars, construction and Cocoa globals) go through `img()`; match arms compare
+   the canonical key of the read vtable (the inverse table, exact entries only).
+4. The macOS gate accepts any build in `builds::SUPPORTED` whose table ships; `DISABLED` becomes per
+   build and per module, from the table's confidence.
+5. `scripts/macos_build_variant.py` then becomes a check only (the map covers the sources).
+
 ## When the canonical build moves
 
 The keys are the canonical macOS build's values, so when the macOS sources move to a new build
@@ -124,9 +176,9 @@ value, the new value and the confidence, the literals no method resolved (`unres
 
     python3 scripts/game_migrate.py rekey native/layouts/linux-<build id>.json native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json --write
 
-The keys are not yet build-independent names. Naming them (for example `CCurrentGameState.date`
-instead of `0x460`) would end re-keying for good; it touches every tool's source and is planned
-together with the runtime change below.
+With generated runtimes per macOS build (above) the canonical build no longer moves: the keys stay
+the 1.19.4.1 values for good, as opaque names, and every new build on every system gets a table keyed
+by them. No table is re-keyed for 1.20; the map and `rekey` stay for a table someone keyed otherwise.
 
 ## Planned: unknown builds on a user's machine
 
