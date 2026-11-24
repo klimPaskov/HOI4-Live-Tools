@@ -632,6 +632,13 @@ pub struct State {
     /// pruned by time: at speed 3 the ledger's 120 game days pass in five minutes, and an order
     /// that fails every few minutes for the same reason must not start afresh).
     failed_run: HashMap<String, (u32, String)>,
+    /// Identical orders refused in a row for the same reason: (reason code, refusals, last
+    /// game hour). Unlike the ledger it survives `ledger_forget` for a reason the game's own
+    /// change cannot cure (a tool fault), so no step's "fresh try" re-sends it (not persisted: a
+    /// new server life, e.g. after a fix, starts afresh). See `State::repeat_held`.
+    refusal_hold: HashMap<String, (String, u32, GameHour)>,
+    /// Re-sends stopped by `repeat_held`, by signature: (by a lesson, by the ledger).
+    repeats_stopped: HashMap<String, (u32, u32)>,
     /// Orders given up this run, waiting to be reported once (wake_player alarms).
     gave_up: Vec<Value>,
     /// Wall clock override for tests (seconds); None reads the system clock.
@@ -877,6 +884,8 @@ impl Default for State {
             failed_wall: HashMap::new(),
             failed_cost: HashMap::new(),
             failed_run: HashMap::new(),
+            refusal_hold: HashMap::new(),
+            repeats_stopped: HashMap::new(),
             gave_up: Vec::new(),
             wall: None,
             act_seconds: None,
@@ -1207,6 +1216,37 @@ fn resource_wait(cause: &str) -> bool {
     .any(|c| cause.starts_with(c))
 }
 
+/// Refusals in a row with the same reason after which an identical order is held.
+const REPEAT_HOLD_AFTER: u32 = 2;
+
+/// The reason code of a refusal (`code: text` -> `code`).
+fn refusal_code(cause: &str) -> String {
+    cause.split(':').next().unwrap_or("").trim().to_string()
+}
+
+/// A refusal by the game's own rules, which a change in the game can cure (requirements, an
+/// exclusive branch, a target or slot not allowed yet); anything else is the tool's own fault
+/// and is cured only by a fix.
+fn game_rule_refusal(code: &str) -> bool {
+    code.starts_with("unavailable")
+        || [
+            "not_available",
+            "prerequisite",
+            "exclusive",
+            "invalid_target",
+            "not_allowed",
+            "no_free_slot",
+            "requirements",
+            "insufficient_",
+            "not_enough",
+            "already",
+            "at_war",
+            "not_at_war",
+        ]
+        .iter()
+        .any(|c| code.contains(c))
+}
+
 fn passing_failure(cause: &str) -> bool {
     [
         "action_unconfirmed",
@@ -1367,6 +1407,23 @@ impl State {
             }
         }
         if let Some(why) = self.backing_off(&signature) {
+            // a re-send of an order refused twice for the same reason, stopped: by a lesson of
+            // the run (its rest is the lesson's) or by the ledger's own rest
+            if let Some((code, n, _)) = self.refusal_hold.get(&signature).cloned() {
+                if n >= REPEAT_HOLD_AFTER {
+                    let lesson = self.issues.advice(name, &code, Some(&args)).is_some();
+                    let c = self.repeats_stopped.entry(signature.clone()).or_default();
+                    if lesson {
+                        c.0 += 1;
+                    } else {
+                        c.1 += 1;
+                    }
+                }
+            }
+            self.last_ok = Some(false);
+            return Ok((false, why));
+        }
+        if let Some(why) = self.repeat_held(&signature, name, &args) {
             self.last_ok = Some(false);
             return Ok((false, why));
         }
@@ -1421,6 +1478,18 @@ impl State {
                 let run = self.failed_run.entry(signature.clone()).or_default();
                 run.0 += 1;
                 run.1 = cause.clone();
+                if !passing_failure(&cause) {
+                    let code = refusal_code(&cause);
+                    let hold = self
+                        .refusal_hold
+                        .entry(signature.clone())
+                        .or_insert_with(|| (code.clone(), 0, clock));
+                    if hold.0 != code {
+                        *hold = (code, 0, clock);
+                    }
+                    hold.1 += 1;
+                    hold.2 = clock;
+                }
                 let treat = lesson.as_ref().map(|a| a.treat.clone());
                 if let (Some(plan_issues::Treat::Permanent), Some(adv), 1) =
                     (&treat, &lesson, run.0)
@@ -1451,6 +1520,7 @@ impl State {
                 }
             }
             Ok((true, _)) => {
+                self.refusal_hold.remove(&signature);
                 self.failures.remove(&signature);
                 self.failed_wall.remove(&signature);
                 self.failed_cost.remove(&signature);
@@ -1467,10 +1537,69 @@ impl State {
     /// moved under it: a focus completed, a war began), so it counts as a new order.
     fn ledger_forget(&mut self, name: &str, args: &Value) {
         let signature = format!("{name} {args}");
+        // a change in the game cures a refusal by the game's rules (requirements, an exclusive
+        // branch, no slot), never a tool's own fault: after two such refusals the ledger keeps
+        // the order's record, so its rests and the run's lessons still answer it (t1939a, 24 Nov
+        // 2026: the focus rescue forgot GER_around_maginot's ledger every game day because the
+        // game's rules read it available, and the start refused invalid_focus_type 90 times)
+        match self.refusal_hold.get(&signature) {
+            Some((code, n, _)) if !game_rule_refusal(code) && *n >= REPEAT_HOLD_AFTER => return,
+            // a tool fault keeps counting towards its hold across the forget
+            Some((code, _, _)) if !game_rule_refusal(code) => {}
+            Some(_) => {
+                self.refusal_hold.remove(&signature);
+            }
+            None => {}
+        }
         self.failures.remove(&signature);
         self.failed_wall.remove(&signature);
         self.failed_cost.remove(&signature);
         self.failed_run.remove(&signature);
+    }
+    /// LESSONS THAT ACT: after the second refusal in a row for the same reason, an identical
+    /// order the run's lessons answer (the monitor writes a run lesson at that second refusal)
+    /// is held for the lesson's time on every step's say-so, also after a step forgot the ledger
+    /// (the lessons otherwise act only through the ledger's failure record, which a forget
+    /// wipes). Permanent: the given-up rest; a wait: its days; transient: no hold. The first
+    /// hold wakes the player with the lesson (the issue escalates; the lane's outcome says it is
+    /// held). Some(the refusal) while held.
+    fn repeat_held(&mut self, signature: &str, name: &str, args: &Value) -> Option<String> {
+        let (code, n, last) = self.refusal_hold.get(signature)?.clone();
+        if n < REPEAT_HOLD_AFTER || resource_wait(&code) {
+            return None;
+        }
+        self.issues.refresh();
+        let lesson = self.issues.advice(name, &code, Some(args))?;
+        let rest = match lesson.treat {
+            plan_issues::Treat::Transient => return None,
+            plan_issues::Treat::Permanent => {
+                ledger_rest(self.war_active, GIVE_UP_AFTER, 0, false).0
+            }
+            plan_issues::Treat::Wait(hours) => hours,
+        };
+        if self.clock > last && self.clock - last >= rest {
+            return None;
+        }
+        let counts = self
+            .repeats_stopped
+            .entry(signature.to_string())
+            .or_default();
+        counts.0 += 1;
+        if counts.0 == 1 {
+            let mut shown = args.clone();
+            if let Some(object) = shown.as_object_mut() {
+                object.remove("request_id");
+                object.remove("lease_token");
+            }
+            self.gave_up.push(json!({"code": "wake_player", "rule": "repeat_held",
+                "reason": format!("order_held:{signature}"),
+                "message": format!("{name} was refused {n} times in a row for {code}; lesson {} holds it: the executor does not send it unchanged again ({})", lesson.id, lesson.advice),
+                "evidence": {"tool": name, "args": shown, "refusals": n, "reason": code, "lesson": lesson.id}}));
+        }
+        Some(format!(
+            "skipped: refused {n} times for {code}; lesson {} holds this identical order (repeat stopped)",
+            lesson.id
+        ))
     }
     /// An order the game refused for command power is not sent again while the command power
     /// held (hoi4_country_status, read without input) is still below the cost that refusal
@@ -3599,6 +3728,22 @@ fn declare_first(
     Ok(None)
 }
 
+/// Whether a role an operation names (undated) has no army yet, or a carved role still waits for
+/// its top-up to join.
+fn operation_roles_missing(state: &State, plan: &Value) -> bool {
+    if state.done.keys().any(|k| k.starts_with("layoutmerge:")) {
+        return true;
+    }
+    list(plan, "army_layout").iter().any(|e| {
+        let h = text(&e["name_hint"]);
+        e["when"].is_null()
+            && !h.is_empty()
+            && !state.layout.contains_key(h)
+            && !state.done.contains_key(&format!("layout:impossible:{h}"))
+            && plan_operation::names_army(plan, h)
+    })
+}
+
 /// The war-first block: layout, war executive, triggered build order, armies, early disbands.
 fn war_first_steps(
     state: &mut State,
@@ -3610,7 +3755,17 @@ fn war_first_steps(
     if let Some(line) = declare_first(state, tools, plan, lease, now)? {
         return Ok(Some(line));
     }
-    let steps: [Step; 12] = [
+    let steps: [Step; 13] = [
+        // the roles an operation names form before anything else while they are missing: they
+        // are the operation's armies (t1939e, 24 Nov 2026: behind the operations step and its air
+        // burst the layout formed Armee Mitte on 7 September, a week into the war)
+        |state, tools, plan, lease, now| {
+            if operation_roles_missing(state, plan) {
+                layout_step(state, tools, plan, lease, now)
+            } else {
+                Ok(None)
+            }
+        },
         // the operations: prepare, execute, advance (plan_operation.rs); the air burst follows in
         // the same tick (o1d: the operation acted in every tick of the first war days and the
         // air step behind it first ran on day 3, every wing still on its peace training)
@@ -4426,6 +4581,12 @@ fn layout_step(
     state
         .layout
         .retain(|_, a| a.is_empty() || all_present.contains(a));
+    // every army, the owned ones too: a role an operation names may be carved out of them
+    let full: Vec<Value> = list(&roster, "armies").to_vec();
+    // a top-up detached for a carved role joins the role's army first
+    if let Some(step) = layout_merge_step(state, tools, lease, now, &all_present)? {
+        return Ok(Some(step));
+    }
     // an army an operation owns is neither marched nor split by the layout
     plan_operation::hide_owned(state, &mut roster);
     let armies = list(&roster, "armies");
@@ -4564,7 +4725,7 @@ fn layout_step(
         if first_strike {
             let Some(base) = base else {
                 if let Some(step) =
-                    form_strike_role(state, tools, plan, lease, now, e, &hint, armies)?
+                    form_strike_role(state, tools, plan, lease, now, e, &hint, &full)?
                 {
                     return Ok(Some(step));
                 }
@@ -4581,7 +4742,18 @@ fn layout_step(
             .find(|a| present.contains(*a))
             .cloned()
             .or(base);
-        let Some(parent) = parent else { continue };
+        let Some(parent) = parent else {
+            // no army stands in the role's state: a role an operation names is carved out of the
+            // armies the start gives (a bookmark's few large armies), wherever they stand
+            if plan_operation::names_army(plan, &hint) {
+                if let Some(step) =
+                    form_strike_role(state, tools, plan, lease, now, e, &hint, &full)?
+                {
+                    return Ok(Some(step));
+                }
+            }
+            continue;
+        };
         // The parent's division count: a pick that would take all of them binds the army itself
         // (the game keeps a lone division in its army: J_guard's detach went out 10 times).
         let parent_size = armies
@@ -4672,6 +4844,10 @@ fn layout_step(
             pick.len()
         )));
     }
+    // a carved role below its share takes more of its templates from the next donor
+    if let Some(step) = layout_top_up(state, tools, plan, lease, now, &full)? {
+        return Ok(Some(step));
+    }
     // Generals named by the layout, only where the army has none (no reassignment churn).
     for e in entries {
         let hint = text(&e["name_hint"]);
@@ -4720,16 +4896,26 @@ fn layout_step(
     Ok(None)
 }
 
-/// Game days a strike role of `army_layout` waits for an army to stand in its state before it is
-/// formed from another army.
+/// Game days a strike role of `army_layout` that no operation names waits for an army to stand in
+/// its state before it is formed from another army.
 const LAYOUT_FORM_WAIT_DAYS: i64 = 30;
 
-/// A strike role whose state has no army and gets none by itself (the divisions trained there are
-/// gathered into the plan's gather army: Armee Nord never formed in g17e and g17f, so the Polish
-/// theatre went to war without its northern formation). After LAYOUT_FORM_WAIT_DAYS the role is
-/// formed: `count` divisions of its templates are detached from the army holding the most of
-/// them (the gather army first), the new army takes the role, and the layout step then marches
-/// it to the role's state. The donor keeps more divisions than it gives.
+/// A role with no army in its state is formed out of the armies the start gives. A role an
+/// operation names is formed AT ONCE, in the peace days before its operation's prepare (a
+/// bookmark start gives a few oversized armies and the war 18 days later: t1939c, 24 Nov 2026,
+/// Armee Süd, Armee West Nord and the Panzergruppen never formed while the 30-day wait ran and the
+/// operations went on without them after their own 14-day wait); a strike role no operation names
+/// waits LAYOUT_FORM_WAIT_DAYS for an army to stand there (the gather may bring one).
+///
+/// Which divisions: the role's `templates`, nearest its state first, from every army that does not
+/// hold them for a role of its own (armies without a role, and roles whose templates do not list
+/// them: armour standing in an infantry army goes to the armour role, never the other way). How
+/// many: a role no operation names takes its `count`; an operation's role takes its share of
+/// those divisions (split evenly between the operation roles still forming that want them), at
+/// least `count`, at most the plan's `armies.max` (the armies step then holds every army to its
+/// commander's limit). One detach from the donor that gives the most; an army without a role
+/// whose divisions all fit is bound whole; the rest of the share comes from the next donor
+/// ([`layout_top_up`]). The formed army then marches to the role's state (the layout's march).
 #[allow(clippy::too_many_arguments)]
 fn form_strike_role(
     state: &mut State,
@@ -4739,77 +4925,470 @@ fn form_strike_role(
     now: GameHour,
     entry: &Value,
     hint: &str,
-    armies: &[Value],
+    full: &[Value],
 ) -> Result<Option<String>> {
-    let since = *state
-        .done
-        .entry(format!("layoutwait:{hint}"))
-        .or_insert(now);
-    if now.saturating_sub(since) < LAYOUT_FORM_WAIT_DAYS * DAY
-        || state.skipped(now, "layoutentry", hint)
-    {
+    let named = plan_operation::names_army(plan, hint);
+    if !named {
+        let since = *state
+            .done
+            .entry(format!("layoutwait:{hint}"))
+            .or_insert(now);
+        if now.saturating_sub(since) < LAYOUT_FORM_WAIT_DAYS * DAY {
+            return Ok(None);
+        }
+    }
+    if state.skipped(now, "layoutentry", hint) {
         return Ok(None);
     }
-    let templates = strings(entry, "templates");
+    // nearest first needs the own states' centres (in peace no other step may have read them)
+    if let Some(home) = entry["state"].as_i64() {
+        if !state.centers.contains_key(&(home as i32)) {
+            let me = plan_operation::player(tools, plan);
+            plan_operation::learn_centres(state, tools, &[me]);
+        }
+    }
+    let cands = layout_candidates(state, tools, plan, entry, hint, full, None)?;
+    if cands.is_empty() {
+        // an operation's role looks again the next game day (a start's divisions may stand in no
+        // army yet: t1939e waited 10 days per role behind a refused gather)
+        state.skip(now, "layoutentry", hint, if named { DAY } else { 10 * DAY });
+        return Ok(None);
+    }
     let count = entry["count"].as_u64().unwrap_or(1).max(1) as usize;
-    let gather = text(&plan["armies"]["gather_into"]).to_string();
-    let gather = state.layout.get(&gather).cloned().unwrap_or(gather);
-    let mut donors: Vec<(&str, u64)> = armies
+    let need = if named {
+        let target = role_target(state, plan, entry, hint, cands.len());
+        state
+            .done
+            .insert(format!("layouttarget:{hint}"), target as GameHour);
+        target
+    } else {
+        count
+    };
+    let (donor, pick) = best_donor(&cands, need);
+    let donor_size = full
         .iter()
-        .filter_map(|a| Some((a["army"].as_str()?, a["division_count"].as_u64()?)))
-        .filter(|(_, n)| *n as usize > 2 * count)
-        .collect();
-    // the gather army first, then the largest
-    donors.sort_by_key(|(a, n)| (*a != gather, std::cmp::Reverse(*n)));
-    for (donor, _) in donors {
-        let detail = tools.call("hoi4_supply", &json!({"army": donor}))?;
-        let pick: Vec<String> = list(&detail, "divisions")
-            .iter()
-            .filter(|d| text(&d["army"]) == donor)
-            .filter(|d| templates.iter().any(|t| t == text(&d["template"])))
-            .filter_map(|d| d["id"].as_str().map(str::to_string))
-            .take(count)
-            .collect();
-        if pick.is_empty() {
+        .find(|a| text(&a["army"]) == donor)
+        .and_then(|a| a["division_count"].as_u64())
+        .unwrap_or(0) as usize;
+    let taken: HashSet<String> = state.layout.values().cloned().collect();
+    if donor_size > 0 && pick.len() >= donor_size {
+        if taken.contains(&donor) {
+            // a role's army keeps at least one division of its own
+            state.skip(now, "layoutentry", hint, 3 * DAY);
+            return Ok(None);
+        }
+        // an army without a role whose divisions all fit: the role takes it whole
+        state.layout.insert(hint.to_string(), donor.clone());
+        if !named {
+            state.done.insert(format!("layoutformed:{hint}"), now);
+        }
+        state.done.insert(format!("layoutcarved:{hint}"), now);
+        return Ok(Some(format!(
+            "layout: {donor} is {hint} (all its {donor_size} division(s) fit the role)"
+        )));
+    }
+    // one detach moves at most DETACH_MAX divisions (the tool's bound); the top-up takes the rest
+    let mut pick = pick;
+    pick.truncate(DETACH_MAX);
+    let before: HashSet<String> = full.iter().map(|a| text(&a["army"]).to_string()).collect();
+    let (ok, why) = layout_detach(state, tools, plan, lease, hint, &donor, &pick, "lf")?;
+    // a detach the game took in part still made the role's army: bind it, the top-up fills it
+    // (t1939f: 2 of 14 divisions moved, the role was then given up while its army stood there)
+    let partial = if ok {
+        None
+    } else {
+        new_army(tools, &before, &taken)?
+    };
+    if let Some(new) = partial {
+        state.layout.insert(hint.to_string(), new.clone());
+        state.done.insert(format!("layoutcarved:{hint}"), now);
+        if !named {
+            state.done.insert(format!("layoutformed:{hint}"), now);
+        }
+        return Ok(Some(format!(
+            "layout: {hint} formed in part from {donor} -> {new} ({why}); the top-up takes the rest"
+        )));
+    }
+    if !ok {
+        if held_back(&why) {
+            state.skip(now, "layoutentry", hint, DAY);
+            return Ok(None);
+        }
+        state.skip(now, "layoutentry", hint, 3 * DAY);
+        if layout_failed(state, &format!("form:{hint}")) {
+            state.layout.insert(hint.to_string(), String::new());
+            state.done.insert(format!("layout:impossible:{hint}"), now);
+            return Ok(Some(format!(
+                "layout: forming {hint} given up after {LAYOUT_TRIES} failed detaches ({why})"
+            )));
+        }
+        return Ok(Some(format!(
+            "layout: forming {hint} from {donor}: {ok} {why}"
+        )));
+    }
+    let Some(new) = new_army(tools, &before, &taken)? else {
+        state.skip(now, "layoutentry", hint, DAY);
+        return Ok(Some(format!(
+            "layout: forming {hint} from {donor}: no new army seen"
+        )));
+    };
+    state.layout.insert(hint.to_string(), new.clone());
+    // an operation's role is taken to its line by the operation's own front; a role no operation
+    // names marches to its state (the layout's march)
+    if !named {
+        state.done.insert(format!("layoutformed:{hint}"), now);
+    }
+    state.done.insert(format!("layoutcarved:{hint}"), now);
+    Ok(Some(format!(
+        "layout: {hint} formed from {} division(s) of {donor} -> {new} (target {need}{})",
+        pick.len(),
+        if named {
+            ", a role of an operation"
+        } else {
+            ""
+        }
+    )))
+}
+
+/// A carved role below its target (`layouttarget:`) takes the rest from the next donor: one
+/// detach, then the new army joins the role's army ([`layout_merge_step`]). Given up once no
+/// donor has its templates.
+fn layout_top_up(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    full: &[Value],
+) -> Result<Option<String>> {
+    for e in list(plan, "army_layout") {
+        let hint = text(&e["name_hint"]);
+        let (Some(target), Some(army)) = (
+            state.done.get(&format!("layouttarget:{hint}")).copied(),
+            state.layout.get(hint).filter(|a| !a.is_empty()).cloned(),
+        ) else {
+            continue;
+        };
+        if state.done.contains_key(&format!("layouttopped:{hint}"))
+            || state.skipped(now, "layouttop", hint)
+            || state
+                .done
+                .keys()
+                .any(|k| k.starts_with(&format!("layoutmerge:{hint}\u{1}")))
+        {
             continue;
         }
-        let before: HashSet<String> = armies
+        let size = full
             .iter()
-            .map(|a| text(&a["army"]).to_string())
-            .collect();
-        let (ok, why) = state.act(
-            tools,
-            lease,
-            "hoi4_army_detach",
-            json!({"army": donor, "divisions": pick}),
-            "lf",
-        )?;
+            .find(|a| text(&a["army"]) == army)
+            .and_then(|a| a["division_count"].as_u64())
+            .unwrap_or(0) as GameHour;
+        if size == 0 || size >= target {
+            continue;
+        }
+        let cands = layout_candidates(state, tools, plan, e, hint, full, Some(&army))?;
+        // a donor without a role gives at most all but one (the game keeps a lone division in
+        // its army); a role's army keeps more than it gives
+        let usable: Vec<(String, String, f64)> =
+            cands.into_iter().filter(|(d, _, _)| d != &army).collect();
+        if usable.is_empty() {
+            state.done.insert(format!("layouttopped:{hint}"), now);
+            continue;
+        }
+        let (donor, mut pick) = best_donor(&usable, (target - size) as usize);
+        let donor_size = full
+            .iter()
+            .find(|a| text(&a["army"]) == donor)
+            .and_then(|a| a["division_count"].as_u64())
+            .unwrap_or(0) as usize;
+        if pick.len() >= donor_size {
+            pick.truncate(donor_size.saturating_sub(1));
+        }
+        pick.truncate(DETACH_MAX);
+        if pick.is_empty() {
+            state.done.insert(format!("layouttopped:{hint}"), now);
+            continue;
+        }
+        let taken: HashSet<String> = state.layout.values().cloned().collect();
+        let before: HashSet<String> = full.iter().map(|a| text(&a["army"]).to_string()).collect();
+        let (ok, why) = layout_detach(state, tools, plan, lease, hint, &donor, &pick, "lt")?;
         if !ok {
-            state.skip(now, "layoutentry", hint, 3 * DAY);
+            state.skip(
+                now,
+                "layouttop",
+                hint,
+                if held_back(&why) { DAY } else { 3 * DAY },
+            );
+            if !held_back(&why) && layout_failed(state, &format!("top:{hint}")) {
+                state.done.insert(format!("layouttopped:{hint}"), now);
+            }
             return Ok(Some(format!(
-                "layout: forming {hint} from {donor}: {ok} {why}"
+                "layout: top-up of {hint} ({army}, {size}/{target}) from {donor}: {ok} {why}"
             )));
         }
-        let after = tools.call("hoi4_armies", &json!({"threat": false}))?;
-        let Some(new) = list(&after, "armies")
-            .iter()
-            .map(|a| text(&a["army"]).to_string())
-            .find(|n| !before.contains(n))
-        else {
-            state.skip(now, "layoutentry", hint, DAY);
+        let Some(new) = new_army(tools, &before, &taken)? else {
+            state.skip(now, "layouttop", hint, DAY);
             return Ok(Some(format!(
-                "layout: forming {hint} from {donor}: no new army seen"
+                "layout: top-up of {hint} from {donor}: no new army seen"
             )));
         };
-        state.layout.insert(hint.to_string(), new.clone());
-        state.done.insert(format!("layoutformed:{hint}"), now);
+        state
+            .done
+            .insert(format!("layoutmerge:{hint}\u{1}{new}"), now);
         return Ok(Some(format!(
-            "layout: {hint} formed from {} division(s) of {donor} -> {new} (no army stood in its state for {LAYOUT_FORM_WAIT_DAYS} days)",
+            "layout: top-up of {hint} ({army}, {size}/{target}): {} division(s) of {donor} -> {new}, joining {army} next",
             pick.len()
         )));
     }
-    state.skip(now, "layoutentry", hint, 10 * DAY);
     Ok(None)
+}
+
+/// A top-up army detached for a role joins the role's army (one merge per step).
+fn layout_merge_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    lease: &str,
+    now: GameHour,
+    present: &HashSet<String>,
+) -> Result<Option<String>> {
+    let Some(k) = state
+        .done
+        .keys()
+        .find(|k| k.starts_with("layoutmerge:"))
+        .cloned()
+    else {
+        return Ok(None);
+    };
+    let (hint, source) = k["layoutmerge:".len()..]
+        .split_once('\u{1}')
+        .map(|(h, s)| (h.to_string(), s.to_string()))
+        .unwrap_or_default();
+    let target = state.layout.get(&hint).cloned().unwrap_or_default();
+    if target.is_empty() || !present.contains(&source) || !present.contains(&target) {
+        state.done.remove(&k);
+        return Ok(None);
+    }
+    if state.skipped(now, "layoutmerge", &hint) {
+        return Ok(None);
+    }
+    let was = state.op_acting;
+    state.op_acting = true;
+    let sent = state.act(
+        tools,
+        lease,
+        "hoi4_army_merge",
+        json!({"source": source, "target": target}),
+        "lm2",
+    );
+    state.op_acting = was;
+    let (ok, why) = sent?;
+    if ok || (!held_back(&why) && layout_failed(state, &format!("merge:{hint}"))) {
+        state.done.remove(&k);
+    } else {
+        state.skip(now, "layoutmerge", &hint, DAY);
+    }
+    Ok(Some(format!(
+        "layout: {source} joins {target} ({hint}): {ok} {why}"
+    )))
+}
+
+/// The most divisions one `hoi4_army_detach` moves (the tool refuses more).
+const DETACH_MAX: usize = 18;
+
+/// The detach of a layout role: an operation's own role carved out of an army an operation owns
+/// is that operation's assembly (the guard lets it through).
+#[allow(clippy::too_many_arguments)]
+fn layout_detach(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    hint: &str,
+    donor: &str,
+    pick: &[String],
+    tag: &str,
+) -> Result<(bool, String)> {
+    let carve = state.op_owned.contains_key(donor) && plan_operation::names_army(plan, hint);
+    let was = state.op_acting;
+    state.op_acting = was || carve;
+    let sent = state.act(
+        tools,
+        lease,
+        "hoi4_army_detach",
+        json!({"army": donor, "divisions": pick}),
+        tag,
+    );
+    state.op_acting = was;
+    sent
+}
+
+/// The army that appeared after a detach: on the full roster, not there before and held by no
+/// role (the game reuses a renamed army's old name, and a roster with the owned armies hidden
+/// made an old army look new: t1939c bound Armee Süd, Armee West Nord and Panzergruppe Ost all to
+/// "Army 4").
+fn new_army(
+    tools: &dyn Tools,
+    before: &HashSet<String>,
+    taken: &HashSet<String>,
+) -> Result<Option<String>> {
+    let after = tools.call("hoi4_armies", &json!({"threat": false}))?;
+    Ok(list(&after, "armies")
+        .iter()
+        .map(|a| text(&a["army"]).to_string())
+        .find(|n| !before.contains(n) && !taken.contains(n)))
+}
+
+/// The divisions a role may take, nearest its state first: (donor army, division id, squared
+/// distance). From every army except `own` and the armies whose role lists the same template;
+/// an army an operation owns gives only to a role an operation names.
+fn layout_candidates(
+    state: &State,
+    tools: &dyn Tools,
+    plan: &Value,
+    entry: &Value,
+    hint: &str,
+    full: &[Value],
+    own: Option<&str>,
+) -> Result<Vec<(String, String, f64)>> {
+    let templates = strings(entry, "templates");
+    if templates.is_empty() {
+        return Ok(Vec::new());
+    }
+    let named = plan_operation::names_army(plan, hint);
+    let home = entry["state"].as_i64();
+    let gather = text(&plan["armies"]["gather_into"]).to_string();
+    let gather = state.layout.get(&gather).cloned().unwrap_or(gather);
+    let role_of: HashMap<&str, &str> = state
+        .layout
+        .iter()
+        .filter(|(_, a)| !a.is_empty())
+        .map(|(h, a)| (a.as_str(), h.as_str()))
+        .collect();
+    let mut out = Vec::new();
+    for a in full {
+        let name = text(&a["army"]);
+        if name.is_empty() || Some(name) == own {
+            continue;
+        }
+        if state.op_owned.contains_key(name) && !named {
+            continue;
+        }
+        // a role keeps the templates its own entry lists
+        let keeps: Vec<String> = role_of
+            .get(name)
+            .and_then(|h| {
+                list(plan, "army_layout")
+                    .iter()
+                    .find(|x| text(&x["name_hint"]) == *h)
+            })
+            .map(|x| strings(x, "templates"))
+            .unwrap_or_default();
+        let wanted: Vec<&String> = templates.iter().filter(|t| !keeps.contains(t)).collect();
+        // a role's army above its own size gives the surplus of its own templates too (t1939d,
+        // 24 Nov 2026: the bookmark's gathered army of 96 was bound as Armee Pommern and kept
+        // every infantry division, so Armee Mitte and Armee Süd never formed and no war began)
+        let size = a["division_count"].as_u64().unwrap_or(0) as usize;
+        let own_size = role_of
+            .get(name)
+            .map(|h| own_role_size(state, plan, h, a))
+            .unwrap_or(usize::MAX);
+        let surplus = size.saturating_sub(own_size);
+        if wanted.is_empty() && surplus == 0 {
+            continue;
+        }
+        let detail = tools.call("hoi4_supply", &json!({"army": name}))?;
+        let mut spare: Vec<(String, String, f64)> = Vec::new();
+        for d in list(&detail, "divisions") {
+            let template = text(&d["template"]);
+            if text(&d["army"]) != name || !templates.iter().any(|t| t == template) {
+                continue;
+            }
+            let Some(id) = d["id"].as_str() else { continue };
+            let at = d["state_id"]
+                .as_i64()
+                .or(d["state"].as_i64())
+                .or(a["main_state"].as_i64());
+            let mut dist = plan_military::state_distance(state, at, home);
+            if at.is_some() && at == home {
+                dist = 0.0;
+            }
+            // the gather army gives first among equals (it holds the new divisions)
+            if name != gather {
+                dist += 1e-6;
+            }
+            let row = (name.to_string(), id.to_string(), dist);
+            if wanted.iter().any(|t| *t == template) {
+                out.push(row);
+            } else {
+                spare.push(row);
+            }
+        }
+        spare.sort_by(|x, y| x.2.total_cmp(&y.2));
+        spare.truncate(surplus);
+        out.extend(spare);
+    }
+    out.sort_by(|x, y| x.2.total_cmp(&y.2));
+    Ok(out)
+}
+
+/// The divisions role `hint`'s own army keeps: its formed target (`layouttarget:`), else the
+/// plan's `armies.max` held to the army's commander limit (`division_limit`).
+fn own_role_size(state: &State, plan: &Value, hint: &str, row: &Value) -> usize {
+    if let Some(t) = state.done.get(&format!("layouttarget:{hint}")) {
+        return (*t).max(1) as usize;
+    }
+    let cap = plan["armies"]["max"].as_u64().unwrap_or(24).max(1);
+    let limit = row["division_limit"]
+        .as_u64()
+        .filter(|l| *l > 0)
+        .unwrap_or(cap);
+    cap.min(limit) as usize
+}
+
+/// The divisions an operation's role aims at: its share of `available` divisions of its
+/// templates split evenly between the operation roles still forming that want any of them (this
+/// one included), at least its `count`, at most the plan's `armies.max` (default 24).
+fn role_target(state: &State, plan: &Value, entry: &Value, hint: &str, available: usize) -> usize {
+    let templates = strings(entry, "templates");
+    let wanting = list(plan, "army_layout")
+        .iter()
+        .filter(|x| {
+            let h = text(&x["name_hint"]);
+            h == hint
+                || (x["when"].is_null()
+                    && !state.layout.contains_key(h)
+                    && plan_operation::names_army(plan, h)
+                    && strings(x, "templates")
+                        .iter()
+                        .any(|t| templates.contains(t)))
+        })
+        .count()
+        .max(1);
+    let cap = plan["armies"]["max"].as_u64().unwrap_or(24).max(1) as usize;
+    let count = entry["count"].as_u64().unwrap_or(1).max(1) as usize;
+    available.div_ceil(wanting).max(count).min(cap)
+}
+
+/// The donor giving the most of the `need` nearest candidates, with its picks (nearest first).
+fn best_donor(cands: &[(String, String, f64)], need: usize) -> (String, Vec<String>) {
+    let nearest = &cands[..need.min(cands.len())];
+    let mut by: Vec<(String, usize, usize)> = Vec::new();
+    for (i, (d, _, _)) in nearest.iter().enumerate() {
+        match by.iter_mut().find(|(n, _, _)| n == d) {
+            Some(row) => row.1 += 1,
+            None => by.push((d.clone(), 1, i)),
+        }
+    }
+    by.sort_by_key(|(_, n, first)| (std::cmp::Reverse(*n), *first));
+    let donor = by.first().map(|r| r.0.clone()).unwrap_or_default();
+    // the donor's own nearest divisions, up to the need (not only those in the global nearest)
+    let pick: Vec<String> = cands
+        .iter()
+        .filter(|(d, _, _)| *d == donor)
+        .map(|(_, id, _)| id.clone())
+        .take(need)
+        .collect();
+    (donor, pick)
 }
 
 /// The army_layout entry whose role `army` plays.
@@ -10335,6 +10914,9 @@ impl State {
         json!({"done": self.done, "plan_built": self.plan_built,
             "plan_blocked": self.plan_blocked, "skips": skips,
             "failures": failures, "layout": layout, "strategy": self.strategy.memory(),
+            "repeats_stopped": self.repeats_stopped.iter()
+                .map(|(k, (l, g))| (k.clone(), json!({"by_lesson": l, "by_ledger": g})))
+                .collect::<serde_json::Map<String, Value>>(),
             "war": {"stage": stage, "assign": self.war_assign,
                 "rules": plan_war::memory(&self.war_rules)}})
     }
@@ -11320,6 +11902,113 @@ mod tests {
             !state.bad.keys().any(|k| k.starts_with("tech:")),
             "Unfinished research must not be skipped"
         );
+    }
+
+    fn run_lesson(id: &str, tool: &str, cause: &str, args: Value, treat: &str) -> Value {
+        json!({"id": id, "statement": "s", "situation": {"tool": tool, "cause": cause, "args": args},
+               "scope": "run:t", "confidence": 0.5, "status": "active", "version_independent": true,
+               "executor": {"treat_as": treat, "advice": "do it another way", "days": 14}})
+    }
+
+    #[test]
+    fn a_refusal_with_a_run_lesson_is_not_resent_even_when_a_step_forgets_the_ledger() {
+        // t1939a (24 Nov 2026): the focus rescue forgot the ledger every game day because the
+        // game's rules read GER_around_maginot available; the start refused invalid_focus_type
+        // 90 times after its issue opened and its run lesson was written
+        let tools = fake(vec![]);
+        tools.refuse_with(
+            "hoi4_focus_start",
+            "invalid_focus_type",
+            "not a focus button",
+        );
+        let focus = json!({"focus": "GER_around_maginot"});
+        let mut state = State {
+            issues: plan_issues::Issues::with_lessons(
+                vec![run_lesson(
+                    "rl1",
+                    "hoi4_focus_start",
+                    "invalid_focus_type",
+                    focus.clone(),
+                    "permanent",
+                )],
+                "t",
+            ),
+            ..State::default()
+        };
+        let sends = |t: &Fake| {
+            t.calls
+                .borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_focus_start")
+                .count()
+        };
+        let t0 = hour("1939.09.06");
+        for day in 0..30 {
+            state.clock = t0 + day * DAY;
+            state.ledger_forget("hoi4_focus_start", &focus);
+            let (ok, why) = state
+                .act(&tools, "l", "hoi4_focus_start", focus.clone(), "fo")
+                .unwrap();
+            assert!(!ok);
+            if day >= 2 {
+                assert!(held_back(&why), "{why}");
+            }
+        }
+        assert_eq!(sends(&tools), 2, "sent twice, then the lesson holds it");
+        let sig = format!("hoi4_focus_start {focus}");
+        let (by_lesson, _) = state.repeats_stopped[&sig];
+        assert!(by_lesson >= 1);
+        // the player is told once, with the lesson (the issue escalates)
+        let woke: Vec<_> = state
+            .gave_up
+            .iter()
+            .filter(|g| g["rule"] == "repeat_held" || g["rule"] == "lesson")
+            .collect();
+        assert!(!woke.is_empty());
+    }
+
+    #[test]
+    fn without_a_lesson_a_forget_no_longer_resets_a_tool_fault_and_a_rule_refusal_is_freed() {
+        let tools = fake(vec![]);
+        tools.refuse_with(
+            "hoi4_focus_start",
+            "invalid_focus_type",
+            "not a focus button",
+        );
+        let mut state = State::default();
+        let focus = json!({"focus": "GER_around_maginot"});
+        let n = |t: &Fake, tool: &str| t.calls.borrow().iter().filter(|(c, _)| c == tool).count();
+        let t0 = hour("1939.09.06");
+        for day in 0..80 {
+            state.clock = t0 + day * DAY;
+            state.ledger_forget("hoi4_focus_start", &focus);
+            state
+                .act(&tools, "l", "hoi4_focus_start", focus.clone(), "fo")
+                .unwrap();
+        }
+        // the ledger's own rests (1 h, 3 h, 10 days, 20 days, then given up) instead of 80 sends
+        assert!(
+            n(&tools, "hoi4_focus_start") <= 6,
+            "{}",
+            n(&tools, "hoi4_focus_start")
+        );
+        let sig = format!("hoi4_focus_start {focus}");
+        assert!(state.repeats_stopped[&sig].1 >= 70);
+        // a refusal by the game's rules is freed by the change a step reports
+        tools.refuse_with(
+            "hoi4_decision_take",
+            "decision_not_available",
+            "requirements",
+        );
+        let d = json!({"decision": "GER_operational_planning", "target": "POL"});
+        for day in 0..3 {
+            state.clock = t0 + 100 * DAY + day * DAY;
+            state.ledger_forget("hoi4_decision_take", &d);
+            state
+                .act(&tools, "l", "hoi4_decision_take", d.clone(), "dt")
+                .unwrap();
+        }
+        assert_eq!(n(&tools, "hoi4_decision_take"), 3);
     }
 
     #[test]
@@ -15870,6 +16559,415 @@ mod tests {
         assert!(
             matches!(&step, Tick::Acted(s) if s.starts_with("war vp target Army 1 -> province 71")),
             "{step:?}"
+        );
+    }
+
+    /// A game with armies and divisions that detach and merge like the real one.
+    /// (division id, template, state)
+    type Div = (String, String, i64);
+    /// (army, main state, divisions)
+    type BoardArmy = (String, i64, Vec<Div>);
+    type BoardSpec<'a> = Vec<(&'a str, i64, Vec<(&'a str, &'a str, i64)>)>;
+    struct Board {
+        armies: RefCell<Vec<BoardArmy>>,
+        orders: RefCell<HashSet<String>>,
+        calls: RefCell<Vec<(String, Value)>>,
+    }
+    impl Board {
+        fn new(armies: BoardSpec<'_>) -> Board {
+            Board {
+                armies: RefCell::new(
+                    armies
+                        .into_iter()
+                        .map(|(a, s, d)| {
+                            (
+                                a.to_string(),
+                                s,
+                                d.into_iter()
+                                    .map(|(i, t, st)| (i.to_string(), t.to_string(), st))
+                                    .collect(),
+                            )
+                        })
+                        .collect(),
+                ),
+                orders: RefCell::new(HashSet::new()),
+                calls: RefCell::new(Vec::new()),
+            }
+        }
+        fn size(&self, army: &str) -> usize {
+            self.armies
+                .borrow()
+                .iter()
+                .find(|a| a.0 == army)
+                .map_or(0, |a| a.2.len())
+        }
+        fn templates(&self, army: &str) -> HashSet<String> {
+            self.armies
+                .borrow()
+                .iter()
+                .find(|a| a.0 == army)
+                .map(|a| a.2.iter().map(|d| d.1.clone()).collect())
+                .unwrap_or_default()
+        }
+        fn sent(&self, tool: &str) -> usize {
+            self.calls
+                .borrow()
+                .iter()
+                .filter(|(n, _)| n == tool)
+                .count()
+        }
+    }
+    impl Tools for Board {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            self.calls
+                .borrow_mut()
+                .push((name.to_string(), args.clone()));
+            let ok = json!({"receipt": {"status": "Verified"}});
+            Ok(match name {
+                "hoi4_armies" => {
+                    let rows: Vec<Value> = self
+                        .armies
+                        .borrow()
+                        .iter()
+                        .map(|(a, s, d)| {
+                            let mut at = serde_json::Map::new();
+                            at.insert(s.to_string(), json!(d.len()));
+                            json!({"army": a, "main_state": s, "division_count": d.len(),
+                                "commander": null, "states": at,
+                                "defensive_orders": i64::from(self.orders.borrow().contains(a))})
+                        })
+                        .collect();
+                    json!({"armies": rows})
+                }
+                "hoi4_supply" => {
+                    let army = text(&args["army"]);
+                    let rows: Vec<Value> = self
+                        .armies
+                        .borrow()
+                        .iter()
+                        .filter(|a| a.0 == army)
+                        .flat_map(|a| {
+                            a.2.iter().map(|(i, t, st)| {
+                                json!({"army": a.0, "id": i, "template": t, "state_id": st})
+                            })
+                        })
+                        .collect();
+                    json!({"divisions": rows})
+                }
+                "hoi4_army_detach" => {
+                    let from = text(&args["army"]).to_string();
+                    let ids = strings(args, "divisions");
+                    assert!(ids.len() <= DETACH_MAX, "detach of {} divisions", ids.len());
+                    let mut all = self.armies.borrow_mut();
+                    let n = (1..)
+                        .find(|n| !all.iter().any(|a| a.0 == format!("Army {n}")))
+                        .unwrap();
+                    let src = all.iter_mut().find(|a| a.0 == from).unwrap();
+                    let moved: Vec<_> = src
+                        .2
+                        .iter()
+                        .filter(|d| ids.contains(&d.0))
+                        .cloned()
+                        .collect();
+                    src.2.retain(|d| !ids.contains(&d.0));
+                    let at = src.1;
+                    all.push((format!("Army {n}"), at, moved));
+                    ok
+                }
+                "hoi4_army_merge" => {
+                    let (from, to) = (text(&args["source"]), text(&args["target"]));
+                    let mut all = self.armies.borrow_mut();
+                    let moved = all
+                        .iter()
+                        .find(|a| a.0 == from)
+                        .map(|a| a.2.clone())
+                        .unwrap_or_default();
+                    all.retain(|a| a.0 != from);
+                    if let Some(t) = all.iter_mut().find(|a| a.0 == to) {
+                        t.2.extend(moved);
+                    }
+                    ok
+                }
+                "hoi4_army_area_defense" | "hoi4_army_front" => {
+                    self.orders
+                        .borrow_mut()
+                        .insert(text(&args["army"]).to_string());
+                    ok
+                }
+                _ if args.get("request_id").is_some() => ok,
+                _ => json!({}),
+            })
+        }
+    }
+
+    fn bookmark_plan() -> Value {
+        json!({"war": {"land_orders": false}, "armies": {"max": 24},
+            "army_layout": [
+                {"name_hint": "Armee Mitte", "state": 66, "role": "strike", "templates": ["Inf"], "count": 3},
+                {"name_hint": "Armee Süd", "state": 67, "role": "strike", "templates": ["Inf"], "count": 2},
+                {"name_hint": "Armee West", "state": 56, "role": "strike", "templates": ["Inf"], "count": 4},
+                {"name_hint": "Panzergruppe", "state": 64, "role": "strike", "templates": ["Pz"], "count": 4},
+                {"name_hint": "Garnison", "state": 65, "role": "guard", "templates": ["Inf"], "when": "owner:10=GER"}],
+            "operations": [{"id": "op", "formations": [
+                {"army": "Armee Mitte", "role": "line"}, {"army": "Armee Süd", "role": "line"},
+                {"army": "Panzergruppe", "role": "mobile"}],
+                "holds": [{"armies": [{"army": "Armee West"}], "facing": ["FRA"]}]}]})
+    }
+
+    #[test]
+    fn a_bookmark_start_forms_every_operation_role_at_once_by_template_and_share() {
+        // t1939c (24 Nov 2026): the 1939 bookmark gives a few large armies; Armee Süd, Armee West
+        // Nord and the Panzergruppen never formed (a 30-day wait, then 2-4 divisions each, and
+        // three roles bound to one "Army 4")
+        let mitte: Vec<(&str, &str, i64)> = vec![
+            ("m1", "Inf", 66),
+            ("m2", "Inf", 66),
+            ("m3", "Inf", 66),
+            ("m4", "Pz", 64),
+            ("m5", "Pz", 66),
+        ];
+        let mut west: Vec<(String, &str, i64)> =
+            (0..12).map(|i| (format!("w{i}"), "Inf", 56)).collect();
+        west.push(("wp".into(), "Pz", 56));
+        let south: Vec<(String, &str, i64)> =
+            (0..10).map(|i| (format!("s{i}"), "Inf", 67)).collect();
+        let board = Board::new(vec![
+            ("Armee Mitte", 66, mitte),
+            (
+                "Army 2",
+                56,
+                west.iter().map(|(i, t, s)| (i.as_str(), *t, *s)).collect(),
+            ),
+            (
+                "Army 3",
+                54,
+                south.iter().map(|(i, t, s)| (i.as_str(), *t, *s)).collect(),
+            ),
+        ]);
+        let plan = bookmark_plan();
+        let mut state = State::default();
+        state
+            .layout
+            .insert("Armee Mitte".into(), "Armee Mitte".into());
+        state.op_owned.insert("Armee Mitte".into(), "op".into());
+        let now = hour("1939.08.15");
+        let mut log = Vec::new();
+        for _ in 0..12 {
+            match layout_step(&mut state, &board, &plan, "l", now).unwrap() {
+                Some(line) => log.push(line),
+                None => break,
+            }
+        }
+        let bound = |h: &str| state.layout.get(h).cloned().unwrap_or_default();
+        // formed on the first day (no 30-day wait), each from a different army, never one army twice
+        for h in ["Armee Süd", "Armee West", "Panzergruppe"] {
+            assert!(!bound(h).is_empty(), "{h} not formed: {log:?}");
+        }
+        let names: HashSet<String> = state.layout.values().cloned().collect();
+        assert_eq!(names.len(), state.layout.len(), "{:?}", state.layout);
+        // the armour went to the armour role, out of the infantry role's army; no infantry with it
+        assert_eq!(
+            board.templates(&bound("Panzergruppe")),
+            HashSet::from(["Pz".to_string()])
+        );
+        assert_eq!(
+            board.templates("Armee Mitte"),
+            HashSet::from(["Inf".to_string()])
+        );
+        assert_eq!(board.size(&bound("Panzergruppe")), 3, "{log:?}");
+        // the infantry share: 22 free infantry for two forming roles -> 11 each (count is the floor)
+        assert_eq!(
+            board.size(&bound("Armee Süd")) + board.size(&bound("Armee West")),
+            22,
+            "{log:?}"
+        );
+        assert!(board.size(&bound("Armee Süd")) >= 10 && board.size(&bound("Armee West")) >= 10);
+        // nearest first: Armee Süd (state 67) holds the divisions that stood in 67
+        assert!(
+            board
+                .armies
+                .borrow()
+                .iter()
+                .find(|a| a.0 == bound("Armee Süd"))
+                .unwrap()
+                .2
+                .iter()
+                .all(|d| d.0.starts_with('s')),
+            "{log:?}"
+        );
+        // the dated role is not formed before its date
+        assert!(bound("Garnison").is_empty());
+        assert!(board.sent("hoi4_army_merge") >= 1, "{log:?}");
+        // a role whose army is far above its size gives its surplus to the roles still forming
+        let big: Vec<(String, &str, i64)> = (0..40).map(|i| (format!("p{i}"), "Inf", 63)).collect();
+        let board = Board::new(vec![(
+            "Armee Mitte",
+            63,
+            big.iter().map(|(i, t, s)| (i.as_str(), *t, *s)).collect(),
+        )]);
+        let mut state = State::default();
+        state
+            .layout
+            .insert("Armee Mitte".into(), "Armee Mitte".into());
+        for _ in 0..12 {
+            if layout_step(&mut state, &board, &plan, "l", now)
+                .unwrap()
+                .is_none()
+            {
+                break;
+            }
+        }
+        let got = |h: &str| board.size(state.layout.get(h).map_or("", String::as_str));
+        assert_eq!(got("Armee Mitte"), 24, "{:?}", state.layout);
+        assert_eq!(
+            got("Armee Süd") + got("Armee West"),
+            16,
+            "{:?}",
+            state.layout
+        );
+    }
+
+    #[test]
+    fn a_role_above_one_detach_is_formed_in_two_and_joined() {
+        // t1939f: Armee Mitte aimed at 21 and the detach tool takes at most 18: given up
+        let big: Vec<(String, &str, i64)> = (0..70).map(|i| (format!("d{i}"), "Inf", 63)).collect();
+        let board = Board::new(vec![(
+            "Army 1",
+            63,
+            big.iter().map(|(i, t, s)| (i.as_str(), *t, *s)).collect(),
+        )]);
+        let plan = bookmark_plan();
+        let mut state = State::default();
+        for _ in 0..20 {
+            if layout_step(&mut state, &board, &plan, "l", START)
+                .unwrap()
+                .is_none()
+            {
+                break;
+            }
+        }
+        let got = |h: &str| board.size(state.layout.get(h).map_or("", String::as_str));
+        assert_eq!(got("Armee Mitte"), 24, "{:?}", state.layout);
+        assert_eq!(got("Armee Süd"), 24, "{:?}", state.layout);
+        assert!(board.sent("hoi4_army_merge") >= 2);
+    }
+
+    #[test]
+    fn the_layout_goes_first_while_a_role_an_operation_names_is_missing() {
+        let plan = bookmark_plan();
+        let mut state = State::default();
+        assert!(operation_roles_missing(&state, &plan));
+        for h in ["Armee Mitte", "Armee Süd", "Armee West", "Panzergruppe"] {
+            state.layout.insert(h.into(), format!("{h} army"));
+        }
+        // the dated Garnison does not count; a pending top-up does
+        assert!(!operation_roles_missing(&state, &plan));
+        state
+            .done
+            .insert("layoutmerge:Armee Süd\u{1}Army 9".into(), 1);
+        assert!(operation_roles_missing(&state, &plan));
+    }
+
+    #[test]
+    fn a_role_no_operation_names_still_waits_and_takes_its_count() {
+        let board = Board::new(vec![(
+            "Army 1",
+            56,
+            (0..10)
+                .map(|i| {
+                    (
+                        ["a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"][i],
+                        "Inf",
+                        56,
+                    )
+                })
+                .collect(),
+        )]);
+        let plan = json!({"army_layout": [
+            {"name_hint": "North", "state": 5, "role": "strike", "templates": ["Inf"], "count": 3}]});
+        let mut state = State::default();
+        let t0 = hour("1939.08.15");
+        assert_eq!(
+            layout_step(&mut state, &board, &plan, "l", t0).unwrap(),
+            None
+        );
+        assert_eq!(board.sent("hoi4_army_detach"), 0);
+        let later = t0 + (LAYOUT_FORM_WAIT_DAYS + 1) * DAY;
+        let line = layout_step(&mut state, &board, &plan, "l", later)
+            .unwrap()
+            .unwrap();
+        assert!(
+            line.contains("North formed from 3 division(s) of Army 1"),
+            "{line}"
+        );
+        assert!(
+            state.done.contains_key("layoutformed:North"),
+            "it marches to its state"
+        );
+    }
+
+    #[test]
+    fn every_army_without_an_order_gets_a_hold_while_operations_carry_the_war() {
+        let board = Board::new(vec![
+            ("Army 1", 42, vec![("a", "Inf", 42)]),
+            ("Armee Mitte", 66, vec![("m", "Inf", 66)]),
+        ]);
+        let plan = json!({"war": {"land_orders": false},
+            "operations": [{"id": "op", "prepare_from": "date >= 1939.7.15", "formations": [
+                {"army": "Armee Mitte", "role": "line"}]}]});
+        let mut state = State::default();
+        state.op_owned.insert("Armee Mitte".into(), "op".into());
+        let roster = board.call("hoi4_armies", &json!({})).unwrap();
+        let active = vec![("op".to_string(), plan["operations"][0].clone())];
+        let now = hour("1939.08.20");
+        let line = plan_operation::idle_holds(
+            &mut state,
+            &board,
+            &plan,
+            &active,
+            &roster,
+            &json!({}),
+            "l",
+            now,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(
+            line.contains("Army 1 has no order: it holds [42]"),
+            "{line}"
+        );
+        // the owned army is the operation's; the held one is not ordered twice
+        let roster = board.call("hoi4_armies", &json!({})).unwrap();
+        assert_eq!(
+            plan_operation::idle_holds(
+                &mut state,
+                &board,
+                &plan,
+                &active,
+                &roster,
+                &json!({}),
+                "l",
+                now + 2 * DAY
+            )
+            .unwrap(),
+            None
+        );
+        // land orders on: the war step orders every army itself
+        let on = json!({"operations": plan["operations"].clone()});
+        let mut fresh = State::default();
+        assert_eq!(
+            plan_operation::idle_holds(
+                &mut fresh,
+                &board,
+                &on,
+                &active,
+                &roster,
+                &json!({}),
+                "l",
+                now
+            )
+            .unwrap(),
+            None
         );
     }
 

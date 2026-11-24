@@ -159,12 +159,18 @@ class CommittedMapTest(unittest.TestCase):
         root = pathlib.Path(__file__).resolve().parents[1]
         m = json.loads((root / 'native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json').read_text(encoding='utf-8'))
         _, sites, _ = V.plan(root / 'native', m)
-        got = {s['site']: s['new'] for s in sites if s['kind'] == 'image'}
-        for site, new in {'own_focus.rs:56': '0x358e128', 'construction/mac_find.rs:31': '0x366a438',
-                          'construction/mac_find.rs:33': '0x3585618', 'launch/macos/panelkit.rs:627': '0x36d1be0',
-                          'construction/mac_ui/selection_state.rs:384': '0x36aa940'}.items():
-            self.assertEqual(got.get('native/src/' + site), new, site)
-        self.assertIn('0x36be898', {got.get(k) for k in got if k.startswith('native/src/launch/macos/focus/binding.rs')})
+        by_file = {}
+        for s in sites:
+            if s['kind'] == 'image':
+                by_file.setdefault(s['site'].rsplit(':', 1)[0], set()).add((s['old'], s['new']))
+        for f, old, new in [('own_focus.rs', '0x3589270', '0x358e128'),
+                            ('construction/mac_find.rs', '0x3665308', '0x366a438'),
+                            ('construction/mac_find.rs', '0x3580798', '0x3585618'),
+                            ('launch/macos/panelkit.rs', '0x36cca80', '0x36d1be0'),
+                            ('construction/mac_ui/selection_state.rs', '0x36a5810', '0x36aa940'),
+                            ('launch/macos/focus/binding.rs', '0x36b9738', '0x36be898'),
+                            ('gui_tree.rs', '0x36ba978', '0x36bfad8')]:
+            self.assertIn((old, new), by_file.get('native/src/' + f, set()), f)
 
 
 if __name__ == '__main__':

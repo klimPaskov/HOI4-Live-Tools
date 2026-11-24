@@ -93,7 +93,17 @@ unchanged, and the player is told what to do instead. The second identical refus
 lesson of the run (`scope: run:<run>`, confidence 0.5) with the order's arguments, what was tried,
 the refusal and what to do instead: a wrong call or an order for what already holds is not sent
 again, a precondition rests a week, a GUI or read-back failure of that order rests two days for a
-war order and two weeks for any other. The executor uses a run's own lessons in that run only. Issues the executor cannot act on (a plan
+war order and two weeks for any other. The executor uses a run's own lessons in that run only.
+
+No step re-sends such an order on its own say-so: after the second refusal in a row for the same
+reason, an identical order is held (`skipped: ... repeat stopped`) when the reason is the tool's own
+fault (the ledger holds it) or the run has a lesson for it (the lesson holds it); a refusal by the
+game's rules without a lesson rests on the ledger as before. A step that forgets the ledger because
+the game changed (a focus completed, a war began) frees only a refusal by the game's rules; a tool
+fault stays held until a long rest (60 game days in peace, 6 at war, then one more try), or a new
+server life (a fixed build). The first hold wakes the player with the lesson, and the executor's
+memory (`plan_state.json` `repeats_stopped`) counts each stopped re-send, by a lesson or by the
+ledger. Issues the executor cannot act on (a plan
 decision, a tool fault) appear in the player's wake list with their packet.
 
 ## Escalation (Tier 1 and Tier 2)

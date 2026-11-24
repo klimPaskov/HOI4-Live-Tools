@@ -1440,6 +1440,9 @@ pub(super) fn step(
     }
     let roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
     let wars = tools.call("hoi4_wars", &json!({}))?;
+    if let Some(line) = idle_holds(state, tools, plan, &active, &roster, &wars, lease, now)? {
+        return Ok(Some(line));
+    }
     for (id, op) in &active {
         state.op_acting = true;
         let out = one(state, tools, plan, id, op, &roster, &wars, lease, now);
@@ -1451,6 +1454,110 @@ pub(super) fn step(
     // nothing differs: look again in six game hours (a declaration or a loss wakes it sooner
     // through `wake`)
     state.skip(now, "opstep", "x", 6);
+    Ok(None)
+}
+
+/// Hold orders an idle army may get before it is left alone.
+const IDLE_HOLD_TRIES: i64 = 2;
+
+/// NOTHING WITHOUT AN ORDER: while operations carry the land war (land orders off) every army no
+/// operation owns and no march is taking to its role gets a standing order of its own, in the
+/// peace days before the declaration and again whenever one is found without (t1939c, 24 Nov
+/// 2026: the 1939 bookmark's three western armies, 62 divisions, stood the whole Polish war with
+/// no order at all). An army in contact with an enemy at war joins the front of an operation's
+/// hold facing that enemy (where one is drawn); every other army holds the states its role names
+/// (`guard_states_in_order`) or the state it stands in, by an area defence. One order per call,
+/// IDLE_HOLD_TRIES per army.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn idle_holds(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    active: &[(String, Value)],
+    roster: &Value,
+    wars: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if super::land_orders(plan) {
+        return Ok(None);
+    }
+    let role_of: HashMap<String, String> = state
+        .layout
+        .iter()
+        .filter(|(_, a)| !a.is_empty())
+        .map(|(h, a)| (a.clone(), h.clone()))
+        .collect();
+    for row in list(roster, "armies") {
+        let name = text(&row["army"]).to_string();
+        if name.is_empty()
+            || row["division_count"].as_i64().unwrap_or(1) == 0
+            || state.op_owned.contains_key(&name)
+            || has_orders(roster, &name)
+            || state.skipped(now, "idlehold", &name)
+        {
+            continue;
+        }
+        let hint = role_of.get(&name).cloned().unwrap_or_default();
+        // a formed role on its way to its state is the layout's march, not idle
+        if !hint.is_empty() && state.done.contains_key(&format!("layoutformed:{hint}")) {
+            continue;
+        }
+        let tk = format!("idlehold:{name}");
+        let tries = state.done.get(&tk).copied().unwrap_or(0);
+        if tries >= IDLE_HOLD_TRIES {
+            continue;
+        }
+        let facing = contact_tags(roster, wars, &name);
+        let hold = active.iter().find_map(|(id, op)| {
+            list(op, "holds")
+                .iter()
+                .find(|h| {
+                    strings(h, "facing").iter().any(|t| facing.contains(t))
+                        && h["click_state"].is_i64()
+                })
+                .map(|h| (id.clone(), h["click_state"].as_i64().unwrap_or(0)))
+        });
+        let entry = list(plan, "army_layout")
+            .iter()
+            .find(|e| !hint.is_empty() && text(&e["name_hint"]) == hint);
+        let posts: Vec<i64> = entry
+            .map(|e| ints(&e["guard_states_in_order"]))
+            .unwrap_or_default()
+            .into_iter()
+            .take(3)
+            .collect();
+        let (what, tool, args) = match hold {
+            Some((op_id, click)) => (
+                format!(
+                    "{name} stands on the border of the hold of {op_id}: joins its front at {click}"
+                ),
+                "hoi4_army_front",
+                json!({"army": name, "state_id": click}),
+            ),
+            None => {
+                let states = if posts.is_empty() {
+                    row["main_state"]
+                        .as_i64()
+                        .map(|s| vec![s])
+                        .unwrap_or_default()
+                } else {
+                    posts
+                };
+                if states.is_empty() {
+                    continue;
+                }
+                (
+                    format!("{name} has no order: it holds {states:?} (area defence)"),
+                    "hoi4_army_area_defense",
+                    json!({"army": name, "states": states}),
+                )
+            }
+        };
+        state.done.insert(tk, tries + 1);
+        state.skip(now, "idlehold", &name, DAY);
+        return Ok(Some(order(state, tools, lease, "hold", &what, tool, args)?));
+    }
     Ok(None)
 }
 

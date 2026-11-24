@@ -1765,7 +1765,7 @@ fn attached_before(state: &State, wing: &str) -> Option<String> {
 }
 
 /// Squared map distance between two own states' centres (unknown: far).
-fn state_distance(state: &State, a: Option<i64>, b: Option<i64>) -> f64 {
+pub(super) fn state_distance(state: &State, a: Option<i64>, b: Option<i64>) -> f64 {
     match (a, b) {
         (Some(a), Some(b)) => match (
             state.centers.get(&(a as i32)),
