@@ -14516,10 +14516,12 @@ mod tests {
         let mut state = State::default();
         // the tactical bomber flies its ground support too (s7n: 13 bomber wings stood by)
         let steps: Vec<String> = (0..3)
-            .filter_map(|_| match tick(&mut state, &tools, &plan, "l", START).unwrap() {
-                Tick::Acted(s) => Some(s),
-                _ => None,
-            })
+            .filter_map(
+                |_| match tick(&mut state, &tools, &plan, "l", START).unwrap() {
+                    Tick::Acted(s) => Some(s),
+                    _ => None,
+                },
+            )
             .collect();
         assert!(
             steps
@@ -14528,7 +14530,9 @@ mod tests {
             "{steps:?}"
         );
         assert!(
-            steps.iter().any(|s| s.contains(" cas over ") && s.contains("(KG 1)")),
+            steps
+                .iter()
+                .any(|s| s.contains(" cas over ") && s.contains("(KG 1)")),
             "{steps:?}"
         );
     }
@@ -14834,7 +14838,12 @@ mod tests {
             {"equipment": "small_plane_airframe_1", "from": "1937.1.1", "factories": 7},
             {"equipment": "light_tank_chassis_2", "from": "1936.9.1", "remove": true}]});
         let rows = list(&plan, "production");
-        let at = |d: &str| crate::alarms::stop_on_date(&json!({"stop_on_date": d})).unwrap().unwrap().0;
+        let at = |d: &str| {
+            crate::alarms::stop_on_date(&json!({"stop_on_date": d}))
+                .unwrap()
+                .unwrap()
+                .0
+        };
         assert!(removal_superseded(&plan, &rows[0], at("1939.8.14")));
         // before the later floor is reached the removal stands
         assert!(!removal_superseded(&plan, &rows[0], at("1936.6.1")));
