@@ -304,6 +304,14 @@ fn file_identity(file: &File) -> Result<FileIdentity> {
         id: id.id,
     })
 }
+/// How often a module census that looked mid-change is taken before the process is refused.
+const MODULE_CENSUS_TRIES: usize = 8;
+enum Census {
+    /// ERROR_BAD_LENGTH or no main module: the loader was changing the list.
+    Transient(Error),
+    /// A listing that contradicts the identity, or any other failure.
+    Refused(Error),
+}
 pub(crate) struct Native;
 pub(crate) struct NativeImage(File);
 impl Native {
@@ -349,32 +357,78 @@ impl Native {
             "Process metadata census exceeds observer bound",
         ))
     }
+    /// The executable module's base and size. A module snapshot taken while the game loads or
+    /// unloads libraries (start-up, the embedded browser) can fail with ERROR_BAD_LENGTH or come
+    /// back without the main module; such a census is taken again a few times, a short while
+    /// apart, before the process is refused. A listing that contradicts the identity (the path
+    /// under another process, or twice) is refused at once.
     fn module(pid: u32, path: &str) -> Result<(u64, u32)> {
-        // SAFETY: read-only module snapshot. ERROR_BAD_LENGTH is refused, not retried.
-        let snapshot = owned(unsafe { CreateToolhelp32Snapshot(8 | 16, pid) })?;
+        let mut last = None;
+        for attempt in 0..MODULE_CENSUS_TRIES {
+            if attempt > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            match Self::module_once(pid, path) {
+                Ok(found) => return Ok(found),
+                Err(Census::Transient(e)) => last = Some(e),
+                Err(Census::Refused(e)) => return Err(e),
+            }
+        }
+        Err(last.unwrap_or_else(changed))
+    }
+    fn module_once(pid: u32, path: &str) -> std::result::Result<(u64, u32), Census> {
+        // SAFETY: read-only module snapshot; ERROR_BAD_LENGTH (24) is a transient census.
+        let raw = unsafe { CreateToolhelp32Snapshot(8 | 16, pid) };
+        if raw.is_null() || raw as isize == -1 {
+            let bad_length = std::io::Error::last_os_error().raw_os_error() == Some(24);
+            let e = os_error("Invalid read-only handle");
+            return Err(if bad_length {
+                Census::Transient(e)
+            } else {
+                Census::Refused(e)
+            });
+        }
+        // SAFETY: a successful snapshot result is one real, closable handle.
+        let snapshot = unsafe { OwnedHandle::from_raw_handle(raw) };
         // SAFETY: all-zero C metadata with valid pointers until populated by Win32.
         let mut e: ModuleEntry = unsafe { zeroed() };
         e.size = size_of::<ModuleEntry>() as u32;
         // SAFETY: valid owned snapshot and correctly sized output structure.
         let mut more = unsafe { Module32FirstW(snapshot.as_raw_handle(), &mut e) };
         let mut found = None;
+        let (mut seen, mut similar) = (0usize, Vec::new());
+        let file_name = |p: &str| p.rsplit('\\').next().unwrap_or(p).to_ascii_lowercase();
         for _ in 0..4096 {
             if more == 0 {
                 if std::io::Error::last_os_error().raw_os_error() != Some(18) {
-                    return Err(os_error("Module32 iteration"));
+                    return Err(Census::Refused(os_error("Module32 iteration")));
                 }
-                return found
-                    .ok_or_else(|| error("ownership_changed", "Exact executable module missing"));
+                return found.ok_or_else(|| {
+                    Census::Transient(error(
+                        "ownership_changed",
+                        &format!(
+                            "Exact executable module missing ({seen} modules of pid {pid}; expected {path:?}; same file name: {similar:?})"
+                        ),
+                    ))
+                });
             }
-            if wchar(&e.path)? == path
+            seen += 1;
+            let listed = wchar(&e.path).map_err(Census::Refused)?;
+            if file_name(&listed) == file_name(path) && similar.len() < 4 {
+                similar.push(listed.clone());
+            }
+            if listed == path
                 && (e.pid != pid || found.replace((e.base as u64, e.base_size)).is_some())
             {
-                return Err(changed());
+                return Err(Census::Refused(changed()));
             }
             // SAFETY: valid owned snapshot and correctly sized output structure.
             more = unsafe { Module32NextW(snapshot.as_raw_handle(), &mut e) };
         }
-        Err(error("read_bound", "Module census exceeds observer bound"))
+        Err(Census::Refused(error(
+            "read_bound",
+            "Module census exceeds observer bound",
+        )))
     }
 }
 impl Api for Native {

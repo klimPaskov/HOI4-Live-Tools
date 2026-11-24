@@ -77,8 +77,11 @@ Two runtimes exist:
   Windows strings are MSVC `std::string`/`std::wstring`; `object_type` reads the MSVC complete
   object locator. The core game and army layouts for Windows 1.20.0.0 were read live from an owned
   game (globals, date, speed, pause, player tag, countries, difficulty, playthrough, the country's
-  member objects, division strength and organisation); the tag database, the division province and
-  the production members are not measured yet and fail with `read_bound`. It sends no input: a
+  member objects, division strength and organisation, the tag database; checked through the tools on 24
+  November 2026: `hoi4_overview` and `hoi4_army` on a paused game). The division province and the
+  production members are not measured yet and fail with `read_bound`. Every read batch runs the full
+  ownership census (tens of milliseconds), so a multi-read snapshot of a running game tears
+  (`torn_read`); reads of a paused game work. It sends no input: a
   development build (`--features dev-table`) reads a table from `HOI4_LIVE_DEV_TABLE` and accepts
   the executable named by `HOI4_LIVE_DEV_WINDOWS_SHA256`; release builds attach to nothing.
   The management tools are compiled and unit-tested on Windows, but nothing binds them there yet.

@@ -10,6 +10,18 @@ use crate::{
 
 pub(crate) struct WindowsProcess {
     reader: OwnedReader<Native>,
+    epoch: crate::platform::Identity,
+}
+
+/// The process epoch the tools tag their results with: the creation FILETIME stands for the
+/// Unix start ticks. `uid` has no Windows meaning and is 0; the reader checks the owner SID.
+fn epoch(game: &Identity) -> crate::platform::Identity {
+    crate::platform::Identity {
+        pid: game.pid as i32,
+        start_ticks: game.creation_filetime.to_string(),
+        exe: game.executable.clone(),
+        uid: 0,
+    }
 }
 
 /// The session for a game started by this process: this process is the supervisor, the
@@ -58,13 +70,13 @@ impl WindowsProcess {
     pub(crate) fn open(session: Session) -> Result<Self> {
         #[cfg(feature = "dev-table")]
         if let Some(sha256) = development_sha256()? {
-            return Ok(Self {
-                reader: OwnedReader::development(Native, session, sha256)?,
-            });
+            let reader = OwnedReader::development(Native, session, sha256)?;
+            let epoch = epoch(reader.identity());
+            return Ok(Self { reader, epoch });
         }
-        Ok(Self {
-            reader: OwnedReader::open(Native, session)?,
-        })
+        let reader = OwnedReader::open(Native, session)?;
+        let epoch = epoch(reader.identity());
+        Ok(Self { reader, epoch })
     }
     pub(crate) fn game(&self) -> &Identity {
         self.reader.identity()
@@ -90,6 +102,7 @@ impl crate::platform::Process for WindowsProcess {
     fn image_base(&self) -> u64 {
         self.reader.image_base()
     }
-    // No `platform::Identity`: its Unix start ticks and uid have no Windows meaning (the
-    // reader holds the creation FILETIME and the full SID). Bindings that need it refuse.
+    fn identity(&self) -> Option<&crate::platform::Identity> {
+        Some(&self.epoch)
+    }
 }

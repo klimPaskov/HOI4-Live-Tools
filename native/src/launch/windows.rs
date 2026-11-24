@@ -33,6 +33,8 @@ pub struct Config {
 
 const SETTINGS: &str = "launcher-settings.json";
 const BACKUP: &str = "launcher-settings.backup.json";
+/// How long the server waits for the game to exit before it gives up restoring.
+const RESTORE_WAIT: Duration = Duration::from_secs(30 * 60);
 
 fn sha256_hex(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
@@ -192,9 +194,19 @@ pub fn serve(config_path: &Path) -> Result<()> {
     )?;
     write_replace(&settings, redirected.as_bytes())?;
     let result = run(&config, &exe);
-    // Restore whatever happened, once the game is gone.
-    let deadline = Instant::now() + Duration::from_secs(120);
-    while game_running().unwrap_or(true) && Instant::now() < deadline {
+    // Restore whatever happened, once the game is gone. A game that did not close on
+    // WM_CLOSE (a confirmation dialog, a hang) is waited for while someone closes it from
+    // its menu, so the settings are restored without a separate --windows-restore.
+    let started = Instant::now();
+    let mut said = Duration::ZERO;
+    while game_running().unwrap_or(true) && started.elapsed() < RESTORE_WAIT {
+        if started.elapsed() >= said + Duration::from_secs(60) {
+            said = started.elapsed();
+            eprintln!(
+                "waiting for hoi4.exe to exit before restoring the launcher settings ({} s)",
+                said.as_secs()
+            );
+        }
         std::thread::sleep(Duration::from_millis(500));
     }
     match restore(&config.run_directory) {
@@ -228,7 +240,10 @@ fn run(config: &Config, exe: &Path) -> Result<()> {
                 let _ = e;
                 std::thread::sleep(Duration::from_millis(250));
             }
-            Err(e) => return Err(e),
+            Err(e) => {
+                eprintln!("the started game is not verified as owned: {e}");
+                return Err(e);
+            }
         }
     };
     let record = json!({
