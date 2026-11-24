@@ -160,7 +160,7 @@ class CommittedMapTest(unittest.TestCase):
         m = json.loads((root / 'native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json').read_text(encoding='utf-8'))
         _, sites, _ = V.plan(root / 'native', m)
         got = {s['site']: s['new'] for s in sites if s['kind'] == 'image'}
-        for site, new in {'own_focus.rs:55': '0x358e128', 'construction/mac_find.rs:31': '0x366a438',
+        for site, new in {'own_focus.rs:56': '0x358e128', 'construction/mac_find.rs:31': '0x366a438',
                           'construction/mac_find.rs:33': '0x3585618', 'launch/macos/panelkit.rs:627': '0x36d1be0',
                           'construction/mac_ui/selection_state.rs:384': '0x36aa940'}.items():
             self.assertEqual(got.get('native/src/' + site), new, site)
