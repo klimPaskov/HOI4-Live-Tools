@@ -14,13 +14,13 @@ pub(crate) fn observe(
     render: u64,
 ) -> Result<Value> {
     let base = reuse.base();
-    if primary == base + 0x44ed1d8 {
+    if primary == base + 0x44f51d8 {
         crate::node_detail::standard_sprite_diagnostic(r, reuse, container, button, registry)
-    } else if primary == base + 0x44ef818 {
+    } else if primary == base + 0x44f7818 {
         let mut raw = crate::info_research_button::text_raw(r, reuse, render, container, registry)?;
         raw["render_type_encoding"] = json!("11CTextSprite");
         Ok(raw)
-    } else if primary == base + 0x44e15e0 {
+    } else if primary == base + 0x44e95e0 {
         frame::observe(r, reuse, container, button, registry, render)
     } else {
         Ok(

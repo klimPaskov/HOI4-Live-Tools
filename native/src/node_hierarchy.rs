@@ -7,8 +7,8 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
-const POSITION: u64 = 0x44dea58;
-const TYPES: [u64; 4] = [POSITION, 0x44ed1d8, 0x44e15e0, 0x44e2820];
+const POSITION: u64 = 0x44e6a58;
+const TYPES: [u64; 4] = [POSITION, 0x44f51d8, 0x44e95e0, 0x44ea820];
 enum Membership {
     Verified(usize),
     PolicyUnavailable(Value),
@@ -107,24 +107,24 @@ pub(crate) fn observe(
     // InstantText is restricted to the owned Focus search renderer path.
     let leaf = r.u64(render)?;
     if !TYPES.iter().any(|table| leaf == base + table)
-        && leaf != base + 0x44ef818
-        && !(policy == HierarchyPolicy::OwnFocus && leaf == base + 0x44e2ee8)
+        && leaf != base + 0x44f7818
+        && !(policy == HierarchyPolicy::OwnFocus && leaf == base + 0x44eaee8)
     {
         return Err(Error::new(
             "invalid_gui_hierarchy",
             "Exact supported hierarchy leaf required",
         ));
     }
-    exact(r, registry, base + 0x4409f68)?;
-    exact(r, container, base + 0x44de2b0)?;
+    exact(r, registry, base + 0x4411218)?;
+    exact(r, container, base + 0x44e62b0)?;
     if r.u64(container + 0x98)? != registry {
         return Err(Error::new(
             "invalid_gui_owner",
             "Own container registry join required",
         ));
     }
-    let graphics = r.u64(base + 0x470e688)?;
-    exact(r, graphics, base + 0x43d7220)?;
+    let graphics = r.u64(base + 0x47166a8)?;
+    exact(r, graphics, base + 0x43de4d0)?;
     if r.u64(registry + 0xb8)? != graphics {
         return Err(Error::new(
             "invalid_gui_owner",

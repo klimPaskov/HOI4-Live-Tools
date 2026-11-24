@@ -29,14 +29,14 @@ pub(crate) struct Layout {
 }
 /// Linux ELF a4971c9e (libstdc++).
 const LINUX: Layout = Layout {
-    military_line_vtable: 0x4483480,
-    naval_line_vtable: 0x4483600,
-    equipment_db_global: 0x45353a0,
-    equipment_db_vtable: 0x438c1f8,
+    military_line_vtable: 0x448b358,
+    naval_line_vtable: 0x448b4d8,
+    equipment_db_global: 0x453d3a0,
+    equipment_db_vtable: 0x4393280,
     equipment_catalog: 0x60,
-    variant_vtable: 0x438f000,
+    variant_vtable: 0x43960f0,
     variant_type: 0x3f0,
-    equipment_type_vtable: 0x438d730,
+    equipment_type_vtable: 0x43947c0,
 };
 /// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026: vtables by
 /// RTTI name, database by its sole global, catalog from the shared accessors.
