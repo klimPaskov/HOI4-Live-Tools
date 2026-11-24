@@ -1038,8 +1038,13 @@ fn unit(name: String, role: Role, front: &Value, offensive: &Value) -> Unit {
 /// (`armour: "spearhead"`) or on the strike engine's direct moves (the default). On the Poland bed
 /// (19 Nov 2026) the spearheads took Lodz and Krakow by day 14 but then stood or were redrawn, and
 /// reached 51-71 victory points on day 49 against 71-112 on the direct moves.
+/// The armour fights on the game's spearhead order (a battle plan, with its planning bonus) unless
+/// the operation says `armour: "strike"` (direct whole-army moves). The direct moves as the
+/// default left both Panzergruppen without any order on the war's first day, their planning at 0
+/// (s7n, 24 Nov 2026); the owner's war model is battle plans with planning, direct orders only
+/// for encirclements.
 fn spearheads(op: &Value) -> bool {
-    op["armour"].as_str() == Some("spearhead")
+    op["armour"].as_str() != Some("strike")
 }
 
 /// The states of a strike formation's thrust, deepest last: its axis without its own start
@@ -1595,6 +1600,18 @@ pub(super) fn idle_holds(
     Ok(None)
 }
 
+/// Game hours an execute-then-declare mark (plan_run declare_first) lets a prepared operation
+/// execute before its war.
+pub(super) const PRE_EXECUTE: GameHour = 12;
+
+/// The declaration is going out now: the prepared operations execute first.
+pub(super) fn pre_executing(state: &State, now: GameHour) -> bool {
+    state
+        .done
+        .get("preexec")
+        .is_some_and(|at| now >= *at && now - *at <= PRE_EXECUTE)
+}
+
 /// An operation is under way: prepared (its armies own their lines, in peace too) and not
 /// finished. The air goes over its regions from the prepare on, so the wings already fly there
 /// when the war starts.
@@ -1916,7 +1933,13 @@ fn one(
             return Ok(Some(line));
         }
     }
-    if op["execute_on"].is_null() || !holds(state, tools, &op["execute_on"], now) {
+    // EXECUTE, THEN DECLARE: in the tick its declaration goes out (plan_run declare_first) a
+    // prepared operation executes first, so the attack starts on the declaration's hour (s7n,
+    // 24 Nov 2026: declared on 1 September, the events the declaration opened held the execute
+    // and the attack began on the 4th). Planning decays 0.01 a day while executing: the few
+    // game hours before the war cost nothing.
+    let pre = pre_executing(state, now) && !strings(op, "enemies").is_empty();
+    if !pre && (op["execute_on"].is_null() || !holds(state, tools, &op["execute_on"], now)) {
         state.op_notes.insert(
             id.to_string(),
             format!("operation {id}: prepared, waits for execute_on"),
@@ -1990,7 +2013,12 @@ fn one(
                 .unwrap_or(0)
                 < 3 * REDRAWS
     });
-    if attackers.iter().all(|u| executing(roster, &u.name)) && !attackers.is_empty() && !drawing {
+    // executed before its war (EXECUTE, THEN DECLARE): counted as executing once the war is on
+    if attackers.iter().all(|u| executing(roster, &u.name))
+        && !attackers.is_empty()
+        && !drawing
+        && (!pre || !at_war.is_empty())
+    {
         state.done.insert(key(id, "exec"), now);
         state.done.insert(key(id, "line"), 0);
         state.done.insert(key(id, "moved"), now);
@@ -4345,13 +4373,22 @@ fn prepare(
             };
             let total = row["division_count"].as_i64().unwrap_or(0).max(1);
             let there = row["states"][start.to_string()].as_i64().unwrap_or(0);
-            if there * 2 >= total {
+            // a formation with its own front walks to it with the plan: a manual move on top
+            // costs planning (PLAYER_ORDER_PLANNING_DECAY) and moves nothing the front does not
+            if there * 2 >= total || has_front(roster, &u.name) {
                 continue;
             }
             state.skip(now, "opasm", &format!("march:{}", u.name), DAY / 2);
-            if state.skipped(now, "opmarch", &u.name) {
+            // one march order per two GAME days: in the paused setup the column cannot move, and
+            // a retry timer that ran on the wall clock sent the same march three times in
+            // seconds until the move budget refused it (s7n, 24 Nov 2026)
+            let mk = key(id, &format!("marched:{}", u.name));
+            if state.skipped(now, "opmarch", &u.name)
+                || state.done.get(&mk).is_some_and(|at| now - *at < 2 * DAY)
+            {
                 continue;
             }
+            state.done.insert(mk, now);
             state.skip(now, "opmarch", &u.name, 2 * DAY);
             let line = order(
                 state,

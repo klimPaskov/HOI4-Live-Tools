@@ -1823,7 +1823,12 @@ pub(super) fn air_attach_rule(
         return Ok(None);
     };
     let wings = list(&air, "wings");
-    let kind = |w: &Value| super::war_mission(text(&w["aircraft_type"]));
+    // only the CAS airframes join an army: a tactical bomber flies its ground support as a
+    // region mission (war_mission), never attached
+    let kind = |w: &Value| {
+        let t = text(&w["aircraft_type"]);
+        super::war_mission(t).filter(|m| *m != "cas" || t.to_lowercase().contains("cas"))
+    };
     let base_state = |w: &Value| w["air_base"]["state_id"].as_i64();
     let linked = |w: &Value| {
         w["attached_army"]

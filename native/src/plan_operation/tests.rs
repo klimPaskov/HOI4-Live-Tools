@@ -1246,6 +1246,7 @@ fn the_groups_front_and_offensive_are_drawn_before_any_assembly_or_march() {
     let d = |id: &str, army: &str, t: &str| (id.to_string(), army.to_string(), t.to_string());
     *game.divs.borrow_mut() = vec![d("d1", "Mitte", "Pz"), d("d2", "Mitte", "Inf")];
     let mut plan = plan();
+    plan["operations"][0]["armour"] = json!("strike");
     plan["operations"][0]["formations"][2] = json!({"army": "Schnell", "role": "mobile",
         "drive": "strike", "divisions": {"Pz": 1}, "front": {"enemy": "POL", "own_states": [67]}});
     let mut state = State::default();
@@ -1308,9 +1309,10 @@ fn an_armour_formation_on_the_spearhead_switch_fights_on_its_own_spearhead() {
     // one stroke from the front to the thrust's deepest state (its axis: 87, then 10)
     assert_eq!(panzer[1].1["state_id"], json!(10));
     assert!(panzer[1].1.get("states").is_none());
-    // the default engine: no front of its own
+    // the direct-move engine (`armour: "strike"`): no front of its own; without the key the
+    // spearhead is the default (s7n, 24 Nov 2026)
     let game = Game::new();
-    plan["operations"][0]["armour"] = Value::Null;
+    plan["operations"][0]["armour"] = json!("strike");
     let mut state = State::default();
     burst(&mut state, &game, &plan, START);
     assert!(!game
@@ -1931,6 +1933,7 @@ fn an_attack_that_reads_back_while_the_armour_still_marches_awaits_its_war() {
                      "exercising": false, "division_count": 6, "states": {"66": 6}}),
         );
     let mut plan = plan();
+    plan["operations"][0]["armour"] = json!("strike");
     plan["operations"][0]["formations"][2] = json!({"army": "Schnell", "role": "mobile",
         "drive": "strike", "front": {"enemy": "POL", "own_states": [67]}});
     let mut state = State::default();
