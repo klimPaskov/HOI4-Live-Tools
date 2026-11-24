@@ -26,6 +26,7 @@ mod inproc_construction;
 mod inproc_diplomacy;
 mod inproc_events;
 mod inproc_holds;
+mod inproc_mio;
 mod inproc_orders;
 mod inproc_picks;
 mod inproc_politics;
