@@ -3282,3 +3282,35 @@ fn an_owned_army_over_its_limit_may_give_its_excess_away_and_nothing_else() {
     assert_eq!(guard(&HashMap::new(), "hoi4_army_split", &mut free), None);
     assert!(free.get("over_limit").is_none());
 }
+
+struct Roster;
+impl Tools for Roster {
+    fn call(&self, name: &str, _args: &Value) -> Result<Value> {
+        Ok(match name {
+            "hoi4_armies" => json!({"armies": [
+                {"army": "Army 2", "division_count": 9},
+                {"army": "Army 9", "division_count": 3}]}),
+            _ => json!({}),
+        })
+    }
+}
+
+#[test]
+fn a_role_formed_in_the_same_paused_hour_becomes_the_operations_at_once() {
+    // s7m: Panzergruppe Nord formed after the first ownership read of the paused setup hour, an
+    // idle hold sent it back, its march never ended and the declaration waited
+    let plan =
+        json!({"operations": [{"id": "op_pol", "formations": [{"army": "Nord"}, {"army": "Pz"}]}]});
+    let mut state = State::default();
+    state.done.insert(key("op_pol", "prep"), START);
+    state.layout.insert("Nord".into(), "Army 2".into());
+    refresh(&mut state, &Roster, &plan, START);
+    assert!(state.op_owned.contains_key("Army 2"));
+    assert!(!state.op_owned.contains_key("Army 9"));
+    state.layout.insert("Pz".into(), "Army 9".into());
+    refresh(&mut state, &Roster, &plan, START);
+    assert_eq!(
+        state.op_owned.get("Army 9").map(String::as_str),
+        Some("op_pol")
+    );
+}
