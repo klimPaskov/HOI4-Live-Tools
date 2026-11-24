@@ -4828,6 +4828,12 @@ impl MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
+            // in process (family airwing): the army card's command, Attach(wing, army), one per wing
+            if let Some(mut ch) = inproc::route("airwing") {
+                if let Some(v) = airattach::attach_inprocess(process, &mut ch, &wings, &army)? {
+                    return Ok(v);
+                }
+            }
             self.keys.preflight()?;
             return airattach::attach(process, &self.keys, &wings, &army);
         }
@@ -5125,6 +5131,12 @@ impl MacClock {
             // The in-process backend (HOI4_BACKEND) for missions and rebases: the UI's own commands, no input.
             let mut air_route = match &op {
                 Air::Mission { .. } | Air::Rebase { .. } if !retry => inproc::route("air"),
+                // wing structure (engineer 71): the airwing family, OFF under auto until its live session passes
+                Air::Hold { .. } | Air::Split { .. } | Air::Merge { .. } | Air::Disband { .. }
+                    if !retry =>
+                {
+                    inproc::route("airwing")
+                }
                 _ => None,
             };
             if !retry && air_route.is_none() {
@@ -5299,6 +5311,16 @@ impl MacClock {
                         Air::Rebase { .. } => {
                             inproc::air_rebase(ch, &bases, &wings, &rebase_plans, &mut reread)
                         }
+                        Air::Hold { wing } => inproc::air_hold(ch, &wings, wing, &mut reread),
+                        Air::Disband { wing } => inproc::air_disband(ch, &wings, wing, &mut reread),
+                        Air::Split { .. } => match split_plan.as_ref() {
+                            Some(p) => inproc::air_split(ch, &wings, p, &mut reread),
+                            None => inproc::Routed::Gui,
+                        },
+                        Air::Merge { .. } => match merge_plan.as_ref() {
+                            Some(p) => inproc::air_merge(ch, &wings, p, &mut reread),
+                            None => inproc::Routed::Gui,
+                        },
                         _ => inproc::Routed::Gui,
                     };
                     match done {

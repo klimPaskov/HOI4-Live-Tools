@@ -316,13 +316,18 @@ pub(super) fn air_mission(
             need_region.push(w.address);
         }
     }
+    // the region: the object found through an own base's province (family air), else, when the airwing family is
+    // usable, the region id itself (the map's region click needs no own base; the module looks the region up the way
+    // the command's own check does); else the GUI
+    let by_id = family_usable(&ch.hello, "airwing", mode());
     let region_obj = match region {
         Some(r) if !need_region.is_empty() => {
             match bases
                 .iter()
                 .find(|b| b.region_id == Some(r) && b.region_address != 0)
             {
-                Some(b) => Some(b.region_address),
+                Some(b) => Some(RegionRef::Object(b.region_address)),
+                None if by_id && r > 0 => Some(RegionRef::Id(r)),
                 None => return Routed::Gui,
             }
         }
@@ -363,8 +368,16 @@ pub(super) fn air_mission(
             }
         }
     }
-    if let Some(obj) = region_obj {
-        let Ok(r) = ch.post("air.enable_mission", &need_region, &[], Some(obj), None) else {
+    if let Some(rr) = region_obj {
+        let posted = match rr {
+            RegionRef::Object(obj) => {
+                ch.post("air.enable_mission", &need_region, &[], Some(obj), None)
+            }
+            RegionRef::Id(id) => {
+                ch.post("airwing.region", &need_region, &[i64::from(id)], None, None)
+            }
+        };
+        let Ok(r) = posted else {
             return Routed::Gui;
         };
         if game_refused(&r) {
@@ -391,6 +404,171 @@ pub(super) fn air_mission(
         }
     }
     Routed::Done(json!({"backend":"inprocess","wings":names,"module":replies}))
+}
+
+/// How a mission's region reaches the module: the region object (read through an own base), or its id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RegionRef {
+    Object(u64),
+    Id(i32),
+}
+
+/// Post one wing-structure request (family airwing) and return only once the game has executed it: `done` reads the
+/// wings again until it holds (the call's Verified read-back follows at once; a read right after the post can still
+/// see the old state, s2d/s2g 24 Nov 2026). Refused when the game's own check refused every object; Gui on any other
+/// refusal or silence (the GUI path decides in the same call).
+pub(super) fn airwing_post(
+    ch: &mut Channel,
+    op: &str,
+    objs: &[u64],
+    vals: &[i64],
+    obj2: Option<u64>,
+    what: &str,
+    reread: &mut dyn FnMut() -> Option<Vec<super::airread::Wing>>,
+    done: &dyn Fn(&[super::airread::Wing]) -> bool,
+) -> Routed {
+    let Ok(r) = ch.post(op, objs, vals, obj2, None) else {
+        return Routed::Gui;
+    };
+    if game_refused(&r) {
+        return Routed::Refused(what.into());
+    }
+    if !all_posted(&r) {
+        return Routed::Gui;
+    }
+    let start = std::time::Instant::now();
+    let mut seen = false;
+    while start.elapsed() < MISSION_BIT_WAIT {
+        if reread().is_some_and(|now| done(&now)) {
+            seen = true;
+            break;
+        }
+        std::thread::sleep(MISSION_BIT_POLL);
+    }
+    let waited = start.elapsed().as_millis() as u64;
+    Routed::Done(
+        json!({"backend":"inprocess","op":op,"module":[r,{"executed":seen,"waited_ms":waited}]}),
+    )
+}
+
+/// The address of an own wing by name (0 or absent: not known, the GUI path runs).
+pub(super) fn wing_address(wings: &[super::airread::Wing], name: &str) -> Option<u64> {
+    wings
+        .iter()
+        .find(|w| w.name == name && w.address != 0)
+        .map(|w| w.address)
+}
+
+/// Hold in process: the Hold button's command, EnableMission(wing, region 0). A wing flying a transfer stays on the
+/// GUI path (the game's hold helper cancels the transfer first: a second command this family does not post).
+pub(super) fn air_hold(
+    ch: &mut Channel,
+    wings: &[super::airread::Wing],
+    wing: &str,
+    reread: &mut dyn FnMut() -> Option<Vec<super::airread::Wing>>,
+) -> Routed {
+    let Some(w) = wings.iter().find(|w| w.name == wing && w.address != 0) else {
+        return Routed::Gui;
+    };
+    if w.transfer_base_id != 0 {
+        return Routed::Gui;
+    }
+    let a = w.address;
+    airwing_post(
+        ch,
+        "airwing.region",
+        &[a],
+        &[0],
+        None,
+        "the hold of this wing",
+        reread,
+        &|now| now.iter().any(|x| x.address == a && x.region_id <= 0),
+    )
+}
+
+/// The aircraft the Split button moves to the new wing: half, rounded down (the UI's helper: count / 2).
+pub(super) fn split_count(planes: i32) -> i64 {
+    i64::from(planes / 2)
+}
+
+/// Split in process: Split(wing, aircraft / 2), as the toolbar's Split button. Done once a new wing stands at the base
+/// and the original holds fewer aircraft.
+pub(super) fn air_split(
+    ch: &mut Channel,
+    wings: &[super::airread::Wing],
+    plan: &super::airact::SplitPlan,
+    reread: &mut dyn FnMut() -> Option<Vec<super::airread::Wing>>,
+) -> Routed {
+    let Some(a) = wing_address(wings, &plan.wing) else {
+        return Routed::Gui;
+    };
+    let n = split_count(plan.planes);
+    if n < 1 {
+        return Routed::Gui;
+    }
+    airwing_post(
+        ch,
+        "airwing.split",
+        &[a],
+        &[n],
+        None,
+        "the split of this wing",
+        reread,
+        &|now| super::airact::settle_split(plan, now).0 == super::settle::Verdict::Reached,
+    )
+}
+
+/// Merge in process: ONE Consolidate command for the whole group (the first named wing first), as the Merge button.
+pub(super) fn air_merge(
+    ch: &mut Channel,
+    wings: &[super::airread::Wing],
+    plan: &super::airact::MergePlan,
+    reread: &mut dyn FnMut() -> Option<Vec<super::airread::Wing>>,
+) -> Routed {
+    let mut order = vec![plan.wing.clone()];
+    order.extend(plan.group.iter().filter(|n| **n != plan.wing).cloned());
+    let mut objs = Vec::new();
+    for n in &order {
+        match wing_address(wings, n) {
+            Some(a) => objs.push(a),
+            None => return Routed::Gui,
+        }
+    }
+    if objs.len() < 2 {
+        return Routed::Gui;
+    }
+    airwing_post(
+        ch,
+        "airwing.merge",
+        &objs,
+        &[],
+        None,
+        "the merge of these wings",
+        reread,
+        &|now| super::airact::settle_merge(plan, now) == super::settle::Verdict::Reached,
+    )
+}
+
+/// Disband in process: Delete(owner tag, wing), as the overview's Disband button; the aircraft go to the reserve.
+pub(super) fn air_disband(
+    ch: &mut Channel,
+    wings: &[super::airread::Wing],
+    wing: &str,
+    reread: &mut dyn FnMut() -> Option<Vec<super::airread::Wing>>,
+) -> Routed {
+    let Some(a) = wing_address(wings, wing) else {
+        return Routed::Gui;
+    };
+    airwing_post(
+        ch,
+        "airwing.disband",
+        &[a],
+        &[],
+        None,
+        "the disbanding of this wing",
+        reread,
+        &|now| !now.iter().any(|x| x.address == a),
+    )
 }
 
 /// Rebases in process: one air.transfer request per destination base, only for wings not already there or bound
@@ -474,6 +652,24 @@ mod tests {
         assert_eq!(mode_from(Some("gui")), Mode::Gui);
         assert_eq!(mode_from(Some("inprocess")), Mode::InProcess);
         assert_eq!(mode_from(Some("anything")), Mode::Auto);
+    }
+
+    #[test]
+    fn split_moves_half_rounded_down() {
+        assert_eq!(split_count(100), 50);
+        assert_eq!(split_count(41), 20);
+        assert_eq!(split_count(2), 1);
+        assert_eq!(split_count(1), 0);
+    }
+
+    #[test]
+    fn airwing_is_off_in_auto_until_its_live_pass() {
+        // the module's hello as built by engineer 71: airwing on (opted in, resolved) but not live-passed
+        let hello = json!({"post":{"enabled":true},"families":{
+            "air":{"on":true,"live_passed":true},"airwing":{"on":true,"live_passed":false}}});
+        assert!(!family_usable(&hello, "airwing", Mode::Auto));
+        assert!(family_usable(&hello, "airwing", Mode::InProcess));
+        assert!(family_usable(&hello, "air", Mode::Auto));
     }
 
     #[test]

@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     p.post_enabled = 1; snprintf(p.post_off_reason, sizeof p.post_off_reason, "on: selftest");
     p.speed_max = 5; p.min_interval_ms = 200; p.max_per_minute = 60;
     p.fam_on[0] = 1; p.fam_on[1] = !getenv("IPC_SELFTEST_SPEED_ONLY"); p.fam_on[2] = 0; /* production on, air off (not resolved in the mock) */
-    snprintf(p.fam_reason[1], sizeof p.fam_reason[1], "on"); snprintf(p.fam_reason[2], sizeof p.fam_reason[2], "not opted in");
+    snprintf(p.fam_reason[1], sizeof p.fam_reason[1], "on"); snprintf(p.fam_reason[2], sizeof p.fam_reason[2], "not opted in"); snprintf(p.fam_reason[3], sizeof p.fam_reason[3], "not opted in");
     p.stage2_jobs_per_minute = 600; p.stage2_cmds_per_minute = 2400;
     ipc_backend b = {hello, rd, probe, post, post2, killed, lg};
     return ipc_serve(g_sock, &b, &p) ? 0 : 1;

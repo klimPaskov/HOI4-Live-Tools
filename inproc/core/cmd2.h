@@ -35,12 +35,20 @@ enum { FK_I32 = 1, FK_U8, FK_REF, FK_REF_ARRAY };
  *                 one whose argument stores hit the serializer's offsets) on the factory's fresh object, so the game's
  *                 code allocates and fills its own containers. */
 enum { BUILD_FIELDS = 1, BUILD_CTOR };
-enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2 };
+enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
+       /* engineer 71 (24 Nov): the rest of the air family, each the UI's own constructor read from its argument stores */
+       CTOR_OBJ = 3,          /* (cmd, obj): one handle appended to the list (detach a wing from its army) */
+       CTOR_TAGP_OBJ = 4,     /* (cmd, const tag *, obj): the country tag then one handle (disband a wing) */
+       CTOR_OBJ_OBJ2 = 5,     /* (cmd, obj, obj2): one handle in the list, obj2's handle in its own field (attach) */
+       CTOR_ARRAY = 6 };      /* (cmd, const CPdxArray<T *> *): ONE command for every object (merge wings) */
+/* the second object a type takes, checked before posting */
+enum { OBJ2_NONE = 0, OBJ2_AIR_BASE, OBJ2_REGION, OBJ2_ORDERS_GROUP,
+       OBJ2_REGION_ID }; /* a strategic region given by id in vals (0 = none: hold), looked up as the game's check does */
 
 typedef struct { const char *name; uint16_t off; uint8_t kind; uint16_t count_off; uint32_t field_id; } cmd_field;
 
 typedef struct {
-    const char *family;      /* allow-list unit: "production", "air" */
+    const char *family;      /* allow-list unit: "production", "air", "airwing" (a family = one live pass) */
     const char *op;          /* the request name: "production.add_factories" */
     const char *cls;         /* RTTI class name without the length prefix */
     uint32_t size;           /* object size the factory allocates */
@@ -49,6 +57,8 @@ typedef struct {
     uint16_t auth_off;
     const char *target;      /* Itanium name of the class the typed resolver casts to ("8CAirWing") */
     int nf; cmd_field f[5];
+    int obj2;                /* OBJ2_* */
+    int one_cmd;             /* 1: all objects go in ONE command (CTOR_ARRAY); 0: one command per object */
 } cmd_spec;
 
 enum { /* confidence bits: a type is on only when all are set */
@@ -81,10 +91,16 @@ typedef struct {
     uint32_t line_factories_off;  /* CEquipmentProductionLine: assigned factories (read by the add-factories check) */
     uint32_t region_id_off;       /* CStrategicRegion: the id the air commands carry (transfer ctor) */
     uint64_t vt_region, vt_base;  /* RTTI primary vtables of CStrategicRegion and CAirBase (unslid) */
+    /* engineer 71: a strategic region by id, the way the game's own region check reads it (EnableMission's "can
+     * do": gamestate[+regions_arr][id] for 0 < id < gamestate[+regions_cnt]): a mission over a region with no own
+     * base, and hold (region 0) */
+    uint32_t regions_arr_off, regions_cnt_off;
+    /* typeinfo objects for a checked cast of a second object (attach: the army is a COrdersGroup) */
+    uint64_t ti_reference, ti_orders_group;
     char evidence[300];
 } stage2_common;
 
-#define CMD2_MAX 8
+#define CMD2_MAX 32
 typedef struct {
     stage2_common common;
     int n;

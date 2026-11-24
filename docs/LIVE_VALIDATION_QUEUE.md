@@ -329,3 +329,49 @@ host-only). Same roles and checks as S1-MP (no out-of-sync indicator, the hourly
 no "NOT in sync", "Validity of command changed non-deterministically", "COMMAND LOST" or "Dropped" lines, never flagged
 by `CMarkModifiedClientCommand`), with the module on the client: P1 and P4 above, each change seen on BOTH machines
 (the host's reads of the client's country) at the same game hour.
+
+## Session S3-AIRWING: the in-process module, the rest of air (family `airwing`; about 40 minutes plus a 15-minute soak)
+
+Built by engineer 71 (24 Nov 2026), offline-proven only (`inproc/test_offline.sh` ALL PASS: 6 new types on 1.19.4.1 and
+1.20.0.0 macOS, every constructor hand-checked in both disassemblies). One family, OFF under `auto` until this session
+passes. Ops (module request -> command, the UI action it replaces, the MCP tool):
+`airwing.split` -> `CStratAirSplitCommand(wing, aircraft/2)` (Split button; `hoi4_air_wing_split`);
+`airwing.merge` -> ONE `CStratAirConsolidateCommand(list of wings)` (Merge button; `hoi4_air_wing_merge`);
+`airwing.disband` -> `CDeleteAirWingCommand(&own tag, wing)` (Disband; `hoi4_air_wing_disband`);
+`airwing.attach` -> `CAttachAirWingToArmyCommand(wing, army)` (right click on the army card; `hoi4_air_attach`);
+`airwing.detach` -> `CDetachAirWingFromArmyCommand(wing)` (module only; no MCP tool yet);
+`airwing.region` -> `CStratAirEnableMissionCommand(wing, region id, NULL)` with the region looked up by id the way the
+command's own check reads it (game state +0x2a8 array, +0x2b4 count): a mission over a region with NO own air base
+(`hoi4_air_mission`, which used the GUI for those) and region 0 = Hold (`hoi4_air_hold`; a wing flying a transfer stays
+on the GUI: the game's hold helper cancels the transfer first).
+Wing creation from the reserve (`CDeployAirWingCommand`, 0xa8 bytes, a nested equipment id) is NOT in this family.
+
+Needs: the module built from branch e71/inproc-families (`inproc/build.sh`, sha in NOTES-1116.md "engineer 71"); the
+reader built from the same branch (cargo under the lock: `mkdir cargo.lock.d`, then
+`CARGO_BUILD_JOBS=2 ./buildbin120.sh ~/Projects/_scratch/dev-wt/inproc-e71 v120-e71a` for 1.20 or the usual new-v* build for
+1.19.4.1, then `rmdir cargo.lock.d`); the opt-in with the new family:
+`HOI4_INPROC_FAMILIES=set_game_speed,production,air,airwing ./inproc_stage2.sh PREV s3a`; calls through the broker
+(`zsh deploybin.sh s3a BIN HOI4_BACKEND=inprocess HOI4_INPROC_SOCK=$PWD/s3a/inproc.sock`) as in S2 (s2a/tool.sh lacks
+`--mac-input`). Beds: the May 1940 Germany bed (s2c's source save) and a 1936 start.
+
+A1 hold, paused (5 min): two wings on a mission: `hoi4_air_hold` in process -> Verified (region 0 in memory), `post2`
+`airwing.region` posted 1; a wing already standing by -> `nothing_to_change` before posting; then a mission again via
+`air` and Hold via `gui` for the timing.
+A2 region with no own base, running speed 3 (5 min): three fighters `air_superiority` over a region with no own air base
+(region 5 in the s2 beds): in process -> `air.set_mission` then `airwing.region` (vals = region id), Verified; then a region
+out of range: must come back `refused_by_game_check` (the game's range check), nothing posted, no GUI retry.
+A3 split and merge, paused (10 min): split a 100-plane wing -> two wings of 50 at the base, Verified; merge them back
+(`hoi4_air_wing_merge` with `with`) -> one wing of 100, Verified; merge of a group of three of one type; a 1-plane wing
+split -> `nothing_to_change` before posting. Compare each with `gui`.
+A4 attach and disband (10 min): attach 2 CAS wings to an own army in process -> both links read the army (Verified);
+attach a strategic bomber -> `refused_by_game_check`; disband a spare wing -> gone from memory, its aircraft in the reserve
+(production view); a disbanded wing's address reused in a second request -> `not_a_live_object`.
+A5 UI check: screenshot of the Air Forces Overview after A3 and A4 (the split/merged/attached wings as the module left them).
+A6 soak (15 min, speed 3): each minute one hold + mission over a no-base region pair and one split + merge pair in process,
+all Verified; one save and reload in the middle (the family on again after reload); P8-style plain load of the end save.
+Timings: report median/p90 per op in process vs GUI (GUI medians from s2: hold ~8 s, mission ~7.8-25 s, split/merge
+~10 s by the S2 pattern).
+Stop at once on the S2 stop list (crash/hang, posting_off, family_off, inert, `unexplained`, an in-process call that is
+not Verified while the GUI's is, "Dropped command" / "during command execution" in game.log, a save that will not load).
+Pass: A1-A6 clean on both beds: set `IPC_LIVE_PASSED` for `airwing` (4th entry in `inproc/core/ipc.c`), rebuild, and
+record "S3 PASS: airwing" in NOTES-1116.md with the numbers.

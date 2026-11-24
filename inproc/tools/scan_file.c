@@ -77,6 +77,16 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "player_tag")) got = t.st2.common.player_tag_off;
         else if (!strcmp(argv[a], "line_factories")) got = t.st2.common.line_factories_off;
         else if (!strcmp(argv[a], "region_id")) got = t.st2.common.region_id_off;
+        else if (!strcmp(argv[a], "regions_arr")) got = t.st2.common.regions_arr_off;
+        else if (!strcmp(argv[a], "regions_cnt")) got = t.st2.common.regions_cnt_off;
+        else if (!strcmp(argv[a], "ti_orders_group")) got = t.st2.common.ti_orders_group;
+        else if (!strncmp(argv[a], "ctor:", 5) || !strncmp(argv[a], "on:", 3) || !strncmp(argv[a], "type:", 5)) {
+            /* per stage-2 op (engineer 71): ctor:OP = the UI constructor found, on:OP = 1 when every check resolved,
+             * type:OP = the protocol type id */
+            const cmd_type *x = stage2_find(&t.st2, strchr(argv[a], ':') + 1);
+            found = x != NULL;
+            if (x) got = argv[a][0] == 'c' ? x->ctor : argv[a][0] == 'o' ? (uint64_t)x->ok : x->type_id;
+        }
         else {
             found = 0;
             for (int i = 0; i < CAP_COUNT; i++)

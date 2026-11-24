@@ -15,9 +15,11 @@
 #include <time.h>
 #include <unistd.h>
 
-const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air"};
-const int IPC_ALLOWED_COUNT = 3;
-const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */};
+const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing"};
+const int IPC_ALLOWED_COUNT = 4;
+/* airwing (engineer 71, 24 Nov): split, merge, disband, attach, detach, region by id / hold; OFF in auto until its
+ * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
+const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */, 0};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;

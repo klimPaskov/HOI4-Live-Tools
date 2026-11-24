@@ -54,7 +54,7 @@ static long long mono_us(void) {
 
 static void logj(const char *fmt, ...) {
     if (g_log < 0 || g_log_bytes > (8L << 20)) return; /* bounded: at most 8 MiB per game process */
-    char body[12288], line[12400];
+    char body[40960], line[41100]; /* the capability line carries every stage-2 type (engineer 71: up to 32) */
     va_list ap; va_start(ap, fmt); vsnprintf(body, sizeof body, fmt, ap); va_end(ap);
     int n = snprintf(line, sizeof line, "{\"t\":%lld,%s}\n", now_ms(), body);
     pthread_mutex_lock(&g_log_mu);
@@ -371,6 +371,11 @@ typedef void *(*resolve_fn2)(const void *);
 typedef int32_t (*owner_fn2)(void *);
 typedef void (*ctor_wing_i32_u8)(void *, void *, int32_t, int);
 typedef void (*ctor_wing_i32_ptr)(void *, void *, int32_t, void *);
+typedef void (*ctor_obj)(void *, void *);
+typedef void (*ctor_tagp_obj)(void *, const int32_t *, void *);
+typedef void (*ctor_obj_obj2)(void *, void *, void *);
+typedef struct { void **data; int32_t capacity, size; } pdx_array;
+typedef void (*ctor_array)(void *, const pdx_array *);
 
 #define J2_MAX 32
 enum { R_NONE = 0, R_POSTED, R_INVALID, R_NOT_OWN, R_BAD_OBJ, R_BAD_OBJ2, R_DROPPED, R_UNEXPECTED, R_SKIPPED };
@@ -444,11 +449,15 @@ static void run_job2(void *ctx) {
     if (!sread(gs + c->player_tag_off, &j->player_tag, 4) || j->player_tag <= 0) { snprintf(j->reason, sizeof j->reason, "no player country"); finish2(j); return; }
     int32_t snd = -1;
     if (!sread(q + g_t.post.sender_src, &snd, 4) || snd < 0) { snprintf(j->reason, sizeof j->reason, "sender unreadable"); finish2(j); return; }
-    /* the second object: an air base (transfer) or a strategic region (enable_mission), checked by its exact vtable */
+    /* the second object, by the spec's kind: an air base (transfer) or a strategic region (enable_mission) checked by
+     * its exact vtable; a region given by id (no object: a region with no own base, or 0 = hold) looked up the way the
+     * command's own check reads it; an army (attach) whose handle must resolve to it and which the game's own cast
+     * must accept as a COrdersGroup */
     const char *op = ct->spec->op;
     uint64_t h2 = 0;
-    if (!strcmp(op, "air.transfer") || !strcmp(op, "air.enable_mission")) {
-        int is_base = !strcmp(op, "air.transfer");
+    int k2 = ct->spec->obj2;
+    if (k2 == OBJ2_AIR_BASE || k2 == OBJ2_REGION) {
+        int is_base = k2 == OBJ2_AIR_BASE;
         uint64_t want = (is_base ? c->vt_base : c->vt_region) + (uint64_t)g_slide, v2 = 0;
         if (!plausible(j->obj2) || !sq(j->obj2, &v2) || v2 != want) { for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2; snprintf(j->reason, sizeof j->reason, "obj2 is not a live %s", is_base ? "CAirBase" : "CStrategicRegion"); finish2(j); return; }
         if (is_base) {
@@ -459,14 +468,55 @@ static void run_job2(void *ctx) {
         } else if (!sread(j->obj2 + c->region_id_off, &j->region_id, 4) || j->region_id < 0) {
             for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2; snprintf(j->reason, sizeof j->reason, "region id unreadable"); finish2(j); return;
         }
+    } else if (k2 == OBJ2_REGION_ID) { /* by id: j->region_id was set from the request (0 = hold: no region) */
+        if (j->region_id > 0) {
+            int32_t cnt = 0; uint64_t arr = 0, reg = 0, v2 = 0; int32_t rid = -1;
+            if (!c->regions_arr_off || !sread(gs + c->regions_cnt_off, &cnt, 4) || j->region_id >= cnt ||
+                !sq(gs + c->regions_arr_off, &arr) || !plausible(arr) || !sq(arr + 8 * (uint64_t)j->region_id, &reg) ||
+                !plausible(reg) || !sq(reg, &v2) || v2 != c->vt_region + (uint64_t)g_slide ||
+                !sread(reg + c->region_id_off, &rid, 4) || rid != j->region_id) {
+                for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
+                snprintf(j->reason, sizeof j->reason, "region %d is not a live strategic region (%d regions)", j->region_id, cnt);
+                finish2(j); return;
+            }
+        }
+    } else if (k2 == OBJ2_ORDERS_GROUP) {
+        typedef void *(*dyncast_fn)(const void *, const void *, const void *, long);
+        static dyncast_fn dc;
+        if (!dc) dc = (dyncast_fn)dlsym(RTLD_DEFAULT, "__dynamic_cast");
+        uint64_t lk = ct->lookup_fn + (uint64_t)g_slide;
+        if (!dc || !plausible(j->obj2) || !sq(j->obj2 + c->cref_handle_off, &h2) || !h2 || !code_ptr(lk) ||
+            (uint64_t)(uintptr_t)((resolve_fn2)(uintptr_t)lk)(&h2) != j->obj2 ||
+            (uint64_t)(uintptr_t)dc((void *)(uintptr_t)j->obj2, (void *)(uintptr_t)(c->ti_reference + (uint64_t)g_slide),
+                                    (void *)(uintptr_t)(c->ti_orders_group + (uint64_t)g_slide), -1) != j->obj2) {
+            for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
+            snprintf(j->reason, sizeof j->reason, "obj2 is not a live army (COrdersGroup)"); finish2(j); return;
+        }
     }
     uint64_t fac = ct->factory + (uint64_t)g_slide, post = g_t.post.post + (uint64_t)g_slide, nullref = 0;
     if (!code_ptr(fac) || !code_ptr(post) || !sq(c->null_ref_global + (uint64_t)g_slide, &nullref)) { snprintf(j->reason, sizeof j->reason, "factory/post not game code"); j->unexplained = 1; finish2(j); return; }
     long long tp = 0;
+    /* every object first: a live object of the command's class (the game's typed resolver gives it back) owned by the
+     * player's country (the game's owner getter) */
+    uint64_t hs[J2_MAX] = {0};
+    int good = 0;
     for (int i = 0; i < j->n; i++) {
-        uint64_t h, owner_f = ct->owner_fn + (uint64_t)g_slide;
-        if (!roundtrip(ct, j->obj[i], &h)) { j->res[i] = R_BAD_OBJ; j->refused++; continue; }
+        uint64_t owner_f = ct->owner_fn + (uint64_t)g_slide;
+        if (!roundtrip(ct, j->obj[i], &hs[i])) { j->res[i] = R_BAD_OBJ; j->refused++; continue; }
         if (!code_ptr(owner_f) || ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)j->obj[i]) != j->player_tag) { j->res[i] = R_NOT_OWN; j->refused++; continue; }
+        good++;
+    }
+    /* one command for the whole group (merge) only when every object passed: a group is never posted in part */
+    if (ct->spec->one_cmd && good != j->n) {
+        for (int i = 0; i < j->n; i++) if (j->res[i] == R_NONE) { j->res[i] = R_SKIPPED; }
+        snprintf(j->reason, sizeof j->reason, "a group command is posted whole or not at all");
+        j->post_us = 0; finish2(j); return;
+    }
+    int ncmd = ct->spec->one_cmd ? 1 : j->n;
+    for (int ci = 0; ci < ncmd; ci++) {
+        int i = ci; /* the object this command is for (the first of the group for one_cmd) */
+        if (!ct->spec->one_cmd && j->res[i] != R_NONE) continue;
+        uint64_t h = hs[i];
         if (!strcmp(op, "production.add_factories")) sread(j->obj[i] + c->line_factories_off, &j->before[i], 4);
         char *cmd = (char *)((factory_fn)(uintptr_t)fac)();
         uint64_t cvp = 0; int32_t cs = 0;
@@ -494,26 +544,51 @@ static void run_job2(void *ctx) {
             ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[0].off, &data) && data == 0 &&
                  sread((uint64_t)(uintptr_t)cmd + ct->spec->f[0].count_off, &size, 4) && size == 0;
             uint64_t ctor = ct->ctor + (uint64_t)g_slide;
+            void *obj = (void *)(uintptr_t)j->obj[i];
             if (ok && code_ptr(ctor)) {
-                if (ct->spec->ctor == CTOR_WING_I32_U8) ((ctor_wing_i32_u8)(uintptr_t)ctor)(cmd, (void *)(uintptr_t)j->obj[i], (int32_t)j->val[i], j->flag ? 1 : 0);
-                else ((ctor_wing_i32_ptr)(uintptr_t)ctor)(cmd, (void *)(uintptr_t)j->obj[i], j->region_id, NULL);
-                /* what the game built must be exactly what was asked: one handle (this wing's) and the value */
-                uint64_t d2 = 0, e0 = 0; int32_t s2 = 0, v2 = 0;
+                switch (ct->spec->ctor) {
+                case CTOR_WING_I32_U8: ((ctor_wing_i32_u8)(uintptr_t)ctor)(cmd, obj, (int32_t)j->val[i], j->flag ? 1 : 0); break;
+                case CTOR_WING_I32_NULL: ((ctor_wing_i32_ptr)(uintptr_t)ctor)(cmd, obj, j->region_id, NULL); break;
+                case CTOR_OBJ: ((ctor_obj)(uintptr_t)ctor)(cmd, obj); break;
+                case CTOR_TAGP_OBJ: ((ctor_tagp_obj)(uintptr_t)ctor)(cmd, &j->player_tag, obj); break;
+                case CTOR_OBJ_OBJ2: ((ctor_obj_obj2)(uintptr_t)ctor)(cmd, obj, (void *)(uintptr_t)j->obj2); break;
+                case CTOR_ARRAY: {
+                    pdx_array a = {(void **)(uintptr_t)j->obj, j->n, j->n}; /* the game's CPdxArray<T *> {data, capacity, size} */
+                    ((ctor_array)(uintptr_t)ctor)(cmd, &a); break;
+                }
+                default: ok = 0;
+                }
+            } else ok = 0;
+            if (ok) { /* what the game built must be exactly what was asked: the handles in order, then the second field */
+                uint64_t d2 = 0; int32_t s2 = 0;
+                int want_n = ct->spec->one_cmd ? j->n : 1;
                 ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
                      sq((uint64_t)(uintptr_t)cmd + ct->spec->f[0].off, &d2) && sread((uint64_t)(uintptr_t)cmd + ct->spec->f[0].count_off, &s2, 4) &&
-                     s2 == 1 && sq(d2, &e0) && e0 == h && sread((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &v2, 4) &&
-                     v2 == (ct->spec->ctor == CTOR_WING_I32_U8 ? (int32_t)j->val[i] : j->region_id);
+                     s2 == want_n;
+                for (int e = 0; ok && e < want_n; e++) { uint64_t ee = 0; ok = sq(d2 + 8 * (uint64_t)e, &ee) && ee == hs[ct->spec->one_cmd ? e : i]; }
+                if (ok && ct->spec->nf > 1) {
+                    const cmd_field *f1 = &ct->spec->f[1];
+                    int32_t v2 = 0; uint64_t r2 = 0;
+                    switch (ct->spec->ctor) {
+                    case CTOR_WING_I32_U8: ok = sread((uint64_t)(uintptr_t)cmd + f1->off, &v2, 4) && v2 == (int32_t)j->val[i]; break;
+                    case CTOR_WING_I32_NULL: ok = sread((uint64_t)(uintptr_t)cmd + f1->off, &v2, 4) && v2 == j->region_id; break;
+                    case CTOR_TAGP_OBJ: ok = sread((uint64_t)(uintptr_t)cmd + f1->off, &v2, 4) && v2 == j->player_tag; break;
+                    case CTOR_OBJ_OBJ2: ok = sq((uint64_t)(uintptr_t)cmd + f1->off, &r2) && r2 == h2; break;
+                    default: ok = 0;
+                    }
+                }
                 if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
-            } else ok = 0;
+            }
         }
         if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the factory's defaults differ from the scan"); break; }
         void **vt = *(void ***)cmd;
         unsigned char valid = ((valid_fn2)vt[c->valid_slot / 8])(cmd, 0); /* the game's own "can do" check, as the UI */
-        if (!valid) { ((delete_fn2)vt[c->delete_slot / 8])(cmd); j->res[i] = R_INVALID; j->refused++; continue; }
+        int first = ct->spec->one_cmd ? 0 : i, last = ct->spec->one_cmd ? j->n - 1 : i;
+        if (!valid) { ((delete_fn2)vt[c->delete_slot / 8])(cmd); for (int e = first; e <= last; e++) { j->res[e] = R_INVALID; j->refused++; } continue; }
         long long t0 = mono_us();
         unsigned char r = ((post_fn)(uintptr_t)post)((void *)(uintptr_t)q, cmd, 0); /* Post owns cmd from here */
         tp += mono_us() - t0;
-        if (r) { j->res[i] = R_POSTED; j->posted++; }
+        if (r) { for (int e = first; e <= last; e++) { j->res[e] = R_POSTED; j->posted++; } }
         else { j->res[i] = R_DROPPED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "Post dropped a command every check passed"); break; }
     }
     j->post_us = tp;
@@ -560,8 +635,16 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
     } else if (!strcmp(op, "air.set_mission")) {
         if (nv != 1 || j->val[0] <= 0 || j->val[0] > 0x40000000 || (j->val[0] & (j->val[0] - 1))) why = "vals: one mission mask with exactly one bit";
         else { for (int i = 1; i < j->n; i++) j->val[i] = j->val[0]; if (flag != 0 && flag != 1) why = "flag: 1 enable, 0 disable"; }
+    } else if (!strcmp(op, "airwing.split")) {
+        if (nv != j->n) why = "vals: one aircraft count per wing (the aircraft that leave for the new wing)";
+        else for (int i = 0; i < j->n; i++) if (j->val[i] < 1 || j->val[i] > 1000) why = "an aircraft count is outside 1..1000";
+    } else if (!strcmp(op, "airwing.region")) {
+        /* a region by id (no own base there) or 0 = hold: the UI's region click and its Hold button post this command */
+        if (nv != 1 || j->val[0] < 0 || j->val[0] > 100000) why = "vals: one strategic region id (0 = hold)";
+        else { j->region_id = (int32_t)j->val[0]; for (int i = 1; i < j->n; i++) j->val[i] = j->val[0]; }
     } else if (nv) why = "this op takes no vals";
-    if (!why && (!strcmp(op, "air.transfer") || !strcmp(op, "air.enable_mission"))) {
+    if (!why && !strcmp(op, "airwing.merge") && j->n < 2) why = "a merge takes at least two wings";
+    if (!why && (!strcmp(op, "air.transfer") || !strcmp(op, "air.enable_mission") || !strcmp(op, "airwing.attach"))) {
         uint64_t o2[1];
         if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0];
     }
