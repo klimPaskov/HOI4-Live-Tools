@@ -593,11 +593,11 @@ mod tests {
             self.word(0x60110, 0xf0000);
             self.word(0xf0000, b + 0x44f51d8);
             self.word(0xf0138, 0x60000);
-            self.metadata(b + 0x44f51d8, b + 0x44f5cd0, b + 0x3682000, "7CSprite");
+            self.metadata(b + 0x44f51d8, b + 0x44f5cd0, b + 0x3688000, "7CSprite");
             self.region(0xf1000, 0x1f0);
             self.word(0xf0168, 0xf1000);
             self.word(0xf1000, b + 0x44f5530);
-            self.metadata(b + 0x44f5530, b + 0x44f5ce0, b + 0x3682100, "11CSpriteType");
+            self.metadata(b + 0x44f5530, b + 0x44f5ce0, b + 0x3688100, "11CSpriteType");
             self.put(0xf0114, &1.0f32.to_le_bytes());
             for a in [0xf1090, 0xf1094, 0xf10a4, 0xf10a8] {
                 self.put(a, &1i32.to_le_bytes());
