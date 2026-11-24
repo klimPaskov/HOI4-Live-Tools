@@ -7676,14 +7676,23 @@ impl MacClock {
                         .outcome(detail)
                 })
             };
+            // engineer 76: the decision in process (family `decisions`): the panel's row gives the decision object
+            let mut decisions_route = inproc::route("decisions");
+            let mut decisions_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
-                decisions::take(process, keys, key, target)?;
+                let mut post = |decision: u64| -> Result<bool> {
+                    decisions_reply = module_in_process(&mut decisions_route, |ch| {
+                        Ok(inproc_picks::decision(ch, decision))
+                    })?;
+                    Ok(decisions_reply.is_some())
+                };
+                decisions::take(process, keys, key, target, &mut post)?;
                 verified.set(true);
                 Ok(())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, decisions_reply));
         }
         if name == "hoi4_politics_options" || name == "hoi4_politics_choose" {
             let choosing = name == "hoi4_politics_choose";

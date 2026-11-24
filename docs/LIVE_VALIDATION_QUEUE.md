@@ -651,3 +651,28 @@ plain load without the module.
 Stop at once (endrun.sh s8e) on: a crash, a hang, any `unexplained` post2, an option taken that the request did not name,
 an event answered for another country, a window left open with its record gone.
 Pass: E1-E5 clean -> `IPC_LIVE_PASSED` for `events` (10th entry), "S8 PASS: events".
+
+## Session S9-DECISIONS: the in-process module, decisions (family `decisions`; about 15 minutes) -- after S8-EVENTS
+
+Built by engineer 76 (24 Nov 2026), offline-proven only: stage 2 36/36 types on 1.20.0.0 and 1.19.4.1 macOS; Linux and
+Windows 1.20 CSelectDecisionCommand by RTTI with the same id (14345). OFF under `auto` until this session passes.
+- `decisions.take DECISION` = CSelectDecisionCommand(own tag +0x24, the decision by POINTER +0x28): what the decisions
+  panel's select posts (after its confirmation). The module checks the object is exactly a CDecision (RTTI vtable),
+  fills the player's tag, then the game's own "can do" (the decision's allowed/visible test with the player's country,
+  active state, cost). Refused = deleted, never posted. Targeted decisions stay on the mouse path (another command).
+- MCP: hoi4_decision_take (same name, schema, Verified read: PP spent, timer or entry gone) opens the panel as before,
+  takes the row's decision object and posts it in process; reply `in_process`; the mouse path in the same call.
+Needs: branch e76/inproc-events; PREV-1936 (Germany has untargeted decisions with a PP cost).
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,decisions ./inproc_stage2.sh PREV-1936 s9d`; hello shows
+`"decisions":{"on":true,"live_passed":false}`. `C="python3 -I inproc/tools/inproc_client.py s9d/inproc.sock"`.
+D1 an affordable untargeted decision, paused (3 min): `hoi4_decision_take {"decision":KEY}` with `HOI4_BACKEND=inprocess`:
+receipt Verified, `in_process.module.per_object[0].result:"posted"`, PP spent by the script cost, no confirmation window
+left open, tool ms (mouse: record).
+D2 refusals (4 min): a decision whose cost is above the PP held (the tool's own refusal first; then `$C post2
+decisions.take ADDR` -> `refused_by_game_check`, nothing posted); a decision already active -> refused; a CDecision of
+another country's category by address -> record the check's answer (expected refused; if it posts, STOP).
+D3 a targeted decision: the mouse path answers (reply without `in_process`).
+D4 running at speed 2 + save/reload with the family on; a plain load without the module.
+Stop at once (endrun.sh s9d) on: a crash, a hang, any `unexplained` post2, a decision taken that the request did not name,
+D2's foreign decision posted.
+Pass: D1-D4 clean -> `IPC_LIVE_PASSED` for `decisions` (11th entry), "S9 PASS: decisions".

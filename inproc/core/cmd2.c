@@ -184,6 +184,13 @@ const cmd_spec CMD2_SPECS[] = {
     {"events", "events.answer", "CSelectEventOptionCommand", 0xf0, BUILD_CTOR, CTOR_EVENT_OPTION, 0, 0x30, "6CEvent", 4,
      {{"id", 0x24, FK_I32, 0, 0xb, 0}, {"event", 0x28, FK_REF, 0, 0x1b8, 0}, {"country", 0x30, FK_I32, 0, 0x292e, 0},
       {"option", 0xe8, FK_I32, 0, 0x2966, 0}}, OBJ2_NONE, 0, AUTH_EVENT, "12CEventWindow"},
+    /* ---- decisions (engineer 76): the decisions panel's select posts SelectDecision(tag, decision): the shape of
+     * picks.focus (tag +0x24, the decision by RAW POINTER +0x28, written by the serializer). The "can do" 1.20 0x100216030:
+     * a decision is named, the tag is set, the decision's own allowed/visible test with the tag's country, its active
+     * state, its cost. Targeted decisions are another command (CSelectTargetedDecision, not read) */
+    {"decisions", "decisions.take", "CSelectDecisionCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "9CDecision", 2,
+     {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"decision", 0x28, FK_PTR, 0, 0x2b86, 0}}, OBJ2_NONE, 0,
+     AUTH_TAG_PTR, "9CDecision"},
 };
 const int CMD2_NSPECS = (int)(sizeof CMD2_SPECS / sizeof CMD2_SPECS[0]);
 

@@ -1247,6 +1247,11 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         if (nv) why = "this op takes no vals";
         else if (j->n != 1) why = "picks.focus: exactly one focus";
         else if (obj2 && *obj2) why = "this op takes no obj2";
+    } else if (!strncmp(op, "decisions.", 10)) {
+        /* engineer 76: objs = ONE CDecision (exact vtable; the game's own "can do" with the player's country decides) */
+        if (nv) why = "this op takes no vals";
+        else if (j->n != 1) why = "decisions.take: exactly one decision";
+        else if (flag || (obj2 && *obj2) || (provs && *provs)) why = "decisions.take takes no flag, obj2 or provs";
     } else if (!strncmp(op, "events.", 7)) {
         /* engineer 76: an event answer. objs = ONE open event window (CEventWindow); vals = the option's place among the
          * shown options (0..7) and how many the window shows (1..8: the module's option test must agree) */

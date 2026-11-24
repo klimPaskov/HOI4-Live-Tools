@@ -13,6 +13,15 @@ pub(super) fn focus(ch: &mut Channel, focus: u64) -> Routed {
     }
 }
 
+/// engineer 76 (family `decisions`): an untargeted decision of the own country, as the decisions panel's select posts
+/// it: SelectDecision(own tag, the decision) after the game's own "can do" with the player's country.
+pub(super) fn decision(ch: &mut Channel, decision: u64) -> Routed {
+    match request("decisions.take", &[decision], &[], &[], None).and_then(|r| ch.post_raw(r)) {
+        Ok(reply) => routed(reply, "this decision now"),
+        Err(_) => Routed::Gui,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -23,5 +32,13 @@ mod tests {
         assert_eq!(r["cmd"], "picks.focus");
         assert_eq!(r["objs"], "0x60001234");
         assert!(r.get("vals").is_none() && r.get("divs").is_none() && r.get("obj2").is_none());
+    }
+
+    #[test]
+    fn a_decision_request_carries_one_decision_object() {
+        let r = request("decisions.take", &[0x6000_2000], &[], &[], None).unwrap();
+        assert_eq!(r["cmd"], "decisions.take");
+        assert_eq!(r["objs"], "0x60002000");
+        assert!(r.get("vals").is_none() && r.get("obj2").is_none());
     }
 }
