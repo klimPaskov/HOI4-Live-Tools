@@ -1,0 +1,254 @@
+{
+ "_about": "Entries confirmed on the running Linux HOI4 1.20.0.0 (GNU build ID 71806afa) that the static move from 1.19.4.1 left out. Each key was carried unchanged from the 1.19.4.1 table into a development table; the tool named in its evidence refused with layout_unmapped without the key and returned the stated GER 1936 values with it (24 November 2026, owned game on Xvfb, Regular, historical AI).",
+ "fields": {
+  "CArmyLeader": {
+   "0x18": {
+    "elf": "0x18",
+    "evidence": "hoi4_supply returned 30 GER divisions in 22 provinces, all at full strength and 100% supply"
+   }
+  },
+  "CConsumerGoodsConsumer": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "hoi4_economy_detail returned GER's consumer goods and modifier breakdown"
+   }
+  },
+  "CIdeaResearchBonus": {
+   "0x30": {
+    "elf": "0x38",
+    "evidence": "hoi4_research_extras returned the GER idea research bonuses (none in January 1936) and the technology sharing state"
+   },
+   "0x38": {
+    "elf": "0x40",
+    "evidence": "hoi4_research_extras returned the GER idea research bonuses (none in January 1936) and the technology sharing state"
+   }
+  },
+  "CIntelligenceAgency": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "hoi4_intelligence returned GER's agency name, Abwehr"
+   }
+  },
+  "CProductionLine": {
+   "0x58": {
+    "elf": "0x58",
+    "evidence": "hoi4_production_shortages returned GER's production lines and their resource costs"
+   },
+   "0x88": {
+    "elf": "0x88",
+    "evidence": "hoi4_production_shortages returned GER's production lines and their resource costs"
+   }
+  },
+  "CProductionResourceCost.size": {
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "hoi4_production_shortages returned GER's production lines and their resource costs"
+   }
+  },
+  "CReferencedDivisionTemplate": {
+   "0x18": {
+    "elf": "0x18",
+    "evidence": "hoi4_supply returned 30 GER divisions in 22 provinces, all at full strength and 100% supply"
+   },
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "hoi4_supply returned 30 GER divisions in 22 provinces, all at full strength and 100% supply"
+   },
+   "0x58": {
+    "elf": "0x68",
+    "evidence": "hoi4_supply returned 30 GER divisions in 22 provinces, all at full strength and 100% supply"
+   },
+   "0x78": {
+    "elf": "0x88",
+    "evidence": "hoi4_supply returned 30 GER divisions in 22 provinces, all at full strength and 100% supply"
+   }
+  },
+  "CStrategicRegion.template": {
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "hoi4_fleets returned the Kriegsmarine with its home port, province 241 in North-West Germany (STRATEGICREGION_6)"
+   },
+   "0x38": {
+    "elf": "0x40",
+    "evidence": "hoi4_fleets returned the Kriegsmarine with its home port, province 241 in North-West Germany (STRATEGICREGION_6)"
+   }
+  },
+  "CTechnologyStatus": {
+   "0x320": {
+    "elf": "0x8c0",
+    "evidence": "hoi4_supply returned 30 GER divisions in 22 provinces, all at full strength and 100% supply"
+   }
+  },
+  "NDoctrines::CCountryDoctrineStatus.size": {
+   "0xa0": {
+    "elf": "0xa0",
+    "evidence": "hoi4_doctrines returned the doctrine catalogue (12 grand doctrines, 95 subdoctrines) and GER's doctrine tracks"
+   }
+  },
+  "NDoctrines::CDoctrineTemplate": {
+   "0x18": {
+    "elf": "0x18",
+    "evidence": "hoi4_doctrines returned the doctrine catalogue (12 grand doctrines, 95 subdoctrines) and GER's doctrine tracks"
+   },
+   "0x1c": {
+    "elf": "0x1c",
+    "evidence": "hoi4_doctrines returned the doctrine catalogue (12 grand doctrines, 95 subdoctrines) and GER's doctrine tracks"
+   },
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "hoi4_doctrines returned the doctrine catalogue (12 grand doctrines, 95 subdoctrines) and GER's doctrine tracks"
+   }
+  },
+  "NDoctrines::CFolderStatus.size": {
+   "0x50": {
+    "elf": "0x50",
+    "evidence": "hoi4_doctrines returned the doctrine catalogue (12 grand doctrines, 95 subdoctrines) and GER's doctrine tracks"
+   }
+  },
+  "NDoctrines::CTrackStatus": {
+   "0x50": {
+    "elf": "0x50",
+    "evidence": "hoi4_doctrines returned the doctrine catalogue (12 grand doctrines, 95 subdoctrines) and GER's doctrine tracks"
+   },
+   "0x58": {
+    "elf": "0x58",
+    "evidence": "hoi4_doctrines returned the doctrine catalogue (12 grand doctrines, 95 subdoctrines) and GER's doctrine tracks"
+   }
+  },
+  "NDoctrines::CTrackStatus.size": {
+   "0x60": {
+    "elf": "0x60",
+    "evidence": "hoi4_doctrines returned the doctrine catalogue (12 grand doctrines, 95 subdoctrines) and GER's doctrine tracks"
+   }
+  },
+  "NDoctrines::STemporaryCostReduction.size": {
+   "0x38": {
+    "elf": "0x40",
+    "evidence": "hoi4_doctrines returned the doctrine catalogue (12 grand doctrines, 95 subdoctrines) and GER's doctrine tracks"
+   }
+  },
+  "NFactions::CTechnologySharingFaction": {
+   "0x48": {
+    "elf": "0x48",
+    "evidence": "hoi4_research_extras returned the GER idea research bonuses (none in January 1936) and the technology sharing state"
+   }
+  },
+  "NProject::CProject.size": {
+   "0x1b8": {
+    "elf": "0x1b8",
+    "evidence": "hoi4_special_projects returned GER's land research facility (facility 3499) with no project"
+   }
+  },
+  "breakthrough.map_node": {
+   "0x0": {
+    "elf": "0x10",
+    "evidence": "hoi4_special_projects returned GER's land research facility (facility 3499) with no project"
+   },
+   "0x18": {
+    "elf": "0x1c",
+    "evidence": "hoi4_special_projects returned GER's land research facility (facility 3499) with no project"
+   },
+   "0x20": {
+    "elf": "0x24",
+    "evidence": "hoi4_special_projects returned GER's land research facility (facility 3499) with no project"
+   },
+   "0x8": {
+    "elf": "0x18",
+    "evidence": "hoi4_special_projects returned GER's land research facility (facility 3499) with no project"
+   }
+  },
+  "characters.recruit_pool": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "hoi4_special_projects returned GER's land research facility (facility 3499) with no project"
+   }
+  },
+  "civilian.consumer": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "hoi4_economy_detail returned GER's consumer goods and modifier breakdown"
+   },
+   "0xc": {
+    "elf": "0xc",
+    "evidence": "hoi4_economy_detail returned GER's consumer goods and modifier breakdown"
+   }
+  },
+  "deployment.template_row": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "hoi4_division_templates returned GER's five starting templates (Infanterie-Division, Panzer-Division, Infanterie-Division (mot.), Gebirgs-Brigade, Kavallerie-Brigade)"
+   }
+  },
+  "division.pool": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "hoi4_supply returned 30 GER divisions in 22 provinces, all at full strength and 100% supply"
+   }
+  },
+  "division.pool.size": {
+   "0x18": {
+    "elf": "0x18",
+    "evidence": "hoi4_supply returned 30 GER divisions in 22 provinces, all at full strength and 100% supply"
+   }
+  },
+  "division.variant": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "hoi4_supply returned 30 GER divisions in 22 provinces, all at full strength and 100% supply"
+   }
+  },
+  "division.variant.size": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "hoi4_supply returned 30 GER divisions in 22 provinces, all at full strength and 100% supply"
+   }
+  },
+  "division_template": {
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "hoi4_division_templates returned GER's five starting templates (Infanterie-Division, Panzer-Division, Infanterie-Division (mot.), Gebirgs-Brigade, Kavallerie-Brigade)"
+   }
+  },
+  "modifier.entry.size": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "hoi4_economy_detail returned GER's consumer goods and modifier breakdown"
+   }
+  },
+  "scientist.skill_level": {
+   "0x0": {
+    "elf": "0x0",
+    "evidence": "hoi4_special_projects returned GER's land research facility (facility 3499) with no project"
+   },
+   "0x18": {
+    "elf": "0x18",
+    "evidence": "hoi4_special_projects returned GER's land research facility (facility 3499) with no project"
+   }
+  },
+  "scientist.skill_level.size": {
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "hoi4_special_projects returned GER's land research facility (facility 3499) with no project"
+   }
+  },
+  "spec.template": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "hoi4_special_projects returned GER's land research facility (facility 3499) with no project"
+   }
+  },
+  "subunit.need": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "hoi4_supply returned 30 GER divisions in 22 provinces, all at full strength and 100% supply"
+   }
+  },
+  "subunit.need.size": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "hoi4_supply returned 30 GER divisions in 22 provinces, all at full strength and 100% supply"
+   }
+  }
+ },
+ "image": {}
+}

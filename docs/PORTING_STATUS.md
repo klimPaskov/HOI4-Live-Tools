@@ -14,7 +14,7 @@ Game version: HOI4 1.19.4.1 on macOS, 1.20.0.0 on Linux. The tool catalogue has 
 |---|---|---|---|
 | Tools in the build | all | all (the same modules) | all compiled and unit-tested; none reachable (no Windows game attachment or input yet) |
 | Compiles in CI | yes | yes (x86_64 and aarch64) | yes (the code compiled there) |
-| Memory layout | 1.19.4.1, native (the canonical values) | 1.20.0.0: the 1.19.4.1 table moved by `linux_build_migrate.py --table`: 82 of 94 image keys, 441 of 618 field keys the sources use | vtables only, for Windows 1.19.5.0: 181 of 182 vtable keys by RTTI; no globals or fields |
+| Memory layout | 1.19.4.1, native (the canonical values) | 1.20.0.0: the 1.19.4.1 table moved by `linux_build_migrate.py --table`: 82 of 94 image keys, 487 of 618 field keys the sources use | vtables only, for Windows 1.19.5.0: 181 of 182 vtable keys by RTTI; no globals or fields |
 | Input | CGEvent | X11 XTEST | none in the native runtime |
 | Last proven live | continuously | 5 November 2026: 104 tools verified, 11 refusal-only, 8 not reached | native: never; the separate Python runtime: November 2026 on 1.19.4.2 |
 
@@ -38,12 +38,11 @@ What is missing:
 - 39 tools were added after the Linux live check (battles, army orders such as gather, detach, attack and
   fallback, occupation and its laws, stockpile, war statistics, operations, railways, the learning
   tools, the executor and watcher). None has run on Linux.
-- 12 image keys and 177 field keys the tools use are not in the Linux 1.20.0.0 table. They are
+- 12 image keys and 131 field keys the tools use are not in the Linux 1.20.0.0 table. They are
   listed by source file in `scripts/data/xlayout-unmapped-1.20.0.0.json`; the tools that need them
-  refuse on Linux until they are mapped. 87 of the field keys were in the 1.19.4.1 table: the move to
+  refuse on Linux until they are mapped. 41 of the field keys were in the 1.19.4.1 table: the move to
   1.20.0.0 kept only what the matched code confirms (every confirmed field kept its offset), and the
-  rest (struct strides, GUI helper objects without RTTI, a few single-vote members) waits for live
-  reads.
+  rest waits for live reads.
 - No screen recorder (the macOS recorder uses ScreenCaptureKit).
 
 The Linux build is 1.20.0.0 (GNU build ID `71806afa707a46fb72f0738a719c3f1c3f5e2e42`, SHA-256
@@ -55,8 +54,16 @@ rule. The report is `native/layouts/linux-71806afa....coverage.json`. The core m
 values moved with the same matcher; values in the older GUI diagnostics that no code match covers
 took the shift of the mapped neighbours on both sides.
 
+Live check on 24 November 2026 (owned 1.20.0.0 game on Xvfb, GER 1936, management tools bound):
+27 read tools were called. 46 fields the move had left out were confirmed: carried unchanged from
+1.19.4.1, each made a tool that refused without it return the right GER values
+(`scripts/data/xlayout-live-1.20.0.0.json` names the tool and the values). With them, 22 of the 27
+tools read; `hoi4_stockpile`, `hoi4_commanders`, `hoi4_armies`, `hoi4_wars`, `hoi4_events`,
+`hoi4_occupation`, `hoi4_war_stats`, `hoi4_convoys` and `hoi4_battles` refuse on keys that were
+already unmapped on 1.19.4.1.
+
 Steps to finish, in order:
-1. Live reads on 1.20.0.0 for the keys the move left out, added as live entries with their evidence.
+1. Live reads for the remaining keys, added as live entries with their evidence.
 2. Run the new tools against the Linux game (any x86_64 Linux with an X server; a virtual display
    such as Xvfb with software rendering works but is slow in war) and add what differs to
    the live entries with its evidence.

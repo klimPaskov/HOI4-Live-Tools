@@ -18,17 +18,11 @@
   "CArmyDivisionView+0x10": [
    "launch//macos//armies.rs"
   ],
-  "CArmyLeader+0x18": [
-   "launch//macos//units.rs"
-  ],
   "CCombatManager+0x8": [
    "launch//macos//battles.rs"
   ],
   "CCombatTactic+0x10": [
    "launch//macos//battles.rs"
-  ],
-  "CConsumerGoodsConsumer+0x10": [
-   "launch//macos//economy_detail.rs"
   ],
   "CConvoys+0x10": [
    "launch//macos//naval.rs"
@@ -111,16 +105,6 @@
    "launch//macos//air.rs",
    "launch//macos//diplomacy.rs",
    "launch//macos//events.rs"
-  ],
-  "CIdeaResearchBonus+0x30": [
-   "launch//macos//research_extras.rs"
-  ],
-  "CIdeaResearchBonus+0x38": [
-   "launch//macos//research_extras.rs"
-  ],
-  "CIntelligenceAgency+0x10": [
-   "launch//macos//intel_live.rs",
-   "launch//macos//intelligence.rs"
   ],
   "CLandCombat+0x1c": [
    "launch//macos//battles.rs"
@@ -233,16 +217,6 @@
   "CPowerBalanceSystem+0x8": [
    "launch//macos//bop.rs"
   ],
-  "CProductionLine+0x58": [
-   "launch//macos//resources.rs",
-   "launch//macos//stockpile.rs",
-   "production_lines//output.rs"
-  ],
-  "CProductionLine+0x88": [
-   "launch//macos//resources.rs",
-   "launch//macos//stockpile.rs",
-   "production_lines//output.rs"
-  ],
   "CProductionLine+0x98": [
    "launch//macos//resources.rs",
    "launch//macos//stockpile.rs",
@@ -252,21 +226,6 @@
    "launch//macos//resources.rs",
    "launch//macos//stockpile.rs",
    "production_lines//output.rs"
-  ],
-  "CProductionResourceCost.size+0x20": [
-   "launch//macos//resources.rs"
-  ],
-  "CReferencedDivisionTemplate+0x18": [
-   "launch//macos//units.rs"
-  ],
-  "CReferencedDivisionTemplate+0x20": [
-   "launch//macos//units.rs"
-  ],
-  "CReferencedDivisionTemplate+0x58": [
-   "launch//macos//units.rs"
-  ],
-  "CReferencedDivisionTemplate+0x78": [
-   "launch//macos//units.rs"
   ],
   "CResistance+0x10": [
    "launch//macos//occupation.rs"
@@ -314,18 +273,8 @@
    "launch//macos//deployment.rs",
    "launch//macos//design_ui.rs"
   ],
-  "CStrategicRegion.template+0x20": [
-   "launch//macos//fleetmem.rs"
-  ],
-  "CStrategicRegion.template+0x38": [
-   "launch//macos//fleetmem.rs"
-  ],
   "CTechnology.template+0x8": [
    "launch//macos//research.rs"
-  ],
-  "CTechnologyStatus+0x320": [
-   "launch//macos//research_extras.rs",
-   "launch//macos//units.rs"
   ],
   "CTerrainType+0x10": [
    "launch//macos//battles.rs"
@@ -351,48 +300,15 @@
   "CWarRelation+0x68": [
    "launch//macos//war_stats.rs"
   ],
-  "NDoctrines::CCountryDoctrineStatus.size+0xa0": [
-   "launch//macos//doctrines.rs"
-  ],
   "NDoctrines::CDoctrineSelectionList+0x20": [
    "launch//macos//doctrine_act.rs",
    "launch//macos//panelkit.rs"
-  ],
-  "NDoctrines::CDoctrineTemplate+0x18": [
-   "launch//macos//doctrines.rs"
-  ],
-  "NDoctrines::CDoctrineTemplate+0x1c": [
-   "launch//macos//doctrines.rs"
-  ],
-  "NDoctrines::CDoctrineTemplate+0x20": [
-   "launch//macos//doctrines.rs"
-  ],
-  "NDoctrines::CFolderStatus.size+0x50": [
-   "launch//macos//doctrines.rs"
-  ],
-  "NDoctrines::CTrackStatus+0x50": [
-   "launch//macos//doctrines.rs"
-  ],
-  "NDoctrines::CTrackStatus+0x58": [
-   "launch//macos//doctrines.rs"
-  ],
-  "NDoctrines::CTrackStatus.size+0x60": [
-   "launch//macos//doctrines.rs"
-  ],
-  "NDoctrines::STemporaryCostReduction.size+0x38": [
-   "launch//macos//doctrines.rs"
-  ],
-  "NFactions::CTechnologySharingFaction+0x48": [
-   "launch//macos//research_extras.rs"
   ],
   "NIndustrialOrganisation::CTraitBonus+0x14": [
    "production_lines//output.rs"
   ],
   "NIndustrialOrganisation::CTraitBonus+0x8": [
    "production_lines//output.rs"
-  ],
-  "NProject::CProject.size+0x1b8": [
-   "launch//macos//special_projects.rs"
   ],
   "NProject::SProjectHistory+0x18": [
    "launch//macos//special_projects.rs"
@@ -408,30 +324,6 @@
    "launch//macos//air.rs",
    "launch//macos//airui.rs"
   ],
-  "breakthrough.map_node+0x0": [
-   "launch//macos//special_projects.rs"
-  ],
-  "breakthrough.map_node+0x18": [
-   "launch//macos//special_projects.rs"
-  ],
-  "breakthrough.map_node+0x20": [
-   "launch//macos//special_projects.rs"
-  ],
-  "breakthrough.map_node+0x8": [
-   "launch//macos//special_projects.rs"
-  ],
-  "characters.recruit_pool+0x8": [
-   "launch//macos//special_projects.rs"
-  ],
-  "civilian.consumer+0x8": [
-   "launch//macos//economy_detail.rs"
-  ],
-  "civilian.consumer+0xc": [
-   "launch//macos//economy_detail.rs"
-  ],
-  "deployment.template_row+0x10": [
-   "launch//macos//deployment.rs"
-  ],
   "diplomacy.action_controller+0x8d8": [
    "launch//macos//diplomacy.rs"
   ],
@@ -446,21 +338,6 @@
   ],
   "diplomacy.relation+0xc": [
    "launch//macos//diplomacy_state.rs"
-  ],
-  "division.pool+0x10": [
-   "launch//macos//units.rs"
-  ],
-  "division.pool.size+0x18": [
-   "launch//macos//units.rs"
-  ],
-  "division.variant+0x8": [
-   "launch//macos//units.rs"
-  ],
-  "division.variant.size+0x10": [
-   "launch//macos//units.rs"
-  ],
-  "division_template+0x20": [
-   "launch//macos//deployment.rs"
   ],
   "gui.gfx+0x1e0": [
    "launch//macos//construction_place//point.rs"
@@ -494,9 +371,6 @@
   "leader.trait.size+0x20": [
    "launch//macos//units.rs"
   ],
-  "modifier.entry.size+0x10": [
-   "launch//macos//economy_detail.rs"
-  ],
   "occupation.view+0x490": [
    "launch//macos//occlaw.rs"
   ],
@@ -509,26 +383,8 @@
   "production.selection_row+0xd50": [
    "launch//macos//design_ui.rs"
   ],
-  "scientist.skill_level+0x0": [
-   "launch//macos//special_projects.rs"
-  ],
-  "scientist.skill_level+0x18": [
-   "launch//macos//special_projects.rs"
-  ],
-  "scientist.skill_level.size+0x20": [
-   "launch//macos//special_projects.rs"
-  ],
-  "spec.template+0x8": [
-   "launch//macos//special_projects.rs"
-  ],
   "state.slot_item+0x28": [
    "launch//macos//stateslots.rs"
-  ],
-  "subunit.need+0x8": [
-   "launch//macos//units.rs"
-  ],
-  "subunit.need.size+0x10": [
-   "launch//macos//units.rs"
   ],
   "supply_flow.size+0x10": [
    "launch//macos//supplymem.rs"
