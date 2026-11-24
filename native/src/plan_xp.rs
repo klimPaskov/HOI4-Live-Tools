@@ -133,6 +133,25 @@ fn pending(state: &State, plan: &Value, entry: &Value, now: GameHour) -> bool {
     }
 }
 
+/// The `when` of the plan row a budget entry spends on (`template:<id>` in `templates`,
+/// `design:<id>` in `designs`, `doctrine:<id>` in `doctrines`), Null when there is none. Pure.
+fn spender_when(plan: &Value, entry: &Value) -> Value {
+    let reference = text(&entry["ref"]);
+    let Some((kind, id)) = reference.split_once(':') else {
+        return Value::Null;
+    };
+    let rows = match kind {
+        "template" => "templates",
+        "design" => "designs",
+        "doctrine" => "doctrines",
+        _ => return Value::Null,
+    };
+    list(plan, rows)
+        .iter()
+        .find(|r| item_id(r).as_deref() == Some(id))
+        .map_or(Value::Null, |r| r["when"].clone())
+}
+
 /// The experience of `pool` (army, air, navy) the spends listed before `who` still need, and
 /// their ids: a spender waits until the pool holds that much plus its own price.
 pub(super) fn ahead(
@@ -167,6 +186,14 @@ pub(super) fn ahead(
         if due != Truth::True {
             continue;
         }
+        // the spender itself must be due too: a template, design or doctrine row whose own
+        // `when` does not hold yet cannot spend, so it holds nothing back (t1939k, 24 Nov 2026:
+        // the budget held 30 army experience from August for a template row dated 15 October,
+        // and the officer corps and every doctrine waited behind it through the Polish war)
+        let own = spender_when(plan, entry);
+        if !own.is_null() && super::judge(state, tools, &without_xp(&own), now) != Truth::True {
+            continue;
+        }
         held += cost;
         names.push(item_id(entry).unwrap_or_else(|| text(&entry["ref"]).to_string()));
     }
@@ -193,6 +220,19 @@ mod tests {
             without_xp(&json!("tech_researched:x")),
             json!("tech_researched:x")
         );
+    }
+
+    #[test]
+    fn a_budget_entry_finds_the_when_of_the_row_it_spends_on() {
+        let plan = json!({"templates": [{"id": "t_inf_art", "when": "date >= 1939.10.15"}],
+                          "designs": [{"id": "d1"}]});
+        assert_eq!(
+            spender_when(&plan, &json!({"ref": "template:t_inf_art"})),
+            json!("date >= 1939.10.15")
+        );
+        assert_eq!(spender_when(&plan, &json!({"ref": "design:d1"})), Value::Null);
+        assert_eq!(spender_when(&plan, &json!({"ref": "spirit:x"})), Value::Null);
+        assert_eq!(spender_when(&plan, &json!({"ref": "template:none"})), Value::Null);
     }
 
     #[test]
