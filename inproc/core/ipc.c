@@ -33,10 +33,13 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                 1 /* diplomacy (engineer 78): guarantee, ask / offer military access, non-aggression pact,
                                    * improve relations, declare war on an own war goal (S10-DIPLOMACY PASSED live 24 Nov
                                    * 2026, s81b: improve relations 93 ms, declare war on Poland 200 ms, refusals unposted) */,
-                                0 /* holds (engineer 79): an area-defence order, one map click per state (S11-HOLDS) */,
+                                1 /* holds (engineer 79): an area-defence order, one map click per state (S11-HOLDS PASSED
+                                   * live 24 Nov 2026, s81b/s81c: new order, three states, refusals, states into the army's
+                                   * standing order paused and running) */,
                                 1 /* research (engineer 79): a technology into a research slot (S12-RESEARCH PASSED live
                                    * 24 Nov 2026, s81b: start, replace, refusals, running) */,
-                                0 /* politics (engineer 79): a law / an idea slot (S13-POLITICS) */};
+                                1 /* politics (engineer 79): a law / an idea slot (S13-POLITICS PASSED live 24 Nov 2026,
+                                   * s81b/s81c: trade and conscription laws Verified after the settle window, refusals) */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;
