@@ -461,3 +461,70 @@ Stop at once (endrun.sh s4o) on: a crash, a hang, an `orders` read that disagree
 provinces, any post2 with result "unexplained", a front that appears where the request did not ask, any order that
 changes on an ALLIED or enemy group.
 Pass: O1-O7 clean on both beds -> `IPC_LIVE_PASSED` for `orders` (6th entry), "S4 PASS: orders".
+
+## Session S5-PLAN: the in-process module, the rest of the battle plan (family `orders2`; about 75 minutes)
+
+Built by engineer 74 (24 Nov 2026), offline-proven only: stage 2 25/25 types on with every check on 1.20.0.0 and
+1.19.4.1 macOS; the 8 orders2 classes found by RTTI with the same protocol ids on Linux and Windows 1.20 (10/10 with
+CAutoMergeOrders and COrderConnect); the front facts (theatre -> fronts -> sections -> provinces), the array allocator
+slot and Assign's division facts scanned on both macOS builds; `orders_test` (fronts read, section check, holder,
+root-on-section) ALL PASS on both. OFF under `auto` until this session passes. Run S4-ORDERS first (orders2 builds on
+its tree read).
+- READ `fronts GROUP`: the fronts of the group's theatre: `{"theatre","fronts":[{"front":ADDR,"sections":[{"id",
+  "provinces":[..]}]}]}` (the things a plan root binds to; the module never makes a front).
+- `orders2.new_root` (COrderNewRootCommand: group, divisions, the front's handle, section, range from/to 0..100000,
+  split): a plan root for an army or army group. split 1 = an army group's line divided among its armies (what a plain
+  click on the front does), 0 = one field-marshal line (Shift+click; the only value an army's click sends). Static
+  answer to the O5 question of S4-ORDERS; O5 below checks it. Read-back: the group's root bound to (front, section).
+- `orders2.assign` / `orders2.unassign` (divisions to an order / out of every order), read back on the order's own
+  division list / the plan's holders. Every division is checked first the way the game's Assign check reads it (its
+  handle resolves to it, CUnit cast, its army is a live own group).
+- `orders2.fallback` (COrderNewFallbackCommand: group, divisions, provinces): read back as one more fallback order.
+- `orders2.edit_root` (the root's range on its section): read back on the root's range.
+- `orders2.spearhead` (the UI's NewFront constructor with the spearhead byte): read back as one more child whose line
+  carries the spearhead byte.
+- `orders2.invasion_target` / `orders2.paradrop_target` (group, order, province): posted after the game's check; the
+  module has no read of the target field yet (reply `target_read:"not mapped"`): the external read is the proof.
+- MCP: `hoi4_army_front` with `provinces`/`against` on an EMPTY plan now posts the root first (split 0), then the fronts;
+  `hoi4_army_fallback` WITH `provinces`; `hoi4_army_offensive` WITH `target_provinces` and `spearhead:true` (new
+  spearhead under `parent_order`) or `replace_order` (new path, family `orders`). Without the new arguments the tools
+  stay on the mouse. The journal's Verified reads are unchanged.
+
+Needs: the game slot, Steam closed; module and reader built from branch e74/inproc-plan-orders; PREV-1940 (Germany, an
+army group of 2+ armies) and PREV-WAR. Addresses: `HOI4_BIN/macprobe SESSION dbg_army_bytes:ARMY:8` -> `"address"`;
+divisions: the `orders` read's `division_ptrs`, or `macprobe SESSION dbg_army_words:ARMY` (division list).
+
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,orders,orders2 ./inproc_stage2.sh PREV-1940 s5p`; the hello
+must show `"orders2":{"on":true,"live_passed":false}`, `stage2.fronts.ok:true`, `common.alloc_slot:16`,
+`unit_group_off:192`. `C="python3 -I inproc/tools/inproc_client.py s5p/inproc.sock"`.
+
+P1 fronts read, paused (5 min). `$C fronts GROUP` for an army group and one of its armies: the same theatre; every
+front the map shows (screenshot, front-line map mode) with its provinces; read_ms < 5 (inproc.log `fronts_read`).
+P2 root, paused (15 min). On an army with NO plan: `$C fronts ARMY`, pick the section on its border, then
+`$C post2 orders2.new_root ARMY --vals SEC,0,100000,0 --obj2 FRONT --divs D1,D2,..` -> `root_id`; `$C orders ARMY`
+shows one top order of kind 2 with the section's provinces and the divisions; `hoi4_armies` shows the front; the map
+shows the line. Delete it (`orders.delete`). Same by mouse (front tool, one click) and compare the two `orders` reads
+field by field (range, provinces, divisions, drawer). Then the army group, twice: `--vals SEC,0,100000,1` and
+`...,0`: record per army whether it got its own sub-front (O5 of S4-ORDERS by command), and compare with a plain click
+and a Shift+click by mouse. Then `hoi4_army_front` in process on an empty plan with `provinces` (root, then the front).
+P3 assign/unassign, paused (10 min). Two divisions of the army: `orders2.unassign ARMY --divs D1,D2` ->
+`divisions_moved:2`; `orders` shows them in no order; the army card's front counter drops. `orders2.assign ARMY --vals
+ROOT --divs D1,D2` -> back. A division of ANOTHER army -> refused before posting ("not in an own army" is not enough:
+the game's check refuses a division of another group; record which). A foreign division -> `not a live division`.
+P4 fallback and edit_root, paused (10 min). `orders2.fallback ARMY --provs p1,..,p6` (own provinces behind the
+front) -> `fallback_orders` +1; `hoi4_army_fallback` with `provinces` the same way; by mouse (C, one stroke) for the
+timing. `orders2.edit_root ARMY --vals ROOT,20000,80000` -> `range:[20000,80000]`; the map line is shorter.
+P5 spearhead, paused (10 min). `hoi4_army_offensive {"army":A,"state_id":S,"spearhead":true,"target_provinces":[..]}`
+on an army with a root -> one more child with the spearhead byte; the map shows a spearhead arrow; by mouse (Shift+X).
+Then `"replace_order":ID` with a new target line.
+P6 invasion/paradrop target, paused (5 min). Draw a naval invasion by mouse (hoi4_naval_invasion), read `orders`, then
+`orders2.invasion_target ARMY --vals ORDER,PROV` with another coastal enemy province: record what the external read and
+the map show (a second target, or the target moved). Same for a paradrop with a paratrooper army if the bed has one.
+P7 LIVE MAPPING (no command yet, observe only, 15 min): (a) a new plain OFFENSIVE by mouse (X, one stroke): `orders`
+before and after, and the inproc.log of the game's own posts if the post hook logs types (expected: NewFront under the
+root with the arrow/line pair, or COrderConnect 13233, or SetPath creating the target); (b) the execution mode buttons
+(careful/balanced/rush) by mouse: which command type the post hook sees; (c) area defence (V): the CreateAreaDefense
+list (+0x30) element kind and the +0x48 settings mask; (d) the invasion SOURCE command (+0x30 int and +0x50 byte).
+Stop at once (endrun.sh s5p) on: a crash, a hang, any "unexplained" post2, a root or order on a group the request did
+not name, any order that changes on an allied or enemy group, a `fronts` read that disagrees with the map.
+Pass: P1-P6 clean on both beds -> `IPC_LIVE_PASSED` for `orders2` (7th entry), "S5 PASS: orders2".

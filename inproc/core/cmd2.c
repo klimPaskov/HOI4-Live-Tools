@@ -87,6 +87,48 @@ const cmd_spec CMD2_SPECS[] = {
     {"orders", "orders.new_front", "COrderNewFrontCommand", 0x70, BUILD_CTOR, CTOR_NEW_FRONT, 0, 0x24, "12COrdersGroup", 4,
      {{"provinces", 0x50, FK_I32_ARRAY, 0x5c, 0x174, 0}, {"group", 0x24, FK_REF, 0, 0x3f, 0}, {"parent_id", 0x68, FK_I32, 0, 0x152, 0},
       {"divisions", 0x38, FK_REF_ARRAY, 0x44, 0x28a3, 0}}, OBJ2_NONE, 0},
+    /* ---- orders2 (engineer 74, 24 Nov): the rest of the battle plan, one live pass (Session S5-PLAN). Layouts read from
+     * 1.20.0.0 and 1.19.4.1 (identical field ids and offsets); every scalar takes the request's vals by its 1-based index
+     * (vi); arrays are filled through the fresh object's own allocator (BUILD_FIELDS, see cmd2.h).
+     * new_root: the front tool's click on a border (UI 1.20 0x1025bb2d0): NewRoot(group, &front handle, section id, from,
+     * to, the group's divisions, split). The game binds the root to that CFront section; its own check: the group is a
+     * live COrdersGroup and the front handle is not empty. split = the army group's "divide among the armies" (the UI
+     * passes 1 for an army group unless Shift is held, 0 for an army): Shift+click = 0 = ONE field-marshal line */
+    {"orders2", "orders2.new_root", "COrderNewRootCommand", 0x70, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "12COrdersGroup", 7,
+     {{"group", 0x24, FK_REF, 0, 0x3f, 0}, {"divisions", 0x30, FK_REF_ARRAY, 0x3c, 0x28a3, 0}, {"front", 0x48, FK_HANDLE, 0, 0x29e0, 0},
+      {"section", 0x50, FK_I32, 0, 0x3325, 0, 1}, {"from", 0x58, FK_I64, 0, 0x298f, 0, 2}, {"to", 0x60, FK_I64, 0, 0x2990, 100000, 3},
+      {"split", 0x6c, FK_U8, 0, 0x4c12, 1, 4}}, OBJ2_FRONT, 0},
+    /* assign divisions to an order (the plan bar's assign: Assign(&divisions, group, order id)); the check resolves every
+     * division as a CUnit whose army is not locked, and the group as a COrdersGroup */
+    {"orders2", "orders2.assign", "COrderAssignCommand", 0x50, BUILD_FIELDS, CTOR_NONE, 0, 0x40, "12COrdersGroup", 3,
+     {{"group", 0x40, FK_REF, 0, 0x3f, 0}, {"divisions", 0x28, FK_REF_ARRAY, 0x34, 0x28a3, 0}, {"order_id", 0x48, FK_I32, 0, 0x3036, 0, 1}},
+     OBJ2_NONE, 0},
+    /* remove divisions from the group's orders (the plan bar's unassign); the two flags keep the factory's values */
+    {"orders2", "orders2.unassign", "COrderUnassignCommand", 0x50, BUILD_FIELDS, CTOR_NONE, 0, 0x40, "12COrdersGroup", 2,
+     {{"group", 0x40, FK_REF, 0, 0x3f, 0}, {"divisions", 0x28, FK_REF_ARRAY, 0x34, 0x28a3, 0}}, OBJ2_NONE, 0},
+    /* a fallback line by province list (the fallback tool: NewFallback(group, &divisions, &provinces)); the check: the
+     * group is a COrdersGroup and the list is not empty */
+    {"orders2", "orders2.fallback", "COrderNewFallbackCommand", 0x60, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "12COrdersGroup", 3,
+     {{"group", 0x24, FK_REF, 0, 0x3f, 0}, {"divisions", 0x30, FK_REF_ARRAY, 0x3c, 0x28a3, 0}, {"provinces", 0x48, FK_I32_ARRAY, 0x54, 0x174, 0}},
+     OBJ2_NONE, 0},
+    /* a root's stretch of its front section (EditRoot(group, root id, from, to); the refresh byte keeps its default 1) */
+    {"orders2", "orders2.edit_root", "COrderEditRootCommand", 0x48, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "12COrdersGroup", 4,
+     {{"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0, 1}, {"from", 0x30, FK_I64, 0, 0x298f, 0, 2},
+      {"to", 0x38, FK_I64, 0, 0x2990, 100000, 3}}, OBJ2_NONE, 0},
+    /* the landing province of an existing naval-invasion order (the invasion tool's target click); the check: the order
+     * exists in the group */
+    {"orders2", "orders2.invasion_target", "CAddNavalInvasionTargetCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "12COrdersGroup", 3,
+     {{"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0, 1}, {"province", 0x30, FK_I32, 0, 0x2840, 0, 2}},
+     OBJ2_NONE, 0},
+    /* the drop province of an existing paradrop order */
+    {"orders2", "orders2.paradrop_target", "COrderSetParadropTargetCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "12COrdersGroup", 3,
+     {{"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0, 1}, {"province", 0x30, FK_I32, 0, 0x2840, 0, 2}},
+     OBJ2_NONE, 0},
+    /* a SPEARHEAD under a parent order: the front tool in its blitz mode (UI mode 3) posts NewFront with the blitz byte
+     * set; everything else as orders.new_front */
+    {"orders2", "orders2.spearhead", "COrderNewFrontCommand", 0x70, BUILD_CTOR, CTOR_NEW_FRONT, 0, 0x24, "12COrdersGroup", 4,
+     {{"provinces", 0x50, FK_I32_ARRAY, 0x5c, 0x174, 0}, {"group", 0x24, FK_REF, 0, 0x3f, 0}, {"parent_id", 0x68, FK_I32, 0, 0x152, 0},
+      {"divisions", 0x38, FK_REF_ARRAY, 0x44, 0x28a3, 0}}, OBJ2_NONE, 0},
 };
 const int CMD2_NSPECS = (int)(sizeof CMD2_SPECS / sizeof CMD2_SPECS[0]);
 
@@ -235,6 +277,36 @@ int scan_stage2_common(const scan_image *im, const post_layout *pl, uint64_t gs_
                 char sn[64], dn[64];
                 if (ti_name(im, src, sn, sizeof sn) && !strcmp(sn, "16CReferenceObject") && ti_name(im, dst, dn, sizeof dn) &&
                     !strcmp(dn, "12COrdersGroup")) { o->ti_reference = src; o->ti_orders_group = dst; }
+            }
+        }
+    }
+    /* 8. (engineer 74) the CPdxArray allocator's allocate slot: every growth site "mov rax,[rdi]; mov edx,8; call
+     *    [rax+SLOT]" must agree (thousands of sites) */
+    {
+        unsigned sites = 0, dis = 0; uint32_t slot = 0;
+        for (uint64_t i = 0; t && i + 11 <= im->text_size; i++) {
+            if (!cmd_pmatch(t + i, 11, "48 8b 07 ba 08 00 00 00 ff 50 B", c, 8)) continue;
+            if (!slot) slot = c[0];
+            if (c[0] == slot) sites++; else dis++;
+        }
+        if (sites >= 100 && !dis) o->alloc_slot = slot;
+    }
+    /* 9. (engineer 74) a division as COrderAssignCommand's own check reads it: the handle resolves, the cast
+     *    (CReferenceObject -> CUnit, hint H) succeeds, then the unit's army at [unit + G] (lea rcx,[rax-H] ... [rcx+G]) */
+    if (scan_command_factory(im, "COrderAssignCommand", &f, &vt, &tid)) {
+        uint64_t valid;
+        if (scan_q(im, vt.value + o->valid_slot, &valid) && in_text(im, valid)) {
+            long a = pfind_at(im, valid, 0x200, "b9 B 00 00 00 48 89 c7 48 8d 35 D 48 8d 15 D e8 D", c, 8, &n);
+            if (a >= 0 && n == 1) {
+                uint64_t at = valid + (uint64_t)a + 8, src = at + 7 + (int64_t)(int32_t)c[1], dst = at + 14 + (int64_t)(int32_t)c[2];
+                char sn[64], dn[64];
+                uint32_t hint = c[0];
+                if (ti_name(im, src, sn, sizeof sn) && !strcmp(sn, "16CReferenceObject") && ti_name(im, dst, dn, sizeof dn) &&
+                    !strcmp(dn, "5CUnit") &&
+                    pfind_at(im, valid, 0x200, "48 8d 48 B 48 85 c0 48 0f 44 c8 48 8b 81 D 48 85 c0", c, 8, &n) >= 0 && n == 1 &&
+                    (uint8_t)(0x100 - c[0]) == hint && c[1] < 0x1000) {
+                    o->ti_unit = dst; o->unit_hint = hint; o->unit_group_off = c[1];
+                }
             }
         }
     }
@@ -471,6 +543,7 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
     memset(t, 0, sizeof *t);
     scan_stage2_common(im, pl, gs_global, &t->common);
     scan_orders_facts(im, &t->orders);
+    scan_fronts_facts(im, &t->fronts);
     int on = 0;
     for (int i = 0; i < CMD2_NSPECS && i < CMD2_MAX; i++) {
         on += scan_cmd_type(im, pl, &t->common, &CMD2_SPECS[i], &t->t[i]);
@@ -494,6 +567,10 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
         if ((!strcmp(t->t[i].spec->op, "air.enable_mission") || t->t[i].spec->obj2 == OBJ2_REGION_ID) && !t->common.region_id_off && t->t[i].ok) { t->t[i].ok = 0; on--; }
         if (t->t[i].spec->obj2 == OBJ2_REGION_ID && (!t->common.regions_arr_off || !t->common.regions_cnt_off) && t->t[i].ok) { t->t[i].ok = 0; on--; }
         if (!strcmp(fam, "orders") && !t->orders.ok && t->t[i].ok) { t->t[i].ok = 0; on--; }
+        /* orders2: the order tree, the allocator (array fields), the division facts; new_root also the fronts */
+        if (!strcmp(fam, "orders2") && t->t[i].ok &&
+            (!t->orders.ok || !t->common.alloc_slot || !t->common.ti_unit || !t->common.unit_group_off ||
+             (t->t[i].spec->obj2 == OBJ2_FRONT && !t->fronts.ok))) { t->t[i].ok = 0; on--; }
         if (t->t[i].spec->obj2 == OBJ2_ORDERS_GROUP && (!t->common.ti_reference || !t->common.ti_orders_group) && t->t[i].ok) { t->t[i].ok = 0; on--; }
     }
     return on;
@@ -518,11 +595,13 @@ const char *stage2_json(const stage2_table *t, char *buf, size_t n) {
                                  "{\"common\":{\"ok\":%s,\"valid_slot\":%u,\"delete_slot\":%u,\"exec_flag_off\":%u,"
                                  "\"allow_flag_off\":%u,\"player_tag_off\":%u,\"gate_flag_off\":%u,\"null_ref\":\"0x%llx\","
                                  "\"handle_off\":%u,\"line_factories_off\":%u,\"region_id_off\":%u,\"regions_arr_off\":%u,"
-                                 "\"regions_cnt_off\":%u,\"ti_orders_group\":\"0x%llx\"},\"types\":[",
+                                 "\"regions_cnt_off\":%u,\"ti_orders_group\":\"0x%llx\",\"alloc_slot\":%u,\"ti_unit\":\"0x%llx\","
+                                 "\"unit_hint\":%u,\"unit_group_off\":%u},\"types\":[",
                                  c->ok ? "true" : "false", c->valid_slot, c->delete_slot, c->exec_flag_off, c->allow_flag_off,
                                  c->player_tag_off, c->gate_flag_off, (unsigned long long)c->null_ref_global,
                                  c->cref_handle_off, c->line_factories_off, c->region_id_off, c->regions_arr_off,
-                                 c->regions_cnt_off, (unsigned long long)c->ti_orders_group);
+                                 c->regions_cnt_off, (unsigned long long)c->ti_orders_group, c->alloc_slot,
+                                 (unsigned long long)c->ti_unit, c->unit_hint, c->unit_group_off);
     for (int i = 0; i < t->n && at < n; i++) {
         const cmd_type *x = &t->t[i];
         at += (size_t)snprintf(buf + at, n - at,
@@ -536,6 +615,8 @@ const char *stage2_json(const stage2_table *t, char *buf, size_t n) {
     }
     if (at < n) at += (size_t)snprintf(buf + at, n - at, "],\"orders\":");
     if (at < n) { orders_facts_json(&t->orders, buf + at, n - at); at += strlen(buf + at); }
+    if (at < n) at += (size_t)snprintf(buf + at, n - at, ",\"fronts\":");
+    if (at < n) { fronts_facts_json(&t->fronts, buf + at, n - at); at += strlen(buf + at); }
     if (at < n) snprintf(buf + at, n - at, "}");
     return buf;
 }

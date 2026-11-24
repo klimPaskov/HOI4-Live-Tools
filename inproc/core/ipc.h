@@ -29,11 +29,14 @@ typedef struct {
     /* STAGE 2: posts one family command for each listed object (objs, comma-separated hex addresses of own game
      * objects the client read; vals, per-object integers; obj2, a second object (air base, strategic region); flag).
      * Returns 1 when every object was handled (posted and, where the module can, read back), 0 otherwise. */
-    int (*post2)(const char *op, const char *objs, const char *vals, const char *obj2, const char *provs, int64_t flag, long id,
-                 char *out, size_t n, int *unexplained);
+    int (*post2)(const char *op, const char *objs, const char *vals, const char *obj2, const char *provs, const char *divs,
+                 int64_t flag, long id, char *out, size_t n, int *unexplained);
     /* engineer 73: the battle-plan order tree of one own orders group (army or army group; hex address): a pure read,
      * served whenever the order facts resolved (no opt-in needed: it reads only the player's own orders) */
     int (*orders)(const char *group, char *out, size_t n);
+    /* engineer 74: the fronts of an own group's theatre (the CFront sections a plan root binds to): a pure read of the
+     * player's own theatre, served whenever the front facts resolved */
+    int (*fronts)(const char *group, char *out, size_t n);
     int (*killed)(void);
     void (*log)(const char *json_members);
 } ipc_backend;

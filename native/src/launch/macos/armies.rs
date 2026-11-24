@@ -2490,6 +2490,29 @@ pub(super) fn group_address(r: &Reader<'_>, image: u64, army: &str) -> Result<u6
     group_named(r, image, army)
 }
 
+/// The addresses of the divisions an orders group commands (engineer 74, for orders2 new_root/assign): an army's own
+/// divisions, or for an army group those of its armies; the module checks each one again before posting.
+pub(super) fn group_division_ptrs(r: &Reader<'_>, image: u64, group: u64) -> Result<Vec<u64>> {
+    let u = ui(r)?;
+    let country = own_country(r, image)?;
+    let (_, data, count) = r.array_header(country + u.country_divisions)?;
+    let mut out = Vec::new();
+    for index in 0..count.min(4096) as u64 {
+        let division = r.u64(data + index * 8)?;
+        if r.u64(division)? != image + u.division_vtable {
+            return Err(Error::new(
+                "invalid_army_type",
+                "Exact own division required",
+            ));
+        }
+        let army = r.u64(division + u.division_group)?;
+        if army != 0 && (army == group || r.u64(army + u.army_group)? == group) {
+            out.push(division);
+        }
+    }
+    Ok(out)
+}
+
 fn group_named(r: &Reader<'_>, image: u64, army: &str) -> Result<u64> {
     let mut groups: BTreeSet<u64> = membership(r, image)?
         .into_values()

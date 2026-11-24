@@ -15,6 +15,10 @@ S1=(auth_slot=0x98 speed_type_id=0x2f42 speed_payload=0x24 speed_field=0x47c spe
 # stage 2 (hand-found in the 1.19.4.1 disassembly, 23 Nov e68): 5 command types on; the UI's validity slot; Post's
 # executing byte; the per-frame gate's player-tag field; a line's factories; a region's id
 S2=(valid_slot=0x50 exec_flag=0x624 player_tag=0x4d8 line_factories=0xe8 region_id=0x58)
+# (engineer 74, 24 Nov: orders2 = the rest of the battle plan, 8 types, and the front/allocator/division facts; hand-checked
+#  in both disassemblies: NewRoot exec stores the front handle/section at +0x228/+0x230, the range setter +0x238/+0x240,
+#  CTheatre fronts +0x50, CFront sections +0x58 id +8, a section's provinces +0x30 -> id +0x9c, Assign's CUnit cast hint 0x10
+#  and army +0xc0, the array allocate slot 0x10 at 13k growth sites)
 # stage 2, the next families (engineer 71, 24 Nov; hand-found in both disassemblies, identical payloads): the rest of
 # air (split, merge, disband, attach, detach; a region by id the way EnableMission's own check reads it: gamestate
 # +0x2a8 array, +0x2b4 count; the army cast's typeinfo COrdersGroup)
@@ -23,10 +27,16 @@ S2N=(regions_arr=0x2a8 regions_cnt=0x2b4 on:airwing.split=1 on:airwing.merge=1 o
      on:production2.add_line=1 on:production2.priority=1 type:production2.add_line=13101 type:production2.priority=12147
      on:orders.delete=1 on:orders.execute=1 on:orders.set_path=1 on:orders.new_front=1 type:orders.delete=12351
      type:orders.execute=12352 type:orders.set_path=12345 type:orders.new_front=13095 orders_ok=1 order_id_off=0x214
-     order_provs_off=0x70 order_divs_off=0x1e0 order_children_off=0x1c8 group_lists_off=0x98)
-S2_1194=(stage2_on=17 orders_vt=0x103512bf0 orders_lookup=0x10095a510 ctor:orders.set_path=0x1009355a0 ctor:orders.new_front=0x100940c60 ctor:production2.add_line=0x1001eef30 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
+     order_provs_off=0x70 order_divs_off=0x1e0 order_children_off=0x1c8 group_lists_off=0x98
+     on:orders2.new_root=1 on:orders2.assign=1 on:orders2.unassign=1 on:orders2.fallback=1 on:orders2.edit_root=1
+     on:orders2.invasion_target=1 on:orders2.paradrop_target=1 on:orders2.spearhead=1 type:orders2.new_root=13096
+     type:orders2.assign=12350 type:orders2.unassign=12365 type:orders2.fallback=13271 type:orders2.edit_root=13097
+     type:orders2.invasion_target=12661 type:orders2.paradrop_target=12730 type:orders2.spearhead=13095
+     fronts_ok=1 group_parent_off=0x40 theatre_fronts_off=0x50 front_sections_off=0x58 section_provs_off=0x30 province_id_off=0x9c
+     root_front_off=0x228 root_range_off=0x238 alloc_slot=0x10 unit_group_off=0xc0 unit_hint=0x10)
+S2_1194=(stage2_on=25 orders_vt=0x103512bf0 orders_lookup=0x10095a510 ctor:orders.set_path=0x1009355a0 ctor:orders.new_front=0x100940c60 ctor:production2.add_line=0x1001eef30 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
          ctor:airwing.detach=0x100a293b0 ti_orders_group=0x103516d08)
-S2_120=(stage2_on=17 orders_vt=0x1035173b8 orders_lookup=0x10095b520 ctor:orders.set_path=0x1009365b0 ctor:orders.new_front=0x100941c70 ctor:production2.add_line=0x1001ef670 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
+S2_120=(stage2_on=25 orders_vt=0x1035173b8 orders_lookup=0x10095b520 ctor:orders.set_path=0x1009365b0 ctor:orders.new_front=0x100941c70 ctor:production2.add_line=0x1001ef670 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
         ctor:airwing.detach=0x100a2a3c0 ti_orders_group=0x10351b6b0)
 fail=0
 echo "== 1.19.4.1 f584 ($NEW)"

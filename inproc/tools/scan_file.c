@@ -89,6 +89,18 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "order_divs_off")) got = t.st2.orders.divs_off;
         else if (!strcmp(argv[a], "order_children_off")) got = t.st2.orders.child_off[0];
         else if (!strcmp(argv[a], "group_lists_off")) got = t.st2.orders.list_off[0];
+        /* engineer 74: the fronts a plan root binds to; the array allocator; a division as Assign's check reads it */
+        else if (!strcmp(argv[a], "fronts_ok")) got = (uint64_t)t.st2.fronts.ok;
+        else if (!strcmp(argv[a], "group_parent_off")) got = t.st2.fronts.group_parent_off;
+        else if (!strcmp(argv[a], "theatre_fronts_off")) got = t.st2.fronts.theatre_fronts_off;
+        else if (!strcmp(argv[a], "front_sections_off")) got = t.st2.fronts.front_sections_off;
+        else if (!strcmp(argv[a], "section_provs_off")) got = t.st2.fronts.section_provs_off;
+        else if (!strcmp(argv[a], "province_id_off")) got = t.st2.fronts.province_id_off;
+        else if (!strcmp(argv[a], "root_front_off")) got = t.st2.fronts.root_front_off;
+        else if (!strcmp(argv[a], "root_range_off")) got = t.st2.fronts.root_range_off;
+        else if (!strcmp(argv[a], "alloc_slot")) got = t.st2.common.alloc_slot;
+        else if (!strcmp(argv[a], "unit_group_off")) got = t.st2.common.unit_group_off;
+        else if (!strcmp(argv[a], "unit_hint")) got = t.st2.common.unit_hint;
         else if (!strncmp(argv[a], "ctor:", 5) || !strncmp(argv[a], "on:", 3) || !strncmp(argv[a], "type:", 5)) {
             /* per stage-2 op (engineer 71): ctor:OP = the UI constructor found, on:OP = 1 when every check resolved,
              * type:OP = the protocol type id */

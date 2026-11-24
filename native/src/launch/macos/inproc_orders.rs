@@ -133,7 +133,137 @@ pub(super) fn request(
     Ok(req)
 }
 
+/// The orders2 request (engineer 74, the rest of the battle plan): one group, the op's values, the provinces (fallback,
+/// spearhead), the division addresses (assign, unassign; optional for new_root and fallback) and, for new_root, the
+/// CFront. The arity rules are the module's own (`be_post2`), checked here first so a bad call never reaches it.
+/// vals: new_root [section, from, to, split]; assign [order]; unassign []; fallback []; edit_root [order, from, to];
+/// invasion_target / paradrop_target [order, province]; spearhead [parent order].
+pub(super) fn request2(
+    op: &str,
+    group: u64,
+    vals: &[i64],
+    provinces: &[i32],
+    divisions: &[u64],
+    front: Option<u64>,
+) -> Result<Value> {
+    let bad = |m: &str| Err(Error::new("invalid_arguments", m.to_string()));
+    let (arity, provs, divs_need, divs_may) = match op {
+        "orders2.new_root" => (4, false, false, true),
+        "orders2.assign" => (1, false, true, true),
+        "orders2.unassign" => (0, false, true, true),
+        "orders2.fallback" => (0, true, false, true),
+        "orders2.edit_root" => (3, false, false, false),
+        "orders2.invasion_target" | "orders2.paradrop_target" => (2, false, false, false),
+        "orders2.spearhead" => (1, true, false, false),
+        _ => return bad("unknown orders2 op"),
+    };
+    if vals.len() != arity {
+        return bad("the wrong number of values for this op");
+    }
+    if provs != !provinces.is_empty() || provinces.len() > 1024 || provinces.iter().any(|p| *p <= 0)
+    {
+        return bad("provinces: 1..1024 positive ids for fallback and spearhead, none otherwise");
+    }
+    let mut seen = BTreeSet::new();
+    if !provinces.iter().all(|p| seen.insert(*p)) {
+        return bad("a province is listed twice");
+    }
+    if (divs_need && divisions.is_empty())
+        || (!divs_may && !divisions.is_empty())
+        || divisions.len() > 512
+    {
+        return bad(
+            "divisions: needed for assign/unassign, allowed for new_root/fallback, at most 512",
+        );
+    }
+    let range = |a: i64, b: i64| (0..=100_000).contains(&a) && (0..=100_000).contains(&b) && a < b;
+    match op {
+        "orders2.new_root"
+            if !(vals[0] >= 0 && range(vals[1], vals[2]) && (vals[3] == 0 || vals[3] == 1)) =>
+        {
+            return bad("new_root: section, from < to in 0..100000, split 0/1")
+        }
+        "orders2.edit_root" if !range(vals[1], vals[2]) => {
+            return bad("edit_root: from < to in 0..100000")
+        }
+        "orders2.invasion_target" | "orders2.paradrop_target" if vals[1] <= 0 => {
+            return bad("a province id")
+        }
+        _ => {}
+    }
+    if op != "orders2.new_root" && arity >= 1 && vals[0] <= 0 {
+        return bad("vals[0]: an order id");
+    }
+    if (op == "orders2.new_root") != front.is_some() {
+        return bad("new_root needs the CFront, no other op takes one");
+    }
+    let join = |v: Vec<String>| v.join(",");
+    let mut req = json!({"op":"post","cmd":op,"objs":format!("0x{group:x}")});
+    if !vals.is_empty() {
+        req["vals"] = json!(join(vals.iter().map(i64::to_string).collect()));
+    }
+    if !provinces.is_empty() {
+        req["provs"] = json!(join(provinces.iter().map(i32::to_string).collect()));
+    }
+    if !divisions.is_empty() {
+        req["divs"] = json!(join(divisions.iter().map(|d| format!("0x{d:x}")).collect()));
+    }
+    if let Some(f) = front {
+        req["obj2"] = json!(format!("0x{f:x}"));
+    }
+    Ok(req)
+}
+
+/// The front section a new plan root binds to: of the group's theatre fronts (the module's `fronts` read), the section
+/// holding the most of `provinces` (ties: the lower section id). None when no section shares a province: the game
+/// binds a root to a front the map already has, it does not make one.
+pub(super) fn root_section(fronts: &Value, provinces: &[i32]) -> Option<(u64, i32)> {
+    let want: BTreeSet<i32> = provinces.iter().copied().collect();
+    let mut best: Option<(usize, i32, u64)> = None;
+    for f in fronts["fronts"].as_array().into_iter().flatten() {
+        let addr = f["front"]
+            .as_str()
+            .and_then(|a| u64::from_str_radix(a.trim_start_matches("0x"), 16).ok())?;
+        for s in f["sections"].as_array().into_iter().flatten() {
+            let id = s["id"].as_i64()? as i32;
+            let hits = s["provinces"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_i64)
+                .filter(|p| want.contains(&(*p as i32)))
+                .count();
+            let better = match best {
+                None => hits > 0,
+                Some((h, i, _)) => hits > h || (hits == h && hits > 0 && id < i),
+            };
+            if better {
+                best = Some((hits, id, addr));
+            }
+        }
+    }
+    best.map(|(_, id, addr)| (addr, id))
+}
+
 impl Channel {
+    /// The fronts of an own group's theatre (engineer 74): `{"theatre","fronts":[{"front","sections":[{"id","provinces"}]}]}`.
+    pub(super) fn fronts(&mut self, group: u64) -> Result<Value> {
+        let reply = self.call_raw(json!({"op":"fronts","group":format!("0x{group:x}")}))?;
+        if reply["ok"].as_bool() != Some(true) || reply["truncated"].as_bool() == Some(true) {
+            return Err(Error::new(
+                "inproc_refused",
+                format!(
+                    "fronts read refused: {}",
+                    reply["reason"]
+                        .as_str()
+                        .or(reply["error"].as_str())
+                        .unwrap_or("truncated")
+                ),
+            ));
+        }
+        Ok(reply)
+    }
+
     /// The order tree of one own army or army group, read by the module between two frames.
     pub(super) fn orders_tree(&mut self, group: u64) -> Result<Value> {
         let reply = self.call_raw(json!({"op":"orders","group":format!("0x{group:x}")}))?;
@@ -241,6 +371,110 @@ pub(super) fn border_chains(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn orders2_requests_follow_the_module_arity() {
+        let r = request2(
+            "orders2.new_root",
+            0x10,
+            &[7, 0, 100_000, 0],
+            &[],
+            &[0xa, 0xb],
+            Some(0x99),
+        )
+        .unwrap();
+        assert_eq!(r["cmd"], "orders2.new_root");
+        assert_eq!(r["vals"], "7,0,100000,0");
+        assert_eq!(r["divs"], "0xa,0xb");
+        assert_eq!(r["obj2"], "0x99");
+        let r = request2("orders2.fallback", 0x10, &[], &[3, 4, 5], &[], None).unwrap();
+        assert_eq!(r["provs"], "3,4,5");
+        assert!(r.get("vals").is_none());
+        let r = request2("orders2.spearhead", 0x10, &[190], &[851, 861], &[], None).unwrap();
+        assert_eq!(
+            (r["vals"].as_str(), r["provs"].as_str()),
+            (Some("190"), Some("851,861"))
+        );
+        assert!(
+            request2("orders2.assign", 0x10, &[5], &[], &[], None).is_err(),
+            "assign needs divisions"
+        );
+        assert!(request2("orders2.unassign", 0x10, &[], &[], &[0x1], None).is_ok());
+        assert!(
+            request2(
+                "orders2.edit_root",
+                0x10,
+                &[5, 60_000, 50_000],
+                &[],
+                &[],
+                None
+            )
+            .is_err(),
+            "from < to"
+        );
+        assert!(
+            request2(
+                "orders2.new_root",
+                0x10,
+                &[7, 0, 100_000, 2],
+                &[],
+                &[],
+                Some(1)
+            )
+            .is_err(),
+            "split 0/1"
+        );
+        assert!(
+            request2(
+                "orders2.new_root",
+                0x10,
+                &[7, 0, 100_000, 1],
+                &[],
+                &[],
+                None
+            )
+            .is_err(),
+            "front needed"
+        );
+        assert!(
+            request2("orders2.fallback", 0x10, &[], &[3, 3], &[], None).is_err(),
+            "duplicate province"
+        );
+        assert!(request2("orders2.invasion_target", 0x10, &[5, 0], &[], &[], None).is_err());
+        assert!(request2("orders2.invasion_target", 0x10, &[5, 9001], &[], &[], None).is_ok());
+        assert!(
+            request2("orders2.edit_root", 0x10, &[5, 0, 100], &[], &[0x1], None).is_err(),
+            "no divisions"
+        );
+        assert!(request2("orders2.paint", 0x10, &[], &[], &[], None).is_err());
+        // every request fits the module parser: flat members, short strings
+        let big: Vec<i32> = (1..=1024).collect();
+        let r = request2(
+            "orders2.fallback",
+            0x10,
+            &[],
+            &big,
+            &[0x7fff_0000_1234; 512],
+            None,
+        )
+        .unwrap();
+        assert!(r.to_string().len() < 20_000);
+    }
+
+    #[test]
+    fn a_root_binds_to_the_section_holding_most_of_the_line() {
+        let fronts = json!({"theatre":"0x9","fronts":[
+            {"front":"0x100","sections":[{"id":4,"provinces":[1,2,3]},{"id":7,"provinces":[4,5]}]},
+            {"front":"0x200","sections":[{"id":2,"provinces":[5,6,7,8]}]}]});
+        assert_eq!(root_section(&fronts, &[6, 7, 5]), Some((0x200, 2)));
+        assert_eq!(root_section(&fronts, &[2, 3]), Some((0x100, 4)));
+        assert_eq!(
+            root_section(&fronts, &[4, 1]),
+            Some((0x100, 4)),
+            "a tie takes the lower section id"
+        );
+        assert_eq!(root_section(&fronts, &[99]), None);
+    }
 
     fn line_adj(p: i32) -> Vec<i32> {
         // own provinces 1..=6 in a row, enemy 11..=16 opposite; 4 and 5 are not adjacent (a river mouth)

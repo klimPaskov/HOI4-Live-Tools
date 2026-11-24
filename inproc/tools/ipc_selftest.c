@@ -27,9 +27,9 @@ static int post(int64_t v, long id, char *o, size_t n, int *unexplained) {
 }
 /* stage 2 mock: objects "0x1".."0x20" are own and valid; 0xbad is foreign (refused before posting); 0xdead makes the
  * game's own check say no; 0x666 simulates an unexplained refusal (the family must switch off) */
-static int post2(const char *op, const char *objs, const char *vals, const char *obj2, const char *provs, int64_t flag, long id,
+static int post2(const char *op, const char *objs, const char *vals, const char *obj2, const char *provs, const char *divs, int64_t flag, long id,
                  char *o, size_t n, int *unexplained) {
-    (void)vals; (void)obj2; (void)flag; (void)provs;
+    (void)vals; (void)obj2; (void)flag; (void)provs; (void)divs;
     if (strstr(objs, "0x666")) { *unexplained = 1; snprintf(o, n, "\"op\":\"%s\",\"result\":\"dropped_by_post\",\"id\":%ld", op, id); return 0; }
     int posted = 0, refused = 0;
     char b[700]; snprintf(b, sizeof b, "%s", objs);
@@ -40,6 +40,10 @@ static int post2(const char *op, const char *objs, const char *vals, const char 
     return refused == 0;
 }
 /* engineer 73: the order-tree read (mock: one front with one arrow) */
+static int fronts(const char *group, char *o, size_t n) {
+    snprintf(o, n, "\"theatre\":\"0x9\",\"fronts\":[{\"front\":\"0x10\",\"sections\":[{\"id\":1,\"provinces\":[11,12]}]}],\"truncated\":false");
+    (void)group; return 1;
+}
 static int orders(const char *group, char *o, size_t n) {
     snprintf(o, n, "\"group\":\"%s\",\"lists\":[{\"list\":\"top\",\"orders\":[]}],\"orders_read\":0,\"truncated\":false", group);
     return 1;
@@ -65,6 +69,6 @@ int main(int argc, char **argv) {
     p.fam_on[0] = 1; p.fam_on[1] = !getenv("IPC_SELFTEST_SPEED_ONLY"); p.fam_on[2] = 0; /* production on, air off (not resolved in the mock) */
     snprintf(p.fam_reason[1], sizeof p.fam_reason[1], "on"); snprintf(p.fam_reason[2], sizeof p.fam_reason[2], "not opted in"); snprintf(p.fam_reason[3], sizeof p.fam_reason[3], "not opted in"); snprintf(p.fam_reason[4], sizeof p.fam_reason[4], "not opted in"); snprintf(p.fam_reason[5], sizeof p.fam_reason[5], "not opted in");
     p.stage2_jobs_per_minute = 600; p.stage2_cmds_per_minute = 2400;
-    ipc_backend b = {hello, rd, probe, post, post2, orders, killed, lg};
+    ipc_backend b = {hello, rd, probe, post, post2, orders, fronts, killed, lg};
     return ipc_serve(g_sock, &b, &p) ? 0 : 1;
 }

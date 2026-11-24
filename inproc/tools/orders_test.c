@@ -84,6 +84,38 @@ int main(int argc, char **argv) {
     static char small[300];
     n = orders_tree_json(&f, rd, VT, G, small, sizeof small);
     CHECK("a small buffer says truncated", n == 4 && strstr(small, "\"truncated\":true"));
+    /* engineer 74: holders (assign/unassign read-back) */
+    CHECK("holder: a division on the arrow is held by the front first (outermost order wins)", orders_holder(&f, rd, VT, G, D[0]) == 190);
+    CHECK("holder: a division in no order", orders_holder(&f, rd, VT, G, 0x7000009) == 0);
+    /* engineer 74: the fronts a plan root binds to: army -> army group -> theatre -> fronts -> sections -> provinces */
+    fronts_facts ff;
+    if (!scan_fronts_facts(&im, &ff)) { printf("FAIL front facts: %s\n", ff.evidence); return 1; }
+    uint64_t VG = 0x2222220, VTH = 0x3333330, VFR = 0x4444440, VSE = 0x5555550;
+    uint64_t AG = BASE + 0xa000, TH = BASE + 0xb000, FR1 = BASE + 0xc000, S1 = BASE + 0xd000, S2 = BASE + 0xd800;
+    uint64_t P[3] = {BASE + 0xe000, BASE + 0xe400, BASE + 0xe800};
+    q(G + ff.group_parent_off, AG); q(AG, VG); q(AG + ff.group_parent_off, TH); q(TH, VTH);
+    q(BASE + 0xf000, FR1); array(TH, ff.theatre_fronts_off, ff.theatre_fronts_cnt, BASE + 0xf000, 1);
+    q(FR1, VFR); q(BASE + 0xf100, S1); q(BASE + 0xf108, S2); array(FR1, ff.front_sections_off, ff.front_sections_cnt, BASE + 0xf100, 2);
+    q(S1, VSE); d(S1 + ff.section_id_off, 4); q(S2, VSE); d(S2 + ff.section_id_off, 7);
+    d(P[0] + ff.province_id_off, 3001); d(P[1] + ff.province_id_off, 3002); d(P[2] + ff.province_id_off, 3003);
+    q(BASE + 0xf200, P[0]); q(BASE + 0xf208, P[1]); array(S1, ff.section_provs_off, ff.section_provs_cnt, BASE + 0xf200, 2);
+    q(BASE + 0xf300, P[2]); array(S2, ff.section_provs_off, ff.section_provs_cnt, BASE + 0xf300, 1);
+    CHECK("theatre found through the army group", fronts_theatre_of(&ff, rd, VG, VTH, G) == TH);
+    n = fronts_json(&ff, rd, VFR, VSE, TH, out, sizeof out);
+    CHECK("fronts read: one front, two sections with their province ids",
+          n == 1 && strstr(out, "{\"id\":4,\"provinces\":[3001,3002]}") && strstr(out, "{\"id\":7,\"provinces\":[3003]}"));
+    CHECK("section check: present", fronts_has_section(&ff, rd, VFR, VSE, TH, FR1, 7) == 1);
+    CHECK("section check: unknown section", fronts_has_section(&ff, rd, VFR, VSE, TH, FR1, 9) == 0);
+    CHECK("section check: a front of another theatre", fronts_has_section(&ff, rd, VFR, VSE, TH, BASE + 0xc800, 4) == 0);
+    q(AG, VG + 8);
+    CHECK("an unknown parent class: no theatre (nothing guessed)", fronts_theatre_of(&ff, rd, VG, VTH, G) == 0);
+    q(AG, VG);
+    q(S2, VSE + 8);
+    CHECK("a wrong section vtable fails the fronts read", fronts_json(&ff, rd, VFR, VSE, TH, out, sizeof out) < 0);
+    q(S2, VSE);
+    q(FRONT + ff.root_front_off, 0x0000123400001269ULL); d(FRONT + ff.root_section_off, 7);
+    CHECK("the root bound to (front handle, section) is found by the new_root read-back",
+          orders_root_on(&f, &ff, rd, VT, G, 0x0000123400001269ULL, 7) == 190 && orders_root_on(&f, &ff, rd, VT, G, 0x0000123400001269ULL, 4) == 0);
     printf(bad ? "ORDERS FAILED\n" : "ORDERS ALL PASS\n");
     return bad ? 1 : 0;
 }

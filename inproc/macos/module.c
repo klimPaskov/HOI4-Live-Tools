@@ -382,6 +382,8 @@ typedef struct { int32_t *data; int32_t capacity, size; } pdx_iarray; /* CPdxArr
 typedef void (*ctor_order_path)(void *, void *, const pdx_iarray *, int);
 typedef void (*ctor_new_front)(void *, void *, const pdx_iarray *, void *, const pdx_array *, int, int, int, void *);
 typedef void *(*order_lookup_fn)(void *, int32_t);
+/* engineer 74: a CPdxArray allocator's allocate slot: alloc(allocator, bytes, align) */
+typedef void *(*alloc_fn)(void *, uint64_t, uint64_t);
 #define J2_PROVS 1024
 #define J2_DIVS 512
 
@@ -404,6 +406,10 @@ typedef struct {
     uint64_t order, drawer; int32_t order_id;
     uint64_t divs[J2_DIVS]; int ndiv;
     int32_t before_children; uint8_t before_exec;
+    /* orders2 (engineer 74): the divisions named by the request (CUnit pointers, checked) and their handles, the
+     * front's raw handle (new_root), the before-state of the read-back, a spearhead's blitz byte */
+    uint64_t divh[J2_DIVS]; int ndivh;
+    uint64_t hx, theatre; int32_t before_top, before_fallback; int blitz;
     long long ran_us, post_us;
     char reason[200], queue_type[64], server_type[64];
     dispatch_semaphore_t done;
@@ -449,6 +455,9 @@ static const char *orders_prep(job2_t *j) {
     uint64_t grp = j->obj[0], vt = of->vt_order + (uint64_t)g_slide, v = 0, own = 0;
     static char why[160];
     if (!strcmp(op, "orders.execute") && j->order_id == 0) return NULL; /* 0 = the whole plan (the plan bar's button) */
+    int new_front = !strcmp(op, "orders.new_front") || !strcmp(op, "orders2.spearhead");
+    /* orders2 ops without an order: nothing to find here (new_root, unassign, fallback) */
+    if (!strcmp(op, "orders2.new_root") || !strcmp(op, "orders2.unassign") || !strcmp(op, "orders2.fallback")) return NULL;
     uint64_t lk = of->lookup_fn + (uint64_t)g_slide;
     if (!code_ptr(lk)) return "the order lookup is not game code";
     uint64_t o = (uint64_t)(uintptr_t)((order_lookup_fn)(uintptr_t)lk)((void *)(uintptr_t)grp, j->order_id);
@@ -458,7 +467,7 @@ static const char *orders_prep(job2_t *j) {
     }
     j->order = o;
     if (!strcmp(op, "orders.execute") && !sread(o + of->exec_off, &j->before_exec, 1)) return "executing byte unreadable";
-    if (!strcmp(op, "orders.new_front")) {
+    if (new_front) {
         int n = orders_free_divisions(of, sread, o, j->divs, J2_DIVS);
         if (n < 0) return "the parent's divisions are unreadable";
         j->ndiv = n;
@@ -474,6 +483,75 @@ static const char *orders_prep(job2_t *j) {
         }
     }
     return NULL;
+}
+
+/* engineer 74: every division a request names, checked the way COrderAssignCommand's own check reads it: the handle at
+ * the unit's reference base resolves (the game's generic lookup) to it and the C++ cast to CUnit accepts it; its army
+ * (the unit's group field) must be a live own COrdersGroup. Fills j->divh with the handles. NULL when all pass. */
+static const char *orders2_divisions(job2_t *j) {
+    const stage2_common *c = &g_t.st2.common;
+    const cmd_type *dt = stage2_find(&g_t.st2, "orders.delete");
+    static char why[160];
+    if (!g_dyncast) g_dyncast = (dyncast_fn)dlsym(RTLD_DEFAULT, "__dynamic_cast");
+    uint64_t lk = dt ? dt->lookup_fn + (uint64_t)g_slide : 0, owner_f = dt ? dt->owner_fn + (uint64_t)g_slide : 0;
+    if (!dt || !dt->ok || !g_dyncast || !code_ptr(lk) || !code_ptr(owner_f) || !c->ti_unit) return "division facts unresolved";
+    for (int i = 0; i < j->ndiv; i++) {
+        uint64_t d = j->divs[i], h = 0, grp = 0, hg = 0;
+        void *ref = NULL;
+        if (!plausible(d) || !sq(d + c->unit_hint + c->cref_handle_off, &h) || !h ||
+            (ref = ((resolve_fn2)(uintptr_t)lk)(&h)) == NULL || (uint64_t)(uintptr_t)ref != d + c->unit_hint ||
+            (uint64_t)(uintptr_t)g_dyncast(ref, (void *)(uintptr_t)(c->ti_reference + (uint64_t)g_slide),
+                                           (void *)(uintptr_t)(c->ti_unit + (uint64_t)g_slide), c->unit_hint) != d) {
+            snprintf(why, sizeof why, "division %d (0x%llx) is not a live division", i, (unsigned long long)d); return why;
+        }
+        if (!sq(d + c->unit_group_off, &grp) || !roundtrip(dt, grp, &hg) ||
+            ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)grp) != j->player_tag) {
+            snprintf(why, sizeof why, "division %d is not in an own army", i); return why;
+        }
+        for (int k = 0; k < i; k++) if (j->divh[k] == h) { snprintf(why, sizeof why, "division %d listed twice", i); return why; }
+        j->divh[i] = h;
+    }
+    j->ndivh = j->ndiv;
+    return NULL;
+}
+
+/* engineer 74: new_root's front: an exact CFront of the group's own theatre with the named section (provinces > 0); the
+ * front's own handle (at its reference base) must resolve to it. */
+static const char *orders2_front(job2_t *j) {
+    const fronts_facts *ff = &g_t.st2.fronts;
+    const stage2_common *c = &g_t.st2.common;
+    const cmd_type *dt = stage2_find(&g_t.st2, "orders.delete");
+    uint64_t v = 0, h = 0, lk = dt ? dt->lookup_fn + (uint64_t)g_slide : 0;
+    if (!ff->ok || !dt || !code_ptr(lk)) return "front facts unresolved";
+    if (!plausible(j->obj2) || !sq(j->obj2, &v) || v != ff->vt_front + (uint64_t)g_slide) return "obj2 is not a live CFront";
+    j->theatre = fronts_theatre_of(ff, sread, ff->vt_group + (uint64_t)g_slide, ff->vt_theatre + (uint64_t)g_slide, j->obj[0]);
+    if (!j->theatre) return "the group has no theatre (no front to bind a root to)";
+    if (!fronts_has_section(ff, sread, ff->vt_front + (uint64_t)g_slide, ff->vt_section + (uint64_t)g_slide, j->theatre, j->obj2,
+                            (int32_t)j->val[0]))
+        return "the front is not in the group's theatre or has no such section";
+    if (!sq(j->obj2 + c->cref_handle_off, &h) || !h || (uint64_t)(uintptr_t)((resolve_fn2)(uintptr_t)lk)(&h) != j->obj2)
+        return "the front's handle does not resolve to it";
+    j->hx = h;
+    return NULL;
+}
+
+/* engineer 74: fill one CPdxArray field of the fresh command through the allocator the factory put there */
+static int fill_array(char *cmd, const cmd_field *f, const void *src, int n, int esize) {
+    uint64_t data = 1, al = 0, avt = 0, afn = 0; int32_t cap = -1, size = -1;
+    uint32_t aoff = f->count_off + 4; /* {data, capacity, size, allocator} */
+    if (f->count_off != f->off + 0xc || !sq((uint64_t)(uintptr_t)cmd + f->off, &data) || data != 0 ||
+        !sread((uint64_t)(uintptr_t)cmd + f->off + 8, &cap, 4) || cap != 0 || !sread((uint64_t)(uintptr_t)cmd + f->count_off, &size, 4) ||
+        size != 0 || !sq((uint64_t)(uintptr_t)cmd + aoff, &al) || !plausible(al) || !sq(al, &avt) || !plausible(avt) ||
+        !sq(avt + g_t.st2.common.alloc_slot, &afn) || !code_ptr(afn))
+        return 0;
+    if (n == 0) return 1;
+    void *mem = ((alloc_fn)(uintptr_t)afn)((void *)(uintptr_t)al, (uint64_t)n * (uint64_t)esize, 8);
+    if (!mem) return 0;
+    memcpy(mem, src, (size_t)n * (size_t)esize);
+    *(void **)(cmd + f->off) = mem;
+    *(int32_t *)(cmd + f->off + 8) = n;
+    *(int32_t *)(cmd + f->count_off) = n;
+    return 1;
 }
 
 static void run_job2(void *ctx) {
@@ -570,9 +648,15 @@ static void run_job2(void *ctx) {
         /* AUTH_TAG: the command names the player's own tag; whether the country may use the object is the game's check */
         if (ct->spec->auth_kind != AUTH_TAG &&
             (!code_ptr(owner_f) || ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)j->obj[i]) != j->player_tag)) { j->res[i] = R_NOT_OWN; j->refused++; continue; }
-        if (!strcmp(ct->spec->family, "orders")) {
+        if (!strcmp(ct->spec->family, "orders") || !strcmp(ct->spec->family, "orders2")) {
             const char *why = orders_prep(j);
+            if (!why && !strcmp(ct->spec->family, "orders2") && j->ndiv && strcmp(op, "orders2.spearhead")) why = orders2_divisions(j);
+            if (!why && ct->spec->obj2 == OBJ2_FRONT) why = orders2_front(j);
             if (why) { j->res[i] = R_BAD_OBJ2; j->refused++; snprintf(j->reason, sizeof j->reason, "%s", why); continue; }
+            /* the before-state of the read-back */
+            const orders_facts *of = &g_t.st2.orders;
+            sread(j->obj[i] + of->list_cnt[0], &j->before_top, 4);
+            sread(j->obj[i] + of->list_cnt[1], &j->before_fallback, 4);
         }
         good++;
     }
@@ -598,17 +682,30 @@ static void run_job2(void *ctx) {
             for (int k = 0; k < ct->spec->nf && ok; k++) { /* every field still holds the factory's default */
                 const cmd_field *f = &ct->spec->f[k];
                 uint64_t cur = 0;
-                if (f->kind == FK_REF) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == nullref;
+                if (f->kind == FK_REF || f->kind == FK_HANDLE) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == nullref;
                 else if (f->kind == FK_I32) { int32_t v = 1; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 4) && v == f->def; }
+                else if (f->kind == FK_I64) { int64_t v = 1; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 8) && v == (int64_t)f->def; }
                 else if (f->kind == FK_U8) { uint8_t v = 9; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 1) && v == (uint8_t)f->def; }
+                else if (f->kind == FK_REF_ARRAY || f->kind == FK_I32_ARRAY) ok = 1; /* checked empty by fill_array */
                 else ok = 0;
             }
             if (ok) { /* fill: our own fresh command object, never game state */
-                for (int k = 0; k < ct->spec->nf; k++) {
+                for (int k = 0; k < ct->spec->nf && ok; k++) {
                     const cmd_field *f = &ct->spec->f[k];
+                    int64_t val = f->vi > 0 ? j->val[f->vi - 1] : j->val[i];
+                    if (f->keep) continue;
                     if (f->kind == FK_REF) *(uint64_t *)(cmd + f->off) = k == 0 ? h : h2;
-                    else if (f->kind == FK_U8) *(uint8_t *)(cmd + f->off) = j->flag ? 1 : 0; /* orders.execute: 1 execute, 0 stop */
-                    else *(int32_t *)(cmd + f->off) = (int32_t)j->val[i];
+                    else if (f->kind == FK_HANDLE) *(uint64_t *)(cmd + f->off) = j->hx;
+                    else if (f->kind == FK_I64) *(int64_t *)(cmd + f->off) = val;
+                    else if (f->kind == FK_REF_ARRAY) ok = fill_array(cmd, f, j->divh, j->ndivh, 8);
+                    else if (f->kind == FK_I32_ARRAY) ok = fill_array(cmd, f, j->provs, j->nprov, 4);
+                    else if (f->kind == FK_U8) *(uint8_t *)(cmd + f->off) = f->vi > 0 ? (uint8_t)val : (j->flag ? 1 : 0); /* orders.execute: 1 execute, 0 stop */
+                    else *(int32_t *)(cmd + f->off) = (int32_t)val;
+                }
+                if (!ok) { /* a partly filled object: the game's own destructor frees what was allocated */
+                    void **vt0 = *(void ***)cmd; ((delete_fn2)vt0[c->delete_slot / 8])(cmd);
+                    j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "an array field of the fresh command is not empty or its allocator is not game code");
+                    break;
                 }
             }
         } else { /* the UI's own constructor, on the fresh object whose containers are still empty */
@@ -635,7 +732,7 @@ static void run_job2(void *ctx) {
                 case CTOR_NEW_FRONT: { /* group, provinces, parent, the divisions the UI hands over, no flags, the drawer */
                     pdx_iarray pa = {j->provs, j->nprov, j->nprov};
                     pdx_array da = {(void **)(uintptr_t)j->divs, j->ndiv, j->ndiv};
-                    ((ctor_new_front)(uintptr_t)ctor)(cmd, obj, &pa, (void *)(uintptr_t)j->order, &da, 0, 0, 0, (void *)(uintptr_t)j->drawer);
+                    ((ctor_new_front)(uintptr_t)ctor)(cmd, obj, &pa, (void *)(uintptr_t)j->order, &da, 0, j->blitz, 0, (void *)(uintptr_t)j->drawer);
                     break;
                 }
                 case CTOR_ARRAY: {
@@ -666,7 +763,7 @@ static void run_job2(void *ctx) {
                 if (ok && nf) {
                     uint64_t dd = 0; int32_t dn = -1;
                     ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[3].off, &dd) && sread((uint64_t)(uintptr_t)cmd + ct->spec->f[3].count_off, &dn, 4) &&
-                         dn == j->ndiv && sread((uint64_t)(uintptr_t)cmd + 0x6c, fl, 3) && !fl[0] && !fl[1] && !fl[2];
+                         dn == j->ndiv && sread((uint64_t)(uintptr_t)cmd + 0x6c, fl, 3) && !fl[0] && fl[1] == (j->blitz ? 1 : 0) && !fl[2];
                 } else if (ok) ok = sread((uint64_t)(uintptr_t)cmd + 0x48, &top, 1) && top == 1;
                 if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
             } else if (ok) { /* what the game built must be exactly what was asked: the handles in order, then the second field */
@@ -740,8 +837,8 @@ static int parse_list_i32(const char *s, int32_t *out, int max) {
     return *s ? -1 : n;
 }
 
-static int be_post2(const char *op, const char *objs, const char *vals, const char *obj2, const char *provs, int64_t flag, long id,
-                    char *out, size_t n, int *unexplained) {
+static int be_post2(const char *op, const char *objs, const char *vals, const char *obj2, const char *provs, const char *divs,
+                    int64_t flag, long id, char *out, size_t n, int *unexplained) {
     const cmd_type *ct = stage2_find(&g_t.st2, op);
     if (!ct || !ct->ok) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused\",\"reason\":\"type not resolved on this build\"", op); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
     job2_t *j = (job2_t *)calloc(1, sizeof *j);
@@ -791,7 +888,45 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             if (strcmp(op, "orders.new_front")) why = "obj2 is for orders.new_front only (the drawing group)";
             else if (parse_list_u64(obj2, o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0];
         }
+    } else if (!strncmp(op, "orders2.", 8)) {
+        /* engineer 74: the rest of the battle plan. ONE orders group. vals by op:
+         *   new_root: section id, from, to (0..100000), split (0/1); obj2 = the CFront; divs = the divisions to assign
+         *   assign: order id; divs (1..)      unassign: no vals; divs (1..)
+         *   fallback: no vals; provs (the line, drawing order); divs (0..)
+         *   edit_root: order id, from, to     invasion_target / paradrop_target: order id, province id
+         *   spearhead: parent order id; provs (as orders.new_front; the parent's free divisions are handed over) */
+        int64_t lim_hi = 100000;
+        int want = !strcmp(op, "orders2.new_root") ? 4 : !strcmp(op, "orders2.edit_root") ? 3 :
+                   (!strcmp(op, "orders2.invasion_target") || !strcmp(op, "orders2.paradrop_target")) ? 2 :
+                   (!strcmp(op, "orders2.assign") || !strcmp(op, "orders2.spearhead")) ? 1 : 0;
+        int wants_provs = !strcmp(op, "orders2.fallback") || !strcmp(op, "orders2.spearhead");
+        int wants_divs = !strcmp(op, "orders2.assign") || !strcmp(op, "orders2.unassign");
+        int may_divs = wants_divs || !strcmp(op, "orders2.new_root") || !strcmp(op, "orders2.fallback");
+        if (j->n != 1) why = "orders2: exactly one orders group per request";
+        else if (nv != want) why = "vals: the wrong number of values for this op";
+        else if (flag) why = "orders2 ops take no flag";
+        else if (want >= 1 && strcmp(op, "orders2.new_root") && (j->val[0] < 1 || j->val[0] > 100000000)) why = "vals[0]: an order id";
+        else if (!strcmp(op, "orders2.new_root") && (j->val[0] < 0 || j->val[0] > 100000000 || j->val[1] < 0 || j->val[1] > lim_hi ||
+                                                    j->val[2] < 0 || j->val[2] > lim_hi || j->val[1] >= j->val[2] || (j->val[3] != 0 && j->val[3] != 1)))
+            why = "new_root vals: section id, from < to within 0..100000, split 0/1";
+        else if (!strcmp(op, "orders2.edit_root") && (j->val[1] < 0 || j->val[1] > lim_hi || j->val[2] < 0 || j->val[2] > lim_hi || j->val[1] >= j->val[2]))
+            why = "edit_root vals: order id, from < to within 0..100000";
+        else if (want == 2 && (j->val[1] < 1 || j->val[1] > 1000000)) why = "vals[1]: a province id";
+        else if (wants_provs && (j->nprov = parse_list_i32(provs ? provs : "", j->provs, J2_PROVS)) < 1)
+            why = "provs: 1 to 1024 comma-separated province ids in drawing order";
+        else if (!wants_provs && provs && *provs) why = "this op takes no provs";
+        else if (divs && *divs && !may_divs) why = "this op takes no divs";
+        else if (may_divs && divs && *divs && (j->ndiv = parse_list_u64(divs, j->divs, J2_DIVS)) < 1) why = "divs: comma-separated hex division addresses";
+        else if (wants_divs && j->ndiv < 1) why = "divs: at least one division";
+        else {
+            j->order_id = want >= 1 && strcmp(op, "orders2.new_root") ? (int32_t)j->val[0] : 0;
+            j->blitz = !strcmp(op, "orders2.spearhead");
+            for (int a = 0; !why && a < j->nprov; a++) for (int b = a + 1; b < j->nprov; b++) if (j->provs[a] == j->provs[b]) why = "a province is listed twice";
+        }
+        if (!why && obj2 && *obj2 && strcmp(op, "orders2.new_root")) why = "obj2 is for orders2.new_root only (the CFront)";
+        if (!why && !strcmp(op, "orders2.new_root")) { uint64_t o2[1]; if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: the CFront's hex address"; else j->obj2 = o2[0]; }
     } else if (nv) why = "this op takes no vals";
+    if (!why && divs && *divs && strncmp(op, "orders2.", 8)) why = "only orders2 ops take divs";
     if (!why && !strcmp(op, "airwing.merge") && j->n < 2) why = "a merge takes at least two wings";
     if (!why && (!strcmp(op, "air.transfer") || !strcmp(op, "air.enable_mission") || !strcmp(op, "airwing.attach"))) {
         uint64_t o2[1];
@@ -855,10 +990,60 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
                 }
                 pending = !(same && pn > 0);
                 if (!pending) snprintf(rbx, sizeof rbx, ",\"provinces_after\":%d", pn);
-            } else if (!strcmp(op, "orders.new_front")) {
+            } else if (!strncmp(op, "orders2.", 8) && strcmp(op, "orders2.spearhead")) {
+                /* engineer 74 */
+                const fronts_facts *ff = &g_t.st2.fronts;
+                uint64_t g = j->obj[0];
+                pending = 1;
+                if (!strcmp(op, "orders2.new_root")) {
+                    int32_t rid = orders_root_on(of, ff, sread, vt, g, j->hx, (int32_t)j->val[0]);
+                    if (rid > 0) { pending = 0; snprintf(rbx, sizeof rbx, ",\"root_id\":%d", rid); }
+                } else if (!strcmp(op, "orders2.assign") || !strcmp(op, "orders2.unassign")) {
+                    int held = 0, ok_all = 1;
+                    uint64_t od = 0; int32_t on = 0;
+                    int as = !strcmp(op, "orders2.assign");
+                    if (as && (orders_find(of, sread, vt, g, j->order_id) != j->order || !sq(j->order + of->divs_off, &od) ||
+                               !sread(j->order + of->divs_cnt, &on, 4))) ok_all = 0;
+                    for (int d = 0; ok_all && d < j->ndiv; d++) {
+                        if (as) { /* the named order's own list now holds the division */
+                            for (int32_t e = 0; e < on && e < 1024; e++) { uint64_t x = 0; if (sq(od + 8 * (uint64_t)e, &x) && x == j->divs[d]) { held++; break; } }
+                        } else { /* no order of the group holds it any more */
+                            int32_t hid = orders_holder(of, sread, vt, g, j->divs[d]);
+                            if (hid < 0) { ok_all = 0; break; }
+                            if (hid == 0) held++;
+                        }
+                    }
+                    pending = !(ok_all && held == j->ndiv);
+                    if (!pending) snprintf(rbx, sizeof rbx, ",\"divisions_moved\":%d", held);
+                } else if (!strcmp(op, "orders2.fallback")) {
+                    int32_t cnt = -1;
+                    pending = !(sread(g + of->list_cnt[1], &cnt, 4) && cnt > j->before_fallback);
+                    if (!pending) snprintf(rbx, sizeof rbx, ",\"fallback_orders\":%d", cnt);
+                } else if (!strcmp(op, "orders2.edit_root")) {
+                    int64_t rg[2] = {-1, -1};
+                    pending = !(orders_find(of, sread, vt, g, j->order_id) == j->order && sread(j->order + ff->root_range_off, rg, 16) &&
+                                rg[0] == j->val[1] && rg[1] == j->val[2]);
+                    if (!pending) snprintf(rbx, sizeof rbx, ",\"range\":[%lld,%lld]", (long long)rg[0], (long long)rg[1]);
+                } else {
+                    /* invasion/paradrop target: the module has no read of the target field yet; the order must still be
+                     * there and the MCP side reads the plan */
+                    pending = orders_find(of, sread, vt, g, j->order_id) != j->order;
+                    if (!pending) snprintf(rbx, sizeof rbx, ",\"target_read\":\"not mapped (the order is still there)\"");
+                }
+            } else if (!strcmp(op, "orders.new_front") || !strcmp(op, "orders2.spearhead")) {
                 int32_t cn = -1;
                 pending = !(orders_find(of, sread, vt, j->obj[0], j->order_id) == j->order && sread(j->order + of->child_cnt[0], &cn, 4) &&
                             cn > j->before_children);
+                if (!pending && j->blitz) {
+                    uint64_t cd = 0, sp = 0; uint8_t bz = 0;
+                    if (sq(j->order + of->child_off[0], &cd) && sq(cd + 8 * (uint64_t)(cn - 1), &sp)) {
+                        /* the spearhead's line is the new child's own child (NewFront: arrow -> line) or the child itself */
+                        pending = !(sread(sp + of->blitz_off, &bz, 1) && bz == 1);
+                        if (pending) { uint64_t sd = 0, s2 = 0; int32_t sn = 0;
+                            if (sq(sp + of->child_off[0], &sd) && sread(sp + of->child_cnt[0], &sn, 4) && sn > 0 && sq(sd, &s2) &&
+                                sread(s2 + of->blitz_off, &bz, 1) && bz == 1) pending = 0; }
+                    }
+                }
                 if (!pending) {
                     uint64_t cd = 0; int32_t nid = 0;
                     if (sq(j->order + of->child_off[0], &cd) && sread(cd + 8 * (uint64_t)(cn - 1), &cd, 8) && sread(cd + of->id_off, &nid, 4))
@@ -897,6 +1082,7 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
  * be the player's tag (the same checks the order commands make). Then a pure read (core/orders.c). */
 typedef struct {
     int refs; uint64_t group; int ok, n; char reason[160]; char *out; size_t cap;
+    int fronts; /* engineer 74: 1 = the group's theatre fronts instead of its order tree */
     dispatch_semaphore_t done;
 } jobo_t;
 static void jobo_release(jobo_t *j) {
@@ -915,7 +1101,17 @@ static void run_jobo(void *ctx) {
     else if (!code_ptr(dt->owner_fn + (uint64_t)g_slide) ||
              ((owner_fn2)(uintptr_t)(dt->owner_fn + (uint64_t)g_slide))((void *)(uintptr_t)j->group) != tag)
         snprintf(j->reason, sizeof j->reason, "not an own army or army group");
-    else {
+    else if (j->fronts) {
+        const fronts_facts *ff = &g_t.st2.fronts;
+        uint64_t th = ff->ok ? fronts_theatre_of(ff, sread, ff->vt_group + (uint64_t)g_slide, ff->vt_theatre + (uint64_t)g_slide, j->group) : 0;
+        if (!ff->ok) snprintf(j->reason, sizeof j->reason, "front facts unresolved on this build");
+        else if (!th) snprintf(j->reason, sizeof j->reason, "the group has no theatre");
+        else {
+            j->n = fronts_json(ff, sread, ff->vt_front + (uint64_t)g_slide, ff->vt_section + (uint64_t)g_slide, th, j->out, j->cap);
+            j->ok = j->n >= 0;
+            if (!j->ok) snprintf(j->reason, sizeof j->reason, "a front is not what the facts say (nothing guessed)");
+        }
+    } else {
         j->n = orders_tree_json(&g_t.st2.orders, sread, g_t.st2.orders.vt_order + (uint64_t)g_slide, j->group, j->out, j->cap);
         j->ok = j->n >= 0;
         if (!j->ok) snprintf(j->reason, sizeof j->reason, "an order is not what the facts say (nothing guessed)");
@@ -923,12 +1119,12 @@ static void run_jobo(void *ctx) {
     dispatch_semaphore_signal(j->done);
     jobo_release(j);
 }
-static int be_orders(const char *group, char *out, size_t n) {
+static int be_tree(const char *group, char *out, size_t n, int fronts) {
     uint64_t g[1];
     if (parse_list_u64(group, g, 1) != 1) { snprintf(out, n, "\"reason\":\"group: one hex address\""); return 0; }
     jobo_t *j = (jobo_t *)calloc(1, sizeof *j);
     if (!j || !(j->out = (char *)malloc(n))) { free(j); return 0; }
-    j->refs = 2; j->group = g[0]; j->cap = n; j->done = dispatch_semaphore_create(0);
+    j->refs = 2; j->group = g[0]; j->cap = n; j->fronts = fronts; j->done = dispatch_semaphore_create(0);
     long long t0 = mono_us();
     dispatch_async_f(dispatch_get_main_queue(), j, run_jobo);
     if (dispatch_semaphore_wait(j->done, dispatch_time(DISPATCH_TIME_NOW, 1500 * NSEC_PER_MSEC))) {
@@ -938,17 +1134,19 @@ static int be_orders(const char *group, char *out, size_t n) {
     int ok = j->ok;
     if (ok) { snprintf(out, n, "%s,\"read_ms\":%.2f", j->out, (mono_us() - t0) / 1000.0); }
     else snprintf(out, n, "\"reason\":\"%s\"", j->reason);
-    logj("\"event\":\"orders_read\",\"group\":\"0x%llx\",\"ok\":%s,\"orders\":%d,\"ms\":%.2f", (unsigned long long)g[0],
-         ok ? "true" : "false", j->n, (mono_us() - t0) / 1000.0);
+    logj("\"event\":\"%s\",\"group\":\"0x%llx\",\"ok\":%s,\"n\":%d,\"ms\":%.2f", fronts ? "fronts_read" : "orders_read",
+         (unsigned long long)g[0], ok ? "true" : "false", j->n, (mono_us() - t0) / 1000.0);
     jobo_release(j);
     return ok;
 }
 
+static int be_orders(const char *group, char *out, size_t n) { return be_tree(group, out, n, 0); }
+static int be_fronts(const char *group, char *out, size_t n) { return be_tree(group, out, n, 1); }
 static void be_log(const char *members) { logj("%s", members); }
 
 static void *ipc_thread(void *arg) {
     pthread_setname_np("hoi4-live-inproc-ipc");
-    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, be_post2, be_orders, killed, be_log};
+    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, be_post2, be_orders, be_fronts, killed, be_log};
     ipc_serve((const char *)arg, &be, &g_policy);
     return NULL;
 }

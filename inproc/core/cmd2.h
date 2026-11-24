@@ -28,7 +28,10 @@
 #include "cmd.h"
 #include "orders.h"
 
-enum { FK_I32 = 1, FK_U8, FK_REF, FK_REF_ARRAY, FK_I32_ARRAY /* a CPdxArray<int> (province ids) */ };
+enum { FK_I32 = 1, FK_U8, FK_REF, FK_REF_ARRAY, FK_I32_ARRAY /* a CPdxArray<int> (province ids) */,
+       /* engineer 74 (24 Nov): a 64-bit scalar (a fixed-point range end) and a raw handle the module took from a checked
+        * object of another class (a CFront's own handle: the front a plan root is bound to) */
+       FK_I64, FK_HANDLE };
 /* How the module builds the command:
  *   BUILD_FIELDS: the game's factory makes the default object; the module writes the spec's scalar and handle fields
  *                 into that fresh object (each field's default and serializer entry checked first).
@@ -47,15 +50,22 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
        CTOR_ORDER_PATH = 8,   /* (cmd, COrderInstance *, const CPdxArray<int> *provinces, bool ui): a new path for an order */
        CTOR_NEW_FRONT = 9 };  /* (cmd, group, const CPdxArray<int> *provinces, parent order, const CPdxArray<CArmy *> *
                                *  divisions, bool, bool blitz, bool withdraw, drawing group): a new front under a parent */
+/* engineer 74: BUILD_FIELDS also fills CPdxArray fields (a division handle list, a province list): the fresh object's
+ * array is empty ({data 0, capacity 0, size 0} and its allocator set by the factory); the module allocates the
+ * elements through THAT allocator's own allocate slot (read from the game's array growth code), so the command's
+ * destructor frees them the game's way. Only the module's fresh command object is written, never game state. */
 /* how the command's authorisation slot names the objects: through a typed resolver of a handle (the default), or as
  * "the sender controls the country tag at +auth_off" (the objects are then checked by the cast the "can do" makes) */
 enum { AUTH_HANDLE = 0, AUTH_TAG = 1 };
 /* the second object a type takes, checked before posting */
 enum { OBJ2_NONE = 0, OBJ2_AIR_BASE, OBJ2_REGION, OBJ2_ORDERS_GROUP,
-       OBJ2_REGION_ID }; /* a strategic region given by id in vals (0 = none: hold), looked up as the game's check does */
+       OBJ2_REGION_ID, /* a strategic region given by id in vals (0 = none: hold), looked up as the game's check does */
+       OBJ2_FRONT };     /* engineer 74: a CFront of the group's own theatre (exact vtable, its handle resolves to it) */
 
-/* def: the factory's default for an FK_I32 field (checked before the module writes the field; 0 unless given) */
-typedef struct { const char *name; uint16_t off; uint8_t kind; uint16_t count_off; uint32_t field_id; int32_t def; } cmd_field;
+/* def: the factory's default for an FK_I32 / FK_U8 / FK_I64 field (checked before the module writes the field; 0 unless
+ * given). vi (engineer 74): 1-based index of the request's vals that fills this scalar; 0 = the older rule (the value of
+ * the object's own row). keep: 1 = the field keeps the factory's default (checked, not written). */
+typedef struct { const char *name; uint16_t off; uint8_t kind; uint16_t count_off; uint32_t field_id; int32_t def; int8_t vi; int8_t keep; } cmd_field;
 
 typedef struct {
     const char *family;      /* allow-list unit: "production", "air", "airwing" (a family = one live pass) */
@@ -66,7 +76,7 @@ typedef struct {
     int auth_array;          /* 0: one handle at auth_off; 1: handle array(s) starting at auth_off */
     uint16_t auth_off;
     const char *target;      /* Itanium name of the class the typed resolver casts to ("8CAirWing") */
-    int nf; cmd_field f[5];  /* BUILD_CTOR: f[0] is the container the fresh object must hold empty */
+    int nf; cmd_field f[8];  /* BUILD_CTOR: f[0] is the container the fresh object must hold empty */
     int obj2;                /* OBJ2_* */
     int one_cmd;             /* 1: all objects go in ONE command (CTOR_ARRAY); 0: one command per object */
     int auth_kind;           /* AUTH_* */
@@ -110,14 +120,19 @@ typedef struct {
     uint32_t regions_arr_off, regions_cnt_off;
     /* typeinfo objects for a checked cast of a second object (attach: the army is a COrdersGroup) */
     uint64_t ti_reference, ti_orders_group;
+    /* engineer 74: the CPdxArray allocator's allocate slot (alloc(allocator, bytes, align)), by consensus of the game's
+     * array growth sites; a division (CUnit) as Assign's own check reads it: the cast's typeinfo and hint, its group */
+    uint32_t alloc_slot;
+    uint64_t ti_unit; uint32_t unit_hint, unit_group_off;
     char evidence[300];
 } stage2_common;
 
 
-#define CMD2_MAX 32
+#define CMD2_MAX 40
 typedef struct {
     stage2_common common;
     orders_facts orders;      /* engineer 73: the battle-plan order tree (core/orders.c) */
+    fronts_facts fronts;      /* engineer 74: the theatre fronts a plan root binds to (core/orders.c) */
     int n;
     cmd_type t[CMD2_MAX];
 } stage2_table;
