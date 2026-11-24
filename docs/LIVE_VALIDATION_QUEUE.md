@@ -348,7 +348,7 @@ Wing creation from the reserve (`CDeployAirWingCommand`, 0xa8 bytes, a nested eq
 
 Needs: the module built from branch e71/inproc-families (`inproc/build.sh`, sha in NOTES-1116.md "engineer 71"); the
 reader built from the same branch (cargo under the lock: `mkdir cargo.lock.d`, then
-`CARGO_BUILD_JOBS=2 ./buildbin120.sh ~/Projects/_scratch/dev-wt/inproc-e71 v120-e71a` for 1.20 or the usual new-v* build for
+`CARGO_BUILD_JOBS=2 ./buildbin120.sh <this worktree> v120-e71a` for 1.20 or the usual new-v* build for
 1.19.4.1, then `rmdir cargo.lock.d`); the opt-in with the new family:
 `HOI4_INPROC_FAMILIES=set_game_speed,production,air,airwing ./inproc_stage2.sh PREV s3a`; calls through the broker
 (`zsh deploybin.sh s3a BIN HOI4_BACKEND=inprocess HOI4_INPROC_SOCK=$PWD/s3a/inproc.sock`) as in S2 (s2a/tool.sh lacks
