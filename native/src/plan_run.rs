@@ -1958,7 +1958,17 @@ pub fn tick(
     // first: one whose answer rests after failures, or that waits for the model, gives the
     // turn to the next. When none can be answered now the tick goes on to the other steps.
     let mut waiting: Option<(String, bool)> = None;
-    for top in list(&events, "events").iter().rev() {
+    // An event whose answer the game refused goes after every other open event, rested or not
+    // (t1939h, 24 Nov 2026: news.234 lay under AAT_norway_news.2; its refused answer came due
+    // again in each 18-second tick and went first seven times, and the declared war's attack
+    // waited 14 game days behind it).
+    let refused = |key: &str| {
+        let prefix = format!("hoi4_event_choose {{\"event\":{}", json!(key));
+        state.failed_run.keys().any(|k| k.starts_with(&prefix))
+    };
+    let mut order: Vec<&Value> = list(&events, "events").iter().rev().collect();
+    order.sort_by_key(|top| refused(text(&top["event"])));
+    for top in order {
         let key = text(&top["event"]).to_string();
         let new = !state.seen.contains_key(&key);
         let first = *state.seen.entry(key.clone()).or_insert(now);
@@ -12427,6 +12437,28 @@ mod tests {
                 event: "y.1".into(),
                 new: true
             }
+        );
+    }
+
+    #[test]
+    fn an_event_whose_answer_was_refused_goes_after_the_others_even_when_due_again() {
+        // t1939h: news.234 under AAT_norway_news.2 was sent seven times, 18 s each, first
+        let events = json!({"events": [
+            {"event": "AAT_norway_news.2", "options": ["ok"]},
+            {"event": "news.234", "options": ["ok"]}]});
+        let tools = fake(vec![("hoi4_events", events)]);
+        let mut state = State::default();
+        let sig = format!(
+            "hoi4_event_choose {}",
+            json!({"event": "news.234", "option": 0})
+        );
+        state
+            .failed_run
+            .insert(sig, (1, "event_covered: answer the other first".into()));
+        let step = tick(&mut state, &tools, &json!({}), "l", START + 10 * DAY).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("event AAT_norway_news.2 option 0")),
+            "{step:?}"
         );
     }
 
