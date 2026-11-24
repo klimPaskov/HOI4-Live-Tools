@@ -22,8 +22,8 @@ mod construction;
 mod construction_find;
 mod fair_facts;
 mod inproc;
-mod inproc_orders;
 mod inproc_events;
+mod inproc_orders;
 mod inproc_picks;
 mod inproc_units;
 mod operation_act;
@@ -8408,7 +8408,7 @@ fn module_in_process(
 }
 
 /// The receipt with the module's reply when the change went in process.
-fn with_inproc(receipt: Value, reply: Option<Value>) -> Value {
+fn with_inproc<R: serde::Serialize>(receipt: R, reply: Option<Value>) -> Value {
     match reply {
         Some(r) => json!({"receipt":receipt,"in_process":r}),
         None => json!({"receipt":receipt}),
