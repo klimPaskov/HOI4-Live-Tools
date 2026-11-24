@@ -121,6 +121,26 @@ impl Channel {
     }
 }
 
+impl Channel {
+    /// One request as built by the caller (the orders read and posts of `inproc_orders`).
+    pub(super) fn call_raw(&mut self, req: Value) -> Result<Value> {
+        self.call(req)
+    }
+
+    /// A stage-2 post built by the caller, spaced and retried once on a rate limit like `post`.
+    pub(super) fn post_raw(&mut self, req: Value) -> Result<Value> {
+        for attempt in 0..2 {
+            space_posts();
+            let reply = self.call(req.clone())?;
+            if attempt == 0 && rate_limited(&reply) {
+                continue;
+            }
+            return Ok(reply);
+        }
+        unreachable!()
+    }
+}
+
 /// The module's minimum gap between stage-2 requests is 50 ms; 60 leaves room for clock skew.
 const POST_GAP: Duration = Duration::from_millis(60);
 static LAST_POST: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
@@ -150,7 +170,7 @@ pub(super) fn rate_limited(reply: &Value) -> bool {
 }
 
 /// The module's parser takes one flat object of at most 8 members, strings without escapes or integers, one line
-/// under 1 KiB; lists travel as comma-separated strings.
+/// under about 9 KB; lists travel as comma-separated strings.
 pub(super) fn post_request(
     op: &str,
     objs: &[u64],
@@ -185,7 +205,9 @@ pub(super) fn post_request(
 fn request_line(req: &Value) -> Result<String> {
     let line =
         serde_json::to_string(req).map_err(|e| Error::new("inproc_channel", e.to_string()))? + "\n";
-    if line.len() > 1000 || line.contains('\\') {
+    // the module reads lines up to about 9 KB (engineer 73: a front's province list); older modules 1 KiB, but they
+    // have no orders family, so no long request reaches them
+    if line.len() > 8800 || line.contains('\\') {
         return Err(Error::new(
             "invalid_arguments",
             "request too long for the channel",

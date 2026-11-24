@@ -403,3 +403,61 @@ must agree; if the own list order is NOT the priority order, the route is wrong:
 B5 soak 10 min at speed 3: one add (then remove via hoi4_production_set factories 0) and two priority moves per minute,
 all Verified; save, reload, plain load.
 Pass: B1-B5 clean on the 1940 and a 1936 bed -> `IPC_LIVE_PASSED` for `production2` (5th entry), "S3 PASS: production2".
+
+## Session S4-ORDERS: the in-process module, battle plans (family `orders`; about 60 minutes plus a 20-day war twice)
+
+Built by engineer 73 (24 Nov 2026), offline-proven only: the order-tree facts and the four types are on with every
+check on 1.20.0.0 and 1.19.4.1 macOS (stage 2 17/17); `orders_test` (a plan laid out with the scanned offsets: tree,
+lookup by id, the new-front division rule) ALL PASS on both. OFF under `auto` until this session passes.
+- READ `orders` (op, not a command): the order tree of one own army or army group, between two frames, in the external
+  read's model (lists top / fallback / area; per order kind, id, executing, spearhead, withdraw, locked, drawing group,
+  provinces in order, divisions, children = arrows and target lines).
+- `orders.delete` (`COrderDeleteCommand(group, id)`), `orders.execute` (`COrderExecuteCommand(group, id, execute)`;
+  id 0 = the whole plan; flag 1 execute, 0 stop), `orders.set_path` (the UI's own `COrderSetPathCommand` constructor:
+  an existing order gets a new province path, keeps its id; refused by the game while the order is locked),
+  `orders.new_front` (the UI's own `COrderNewFrontCommand` constructor: a front under a parent order, with the parent's
+  divisions that no child holds yet, as the front tool hands them; no spearhead, no withdraw, no "+0x6c" flag).
+- MCP: `hoi4_army_front` WITH `provinces` (explicit, drawing order) or `against` (+ `own_states`), optional
+  `parent_order` / `replace_order`. Without them the tool stays on the drag. The journal's Verified (one more order on
+  the army, external read) is unchanged.
+
+Needs: the game slot, Steam closed; module and reader built from branch e73/inproc-plans; the 1940 Germany bed of
+Session 1 (PREV-1940) and a 1936 bed at war or one day before a war (PREV-WAR: e.g. Italy vs Ethiopia, the Italy runs).
+Find a group's address: `HOI4_BIN/macprobe SESSION dbg_army_bytes:ARMY:8` -> `"address"`.
+
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,orders ./inproc_stage2.sh PREV-1940 s4o`; the hello must show
+`"orders":{"on":true,"live_passed":false}` and `stage2.orders.ok:true`. Client:
+`C="python3 -I inproc/tools/inproc_client.py s4o/inproc.sock"`.
+
+O1 reader, paused (10 min). For one army with a front and an offensive, one army group, one army with no plan:
+`$C orders GROUP` and `zsh s4o/tool.sh gui hoi4_armies '{}'` (external read) and a screenshot of the plan (UI).
+Pass: same orders, ids, kinds, provinces (counts and ends), divisions, executing; read_ms < 5. An enemy or allied
+group's address -> `not_own`; a random heap address -> `not_a_live_object`.
+O2 delete and execute, paused (10 min). `$C post2 orders.execute GROUP --vals ID --flag 1` on one front -> the reply's
+read-back `executing:true`, the UI's play button shows it; `--flag 0` -> stop. `--vals 0` -> the whole plan. Then
+`orders.delete` on one offensive arrow (not the front): the arrow is gone in `orders`, in `hoi4_armies` and on the map;
+the front keeps its id. Same by mouse (the arrow's X, the plan's play button) for the timing.
+O3 new front with provinces, paused (10 min). On an army whose front covers its whole border: take the first 4
+provinces of its front (`orders` output) and `zsh s4o/tool.sh inprocess hoi4_army_front '{"army":A,"state_id":S,
+"provinces":[p1,p2,p3,p4],"request_id":"o3a","lease_token":L}'` -> Verified; `orders` shows one more child of the
+parent with exactly those provinces and the free divisions; the map shows the line. Then `"against":"TAG"` for a
+whole border (one front per connected stretch; record the chain counts the reply gives against the map) and with
+`own_states` for a piece. Then `"replace_order":ID` with a shorter list: the same id, the new provinces.
+O4 refusals (5 min): a province in a state the country does not control -> `invalid_arguments` before posting (the
+game's check only counts provinces; its execution drops foreign ones, so the tool checks control first); then the
+same list straight through `$C post2 orders.new_front` (no tool check): record what the game does (no order, or an
+order with fewer provinces) and whether anything else changed; a parent id not in the plan -> refused before
+posting; `replace_order` on a LOCKED order (executing with combat: set_path's check reads the lock handle) ->
+`refused_by_game_check`; a 1025-province list -> invalid_arguments. Nothing posted in any case (inproc.log).
+O5 the field-marshal question (the REQUEST in NOTES-1116 "engineer 73"): with an army group of 2+ armies, by mouse,
+draw the group's front along one border WITHOUT Shift, `$C orders GROUP` and `$C orders ARMY` for each army; delete;
+draw again WITH Shift (Shift+click), read again. Record per order: drawer, blitz, withdraw, parent, children, divisions;
+and whether each army got its own sub-front. This answers what "without sub-army fronts" is in state.
+O6 timings: 20 x (set_path back and forth) in process vs 5 x by mouse: wall ms per change.
+O7 the 20-day war (PREV-WAR, twice, same save, speed 3, executor off, by hand from the same script): run A with the
+drag (`gui`), run B with `inprocess` and `against` fronts + `orders.execute`. Record per run: fronts placed per minute,
+fronts placed where asked (orders vs request), provinces taken by day 20, casualties ratio.
+Stop at once (endrun.sh s4o) on: a crash, a hang, an `orders` read that disagrees with the external read on ids or
+provinces, any post2 with result "unexplained", a front that appears where the request did not ask, any order that
+changes on an ALLIED or enemy group.
+Pass: O1-O7 clean on both beds -> `IPC_LIVE_PASSED` for `orders` (6th entry), "S4 PASS: orders".

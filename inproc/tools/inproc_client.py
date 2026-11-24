@@ -8,6 +8,12 @@
         (--vals one delta per line), production.remove_line, air.transfer (--obj2 the CAirBase), air.set_mission
         (--vals one mission mask, --flag 1 enable / 0 disable), air.enable_mission (--obj2 the CStrategicRegion).
         The module checks every object with the game's resolver and owner getter, then the game's own validity check.
+  inproc_client.py SOCK orders GROUP
+        engineer 73: the battle-plan order tree of one own army or army group (hex address, e.g. from hoi4_armies'
+        debug words or the reader's group list), read by the module between two frames
+  inproc_client.py SOCK post2 orders.OP GROUP --vals ORDER_ID [--provs P,P,..] [--obj2 DRAWER] [--flag 0|1]
+        orders.delete / orders.execute (--vals 0 = the whole plan; --flag 1 execute, 0 stop) / orders.set_path /
+        orders.new_front (--provs the provinces in drawing order; --obj2 the drawing group, default the group)
   inproc_client.py SOCK stage1 OUTDIR --external CMD [--shot CMD]
         Part A of the stage-1 session: hello, probe, one post and its read-back by the module AND by the external
         runtime (CMD prints hoi4_overview's JSON body), undo by the same route, 20 timed repetitions. Writes
@@ -195,12 +201,14 @@ def main(argv):
         print(json.dumps(ch.call(op), indent=1)); return 0
     if op == 'post':
         print(json.dumps(ch.post_speed(int(argv[3])), indent=1)); return 0
+    if op == 'orders':
+        print(json.dumps(ch.call('orders', group=argv[3]), indent=1)); return 0
     if op == 'post2':
         # stage 2, one family op: post2 OP OBJS [--vals V,V] [--obj2 ADDR] [--flag 0|1]
         # e.g. post2 production.add_factories 0x6000abc0 --vals 5 ; post2 air.transfer 0x6001,0x6002 --obj2 0x7000
         rest = argv[5:]
         kw = {'cmd': argv[3], 'objs': argv[4]}
-        for k in ('vals', 'obj2'):
+        for k in ('vals', 'obj2', 'provs'):
             if '--' + k in rest: kw[k] = rest[rest.index('--' + k) + 1]
         if '--flag' in rest: kw['flag'] = int(rest[rest.index('--flag') + 1])
         print(json.dumps(ch.call('post', **kw), indent=1)); return 0
