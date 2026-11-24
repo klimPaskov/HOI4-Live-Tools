@@ -180,3 +180,7 @@ search the country object for it, confirm on a second value, then read it withou
 Total: about 325 minutes in five sessions.
 34. Air wings attached to an army (5 min): `hoi4_air_attach {wings, army}`.
     DONE v65m (23 Nov 2026): 2/2 CAS wings attached to Armee West Nord in 5.3 s, Verified from the wing's attached-army link (+0x950); the repeat call already:true in 19 ms, no input. Wings in pilot exercises are refused by the game.
+    DONE w69d (24 Nov 2026, 7-day war bed from a 1 May 1940 save, executor `manage.air_attach`): by war day 7 twelve wings
+    read attached from memory: Panzergruppe Ost 4 CAS + 1 fighter wing, Panzergruppe Nord 4 CAS + 1 fighter wing, Armee
+    Pommern 2 CAS. As a plain military lane the rule first acted on war day 14 (two 21-day beds); it now runs at the
+    head of the war air step.
