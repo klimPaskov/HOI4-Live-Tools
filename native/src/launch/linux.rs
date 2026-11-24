@@ -68,6 +68,79 @@ struct Config {
     gpu_transport: Option<PathBuf>,
     #[serde(default)]
     fex: Option<translated::FexLaunch>,
+    /// Start the game without the Steam client: the game finds a private no-op `xdg-open`
+    /// first on its PATH (so a `steam://` URL opens nothing; each call is logged in the run
+    /// directory's `xdg-open.log`) and no desktop session bus.
+    #[serde(default)]
+    without_steam_client: bool,
+}
+/// Variables the game inherits from the launcher; everything else is cleared.
+const INHERITED: [&str; 9] = [
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "PATH",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "XDG_RUNTIME_DIR",
+    "DBUS_SESSION_BUS_ADDRESS",
+];
+/// The inherited part of the game's environment. With `no_steam_bin` (the option
+/// `without_steam_client`), that folder goes first on PATH and the session bus is left out.
+fn inherited_environment(
+    get: impl Fn(&str) -> Option<std::ffi::OsString>,
+    no_steam_bin: Option<&Path>,
+) -> Vec<(&'static str, std::ffi::OsString)> {
+    let mut out = Vec::new();
+    for name in INHERITED {
+        if no_steam_bin.is_some() && name == "DBUS_SESSION_BUS_ADDRESS" {
+            continue;
+        }
+        let value = get(name);
+        match (name, no_steam_bin) {
+            ("PATH", Some(bin)) => {
+                let mut path = bin.as_os_str().to_os_string();
+                if let Some(rest) = value.filter(|v| !v.is_empty()) {
+                    path.push(":");
+                    path.push(rest);
+                }
+                out.push((name, path));
+            }
+            (_, _) => {
+                if let Some(v) = value {
+                    out.push((name, v));
+                }
+            }
+        }
+    }
+    out
+}
+/// The private `bin` folder for `without_steam_client`: a no-op `xdg-open` that only logs its
+/// arguments to `<run>/xdg-open.log`, also under the name the game's shell command uses.
+fn write_no_steam_bin(directory: &Path) -> Result<PathBuf> {
+    let bin = directory.join("no-steam-bin");
+    fs::DirBuilder::new().mode(0o700).create(&bin)?;
+    let log = directory.join("xdg-open.log");
+    let log = log
+        .to_str()
+        .filter(|l| !l.contains('\'') && !l.contains('\n'))
+        .ok_or_else(|| {
+            Error::new(
+                "invalid_config",
+                "Run directory path unusable in a shell script",
+            )
+        })?;
+    let script = format!("#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{log}'\nexit 0\n");
+    for name in ["xdg-open", "unset LD_LIBRARY_PATH && xdg-open"] {
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o700)
+            .open(bin.join(name))?;
+        f.write_all(script.as_bytes())?;
+    }
+    Ok(bin)
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1576,20 +1649,13 @@ pub fn serve(path: &Path) -> Result<()> {
         .stdout(log.try_clone()?)
         .stderr(log)
         .env_clear();
-    for name in [
-        "HOME",
-        "USER",
-        "LOGNAME",
-        "PATH",
-        "LANG",
-        "LC_ALL",
-        "LC_CTYPE",
-        "XDG_RUNTIME_DIR",
-        "DBUS_SESSION_BUS_ADDRESS",
-    ] {
-        if let Some(value) = std::env::var_os(name) {
-            command.env(name, value);
-        }
+    let no_steam_bin = if config.without_steam_client {
+        Some(write_no_steam_bin(&directory)?)
+    } else {
+        None
+    };
+    for (name, value) in inherited_environment(|n| std::env::var_os(n), no_steam_bin.as_deref()) {
+        command.env(name, value);
     }
     let fex_needs_home = config
         .fex
