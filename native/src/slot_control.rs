@@ -292,7 +292,7 @@ mod tests {
             f.region(0x90000, 0x18);
             f.word(0x90000, b + 0x168a260);
             f.word(0x90010, 0x20000);
-            f.metadata(b + 0x44e4f10, b + 0x44edbd0, b + 0x3682000, "11CButtonDrag");
+            f.metadata(b + 0x44e4f10, b + 0x44f5bd0, b + 0x3682000, "11CButtonDrag");
             f
         }
         fn observe(&self) -> Result<Value> {
@@ -402,7 +402,7 @@ mod tests {
         f.word(0x70110, 0xa0000);
         f.region(0xa0000, 0x1b0);
         f.word(0xa0000, b + 0x44f51d8);
-        f.metadata(b + 0x44f51d8, b + 0x44edcd0, b + 0x3682100, "7CSprite");
+        f.metadata(b + 0x44f51d8, b + 0x44f5cd0, b + 0x3682100, "7CSprite");
         f.word(0xa0138, 0x70008);
         assert_eq!(f.observe().unwrap_err().code, "invalid_gui_owner");
         assert!(!f.reads.borrow().contains_key(&0xa0168));

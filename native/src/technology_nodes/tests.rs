@@ -46,8 +46,8 @@ impl Memory {
     }
     fn unknown_gui(&mut self) -> u64 {
         let object = 0x29000000;
-        let table = BASE + 0x43e5d58;
-        let info = BASE + 0x43f63e0;
+        let table = BASE + 0x43ed008;
+        let info = BASE + 0x43fd690;
         let name = BASE + 0x3778000;
         self.u64(object, table);
         self.u64(table - 16, 0);

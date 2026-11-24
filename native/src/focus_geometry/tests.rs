@@ -44,7 +44,7 @@ impl Fixture {
         self.word(data, child);
     }
     fn metadata(&mut self, table: u64, index: u64, name: &str) {
-        let info = BASE + 0x44f0440 + index * 0x100;
+        let info = BASE + 0x44f8440 + index * 0x100;
         let text = BASE + 0x3688000 + index * 0x100;
         self.word(BASE + table - 16, 0);
         self.word(BASE + table - 8, info);

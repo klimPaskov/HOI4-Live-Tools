@@ -258,7 +258,7 @@ fn unbound_factory_gate_never_reads_payload_or_renderer() {
         f.word(BUTTON + 0x1a8, gate);
         if own {
             f.word(WINDOW + 0xe78, gate);
-            f.word(gate, BASE + 0x44dea60); // Unknown owned position type.
+            f.word(gate, BASE + 0x44e6a60); // Unknown owned position type.
         }
         let v = f.control(true).unwrap();
         assert_eq!(v["binding_available"], true);

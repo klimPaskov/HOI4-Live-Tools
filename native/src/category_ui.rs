@@ -513,7 +513,7 @@ mod tests {
     #[test]
     fn unknown_control_stops_before_owner_payload() {
         let mut f = Fixture::new();
-        f.word(0x60000, 0x10000 + 0x44dd428);
+        f.word(0x60000, 0x10000 + 0x44e5428);
         assert_eq!(f.observe().unwrap()["reason"], "unknown_control_layout");
         assert!(!f.reads.borrow().contains_key(&0x60068));
     }
@@ -525,7 +525,7 @@ mod tests {
         for (a, v) in [
             (0xc0000, 0xa0000),
             (0x10000 + 0x4542120, 0xa0000),
-            (0xa2000, 0x10000 + 0x43a6400),
+            (0xa2000, 0x10000 + 0x43ad548),
         ] {
             let mut f = Fixture::new();
             f.word(a, v);
@@ -593,11 +593,11 @@ mod tests {
             self.word(0x60110, 0xf0000);
             self.word(0xf0000, b + 0x44f51d8);
             self.word(0xf0138, 0x60000);
-            self.metadata(b + 0x44f51d8, b + 0x44edcd0, b + 0x3682000, "7CSprite");
+            self.metadata(b + 0x44f51d8, b + 0x44f5cd0, b + 0x3682000, "7CSprite");
             self.region(0xf1000, 0x1f0);
             self.word(0xf0168, 0xf1000);
             self.word(0xf1000, b + 0x44f5530);
-            self.metadata(b + 0x44f5530, b + 0x44edce0, b + 0x3682100, "11CSpriteType");
+            self.metadata(b + 0x44f5530, b + 0x44f5ce0, b + 0x3682100, "11CSpriteType");
             self.put(0xf0114, &1.0f32.to_le_bytes());
             for a in [0xf1090, 0xf1094, 0xf10a4, 0xf10a8] {
                 self.put(a, &1i32.to_le_bytes());
