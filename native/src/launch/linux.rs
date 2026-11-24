@@ -1650,7 +1650,7 @@ pub fn serve(path: &Path) -> Result<()> {
         .stderr(log)
         .env_clear();
     let no_steam_bin = if config.without_steam_client {
-        Some(write_no_steam_bin(&directory)?)
+        Some(write_no_steam_bin(directory)?)
     } else {
         None
     };

@@ -1733,7 +1733,9 @@ fn the_game_inherits_the_session_bus_and_path_unless_launched_without_the_steam_
     let without = inherited_environment(get, Some(bin));
     assert!(without.contains(&("PATH", "/run/r/no-steam-bin:/usr/bin:/bin".into())));
     assert!(without.contains(&("HOME", "/home/u".into())));
-    assert!(!without.iter().any(|(n, _)| *n == "DBUS_SESSION_BUS_ADDRESS"));
+    assert!(!without
+        .iter()
+        .any(|(n, _)| *n == "DBUS_SESSION_BUS_ADDRESS"));
     assert!(!without.iter().any(|(n, _)| n.starts_with("Steam")));
     // No inherited PATH: the private folder alone.
     let empty = inherited_environment(|_| None, Some(bin));
@@ -1743,7 +1745,10 @@ fn the_game_inherits_the_session_bus_and_path_unless_launched_without_the_steam_
 #[test]
 fn the_private_xdg_open_opens_nothing_and_logs_each_call() {
     let directory = std::env::temp_dir().join(format!("hoi4-no-steam-{}", nonce().unwrap()));
-    fs::DirBuilder::new().mode(0o700).create(&directory).unwrap();
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&directory)
+        .unwrap();
     let bin = write_no_steam_bin(&directory).unwrap();
     for name in ["xdg-open", "unset LD_LIBRARY_PATH && xdg-open"] {
         let meta = fs::metadata(bin.join(name)).unwrap();
