@@ -66,6 +66,8 @@ fn root_offsets(abi: StringAbi) -> &'static [u64] {
     match abi {
         StringAbi::LibCxx => &ROOT_OFFSETS,
         StringAbi::LibStdCxx => &ROOT_OFFSETS_LINUX,
+        // No Windows window root is measured yet: no candidate, so no widget tree is read.
+        StringAbi::Msvc => &[],
     }
 }
 const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);

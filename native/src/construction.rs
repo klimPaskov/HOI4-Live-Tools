@@ -2,6 +2,7 @@
 //! Semantics consulted: smerss/Clausewitz-MCP calling/game.py (MIT).
 //! Layout/field names independently recovered from constructors, serializers,
 //! keyword initializers and arithmetic; see PROVENANCE.md. No engine calls.
+use crate::xlayout::UNMAPPED;
 mod buildings;
 mod catalog;
 pub mod controls;
@@ -221,10 +222,41 @@ const MACOS: Layout = Layout {
     gs_states: 0x290,
     line_tail_shift: 8,
 };
+/// Windows: no reviewed layout yet. Every offset and address is past the readable range, so
+/// each read through it fails with `read_bound` instead of reading a guessed place.
+const WINDOWS: Layout = Layout {
+    building_line_vtable: UNMAPPED,
+    railway_line_vtable: UNMAPPED,
+    building_vtable: UNMAPPED,
+    building_status: UNMAPPED,
+    building_template: UNMAPPED,
+    database_global: UNMAPPED,
+    database_vtable: UNMAPPED,
+    template_vtable: UNMAPPED,
+    null_template_vtable: UNMAPPED,
+    template_key: UNMAPPED,
+    template_ordinal: UNMAPPED,
+    status_vtable: UNMAPPED,
+    state_vtable: UNMAPPED,
+    state_owner: UNMAPPED,
+    state_controller: UNMAPPED,
+    state_id: UNMAPPED,
+    state_status: UNMAPPED,
+    state_extra_slots: UNMAPPED,
+    province_vtable: UNMAPPED,
+    province_owner: UNMAPPED,
+    province_state: UNMAPPED,
+    province_id: UNMAPPED,
+    province_status: UNMAPPED,
+    gs_provinces: UNMAPPED,
+    gs_states: UNMAPPED,
+    line_tail_shift: UNMAPPED,
+};
 pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {
         crate::memory::StringAbi::LibStdCxx => &LINUX,
         crate::memory::StringAbi::LibCxx => &MACOS,
+        crate::memory::StringAbi::Msvc => &WINDOWS,
     }
 }
 pub(crate) fn lines_in(

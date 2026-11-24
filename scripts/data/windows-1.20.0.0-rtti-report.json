@@ -1,0 +1,2648 @@
+{
+ "summary": {
+  "pe_sha256": "1beb2a38fe2d747e5b7adb9b9648e350b0b851845dd228ffb87d2d2ac1b63a9f",
+  "pe_image_base": "0x140000000",
+  "rtti_types": 14122,
+  "keys": 190,
+  "counts": {
+   "high": 177,
+   "medium": 4,
+   "unresolved": 1,
+   "not_vtable": 8
+  }
+ },
+ "items": [
+  {
+   "mac": "0x34ac5f8",
+   "used": [
+    "Class CAirWing",
+    "launch/macos/airui.rs:331"
+   ],
+   "kind": "vtable",
+   "itanium": "8CAirWing",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCAirWing@@",
+   "windows": "0x29fc498"
+  },
+  {
+   "mac": "0x34ac6c0",
+   "used": [
+    "Class CAirWingPool"
+   ],
+   "kind": "vtable",
+   "itanium": "12CAirWingPool",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCAirWingPool@@",
+   "windows": "0x29fc528"
+  },
+  {
+   "mac": "0x34ace60",
+   "used": [
+    "Class CArmy",
+    "army.rs:36 division_vtable",
+    "launch/macos/armies.rs:144",
+    "launch/macos/armies.rs:68 division_vtable",
+    "launch/macos/units.rs:237",
+    "launch/macos/units.rs:91 division_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "5CArmy",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCArmy@@",
+   "windows": "0x29db9c8"
+  },
+  {
+   "mac": "0x34b0ab0",
+   "used": [
+    "Class CLandCombatant"
+   ],
+   "kind": "vtable",
+   "itanium": "14CLandCombatant",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCLandCombatant@@",
+   "windows": "0x2a28440"
+  },
+  {
+   "mac": "0x34b0bd8",
+   "used": [
+    "Class CLandCombat"
+   ],
+   "kind": "vtable",
+   "itanium": "11CLandCombat",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCLandCombat@@",
+   "windows": "0x2a28558"
+  },
+  {
+   "mac": "0x34b1930",
+   "used": [
+    "Class CCombatManager"
+   ],
+   "kind": "vtable",
+   "itanium": "14CCombatManager",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCombatManager@@",
+   "windows": "0x29d1f48"
+  },
+  {
+   "mac": "0x34b1b90",
+   "used": [
+    "Class CCombatTactic"
+   ],
+   "kind": "vtable",
+   "itanium": "13CCombatTactic",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCombatTactic@@",
+   "windows": "0x2868420"
+  },
+  {
+   "mac": "0x34b2928",
+   "used": [
+    "Class CCountryFuelStatus",
+    "launch/macos/economy_detail.rs:314",
+    "launch/macos/resources.rs:198"
+   ],
+   "kind": "vtable",
+   "itanium": "18CCountryFuelStatus",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryFuelStatus@@",
+   "windows": "0x2a0be08"
+  },
+  {
+   "mac": "0x34bd248",
+   "used": [
+    "Class CCountryOccupationStatus"
+   ],
+   "kind": "vtable",
+   "itanium": "24CCountryOccupationStatus",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryOccupationStatus@@",
+   "windows": "0x2a05bb8"
+  },
+  {
+   "mac": "0x34fb310",
+   "used": [
+    "Class CDivisionTemplateData",
+    "launch/macos/units.rs:106 data_vtable",
+    "launch/macos/units.rs:252"
+   ],
+   "kind": "vtable",
+   "itanium": "21CDivisionTemplateData",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCDivisionTemplateData@@",
+   "windows": "0x29d0f30"
+  },
+  {
+   "mac": "0x34fb370",
+   "used": [
+    "Class CReferencedDivisionTemplate",
+    "launch/macos/units.rs:102 template_vtable",
+    "launch/macos/units.rs:248"
+   ],
+   "kind": "vtable",
+   "itanium": "27CReferencedDivisionTemplate",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCReferencedDivisionTemplate@@",
+   "windows": "0x29d0f80"
+  },
+  {
+   "mac": "0x34fbb48",
+   "used": [
+    "Class CEvent"
+   ],
+   "kind": "vtable",
+   "itanium": "6CEvent",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCEvent@@",
+   "windows": "0x2a1ada8"
+  },
+  {
+   "mac": "0x34fc2e8",
+   "used": [
+    "Class CFleet"
+   ],
+   "kind": "vtable",
+   "itanium": "6CFleet",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCFleet@@",
+   "windows": "0x29e4128"
+  },
+  {
+   "mac": "0x35044e8",
+   "used": [
+    "Class CCurrentGameState",
+    "game.rs:94 gs_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "17CCurrentGameState",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCurrentGameState@@",
+   "windows": "0x27a31b8"
+  },
+  {
+   "mac": "0x35089d8",
+   "used": [
+    "Class CInGameIdler",
+    "game.rs:95 idler_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "12CInGameIdler",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCInGameIdler@@",
+   "windows": "0x29ea628"
+  },
+  {
+   "mac": "0x350ad90",
+   "used": [
+    "launch/macos/economy_detail.rs:305"
+   ],
+   "kind": "vtable",
+   "itanium": "16CCountryManpower",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryManpower@@",
+   "windows": "0x29e02a0"
+  },
+  {
+   "mac": "0x350cdc0",
+   "used": [
+    "Class CModifier",
+    "launch/macos/economy_detail.rs:263"
+   ],
+   "kind": "vtable",
+   "itanium": "9CModifier",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCModifier@@",
+   "windows": "0x279a5f8"
+  },
+  {
+   "mac": "0x35105d0",
+   "used": [
+    "Class COccupationLaw"
+   ],
+   "kind": "vtable",
+   "itanium": "14COccupationLaw",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCOccupationLaw@@",
+   "windows": "0x29c0ec0"
+  },
+  {
+   "mac": "0x3512bf0",
+   "used": [
+    "Class COrderInstance",
+    "launch/macos/armies.rs:164",
+    "launch/macos/armies.rs:87 order_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "14COrderInstance",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCOrderInstance@@",
+   "windows": "0x2a07488"
+  },
+  {
+   "mac": "0x3516b78",
+   "used": [
+    "Class COrdersGroup"
+   ],
+   "kind": "vtable",
+   "itanium": "12COrdersGroup",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCOrdersGroup@@",
+   "windows": "0x29d39f0"
+  },
+  {
+   "mac": "0x3518868",
+   "used": [
+    "Class CResistance"
+   ],
+   "kind": "vtable",
+   "itanium": "11CResistance",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCResistance@@",
+   "windows": "0x29ff770"
+  },
+  {
+   "mac": "0x3519a20",
+   "used": [
+    "Class CShip"
+   ],
+   "kind": "vtable",
+   "itanium": "5CShip",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCShip@@",
+   "windows": "0x29d94b8"
+  },
+  {
+   "mac": "0x3519c88",
+   "used": [
+    "Class CCountryAirContainer"
+   ],
+   "kind": "vtable",
+   "itanium": "20CCountryAirContainer",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryAirContainer@@",
+   "windows": "0x29d9c60"
+  },
+  {
+   "mac": "0x3519d08",
+   "used": [
+    "Class CAirBase"
+   ],
+   "kind": "vtable",
+   "itanium": "8CAirBase",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCAirBase@@",
+   "windows": "0x29d9cd0"
+  },
+  {
+   "mac": "0x3519d70",
+   "used": [
+    "Class CStrategicAir"
+   ],
+   "kind": "vtable",
+   "itanium": "13CStrategicAir",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCStrategicAir@@",
+   "windows": "0x29d9d28"
+  },
+  {
+   "mac": "0x351cf18",
+   "used": [
+    "Class CNavalBase"
+   ],
+   "kind": "vtable",
+   "itanium": "10CNavalBase",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCNavalBase@@",
+   "windows": "0x29f4600"
+  },
+  {
+   "mac": "0x351e438",
+   "used": [
+    "Class CStrategicResource",
+    "launch/macos/resources.rs:176",
+    "launch/macos/resources.rs:301"
+   ],
+   "kind": "vtable",
+   "itanium": "18CStrategicResource",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCStrategicResource@@",
+   "windows": "0x29d2d80"
+  },
+  {
+   "mac": "0x351e498",
+   "used": [
+    "launch/macos/resources.rs:190"
+   ],
+   "kind": "vtable",
+   "itanium": "22CStrategicResourcePool",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCStrategicResourcePool@@",
+   "windows": "0x29d2e18"
+  },
+  {
+   "mac": "0x351e5e0",
+   "used": [
+    "Class CStrategicResourceDatabase",
+    "launch/macos/resources.rs:162"
+   ],
+   "kind": "vtable",
+   "itanium": "26CStrategicResourceDatabase",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCStrategicResourceDatabase@@",
+   "windows": "0x29c5a98"
+  },
+  {
+   "mac": "0x351e958",
+   "used": [
+    "Class CSubUnitDefinition",
+    "launch/macos/units.rs:114 subunit_vtable",
+    "launch/macos/units.rs:260"
+   ],
+   "kind": "vtable",
+   "itanium": "18CSubUnitDefinition",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCSubUnitDefinition@@",
+   "windows": "0x280be50"
+  },
+  {
+   "mac": "0x351f208",
+   "used": [
+    "Class CTaskForce"
+   ],
+   "kind": "vtable",
+   "itanium": "10CTaskForce",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCTaskForce@@",
+   "windows": "0x29e4650"
+  },
+  {
+   "mac": "0x351fe78",
+   "used": [
+    "Class CTerrainType"
+   ],
+   "kind": "vtable",
+   "itanium": "12CTerrainType",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCTerrainType@@",
+   "windows": "0x2a40210"
+  },
+  {
+   "mac": "0x3525bf8",
+   "used": [
+    "Class CWarGoal",
+    "launch/macos/diplomacy_state.rs:400"
+   ],
+   "kind": "vtable",
+   "itanium": "8CWarGoal",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCWarGoal@@",
+   "windows": "0x2a5dff0"
+  },
+  {
+   "mac": "0x352ee30",
+   "used": [
+    "Class CBuilding",
+    "construction.rs:197 building_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "9CBuilding",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCBuilding@@",
+   "windows": "0x2a0b368"
+  },
+  {
+   "mac": "0x352eea8",
+   "used": [
+    "construction.rs:201 database_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "17CBuildingDatabase",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCBuildingDatabase@@",
+   "windows": "0x2866368"
+  },
+  {
+   "mac": "0x352f078",
+   "used": [
+    "construction.rs:203 null_template_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "11TNullObjectI17CBuildingTemplateS0_E",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "unresolved",
+   "note": "type name not translatable (template, anonymous namespace or std)"
+  },
+  {
+   "mac": "0x352f828",
+   "used": [
+    "Class CBuildingStatus",
+    "construction.rs:206 status_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "15CBuildingStatus",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCBuildingStatus@@",
+   "windows": "0x2a1a2b0"
+  },
+  {
+   "mac": "0x352fa88",
+   "used": [
+    "Class CBuildingTemplate",
+    "construction.rs:202 template_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "17CBuildingTemplate",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCBuildingTemplate@@",
+   "windows": "0x2866438"
+  },
+  {
+   "mac": "0x3530150",
+   "used": [
+    "Class CCharacter"
+   ],
+   "kind": "vtable",
+   "itanium": "10CCharacter",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCharacter@@",
+   "windows": "0x29ffe20"
+  },
+  {
+   "mac": "0x3530728",
+   "used": [
+    "Class CCountryCharacters"
+   ],
+   "kind": "vtable",
+   "itanium": "18CCountryCharacters",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryCharacters@@",
+   "windows": "0x2a0b8e8"
+  },
+  {
+   "mac": "0x3530f20",
+   "used": [
+    "Class CScientist"
+   ],
+   "kind": "vtable",
+   "itanium": "10CScientist",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCScientist@@",
+   "windows": "0x29ffe78"
+  },
+  {
+   "mac": "0x3531290",
+   "used": [
+    "Class CScientistTrait"
+   ],
+   "kind": "vtable",
+   "itanium": "15CScientistTrait",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCScientistTrait@@",
+   "windows": "0x279d5b0"
+  },
+  {
+   "mac": "0x353e188",
+   "used": [
+    "Class NFactions::CFaction",
+    "launch/macos/diplomacy_state.rs:451",
+    "launch/macos/diplomacy_state.rs:476"
+   ],
+   "kind": "vtable",
+   "itanium": "N9NFactions8CFactionE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCFaction@NFactions@@",
+   "windows": "0x29e78a8"
+  },
+  {
+   "mac": "0x3540478",
+   "used": [
+    "Class NFactions::CFactionSystem",
+    "launch/macos/diplomacy_state.rs:473"
+   ],
+   "kind": "vtable",
+   "itanium": "N9NFactions14CFactionSystemE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCFactionSystem@NFactions@@",
+   "windows": "0x29e7d20"
+  },
+  {
+   "mac": "0x3544048",
+   "used": [
+    "Class CAutonomousState",
+    "launch/macos/diplomacy_state.rs:357"
+   ],
+   "kind": "vtable",
+   "itanium": "16CAutonomousState",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCAutonomousState@@",
+   "windows": "0x28659e0"
+  },
+  {
+   "mac": "0x3544268",
+   "used": [
+    "Class CDiplomacyStatus",
+    "launch/macos/diplomacy_state.rs:322"
+   ],
+   "kind": "vtable",
+   "itanium": "16CDiplomacyStatus",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCDiplomacyStatus@@",
+   "windows": "0x29e3338"
+  },
+  {
+   "mac": "0x354a170",
+   "used": [
+    "Class CWarRelation",
+    "launch/macos/diplomacy_state.rs:531"
+   ],
+   "kind": "vtable",
+   "itanium": "12CWarRelation",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCWarRelation@@",
+   "windows": "0x29e1958"
+  },
+  {
+   "mac": "0x354aa60",
+   "used": [
+    "Class CSubjectRelation"
+   ],
+   "kind": "vtable",
+   "itanium": "16CSubjectRelation",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCSubjectRelation@@",
+   "windows": "0x29e20d8"
+  },
+  {
+   "mac": "0x354b628",
+   "used": [
+    "Class CWorldThreat",
+    "launch/macos/diplomacy_state.rs:521"
+   ],
+   "kind": "vtable",
+   "itanium": "12CWorldThreat",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCWorldThreat@@",
+   "windows": "0x29f7d98"
+  },
+  {
+   "mac": "0x354e610",
+   "used": [
+    "Class NDoctrines::CCountryDoctrineView",
+    "launch/macos/doctrine_act.rs:383",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356"
+   ],
+   "kind": "vtable",
+   "itanium": "N10NDoctrines20CCountryDoctrineViewE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryDoctrineView@NDoctrines@@",
+   "windows": "0x2a64728"
+  },
+  {
+   "mac": "0x354e920",
+   "used": [
+    "Class NDoctrines::CDoctrineSelectionList",
+    "launch/macos/doctrine_act.rs:391",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356"
+   ],
+   "kind": "vtable",
+   "itanium": "N10NDoctrines22CDoctrineSelectionListE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCDoctrineSelectionList@NDoctrines@@",
+   "windows": "0x2b13bb0"
+  },
+  {
+   "mac": "0x357a240",
+   "used": [
+    "production_lines.rs:47 equipment_db_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "18CEquipmentDatabase",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCEquipmentDatabase@@",
+   "windows": "0x29bab70"
+  },
+  {
+   "mac": "0x357bad8",
+   "used": [
+    "Class CEquipmentType",
+    "launch/macos/units.rs:116 equipment_type_vtable",
+    "launch/macos/units.rs:262",
+    "production_lines.rs:51 equipment_type_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "14CEquipmentType",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCEquipmentType@@",
+   "windows": "0x29baa50"
+  },
+  {
+   "mac": "0x357ccd8",
+   "used": [
+    "Class CEquipmentModule"
+   ],
+   "kind": "vtable",
+   "itanium": "16CEquipmentModule",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCEquipmentModule@@",
+   "windows": "0x29baa00"
+  },
+  {
+   "mac": "0x357ce80",
+   "used": [
+    "Class CEquipmentModuleSlot"
+   ],
+   "kind": "vtable",
+   "itanium": "20CEquipmentModuleSlot",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCEquipmentModuleSlot@@",
+   "windows": "0x29dcdd0"
+  },
+  {
+   "mac": "0x357cef8",
+   "used": [
+    "Class CEquipmentVariantPool",
+    "launch/macos/stockpile.rs:148"
+   ],
+   "kind": "vtable",
+   "itanium": "21CEquipmentVariantPool",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCEquipmentVariantPool@@",
+   "windows": "0x27caf58"
+  },
+  {
+   "mac": "0x357d1b8",
+   "used": [
+    "Class CEquipmentVariant",
+    "launch/macos/units.rs:118 variant_vtable",
+    "launch/macos/units.rs:264",
+    "production_lines.rs:49 variant_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "17CEquipmentVariant",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCEquipmentVariant@@",
+   "windows": "0x29d2e80"
+  },
+  {
+   "mac": "0x357e388",
+   "used": [
+    "Class CCountry",
+    "game.rs:108 country_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "8CCountry",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountry@@",
+   "windows": "0x28691d0"
+  },
+  {
+   "mac": "0x357f020",
+   "used": [
+    "Class CProvince",
+    "construction.rs:215 province_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "9CProvince",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProvince@@",
+   "windows": "0x29f30a8"
+  },
+  {
+   "mac": "0x357f410",
+   "used": [
+    "Class CState",
+    "construction.rs:207 state_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "6CState",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCState@@",
+   "windows": "0x29b9988"
+  },
+  {
+   "mac": "0x3587fd0",
+   "used": [
+    "Class CWarGoalType",
+    "launch/macos/diplomacy_state.rs:401"
+   ],
+   "kind": "vtable",
+   "itanium": "12CWarGoalType",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCWarGoalType@@",
+   "windows": "0x29be750"
+  },
+  {
+   "mac": "0x35882b8",
+   "used": [
+    "Class CIdea",
+    "launch/macos/economy_detail.rs:280"
+   ],
+   "kind": "vtable",
+   "itanium": "5CIdea",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCIdea@@",
+   "windows": "0x2a02848"
+  },
+  {
+   "mac": "0x3589048",
+   "used": [
+    "own_focus.rs:56 tree_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "18CNationalFocusTree",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCNationalFocusTree@@",
+   "windows": "0x27bb9e0"
+  },
+  {
+   "mac": "0x3589108",
+   "used": [
+    "own_focus.rs:59 focus_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "14CNationalFocus",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCNationalFocus@@",
+   "windows": "0x27bba30"
+  },
+  {
+   "mac": "0x35891c8",
+   "used": [
+    "own_focus.rs:58 database_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "22CNationalFocusDatabase",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCNationalFocusDatabase@@",
+   "windows": "0x27bbaf8"
+  },
+  {
+   "mac": "0x3589270",
+   "used": [
+    "own_focus.rs:55 progress_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "22CNationalFocusProgress",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCNationalFocusProgress@@",
+   "windows": "0x27bbb78"
+  },
+  {
+   "mac": "0x3589e48",
+   "used": [
+    "Class CPoliticalStatus",
+    "game.rs:113 politics_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "16CPoliticalStatus",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCPoliticalStatus@@",
+   "windows": "0x29d1738"
+  },
+  {
+   "mac": "0x358a268",
+   "used": [
+    "Class CPowerBalance"
+   ],
+   "kind": "vtable",
+   "itanium": "13CPowerBalance",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCPowerBalance@@",
+   "windows": "0x29f1388"
+  },
+  {
+   "mac": "0x358a2c8",
+   "used": [
+    "Class CPowerBalanceSystem"
+   ],
+   "kind": "vtable",
+   "itanium": "19CPowerBalanceSystem",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCPowerBalanceSystem@@",
+   "windows": "0x29f13d8"
+  },
+  {
+   "mac": "0x358a5b8",
+   "used": [
+    "Class CPowerBalanceTemplate"
+   ],
+   "kind": "vtable",
+   "itanium": "21CPowerBalanceTemplate",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCPowerBalanceTemplate@@",
+   "windows": "0x29c2480"
+  },
+  {
+   "mac": "0x358a6a0",
+   "used": [
+    "Class CPowerBalanceRange"
+   ],
+   "kind": "vtable",
+   "itanium": "18CPowerBalanceRange",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCPowerBalanceRange@@",
+   "windows": "0x29c23d8"
+  },
+  {
+   "mac": "0x358a750",
+   "used": [
+    "Class CPowerBalanceSide"
+   ],
+   "kind": "vtable",
+   "itanium": "17CPowerBalanceSide",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCPowerBalanceSide@@",
+   "windows": "0x29c2430"
+  },
+  {
+   "mac": "0x358c220",
+   "used": [
+    "Class NIndustrialOrganisation::COrganisationDatabase"
+   ],
+   "kind": "vtable",
+   "itanium": "N23NIndustrialOrganisation21COrganisationDatabaseE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCOrganisationDatabase@NIndustrialOrganisation@@",
+   "windows": "0x279c5b8"
+  },
+  {
+   "mac": "0x358c418",
+   "used": [
+    "Class NIndustrialOrganisation::CTraitBonus"
+   ],
+   "kind": "vtable",
+   "itanium": "N23NIndustrialOrganisation11CTraitBonusE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCTraitBonus@NIndustrialOrganisation@@",
+   "windows": "0x279ac20"
+  },
+  {
+   "mac": "0x358c690",
+   "used": [
+    "construction.rs:195 building_line_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "23CBuildingProductionLine",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCBuildingProductionLine@@",
+   "windows": "0x29fcfb8"
+  },
+  {
+   "mac": "0x358ca80",
+   "used": [
+    "Class CMilitaryProductionLine",
+    "launch/macos/resources.rs:298",
+    "production_lines.rs:44 military_line_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "23CMilitaryProductionLine",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCMilitaryProductionLine@@",
+   "windows": "0x29fd270"
+  },
+  {
+   "mac": "0x358cc00",
+   "used": [
+    "launch/macos/resources.rs:299",
+    "production_lines.rs:45 naval_line_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "20CNavalProductionLine",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCNavalProductionLine@@",
+   "windows": "0x29fd3f0"
+  },
+  {
+   "mac": "0x358ce80",
+   "used": [
+    "Class CProductionLine"
+   ],
+   "kind": "vtable",
+   "itanium": "15CProductionLine",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProductionLine@@",
+   "windows": "0x2a49df8"
+  },
+  {
+   "mac": "0x358d1f8",
+   "used": [
+    "construction.rs:196 railway_line_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "22CRailwayProductionLine",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCRailwayProductionLine@@",
+   "windows": "0x2aa9600"
+  },
+  {
+   "mac": "0x358d580",
+   "used": [
+    "Class CConsumerGoodsConsumer"
+   ],
+   "kind": "vtable",
+   "itanium": "22CConsumerGoodsConsumer",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCConsumerGoodsConsumer@@",
+   "windows": "0x29f1cd0"
+  },
+  {
+   "mac": "0x358d850",
+   "used": [
+    "Class CDeploymentStatus"
+   ],
+   "kind": "vtable",
+   "itanium": "17CDeploymentStatus",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCDeploymentStatus@@",
+   "windows": "0x29e12e8"
+  },
+  {
+   "mac": "0x358dff8",
+   "used": [
+    "Class CMilitaryDeploymentConveyor"
+   ],
+   "kind": "vtable",
+   "itanium": "27CMilitaryDeploymentConveyor",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCMilitaryDeploymentConveyor@@",
+   "windows": "0x29df758"
+  },
+  {
+   "mac": "0x358e0c8",
+   "used": [
+    "Class CProductionStatus",
+    "game.rs:112 production_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "17CProductionStatus",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProductionStatus@@",
+   "windows": "0x29f1de8"
+  },
+  {
+   "mac": "0x358e878",
+   "used": [
+    "Class CProductionResourceCost",
+    "launch/macos/resources.rs:300"
+   ],
+   "kind": "vtable",
+   "itanium": "23CProductionResourceCost",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProductionResourceCost@@",
+   "windows": "0x2a8fa88"
+  },
+  {
+   "mac": "0x358ff80",
+   "used": [
+    "Class CGenericDefaultConfirmationPopUpWindow",
+    "launch/macos/special_projects.rs:1654"
+   ],
+   "kind": "vtable",
+   "itanium": "38CGenericDefaultConfirmationPopUpWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCGenericDefaultConfirmationPopUpWindow@@",
+   "windows": "0x2abcdd8"
+  },
+  {
+   "mac": "0x359c918",
+   "used": [
+    "Class NProject::CProgram"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject8CProgramE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProgram@NProject@@",
+   "windows": "0x29f2dd0"
+  },
+  {
+   "mac": "0x359ca08",
+   "used": [
+    "Class NProject::CProject"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject8CProjectE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProject@NProject@@",
+   "windows": "0x2a041a0"
+  },
+  {
+   "mac": "0x359d7f8",
+   "used": [
+    "Class NProject::CProjectTemplate"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject16CProjectTemplateE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProjectTemplate@NProject@@",
+   "windows": "0x29c2b18"
+  },
+  {
+   "mac": "0x359f820",
+   "used": [
+    "Class NProject::SProjectHistory",
+    "launch/macos/special_projects.rs:330"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject15SProjectHistoryE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AUSProjectHistory@NProject@@",
+   "windows": "0x2a04150"
+  },
+  {
+   "mac": "0x359f8b0",
+   "used": [
+    "Class NProject::CProjectPool"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject12CProjectPoolE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProjectPool@NProject@@",
+   "windows": "0x2a45bd8"
+  },
+  {
+   "mac": "0x359f990",
+   "used": [
+    "Class NProject::CSimpleProjectState",
+    "launch/macos/special_projects.rs:411"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject19CSimpleProjectStateE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCSimpleProjectState@NProject@@",
+   "windows": "0x2aad620"
+  },
+  {
+   "mac": "0x359fa60",
+   "used": [
+    "Class NProject::CProjectStateMachine"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject20CProjectStateMachineE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProjectStateMachine@NProject@@",
+   "windows": "0x2aad6d0"
+  },
+  {
+   "mac": "0x359fdb0",
+   "used": [
+    "Class NProject::CProgramStatus"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject14CProgramStatusE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProgramStatus@NProject@@",
+   "windows": "0x29f2e28"
+  },
+  {
+   "mac": "0x35a0300",
+   "used": [
+    "Class NProject::NUi::CFacilitiesTabView"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject3NUi18CFacilitiesTabViewE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCFacilitiesTabView@NUi@NProject@@",
+   "windows": "0x2adcbe8"
+  },
+  {
+   "mac": "0x35a1018",
+   "used": [
+    "Class NProject::NUi::CProgramItem",
+    "launch/macos/special_projects.rs:940"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject3NUi12CProgramItemE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProgramItem@NUi@NProject@@",
+   "windows": "0x2b0e998"
+  },
+  {
+   "mac": "0x35a1970",
+   "used": [
+    "launch/macos/special_projects.rs:1070",
+    "launch/macos/special_projects.rs:1990"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject3NUi14CScientistItemE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCScientistItem@NUi@NProject@@",
+   "windows": "0x2b0fe08"
+  },
+  {
+   "mac": "0x35a1b08",
+   "used": [
+    "Class NProject::NUi::CScientistRoster"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject3NUi16CScientistRosterE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCScientistRoster@NUi@NProject@@",
+   "windows": "0x2a43d18"
+  },
+  {
+   "mac": "0x35a1cb8",
+   "used": [
+    "Class NProject::NUi::CProgramView",
+    "launch/macos/special_projects.rs:1036"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject3NUi12CProgramViewE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProgramView@NUi@NProject@@",
+   "windows": "0x2abc718"
+  },
+  {
+   "mac": "0x35a2910",
+   "used": [
+    "Class NProject::NUi::CProjectItem",
+    "launch/macos/special_projects.rs:1125"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject3NUi12CProjectItemE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProjectItem@NUi@NProject@@",
+   "windows": "0x2b0bc38"
+  },
+  {
+   "mac": "0x35a3908",
+   "used": [
+    "Class NProject::NUi::CRecruitScientistWindow",
+    "launch/macos/special_projects.rs:1699",
+    "launch/macos/special_projects.rs:1963"
+   ],
+   "kind": "vtable",
+   "itanium": "N8NProject3NUi23CRecruitScientistWindowE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCRecruitScientistWindow@NUi@NProject@@",
+   "windows": "0x2b0ffc8"
+  },
+  {
+   "mac": "0x35a4000",
+   "used": [
+    "Class CCountrySupplySystem",
+    "launch/macos/supplymem.rs:363"
+   ],
+   "kind": "vtable",
+   "itanium": "20CCountrySupplySystem",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountrySupplySystem@@",
+   "windows": "0x2a23a18"
+  },
+  {
+   "mac": "0x35a4748",
+   "used": [
+    "Class CProvinceRailwayInfo",
+    "launch/macos/supplymem.rs:299"
+   ],
+   "kind": "vtable",
+   "itanium": "20CProvinceRailwayInfo",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProvinceRailwayInfo@@",
+   "windows": "0x29f4150"
+  },
+  {
+   "mac": "0x35a47a8",
+   "used": [
+    "Class CRailwayManager",
+    "launch/macos/supplymem.rs:146"
+   ],
+   "kind": "vtable",
+   "itanium": "15CRailwayManager",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCRailwayManager@@",
+   "windows": "0x29f41a0"
+  },
+  {
+   "mac": "0x35a4838",
+   "used": [
+    "Class CSupplySystem",
+    "launch/macos/supplymem.rs:144"
+   ],
+   "kind": "vtable",
+   "itanium": "13CSupplySystem",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCSupplySystem@@",
+   "windows": "0x29f5008"
+  },
+  {
+   "mac": "0x35a7158",
+   "used": [
+    "research.rs:50 technology_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "11CTechnology",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCTechnology@@",
+   "windows": "0x29f64f0"
+  },
+  {
+   "mac": "0x35a71f8",
+   "used": [
+    "research.rs:52 slot_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "13CResearchSlot",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCResearchSlot@@",
+   "windows": "0x29f6560"
+  },
+  {
+   "mac": "0x35a7258",
+   "used": [
+    "research.rs:51 status_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "17CTechnologyStatus",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCTechnologyStatus@@",
+   "windows": "0x29f65b0"
+  },
+  {
+   "mac": "0x35a7c80",
+   "used": [
+    "research.rs:46 template_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "19CTechnologyTemplate",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCTechnologyTemplate@@",
+   "windows": "0x29beb40"
+  },
+  {
+   "mac": "0x35a7d10",
+   "used": [
+    "research.rs:45 database_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "19CTechnologyDatabase",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCTechnologyDatabase@@",
+   "windows": "0x29c6030"
+  },
+  {
+   "mac": "0x35a8b50",
+   "used": [
+    "launch/macos/resources.rs:188"
+   ],
+   "kind": "vtable",
+   "itanium": "17CCountryResources",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryResources@@",
+   "windows": "0x29ddb30"
+  },
+  {
+   "mac": "0x35d8db0",
+   "used": [
+    "Class CArmyLeader",
+    "launch/macos/units.rs:125 leader_vtable",
+    "launch/macos/units.rs:268"
+   ],
+   "kind": "vtable",
+   "itanium": "11CArmyLeader",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCArmyLeader@@",
+   "windows": "0x29d7278"
+  },
+  {
+   "mac": "0x35e5c88",
+   "used": [
+    "Class CEventWindow",
+    "launch/macos/events.rs:51 event_window_vtable",
+    "launch/macos/events.rs:97"
+   ],
+   "kind": "vtable",
+   "itanium": "12CEventWindow",
+   "ordinal": 1,
+   "offset_to_top": -32,
+   "confidence": "medium",
+   "note": ".?AVCEventWindow@@ secondary #1 of 4",
+   "windows": "0x2a255f8"
+  },
+  {
+   "mac": "0x35e77d8",
+   "used": [
+    "Class CAirBaseMapIcon",
+    "launch/macos/airui.rs:68"
+   ],
+   "kind": "vtable",
+   "itanium": "15CAirBaseMapIcon",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCAirBaseMapIcon@@",
+   "windows": "0x2a92480"
+  },
+  {
+   "mac": "0x360b170",
+   "used": [
+    "Class CEquipmentModuleSlotView"
+   ],
+   "kind": "vtable",
+   "itanium": "24CEquipmentModuleSlotView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCEquipmentModuleSlotView@@",
+   "windows": "0x2af5f28"
+  },
+  {
+   "mac": "0x360b818",
+   "used": [
+    "Class CEquipmentDesignerView"
+   ],
+   "kind": "vtable",
+   "itanium": "22CEquipmentDesignerView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCEquipmentDesignerView@@",
+   "windows": "0x2a7b600"
+  },
+  {
+   "mac": "0x360db18",
+   "used": [
+    "Class CEquipmentModuleEntry"
+   ],
+   "kind": "vtable",
+   "itanium": "21CEquipmentModuleEntry",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCEquipmentModuleEntry@@",
+   "windows": "0x2b1a758"
+  },
+  {
+   "mac": "0x36106d8",
+   "used": [
+    "Class CNationalFocusInfoWindow",
+    "launch/macos/focus.rs:107",
+    "launch/macos/focus.rs:63 panel_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "24CNationalFocusInfoWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCNationalFocusInfoWindow@@",
+   "windows": "0x2ac8aa0"
+  },
+  {
+   "mac": "0x3611108",
+   "used": [
+    "Class CNationalFocusTreeItem",
+    "launch/macos/focus.rs:102",
+    "launch/macos/focus.rs:58 item_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "22CNationalFocusTreeItem",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCNationalFocusTreeItem@@",
+   "windows": "0x2a34af8"
+  },
+  {
+   "mac": "0x3611298",
+   "used": [
+    "Class CNationalFocusView",
+    "launch/macos/focus.rs:54 focus_view_vtable",
+    "launch/macos/focus.rs:98"
+   ],
+   "kind": "vtable",
+   "itanium": "18CNationalFocusView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCNationalFocusView@@",
+   "windows": "0x2a34340"
+  },
+  {
+   "mac": "0x3613100",
+   "used": [
+    "Class CCountryInternationalMarketView",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356",
+    "launch/macos/panelkit.rs:474"
+   ],
+   "kind": "vtable",
+   "itanium": "N20NInternationalMarket31CCountryInternationalMarketViewE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryInternationalMarketView@NInternationalMarket@@",
+   "windows": "0x2a804f0"
+  },
+  {
+   "mac": "0x36208e0",
+   "used": [
+    "Class COperationOverviewWindow",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356",
+    "launch/macos/panelkit.rs:474"
+   ],
+   "kind": "vtable",
+   "itanium": "24COperationOverviewWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCOperationOverviewWindow@@",
+   "windows": "0x2a87ac8"
+  },
+  {
+   "mac": "0x3621f70",
+   "used": [
+    "Class CAgencyLogoSelectionWindow",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356",
+    "launch/macos/panelkit.rs:474"
+   ],
+   "kind": "vtable",
+   "itanium": "26CAgencyLogoSelectionWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCAgencyLogoSelectionWindow@@",
+   "windows": "0x2aa9c50"
+  },
+  {
+   "mac": "0x3622a70",
+   "used": [
+    "Class CAgencyUpgradesWindow",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356",
+    "launch/macos/panelkit.rs:474"
+   ],
+   "kind": "vtable",
+   "itanium": "21CAgencyUpgradesWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCAgencyUpgradesWindow@@",
+   "windows": "0x2aaa060"
+  },
+  {
+   "mac": "0x36249c0",
+   "used": [
+    "Class CCountryIntelligenceAgencyView",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356",
+    "launch/macos/panelkit.rs:474"
+   ],
+   "kind": "vtable",
+   "itanium": "30CCountryIntelligenceAgencyView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryIntelligenceAgencyView@@",
+   "windows": "0x29f9878"
+  },
+  {
+   "mac": "0x36257e8",
+   "used": [
+    "Class COperativeBottomBar",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356",
+    "launch/macos/panelkit.rs:474"
+   ],
+   "kind": "vtable",
+   "itanium": "19COperativeBottomBar",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCOperativeBottomBar@@",
+   "windows": "0x2a88348"
+  },
+  {
+   "mac": "0x3626830",
+   "used": [
+    "Class COperativeOrderBar",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356",
+    "launch/macos/panelkit.rs:474"
+   ],
+   "kind": "vtable",
+   "itanium": "18COperativeOrderBar",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCOperativeOrderBar@@",
+   "windows": "0x2affcf8"
+  },
+  {
+   "mac": "0x362a5b8",
+   "used": [
+    "Class CPeaceConferenceWindow"
+   ],
+   "kind": "vtable",
+   "itanium": "22CPeaceConferenceWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCPeaceConferenceWindow@@",
+   "windows": "0x2a8c208"
+  },
+  {
+   "mac": "0x362cd98",
+   "used": [
+    "Class NIndustrialOrganisation::COrganisationDetailWindow",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:247",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356"
+   ],
+   "kind": "vtable",
+   "itanium": "N23NIndustrialOrganisation21COrganisationListItemE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCOrganisationListItem@NIndustrialOrganisation@@",
+   "windows": "0x2b10a30"
+  },
+  {
+   "mac": "0x362d5b0",
+   "used": [
+    "Class NIndustrialOrganisation::COrganisationListWindow",
+    "launch/macos/mio_act.rs:1034",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356"
+   ],
+   "kind": "vtable",
+   "itanium": "N23NIndustrialOrganisation23COrganisationListWindowE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCOrganisationListWindow@NIndustrialOrganisation@@",
+   "windows": "0x2ad2900"
+  },
+  {
+   "mac": "0x362de58",
+   "used": [
+    "Class NIndustrialOrganisation::CPolicyWindow",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356",
+    "launch/macos/panelkit.rs:474"
+   ],
+   "kind": "vtable",
+   "itanium": "N23NIndustrialOrganisation13CPolicyWindowE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCPolicyWindow@NIndustrialOrganisation@@",
+   "windows": "0x2b10150"
+  },
+  {
+   "mac": "0x362e210",
+   "used": [
+    "launch/macos/politics.rs:237"
+   ],
+   "kind": "vtable",
+   "itanium": "N23NIndustrialOrganisation35COpenRosterButtonForPoliticalScreenE",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCOpenRosterButtonForPoliticalScreen@NIndustrialOrganisation@@",
+   "windows": "0x2b11190"
+  },
+  {
+   "mac": "0x362e238",
+   "used": [
+    "launch/macos/politics.rs:237"
+   ],
+   "kind": "vtable",
+   "itanium": "N23NIndustrialOrganisation35COpenRosterButtonForPoliticalScreenE",
+   "ordinal": 1,
+   "offset_to_top": -8,
+   "confidence": "medium",
+   "note": ".?AVCOpenRosterButtonForPoliticalScreen@NIndustrialOrganisation@@ secondary #1 of 2",
+   "windows": "0x2b111a8"
+  },
+  {
+   "mac": "0x3632080",
+   "used": [
+    "Class CTechnologyInfoWindow",
+    "launch/macos/research.rs:59 info_vtable",
+    "launch/macos/research.rs:97"
+   ],
+   "kind": "vtable",
+   "itanium": "21CTechnologyInfoWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCTechnologyInfoWindow@@",
+   "windows": "0x2aca4c8"
+  },
+  {
+   "mac": "0x3633588",
+   "used": [
+    "Class CTechnologyTreeTechItem",
+    "launch/macos/research.rs:54 tech_item_vtable",
+    "launch/macos/research.rs:92"
+   ],
+   "kind": "vtable",
+   "itanium": "23CTechnologyTreeTechItem",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCTechnologyTreeTechItem@@",
+   "windows": "0x2ac9610"
+  },
+  {
+   "mac": "0x3633a80",
+   "used": [
+    "launch/macos/research.rs:52 slot_item_vtable",
+    "launch/macos/research.rs:90"
+   ],
+   "kind": "vtable",
+   "itanium": "17CResearchSlotItem",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCResearchSlotItem@@",
+   "windows": "0x2acaeb8"
+  },
+  {
+   "mac": "0x363b690",
+   "used": [
+    "Class CAcceptCommandDialog"
+   ],
+   "kind": "vtable",
+   "itanium": "20CAcceptCommandDialog",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCAcceptCommandDialog@@",
+   "windows": "0x2a5ae78"
+  },
+  {
+   "mac": "0x363d530",
+   "used": [
+    "Class CArmiesView"
+   ],
+   "kind": "vtable",
+   "itanium": "11CArmiesView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCArmiesView@@",
+   "windows": "0x2a683d8"
+  },
+  {
+   "mac": "0x363d598",
+   "used": [
+    "Class CArmyBadgeView",
+    "launch/macos/armies.rs:1745"
+   ],
+   "kind": "vtable",
+   "itanium": "14CArmyBadgeView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCArmyBadgeView@@",
+   "windows": "0x2a684f8"
+  },
+  {
+   "mac": "0x363d5c0",
+   "used": [
+    "Class CArmyDivisionListView"
+   ],
+   "kind": "vtable",
+   "itanium": "21CArmyDivisionListView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCArmyDivisionListView@@",
+   "windows": "0x2a68670"
+  },
+  {
+   "mac": "0x363d658",
+   "used": [
+    "Class CArmyDivisionView",
+    "launch/macos/armies.rs:1976",
+    "launch/macos/armies.rs:2065"
+   ],
+   "kind": "vtable",
+   "itanium": "17CArmyDivisionView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCArmyDivisionView@@",
+   "windows": "0x2a68730"
+  },
+  {
+   "mac": "0x3643990",
+   "used": [
+    "Class CChangeGroupLeaderDialog"
+   ],
+   "kind": "vtable",
+   "itanium": "24CChangeGroupLeaderDialog",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCChangeGroupLeaderDialog@@",
+   "windows": "0x2b0b2d0"
+  },
+  {
+   "mac": "0x3643ac0",
+   "used": [
+    "Class CChangeNavyLeaderDialog"
+   ],
+   "kind": "vtable",
+   "itanium": "23CChangeNavyLeaderDialog",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCChangeNavyLeaderDialog@@",
+   "windows": "0x2b0b500"
+  },
+  {
+   "mac": "0x3647398",
+   "used": [
+    "Class CCountryConstructionViewBuildingItem",
+    "launch/macos/construction.rs:43 item_vtable",
+    "launch/macos/construction.rs:67"
+   ],
+   "kind": "vtable",
+   "itanium": "36CCountryConstructionViewBuildingItem",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryConstructionViewBuildingItem@@",
+   "windows": "0x2a72d40"
+  },
+  {
+   "mac": "0x364a878",
+   "used": [
+    "Class CCountryDeploymentView"
+   ],
+   "kind": "vtable",
+   "itanium": "22CCountryDeploymentView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryDeploymentView@@",
+   "windows": "0x2a74b70"
+  },
+  {
+   "mac": "0x364aa18",
+   "used": [
+    "Class CCountryDiplomacyView"
+   ],
+   "kind": "vtable",
+   "itanium": "21CCountryDiplomacyView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryDiplomacyView@@",
+   "windows": "0x2a5e838"
+  },
+  {
+   "mac": "0x36511f0",
+   "used": [
+    "Class CCountryPoliticsView",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356",
+    "launch/macos/panelkit.rs:474"
+   ],
+   "kind": "vtable",
+   "itanium": "20CCountryPoliticsView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryPoliticsView@@",
+   "windows": "0x2a579b0"
+  },
+  {
+   "mac": "0x36634f0",
+   "used": [
+    "Class CEquipmentUpgradeDesignerView"
+   ],
+   "kind": "vtable",
+   "itanium": "29CEquipmentUpgradeDesignerView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCEquipmentUpgradeDesignerView@@",
+   "windows": "0x2b19aa8"
+  },
+  {
+   "mac": "0x3663518",
+   "used": [
+    "Class CEquipmentUpgradeDesignerWindow"
+   ],
+   "kind": "vtable",
+   "itanium": "31CEquipmentUpgradeDesignerWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCEquipmentUpgradeDesignerWindow@@",
+   "windows": "0x2b19b70"
+  },
+  {
+   "mac": "0x3665308",
+   "used": [
+    "Class CFindView",
+    "launch/macos/construction_place/point.rs:213"
+   ],
+   "kind": "vtable",
+   "itanium": "9CFindView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCFindView@@",
+   "windows": "0x2a7e740"
+  },
+  {
+   "mac": "0x3670a20",
+   "used": [
+    "Class CLeaderGroupView",
+    "launch/macos/armies.rs:150",
+    "launch/macos/armies.rs:74 leader_view_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "16CLeaderGroupView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCLeaderGroupView@@",
+   "windows": "0x2a809c0"
+  },
+  {
+   "mac": "0x367efa0",
+   "used": [
+    "Class CPoliticalIdeaItem",
+    "launch/macos/politics.rs:115",
+    "launch/macos/politics.rs:61 slot_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "18CPoliticalIdeaItem",
+   "ordinal": 1,
+   "offset_to_top": -8,
+   "confidence": "medium",
+   "note": ".?AVCPoliticalIdeaItem@@ secondary #1 of 2",
+   "windows": "0x2ad3470"
+  },
+  {
+   "mac": "0x367f050",
+   "used": [
+    "Class CPoliticalSelectableIdeaItem",
+    "launch/macos/politics.rs:121",
+    "launch/macos/politics.rs:67 entry_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "28CPoliticalSelectableIdeaItem",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCPoliticalSelectableIdeaItem@@",
+   "windows": "0x2ad3510"
+  },
+  {
+   "mac": "0x367f210",
+   "used": [
+    "Class CPoliticsIdeaCategoryEntry",
+    "launch/macos/politics.rs:111",
+    "launch/macos/politics.rs:56 category_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "26CPoliticsIdeaCategoryEntry",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCPoliticsIdeaCategoryEntry@@",
+   "windows": "0x2ad3680"
+  },
+  {
+   "mac": "0x3680170",
+   "used": [
+    "Class CResearchFinishedPopUpWindow"
+   ],
+   "kind": "vtable",
+   "itanium": "28CResearchFinishedPopUpWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCResearchFinishedPopUpWindow@@",
+   "windows": "0x29ce0c0"
+  },
+  {
+   "mac": "0x3680288",
+   "used": [
+    "Class CIntelAgencyFinishedPopUpWindow"
+   ],
+   "kind": "vtable",
+   "itanium": "31CIntelAgencyFinishedPopUpWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCIntelAgencyFinishedPopUpWindow@@",
+   "windows": "0x29ce1f8"
+  },
+  {
+   "mac": "0x36803a0",
+   "used": [
+    "Class CSpecialProjectFinishedPopUpWindow"
+   ],
+   "kind": "vtable",
+   "itanium": "34CSpecialProjectFinishedPopUpWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCSpecialProjectFinishedPopUpWindow@@",
+   "windows": "0x29ce2c0"
+  },
+  {
+   "mac": "0x36804b8",
+   "used": [
+    "Class CSpecialProjectCapturedPopUpWindow"
+   ],
+   "kind": "vtable",
+   "itanium": "34CSpecialProjectCapturedPopUpWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCSpecialProjectCapturedPopUpWindow@@",
+   "windows": "0x29ce388"
+  },
+  {
+   "mac": "0x36805d0",
+   "used": [
+    "Class CConfirmationPopUpWindow"
+   ],
+   "kind": "vtable",
+   "itanium": "24CConfirmationPopUpWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCConfirmationPopUpWindow@@",
+   "windows": "0x29ce4c0"
+  },
+  {
+   "mac": "0x36806e8",
+   "used": [
+    "Class CFocusFinishedPopUpWindow"
+   ],
+   "kind": "vtable",
+   "itanium": "25CFocusFinishedPopUpWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCFocusFinishedPopUpWindow@@",
+   "windows": "0x29ce5f8"
+  },
+  {
+   "mac": "0x3680800",
+   "used": [
+    "Class CPeaceSummaryPopUpWindow"
+   ],
+   "kind": "vtable",
+   "itanium": "24CPeaceSummaryPopUpWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCPeaceSummaryPopUpWindow@@",
+   "windows": "0x29ce730"
+  },
+  {
+   "mac": "0x3685b58",
+   "used": [
+    "Class CProductionEquipmentWindow"
+   ],
+   "kind": "vtable",
+   "itanium": "26CProductionEquipmentWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProductionEquipmentWindow@@",
+   "windows": "0x2af3280"
+  },
+  {
+   "mac": "0x3686b08",
+   "used": [
+    "Class CProductionLineMilitaryItem",
+    "launch/macos/production.rs:44 military_row_vtable",
+    "launch/macos/production.rs:76"
+   ],
+   "kind": "vtable",
+   "itanium": "27CProductionLineMilitaryItem",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProductionLineMilitaryItem@@",
+   "windows": "0x2ae9c48"
+  },
+  {
+   "mac": "0x3686c50",
+   "used": [
+    "launch/macos/production.rs:45 naval_row_vtable",
+    "launch/macos/production.rs:77"
+   ],
+   "kind": "vtable",
+   "itanium": "24CProductionLineNavalItem",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCProductionLineNavalItem@@",
+   "windows": "0x2ae9dd8"
+  },
+  {
+   "mac": "0x368b8a8",
+   "used": [
+    "launch/macos/ui.rs:770"
+   ],
+   "kind": "vtable",
+   "itanium": "30CReassignFullOrdersGroupDialog",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCReassignFullOrdersGroupDialog@@",
+   "windows": "0x2af8c00"
+  },
+  {
+   "mac": "0x3695460",
+   "used": [
+    "Class CSurrenderedPopupWindow"
+   ],
+   "kind": "vtable",
+   "itanium": "23CSurrenderedPopupWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCSurrenderedPopupWindow@@",
+   "windows": "0x2a523e0"
+  },
+  {
+   "mac": "0x3697918",
+   "used": [
+    "Class CTopBar"
+   ],
+   "kind": "vtable",
+   "itanium": "7CTopBar",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCTopBar@@",
+   "windows": "0x2a8f9f0"
+  },
+  {
+   "mac": "0x3698030",
+   "used": [
+    "Class CTradeOfferWindow",
+    "launch/macos/trade.rs:158"
+   ],
+   "kind": "vtable",
+   "itanium": "17CTradeOfferWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCTradeOfferWindow@@",
+   "windows": "0x2adda68"
+  },
+  {
+   "mac": "0x369bd60",
+   "used": [
+    "Class COperativeLeaderRecruitmentWindow",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356",
+    "launch/macos/panelkit.rs:474"
+   ],
+   "kind": "vtable",
+   "itanium": "33COperativeLeaderRecruitmentWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCOperativeLeaderRecruitmentWindow@@",
+   "windows": "0x2ab5458"
+  },
+  {
+   "mac": "0x369beb0",
+   "used": [
+    "Class COperativeLeaderForOperationWindow",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356",
+    "launch/macos/panelkit.rs:474"
+   ],
+   "kind": "vtable",
+   "itanium": "34COperativeLeaderForOperationWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCOperativeLeaderForOperationWindow@@",
+   "windows": "0x2ab5598"
+  },
+  {
+   "mac": "0x36a1f88",
+   "used": [
+    "Class CWorldTensionPopUpWindow"
+   ],
+   "kind": "vtable",
+   "itanium": "24CWorldTensionPopUpWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCWorldTensionPopUpWindow@@",
+   "windows": "0x2a91c00"
+  },
+  {
+   "mac": "0x36a2a78",
+   "used": [
+    "Class CCountryArmyOfficerCorpView",
+    "launch/macos/panelkit.rs:213",
+    "launch/macos/panelkit.rs:306",
+    "launch/macos/panelkit.rs:322",
+    "launch/macos/panelkit.rs:356",
+    "launch/macos/panelkit.rs:474"
+   ],
+   "kind": "vtable",
+   "itanium": "27CCountryArmyOfficerCorpView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryArmyOfficerCorpView@@",
+   "windows": "0x2a70ed8"
+  },
+  {
+   "mac": "0x36a40e8",
+   "used": [
+    "Class CCountryCharacterSelectionItem",
+    "launch/macos/politics.rs:132",
+    "launch/macos/politics.rs:78 character_entry_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "30CCountryCharacterSelectionItem",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCountryCharacterSelectionItem@@",
+   "windows": "0x2acdd08"
+  },
+  {
+   "mac": "0x36a4d00",
+   "used": [
+    "Class CCommandStructureLeaderView",
+    "launch/macos/politics.rs:124",
+    "launch/macos/politics.rs:70 advisor_slot_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "27CCommandStructureLeaderView",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCCommandStructureLeaderView@@",
+   "windows": "0x2acdc40"
+  },
+  {
+   "mac": "0x36b6880",
+   "used": [
+    "Class CIcon"
+   ],
+   "kind": "vtable",
+   "itanium": "5CIcon",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCIcon@@",
+   "windows": "0x2bc50f0"
+  },
+  {
+   "mac": "0x36b9738",
+   "used": [
+    "Class CButtonStandard"
+   ],
+   "kind": "vtable",
+   "itanium": "15CButtonStandard",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCButtonStandard@@",
+   "windows": "0x2bc18b0"
+  },
+  {
+   "mac": "0x36ba978",
+   "used": [
+    "Class CContainerWindow",
+    "gui_tree.rs:107",
+    "gui_tree.rs:47 container_vtable",
+    "launch/macos/air.rs:47 container_vtable",
+    "launch/macos/air.rs:77",
+    "launch/macos/armies.rs:101 container_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "16CContainerWindow",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCContainerWindow@@",
+   "windows": "0x2bbfb60"
+  },
+  {
+   "mac": "0x36bc6a0",
+   "used": [
+    "Class CEditBox"
+   ],
+   "kind": "vtable",
+   "itanium": "8CEditBox",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCEditBox@@",
+   "windows": "0x2bc4c08"
+  },
+  {
+   "mac": "0x36c04b8",
+   "used": [
+    "Class CInstantTextObject",
+    "launch/macos/navalui.rs:248"
+   ],
+   "kind": "vtable",
+   "itanium": "18CInstantTextObject",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCInstantTextObject@@",
+   "windows": "0x2bc4590"
+  },
+  {
+   "mac": "0x36cbb20",
+   "used": [
+    "launch/macos/mio_act.rs:1075"
+   ],
+   "kind": "vtable",
+   "itanium": "14CSmoothListbox",
+   "ordinal": 1,
+   "offset_to_top": -8,
+   "confidence": "medium",
+   "note": ".?AVCSmoothListbox@@ secondary #1 of 3",
+   "windows": "0x2bc65d0"
+  },
+  {
+   "mac": "0x36cc528",
+   "used": [
+    "Class CSprite"
+   ],
+   "kind": "vtable",
+   "itanium": "7CSprite",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCSprite@@",
+   "windows": "0x2bc5b60"
+  },
+  {
+   "mac": "0x36cca80",
+   "used": [
+    "Class CStandardGridBox",
+    "launch/macos/learn_tools.rs:135",
+    "launch/macos/mio_act.rs:210",
+    "launch/macos/politics.rs:110",
+    "launch/macos/politics.rs:55 grid_vtable",
+    "launch/macos/research.rs:50 grid_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "16CStandardGridBox",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCStandardGridBox@@",
+   "windows": "0x2bc0a78"
+  },
+  {
+   "mac": "0x36cee08",
+   "used": [
+    "Class gui.text_sprite",
+    "gui_tree.rs:116",
+    "gui_tree.rs:58 text_sprite_vtable"
+   ],
+   "kind": "vtable",
+   "itanium": "11CTextSprite",
+   "ordinal": 0,
+   "offset_to_top": 0,
+   "confidence": "high",
+   "note": ".?AVCTextSprite@@",
+   "windows": "0x2bc2550"
+  },
+  {
+   "mac": "0x3704b10",
+   "used": [
+    "launch/macos/intelligence.rs:100"
+   ],
+   "kind": "global_or_other",
+   "confidence": "not_vtable",
+   "note": "not a vtable address point on macOS; needs code matching or a live read"
+  },
+  {
+   "mac": "0x3705890",
+   "used": [
+    "launch/macos/mios.rs:307"
+   ],
+   "kind": "global_or_other",
+   "confidence": "not_vtable",
+   "note": "not a vtable address point on macOS; needs code matching or a live read"
+  },
+  {
+   "mac": "0x37058c0",
+   "used": [
+    "launch/macos/resources.rs:161"
+   ],
+   "kind": "global_or_other",
+   "confidence": "not_vtable",
+   "note": "not a vtable address point on macOS; needs code matching or a live read"
+  },
+  {
+   "mac": "0x3705fe0",
+   "used": [
+    "launch/macos/special_projects.rs:259"
+   ],
+   "kind": "global_or_other",
+   "confidence": "not_vtable",
+   "note": "not a vtable address point on macOS; needs code matching or a live read"
+  },
+  {
+   "mac": "0x371dae8",
+   "used": [
+    "production_lines/output.rs:105"
+   ],
+   "kind": "global_or_other",
+   "confidence": "not_vtable",
+   "note": "not a vtable address point on macOS; needs code matching or a live read"
+  },
+  {
+   "mac": "0x371daf8",
+   "used": [
+    "production_lines/output.rs:104"
+   ],
+   "kind": "global_or_other",
+   "confidence": "not_vtable",
+   "note": "not a vtable address point on macOS; needs code matching or a live read"
+  },
+  {
+   "mac": "0x372bec0",
+   "used": [
+    "production_lines/output.rs:108"
+   ],
+   "kind": "global_or_other",
+   "confidence": "not_vtable",
+   "note": "not a vtable address point on macOS; needs code matching or a live read"
+  },
+  {
+   "mac": "0x372c530",
+   "used": [
+    "launch/macos/airui.rs:65"
+   ],
+   "kind": "global_or_other",
+   "confidence": "not_vtable",
+   "note": "not a vtable address point on macOS; needs code matching or a live read"
+  }
+ ]
+}

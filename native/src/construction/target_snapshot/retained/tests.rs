@@ -159,6 +159,7 @@ fn advancing_date_is_allowed_but_regression_setup_or_playthrough_is_not() {
         let (difficulty, historical) = match abi {
             StringAbi::LibCxx => (0x5d0, 0x5d8),
             StringAbi::LibStdCxx => (0x620, 0x628),
+            StringAbi::Msvc => unreachable!("the fixture models the macOS and Linux builds only"),
         };
         f.int(GS + difficulty, 1);
         assert!(a.observe_unchanged(&f, until()).is_err());
