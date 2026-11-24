@@ -15,8 +15,8 @@
 #include <time.h>
 #include <unistd.h>
 
-const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions"};
-const int IPC_ALLOWED_COUNT = 11;
+const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy"};
+const int IPC_ALLOWED_COUNT = 12;
 /* airwing (engineer 71, 24 Nov): split, merge, disband, attach, detach, region by id / hold; OFF in auto until its
  * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
 const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */, 0 /* airwing */,
@@ -29,7 +29,9 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                 0 /* picks (engineer 75): a national focus (S7-PICKS) */,
                                 0 /* events (engineer 76): the answer of an open event window (S8-EVENTS stopped live 24 Nov
                                    * 2026: the answer executes but the window stays open) */,
-                                1 /* decisions (engineer 76): an untargeted decision (S9-DECISIONS PASSED live 24 Nov 2026) */};
+                                1 /* decisions (engineer 76): an untargeted decision (S9-DECISIONS PASSED live 24 Nov 2026) */,
+                                0 /* diplomacy (engineer 78): guarantee, ask / offer military access, non-aggression pact,
+                                   * improve relations, declare war on an own war goal (S10-DIPLOMACY) */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;

@@ -676,3 +676,44 @@ D4 running at speed 2 + save/reload with the family on; a plain load without the
 Stop at once (endrun.sh s9d) on: a crash, a hang, any `unexplained` post2, a decision taken that the request did not name,
 D2's foreign decision posted.
 Pass: D1-D4 clean -> `IPC_LIVE_PASSED` for `decisions` (11th entry), "S9 PASS: decisions".
+
+## Session S10-DIPLOMACY: the in-process module, diplomacy (family `diplomacy`; about 30 minutes) -- after S9-DECISIONS
+
+Built by engineer 78 (24 Nov 2026), offline-proven only: stage 2 42/42 types on 1.20.0.0 and 1.19.4.1 macOS; Linux and
+Windows 1.20 CDiplomaticActionCommand by RTTI with the same id (10545) and the six action classes by unique RTTI vtables
+(the full scan is macOS-only). OFF under `auto` until this session passes.
+- Every op is ONE CDiplomaticActionCommand holding a CDiplomaticAction the module builds with the ACTION class's own
+  constructor: sender = the player, receiver = the target, the game date (gamestate +0x428). Declare war: the first of the
+  player's own war goals whose target is the receiver (country +0xd30 -> list +0x68, count +0x74, goal target +0x3c: the
+  list the declare-war dialog shows), its handle into the action (+0x6c), the dialog's flag byte left at 0. The action
+  goes through the game's own command maker (1.20 0x100f83c10: it stamps the date and builds the command), then the
+  command's own "can do" (the action's legality virtual +0x140, the call that enables the view's Send button); refused =
+  the game's destructor frees command and action, never posted.
+- Ops: `diplomacy.guarantee`, `diplomacy.military_access` (ask), `diplomacy.offer_military_access`,
+  `diplomacy.non_aggression`, `diplomacy.improve_relations`, `diplomacy.declare_war`; request: objs `0`, vals = the target's
+  tag index (the number hoi4_diplomacy_state and the view use). Justify war goal, join faction, lend-lease, volunteers
+  and call allies stay on the mouse (their dialogs carry choices the module does not make yet).
+- MCP: hoi4_diplomacy_act (same name, schema, journal and Verified read-back: the relation snapshot) sends these keys in
+  process for a `country` target WITHOUT opening the diplomacy view (the declare-war confirm and widening checks still
+  run first); reply `dialog.backend:"inprocess"`; the module's handing back (`Gui`) opens the view in the same call.
+Needs: the module and reader from branch e78/inproc-war; PREV-1936 (Germany, peace) and PREV-1939 (bed1939-0814, a
+justified war goal on Poland).
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,diplomacy ./inproc_stage2.sh PREV-1936 s10d`; hello shows
+`"diplomacy":{"on":true,"live_passed":false}`. `C="python3 -I inproc/tools/inproc_client.py s10d/inproc.sock"`.
+G1 paused, `HOI4_BACKEND=inprocess` (5 min): `hoi4_diplomacy_act {"country":"AUS","action":"improve_relations"}` and
+`{"country":"HUN","action":"guarantee"}`: receipt Verified, `dialog.module.per_object[0].result:"posted"`, the relation in
+hoi4_diplomacy_state, no view opened, tool ms (mouse: record the same pair by HOI4_BACKEND=gui after revoking).
+G2 AI-decided while running at speed 2 (5 min): `non_aggression_pact` and `ask_military_access` with a neighbour: posted;
+the receipt is Verified or `sent_awaiting_ai_reply` (Diverged), never re-sent by the executor; the AI's answer (event or
+relation) appears within a few days.
+G3 refusals (4 min): guarantee a country already guaranteed / a major the game forbids -> `refused_by_game_check`, nothing
+posted; `$C post2 diplomacy.guarantee 0 <own tag index>` -> refused by the module ("the player's own country"); a tag index
+past the country table -> refused ("not a live country"); `diplomacy.declare_war` on a country with no own war goal ->
+refused ("no war goal ... justify one first"), nothing posted.
+G4 declare war from PREV-1939 (the 1939 test's gate; 5 min): Poland with the justified goal: `hoi4_diplomacy_act
+{"country":"POL","action":"declare_war","confirm":"declare_war","accept_widening":true}` -> Verified at_war within 3 s, the
+war in hoi4_wars, the guarantors' joins as the game decides; the war-goal list after (the goal is consumed or kept as the
+game does); record the tool ms against the mouse path's ~10-20 s.
+G5 save + reload with the family on; a plain load without the module.
+Stop at once (endrun.sh s10d) on: a crash, a hang, any `unexplained` post2, an action sent to a country the request did not
+name, a war declared without the requested confirm, G3's own-tag or no-war-goal request posted.

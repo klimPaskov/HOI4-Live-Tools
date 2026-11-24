@@ -22,6 +22,7 @@ mod construction;
 mod construction_find;
 mod fair_facts;
 mod inproc;
+mod inproc_diplomacy;
 mod inproc_events;
 mod inproc_orders;
 mod inproc_picks;
@@ -3752,26 +3753,53 @@ impl MacClock {
             let action = json!({"kind":"diplomacy_act","state_id":state_json,"country":country_json,"action":action_name,"war_goal":kind,"states":states,"try_anyway":try_anyway});
             let retry = actions.receipt_exists(id);
             let keys = &self.keys;
-            let plan = if retry {
-                None
-            } else {
-                keys.preflight()?;
-                let plan = diplomacy::plan(process, keys, &target, action_name, try_anyway)?;
-                if plan.spec.map(|s| s.key) == Some("declare_war") && confirm != Some("declare_war")
-                {
+            // engineer 78: an action the module sends as the view does (no view opened), for a country target; the
+            // relation snapshot before it is the same read-back the mouse path uses. Off under `auto` until passed live.
+            let inproc_op = match &target {
+                diplomacy::Target::Country(_) if !retry => diplomacy_keys::spec_of_key(action_name)
+                    .or_else(|| diplomacy_keys::spec_of_row(action_name))
+                    .and_then(|s| inproc_diplomacy::op_of(s.key)),
+                _ => None,
+            };
+            let diplo_route =
+                std::cell::RefCell::new(inproc_op.and_then(|_| inproc::route("diplomacy")));
+            let war_checks = |key: Option<&str>, tag: &str| -> Result<()> {
+                if key == Some("declare_war") && confirm != Some("declare_war") {
                     return Err(Error::new(
                         "confirmation_required",
                         "Declaring war is one explicit step: repeat the call with confirm:\"declare_war\" (the game accepts it only with a completed war goal)",
                     ));
                 }
-                if plan.spec.map(|s| s.key) == Some("declare_war") && !flag("accept_widening")? {
+                if key == Some("declare_war") && !flag("accept_widening")? {
                     // Ger1 (1 Nov 2026) declared on Poland without reading its guarantors: Britain
                     // and France joined and walked through an empty Rhine. Refuse before input when
                     // a country that would join borders us without a held front.
-                    self.check_war_widening(process, &plan.tag)?;
+                    self.check_war_widening(process, tag)?;
                 }
+                Ok(())
+            };
+            let mut inproc_before = None;
+            let plan = if retry {
+                None
+            } else if diplo_route.borrow().is_some() {
+                let tag = diplomacy::target_tag(process, &target)?;
+                war_checks(
+                    diplomacy_keys::spec_of_key(action_name)
+                        .or_else(|| diplomacy_keys::spec_of_row(action_name))
+                        .map(|s| s.key),
+                    &tag,
+                )?;
+                inproc_before = Some(ui::read(process, |r, i| {
+                    diplomacy_state::snapshot(r, i, &tag)
+                })?);
+                None
+            } else {
+                keys.preflight()?;
+                let plan = diplomacy::plan(process, keys, &target, action_name, try_anyway)?;
+                war_checks(plan.spec.map(|s| s.key), &plan.tag)?;
                 Some(plan)
             };
+            let inproc_ai_sent = std::cell::Cell::new(false);
             let tag = match &plan {
                 Some(p) => p.tag.clone(),
                 None => diplomacy::target_tag(process, &target)?,
@@ -3788,7 +3816,7 @@ impl MacClock {
                 let snap = ui::read(process, |r, i| diplomacy_state::snapshot(r, i, &tag))?;
                 let mut verdict = diplomacy_keys::verdict(
                     spec,
-                    plan.as_ref().map(|p| &p.before),
+                    plan.as_ref().map(|p| &p.before).or(inproc_before.as_ref()),
                     &snap,
                     proven.get(),
                 );
@@ -3804,11 +3832,13 @@ impl MacClock {
                     .and_then(Value::as_str)
                     .map(str::to_lowercase)
                     .unwrap_or_default();
+                // engineer 78: a proposal sent in process has no dialog text; the game's own check passed and the
+                // command was posted, so the target's AI answers when the game runs (the same as a sent dialog)
                 let awaiting = verdict == settle::Verdict::Unchanged
                     && spec.is_some_and(|s| s.ai_decides)
                     && sent.get()
-                    && reply.contains("will accept")
-                    && !reply.contains("not accept");
+                    && ((reply.contains("will accept") && !reply.contains("not accept"))
+                        || inproc_ai_sent.get());
                 if awaiting {
                     verdict = settle::Verdict::Diverged;
                 }
@@ -3820,9 +3850,52 @@ impl MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
-                let plan = plan
-                    .as_ref()
-                    .ok_or_else(|| Error::new("invalid_state", "No plan for this dispatch"))?;
+                if let (Some(op), Some(ch)) = (inproc_op, diplo_route.borrow_mut().as_mut()) {
+                    let idx = ui::read(process, |r, i| diplomacy_state::tag_index_of(r, i, &tag))?;
+                    let pp_before = decisions::political_power(process).ok();
+                    match inproc_diplomacy::act(ch, op, idx) {
+                        inproc::Routed::Done(body) => {
+                            sent.set(true);
+                            // read-back: the relation the action makes, or political power spent, within 3 s
+                            let deadline =
+                                std::time::Instant::now() + std::time::Duration::from_secs(3);
+                            loop {
+                                let snap = ui::read(process, |r, i| {
+                                    diplomacy_state::snapshot(r, i, &tag)
+                                })?;
+                                let reached = diplomacy_keys::verdict(
+                                    spec,
+                                    inproc_before.as_ref(),
+                                    &snap,
+                                    false,
+                                ) == settle::Verdict::Reached;
+                                let pp_spent = matches!((pp_before, decisions::political_power(process).ok()), (Some(a), Some(b)) if b < a);
+                                if reached || pp_spent || std::time::Instant::now() >= deadline {
+                                    proven.set(reached || pp_spent);
+                                    break;
+                                }
+                                crate::phase::sleep(std::time::Duration::from_millis(80));
+                            }
+                            inproc_ai_sent.set(spec.is_some_and(|s| s.ai_decides));
+                            *dialog.borrow_mut() = body;
+                            return Ok(());
+                        }
+                        inproc::Routed::Refused(what) => return Err(inproc::refused_error(&what)),
+                        inproc::Routed::Gui => {}
+                    }
+                }
+                let fallback;
+                let plan = match plan.as_ref() {
+                    Some(p) => p,
+                    // the module handed the action to the mouse (not an unexplained refusal): the view's own path
+                    None if inproc_op.is_some() && !retry => {
+                        keys.preflight()?;
+                        fallback =
+                            diplomacy::plan(process, keys, &target, action_name, try_anyway)?;
+                        &fallback
+                    }
+                    None => return Err(Error::new("invalid_state", "No plan for this dispatch")),
+                };
                 let proof = diplomacy::execute(process, keys, plan, kind, &states, &sent)?;
                 proven.set(proof.rows_changed || proof.pp_spent || proof.relation);
                 *dialog.borrow_mut() = proof.dialog;
