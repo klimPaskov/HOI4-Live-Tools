@@ -63,7 +63,13 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
        CTOR_GROUPS = 15,       /* (cmd, const CPdxArray<COrdersGroup *> *): armies out of their army group */
        /* engineer 76 (24 Nov): an event answer, the event window's own call (cmd, pending id, CEvent *, const int *country,
         * const scope *, option index): the scope is copied by the game's own copy routine */
-       CTOR_EVENT_OPTION = 16 };
+       CTOR_EVENT_OPTION = 16,
+       /* engineer 78 (24 Nov): diplomacy. The command carries a CDiplomaticAction the module builds with the ACTION
+        * class's own constructor, then wraps with the game's own command maker (it stamps the game date and moves the
+        * action into a CDiplomaticActionCommand):
+        *   SIMPLE (action, const tag *sender, const tag *receiver, const CDate *): guarantee, access, pact, relations;
+        *   WAR    (action, const tag *sender, const tag *receiver, war goal object, flag byte, const CDate *) */
+       CTOR_DIPLO_SIMPLE = 17, CTOR_DIPLO_WAR = 18 };
 /* engineer 74: BUILD_FIELDS also fills CPdxArray fields (a division handle list, a province list): the fresh object's
  * array is empty ({data 0, capacity 0, size 0} and its allocator set by the factory); the module allocates the
  * elements through THAT allocator's own allocate slot (read from the game's array growth code), so the command's
@@ -78,7 +84,12 @@ enum { AUTH_HANDLE = 0, AUTH_TAG = 1,
         * event handle resolves to a CEvent with options, and the game state's pending-event record of the command's id
         * holds that event. The object the request names is the open event WINDOW (exact vtable of obj_cast); the
         * module takes every field from it, as the window's own option click does */
-       AUTH_EVENT = 3 };
+       AUTH_EVENT = 3,
+       /* engineer 78: a diplomatic action (CDiplomaticActionCommand): the command holds the action by pointer at
+        * +auth_off and the sender must control the action's sender tag. obj_cast = the ACTION class (exact vtable); the
+        * game's own "can do" is the command's check, which asks the action's own legality virtual (the one that greys the
+        * diplomacy view's button) */
+       AUTH_DIPLO = 4 };
 /* the second object a type takes, checked before posting */
 enum { OBJ2_NONE = 0, OBJ2_AIR_BASE, OBJ2_REGION, OBJ2_ORDERS_GROUP,
        OBJ2_REGION_ID, /* a strategic region given by id in vals (0 = none: hold), looked up as the game's check does */
@@ -123,6 +134,10 @@ typedef struct {
     uint64_t ti_src, ti_dst;                                      /* AUTH_TAG: CReferenceObject -> obj_cast typeinfos */
     uint64_t vt_obj;                                              /* AUTH_TAG_PTR: the object's exact vtable */
     uint64_t ti2; uint32_t hint2;                                 /* OBJ2_CAST: the check's typeinfo and hint */
+    /* engineer 78, AUTH_DIPLO: the action class's constructor, object size (from its own Clone), type id (its SetType),
+     * the base constructor it calls, the sender field (from the command's auth slot); WAR: the war goal handle field and
+     * the flag byte the constructor writes */
+    uint64_t act_ctor, act_base; uint32_t act_size, act_type, act_sender_off, act_goal_off, act_flag_off;
     unsigned conf, need;
     char evidence[300];
 } cmd_type;
@@ -180,12 +195,31 @@ typedef struct {
     char evidence[300];
 } events_facts;
 
-#define CMD2_MAX 48
+/* engineer 78: what every diplomatic action needs, each read from the code that uses it:
+ *   - the command maker the diplomacy UI calls with the new action (it writes the game date into the action and moves the
+ *     action into a fresh CDiplomaticActionCommand: its make-unique helper holds the command's vtable): make_cmd, the game
+ *     state's date field and the action's date field;
+ *   - the CDate object layout the action constructors build (two vtables: the primary +0x10 and the secondary +0x60 of
+ *     the class's vtable group), read from an action constructor;
+ *   - the player's war goals as the declare-war dialog lists them (its selection handler): the country of a tag, the
+ *     country's war-goal holder, its list (data, count), a war goal's target tag; the handler writes the chosen goal's
+ *     handle into the action at the war constructor's handle field */
+typedef struct {
+    int ok, war_ok;
+    uint64_t make_cmd, make_unique, date_vt;
+    uint32_t date_off, act_date_off;
+    uint64_t country_of;
+    uint32_t wg_holder_off, wg_list_off, wg_count_off, wg_target_off;
+    char evidence[300];
+} diplo_facts;
+
+#define CMD2_MAX 64
 typedef struct {
     stage2_common common;
     orders_facts orders;      /* engineer 73: the battle-plan order tree (core/orders.c) */
     fronts_facts fronts;      /* engineer 74: the theatre fronts a plan root binds to (core/orders.c) */
     events_facts events;      /* engineer 76: the event window and the pending-event records */
+    diplo_facts diplo;        /* engineer 78: the command maker, the date, the war goals */
     int n;
     cmd_type t[CMD2_MAX];
 } stage2_table;

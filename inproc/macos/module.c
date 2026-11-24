@@ -740,6 +740,81 @@ static const char *events_prep(job2_t *j, uint64_t gs, int *unavailable) {
     return NULL;
 }
 
+
+/* engineer 78: a diplomatic action, as the diplomacy view sends it. j->val[0] = the receiving country's tag id. The
+ * module builds the action with the action class's own constructor (sender = the player, receiver = the target, the
+ * game date; declare war: one of the player's own war goals against the target, as the declare-war dialog lists them),
+ * hands it to the game's own command maker, asks the command's own "can do" (the action's legality virtual) and posts.
+ * Only the module's fresh objects are written; refused = the game's own destructor frees both. */
+typedef void *(*country_of_fn)(const int32_t *);
+typedef void (*act_simple_fn)(void *, const int32_t *, const int32_t *, const void *);
+typedef void (*act_war_fn)(void *, const int32_t *, const int32_t *, const void *, int, const void *);
+typedef void **(*make_cmd_fn)(void **, void **);
+typedef void *(*new_fn)(size_t);
+static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint64_t q, uint64_t post) {
+    const diplo_facts *d = &g_t.st2.diplo;
+    const stage2_common *c = &g_t.st2.common;
+    uint64_t sl = (uint64_t)g_slide;
+    int32_t target = (int32_t)j->val[0], date = 0;
+    static new_fn nw;
+    if (!nw) nw = (new_fn)dlsym(RTLD_DEFAULT, "_Znwm");
+    if (!nw || !code_ptr(d->country_of + sl) || !code_ptr(d->make_cmd + sl) || !code_ptr(ct->act_ctor + sl) || !code_ptr(post)) { j->unexplained = 1; return "diplomacy facts are not game code"; }
+    if (target == j->player_tag) { j->res[0] = R_BAD_OBJ; return "the target is the player's own country"; }
+    void *tc = ((country_of_fn)(uintptr_t)(d->country_of + sl))(&target);
+    if (!tc) { j->res[0] = R_BAD_OBJ; return "the target tag is not a live country"; }
+    if (!sread(gs + d->date_off, &date, 4) || date <= 0) { j->unexplained = 1; return "the game date is unreadable"; }
+    uint64_t goal = 0;
+    if (ct->spec->ctor == CTOR_DIPLO_WAR) { /* the player's own war goals whose target is the receiver: the first one */
+        void *pc = ((country_of_fn)(uintptr_t)(d->country_of + sl))(&j->player_tag);
+        uint64_t holder = 0, data = 0; int32_t cnt = -1;
+        if (!pc || !sq((uint64_t)(uintptr_t)pc + d->wg_holder_off, &holder) || !plausible(holder) ||
+            !sread(holder + d->wg_count_off, &cnt, 4) || cnt < 0 || cnt > 4096 || (cnt && (!sq(holder + d->wg_list_off, &data) || !plausible(data)))) {
+            j->unexplained = 1; return "the player's war goals are unreadable";
+        }
+        for (int32_t k = 0; k < cnt && !goal; k++) {
+            uint64_t g = 0, h = 0; int32_t t = 0;
+            if (!sq(data + 8 * (uint64_t)k, &g) || !plausible(g) || !sread(g + d->wg_target_off, &t, 4) || t != target) continue;
+            uint64_t lk = ct->lookup_fn + sl;
+            if (!sq(g + c->cref_handle_off, &h) || !h || !code_ptr(lk) || (uint64_t)(uintptr_t)((resolve_fn2)(uintptr_t)lk)(&h) != g) continue;
+            goal = g; j->hx = h;
+        }
+        if (!goal) { j->res[0] = R_INVALID; j->refused++; return "no war goal of the player's against the target (justify one first)"; }
+    }
+    /* the date object the constructors read (+8), laid out as they build their own: two vtables of the CDate group */
+    uint64_t dobj[3] = {d->date_vt + sl + 0x10, (uint64_t)(uint32_t)date, d->date_vt + sl + 0x60};
+    char *act = (char *)nw(ct->act_size);
+    if (!act) { j->unexplained = 1; return "allocation failed"; }
+    memset(act, 0, ct->act_size);
+    if (ct->spec->ctor == CTOR_DIPLO_SIMPLE) ((act_simple_fn)(uintptr_t)(ct->act_ctor + sl))(act, &j->player_tag, &target, dobj);
+    else ((act_war_fn)(uintptr_t)(ct->act_ctor + sl))(act, &j->player_tag, &target, (const void *)(uintptr_t)goal, 0, dobj);
+    /* what the game built must be exactly what was asked */
+    uint64_t av = 0, ah = 0; int32_t at = -1, as = -1, ar = -1;
+    int ok = sq((uint64_t)(uintptr_t)act, &av) && av == ct->vt_obj + sl && sread((uint64_t)(uintptr_t)act + 8, &at, 4) &&
+             at == (int32_t)ct->act_type && sread((uint64_t)(uintptr_t)act + ct->act_sender_off, &as, 4) && as == j->player_tag &&
+             sread((uint64_t)(uintptr_t)act + ct->act_sender_off + 8, &ar, 4) && ar == target;
+    if (ok && ct->spec->ctor == CTOR_DIPLO_WAR) {
+        uint8_t fl = 9;
+        ok = sq((uint64_t)(uintptr_t)act + ct->act_goal_off, &ah) && ah == j->hx && sread((uint64_t)(uintptr_t)act + ct->act_flag_off, &fl, 1) && fl == 0;
+    }
+    if (!ok) { void **vt0 = *(void ***)act; ((delete_fn2)vt0[1])(act); j->res[0] = R_UNEXPECTED; j->unexplained = 1; return "the action constructor built an unexpected object"; }
+    void *up = act, *cmd = NULL;
+    ((make_cmd_fn)(uintptr_t)(d->make_cmd + sl))(&cmd, &up); /* moves the action into a fresh command, stamps the date */
+    if (!cmd) { if (up) { void **vt0 = *(void ***)up; ((delete_fn2)vt0[1])(up); } j->res[0] = R_UNEXPECTED; j->unexplained = 1; return "the command maker built nothing"; }
+    uint64_t cv = 0, ca = 0; int32_t ad = 0;
+    if (!sq((uint64_t)(uintptr_t)cmd, &cv) || cv != ct->vtable + sl || !sq((uint64_t)(uintptr_t)cmd + ct->spec->auth_off, &ca) ||
+        ca != (uint64_t)(uintptr_t)act || !sread((uint64_t)(uintptr_t)act + d->act_date_off, &ad, 4) || ad != date) {
+        j->res[0] = R_UNEXPECTED; j->unexplained = 1; return "the command maker built an unexpected command"; /* not posted; leaked rather than freed blind */
+    }
+    void **vt = *(void ***)cmd;
+    if (!((valid_fn2)vt[c->valid_slot / 8])(cmd, 0)) { ((delete_fn2)vt[c->delete_slot / 8])(cmd); j->res[0] = R_INVALID; j->refused++; return NULL; }
+    long long t0 = mono_us();
+    unsigned char r = ((post_fn)(uintptr_t)post)((void *)(uintptr_t)q, cmd, 0);
+    j->post_us = mono_us() - t0;
+    if (!r) { j->res[0] = R_DROPPED; j->unexplained = 1; return "Post dropped a command every check passed"; }
+    j->res[0] = R_POSTED; j->posted++;
+    return NULL;
+}
+
 static void run_job2(void *ctx) {
     job2_t *j = (job2_t *)ctx;
     const stage2_common *c = &g_t.st2.common;
@@ -836,6 +911,12 @@ static void run_job2(void *ctx) {
             for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
             snprintf(j->reason, sizeof j->reason, "obj2 is not a live %s", ct->spec->obj2_cast); finish2(j); return;
         }
+    }
+    if (ct->spec->auth_kind == AUTH_DIPLO) { /* engineer 78: no object handles; the action is built and checked whole */
+        uint64_t post2 = g_t.post.post + (uint64_t)g_slide;
+        const char *why = diplo_build(j, ct, gs, q, post2);
+        if (why) { if (j->res[0] == R_NONE) j->res[0] = R_UNEXPECTED; snprintf(j->reason, sizeof j->reason, "%s", why); }
+        finish2(j); return;
     }
     if (!strcmp(op, "units.new_army") || !strcmp(op, "units.army_group_new")) {
         const char *w = units_theatre(j);
@@ -1123,7 +1204,16 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
     j->n = parse_list_u64(objs, j->obj, J2_MAX);
     int nv = vals && *vals ? parse_list_i64(vals, j->val, J2_MAX) : 0;
     const char *why = NULL;
-    if (j->n < 1) why = "objs: comma-separated hex addresses";
+    if (!strncmp(op, "diplomacy.", 10)) {
+        /* engineer 78: no object (objs = "0", the channel's one placeholder); vals = the receiving country's tag id (the
+         * shown country of the diplomacy view) */
+        if (j->n != 1 || j->obj[0] != 0) why = "diplomacy ops name no object: objs = 0 (vals: the receiving country's tag id)";
+        else if (nv != 1 || j->val[0] < 1 || j->val[0] > 100000) why = "vals: the receiving country's tag id";
+        else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "diplomacy ops take no flag, obj2, provs or divs";
+        else { j->n = 1; j->obj[0] = 0; }
+        if (why) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused_by_policy\",\"reason\":\"%s\"", op, why); free(j); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
+        nv = 0; /* consumed */
+    } else if (j->n < 1) why = "objs: comma-separated hex addresses";
     else if (!strcmp(op, "production.add_factories")) {
         if (nv != j->n) why = "vals: one factory delta per line";
         else for (int i = 0; i < j->n; i++) if (j->val[i] == 0 || j->val[i] < -150 || j->val[i] > 150) why = "a delta is 0 or outside -150..150";

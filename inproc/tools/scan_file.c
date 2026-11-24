@@ -103,6 +103,21 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "unit_hint")) got = t.st2.common.unit_hint;
         else if (!strcmp(argv[a], "unit_theatre_off")) got = t.st2.common.unit_theatre_off;
         else if (!strcmp(argv[a], "group_parent_ptr_off")) got = t.st2.common.group_parent_ptr_off;
+        /* engineer 78: diplomacy */
+        else if (!strcmp(argv[a], "diplo_ok")) { got = (uint64_t)t.st2.diplo.ok; fprintf(stderr, "diplo: %s\n", t.st2.diplo.evidence); }
+        else if (!strcmp(argv[a], "diplo_war_ok")) got = (uint64_t)t.st2.diplo.war_ok;
+        else if (!strcmp(argv[a], "diplo_make_cmd")) got = t.st2.diplo.make_cmd;
+        else if (!strcmp(argv[a], "diplo_date_off")) got = t.st2.diplo.date_off;
+        else if (!strcmp(argv[a], "diplo_act_date_off")) got = t.st2.diplo.act_date_off;
+        else if (!strcmp(argv[a], "diplo_date_vt")) got = t.st2.diplo.date_vt;
+        else if (!strcmp(argv[a], "diplo_country_of")) got = t.st2.diplo.country_of;
+        else if (!strcmp(argv[a], "wg_holder_off")) got = t.st2.diplo.wg_holder_off;
+        else if (!strcmp(argv[a], "wg_list_off")) got = t.st2.diplo.wg_list_off;
+        else if (!strcmp(argv[a], "wg_count_off")) got = t.st2.diplo.wg_count_off;
+        else if (!strcmp(argv[a], "wg_target_off")) got = t.st2.diplo.wg_target_off;
+        else if (!strncmp(argv[a], "act_size:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_size : 0; }
+        else if (!strncmp(argv[a], "act_type:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_type : 0; }
+        else if (!strncmp(argv[a], "act_goal_off:", 13)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 13); got = x ? x->act_goal_off : 0; }
         /* engineer 76: the event window and the pending-event records */
         else if (!strcmp(argv[a], "events_ok")) got = (uint64_t)t.st2.events.ok;
         else if (!strcmp(argv[a], "events_vt_window")) got = t.st2.events.vt_window;
