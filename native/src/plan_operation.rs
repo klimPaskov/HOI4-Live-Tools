@@ -203,7 +203,11 @@ pub(super) fn refresh(state: &mut State, tools: &dyn Tools, plan: &Value, now: G
     // the first read, was not counted as the operation's, and the idle-hold step sent it back to
     // its old state with an area-defence order: its march never ended and the operation never
     // read as ready, so the declaration waited past 1 September.
-    let mut roles: Vec<String> = state.layout.iter().map(|(h, a)| format!("{h}={a}")).collect();
+    let mut roles: Vec<String> = state
+        .layout
+        .iter()
+        .map(|(h, a)| format!("{h}={a}"))
+        .collect();
     roles.sort_unstable();
     let stamp = (now, roles.join("\u{1}"));
     if state.op_owned_at.as_ref() == Some(&stamp) {

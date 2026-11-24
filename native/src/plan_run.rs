@@ -1997,7 +1997,9 @@ pub fn tick(
             state.failed_run.iter().any(|(k, (_, cause))| {
                 k.starts_with(&prefix)
                     && cause.contains("event_covered")
-                    && open_keys.iter().any(|o| o != *key && cause.contains(o.as_str()))
+                    && open_keys
+                        .iter()
+                        .any(|o| o != *key && cause.contains(o.as_str()))
             })
         })
         .cloned()
@@ -2224,7 +2226,11 @@ fn lanes_tick_inner(
         let said = match (&result, state.last_ok) {
             (Some(line), Some(false)) => Some(("refused", line.clone())),
             (Some(line), _) => Some(("acted", line.clone())),
-            (None, _) if name == "focus" => state.stages.focus.as_ref().map(|(t, _)| ("waiting", t.clone())),
+            (None, _) if name == "focus" => state
+                .stages
+                .focus
+                .as_ref()
+                .map(|(t, _)| ("waiting", t.clone())),
             (None, _) => None,
         };
         if let Some((outcome, reason)) = said {
@@ -3868,7 +3874,8 @@ fn war_first_steps(
         // are the operation's armies (t1939e, 24 Nov 2026: behind the operations step and its air
         // burst the layout formed Armee Mitte on 7 September, a week into the war)
         |state, tools, plan, lease, now| {
-            if operation_roles_missing(state, plan) || owner_roles_missing(state, tools, plan, now) {
+            if operation_roles_missing(state, plan) || owner_roles_missing(state, tools, plan, now)
+            {
                 layout_step(state, tools, plan, lease, now)
             } else {
                 layout_pool_step(state, tools, plan, lease, now)
@@ -5076,16 +5083,18 @@ fn layout_pool_step(
             let guard = |army: &str| {
                 state.layout.iter().any(|(h, x)| {
                     x == army
-                        && list(plan, "army_layout")
-                            .iter()
-                            .any(|e| text(&e["name_hint"]) == h.as_str() && text(&e["role"]) == "guard")
+                        && list(plan, "army_layout").iter().any(|e| {
+                            text(&e["name_hint"]) == h.as_str() && text(&e["role"]) == "guard"
+                        })
                 })
             };
             let mut room: Vec<(bool, u64, String)> = full
                 .iter()
                 .filter(|r| {
                     let n = text(&r["army"]);
-                    roles.contains(n) && !state.op_owned.contains_key(n) && !r["commander"].is_null()
+                    roles.contains(n)
+                        && !state.op_owned.contains_key(n)
+                        && !r["commander"].is_null()
                 })
                 .filter_map(|r| {
                     let n = text(&r["army"]).to_string();
@@ -12338,15 +12347,26 @@ mod tests {
         // the clock stands still (the paused setup); a minute of wall time between tries
         for i in 0..5 {
             state.wall = Some(1_000_000 + 60 * i);
-            state.act(&tools, "l", "hoi4_focus_start", focus.clone(), "fo").unwrap();
+            state
+                .act(&tools, "l", "hoi4_focus_start", focus.clone(), "fo")
+                .unwrap();
         }
-        let sends = || tools.calls.borrow().iter().filter(|(c, _)| c == "hoi4_focus_start").count();
+        let sends = || {
+            tools
+                .calls
+                .borrow()
+                .iter()
+                .filter(|(c, _)| c == "hoi4_focus_start")
+                .count()
+        };
         assert_eq!(sends(), 2);
         let sig = format!("hoi4_focus_start {focus}");
         assert_eq!(state.repeats_stopped[&sig].1, 3, "stopped by the ledger");
         // the clock moves: the ledger's rests answer it again
         state.clock += 1;
-        assert!(state.backing_off(&sig).is_none_or(|why| !why.contains("no game hour")));
+        assert!(state
+            .backing_off(&sig)
+            .is_none_or(|why| !why.contains("no game hour")));
     }
 
     #[test]
@@ -12815,10 +12835,16 @@ mod tests {
         );
         state.failed_run.insert(
             sig,
-            (1, "event_covered: An option of germany_mefo_bills.3 lies on the same spot".into()),
+            (
+                1,
+                "event_covered: An option of germany_mefo_bills.3 lies on the same spot".into(),
+            ),
         );
         let step = tick(&mut state, &tools, &json!({}), "l", START).unwrap();
-        assert!(!matches!(&step, Tick::Acted(s) if s.contains("AAT_Sweden")), "{step:?}");
+        assert!(
+            !matches!(&step, Tick::Acted(s) if s.contains("AAT_Sweden")),
+            "{step:?}"
+        );
     }
 
     #[test]
@@ -17429,7 +17455,9 @@ mod tests {
             state.layout.insert(h.into(), h.into());
         }
         state.op_owned.insert("Op".into(), "op".into());
-        let line = layout_pool_step(&mut state, &tools, &plan, "l", START).unwrap().unwrap();
+        let line = layout_pool_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
         assert!(line.contains("to the hold West"), "{line}");
         let calls = tools.calls.borrow();
         let (_, args) = calls.iter().find(|(n, _)| n == "hoi4_army_detach").unwrap();
