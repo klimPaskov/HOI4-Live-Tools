@@ -896,3 +896,33 @@ T5 running at speed 3: T1 again, Verified within 3 s. T6 save + reload; a plain 
 Stop at once on: a crash, any `unexplained`, a trait unlocked with no point (points negative), political power spent on a
 refused policy, an organisation of another country in the read, a read whose sizes or points differ from the window.
 Pass -> IPC_LIVE_PASSED entry 18 (mio) = 1.
+
+## Session S17-NAVY: the in-process module, task forces and fleets (family `navy`; about 25 minutes) -- after S16-MIO
+
+Built by engineer 85 (24 Nov 2026), offline-proven only: stage 2 65/65 on 1.20.0.0 and 1.19.4.1 macOS (identical type ids,
+offsets and field ids); Linux/Windows 1.20 CNavalMissionSetTypeCommand 12272 / CMergeNaviesCommand 13176 /
+CNavalMissionAddRegionCommand 12274 / CNavalMissionRemoveRegionCommand 12275 / CSetFleetLeaderCommand 12370 /
+CSetFleetCommand 15165 by RTTI and type id (6/6 each). OFF under `auto` until this session passes.
+- mission: the mission bar's command (one command for the selection; task force handles, the button's mission code,
+  +0x45 = 1 as the button; +0x44 kept 0; codes 0-4 and 9 only). add_region / remove_region: the fleet and the strategic region id (the right
+  click; the remove tool). leader: the fleet and the admiral (or none). assign: the receiving fleet and the task forces
+  (each checked by the task force type's own resolver and owner getter). merge: the selection's task forces.
+- MCP: hoi4_fleet_mission, hoi4_fleet_region (the region by its display name -> id from the game files; `state_id` is
+  still required by the schema and only used by the mouse path), hoi4_fleet_admiral (assign/unassign; list:true stays on the
+  mouse path), hoi4_fleet_assign, hoi4_fleet_merge route in process; split, balance, reserve, delete, create stay on the mouse.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,navy ./inproc_stage2.sh PREV-1939 s17n` (Germany 1939 bookmark:
+several fleets, submarines, an idle task force), calls with `HOI4_BACKEND=inprocess`.
+N1 paused: `hoi4_fleet_region {"fleet":"<a U-boat fleet>","region":"<a sea region not assigned>","state_id":<any coastal>}`:
+Verified (hoi4_fleets assigned_regions lists it; the fleet panel's Active in Regions too). The same again ->
+already_assigned before posting. Then `remove:true`: Verified, gone from both.
+N2 `hoi4_fleet_mission {"task_force":"<a submarine task force>","mission":"convoy_raiding"}`: Verified (code 3; the panel
+shows the raiding icon). Then `patrol`, then `hold` (code 0): each Verified. `mine_laying` and `training` go by mouse by
+design (the module never posts 5/6/7: the buttons' technology rule and training's setting byte are the UI's): the reply has no `in_process`.
+N3 `hoi4_fleet_admiral {"fleet":"<fleet with no admiral>","admiral":"<free admiral>"}`: Verified; then `unassign:true`:
+Verified; an admiral who leads another fleet -> Verified and the other fleet shows none (the UI asks first; record).
+N4 `hoi4_fleet_assign {"task_force":"<tf>","to_fleet":"<other fleet>"}`: Verified (hoi4_fleets). `hoi4_fleet_merge
+{"fleet":"<fleet with 2+ task forces in one port>"}`: Verified (one task force with all ships).
+N5 running at speed 3: N2 again, Verified within 2 s. N6 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, a task force of another country moved, a mission code outside the buttons'
+set read back, a fleet left with no task force and not deleted by the game, an admiral who appears in two fleets.
+Pass -> IPC_LIVE_PASSED entry 19 (navy) = 1.

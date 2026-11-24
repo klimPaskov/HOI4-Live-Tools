@@ -1728,7 +1728,7 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         /* engineer 85: task forces and fleets, as the navy view posts them.
          *   mission:       objs = own task forces (1..32, ONE command, the mission bar's selection); vals = the mission
          *                  code of a mission button (0 hold, 1 patrol, 2 strike force, 3 convoy raiding, 4 convoy escort,
-         *                  5 mine laying, 6 mine sweeping, 7 training, 9 invasion support; 8 = the reserve: no button)
+         *                  9 invasion support; 8 = the reserve: no button; 5/6 mines and 7 training: refused, see below)
          *   merge:         objs = own task forces (2..32, ONE command: the toolbar's merge of the selection)
          *   add_region / remove_region: objs = ONE own fleet; vals = the strategic region id
          *   leader:        objs = ONE own fleet; obj2 = the admiral (CNavyLeader) or none (unassign)
@@ -1739,6 +1739,12 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         else if (obj2 && *obj2 && strcmp(op, "navy.leader")) why = "only navy.leader takes obj2 (the admiral)";
         else if (!strcmp(op, "navy.mission")) {
             if (nv != 1 || j->val[0] < 0 || j->val[0] > 9 || j->val[0] == 8) why = "vals: one mission code of a mission button (0..7, 9)";
+            /* the mine buttons are enabled by technology, a UI rule the command's own "can do" (code <= 9) does not
+             * repeat: the module never posts them (FAIR: only what the UI offers); the mouse path serves them */
+            else if (j->val[0] == 5 || j->val[0] == 6) why = "mine missions stay on the mouse path (their button's technology rule is the UI's)";
+            /* training: the button sets +0x44 under a game-state setting (1.20 0x101dc9a48: gamestate +0x4d0, its slot
+             * 0x30) the module does not read: the mouse path serves it */
+            else if (j->val[0] == 7) why = "training stays on the mouse path (the button's +0x44 depends on a game setting)";
             else for (int i = 1; i < j->n; i++) j->val[i] = j->val[0];
         } else if (!strcmp(op, "navy.merge")) {
             if (nv) why = "navy.merge takes no vals";
