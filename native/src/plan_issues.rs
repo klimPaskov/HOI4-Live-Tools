@@ -377,6 +377,19 @@ fn usable_treat(le: &Value, run: Option<&str>) -> Option<Treat> {
 }
 
 #[cfg(test)]
+impl Issues {
+    /// A store with these lessons for run `run`, not re-read from disk for a while.
+    pub fn with_lessons(lessons: Vec<Value>, run: &str) -> Issues {
+        Issues {
+            lessons,
+            run_name: Some(run.to_string()),
+            checked: Some(Instant::now()),
+            ..Default::default()
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
