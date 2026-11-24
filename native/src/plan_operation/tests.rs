@@ -43,6 +43,10 @@ struct Game {
     calls: RefCell<Vec<(String, Value)>>,
     /// the roster does not show a stop (a read taken before the stop landed)
     stale_stop: RefCell<bool>,
+    /// every front drawn as a segment (`from_state`) refused
+    refuse_segment: RefCell<bool>,
+    /// the own states on the Polish border, as hoi4_wars lists them (none when empty)
+    own_border: RefCell<Vec<i64>>,
 }
 
 impl Game {
@@ -84,6 +88,8 @@ impl Game {
             graph: RefCell::new(None),
             calls: RefCell::new(vec![]),
             stale_stop: RefCell::new(false),
+            refuse_segment: RefCell::new(false),
+            own_border: RefCell::new(vec![]),
         }
     }
     fn orders(&self) -> Vec<(String, Value)> {
@@ -127,9 +133,13 @@ impl Tools for Game {
                 } else {
                     json!([])
                 };
-                return Ok(json!({"wars": {"enemies": *self.enemies.borrow()},
+                let mut wars = json!({"wars": {"enemies": *self.enemies.borrow()},
                     "borders": [{"neighbour_tag": "POL", "neighbour_states": pol},
-                                {"neighbour_tag": "FRA", "neighbour_states": [28]}]}));
+                                {"neighbour_tag": "FRA", "neighbour_states": [28]}]});
+                if !self.own_border.borrow().is_empty() {
+                    wars["borders"][0]["own_border_states"] = json!(*self.own_border.borrow());
+                }
+                return Ok(wars);
             }
             "hoi4_overview" => return Ok(json!({"player": "GER"})),
             "hoi4_states" if text(&args["query"]).parse::<i64>().is_ok() => {
@@ -212,6 +222,9 @@ impl Tools for Game {
                     rows
                 };
                 return Ok(json!({"states": rows}));
+            }
+            "hoi4_army_front" if args["from_state"].is_i64() && *self.refuse_segment.borrow() => {
+                return Ok(json!({"receipt": {"status": "NotApplied"}}));
             }
             "hoi4_army_front" => self.unit(&army, |r| {
                 r["plan"]
@@ -3349,4 +3362,97 @@ fn a_role_formed_in_the_same_paused_hour_becomes_the_operations_at_once() {
         state.op_owned.get("Army 9").map(String::as_str),
         Some("op_pol")
     );
+}
+
+/// The Poland plan with the armour on its spearhead (axis 67-87-10), at war, prepared.
+fn spear_at_war() -> (Game, Value, State) {
+    let game = Game::new();
+    let mut plan = plan();
+    plan["operations"][0]["formations"][2] = json!({"army": "Panzer", "role": "mobile",
+        "drive": "strike", "front": {"enemy": "POL", "own_states": [67], "click_state": 87},
+        "offensive": {"axis": [67, 87, 10], "target_line": [87, 10, 92]}});
+    let mut state = State::default();
+    game.unit("Panzer", |r| r["states"] = json!({"67": 12}));
+    prepared(&mut state, &game, &plan);
+    *game.enemies.borrow_mut() = vec!["POL"];
+    burst(&mut state, &game, &plan, START + DAY);
+    game.calls.borrow_mut().clear();
+    (game, plan, state)
+}
+
+#[test]
+fn at_war_a_spearhead_whose_line_moved_loses_only_its_arrow_never_its_front() {
+    // t1939j (24 Nov 2026): each new line cleared Panzergruppe Ost's orders; the front would not
+    // draw again where the army stood and it fought without an order for weeks
+    let (game, plan, mut state) = spear_at_war();
+    *game.held.borrow_mut() = vec![87, 10];
+    for hour in 0..6 {
+        burst(&mut state, &game, &plan, START + 2 * DAY + hour * 3);
+    }
+    let panzer: Vec<(String, Value)> = game
+        .orders()
+        .into_iter()
+        .filter(|(_, a)| a["army"] == json!("Panzer"))
+        .collect();
+    assert!(
+        !panzer.iter().any(|(_, a)| a["clear_orders"] == json!(true)),
+        "{panzer:?}"
+    );
+    let delete = panzer
+        .iter()
+        .position(|(_, a)| a["delete_order"].is_i64())
+        .expect("the old arrow deleted alone");
+    assert!(
+        panzer[delete..]
+            .iter()
+            .any(|(n, a)| n == "hoi4_army_offensive" && a["spearhead"] == json!(true)),
+        "a new spearhead on the standing front: {panzer:?}"
+    );
+    assert!(has_front(&game.roster.borrow(), "Panzer"));
+}
+
+#[test]
+fn at_war_a_refused_segment_front_gives_way_to_the_plain_click_in_the_same_call() {
+    let (game, plan, mut state) = spear_at_war();
+    *game.own_border.borrow_mut() = vec![67];
+    *game.refuse_segment.borrow_mut() = true;
+    game.unit("Panzer", |r| r["plan"] = json!([]));
+    let lines = burst(&mut state, &game, &plan, START + 3 * DAY);
+    let fronts: Vec<Value> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, a)| n == "hoi4_army_front" && a["army"] == json!("Panzer"))
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(fronts.len(), 2, "{fronts:?}");
+    assert!(fronts[0]["from_state"].is_i64());
+    assert!(fronts[1].get("from_state").is_none());
+    assert!(has_front(&game.roster.borrow(), "Panzer"), "{lines:?}");
+    // the next loss: the plain click straight away, no segment again in this operation
+    game.calls.borrow_mut().clear();
+    game.unit("Panzer", |r| r["plan"] = json!([]));
+    burst(&mut state, &game, &plan, START + 4 * DAY);
+    let fronts: Vec<Value> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, a)| n == "hoi4_army_front" && a["army"] == json!("Panzer"))
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(fronts.len(), 1, "{fronts:?}");
+    assert!(fronts[0].get("from_state").is_none());
+}
+
+#[test]
+fn a_front_the_game_keeps_removing_is_drawn_again_every_time() {
+    // the draws are counted per click only while no front reads back: eight losses, eight fronts
+    let (game, plan, mut state) = spear_at_war();
+    for loss in 0..8 {
+        game.unit("Panzer", |r| r["plan"] = json!([]));
+        burst(&mut state, &game, &plan, START + (3 + loss) * DAY);
+        assert!(
+            has_front(&game.roster.borrow(), "Panzer"),
+            "loss {loss}: {:?}",
+            state.op_notes
+        );
+    }
 }

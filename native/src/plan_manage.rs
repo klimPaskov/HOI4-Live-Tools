@@ -3733,6 +3733,114 @@ fn wing_owners(entries: &[Value], active: &[bool], wings: &[Value]) -> HashMap<S
 /// there; missions go one call per entry, new wings one per call).
 const AIR_REBASE_BATCH: usize = 12;
 
+/// The land missions that follow the fighting (`follow_front: false` on an entry keeps its region).
+const FOLLOW_MISSIONS: [&str; 2] = ["cas", "air_superiority"];
+
+/// The fighting region an `air_plan` entry with a land mission flies over once the war has left
+/// its planned region: the planned region (an id) held a state of the contact line earlier in this
+/// run (`airfight:<region>`) and holds none now, while other regions do. The new region is the
+/// one with the contact state nearest the entry's wings' bases (else the one with most contact
+/// states). None: the planned region stands (no war, a region given by name, no region facts).
+#[allow(clippy::too_many_arguments)]
+fn follow_fighting(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    entry: &Value,
+    planned: &Value,
+    mission: Option<&str>,
+    owned: &[&Value],
+    now: GameHour,
+) -> Option<Value> {
+    if entry["follow_front"] == json!(false)
+        || !mission.is_some_and(|m| FOLLOW_MISSIONS.contains(&m))
+    {
+        return None;
+    }
+    let rid = planned
+        .as_i64()
+        .or_else(|| planned.as_str().and_then(|s| s.trim().parse().ok()))?;
+    let wars = tools.call("hoi4_wars", &json!({})).ok()?;
+    let won: Vec<&str> = list(&wars["wars"], "wars_won")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    let enemies: Vec<String> = list(&wars["wars"], "enemies")
+        .iter()
+        .filter_map(|t| t.as_str().or_else(|| t["tag"].as_str()))
+        .filter(|t| !won.contains(t))
+        .map(str::to_string)
+        .collect();
+    if enemies.is_empty() {
+        return None;
+    }
+    let contact: Vec<i64> = list(&wars, "borders")
+        .iter()
+        .filter(|b| enemies.iter().any(|t| t == text(&b["neighbour_tag"])))
+        .flat_map(|b| super::ints(&b["neighbour_states"]))
+        .collect();
+    if contact.is_empty() {
+        return None;
+    }
+    let me = super::plan_operation::player(tools, plan);
+    let mut tags = enemies.clone();
+    tags.push(me);
+    super::plan_operation::learn_centres(state, tools, &tags);
+    let region_of = |s: i64| state.regions.get(&(s as i32)).copied();
+    let fighting: HashSet<i64> = contact.iter().filter_map(|s| region_of(*s)).collect();
+    if fighting.is_empty() {
+        return None;
+    }
+    for r in &fighting {
+        state.done.insert(format!("airfight:{r}"), now);
+    }
+    if fighting.contains(&rid) || !state.done.contains_key(&format!("airfight:{rid}")) {
+        return None;
+    }
+    // the wings' bases' middle; the nearest contact state's region
+    let pts: Vec<(f64, f64)> = owned
+        .iter()
+        .filter_map(|w| w["air_base"]["state_id"].as_i64())
+        .filter_map(|s| state.centers.get(&(s as i32)).copied())
+        .collect();
+    let target = if pts.is_empty() {
+        let mut counts: HashMap<i64, usize> = HashMap::new();
+        for s in &contact {
+            if let Some(r) = region_of(*s) {
+                *counts.entry(r).or_default() += 1;
+            }
+        }
+        counts
+            .into_iter()
+            .max_by_key(|(r, n)| (*n, -*r))
+            .map(|(r, _)| r)
+    } else {
+        let n = pts.len() as f64;
+        let (x, z) = (
+            pts.iter().map(|p| p.0).sum::<f64>() / n,
+            pts.iter().map(|p| p.1).sum::<f64>() / n,
+        );
+        contact
+            .iter()
+            .filter_map(|s| {
+                let p = state.centers.get(&(*s as i32))?;
+                Some((region_of(*s)?, (p.0 - x).powi(2) + (p.1 - z).powi(2)))
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(r, _)| r)
+    }?;
+    note(
+        state,
+        "air_plan",
+        format!(
+            "{}: the fighting left region {rid}: {} over region {target}",
+            text(&entry["id"]),
+            mission.unwrap_or("")
+        ),
+    );
+    Some(json!(target))
+}
+
 pub(super) fn air_plan_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -3807,6 +3915,23 @@ pub(super) fn air_plan_step(
     // one call overfilled it and the game refused the rest (w43a1, 23 Nov 2026: six fighter wings
     // to Westfalen 57 NotApplied, the start wings stayed over Poland on the war day)
     let mut room: Vec<Value> = bases.to_vec();
+    // the planes already flying to a base take its room too: the read counts only the wings
+    // stationed there (t1939j, 24 Nov 2026: seven wings queued to state 97 behind 570 planes in
+    // transit, each refused air_base_full)
+    for b in room.iter_mut() {
+        let Some(id) = b["base_id"].as_i64() else {
+            continue;
+        };
+        let coming: i64 = list(&air, "wings")
+            .iter()
+            .filter(|w| w["transfer_to_base_id"].as_i64() == Some(id))
+            .filter_map(|w| w["aircraft"].as_i64())
+            .sum();
+        if coming > 0 {
+            let free = b["free"].as_i64().unwrap_or(0);
+            b["free"] = json!(free - coming);
+        }
+    }
     for (index, entry) in entries.iter().enumerate() {
         let owned: Vec<&Value> = all_wings
             .iter()
@@ -3815,7 +3940,7 @@ pub(super) fn air_plan_step(
         let switched = active[index]
             && !entry["switch_when"].is_null()
             && when_holds(state, tools, &entry["switch_when"], now) == Truth::True;
-        let region = if switched && !entry["then_region"].is_null() {
+        let planned = if switched && !entry["then_region"].is_null() {
             &entry["then_region"]
         } else {
             &entry["region"]
@@ -3829,6 +3954,15 @@ pub(super) fn air_plan_step(
             .flatten()
             .or(entry["mission"].as_str())
             .filter(|m| !m.is_empty());
+        // a land mission follows the fighting: once the war has left the entry's region, its
+        // wings fly over the fighting region nearest them (t1939j, 24 Nov 2026: 80% of the planes
+        // kept flying over Western Poland for three weeks after the front had moved east)
+        let followed = if active[index] {
+            follow_fighting(state, tools, plan, entry, planned, mission, &owned, now)
+        } else {
+            None
+        };
+        let region = followed.as_ref().unwrap_or(planned);
         let region_arg = match region {
             Value::Number(n) => Some(n.to_string()),
             Value::String(s) if !s.trim().is_empty() => Some(s.trim().to_string()),
@@ -9777,6 +9911,86 @@ mod tests {
              "region": {"id": 38}, "air_base": {"base_id": 4, "state_id": 551}, "missions": ["air_superiority"]}));
         let owners = wing_owners(entries, &[false, true], list(&read, "wings"));
         assert_eq!(owners["JG 4"], 1);
+    }
+
+    #[test]
+    fn a_land_mission_follows_the_fighting_once_it_left_the_planned_region() {
+        // t1939j (24 Nov 2026): 80% of the planes kept flying over Western Poland (38) for three
+        // weeks after the front had moved east
+        let read = json!({"air_bases": [
+            {"base_id": 9, "state_id": 66, "free": 1000, "region": {"id": 8}}],
+            "wings": [{"wing": "StG 1", "aircraft_type": "small_plane_cas_airframe_1",
+                       "aircraft": 100, "standing_by": false, "region": {"id": 38},
+                       "air_base": {"base_id": 9, "state_id": 66}, "missions": ["cas"]}]});
+        let states = json!({"states": [
+            {"state_id": 86, "region": 38, "x": 10.0, "z": 0.0},
+            {"state_id": 97, "region": 39, "x": 30.0, "z": 0.0},
+            {"state_id": 28, "region": 19, "x": -90.0, "z": 0.0},
+            {"state_id": 66, "region": 8, "x": 0.0, "z": 0.0}]});
+        let wars = |pol: Value| {
+            json!({"wars": {"enemies": ["POL", "FRA"]}, "borders": [
+                {"neighbour_tag": "POL", "neighbour_states": pol},
+                {"neighbour_tag": "FRA", "neighbour_states": [28]}]})
+        };
+        let tools = fake(vec![
+            ("hoi4_air", read),
+            ("hoi4_states", states),
+            ("hoi4_wars", wars(json!([86]))),
+            ("hoi4_overview", json!({"player": "GER"})),
+        ]);
+        let plan = json!({"air_plan": [{"id": "ap", "airframe": "small_plane_cas_airframe_1",
+            "region": 38, "mission": "cas"}]});
+        let mut state = State::default();
+        // the fighting in the planned region: the wing flies on
+        air_plan_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(actions(&tools).is_empty(), "{:?}", actions(&tools));
+        // the front moved east: the nearest fighting region (39), not the quiet western one
+        tools
+            .replies
+            .borrow_mut()
+            .insert("hoi4_wars".into(), wars(json!([97])));
+        air_plan_step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap();
+        let sent = actions(&tools);
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!(sent[0].0, "hoi4_air_mission");
+        assert_eq!(sent[0].1["region"], json!("39"));
+        // an entry that never saw fighting in its region (a home cover) keeps it
+        let plan = json!({"air_plan": [{"id": "home", "airframe": "small_plane_cas_airframe_1",
+            "region": 8, "mission": "cas"}]});
+        let mut state = State::default();
+        tools.calls.borrow_mut().clear();
+        air_plan_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(actions(&tools)
+            .iter()
+            .all(|(_, a)| a["region"] == json!("8")));
+    }
+
+    #[test]
+    fn planes_flying_to_a_base_take_its_room() {
+        // t1939j: seven wings queued to a base behind 570 planes in transit, all refused
+        let read = json!({"air_bases": [
+            {"base_id": 9, "state_id": 97, "free": 600, "region": {"id": 39}},
+            {"base_id": 8, "state_id": 98, "free": 600, "region": {"id": 39}}],
+            "wings": [
+                {"wing": "JG 9", "aircraft_type": "small_plane_airframe_1", "aircraft": 570,
+                 "standing_by": true, "transfer_to_base_id": 9,
+                 "air_base": {"base_id": 1, "state_id": 66}, "missions": []},
+                {"wing": "JG 1", "aircraft_type": "small_plane_airframe_1", "aircraft": 100,
+                 "standing_by": true, "air_base": {"base_id": 1, "state_id": 66}, "missions": []}]});
+        let tools = fake(vec![("hoi4_air", read)]);
+        let plan = json!({"air_plan": [{"id": "f", "wing": "JG 1", "base_region": 39,
+            "region": 39, "mission": "air_superiority"}]});
+        let mut state = State::default();
+        state.centers.insert(97, (10.0, 0.0));
+        state.centers.insert(98, (20.0, 0.0));
+        state.centers.insert(66, (0.0, 0.0));
+        air_plan_step(&mut state, &tools, &plan, "l", START).unwrap();
+        let sent = actions(&tools);
+        assert!(
+            sent.iter()
+                .any(|(n, a)| n == "hoi4_air_rebase" && a["state_id"] == json!(98)),
+            "the base with room, not the one the planes in transit fill: {sent:?}"
+        );
     }
 
     #[test]
