@@ -70,11 +70,12 @@ fn native_owned_child_read_and_exit_refusal() {
     let stdout = child.0.stdout.take().unwrap();
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
-        for line in BufReader::new(stdout).lines().take(32) {
-            let line = line.unwrap();
+        // Read to EOF: closing the pipe after the marker would make the child's later test
+        // output fail with a broken pipe, and the child would exit unsuccessfully.
+        for line in BufReader::new(stdout).lines() {
+            let Ok(line) = line else { break };
             if let Some(v) = line.strip_prefix("OWNED_WINDOWS_BYTES ") {
                 let _ = tx.send(v.parse::<u64>().unwrap());
-                break;
             }
         }
     });

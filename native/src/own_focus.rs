@@ -2,6 +2,7 @@
 //! UI/catalog layouts independently recovered; see native/PROVENANCE.md.
 //! Typed/string/array ideas consulted: smerss/Clausewitz-MCP, MIT,
 //! Copyright (c) 2026 smerss. See ../LICENSE.clausewitz.
+use crate::xlayout::UNMAPPED;
 use crate::{
     error::{Error, Result},
     game,
@@ -60,10 +61,22 @@ const MACOS: Layout = Layout {
     tree_focuses: 0x28,
     focus_tree: 0x130,
 };
+/// Windows: no reviewed layout yet. Every offset and address is past the readable range, so
+/// each read through it fails with `read_bound` instead of reading a guessed place.
+const WINDOWS: Layout = Layout {
+    progress_vtable: UNMAPPED,
+    tree_vtable: UNMAPPED,
+    database_global: UNMAPPED,
+    database_vtable: UNMAPPED,
+    focus_vtable: UNMAPPED,
+    tree_focuses: UNMAPPED,
+    focus_tree: UNMAPPED,
+};
 pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {
         crate::memory::StringAbi::LibStdCxx => &LINUX,
         crate::memory::StringAbi::LibCxx => &MACOS,
+        crate::memory::StringAbi::Msvc => &WINDOWS,
     }
 }
 

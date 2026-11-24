@@ -2,6 +2,7 @@
 //! Independently recovered constructors/save/handle/keyword witnesses:
 //! production-lines-v1, ELF a4971c9e8ac9a6f2487dea109e01f9839ee59db7.
 //! Base equipment type joins only; no design payload, allocation or input authority.
+use crate::xlayout::UNMAPPED;
 pub mod control_snapshot;
 pub(crate) mod controls;
 mod equipment;
@@ -49,6 +50,18 @@ const MACOS: Layout = Layout {
     variant_vtable: 0x357d1b8,
     variant_type: 0x3e0,
     equipment_type_vtable: 0x357bad8,
+};
+/// Windows: no reviewed layout yet. Every offset and address is past the readable range, so
+/// each read through it fails with `read_bound` instead of reading a guessed place.
+const WINDOWS: Layout = Layout {
+    military_line_vtable: UNMAPPED,
+    naval_line_vtable: UNMAPPED,
+    equipment_db_global: UNMAPPED,
+    equipment_db_vtable: UNMAPPED,
+    equipment_catalog: UNMAPPED,
+    variant_vtable: UNMAPPED,
+    variant_type: UNMAPPED,
+    equipment_type_vtable: UNMAPPED,
 };
 /// One own equipment line as the input adapters see it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -108,6 +121,7 @@ pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {
         crate::memory::StringAbi::LibStdCxx => &LINUX,
         crate::memory::StringAbi::LibCxx => &MACOS,
+        crate::memory::StringAbi::Msvc => &WINDOWS,
     }
 }
 use std::{

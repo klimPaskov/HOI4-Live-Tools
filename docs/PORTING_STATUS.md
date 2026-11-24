@@ -23,7 +23,7 @@ a table keyed otherwise). The tool catalogue has 189 `hoi4_*` names (about
 |---|---|---|---|
 | Tools in the build | all | all (the same modules) | all compiled and unit-tested; none reachable (no Windows game attachment or input yet) |
 | Compiles in CI | yes | yes (x86_64 and aarch64) | yes (the code compiled there) |
-| Memory layout for 1.19.4.1 | native (the canonical values) | generated table: 82 of 94 image keys, 527 of 617 field keys | vtables only, for Windows 1.19.5.0: 181 of 182 vtable keys by RTTI; no globals or fields |
+| Memory layout for 1.19.4.1 | native (the canonical values) | generated table: 82 of 94 image keys, 527 of 617 field keys | vtables only, for Windows 1.20.0.0 (and 1.19.5.0): 181 of 182 vtable keys by RTTI; no globals or fields |
 | Input | CGEvent | X11 XTEST | none in the native runtime |
 | Last proven live | continuously | 5 November 2026: 104 tools verified, 11 refusal-only, 8 not reached | native: never; the separate Python runtime: November 2026 on 1.19.4.2 |
 
@@ -78,7 +78,21 @@ Two runtimes exist:
   with ordinary input. It is the supported Windows path for mod testing and was last run on
   Windows HOI4 1.19.4.2. It has no memory reads and is not a campaign runtime.
 - The native runtime has a read-only Windows process reader (`native/src/platform/windows/`) with
-  an empty build allowlist. It attaches to no game, sends no input, has no launcher and no layout.
+  an empty build allowlist, a `Process` for a game it started itself (`WindowsProcess`: the game's
+  parent must be the running server, identities by creation time, SID and file ID) and a launcher
+  (`hoi4-live-native --windows-serve CONFIG`) that starts `hoi4.exe` without Steam variables in a
+  private user folder, refuses while a game or the Steam client runs, and restores the launcher
+  settings it redirected when the game exits (`--windows-restore RUN` repairs an interrupted run).
+  Windows strings are MSVC `std::string`/`std::wstring`; `object_type` reads the MSVC complete
+  object locator. The core game and army layouts for Windows 1.20.0.0 were read live from an owned
+  game (globals, date, speed, pause, player tag, countries, difficulty, playthrough, the country's
+  member objects, division strength and organisation, the tag database; checked through the tools on 24
+  November 2026: `hoi4_overview` and `hoi4_army` on a paused game). The division province and the
+  production members are not measured yet and fail with `read_bound`. Every read batch runs the full
+  ownership census (tens of milliseconds), so a multi-read snapshot of a running game tears
+  (`torn_read`); reads of a paused game work. It sends no input: a
+  development build (`--features dev-table`) reads a table from `HOI4_LIVE_DEV_TABLE` and accepts
+  the executable named by `HOI4_LIVE_DEV_WINDOWS_SHA256`; release builds attach to nothing.
   The management tools are compiled and unit-tested on Windows, but nothing binds them there yet.
   Their journals hold the exclusive lock on a sibling `<journal>.lock` file on Windows (a Windows
   lock on the journal itself would stop every other reader); the daily plan store still refuses on
@@ -88,21 +102,21 @@ Steps to finish, in order:
 1. Done: the tool modules compile on Windows and Windows CI runs their unit tests.
 2. The private-file checks (controller state, daily plan store) for Windows: owner-only ACLs
    instead of POSIX modes.
-3. A `Process` for an owned Windows game on top of the existing reader, and a launcher that starts
-   the game without Steam variables in a private user folder, like the Linux launcher.
+3. Done (not yet run against the game): a `Process` for an owned Windows game and a launcher that
+   starts it without Steam variables in a private user folder, like the Linux launcher.
 4. A `GameInput` for Windows (`SendInput` to the owned, foreground window; client geometry, DPI,
    keyboard layout), with the modifier timing the Linux backend needed.
 5. A layout table for the Windows build. Started: `scripts/pe_rtti_map.py MACHO PE` maps every
    vtable key the sources use (the `Class` tags, the `img()` vtables and the `*vtable*` values of
    the hand-written core layouts) to the PE by RTTI name: the Itanium typeinfo name of the macOS
    address point is rewritten in MSVC form and looked up through the complete object locators.
-   Against Windows 1.19.5.0 (`hoi4.exe` SHA-256 `709f916afbeb...01fce148`, the Steam build on the test
-   machine, one version past macOS 1.19.4.1) it maps 177 keys with high confidence (primary
-   vtable) and 4 with medium (secondary vtables matched by order), leaves one template
-   (`TNullObject<CBuildingTemplate>`) and lists 8 globals it cannot map
-   (`scripts/data/windows-1.19.5.0-vtables.json`, report beside it). RTTI names do not change
-   between versions, so these hold for 1.19.5.0 even though the keys come from 1.19.4.1; a
-   class whose fields changed in 1.19.5.0 still needs its fields checked live. The mapper
+   Windows 1.20.0.0 (`hoi4.exe` SHA-256 `1beb2a38fe2d...d2ac1b63a9f`, the current Steam build) and
+   1.19.5.0 (`709f916afbeb...01fce148`) give the same result: 177 keys with high confidence
+   (primary vtable), 4 with medium (secondary vtables matched by order), one template left
+   (`TNullObject<CBuildingTemplate>`) and 8 globals the mapper cannot map
+   (`scripts/data/windows-<version>-vtables.json`, report beside each). RTTI names do not change
+   between versions, so the vtables hold even though the keys come from macOS 1.19.4.1; a class
+   whose fields changed still needs its fields checked live. The mapper
    (`scripts/cross_platform_map.py`) reads Mach-O and ELF only; `scripts/game_migrate.py identify`
    reads a PE's build id (CodeView GUID and age). For a PE executable it can be
    extended for vtables (MSVC RTTI names translate from Itanium names) and for globals reached

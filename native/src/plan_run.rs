@@ -4987,8 +4987,28 @@ fn form_strike_role(
             "layout: {donor} is {hint} (all its {donor_size} division(s) fit the role)"
         )));
     }
+    // one detach moves at most DETACH_MAX divisions (the tool's bound); the top-up takes the rest
+    let mut pick = pick;
+    pick.truncate(DETACH_MAX);
     let before: HashSet<String> = full.iter().map(|a| text(&a["army"]).to_string()).collect();
     let (ok, why) = layout_detach(state, tools, plan, lease, hint, &donor, &pick, "lf")?;
+    // a detach the game took in part still made the role's army: bind it, the top-up fills it
+    // (t1939f: 2 of 14 divisions moved, the role was then given up while its army stood there)
+    let partial = if ok {
+        None
+    } else {
+        new_army(tools, &before, &taken)?
+    };
+    if let Some(new) = partial {
+        state.layout.insert(hint.to_string(), new.clone());
+        state.done.insert(format!("layoutcarved:{hint}"), now);
+        if !named {
+            state.done.insert(format!("layoutformed:{hint}"), now);
+        }
+        return Ok(Some(format!(
+            "layout: {hint} formed in part from {donor} -> {new} ({why}); the top-up takes the rest"
+        )));
+    }
     if !ok {
         if held_back(&why) {
             state.skip(now, "layoutentry", hint, DAY);
@@ -5084,6 +5104,7 @@ fn layout_top_up(
         if pick.len() >= donor_size {
             pick.truncate(donor_size.saturating_sub(1));
         }
+        pick.truncate(DETACH_MAX);
         if pick.is_empty() {
             state.done.insert(format!("layouttopped:{hint}"), now);
             continue;
@@ -5170,6 +5191,9 @@ fn layout_merge_step(
         "layout: {source} joins {target} ({hint}): {ok} {why}"
     )))
 }
+
+/// The most divisions one `hoi4_army_detach` moves (the tool refuses more).
+const DETACH_MAX: usize = 18;
 
 /// The detach of a layout role: an operation's own role carved out of an army an operation owns
 /// is that operation's assembly (the guard lets it through).
@@ -16624,7 +16648,7 @@ mod tests {
                         .filter(|a| a.0 == army)
                         .flat_map(|a| {
                             a.2.iter().map(|(i, t, st)| {
-                                json!({"army": a.0, "id": i, "template": t, "state": st})
+                                json!({"army": a.0, "id": i, "template": t, "state_id": st})
                             })
                         })
                         .collect();
@@ -16633,6 +16657,7 @@ mod tests {
                 "hoi4_army_detach" => {
                     let from = text(&args["army"]).to_string();
                     let ids = strings(args, "divisions");
+                    assert!(ids.len() <= DETACH_MAX, "detach of {} divisions", ids.len());
                     let mut all = self.armies.borrow_mut();
                     let n = (1..)
                         .find(|n| !all.iter().any(|a| a.0 == format!("Army {n}")))
@@ -16800,6 +16825,31 @@ mod tests {
             "{:?}",
             state.layout
         );
+    }
+
+    #[test]
+    fn a_role_above_one_detach_is_formed_in_two_and_joined() {
+        // t1939f: Armee Mitte aimed at 21 and the detach tool takes at most 18: given up
+        let big: Vec<(String, &str, i64)> = (0..70).map(|i| (format!("d{i}"), "Inf", 63)).collect();
+        let board = Board::new(vec![(
+            "Army 1",
+            63,
+            big.iter().map(|(i, t, s)| (i.as_str(), *t, *s)).collect(),
+        )]);
+        let plan = bookmark_plan();
+        let mut state = State::default();
+        for _ in 0..20 {
+            if layout_step(&mut state, &board, &plan, "l", START)
+                .unwrap()
+                .is_none()
+            {
+                break;
+            }
+        }
+        let got = |h: &str| board.size(state.layout.get(h).map_or("", String::as_str));
+        assert_eq!(got("Armee Mitte"), 24, "{:?}", state.layout);
+        assert_eq!(got("Armee Süd"), 24, "{:?}", state.layout);
+        assert!(board.sent("hoi4_army_merge") >= 2);
     }
 
     #[test]
