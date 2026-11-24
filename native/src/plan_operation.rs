@@ -1469,7 +1469,7 @@ const IDLE_HOLD_TRIES: i64 = 2;
 /// (`guard_states_in_order`) or the state it stands in, by an area defence. One order per call,
 /// IDLE_HOLD_TRIES per army.
 #[allow(clippy::too_many_arguments)]
-fn idle_holds(
+pub(super) fn idle_holds(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,
@@ -1530,7 +1530,7 @@ fn idle_holds(
         let (what, tool, args) = match hold {
             Some((op_id, click)) => (
                 format!(
-                    "{name} stands on the border of {op_id}'s hold: joins its front at {click}"
+                    "{name} stands on the border of the hold of {op_id}: joins its front at {click}"
                 ),
                 "hoi4_army_front",
                 json!({"army": name, "state_id": click}),
@@ -1559,19 +1559,6 @@ fn idle_holds(
         return Ok(Some(order(state, tools, lease, "hold", &what, tool, args)?));
     }
     Ok(None)
-}
-
-/// [`idle_holds`] for the executor's tests (no wars read).
-#[cfg(test)]
-pub(super) fn idle_holds_for_test(
-    state: &mut State,
-    tools: &dyn Tools,
-    plan: &Value,
-    active: &[(String, Value)],
-    roster: &Value,
-    now: GameHour,
-) -> Result<Option<String>> {
-    idle_holds(state, tools, plan, active, roster, &json!({}), "l", now)
 }
 
 /// An operation is under way: prepared (its armies own their lines, in peace too) and not
