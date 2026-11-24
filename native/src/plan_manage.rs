@@ -3876,6 +3876,94 @@ fn nearest_base_to(
         .map(|(_, s)| s)
 }
 
+/// (mission, region) and the orphan wings (name, base state) that fly it.
+type OrphanGroup = ((String, String), Vec<(String, Option<i64>)>);
+
+/// The orphan wings' order this step (see air_plan_step): rebases first (one call per base),
+/// else one mission order for the largest group of orphans with the same mission and region.
+#[allow(clippy::too_many_arguments)]
+fn orphans_follow(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    wings: &[Value],
+    owners: &HashMap<String, usize>,
+    room: &mut [Value],
+) -> Result<Option<String>> {
+    let mut rebases: Vec<(String, i64)> = Vec::new();
+    let mut groups: Vec<OrphanGroup> = Vec::new();
+    let mut looked = 0;
+    for wing in wings {
+        let name = text(&wing["wing"]).to_string();
+        if name.is_empty() || owners.contains_key(&name) || state.skipped(now, "airplan", &name) {
+            continue;
+        }
+        let Some(rid) = wing["region"]["id"].as_i64() else {
+            continue;
+        };
+        let missions = strings(wing, "missions");
+        let Some(mission) = FOLLOW_MISSIONS
+            .iter()
+            .find(|m| missions.iter().any(|x| x == *m))
+        else {
+            continue;
+        };
+        if looked >= AIR_PLAN_BATCH * 2 {
+            break;
+        }
+        looked += 1;
+        let entry = json!({"id": format!("orphan {name}")});
+        let Some((target, anchor)) = follow_fighting(
+            state,
+            tools,
+            plan,
+            &entry,
+            &json!(rid),
+            Some(mission),
+            &[wing],
+            now,
+        ) else {
+            continue;
+        };
+        let here = wing["air_base"]["state_id"].as_i64();
+        let planes = wing["aircraft"].as_i64().unwrap_or(0);
+        if wing["transfer_to_base_id"].as_i64().is_none()
+            && !state.skipped(now, "airrebase", &name)
+            && rebases.len() < AIR_REBASE_BATCH
+        {
+            if let Some(base) =
+                anchor.and_then(|p| nearest_base_to(room, p, here, planes, &state.centers))
+            {
+                for b in room.iter_mut() {
+                    if b["state_id"].as_i64() == Some(base) {
+                        let free = b["free"].as_i64().unwrap_or(0);
+                        b["free"] = json!(free - planes);
+                    }
+                }
+                rebases.push((name, base));
+                continue;
+            }
+        }
+        let k = (mission.to_string(), target.to_string());
+        match groups.iter_mut().find(|(g, _)| *g == k) {
+            Some((_, b)) if b.len() < AIR_PLAN_BATCH => b.push((name, here)),
+            Some(_) => {}
+            None => groups.push((k, vec![(name, here)])),
+        }
+    }
+    if !rebases.is_empty() {
+        let mut moved: Vec<String> = Vec::new();
+        send_rebases(state, tools, lease, now, &mut rebases, &mut moved)?;
+        return Ok(Some(moved.join("; ")));
+    }
+    let Some(((mission, region), batch)) = groups.into_iter().max_by_key(|(_, b)| b.len()) else {
+        return Ok(None);
+    };
+    air_plan_batch(state, tools, lease, now, &batch, &mission, &region).map(Some)
+}
+
 pub(super) fn air_plan_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -3966,6 +4054,16 @@ pub(super) fn air_plan_step(
             let free = b["free"].as_i64().unwrap_or(0);
             b["free"] = json!(free - coming);
         }
+    }
+    // ORPHANS: a wing no active entry claims (its war's entries ended, the next war's entries
+    // wait for their `when`) that still flies a land mission over a region the fighting has left
+    // follows the fighting like an entry's wing: to the base nearest it, then its mission over
+    // the nearest contact region (t1939l, 24 Nov 2026: 91% of the planes flew over Poland for
+    // a week after its capitulation; the Polish entries had ended and nothing claimed them)
+    if let Some(line) = orphans_follow(
+        state, tools, plan, lease, now, all_wings, &owners, &mut room,
+    )? {
+        return Ok(Some(line));
     }
     for (index, entry) in entries.iter().enumerate() {
         let owned: Vec<&Value> = all_wings
@@ -10009,6 +10107,56 @@ mod tests {
         assert!(actions(&tools)
             .iter()
             .all(|(_, a)| a["region"] == json!("8")));
+    }
+
+    #[test]
+    fn an_orphan_wing_over_a_finished_war_follows_the_fighting() {
+        // t1939l (24 Nov 2026): the Polish entries ended with the capitulation; their wings had
+        // no active entry and 91% of the planes flew over Poland for a week
+        let read = json!({"air_bases": [
+            {"base_id": 9, "state_id": 66, "free": 1000, "region": {"id": 8}},
+            {"base_id": 7, "state_id": 51, "free": 500, "region": {"id": 5}}],
+            "wings": [{"wing": "StG 1", "aircraft_type": "small_plane_cas_airframe_1",
+                       "aircraft": 100, "standing_by": false, "region": {"id": 38},
+                       "air_base": {"base_id": 9, "state_id": 66}, "missions": ["cas"]}]});
+        let states = json!({"states": [
+            {"state_id": 86, "region": 38, "x": 10.0, "z": 0.0},
+            {"state_id": 28, "region": 19, "x": -90.0, "z": 0.0},
+            {"state_id": 51, "region": 5, "x": -80.0, "z": 0.0},
+            {"state_id": 66, "region": 8, "x": 0.0, "z": 0.0}]});
+        let tools = fake(vec![
+            ("hoi4_air", read.clone()),
+            ("hoi4_states", states),
+            (
+                "hoi4_wars",
+                json!({"wars": {"enemies": ["FRA"]}, "borders": [
+                {"neighbour_tag": "FRA", "neighbour_states": [28]}]}),
+            ),
+            ("hoi4_overview", json!({"player": "GER"})),
+        ]);
+        // the Polish entry is over; the western entry waits for its war
+        let plan = json!({"air_plan": [
+            {"id": "pl", "airframe": "small_plane_cas_airframe_1", "region": 38,
+             "mission": "cas", "until": "date >= 1939.1.1"},
+            {"id": "west", "airframe": "small_plane_cas_airframe_1", "region": 19,
+             "mission": "cas", "when": "date >= 1940.5.10"}]});
+        let mut state = State::default();
+        state.done.insert("airfight:38".into(), START - 10 * DAY);
+        air_plan_step(&mut state, &tools, &plan, "l", START).unwrap();
+        let sent = actions(&tools);
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!(sent[0].0, "hoi4_air_rebase");
+        assert_eq!(sent[0].1["state_id"], json!(51));
+        // based in the west: the mission over the French border region
+        let mut there = read;
+        there["wings"][0]["air_base"] = json!({"base_id": 7, "state_id": 51});
+        tools.replies.borrow_mut().insert("hoi4_air".into(), there);
+        tools.calls.borrow_mut().clear();
+        air_plan_step(&mut state, &tools, &plan, "l", START + DAY).unwrap();
+        let sent = actions(&tools);
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!(sent[0].0, "hoi4_air_mission");
+        assert_eq!(sent[0].1["region"], json!("19"));
     }
 
     #[test]

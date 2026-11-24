@@ -2280,7 +2280,8 @@ fn lanes_tick_inner(
             plan_operation::executing_any(state),
             state.sched.turns.get(name).copied(),
             now,
-        ) {
+        ) || opening_holds(state, tools, plan, name, now)
+        {
             continue;
         }
         // the air lanes wait while a prepared operation's declaration is near (see
@@ -2326,6 +2327,7 @@ fn issue_lanes(
             state.sched.turns.get(name).copied(),
             now,
         ) || (name.starts_with("air") && air_waits_for_war(state, tools, plan, now))
+            || opening_holds(state, tools, plan, name, now)
             || !state.issues.take_turn(name, now)
         {
             continue;
@@ -3688,14 +3690,24 @@ fn production_step(
         // the Submarine II hull and no Submarine I): the next newer offered of its kind, at once
         // (t1939k, 24 Nov 2026: the U-boat line was given up after one refusal and the dockyards
         // stood idle through the Polish war)
-        if !ok {
-            if let Some(newer) = newer_offered(&equipment, &why) {
+        if !ok && why.contains("No producible design") {
+            // the refusal's list of offered models is cut short in the receipt: the offered
+            // newer model named there, else the next two model numbers, one call each
+            let tries: Vec<String> = match newer_offered(&equipment, &why) {
+                Some(newer) => vec![newer],
+                None => successors(&equipment, 2),
+            };
+            for newer in tries {
                 args["equipment"] = json!(newer);
-                let (ok2, why2) = state.act(tools, lease, "hoi4_production_add", args, "pr")?;
+                let (ok2, why2) =
+                    state.act(tools, lease, "hoi4_production_add", args.clone(), "pr")?;
                 (ok, why) = (
                     ok2,
-                    format!("{why2} ({equipment} not offered: {newer} instead)"),
+                    format!("{why2} ({equipment} not offered: {newer} tried)"),
                 );
+                if ok || !why2.contains("No producible design") {
+                    break;
+                }
             }
         }
         if ok {
@@ -3729,6 +3741,17 @@ fn newer_offered(equipment: &str, why: &str) -> Option<String> {
         .map(|(_, _, t)| t)
 }
 
+/// The next `n` model names after `equipment` (`ship_hull_submarine_1` -> `_2`, `_3`). Pure.
+fn successors(equipment: &str, n: u32) -> Vec<String> {
+    let Some((base, num)) = equipment.rsplit_once('_') else {
+        return Vec::new();
+    };
+    let Ok(num) = num.parse::<u32>() else {
+        return Vec::new();
+    };
+    (1..=n).map(|i| format!("{base}_{}", num + i)).collect()
+}
+
 /// The organisation a `production` entry names for its line (`organization`, or `organisation`).
 fn line_organisation(line: &Value) -> Option<String> {
     ["organization", "organisation"]
@@ -3749,6 +3772,19 @@ fn air_waits_for_war(state: &mut State, tools: &dyn Tools, plan: &Value, now: Ga
     !state.war_active
         && plan_operation::awaiting_war(state)
         && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD)
+}
+
+/// The slow GUI lanes (WAR_DEFERRED_LANES) wait while a prepared operation's declaration is due
+/// or near, with no cap: one design-company step by mouse ran 77 s at speed 3 from 25 August and
+/// the Polish declaration due on 1 September went out on the 16th (t1939l, 24 Nov 2026).
+fn opening_holds(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    name: &str,
+    now: GameHour,
+) -> bool {
+    WAR_DEFERRED_LANES.contains(&name) && air_waits_for_war(state, tools, plan, now)
 }
 
 /// Wall seconds the operations' burst may take between two declarations due the same day.
@@ -13478,6 +13514,11 @@ mod tests {
             newer_offered("ship_hull_submarine_1", "invalid_target: busy"),
             None
         );
+        assert_eq!(
+            successors("ship_hull_submarine_1", 2),
+            vec!["ship_hull_submarine_2", "ship_hull_submarine_3"]
+        );
+        assert!(successors("ship_hull_cruiser_panzerschiff", 2).is_empty());
     }
 
     #[test]
