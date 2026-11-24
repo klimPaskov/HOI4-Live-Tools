@@ -41,10 +41,11 @@ S2N=(regions_arr=0x2a8 regions_cnt=0x2b4 on:airwing.split=1 on:airwing.merge=1 o
      on:units.new_army=1 on:units.transfer=1 on:units.leader=1 on:units.rename=1 on:units.army_group_new=1
      on:units.to_army_group=1 on:units.from_army_group=1 on:units.delete_group=1 type:units.new_army=11983 type:units.transfer=12350
      type:units.leader=12369 type:units.rename=13563 type:units.army_group_new=14433 type:units.to_army_group=14470
-     type:units.from_army_group=14471 type:units.delete_group=12366 unit_theatre_off=0x298 group_parent_ptr_off=0x1b0)
-S2_1194=(stage2_on=33 ctor:units.new_army=0x1009287a0 ctor:units.leader=0x100946ae0 ctor:units.rename=0x100926280 ctor:units.army_group_new=0x100929ed0 ctor:units.to_army_group=0x10092b5f0 ctor:units.from_army_group=0x10092c110 orders_vt=0x103512bf0 orders_lookup=0x10095a510 ctor:orders.set_path=0x1009355a0 ctor:orders.new_front=0x100940c60 ctor:production2.add_line=0x1001eef30 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
+     type:units.from_army_group=14471 type:units.delete_group=12366 unit_theatre_off=0x298 group_parent_ptr_off=0x1b0
+     on:picks.focus=1 type:picks.focus=13245)
+S2_1194=(stage2_on=34 ctor:units.new_army=0x1009287a0 ctor:units.leader=0x100946ae0 ctor:units.rename=0x100926280 ctor:units.army_group_new=0x100929ed0 ctor:units.to_army_group=0x10092b5f0 ctor:units.from_army_group=0x10092c110 orders_vt=0x103512bf0 orders_lookup=0x10095a510 ctor:orders.set_path=0x1009355a0 ctor:orders.new_front=0x100940c60 ctor:production2.add_line=0x1001eef30 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
          ctor:airwing.detach=0x100a293b0 ti_orders_group=0x103516d08)
-S2_120=(stage2_on=33 ctor:units.new_army=0x1009297b0 ctor:units.leader=0x100947af0 ctor:units.rename=0x100927290 ctor:units.army_group_new=0x10092aee0 ctor:units.to_army_group=0x10092c600 ctor:units.from_army_group=0x10092d120 orders_vt=0x1035173b8 orders_lookup=0x10095b520 ctor:orders.set_path=0x1009365b0 ctor:orders.new_front=0x100941c70 ctor:production2.add_line=0x1001ef670 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
+S2_120=(stage2_on=34 ctor:units.new_army=0x1009297b0 ctor:units.leader=0x100947af0 ctor:units.rename=0x100927290 ctor:units.army_group_new=0x10092aee0 ctor:units.to_army_group=0x10092c600 ctor:units.from_army_group=0x10092d120 orders_vt=0x1035173b8 orders_lookup=0x10095b520 ctor:orders.set_path=0x1009365b0 ctor:orders.new_front=0x100941c70 ctor:production2.add_line=0x1001ef670 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
         ctor:airwing.detach=0x100a2a3c0 ti_orders_group=0x10351b6b0)
 fail=0
 echo "== 1.19.4.1 f584 ($NEW)"

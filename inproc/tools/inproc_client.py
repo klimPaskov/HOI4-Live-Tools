@@ -26,6 +26,7 @@
         --divs D,.. / units.leader GROUP [--obj2 LEADER] (none = unassign) / units.rename GROUP --vals 65,114,.. (the
         name's character codes) / units.army_group_new A1,A2,.. / units.to_army_group A1,.. --obj2 ARMY_GROUP /
         units.from_army_group A1,.. / units.delete_group GROUP
+  inproc_client.py SOCK post2 picks.focus FOCUS   (engineer 75: a national focus of the own tree, by address)
         --provs). FROM/TO 0..100000 along the section; SPLIT 1 = an army group's line divided among its armies (a plain
         click), 0 = one line (Shift+click); divisions are hex CUnit addresses (the `orders` read's division_ptrs)
   inproc_client.py SOCK stage1 OUTDIR --external CMD [--shot CMD]

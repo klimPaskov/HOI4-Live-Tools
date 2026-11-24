@@ -438,6 +438,11 @@ static dyncast_fn g_dyncast;
 static int roundtrip(const cmd_type *ct, uint64_t obj, uint64_t *handle) {
     const stage2_common *c = &g_t.st2.common;
     uint64_t h;
+    if (ct->spec->auth_kind == AUTH_TAG_PTR) { /* engineer 75: a raw pointer of exactly the class the spec names */
+        uint64_t vt = 0;
+        *handle = 0;
+        return ct->vt_obj && plausible(obj) && sq(obj, &vt) && vt == ct->vt_obj + (uint64_t)g_slide;
+    }
     if (ct->spec->auth_kind == AUTH_TAG) {
         uint64_t lk = ct->lookup_fn + (uint64_t)g_slide;
         if (!g_dyncast) g_dyncast = (dyncast_fn)dlsym(RTLD_DEFAULT, "__dynamic_cast");
@@ -784,7 +789,7 @@ static void run_job2(void *ctx) {
         uint64_t owner_f = ct->owner_fn + (uint64_t)g_slide;
         if (!roundtrip(ct, j->obj[i], &hs[i])) { j->res[i] = R_BAD_OBJ; j->refused++; continue; }
         /* AUTH_TAG: the command names the player's own tag; whether the country may use the object is the game's check */
-        if (ct->spec->auth_kind != AUTH_TAG &&
+        if (ct->spec->auth_kind == AUTH_HANDLE &&
             (!code_ptr(owner_f) || ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)j->obj[i]) != j->player_tag)) { j->res[i] = R_NOT_OWN; j->refused++; continue; }
         if (!strcmp(op, "units.transfer")) { /* the divisions (in an army or in none), then the order the UI would name */
             j->allow_free = 1;
@@ -829,7 +834,8 @@ static void run_job2(void *ctx) {
                 const cmd_field *f = &ct->spec->f[k];
                 uint64_t cur = 0;
                 if (f->kind == FK_REF || f->kind == FK_HANDLE) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == nullref;
-                else if (f->kind == FK_I32) { int32_t v = 1; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 4) && v == f->def; }
+                else if (f->kind == FK_I32 || f->kind == FK_TAG) { int32_t v = 1; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 4) && v == f->def; }
+                else if (f->kind == FK_PTR) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == 0;
                 else if (f->kind == FK_I64) { int64_t v = 1; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 8) && v == (int64_t)f->def; }
                 else if (f->kind == FK_U8) { uint8_t v = 9; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 1) && v == (uint8_t)f->def; }
                 else if (f->kind == FK_REF_ARRAY || f->kind == FK_I32_ARRAY) ok = 1; /* checked empty by fill_array */
@@ -842,6 +848,8 @@ static void run_job2(void *ctx) {
                     if (f->keep) continue;
                     if (f->kind == FK_REF) *(uint64_t *)(cmd + f->off) = k == 0 ? h : h2;
                     else if (f->kind == FK_HANDLE) *(uint64_t *)(cmd + f->off) = j->hx;
+                    else if (f->kind == FK_TAG) *(int32_t *)(cmd + f->off) = j->player_tag; /* picks: the player's own tag */
+                    else if (f->kind == FK_PTR) *(uint64_t *)(cmd + f->off) = j->obj[i];    /* picks: the checked object */
                     else if (f->kind == FK_I64) *(int64_t *)(cmd + f->off) = val;
                     else if (f->kind == FK_REF_ARRAY) ok = fill_array(cmd, f, j->divh, j->ndivh, 8);
                     else if (f->kind == FK_I32_ARRAY) ok = fill_array(cmd, f, j->provs, j->nprov, 4);
@@ -1153,6 +1161,12 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             else if (parse_list_u64(obj2, o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0];
         }
         if (!why && !strcmp(op, "units.to_army_group") && !j->obj2) why = "obj2: the army group";
+    } else if (!strncmp(op, "picks.", 6)) {
+        /* engineer 75: the player's own picks. focus: objs = ONE CNationalFocus of the own tree (exact vtable; the game's
+         * own "can start" with the player's country decides) */
+        if (nv) why = "this op takes no vals";
+        else if (j->n != 1) why = "picks.focus: exactly one focus";
+        else if (obj2 && *obj2) why = "this op takes no obj2";
     } else if (nv) why = "this op takes no vals";
     if (!why && divs && *divs && strncmp(op, "orders2.", 8) && strncmp(op, "units.", 6)) why = "only orders2 and units ops take divs";
     if (!why && !strcmp(op, "airwing.merge") && j->n < 2) why = "a merge takes at least two wings";

@@ -33,7 +33,9 @@ enum { FK_I32 = 1, FK_U8, FK_REF, FK_REF_ARRAY, FK_I32_ARRAY /* a CPdxArray<int>
         * object of another class (a CFront's own handle: the front a plan root is bound to) */
        FK_I64, FK_HANDLE,
        /* engineer 75 (24 Nov): a libc++ std::string held inline (the UI constructor copies a short string; names <= 22 bytes) */
-       FK_STR };
+       FK_STR,
+       /* engineer 75 (picks): the player's own country tag; a raw object pointer (a focus: no handle, an exact vtable) */
+       FK_TAG, FK_PTR };
 /* How the module builds the command:
  *   BUILD_FIELDS: the game's factory makes the default object; the module writes the spec's scalar and handle fields
  *                 into that fresh object (each field's default and serializer entry checked first).
@@ -65,7 +67,10 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
  * destructor frees them the game's way. Only the module's fresh command object is written, never game state. */
 /* how the command's authorisation slot names the objects: through a typed resolver of a handle (the default), or as
  * "the sender controls the country tag at +auth_off" (the objects are then checked by the cast the "can do" makes) */
-enum { AUTH_HANDLE = 0, AUTH_TAG = 1 };
+enum { AUTH_HANDLE = 0, AUTH_TAG = 1,
+       /* engineer 75: the sender must control the tag (as AUTH_TAG); the object is a raw pointer of exactly the class
+        * obj_cast names (its RTTI vtable), e.g. a national focus the command carries by pointer and writes by name */
+       AUTH_TAG_PTR = 2 };
 /* the second object a type takes, checked before posting */
 enum { OBJ2_NONE = 0, OBJ2_AIR_BASE, OBJ2_REGION, OBJ2_ORDERS_GROUP,
        OBJ2_REGION_ID, /* a strategic region given by id in vals (0 = none: hold), looked up as the game's check does */
@@ -108,6 +113,7 @@ typedef struct {
     uint64_t resolve_fn, owner_fn, controls_fn, lookup_fn;        /* from the auth slot / the typed resolver */
     uint32_t type_id, size, slots, target_hint;                   /* hint: offset of the reference base in the object */
     uint64_t ti_src, ti_dst;                                      /* AUTH_TAG: CReferenceObject -> obj_cast typeinfos */
+    uint64_t vt_obj;                                              /* AUTH_TAG_PTR: the object's exact vtable */
     uint64_t ti2; uint32_t hint2;                                 /* OBJ2_CAST: the check's typeinfo and hint */
     unsigned conf, need;
     char evidence[300];

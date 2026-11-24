@@ -167,6 +167,13 @@ const cmd_spec CMD2_SPECS[] = {
     /* an army (or army group) shell removed: DeleteOrderGroup(group); the game's check decides whether it may go */
     {"units", "units.delete_group", "CDeleteOrderGroupCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "12COrdersGroup", 1,
      {{"group", 0x24, FK_REF, 0, 0x3f, 0}}, OBJ2_NONE, 0},
+    /* ---- picks (engineer 75, 24 Nov): the player's own choices. Read from 1.20.0.0 and 1.19.4.1.
+     * focus: the focus tree's start button posts SetNationalFocus(tag, focus): tag +0x24 (the sender must control it),
+     * the focus by POINTER at +0x28 (written by its name, +0x18 of the focus). The "can do" check is the focus's own
+     * virtual "can start" (vtable +0x50) with the tag's country: prerequisites, exclusivity, availability, not done. */
+    {"picks", "picks.focus", "CSetNationalFocusCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "14CNationalFocus", 2,
+     {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"focus", 0x28, FK_PTR, 0, 0x33b7, 0}}, OBJ2_NONE, 0,
+     AUTH_TAG_PTR, "14CNationalFocus"},
 };
 const int CMD2_NSPECS = (int)(sizeof CMD2_SPECS / sizeof CMD2_SPECS[0]);
 
@@ -550,7 +557,17 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
         const uint8_t *g = scan_ptr(im, gate_fn, 8); uint32_t c[2];
         if (!(g && cmd_pmatch(g, 8, "55 48 89 e5 b0 01 5d c3", c, 2))) o->conf |= C_SLOTS;
     }
-    if (s->auth_kind == AUTH_TAG) {
+    if (s->auth_kind == AUTH_TAG_PTR) {
+        /* auth as AUTH_TAG; the object: a raw pointer of exactly the class obj_cast names (RTTI vtable) */
+        uint32_t c[4];
+        const uint8_t *ab = (o->conf & C_SLOTS) ? scan_ptr(im, o->auth_fn, 0x12) : NULL;
+        if (ab && cmd_pmatch(ab, 0x11, "55 48 89 e5 48 89 f2 48 8d 77 B 5d e9 D", c, 4) && c[0] == s->auth_off) {
+            o->controls_fn = o->auth_fn + 17 + (int64_t)(int32_t)c[1];
+            o->conf |= C_AUTH;
+        }
+        scan_cap vc;
+        if ((o->conf & C_AUTH) && scan_class_vtable(im, s->obj_cast, &vc) && vc.value) { o->vt_obj = vc.value; o->conf |= C_RESOLVER; }
+    } else if (s->auth_kind == AUTH_TAG) {
         /* auth: mov rdx, rsi; lea rsi, [rdi + TAG]; pop rbp; jmp controls -- the sender must control the tag */
         uint32_t c[4];
         const uint8_t *ab = (o->conf & C_SLOTS) ? scan_ptr(im, o->auth_fn, 0x12) : NULL;
@@ -623,7 +640,7 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
     }
     /* AUTH_TAG types: the generic lookup (for the module's own object check) is the one every handle type uses */
     for (int i = 1; i < t->n; i++)
-        if (t->t[i].spec->auth_kind == AUTH_TAG && t->t[0].ok) t->t[i].lookup_fn = t->t[0].lookup_fn;
+        if (t->t[i].spec->auth_kind != AUTH_HANDLE && t->t[0].ok) t->t[i].lookup_fn = t->t[0].lookup_fn;
     /* every type must agree on the "sender controls" check and the generic lookup (one game, one rule) */
     for (int i = 1; i < t->n; i++)
         if (t->t[i].ok && t->t[0].ok &&

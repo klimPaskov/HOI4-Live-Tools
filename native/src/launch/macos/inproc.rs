@@ -760,6 +760,19 @@ mod tests {
     }
 
     #[test]
+    fn units_and_picks_stay_off_in_auto_until_their_live_pass() {
+        let hello = json!({"post":{"enabled":true},"families":{
+            "units":{"on":true,"live_passed":false},"picks":{"on":true,"live_passed":false}}});
+        for fam in ["units", "picks"] {
+            assert!(!family_usable(&hello, fam, Mode::Auto));
+            assert!(family_usable(&hello, fam, Mode::InProcess));
+            assert!(!family_usable(&hello, fam, Mode::Gui));
+        }
+        let off = json!({"post":{"enabled":true},"families":{"units":{"on":false,"live_passed":true}}});
+        assert!(!family_usable(&off, "units", Mode::InProcess));
+    }
+
+    #[test]
     fn split_moves_half_rounded_down() {
         assert_eq!(split_count(100), 50);
         assert_eq!(split_count(41), 20);

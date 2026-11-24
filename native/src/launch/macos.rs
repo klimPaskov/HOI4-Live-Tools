@@ -24,6 +24,7 @@ mod fair_facts;
 mod inproc;
 mod inproc_orders;
 mod inproc_units;
+mod inproc_picks;
 mod operation_act;
 mod railway;
 // Internal prospective click opener; no tool/configuration registration.
@@ -5838,7 +5839,7 @@ impl MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 // engineer 75: in process = one command (a new army of these divisions, or Assign into `into`)
-                units_reply = units_in_process(&mut units_route, |ch| {
+                units_reply = module_in_process(&mut units_route, |ch| {
                     let divs = ui::read(process, |r, i| armies::detach_targets(r, i, army, &ids))?;
                     Ok(match into {
                         Some(t) => {
@@ -5903,7 +5904,7 @@ impl MacClock {
                 if army == new_name {
                     return Ok(());
                 }
-                units_reply = units_in_process(&mut units_route, |ch| {
+                units_reply = module_in_process(&mut units_route, |ch| {
                     let g = ui::read(process, |r, i| armies::group_address(r, i, army))?;
                     Ok(inproc_units::rename(ch, g, new_name))
                 })?;
@@ -6022,7 +6023,7 @@ impl MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 // engineer 75: every division of the source into the target (the right click on its card), one command
-                units_reply = units_in_process(&mut units_route, |ch| {
+                units_reply = module_in_process(&mut units_route, |ch| {
                     let (s, t) = ui::read(process, |r, i| {
                         Ok((armies::group_address(r, i, source)?, armies::group_address(r, i, target)?))
                     })?;
@@ -6117,7 +6118,7 @@ impl MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 // engineer 75: the army's first `count` divisions (the roster's order) as one new army, one command
-                units_reply = units_in_process(&mut units_route, |ch| {
+                units_reply = module_in_process(&mut units_route, |ch| {
                     let view = armies::armies(process)?;
                     let ids = armies::first_divisions(&view, army, count).ok_or_else(|| {
                         Error::new("army_unknown", "No own army with this name and that many divisions")
@@ -6183,7 +6184,7 @@ impl MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 // engineer 75: one ArmyGroup command over the armies (they share a theatre; the module checks it)
-                units_reply = units_in_process(&mut units_route, |ch| {
+                units_reply = module_in_process(&mut units_route, |ch| {
                     let groups = ui::read(process, |r, i| {
                         names.iter().map(|n| armies::group_address(r, i, n)).collect::<Result<Vec<_>>>()
                     })?;
@@ -6256,7 +6257,7 @@ impl MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 // engineer 75: SetArmyLeader(the leader by name, the army or army group), one command
-                units_reply = units_in_process(&mut units_route, |ch| {
+                units_reply = module_in_process(&mut units_route, |ch| {
                     let (g, l) = ui::read(process, |r, i| {
                         Ok((armies::group_address(r, i, army)?, units::leader_address(r, i, general)?))
                     })?;
@@ -7832,9 +7833,13 @@ impl MacClock {
             let bounded_keys = self.keys.guarded(&fence, &check_input)?;
             let process: &(dyn Process + Send + Sync) = &fence;
             let action = json!({"kind":"focus_start","focus":key});
+            let mut picks_route = inproc::route("picks");
+            let had_route = picks_route.is_some();
             if !actions.receipt_exists(id) {
                 focus::check(&focus::progress(process)?, key)?;
-                bounded_keys.preflight()?;
+                if !had_route {
+                    bounded_keys.preflight()?;
+                }
             }
             let keys = &bounded_keys;
             let mut settle = || {
@@ -7845,13 +7850,25 @@ impl MacClock {
                         .outcome(detail),
                 )
             };
+            let mut picks_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // engineer 75: SetNationalFocus(own tag, the focus) after the game's own "can start", one command
+                picks_reply = module_in_process(&mut picks_route, |ch| {
+                    let f = crate::own_focus::focus_address(process, key)?;
+                    Ok(inproc_picks::focus(ch, f))
+                })?;
+                if picks_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 focus::start(process, keys, key, fence.until)
             };
             let receipt =
                 actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, picks_reply));
         }
         allowed(args, &["paused", "speed", "request_id", "lease_token"])?;
         let id = string(args, "request_id")?;
@@ -8334,7 +8351,7 @@ fn offensive_in_process(
 /// engineer 75: one army-structure change through the module when the `units` family is usable (never under `auto`
 /// before its live pass): Some(the module's reply) when every command was posted, None when the mouse path runs,
 /// the typed refusal when the game's own check refused the change (the mouse would send the same refused order).
-fn units_in_process(
+fn module_in_process(
     route: &mut Option<inproc::Channel>,
     f: impl FnOnce(&mut inproc::Channel) -> Result<inproc::Routed>,
 ) -> Result<Option<Value>> {

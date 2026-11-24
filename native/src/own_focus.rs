@@ -15,6 +15,8 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 mod catalog;
+/// engineer 75: an own focus's address by key (the in-process focus pick).
+pub(crate) use catalog::address as focus_address;
 mod completion;
 mod search;
 #[cfg(test)]

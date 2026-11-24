@@ -585,3 +585,31 @@ Stop at once (endrun.sh s6u) on: a crash, a hang, any `unexplained` post2, a div
 name, any change to a foreign army, a Dropped command in game.log.
 Pass: U1-U6 clean -> `IPC_LIVE_PASSED` for `units` (8th entry), "S6 PASS: units"; the executor's layout may then name
 the divisions of each role in one call sequence (DETACH_MAX stays 18 per call: the tool's schema).
+
+## Session S7-PICKS: the in-process module, the player's picks (family `picks`; about 15 minutes) -- after S6-UNITS
+
+Built by engineer 75 (24 Nov 2026), offline-proven only: stage 2 34/34 types on 1.20.0.0 and 1.19.4.1 macOS; Linux and
+Windows 1.20 CSetNationalFocusCommand by RTTI with the same id (13245). OFF under `auto` until this session passes.
+- `picks.focus FOCUS` = CSetNationalFocusCommand(own tag +0x24, the focus by POINTER +0x28): what the focus tree's
+  start button posts. The module checks the object is exactly a CNationalFocus (RTTI vtable), fills the player's tag,
+  then the game's own check: the focus's virtual "can start" (vtable +0x50) with the player's country (prerequisites,
+  exclusivity, availability, already done). Refused = deleted, never posted.
+- MCP: hoi4_focus_start (same name, schema, Verified read: the active focus) takes the focus's address from the own
+  tree walk (the catalog's validated walk: exact vtables, own tree membership, unique keys); reply `in_process`. The
+  mouse path (open tree, pan, click) stays the fallback in the same call.
+
+Needs: module and reader from branch e75/inproc-picks; PREV-1936 (Germany, no focus running) and PREV-1939.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,picks ./inproc_stage2.sh PREV-1936 s7p`; the hello must
+show `"picks":{"on":true,"live_passed":false}`. `C="python3 -I inproc/tools/inproc_client.py s7p/inproc.sock"`.
+F1 a focus, paused (3 min). `hoi4_focus_start {"focus":"GER_rheinland"}` (any available root focus) with
+`HOI4_BACKEND=inprocess`: receipt Verified, `in_process.module.per_object[0].result:"posted"`, tool ms (the mouse path:
+3.7 s); the focus tree shows it running; no window opened.
+F2 refusals (3 min). A focus whose prerequisite is not done -> `refused_by_game_check`, nothing posted (the active focus
+unchanged); a focus while another runs -> the tool's own refusal before posting; a CNationalFocus of ANOTHER country's
+tree by `$C post2 picks.focus ADDR` (address from a foreign tree) -> record the game check's answer (expected refused;
+if it posts, STOP: the module must check own-tree membership first).
+F3 running speed 2 (3 min): F1 while the game runs; the Verified read within 3 s.
+F4 save + reload with the family on; plain load without the module.
+Stop at once (endrun.sh s7p) on: a crash, a hang, any `unexplained` post2, a focus started that the request did not
+name, F2's foreign focus posted.
+Pass: F1-F4 clean -> `IPC_LIVE_PASSED` for `picks` (9th entry), "S7 PASS: picks".
