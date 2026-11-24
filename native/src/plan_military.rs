@@ -258,13 +258,14 @@ pub(super) fn digest(state: &State) -> Option<Value> {
 
 /// The military rules as lanes of the pass (plan_run.rs `lanes`): rests that are over, the
 /// running naval invasion, the casualty and air superiority rules, army groups, the navy.
-pub(super) const LANES: [super::Lane; 6] = [
+pub(super) const LANES: [super::Lane; 7] = [
     ("rests", |state, tools, _, lease, now| {
         rest_step(state, tools, lease, now)
     }),
     ("invasion", invasion_step),
     ("casualties", casualty_rule),
     ("air_superiority", air_superiority_rule),
+    ("air_attach", air_attach_rule),
     ("army_groups", army_group_step),
     ("navy", navy_step),
 ];
@@ -1745,6 +1746,204 @@ fn casualty_rule(
 }
 
 // ---------------------------------------------------------------------------------------------
+// Air to armies: close air support and the armour's fighter cover attached to the attacking armies.
+
+/// The done key that remembers an attachment across restarts and loads (a wing loaded attached
+/// from a save reads unlinked until attached again: it goes back to the same army, never another).
+fn attach_key(army: &str, wing: &str) -> String {
+    format!("airatt:{army}\u{1}{wing}")
+}
+
+/// The army a wing was last attached to by this rule, from the done keys.
+fn attached_before(state: &State, wing: &str) -> Option<String> {
+    let tail = format!("\u{1}{wing}");
+    state.done.keys().find_map(|k| {
+        k.strip_prefix("airatt:")?
+            .strip_suffix(&tail)
+            .map(String::from)
+    })
+}
+
+/// Squared map distance between two own states' centres (unknown: far).
+fn state_distance(state: &State, a: Option<i64>, b: Option<i64>) -> f64 {
+    match (a, b) {
+        (Some(a), Some(b)) => match (
+            state.centers.get(&(a as i32)),
+            state.centers.get(&(b as i32)),
+        ) {
+            (Some(p), Some(q)) => (p.0 - q.0).powi(2) + (p.1 - q.1).powi(2),
+            _ => f64::MAX / 4.0,
+        },
+        _ => f64::MAX / 4.0,
+    }
+}
+
+/// At war, the close air support wings are attached to the armies that attack (battle plan
+/// executing or driven by the war step), shared evenly, each wing to the attacking army nearest
+/// its base; the armies the plan names in `manage.air_attach.fighters_for` (its armour) also get
+/// `fighters_per_army` fighter wings (default 1) as cover. An attached wing flies over that army's
+/// battles and follows it; the air plan leaves it alone. One army per pass, one call for its
+/// wings. No churn: a wing attached stays with its army (a wing that reads unlinked after a load
+/// goes back to the army it had); it is moved only when its army is gone. `manage.off:
+/// ["air_attach"]` turns the rule off.
+pub(super) fn air_attach_rule(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if off(plan, "air_attach") || state.skipped(now, "mattach", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "mattach", "x", DAY);
+    let at_war = tools
+        .call("hoi4_wars", &json!({}))
+        .is_ok_and(|w| !list(&w["wars"], "enemies").is_empty());
+    if !at_war {
+        return Ok(None);
+    }
+    let Ok(roster) = tools.call("hoi4_armies", &json!({"threat": false})) else {
+        return Ok(None);
+    };
+    let (claimed, _) = invasion_claims(state, plan);
+    let attackers: Vec<(String, Option<i64>)> = attacking(state, &roster, &claimed, now, 0)
+        .iter()
+        .map(|a| (text(&a["army"]).to_string(), a["main_state"].as_i64()))
+        .collect();
+    if attackers.is_empty() {
+        note(state, "air_attach", "no army attacks: nothing to attach");
+        return Ok(None);
+    }
+    let existing: HashSet<String> = list(&roster, "armies")
+        .iter()
+        .map(|a| text(&a["army"]).to_string())
+        .collect();
+    let Ok(air) = tools.call("hoi4_air", &json!({})) else {
+        return Ok(None);
+    };
+    let wings = list(&air, "wings");
+    let kind = |w: &Value| super::war_mission(text(&w["aircraft_type"]));
+    let base_state = |w: &Value| w["air_base"]["state_id"].as_i64();
+    let linked = |w: &Value| {
+        w["attached_army"]
+            .as_str()
+            .filter(|a| !a.is_empty())
+            .map(String::from)
+    };
+    // who flies for whom now: the memory link, else this rule's record of an army that still exists
+    let owner_of = |w: &Value| -> Option<String> {
+        linked(w)
+            .or_else(|| attached_before(state, text(&w["wing"])).filter(|a| existing.contains(a)))
+    };
+    let cfg = &plan["manage"]["air_attach"];
+    let fighters_for: Vec<String> = strings(cfg, "fighters_for")
+        .iter()
+        .map(|h| state.layout.get(h).cloned().unwrap_or_else(|| h.clone()))
+        .collect();
+    let fighters_per = cfg["fighters_per_army"].as_u64().unwrap_or(1) as usize;
+    let cas: Vec<&Value> = wings.iter().filter(|w| kind(w) == Some("cas")).collect();
+    let cas_share = cas.len().div_ceil(attackers.len());
+    // the army that lacks most, with the wings it should get now
+    let mut best: Option<(String, Vec<String>, usize)> = None;
+    for (army, main) in &attackers {
+        let has = |k: &str| {
+            wings
+                .iter()
+                .filter(|w| kind(w) == Some(k) && linked(w).as_deref() == Some(army.as_str()))
+                .count()
+        };
+        let free = |k: &str| -> Vec<&Value> {
+            let mut v: Vec<&Value> = wings
+                .iter()
+                .filter(|w| kind(w) == Some(k) && !text(&w["wing"]).is_empty())
+                .filter(|w| !text(&w["aircraft_type"]).starts_with("cv_"))
+                .filter(|w| !state.skipped(now, "airatt", text(&w["wing"])))
+                .filter(|w| match owner_of(w) {
+                    // unlinked after a load: back to its own army only
+                    Some(o) => linked(w).is_none() && o == *army,
+                    None => true,
+                })
+                .collect();
+            v.sort_by(|a, b| {
+                state_distance(state, base_state(a), *main)
+                    .total_cmp(&state_distance(state, base_state(b), *main))
+                    .then_with(|| text(&a["wing"]).cmp(text(&b["wing"])))
+            });
+            v
+        };
+        let mut want: Vec<String> = free("cas")
+            .into_iter()
+            .take(cas_share.saturating_sub(has("cas")))
+            .map(|w| text(&w["wing"]).to_string())
+            .collect();
+        if fighters_for.iter().any(|f| f == army) {
+            want.extend(
+                free("air_superiority")
+                    .into_iter()
+                    .filter(|w| !super::plan_manage::air_plan_pinned(plan, w))
+                    .take(fighters_per.saturating_sub(has("air_superiority")))
+                    .map(|w| text(&w["wing"]).to_string()),
+            );
+        }
+        want.truncate(24);
+        if !want.is_empty() && best.as_ref().is_none_or(|b| want.len() > b.1.len()) {
+            best = Some((army.clone(), want, has("cas")));
+        }
+    }
+    let Some((army, want, had)) = best else {
+        note(
+            state,
+            "air_attach",
+            format!("{} attacking army(ies) have their wings", attackers.len()),
+        );
+        return Ok(None);
+    };
+    let reply = tools.call(
+        "hoi4_air_attach",
+        &json!({"wings": want, "army": army,
+                "request_id": format!("plan-att-{}-{}", army.len(), now), "lease_token": lease}),
+    );
+    let done: Vec<String> = match &reply {
+        Ok(v) if v["wings"].is_array() => list(v, "wings")
+            .iter()
+            .filter(|r| r["attached"] == json!(true))
+            .map(|r| text(&r["wing"]).to_string())
+            .collect(),
+        Ok(_) => want.clone(),
+        Err(_) => Vec::new(),
+    };
+    for w in &want {
+        if done.contains(w) {
+            // one record per wing: the old army's is dropped (its army is gone)
+            let stale: Vec<String> = state
+                .done
+                .keys()
+                .filter(|k| k.starts_with("airatt:") && k.ends_with(&format!("\u{1}{w}")))
+                .cloned()
+                .collect();
+            for k in stale {
+                state.done.remove(&k);
+            }
+            state.done.insert(attach_key(&army, w), now);
+        } else {
+            state.skip(now, "airatt", w, 3 * DAY);
+        }
+    }
+    let why = match &reply {
+        Err(e) => format!(" ({}: {})", e.code, e.message),
+        Ok(_) => String::new(),
+    };
+    let line = format!(
+        "air to armies: {} of {} wing(s) attached to {army} (it had {had} CAS){why}",
+        done.len(),
+        want.len()
+    );
+    note(state, "air_attach", line.clone());
+    Ok(Some(line))
+}
+
+// ---------------------------------------------------------------------------------------------
 // W2-5, rule 27: enemy air superiority over our front.
 
 /// The front regions (where own CAS flies, then `manage.air_front_regions`), at most three, each
@@ -1945,6 +2144,7 @@ fn air_superiority_rule(
                 over.is_none_or(|r| !troubled_ids.contains(&r))
             })
             .filter(|w| !super::plan_manage::air_plan_claims(plan, w))
+            .filter(|w| w["attached_army"].as_str().is_none_or(str::is_empty))
             .filter(|w| {
                 let n = text(&w["wing"]);
                 !n.is_empty() && !state.skipped(now, "airsup", n)
@@ -4729,6 +4929,150 @@ mod tests {
             out.as_deref(),
             Some("navy: TF 1 (Squadra 1) hold -> convoy_escort: true Verified")
         );
+    }
+
+    // --- air to armies -----------------------------------------------------------------------
+
+    fn air_wings(rows: &[(&str, &str, i64, Option<&str>)]) -> Value {
+        json!({"wings": rows.iter().map(|(w, t, base, att)| json!({"wing": w, "aircraft_type": t,
+            "air_base": {"state_id": base}, "attached_army": att})).collect::<Vec<_>>()})
+    }
+
+    #[test]
+    fn cas_is_shared_among_the_attacking_armies_nearest_first_and_fighters_cover_the_armour() {
+        let tools = fake(vec![
+            ("hoi4_wars", json!({"wars": {"enemies": ["POL"]}})),
+            (
+                "hoi4_armies",
+                roster(
+                    &[
+                        ("Armee Nord", None, true),
+                        ("PG Ost", None, true),
+                        ("Home", None, false),
+                    ],
+                    &[],
+                ),
+            ),
+            (
+                "hoi4_air",
+                air_wings(&[
+                    ("StG 1", "small_plane_cas_airframe_1", 10, None),
+                    ("StG 2", "small_plane_cas_airframe_1", 2, None),
+                    ("StG 3", "small_plane_cas_airframe_1", 2, None),
+                    ("StG 4", "small_plane_cas_airframe_1", 10, None),
+                    ("JG 1", "small_plane_airframe_1", 2, None),
+                    ("Bomber", "medium_plane_airframe_1", 2, None),
+                ]),
+            ),
+        ]);
+        let plan = json!({"manage": {"air_attach": {"fighters_for": ["armour"]}}});
+        let mut state = State::default();
+        state.layout.insert("armour".into(), "PG Ost".into());
+        state.centers.insert(2, (0.0, 0.0));
+        state.centers.insert(10, (100.0, 0.0));
+        let line = air_attach_rule(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        // PG Ost lacks most (2 CAS + its fighter cover); the CAS nearest its state 2 go first
+        assert!(line.contains("3 of 3") && line.contains("PG Ost"), "{line}");
+        let sent = actions(&tools);
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].0, "hoi4_air_attach");
+        assert_eq!(sent[0].1["wings"], json!(["StG 2", "StG 3", "JG 1"]));
+        // the next day the other attacking army gets the other two CAS; the bomber never attaches
+        tools.reply(
+            "hoi4_air",
+            air_wings(&[
+                ("StG 1", "small_plane_cas_airframe_1", 10, None),
+                ("StG 2", "small_plane_cas_airframe_1", 2, Some("PG Ost")),
+                ("StG 3", "small_plane_cas_airframe_1", 2, Some("PG Ost")),
+                ("StG 4", "small_plane_cas_airframe_1", 10, None),
+                ("JG 1", "small_plane_airframe_1", 2, Some("PG Ost")),
+                ("Bomber", "medium_plane_airframe_1", 2, None),
+            ]),
+        );
+        assert_eq!(
+            air_attach_rule(&mut state, &tools, &plan, "l", START + 2).unwrap(),
+            None
+        );
+        let line = air_attach_rule(&mut state, &tools, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert!(line.contains("Armee Nord"), "{line}");
+        assert_eq!(actions(&tools)[1].1["wings"], json!(["StG 1", "StG 4"]));
+        // a wing that reads unlinked after a load goes back to its own army, never to another
+        tools.reply(
+            "hoi4_air",
+            air_wings(&[
+                (
+                    "StG 1",
+                    "small_plane_cas_airframe_1",
+                    10,
+                    Some("Armee Nord"),
+                ),
+                ("StG 2", "small_plane_cas_airframe_1", 2, None),
+                ("StG 3", "small_plane_cas_airframe_1", 2, Some("PG Ost")),
+                (
+                    "StG 4",
+                    "small_plane_cas_airframe_1",
+                    10,
+                    Some("Armee Nord"),
+                ),
+                ("JG 1", "small_plane_airframe_1", 2, Some("PG Ost")),
+            ]),
+        );
+        let line = air_attach_rule(&mut state, &tools, &plan, "l", START + 2 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(line.contains("1 of 1") && line.contains("PG Ost"), "{line}");
+        // all placed: nothing sent; off by the plan: nothing read
+        tools.reply(
+            "hoi4_air",
+            air_wings(&[
+                (
+                    "StG 1",
+                    "small_plane_cas_airframe_1",
+                    10,
+                    Some("Armee Nord"),
+                ),
+                ("StG 2", "small_plane_cas_airframe_1", 2, Some("PG Ost")),
+            ]),
+        );
+        assert_eq!(
+            air_attach_rule(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap(),
+            None
+        );
+        let off = json!({"manage": {"off": ["air_attach"]}});
+        assert_eq!(
+            air_attach_rule(&mut state, &tools, &off, "l", START + 9 * DAY).unwrap(),
+            None
+        );
+        assert_eq!(actions(&tools).len(), 3);
+    }
+
+    #[test]
+    fn no_wing_is_attached_in_peace_or_without_an_attacking_army() {
+        let tools = fake(vec![
+            ("hoi4_wars", json!({"wars": {"enemies": []}})),
+            ("hoi4_armies", roster(&[("Armee Nord", None, true)], &[])),
+            (
+                "hoi4_air",
+                air_wings(&[("StG 1", "small_plane_cas_airframe_1", 2, None)]),
+            ),
+        ]);
+        let plan = json!({"manage": {}});
+        let mut state = State::default();
+        assert_eq!(
+            air_attach_rule(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        tools.reply("hoi4_wars", json!({"wars": {"enemies": ["POL"]}}));
+        tools.reply("hoi4_armies", roster(&[("Armee Nord", None, false)], &[]));
+        assert_eq!(
+            air_attach_rule(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
+            None
+        );
+        assert!(actions(&tools).is_empty());
     }
 
     // --- W2-9 casualty ratio ----------------------------------------------------------------

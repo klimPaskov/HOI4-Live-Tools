@@ -60,9 +60,40 @@ flow. The executor reads `issues_open.json` at its tick and offers the lanes tha
 before its routine work, at most once per game day per lane. When an order of that lane passes,
 the issue becomes "acted"; when the snapshot no longer shows it, "resolved".
 
+"Acted" means an order of the lane passed, not that the lane had a turn. When the executor offers
+a lane an issue it writes the lane's typed answer to `RUN/issue_outcomes.jsonl` (`acted`, `refused`,
+`waiting` or `cannot`, with the lane's own note as the reason); the monitor keeps it on the issue
+(`lane_outcome`, `lane_reason`; for an executor omission row the rule's own note is the reason).
+An issue its lane was offered that is still open past its deadline is escalated whatever its
+severity: the Tier 1 packet carries `LANE SAYS: <the lane's reason>` beside the allowed responses.
+A lane's further overdue issues within two game weeks join that lane's packet (`ALSO ...`), so a
+backlog is weighed in one answer inside the yearly budget.
+
+### Sinks and slots
+
+`sinks.py` judges every spendable or assignable thing the snapshot shows (with `gamerules.py`
+reading the game's own files: experience caps, spirit slot costs, the mastery a subdoctrine's
+rewards need, the laws with their costs, modifiers and the conditions a snapshot can judge):
+`experience_unspent` (per pool, with the days to the pool's cap at the observed gain),
+`doctrine_track_complete` (a track past its last reward reserves only part of its mastery),
+`doctrine_track_no_mastery` (a subdoctrine whose arm never fights), `manpower_idle` (free men and
+no division in training, with what binds: equipment or the training rows), `conscription_above_need`
+(the law in force has a penalty in the files that a lower law drops while men sit idle),
+`fleet_training_at_war`, `reserve_fleet_ships`, `operatives_home_only`, `decryption_unread` /
+`decryption_idle`, `mio_state_unread`, `special_project_kind_without_facility`, and
+`lane_wait_outlived` (an omission row whose rule has said the same thing past the row's own
+deadline). The recorder also writes the derived read `politics.laws_affordable` (every law of each
+group with its cost against the power and whether its conditions hold) into each snapshot. The
+detector computes these on every full snapshot, so a replay of an older run shows them too.
+
 A refused order is looked up in the lessons before it is retried: a cause a lesson calls transient
 (an event was open) is retried soon and never given up; one it calls permanent is not sent again
-unchanged, and the player is told what to do instead. Issues the executor cannot act on (a plan
+unchanged, and the player is told what to do instead. The second identical refusal of an order
+(the same tool, arguments and cause; or a read-back without the change, or a wrong call) writes a
+lesson of the run (`scope: run:<run>`, confidence 0.5) with the order's arguments, what was tried,
+the refusal and what to do instead: a wrong call or an order for what already holds is not sent
+again, a precondition rests a week, a GUI or read-back failure of that order rests two days for a
+war order and two weeks for any other. The executor uses a run's own lessons in that run only. Issues the executor cannot act on (a plan
 decision, a tool fault) appear in the player's wake list with their packet.
 
 ## Escalation (Tier 1 and Tier 2)

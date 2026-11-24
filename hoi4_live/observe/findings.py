@@ -71,7 +71,8 @@ def from_omissions(snap):
             text += " (the rule's note contradicts the read)"
         sev = "high" if (days or 0) >= 14 else "medium"
         out.append(F(o.get("item") or "omission", sev, text, owner="server omissions",
-                     days_open=days))
+                     days_open=days, owner_rule=o.get("owner"),
+                     owner_note=str(o["owner_note"])[:300] if o.get("owner_note") else None))
         seen[sig] = out[-1]
     return out
 

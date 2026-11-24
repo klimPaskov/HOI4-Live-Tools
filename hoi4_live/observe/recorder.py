@@ -166,7 +166,21 @@ class Recorder:
         for t, e in (g(snap, "wars", "per_enemy", default={}) or {}).items():
             if e.get("at_war") or e.get("casualties_own"):
                 self.fought.add(t)
+        pol = snap.get("politics")
+        if isinstance(pol, dict) and pol.get("political_power") is not None:
+            # the derived read "laws affordable now" (game files + this snapshot; no game read)
+            try:
+                from . import gamerules
+                pol["laws_affordable"] = [
+                    {k: r[k] for k in ("group", "law", "cost", "affordable", "available", "why")}
+                    for r in gamerules.laws_affordable(pol, g(snap, "wars", "at_war"), self.game_dir)]
+            except Exception:  # the files are optional; a broken parse never stops a snapshot
+                pass
         snap["findings"] = findings_mod.findings(snap, self.prev, self.regions)
+        from . import sinks as sinks_mod
+        have = {(f.get("code"), f.get("subject")) for f in snap["findings"]}
+        snap["findings"] += [f for f in sinks_mod.findings(snap, self.prev, self.game_dir)
+                             if (f["code"], f.get("subject")) not in have]
         name = snap["date"]
         path = os.path.join(self.state_dir, name + ".json")
         k = 2
