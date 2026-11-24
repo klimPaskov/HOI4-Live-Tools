@@ -381,9 +381,11 @@ mod tests {
     use super::*;
 
     fn lesson(id: &str, tool: &str, cause: &str, treat: &str, conf: f64) -> Value {
+        // Learned on the build this binary reads here (macOS and Linux may be on different versions).
+        let version = crate::builds::current().map_or("1.19.4.1", |b| b.game_version);
         json!({"id": id, "statement": "s", "situation": {"tool": tool, "cause": cause},
                "scope": "any", "confidence": conf, "status": "active",
-               "learned_on": {"game_version": "1.19.4.1", "mod_set": "plain"},
+               "learned_on": {"game_version": version, "mod_set": "plain"},
                "executor": {"treat_as": treat, "advice": format!("advice {id}"), "days": 30}})
     }
 
