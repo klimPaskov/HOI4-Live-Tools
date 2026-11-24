@@ -24,13 +24,13 @@ mod fair_facts;
 mod inproc;
 mod inproc_construction;
 mod inproc_diplomacy;
-mod inproc_training;
 mod inproc_events;
 mod inproc_holds;
 mod inproc_orders;
 mod inproc_picks;
 mod inproc_politics;
 mod inproc_research;
+mod inproc_training;
 mod inproc_units;
 mod operation_act;
 mod railway;
@@ -3500,7 +3500,8 @@ impl MacClock {
             // millisecond still shows the old line (s7n, 24 Nov 2026: a line closed in process read
             // back unchanged 4 ms later, NotApplied, and the balance rested two game days with 27
             // factories idle). Unchanged counts only after IPC_SETTLE.
-            let ipc_posted: std::cell::Cell<Option<std::time::Instant>> = std::cell::Cell::new(None);
+            let ipc_posted: std::cell::Cell<Option<std::time::Instant>> =
+                std::cell::Cell::new(None);
             let ipc_early = || {
                 ipc_posted
                     .get()
@@ -4005,7 +4006,13 @@ impl MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 if let Some(queue) = order_queue.as_ref() {
-                    match construction_order_in_process(process, &mut order_route, queue, line as usize, order) {
+                    match construction_order_in_process(
+                        process,
+                        &mut order_route,
+                        queue,
+                        line as usize,
+                        order,
+                    ) {
                         Ok(Some((body, reply))) => {
                             order_reply = Some(reply);
                             *done.borrow_mut() = Some(body);
@@ -6721,7 +6728,9 @@ impl MacClock {
                     let view = armies::armies(process)?;
                     if let Some((_, held)) = inproc_holds::standing_area(&view, army) {
                         if states.iter().all(|s| held.contains(s)) {
-                            return Ok(journal::Outcome::Reached(json!({"army":army,"area_states":held})));
+                            return Ok(journal::Outcome::Reached(
+                                json!({"army":army,"area_states":held}),
+                            ));
                         }
                     }
                 }
@@ -6766,8 +6775,11 @@ impl MacClock {
                     let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
                     let routed = match &area_existing {
                         Some((oid, held)) => {
-                            let add: Vec<i32> =
-                                states.iter().copied().filter(|s| !held.contains(s)).collect();
+                            let add: Vec<i32> = states
+                                .iter()
+                                .copied()
+                                .filter(|s| !held.contains(s))
+                                .collect();
                             inproc_holds::area_into(ch, group, *oid, &add)
                         }
                         None => inproc_holds::area(ch, group, &states),
@@ -7783,7 +7795,11 @@ impl MacClock {
             let retry = actions.receipt_exists(id);
             // engineer 82: in process (family `training`): the Train button's command, then the new queue's series,
             // lines and location, no panel; the deploy state's first own province as the location click
-            let mut train_route = if retry { None } else { inproc::route("training") };
+            let mut train_route = if retry {
+                None
+            } else {
+                inproc::route("training")
+            };
             let train_province = match train_route {
                 Some(_) => mapdata::game_dir(&epoch.game.exe)
                     .and_then(|d| mapdata::state_provinces(&d, deploy_state))
@@ -7844,7 +7860,11 @@ impl MacClock {
             let retry = actions.receipt_exists(id);
             // engineer 82: in process (family `training`): the location command for every queue without one, the
             // state's first own province as the click; the queues' own province field is the read-back (no panel)
-            let mut locate_route = if retry { None } else { inproc::route("training") };
+            let mut locate_route = if retry {
+                None
+            } else {
+                inproc::route("training")
+            };
             let locate_province = match locate_route {
                 Some(_) => mapdata::game_dir(&epoch.game.exe)
                     .and_then(|d| mapdata::state_provinces(&d, state))
@@ -8052,7 +8072,8 @@ impl MacClock {
             // showed the old law (s81b, 24 Nov 2026: limited_exports and service_by_requirement read
             // back NotApplied, PP spent and both active a moment later). Unchanged counts only after
             // IPC_SETTLE, as for production.
-            let ipc_posted: std::cell::Cell<Option<std::time::Instant>> = std::cell::Cell::new(None);
+            let ipc_posted: std::cell::Cell<Option<std::time::Instant>> =
+                std::cell::Cell::new(None);
             let mut settle = || {
                 if in_process {
                     // the own active ideas: the law active = Reached; the replaced one still active = Unchanged
@@ -8162,7 +8183,10 @@ impl MacClock {
                 inproc::route("construction")
             };
             let placement = match build_route {
-                Some(_) => ui::read(process, |r, i| crate::construction::template_placement(r, i, key)).ok(),
+                Some(_) => ui::read(process, |r, i| {
+                    crate::construction::template_placement(r, i, key)
+                })
+                .ok(),
                 None => None,
             };
             let on_province = placement.is_some_and(|(_, p)| p);
@@ -8173,7 +8197,11 @@ impl MacClock {
                 build_route = None;
             }
             let in_process = build_route.is_some();
-            let location = if on_province { province.unwrap_or(0) } else { state };
+            let location = if on_province {
+                province.unwrap_or(0)
+            } else {
+                state
+            };
             if !retry && !in_process {
                 self.keys.preflight()?;
             }
@@ -8185,7 +8213,9 @@ impl MacClock {
                 let original = baseline.as_i64().unwrap_or(start);
                 let now = construction::queued(process, key, state)?;
                 let detail = json!({"building":key,"state_id":state,"queued_in_state":now,"queued_before":original});
-                let early = ipc_posted.get().is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                let early = ipc_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
                 if early && now < original + count {
                     return Ok(journal::Outcome::Unknown);
                 }
@@ -8196,7 +8226,13 @@ impl MacClock {
                 authority.authorize(token, &epoch)?;
                 if let Some(t) = template {
                     build_reply = module_in_process(&mut build_route, |ch| {
-                        Ok(inproc_construction::add(ch, t, location, on_province, count))
+                        Ok(inproc_construction::add(
+                            ch,
+                            t,
+                            location,
+                            on_province,
+                            count,
+                        ))
                     })?;
                     if build_reply.is_some() {
                         ipc_posted.set(Some(Instant::now()));
@@ -8834,7 +8870,9 @@ fn construction_order_in_process(
         let now = ui::read(process, crate::construction::inproc_queue)?;
         let at = now.iter().position(|l| l.address == address);
         let body = match (to, at) {
-            (None, None) => Some(json!({"removed": true, "lines_before": n, "lines_after": now.len()})),
+            (None, None) => {
+                Some(json!({"removed": true, "lines_before": n, "lines_after": now.len()}))
+            }
             (Some(want), Some(at)) if at == want => Some(json!({"from": line, "to": want})),
             _ => None,
         };

@@ -21,7 +21,13 @@ pub(super) fn location_kind(province: bool) -> i64 {
 }
 
 /// `clicks` more of the building in the state (or on the province), one command per click.
-pub(super) fn add(ch: &mut Channel, template: u64, location: i32, province: bool, clicks: i64) -> Routed {
+pub(super) fn add(
+    ch: &mut Channel,
+    template: u64,
+    location: i32,
+    province: bool,
+    clicks: i64,
+) -> Routed {
     if !(1..=10).contains(&clicks) || location <= 0 {
         return Routed::Gui;
     }
@@ -35,7 +41,9 @@ pub(super) fn add(ch: &mut Channel, template: u64, location: i32, province: bool
 /// The whole line out of the queue (every level it holds).
 pub(super) fn remove(ch: &mut Channel, line: &InprocLine) -> Routed {
     let levels = i64::from(line.amount.max(1));
-    match request("construction.remove", &[line.address], &[], &[levels], None).and_then(|r| ch.post_raw(r)) {
+    match request("construction.remove", &[line.address], &[], &[levels], None)
+        .and_then(|r| ch.post_raw(r))
+    {
         Ok(reply) => routed(reply, "removing this construction line"),
         Err(_) => Routed::Gui,
     }
@@ -50,7 +58,9 @@ pub(super) fn move_line(ch: &mut Channel, lines: &[InprocLine], from: usize, to:
         return Routed::Gui;
     };
     let vals = [index, i64::from(byte)];
-    match request("construction.move", &[line.address], &[], &vals, None).and_then(|r| ch.post_raw(r)) {
+    match request("construction.move", &[line.address], &[], &vals, None)
+        .and_then(|r| ch.post_raw(r))
+    {
         Ok(reply) => routed(reply, "moving this construction line"),
         Err(_) => Routed::Gui,
     }
@@ -88,13 +98,30 @@ mod tests {
 
     #[test]
     fn requests_carry_the_location_its_kind_and_the_clicks() {
-        let r = request("construction.add", &[0x7000_1000], &[], &[64, location_kind(false), 3], None).unwrap();
+        let r = request(
+            "construction.add",
+            &[0x7000_1000],
+            &[],
+            &[64, location_kind(false), 3],
+            None,
+        )
+        .unwrap();
         assert_eq!(r["cmd"], "construction.add");
         assert_eq!(r["vals"], "64,0,3");
-        let r = request("construction.add", &[0x7000_1000], &[], &[9400, location_kind(true), 1], None).unwrap();
+        let r = request(
+            "construction.add",
+            &[0x7000_1000],
+            &[],
+            &[9400, location_kind(true), 1],
+            None,
+        )
+        .unwrap();
         assert_eq!(r["vals"], "9400,1,1");
         let r = request("construction.move", &[0x7000_2000], &[], &[0, 1], None).unwrap();
-        assert_eq!((r["objs"].as_str(), r["vals"].as_str()), (Some("0x70002000"), Some("0,1")));
+        assert_eq!(
+            (r["objs"].as_str(), r["vals"].as_str()),
+            (Some("0x70002000"), Some("0,1"))
+        );
     }
 
     #[test]
@@ -110,13 +137,25 @@ mod tests {
     #[test]
     fn the_view_groups_a_line_with_its_own_building_and_marks_other_moves_by_hand() {
         // factories A A, then a refinery R: moving R up between the two A lines lands it next to an A: by hand
-        let q = vec![line(1, 0xa, false), line(2, 0xa, false), line(3, 0xb, false)];
+        let q = vec![
+            line(1, 0xa, false),
+            line(2, 0xa, false),
+            line(3, 0xb, false),
+        ];
         assert!(placement_byte(&q, 2, 1));
         // the last A moved to the top lands next to the first A (the line below): grouped
-        let q = vec![line(1, 0xa, false), line(2, 0xb, false), line(3, 0xa, false)];
+        let q = vec![
+            line(1, 0xa, false),
+            line(2, 0xb, false),
+            line(3, 0xa, false),
+        ];
         assert!(!placement_byte(&q, 2, 0));
         // moved down onto the place after an A of its own building (above): grouped
-        let q = vec![line(1, 0xa, false), line(2, 0xb, false), line(3, 0xa, false)];
+        let q = vec![
+            line(1, 0xa, false),
+            line(2, 0xb, false),
+            line(3, 0xa, false),
+        ];
         assert!(!placement_byte(&q, 0, 2));
         // a neighbour placed by hand does not group
         let q = vec![line(1, 0xa, true), line(2, 0xb, false), line(3, 0xa, false)];

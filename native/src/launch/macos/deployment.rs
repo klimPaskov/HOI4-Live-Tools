@@ -387,7 +387,10 @@ pub(super) fn template_object(r: &Reader<'_>, image: u64, name: &str) -> Result<
     for t in pointers(r, country + u.country_templates, 256)? {
         if r.string_bounded(t + u.template_name, 128)? == name {
             if found.is_some() {
-                return Err(Error::new("invalid_target", "Two own templates carry this name"));
+                return Err(Error::new(
+                    "invalid_target",
+                    "Two own templates carry this name",
+                ));
             }
             found = Some(t);
         }

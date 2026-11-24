@@ -435,10 +435,11 @@ pub(crate) fn placement_byte(lines: &[InprocLine], from: usize, to: usize) -> bo
     let above = index.checked_sub(1).and_then(|i| lines.get(i));
     let below = lines.get(index);
     if let Some(a) = above {
-        if groupable(a) && a.kind == line.kind {
-            if a.kind == 3 || (a.kind == 1 && a.template == line.template) {
-                return false;
-            }
+        if groupable(a)
+            && a.kind == line.kind
+            && (a.kind == 3 || (a.kind == 1 && a.template == line.template))
+        {
+            return false;
         }
     }
     if let Some(b) = below {

@@ -74,7 +74,11 @@ pub(super) fn standing_area(view: &Value, army: &str) -> Option<(i32, Vec<i32>)>
         let states = o["line"]["states"]
             .as_array()
             .or_else(|| o["states"].as_array())
-            .map(|a| a.iter().filter_map(|v| v.as_i64().and_then(|v| i32::try_from(v).ok())).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_i64().and_then(|v| i32::try_from(v).ok()))
+                    .collect()
+            })
             .unwrap_or_default();
         Some((id, states))
     })

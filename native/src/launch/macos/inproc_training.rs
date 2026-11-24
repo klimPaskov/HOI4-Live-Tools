@@ -25,12 +25,20 @@ pub(super) fn extra_lines(count: usize) -> i64 {
     count.saturating_sub(1) as i64
 }
 
-fn post(route: &mut Option<Channel>, op: &str, objs: &[u64], vals: &[i64], what: &str) -> Result<Option<Value>> {
+fn post(
+    route: &mut Option<Channel>,
+    op: &str,
+    objs: &[u64],
+    vals: &[i64],
+    what: &str,
+) -> Result<Option<Value>> {
     super::module_in_process(route, |ch| {
-        Ok(match request(op, objs, &[], vals, None).and_then(|r| ch.post_raw(r)) {
-            Ok(reply) => routed(reply, what),
-            Err(_) => Routed::Gui,
-        })
+        Ok(
+            match request(op, objs, &[], vals, None).and_then(|r| ch.post_raw(r)) {
+                Ok(reply) => routed(reply, what),
+                Err(_) => Routed::Gui,
+            },
+        )
     })
 }
 
@@ -69,7 +77,14 @@ pub(super) fn train(
         .into_iter()
         .map(|q| q.address)
         .collect();
-    let Some(created) = post(route, "training.create", &[template], &[], "training this template now")? else {
+    let Some(created) = post(
+        route,
+        "training.create",
+        &[template],
+        &[],
+        "training this template now",
+    )?
+    else {
         return Ok(None);
     };
     let fresh = |qs: &[Queue]| {
@@ -77,8 +92,13 @@ pub(super) fn train(
             .find(|q| !before.contains(&q.address) && q.template == name)
             .cloned()
     };
-    let queue = fresh(&until(process, "the new queue", |qs| fresh(qs).is_some())?)
-        .ok_or_else(|| Error::new("input_readback_failed", "The new training queue left the list"))?;
+    let queue =
+        fresh(&until(process, "the new queue", |qs| fresh(qs).is_some())?).ok_or_else(|| {
+            Error::new(
+                "input_readback_failed",
+                "The new training queue left the list",
+            )
+        })?;
     let q = queue.address;
     let step = |route: &mut Option<Channel>, op: &str, vals: &[i64], what: &str| -> Result<Value> {
         post(route, op, &[q], vals, what)?.ok_or_else(|| {
@@ -90,27 +110,49 @@ pub(super) fn train(
     };
     let mut replies = vec![created];
     if queue.amount == 0 {
-        replies.push(step(route, "training.series", &[1], "one division per line")?);
+        replies.push(step(
+            route,
+            "training.series",
+            &[1],
+            "one division per line",
+        )?);
         until(process, "the series amount", |qs| {
             qs.iter().any(|x| x.address == q && x.amount == 1)
         })?;
     }
     let extra = extra_lines(count);
     if extra > 0 {
-        replies.push(step(route, "training.add_lines", &[extra], "more lines for this queue")?);
+        replies.push(step(
+            route,
+            "training.add_lines",
+            &[extra],
+            "more lines for this queue",
+        )?);
         until(process, "the added lines", |qs| {
-            qs.iter().any(|x| x.address == q && x.lines as usize >= count)
+            qs.iter()
+                .any(|x| x.address == q && x.lines as usize >= count)
         })?;
     }
-    replies.push(step(route, "training.location", &[i64::from(province)], "this deployment location")?);
+    replies.push(step(
+        route,
+        "training.location",
+        &[i64::from(province)],
+        "this deployment location",
+    )?);
     until(process, "the deployment location", |qs| {
         qs.iter().any(|x| x.address == q && x.location == province)
     })?;
-    Ok(Some(json!({"backend":"inprocess","queue":format!("{q:#x}"),"province":province,"posts":replies})))
+    Ok(Some(
+        json!({"backend":"inprocess","queue":format!("{q:#x}"),"province":province,"posts":replies}),
+    ))
 }
 
 /// Every own queue without a deployment province gets `province`. Ok(None): nothing was posted.
-pub(super) fn locate(process: &dyn Process, route: &mut Option<Channel>, province: i32) -> Result<Option<Value>> {
+pub(super) fn locate(
+    process: &dyn Process,
+    route: &mut Option<Channel>,
+    province: i32,
+) -> Result<Option<Value>> {
     let open: Vec<u64> = ui::read(process, deployment::queues)?
         .into_iter()
         .filter(|q| q.location <= 0)
@@ -120,7 +162,14 @@ pub(super) fn locate(process: &dyn Process, route: &mut Option<Channel>, provinc
         return Ok(Some(json!({"backend":"inprocess","posted":0})));
     }
     let objs: Vec<u64> = open.iter().copied().take(32).collect();
-    let Some(reply) = post(route, "training.location", &objs, &[i64::from(province)], "this deployment location")? else {
+    let Some(reply) = post(
+        route,
+        "training.location",
+        &objs,
+        &[i64::from(province)],
+        "this deployment location",
+    )?
+    else {
         return Ok(None);
     };
     until(process, "the deployment locations", |qs| {
@@ -156,7 +205,17 @@ mod tests {
         assert_eq!(r["cmd"], "training.create");
         let r = request("training.add_lines", &[0x7000_2000], &[], &[23], None).unwrap();
         assert_eq!(r["vals"], "23");
-        let r = request("training.location", &[0x7000_2000, 0x7000_3000], &[], &[6521], None).unwrap();
-        assert_eq!((r["objs"].as_str(), r["vals"].as_str()), (Some("0x70002000,0x70003000"), Some("6521")));
+        let r = request(
+            "training.location",
+            &[0x7000_2000, 0x7000_3000],
+            &[],
+            &[6521],
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            (r["objs"].as_str(), r["vals"].as_str()),
+            (Some("0x70002000,0x70003000"), Some("6521"))
+        );
     }
 }
