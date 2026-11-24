@@ -149,6 +149,9 @@ fn pair(r: &Reader<'_>, address: u64) -> Result<(i32, i32)> {
 #[derive(Clone, Debug, PartialEq)]
 struct Open {
     event: u64,
+    /// The window object itself (the popup-list entry is its secondary base; engineer 76: the in-process answer names
+    /// the window, as the window's own option click reads it).
+    window: u64,
     id: String,
     title: String,
     /// The event's own text (Description text box), read from memory.
@@ -184,6 +187,9 @@ fn open_events(r: &Reader<'_>, image: u64) -> Result<Vec<Open>> {
         }
         let event = r.u64(entry + u.event)?;
         let id = r.string_bounded(event + u.event_id, 128)?;
+        // the secondary vtable's offset-to-top (Itanium ABI: the i64 two slots before it) leads to the window object
+        let to_top = r.u64(image + u.event_window_vtable - 16)? as i64;
+        let window = entry.wrapping_add_signed(to_top);
         let kind = gui_tree::name(r, base_of(r, image, root)?, image)?.unwrap_or_default();
         let title = match find(r, image, window, "Title", 0)? {
             Some(t) => r.string_bounded(t + u.text, 256).unwrap_or_default(),
@@ -218,6 +224,7 @@ fn open_events(r: &Reader<'_>, image: u64) -> Result<Vec<Open>> {
         let (centres, scan) = option_centres(r, image, window, grid, &kind, options.len())?;
         out.push(Open {
             event,
+            window,
             id,
             title,
             description,
@@ -599,6 +606,21 @@ pub(super) fn single_option_top(r: &Reader<'_>, image: u64) -> Result<Option<Str
 pub(super) fn open_ids(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
     Ok(open_events(r, image)?.into_iter().map(|e| e.id).collect())
 }
+/// engineer 76: the open window of event `id` for the in-process answer: the window object and how many options it
+/// shows (the module's own walk with the game's option test must count the same). None when the event is not open or
+/// its window is not on the list twice-free (two windows of one event id: the mouse path decides).
+pub(super) fn window_of(process: &dyn Process, id: &str) -> Result<Option<(u64, usize)>> {
+    let open = read(process, open_events)?;
+    Ok(window_pick(&open, id))
+}
+fn window_pick(open: &[Open], id: &str) -> Option<(u64, usize)> {
+    let mut it = open.iter().filter(|e| e.id == id);
+    let first = it.next()?;
+    if it.next().is_some() || first.options.is_empty() || first.options.len() > 8 {
+        return None;
+    }
+    Some((first.window, first.options.len()))
+}
 /// Whether event `id` is open.
 pub(super) fn is_open(process: &dyn Process, id: &str) -> Result<bool> {
     Ok(read(process, open_events)?.iter().any(|e| e.id == id))
@@ -853,6 +875,7 @@ mod tests {
     fn window(event: u64, id: &str, centres: &[(f64, f64)]) -> Open {
         Open {
             event,
+            window: event + 1,
             id: id.into(),
             title: String::new(),
             description: String::new(),
@@ -862,6 +885,16 @@ mod tests {
             scan: None,
             layout: "EventWindow".into(),
         }
+    }
+
+    #[test]
+    fn the_in_process_answer_names_one_window_of_the_event() {
+        let a = window(0x10, "a.1", &[(1.0, 1.0), (2.0, 2.0)]);
+        let b = window(0x20, "b.1", &[(1.0, 1.0)]);
+        assert_eq!(window_pick(&[a.clone(), b.clone()], "a.1"), Some((0x11, 2)));
+        assert_eq!(window_pick(&[a.clone(), b.clone()], "c.1"), None);
+        // two windows of one id: which one the agent means is unknown, the mouse path decides
+        assert_eq!(window_pick(&[a.clone(), a], "a.1"), None);
     }
 
     #[test]

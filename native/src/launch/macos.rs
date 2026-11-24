@@ -23,6 +23,7 @@ mod construction_find;
 mod fair_facts;
 mod inproc;
 mod inproc_orders;
+mod inproc_events;
 mod inproc_picks;
 mod inproc_units;
 mod operation_act;
@@ -4365,6 +4366,9 @@ impl MacClock {
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
             let retry = actions.receipt_exists(id);
+            // engineer 76: the answer in process (family `events`), the mouse path as the fallback
+            let mut events_route = inproc::route("events");
+            let had_route = events_route.is_some();
             if !retry {
                 if !events::is_open(process, event)? {
                     return Err(Error::new(
@@ -4372,7 +4376,9 @@ impl MacClock {
                         format!("Event {event} is not open"),
                     ));
                 }
-                self.keys.preflight()?;
+                if !had_route {
+                    self.keys.preflight()?;
+                }
             }
             let action = json!({"kind":"event_choose","event":event,"option":option});
             let keys = &self.keys;
@@ -4387,12 +4393,27 @@ impl MacClock {
                     journal::Outcome::Unchanged(detail)
                 })
             };
+            let mut events_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // the window's own option click as one command: the window and its shown option count from the
+                // events read, the option by its shown place; the module checks the rest with the game's code
+                events_reply = module_in_process(&mut events_route, |ch| {
+                    Ok(match events::window_of(process, event)? {
+                        Some((window, count)) => inproc_events::answer(ch, window, option, count),
+                        None => inproc::Routed::Gui,
+                    })
+                })?;
+                if events_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 events::choose(process, keys, event, option)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, events_reply));
         }
         if name == "hoi4_fleet_mission" || name == "hoi4_fleet_region" {
             let by_mission = name == "hoi4_fleet_mission";
