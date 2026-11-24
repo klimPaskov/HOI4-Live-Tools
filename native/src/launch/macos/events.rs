@@ -189,7 +189,9 @@ fn open_events(r: &Reader<'_>, image: u64) -> Result<Vec<Open>> {
         let id = r.string_bounded(event + u.event_id, 128)?;
         // the secondary vtable's offset-to-top (Itanium ABI: the i64 two slots before it) leads to the window object
         let to_top = r.u64(image + u.event_window_vtable - 16)? as i64;
-        let window = entry.wrapping_add_signed(to_top);
+        // (named `object`: the GUI container `window` above stays the one the widget finds walk; s6u 24 Nov: shadowing
+        // it made every read with an event open fail "Event options not found")
+        let object = entry.wrapping_add_signed(to_top);
         let kind = gui_tree::name(r, base_of(r, image, root)?, image)?.unwrap_or_default();
         let title = match find(r, image, window, "Title", 0)? {
             Some(t) => r.string_bounded(t + u.text, 256).unwrap_or_default(),
@@ -224,7 +226,7 @@ fn open_events(r: &Reader<'_>, image: u64) -> Result<Vec<Open>> {
         let (centres, scan) = option_centres(r, image, window, grid, &kind, options.len())?;
         out.push(Open {
             event,
-            window,
+            window: object,
             id,
             title,
             description,
