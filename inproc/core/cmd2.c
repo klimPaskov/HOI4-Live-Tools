@@ -129,6 +129,44 @@ const cmd_spec CMD2_SPECS[] = {
     {"orders2", "orders2.spearhead", "COrderNewFrontCommand", 0x70, BUILD_CTOR, CTOR_NEW_FRONT, 0, 0x24, "12COrdersGroup", 4,
      {{"provinces", 0x50, FK_I32_ARRAY, 0x5c, 0x174, 0}, {"group", 0x24, FK_REF, 0, 0x3f, 0}, {"parent_id", 0x68, FK_I32, 0, 0x152, 0},
       {"divisions", 0x38, FK_REF_ARRAY, 0x44, 0x28a3, 0}}, OBJ2_NONE, 0},
+    /* ---- units (engineer 75, 24 Nov): ARMY STRUCTURE, one live pass (Session S6-UNITS). Read from 1.20.0.0 and 1.19.4.1
+     * (identical field ids and offsets). Which commands carry membership: COrderGroupCommand (a NEW army of the given
+     * divisions: the new-army card), COrderAssignCommand (divisions INTO an existing army: the right click on its card
+     * posts Assign(divisions, that army, the order the UI picks or 0)), CArmyGroupCommand / CAssignToArmyGroupCommand /
+     * CRemoveFromArmyGroupCommand (armies into a new / an existing army group, out of one). CMoveCommand is the map
+     * MOVE order (a province target), not membership; CMergeArmiesCommand merges DIVISIONS (CArmy is the division class;
+     * "cannot merge less than 2 armies"), not armies.
+     * new_army: the new-army card (UI 1.20 0x100d28480): COrderGroupCommand(&divisions, the first division's theatre, NULL).
+     * The constructor keeps only divisions the theatre's country owns and that may change army (the game's own filter);
+     * the check: the theatre resolves, every division resolves as a CUnit, the theatre's army count is under its cap */
+    {"units", "units.new_army", "COrderGroupCommand", 0x58, BUILD_CTOR, CTOR_DIVS_THEATRE, 0, 0x40, "8CTheatre", 2,
+     {{"divisions", 0x28, FK_REF_ARRAY, 0x34, 0x28a3, 0}, {"theatre", 0x40, FK_REF, 0, 0x2f1a, 0}}, OBJ2_NONE, 1},
+    /* transfer: divisions INTO an existing army (the right click on its card): Assign(&divisions, army, order id). The
+     * order is the one the UI picks: the first top order of the army (or of the nearest parent group that has one),
+     * descended through first children unless its kind is 3; 0 when there is none. Assign's check does not read the id */
+    {"units", "units.transfer", "COrderAssignCommand", 0x50, BUILD_FIELDS, CTOR_NONE, 0, 0x40, "12COrdersGroup", 3,
+     {{"group", 0x40, FK_REF, 0, 0x3f, 0}, {"divisions", 0x28, FK_REF_ARRAY, 0x34, 0x28a3, 0}, {"order_id", 0x48, FK_I32, 0, 0x3036, 0, 1}},
+     OBJ2_NONE, 0},
+    /* leader: the commander list's pick: SetArmyLeader(leader or NULL, group, 0) (every UI caller passes 0); NULL = unassign */
+    {"units", "units.leader", "CSetArmyLeaderCommand", 0x38, BUILD_CTOR, CTOR_LEADER, 0, 0x2c, "12COrdersGroup", 3,
+     {{"leader", 0x24, FK_REF, 0, 0x28b7, 0}, {"group", 0x2c, FK_REF, 0, 0x3f, 0}, {"flag", 0x34, FK_U8, 0, 0x282b, 0, 0, 1}},
+     OBJ2_CAST, 0, AUTH_HANDLE, NULL, "11CArmyLeader", 1},
+    /* rename: the badge's name box: SetOrderGroupName(group, &name) (a libc++ std::string copied into +0x30) */
+    {"units", "units.rename", "CSetOrderGroupNameCommand", 0x48, BUILD_CTOR, CTOR_GROUP_NAME, 0, 0x24, "12COrdersGroup", 2,
+     {{"group", 0x24, FK_REF, 0, 0x3f, 0}, {"name", 0x30, FK_STR, 0, 0x1b, 0}}, OBJ2_NONE, 0},
+    /* a new army group of these armies (the new-army-group card): ArmyGroup(&armies, theatre) */
+    {"units", "units.army_group_new", "CArmyGroupCommand", 0x80, BUILD_CTOR, CTOR_GROUPS_OBJ, 0, 0x24, "8CTheatre", 2,
+     {{"armies", 0x30, FK_REF_ARRAY, 0x3c, 0x3f, 0}, {"theatre", 0x24, FK_REF, 0, 0x2f1a, 0}}, OBJ2_NONE, 1},
+    /* armies into an existing army group: AssignToArmyGroup(&armies, army group, -1) (every UI caller passes -1) */
+    {"units", "units.to_army_group", "CAssignToArmyGroupCommand", 0x50, BUILD_CTOR, CTOR_GROUPS_OBJ_I32, 1, 0x28, "12COrdersGroup", 3,
+     {{"armies", 0x28, FK_REF_ARRAY, 0x34, 0x3f, 0}, {"army_group", 0x40, FK_REF, 0, 0x3892, 0}, {"index", 0x48, FK_I32, 0, 0x4c, -1}},
+     OBJ2_CAST, 1, AUTH_HANDLE, NULL, "10CArmyGroup", 0},
+    /* armies out of their army group: RemoveFromArmyGroup(&armies) */
+    {"units", "units.from_army_group", "CRemoveFromArmyGroupCommand", 0x40, BUILD_CTOR, CTOR_GROUPS, 1, 0x28, "12COrdersGroup", 1,
+     {{"armies", 0x28, FK_REF_ARRAY, 0x34, 0x3f, 0}}, OBJ2_NONE, 1},
+    /* an army (or army group) shell removed: DeleteOrderGroup(group); the game's check decides whether it may go */
+    {"units", "units.delete_group", "CDeleteOrderGroupCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "12COrdersGroup", 1,
+     {{"group", 0x24, FK_REF, 0, 0x3f, 0}}, OBJ2_NONE, 0},
 };
 const int CMD2_NSPECS = (int)(sizeof CMD2_SPECS / sizeof CMD2_SPECS[0]);
 
@@ -466,6 +504,22 @@ static int find_ctor(const scan_image *im, const cmd_spec *s, cmd_type *o) {
                 if (cmd_pmatch(all + k, 0x30, "44 88 4b 6c 40 88 73 6d", c2, 4)) flags = 1;
             if (flags) { o->ctor = fs; return 1; }
         }
+        /* engineer 75: army structure. Each = the prologue that binds the arguments (read in both builds) plus one
+         * store or call that is that constructor's own (searched anywhere in its first 0x200 bytes) */
+        static const struct { int kind; const char *pre, *any; } UC[] = {
+            {CTOR_DIVS_THEATRE, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 18 49 89 cc 49 89 d6 49 89 f7 48 89 fb", "4c 89 fe 4c 89 f2 e8"},
+            {CTOR_LEADER, "55 48 89 e5 41 57 41 56 41 55 41 54 53 50 89 cb 49 89 d7 49 89 fe", "41 88 5e 34"},
+            {CTOR_GROUP_NAME, "55 48 89 e5 41 57 41 56 41 54 53 48 83 ec 10 49 89 d6 48 89 fb", "48 8d 7b 30 41 f6 06 01"},
+            {CTOR_GROUPS_OBJ, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 28 49 89 f7 48 89 fb", "4c 8d 73 30"},
+            {CTOR_GROUPS_OBJ_I32, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 28 41 89 cf 49 89 f4 48 89 fb", "44 89 7b 48"},
+            {CTOR_GROUPS, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 28 c6 47 08 00", "49 89 f4"},
+        };
+        for (size_t u = 0; u < sizeof UC / sizeof UC[0]; u++) {
+            if (s->ctor != UC[u].kind || !cmd_pmatch(pre, 0x40, UC[u].pre, c, 8)) continue;
+            const uint8_t *all = scan_ptr(im, fs, 0x200);
+            for (size_t k = 0; all && k + 12 <= 0x200; k++)
+                if (cmd_pmatch(all + k, 12, UC[u].any, c, 8)) { o->ctor = fs; return 1; }
+        }
         if (s->ctor == CTOR_ARRAY &&
             cmd_pmatch(pre, 4, "55 48 89 e5", c, 8) &&
             cmd_pmatch(body, 0x60, "48 8d 05 D 48 89 07 4c 8b 26 4c 63 6e 0c 0f 57 c0 0f 11 47 28", c, 8)) {
@@ -517,6 +571,24 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
         if ((o->conf & C_SLOTS) && auth_shape(im, o->auth_fn, s, o)) o->conf |= C_AUTH;
         if ((o->conf & C_AUTH) && resolver_shape(im, s, o)) o->conf |= C_RESOLVER;
     }
+    /* engineer 75: a second object the "can do" casts (a leader, an army group): its typeinfo and hint from that cast */
+    if (s->obj2 == OBJ2_CAST && (o->conf & C_RESOLVER)) {
+        const uint8_t *vb = scan_ptr(im, o->valid_fn, 0x400);
+        uint32_t c[4];
+        for (size_t k = 0; vb && k + 30 <= 0x400 && !o->ti2; k++) {
+            if (!cmd_pmatch(vb + k, 14, "48 8d 35 D 48 8d 15 D", c, 4)) continue;
+            uint64_t a = o->valid_fn + k, src = a + 7 + (int64_t)(int32_t)c[0], dst = a + 14 + (int64_t)(int32_t)c[1];
+            char sn[64], dn[64];
+            if (!ti_name(im, src, sn, sizeof sn) || strcmp(sn, "16CReferenceObject") || !ti_name(im, dst, dn, sizeof dn) ||
+                strcmp(dn, s->obj2_cast))
+                continue;
+            for (size_t e = 14; e + 5 <= 30; e++) { /* the hint: mov ecx, imm32 or xor ecx, ecx before the call */
+                if (cmd_pmatch(vb + k + e, 2, "31 c9", c, 4)) { o->ti2 = dst; o->hint2 = 0; break; }
+                if (cmd_pmatch(vb + k + e, 5, "b9 D", c, 4) && c[0] < 0x400) { o->ti2 = dst; o->hint2 = c[0]; break; }
+            }
+        }
+        if (!o->ti2) o->conf &= ~(unsigned)C_RESOLVER;
+    }
     if (o->conf & C_SLOTS) {
         int all = 1;
         for (int i = 0; i < s->nf; i++) {
@@ -560,6 +632,50 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
             snprintf(t->t[i].evidence + strlen(t->t[i].evidence), sizeof t->t[i].evidence - strlen(t->t[i].evidence),
                      "; disagrees with the other types' authorisation helpers");
         }
+    /* engineer 75: the army-structure facts, from the code that uses them.
+     * (1) a division's theatre as the new-army card reads it: the new-army constructor's C1 thunk (push rbp; mov rbp,
+     *     rsp; pop rbp; jmp ctor, right after it) is called by the UI right after "call G" where G is a one-load getter
+     *     (push rbp; mov rbp,rsp; mov rax,[rdi+OFF]; pop rbp; ret) on the first selected division; every such site agrees.
+     * (2) an orders group's parent group, as COrderAssignCommand's execution walks it when the named order is not the
+     *     group's own: mov rdi,[r14+OFF]; test rdi,rdi; je; mov esi,[rbx+0x48] (the order id); call lookup */
+    {
+        const cmd_type *na = NULL, *as = NULL;
+        for (int i = 0; i < t->n; i++) {
+            if (!strcmp(t->t[i].spec->op, "units.new_army") && t->t[i].ctor) na = &t->t[i];
+            if (!strcmp(t->t[i].spec->op, "units.transfer") && (t->t[i].conf & C_FACTORY)) as = &t->t[i];
+        }
+        uint32_t c[4];
+        if (na) {
+            const uint8_t *z = scan_ptr(im, na->ctor, 0x800);
+            uint64_t thunk = 0;
+            for (size_t k = 0; z && k + 10 <= 0x800 && !thunk; k++)
+                if (cmd_pmatch(z + k, 10, "55 48 89 e5 5d e9 D", c, 4) && na->ctor + k + 10 + (int64_t)(int32_t)c[0] == na->ctor)
+                    thunk = na->ctor + k;
+            const uint8_t *tx = scan_ptr(im, im->text_addr, im->text_size);
+            unsigned votes = 0, other = 0; uint32_t off = 0;
+            for (uint64_t i = 0x20; thunk && tx && i + 5 <= im->text_size; i++) {
+                if (tx[i] != 0xe8 || im->text_addr + i + 5 + (int64_t)(int32_t)rd32(tx + i + 1) != thunk) continue;
+                for (uint64_t b = i - 0x20; b < i; b++) {
+                    if (tx[b] != 0xe8) continue;
+                    uint64_t g = im->text_addr + b + 5 + (int64_t)(int32_t)rd32(tx + b + 1);
+                    const uint8_t *gb = in_text(im, g) ? scan_ptr(im, g, 13) : NULL;
+                    if (gb && cmd_pmatch(gb, 13, "55 48 89 e5 48 8b 87 D 5d c3", c, 4) && c[0] < 0x2000) {
+                        if (!off) off = c[0];
+                        if (c[0] == off) votes++; else other++;
+                    }
+                }
+            }
+            if (votes >= 1 && !other) t->common.unit_theatre_off = off;
+        }
+        if (as) {
+            uint64_t ex = 0;
+            if (scan_q(im, as->vtable + 0x58, &ex) && in_text(im, ex)) {
+                unsigned n2 = 0;
+                long r = pfind_at(im, ex, 0x100, "49 8b be D 48 85 ff 74 ?? 8b 73 48 e8", c, 4, &n2);
+                if (r >= 0 && n2 == 1 && c[0] < 0x1000) t->common.group_parent_ptr_off = c[0];
+            }
+        }
+    }
     /* family facts the per-family checks and read-backs need */
     for (int i = 0; i < t->n; i++) {
         const char *fam = t->t[i].spec->family;
@@ -571,6 +687,10 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
         if (!strcmp(fam, "orders2") && t->t[i].ok &&
             (!t->orders.ok || !t->common.alloc_slot || !t->common.ti_unit || !t->common.unit_group_off ||
              (t->t[i].spec->obj2 == OBJ2_FRONT && !t->fronts.ok))) { t->t[i].ok = 0; on--; }
+        /* units: the division facts, the order tree (the transfer's order), the parent walk, the theatre read */
+        if (!strcmp(fam, "units") && t->t[i].ok &&
+            (!t->orders.ok || !t->fronts.ok || !t->common.alloc_slot || !t->common.ti_unit || !t->common.unit_group_off ||
+             !t->common.unit_theatre_off || !t->common.group_parent_ptr_off || !t->common.ti_reference)) { t->t[i].ok = 0; on--; }
         if (t->t[i].spec->obj2 == OBJ2_ORDERS_GROUP && (!t->common.ti_reference || !t->common.ti_orders_group) && t->t[i].ok) { t->t[i].ok = 0; on--; }
     }
     return on;
@@ -596,12 +716,13 @@ const char *stage2_json(const stage2_table *t, char *buf, size_t n) {
                                  "\"allow_flag_off\":%u,\"player_tag_off\":%u,\"gate_flag_off\":%u,\"null_ref\":\"0x%llx\","
                                  "\"handle_off\":%u,\"line_factories_off\":%u,\"region_id_off\":%u,\"regions_arr_off\":%u,"
                                  "\"regions_cnt_off\":%u,\"ti_orders_group\":\"0x%llx\",\"alloc_slot\":%u,\"ti_unit\":\"0x%llx\","
-                                 "\"unit_hint\":%u,\"unit_group_off\":%u},\"types\":[",
+                                 "\"unit_hint\":%u,\"unit_group_off\":%u,\"unit_theatre_off\":%u,\"group_parent_ptr_off\":%u},\"types\":[",
                                  c->ok ? "true" : "false", c->valid_slot, c->delete_slot, c->exec_flag_off, c->allow_flag_off,
                                  c->player_tag_off, c->gate_flag_off, (unsigned long long)c->null_ref_global,
                                  c->cref_handle_off, c->line_factories_off, c->region_id_off, c->regions_arr_off,
                                  c->regions_cnt_off, (unsigned long long)c->ti_orders_group, c->alloc_slot,
-                                 (unsigned long long)c->ti_unit, c->unit_hint, c->unit_group_off);
+                                 (unsigned long long)c->ti_unit, c->unit_hint, c->unit_group_off, c->unit_theatre_off,
+                                 c->group_parent_ptr_off);
     for (int i = 0; i < t->n && at < n; i++) {
         const cmd_type *x = &t->t[i];
         at += (size_t)snprintf(buf + at, n - at,

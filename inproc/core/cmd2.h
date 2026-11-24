@@ -31,7 +31,9 @@
 enum { FK_I32 = 1, FK_U8, FK_REF, FK_REF_ARRAY, FK_I32_ARRAY /* a CPdxArray<int> (province ids) */,
        /* engineer 74 (24 Nov): a 64-bit scalar (a fixed-point range end) and a raw handle the module took from a checked
         * object of another class (a CFront's own handle: the front a plan root is bound to) */
-       FK_I64, FK_HANDLE };
+       FK_I64, FK_HANDLE,
+       /* engineer 75 (24 Nov): a libc++ std::string held inline (the UI constructor copies a short string; names <= 22 bytes) */
+       FK_STR };
 /* How the module builds the command:
  *   BUILD_FIELDS: the game's factory makes the default object; the module writes the spec's scalar and handle fields
  *                 into that fresh object (each field's default and serializer entry checked first).
@@ -48,8 +50,15 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
        CTOR_ADDLINE = 7,      /* (cmd, const tag *, variant, organisation or NULL, at_top): a new production line */
        /* engineer 73 (24 Nov): battle plans */
        CTOR_ORDER_PATH = 8,   /* (cmd, COrderInstance *, const CPdxArray<int> *provinces, bool ui): a new path for an order */
-       CTOR_NEW_FRONT = 9 };  /* (cmd, group, const CPdxArray<int> *provinces, parent order, const CPdxArray<CArmy *> *
+       CTOR_NEW_FRONT = 9,    /* (cmd, group, const CPdxArray<int> *provinces, parent order, const CPdxArray<CArmy *> *
                                *  divisions, bool, bool blitz, bool withdraw, drawing group): a new front under a parent */
+       /* engineer 75 (24 Nov): army structure (family `units`), each the UI's own constructor read from its argument stores */
+       CTOR_DIVS_THEATRE = 10, /* (cmd, const CPdxArray<CUnit *> *, theatre, theater group NULL): a new army of these divisions */
+       CTOR_LEADER = 11,       /* (cmd, CArmyLeader * or NULL, group, 0): a general / field marshal for an army / army group */
+       CTOR_GROUP_NAME = 12,   /* (cmd, group, const std::string *): rename an army or army group */
+       CTOR_GROUPS_OBJ = 13,   /* (cmd, const CPdxArray<COrdersGroup *> *, theatre): a new army group of these armies */
+       CTOR_GROUPS_OBJ_I32 = 14, /* (cmd, const CPdxArray<COrdersGroup *> *, army group, -1): armies into an army group */
+       CTOR_GROUPS = 15 };     /* (cmd, const CPdxArray<COrdersGroup *> *): armies out of their army group */
 /* engineer 74: BUILD_FIELDS also fills CPdxArray fields (a division handle list, a province list): the fresh object's
  * array is empty ({data 0, capacity 0, size 0} and its allocator set by the factory); the module allocates the
  * elements through THAT allocator's own allocate slot (read from the game's array growth code), so the command's
@@ -60,7 +69,9 @@ enum { AUTH_HANDLE = 0, AUTH_TAG = 1 };
 /* the second object a type takes, checked before posting */
 enum { OBJ2_NONE = 0, OBJ2_AIR_BASE, OBJ2_REGION, OBJ2_ORDERS_GROUP,
        OBJ2_REGION_ID, /* a strategic region given by id in vals (0 = none: hold), looked up as the game's check does */
-       OBJ2_FRONT };     /* engineer 74: a CFront of the group's own theatre (exact vtable, its handle resolves to it) */
+       OBJ2_FRONT,       /* engineer 74: a CFront of the group's own theatre (exact vtable, its handle resolves to it) */
+       OBJ2_CAST };      /* engineer 75: an object the type's own "can do" casts to spec->obj2_cast (its handle resolves to it,
+                          * the C++ cast with the check's own typeinfo accepts it); optional where the spec says so */
 
 /* def: the factory's default for an FK_I32 / FK_U8 / FK_I64 field (checked before the module writes the field; 0 unless
  * given). vi (engineer 74): 1-based index of the request's vals that fills this scalar; 0 = the older rule (the value of
@@ -81,6 +92,8 @@ typedef struct {
     int one_cmd;             /* 1: all objects go in ONE command (CTOR_ARRAY); 0: one command per object */
     int auth_kind;           /* AUTH_* */
     const char *obj_cast;    /* AUTH_TAG: the class the "can do" check casts the objects to ("17CEquipmentVariant") */
+    const char *obj2_cast;   /* OBJ2_CAST: the class the "can do" check casts the second object to ("11CArmyLeader") */
+    int obj2_optional;       /* OBJ2_CAST: 1 = no second object is legal (a general unassigned) */
 } cmd_spec;
 
 enum { /* confidence bits: a type is on only when all are set */
@@ -95,6 +108,7 @@ typedef struct {
     uint64_t resolve_fn, owner_fn, controls_fn, lookup_fn;        /* from the auth slot / the typed resolver */
     uint32_t type_id, size, slots, target_hint;                   /* hint: offset of the reference base in the object */
     uint64_t ti_src, ti_dst;                                      /* AUTH_TAG: CReferenceObject -> obj_cast typeinfos */
+    uint64_t ti2; uint32_t hint2;                                 /* OBJ2_CAST: the check's typeinfo and hint */
     unsigned conf, need;
     char evidence[300];
 } cmd_type;
@@ -124,11 +138,15 @@ typedef struct {
      * array growth sites; a division (CUnit) as Assign's own check reads it: the cast's typeinfo and hint, its group */
     uint32_t alloc_slot;
     uint64_t ti_unit; uint32_t unit_hint, unit_group_off;
+    /* engineer 75: army structure. A division's theatre as the UI reads it before it builds a new army (the getter the
+     * new-army button calls on the first selected division); an orders group's parent group, as COrderAssignCommand's
+     * execution and the UI's transfer rule walk it */
+    uint32_t unit_theatre_off, group_parent_ptr_off;
     char evidence[300];
 } stage2_common;
 
 
-#define CMD2_MAX 40
+#define CMD2_MAX 48
 typedef struct {
     stage2_common common;
     orders_facts orders;      /* engineer 73: the battle-plan order tree (core/orders.c) */

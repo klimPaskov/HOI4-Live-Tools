@@ -15,15 +15,17 @@
 #include <time.h>
 #include <unistd.h>
 
-const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2"};
-const int IPC_ALLOWED_COUNT = 7;
+const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units"};
+const int IPC_ALLOWED_COUNT = 8;
 /* airwing (engineer 71, 24 Nov): split, merge, disband, attach, detach, region by id / hold; OFF in auto until its
  * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
 const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */, 0 /* airwing */,
                                 0 /* production2: add line, priority (S3-PROD2) */,
                                 0 /* orders (engineer 73): delete, execute, set_path, new_front (S4-ORDERS) */,
                                 0 /* orders2 (engineer 74): new_root, assign, unassign, fallback, edit_root, invasion/paradrop
-                                   * target, spearhead (S5-PLAN) */};
+                                   * target, spearhead (S5-PLAN) */,
+                                0 /* units (engineer 75): new army, transfer, leader, rename, army group new / into / out of,
+                                   * delete a shell (S6-UNITS) */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;

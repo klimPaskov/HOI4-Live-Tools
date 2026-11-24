@@ -382,6 +382,12 @@ typedef struct { int32_t *data; int32_t capacity, size; } pdx_iarray; /* CPdxArr
 typedef void (*ctor_order_path)(void *, void *, const pdx_iarray *, int);
 typedef void (*ctor_new_front)(void *, void *, const pdx_iarray *, void *, const pdx_array *, int, int, int, void *);
 typedef void *(*order_lookup_fn)(void *, int32_t);
+/* engineer 75: army structure */
+typedef void (*ctor_divs_theatre)(void *, const pdx_array *, void *, void *);
+typedef void (*ctor_leader)(void *, void *, void *, int);
+typedef void (*ctor_group_name)(void *, void *, const void *);
+typedef void (*ctor_groups_obj)(void *, const pdx_array *, void *);
+typedef void (*ctor_groups_obj_i32)(void *, const pdx_array *, void *, int32_t);
 /* engineer 74: a CPdxArray allocator's allocate slot: alloc(allocator, bytes, align) */
 typedef void *(*alloc_fn)(void *, uint64_t, uint64_t);
 #define J2_PROVS 1024
@@ -410,6 +416,9 @@ typedef struct {
      * front's raw handle (new_root), the before-state of the read-back, a spearhead's blitz byte */
     uint64_t divh[J2_DIVS]; int ndivh;
     uint64_t hx, theatre; int32_t before_top, before_fallback; int blitz;
+    /* units (engineer 75): each division's army before the post (the read-back compares), a new name (std::string
+     * short form: at most 22 bytes), divisions not yet in an army are legal for a new army / a transfer */
+    uint64_t grp_before[J2_DIVS]; char name[24]; int nname; int allow_free;
     long long ran_us, post_us;
     char reason[200], queue_type[64], server_type[64];
     dispatch_semaphore_t done;
@@ -504,8 +513,11 @@ static const char *orders2_divisions(job2_t *j) {
                                            (void *)(uintptr_t)(c->ti_unit + (uint64_t)g_slide), c->unit_hint) != d) {
             snprintf(why, sizeof why, "division %d (0x%llx) is not a live division", i, (unsigned long long)d); return why;
         }
-        if (!sq(d + c->unit_group_off, &grp) || !roundtrip(dt, grp, &hg) ||
-            ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)grp) != j->player_tag) {
+        if (!sq(d + c->unit_group_off, &grp)) { snprintf(why, sizeof why, "division %d is unreadable", i); return why; }
+        j->grp_before[i] = grp;
+        /* units: a division in no army yet (its group 0) is legal: the game's own filter keeps only the country's */
+        if (!(grp == 0 && j->allow_free) && (!roundtrip(dt, grp, &hg) ||
+            ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)grp) != j->player_tag)) {
             snprintf(why, sizeof why, "division %d is not in an own army", i); return why;
         }
         for (int k = 0; k < i; k++) if (j->divh[k] == h) { snprintf(why, sizeof why, "division %d listed twice", i); return why; }
@@ -532,6 +544,112 @@ static const char *orders2_front(job2_t *j) {
     if (!sq(j->obj2 + c->cref_handle_off, &h) || !h || (uint64_t)(uintptr_t)((resolve_fn2)(uintptr_t)lk)(&h) != j->obj2)
         return "the front's handle does not resolve to it";
     j->hx = h;
+    return NULL;
+}
+
+/* engineer 75: the theatre a new army or army group is made in, the way the UI finds it. new_army: the first named
+ * division's theatre (the getter the new-army card calls on the first selected division), which must be an exact
+ * CTheatre; army_group_new: the armies (live own orders groups, checked like every order command's group) must share one
+ * theatre (their plain parents up to the CTheatre), and their handles become the command's list. The theatre replaces
+ * obj[0], so the type's own resolver and owner checks then run on it. NULL when ready. */
+static const char *units_theatre(job2_t *j) {
+    const fronts_facts *ff = &g_t.st2.fronts;
+    const stage2_common *c = &g_t.st2.common;
+    const cmd_type *dt = stage2_find(&g_t.st2, "orders.delete");
+    uint64_t vth = ff->vt_theatre + (uint64_t)g_slide, v = 0, th = 0;
+    static char why[160];
+    if (!ff->ok || !dt || !dt->ok) return "front/order facts unresolved";
+    if (!strcmp(j->ct->spec->op, "units.new_army")) {
+        j->allow_free = 1;
+        const char *w = orders2_divisions(j); /* every division a live CUnit (in an own army or in none) */
+        if (w) return w;
+        if (!sq(j->divs[0] + c->unit_theatre_off, &th) || !plausible(th) || !sq(th, &v) || v != vth)
+            return "the first division has no theatre (an exact CTheatre)";
+    } else {
+        uint64_t owner_f = dt->owner_fn + (uint64_t)g_slide, h = 0;
+        if (!code_ptr(owner_f)) return "owner getter not game code";
+        for (int i = 0; i < j->ndiv; i++) {
+            if (!roundtrip(dt, j->divs[i], &h) || ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)j->divs[i]) != j->player_tag) {
+                snprintf(why, sizeof why, "army %d (0x%llx) is not a live own army", i, (unsigned long long)j->divs[i]); return why;
+            }
+            uint64_t t2 = fronts_theatre_of(ff, sread, ff->vt_group + (uint64_t)g_slide, vth, j->divs[i]);
+            if (!t2) { snprintf(why, sizeof why, "army %d has no theatre", i); return why; }
+            if (i && t2 != th) return "the armies stand in different theatres (one army group per theatre)";
+            th = t2; j->divh[i] = h;
+        }
+        j->ndivh = j->ndiv;
+    }
+    j->theatre = th; j->obj[0] = th; j->n = 1;
+    return NULL;
+}
+
+/* engineer 75: the order the UI's transfer (a right click on an army's card with divisions selected, 1.20 0x100d28480)
+ * names: walk the army and its parent groups for the first with top orders; take its first top order; unless that
+ * order's kind is 3, descend through first children while there are any; its id. 0 when no group has a plan. */
+static int32_t units_transfer_order(uint64_t grp) {
+    const orders_facts *of = &g_t.st2.orders;
+    uint32_t par = g_t.st2.common.group_parent_ptr_off;
+    for (int depth = 0; grp && depth < 8; depth++) {
+        int32_t cnt = 0; uint64_t data = 0, o = 0;
+        if (!sread(grp + of->list_cnt[0], &cnt, 4)) return -1;
+        if (cnt > 0) {
+            int32_t kind = 0, cc = 0, id = 0;
+            if (!sq(grp + of->list_off[0], &data) || !sq(data, &o) || !plausible(o) || !sread(o + of->kind_off, &kind, 4)) return -1;
+            for (int k = 0; kind != 3 && k < 64; k++) {
+                uint64_t cd = 0;
+                if (!sread(o + of->child_cnt[0], &cc, 4)) return -1;
+                if (cc <= 0) break;
+                if (!sq(o + of->child_off[0], &cd) || !sq(cd, &o) || !plausible(o)) return -1;
+            }
+            return sread(o + of->id_off, &id, 4) ? id : -1;
+        }
+        if (!sq(grp + par, &grp)) return -1;
+    }
+    return 0;
+}
+
+/* engineer 75: what the UI's constructor built must be exactly what was asked (units). Sets *filtered when the game's
+ * own selection filter (the new-army constructor keeps only divisions it may move) dropped some: a refusal, not a fault. */
+static const char *units_payload(job2_t *j, char *cmd, uint64_t h, uint64_t h2, uint64_t nullref, int *filtered) {
+    const cmd_type *ct = j->ct;
+    const cmd_field *f = ct->spec->f;
+    uint64_t a = (uint64_t)(uintptr_t)cmd, d = 0, x = 0, y = 0, z = 0;
+    int32_t n = -1, iv = 0; uint8_t b = 9;
+    const uint64_t *want = NULL; int nwant = 0;
+    switch (ct->spec->ctor) {
+    case CTOR_DIVS_THEATRE:
+        if (!sq(a + f[1].off, &x) || x != h || !sq(a + 0x48, &y) || y != nullref || !sq(a + 0x50, &z) || z != nullref ||
+            !sread(a + 0x24, &b, 1) || b != 0)
+            return "new army: theatre / theater group / army group / flag not as asked";
+        want = j->divh; nwant = j->ndivh; break;
+    case CTOR_LEADER:
+        if (!sq(a + f[0].off, &x) || x != (j->obj2 ? h2 : nullref) || !sq(a + f[1].off, &y) || y != h || !sread(a + f[2].off, &b, 1) || b != 0)
+            return "leader: leader / group / flag not as asked";
+        return NULL;
+    case CTOR_GROUP_NAME: {
+        uint8_t got[24];
+        if (!sq(a + f[0].off, &x) || x != h || !sread(a + f[1].off, got, 24) || got[0] != (uint8_t)(2 * j->nname) ||
+            memcmp(got + 1, j->name, (size_t)j->nname) || got[1 + j->nname] != 0)
+            return "rename: group / name not as asked";
+        return NULL;
+    }
+    case CTOR_GROUPS_OBJ:
+        if (!sq(a + f[1].off, &x) || x != h) return "army group: theatre not as asked";
+        want = j->divh; nwant = j->ndivh; break;
+    case CTOR_GROUPS_OBJ_I32:
+        if (!sq(a + f[1].off, &x) || x != h2 || !sread(a + f[2].off, &iv, 4) || iv != -1) return "into army group: target / index not as asked";
+        /* fall through: the list = the armies */
+    case CTOR_GROUPS:
+        want = NULL; nwant = j->n; break;
+    default: return "unknown units constructor";
+    }
+    if (!sq(a + f[0].off, &d) || !sread(a + f[0].count_off, &n, 4) || n < 0 || n > nwant) return "list not as asked";
+    if (n < nwant) { *filtered = nwant - n; return NULL; }
+    for (int e = 0; e < n; e++) {
+        uint64_t got = 0, w = 0;
+        if (want) w = want[e]; else { uint64_t hh = 0; if (!sq(j->obj[e] + ct->target_hint + g_t.st2.common.cref_handle_off, &hh)) return "list unreadable"; w = hh; }
+        if (!sq(d + 8 * (uint64_t)e, &got) || got != w) return "list not in the asked order";
+    }
     return NULL;
 }
 
@@ -634,6 +752,26 @@ static void run_job2(void *ctx) {
             for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
             snprintf(j->reason, sizeof j->reason, "obj2 is not a live army (COrdersGroup)"); finish2(j); return;
         }
+    } else if (k2 == OBJ2_CAST) { /* engineer 75: a leader / an army group, as the type's own check casts it */
+        uint64_t nr = 0, ref = j->obj2 + ct->hint2, lk = ct->lookup_fn + (uint64_t)g_slide;
+        if (!g_dyncast) g_dyncast = (dyncast_fn)dlsym(RTLD_DEFAULT, "__dynamic_cast");
+        if (!j->obj2) {
+            if (!ct->spec->obj2_optional || !sq(c->null_ref_global + (uint64_t)g_slide, &nr)) {
+                for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
+                snprintf(j->reason, sizeof j->reason, "obj2 (a %s) is required", ct->spec->obj2_cast); finish2(j); return;
+            }
+            h2 = nr;
+        } else if (!g_dyncast || !ct->ti2 || !plausible(j->obj2) || !sq(ref + c->cref_handle_off, &h2) || !h2 || !code_ptr(lk) ||
+                   (uint64_t)(uintptr_t)((resolve_fn2)(uintptr_t)lk)(&h2) != ref ||
+                   (uint64_t)(uintptr_t)g_dyncast((void *)(uintptr_t)ref, (void *)(uintptr_t)(c->ti_reference + (uint64_t)g_slide),
+                                                  (void *)(uintptr_t)(ct->ti2 + (uint64_t)g_slide), -1) != j->obj2) {
+            for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
+            snprintf(j->reason, sizeof j->reason, "obj2 is not a live %s", ct->spec->obj2_cast); finish2(j); return;
+        }
+    }
+    if (!strcmp(op, "units.new_army") || !strcmp(op, "units.army_group_new")) {
+        const char *w = units_theatre(j);
+        if (w) { for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2; snprintf(j->reason, sizeof j->reason, "%s", w); finish2(j); return; }
     }
     uint64_t fac = ct->factory + (uint64_t)g_slide, post = g_t.post.post + (uint64_t)g_slide, nullref = 0;
     if (!code_ptr(fac) || !code_ptr(post) || !sq(c->null_ref_global + (uint64_t)g_slide, &nullref)) { snprintf(j->reason, sizeof j->reason, "factory/post not game code"); j->unexplained = 1; finish2(j); return; }
@@ -648,6 +786,14 @@ static void run_job2(void *ctx) {
         /* AUTH_TAG: the command names the player's own tag; whether the country may use the object is the game's check */
         if (ct->spec->auth_kind != AUTH_TAG &&
             (!code_ptr(owner_f) || ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)j->obj[i]) != j->player_tag)) { j->res[i] = R_NOT_OWN; j->refused++; continue; }
+        if (!strcmp(op, "units.transfer")) { /* the divisions (in an army or in none), then the order the UI would name */
+            j->allow_free = 1;
+            const char *why = orders2_divisions(j);
+            int32_t oid = why ? 0 : units_transfer_order(j->obj[0]);
+            if (!why && oid < 0) why = "the army's plan is unreadable";
+            if (why) { j->res[i] = R_BAD_OBJ2; j->refused++; snprintf(j->reason, sizeof j->reason, "%s", why); continue; }
+            j->order_id = oid; j->val[0] = oid;
+        }
         if (!strcmp(ct->spec->family, "orders") || !strcmp(ct->spec->family, "orders2")) {
             const char *why = orders_prep(j);
             if (!why && !strcmp(ct->spec->family, "orders2") && j->ndiv && strcmp(op, "orders2.spearhead")) why = orders2_divisions(j);
@@ -712,7 +858,10 @@ static void run_job2(void *ctx) {
             uint64_t data = 1; int32_t size = 1;
             if (ct->spec->ctor == CTOR_ADDLINE) /* no list: the variant's handle field still holds the empty handle */
                 ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &data) && data == nullref;
-            else
+            else if (ct->spec->ctor == CTOR_LEADER || ct->spec->ctor == CTOR_GROUP_NAME) { /* no list: every handle still empty */
+                for (int k = 0; k < ct->spec->nf && ok; k++)
+                    if (ct->spec->f[k].kind == FK_REF) ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[k].off, &data) && data == nullref;
+            } else
                 ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[0].off, &data) && data == 0 &&
                      sread((uint64_t)(uintptr_t)cmd + ct->spec->f[0].count_off, &size, 4) && size == 0;
             uint64_t ctor = ct->ctor + (uint64_t)g_slide;
@@ -734,6 +883,28 @@ static void run_job2(void *ctx) {
                     pdx_array da = {(void **)(uintptr_t)j->divs, j->ndiv, j->ndiv};
                     ((ctor_new_front)(uintptr_t)ctor)(cmd, obj, &pa, (void *)(uintptr_t)j->order, &da, 0, j->blitz, 0, (void *)(uintptr_t)j->drawer);
                     break;
+                }
+                case CTOR_DIVS_THEATRE: { /* the selected divisions, the first one's theatre, no theater group (the UI's call) */
+                    pdx_array da = {(void **)(uintptr_t)j->divs, j->ndiv, j->ndiv};
+                    ((ctor_divs_theatre)(uintptr_t)ctor)(cmd, &da, obj, NULL); break;
+                }
+                case CTOR_LEADER: ((ctor_leader)(uintptr_t)ctor)(cmd, (void *)(uintptr_t)j->obj2, obj, 0); break;
+                case CTOR_GROUP_NAME: { /* a libc++ std::string in its short form, on our stack; the constructor copies it */
+                    uint8_t sso[24] = {0};
+                    sso[0] = (uint8_t)(2 * j->nname); memcpy(sso + 1, j->name, (size_t)j->nname);
+                    ((ctor_group_name)(uintptr_t)ctor)(cmd, obj, sso); break;
+                }
+                case CTOR_GROUPS_OBJ: { /* the armies (checked, in j->divs), the shared theatre */
+                    pdx_array ga = {(void **)(uintptr_t)j->divs, j->ndiv, j->ndiv};
+                    ((ctor_groups_obj)(uintptr_t)ctor)(cmd, &ga, obj); break;
+                }
+                case CTOR_GROUPS_OBJ_I32: {
+                    pdx_array ga = {(void **)(uintptr_t)j->obj, j->n, j->n};
+                    ((ctor_groups_obj_i32)(uintptr_t)ctor)(cmd, &ga, (void *)(uintptr_t)j->obj2, -1); break;
+                }
+                case CTOR_GROUPS: {
+                    pdx_array ga = {(void **)(uintptr_t)j->obj, j->n, j->n};
+                    ((ctor_array)(uintptr_t)ctor)(cmd, &ga); break;
                 }
                 case CTOR_ARRAY: {
                     pdx_array a = {(void **)(uintptr_t)j->obj, j->n, j->n}; /* the game's CPdxArray<T *> {data, capacity, size} */
@@ -766,6 +937,17 @@ static void run_job2(void *ctx) {
                          dn == j->ndiv && sread((uint64_t)(uintptr_t)cmd + 0x6c, fl, 3) && !fl[0] && fl[1] == (j->blitz ? 1 : 0) && !fl[2];
                 } else if (ok) ok = sread((uint64_t)(uintptr_t)cmd + 0x48, &top, 1) && top == 1;
                 if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+            } else if (ok && ct->spec->ctor >= CTOR_DIVS_THEATRE) { /* engineer 75: army structure */
+                int filtered = 0;
+                const char *bad = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide
+                                      ? units_payload(j, cmd, h, h2, nullref, &filtered) : "vtable changed";
+                if (bad) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload: %s", bad); break; }
+                if (filtered) { /* the game's own filter: refused like a failed check, nothing posted */
+                    void **vt0 = *(void ***)cmd; ((delete_fn2)vt0[c->delete_slot / 8])(cmd);
+                    j->res[i] = R_INVALID; j->refused++;
+                    snprintf(j->reason, sizeof j->reason, "the game's own selection filter dropped %d division(s) (not movable now)", filtered);
+                    continue;
+                }
             } else if (ok) { /* what the game built must be exactly what was asked: the handles in order, then the second field */
                 uint64_t d2 = 0; int32_t s2 = 0;
                 int want_n = ct->spec->one_cmd ? j->n : 1;
@@ -925,8 +1107,54 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         }
         if (!why && obj2 && *obj2 && strcmp(op, "orders2.new_root")) why = "obj2 is for orders2.new_root only (the CFront)";
         if (!why && !strcmp(op, "orders2.new_root")) { uint64_t o2[1]; if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: the CFront's hex address"; else j->obj2 = o2[0]; }
+    } else if (!strncmp(op, "units.", 6)) {
+        /* engineer 75: army structure. objs / divs / vals / obj2 by op:
+         *   new_army: objs = the first division (whose theatre the UI reads), divs = all divisions (the first = objs)
+         *   transfer: objs = the target army, divs = the divisions (1..512)
+         *   leader: objs = the army / army group, obj2 = the leader (absent = unassign)
+         *   rename: objs = the army / army group, vals = the new name's character codes (1..22, printable ASCII)
+         *   army_group_new: objs = the armies (2..32); to_army_group: objs = armies, obj2 = the army group;
+         *   from_army_group: objs = armies; delete_group: objs = groups (one command each) */
+        int is = 0;
+        if (provs && *provs) why = "units ops take no provs";
+        else if (flag) why = "units ops take no flag";
+        else if (!strcmp(op, "units.new_army") || !strcmp(op, "units.transfer")) {
+            is = 1;
+            if (j->n != 1) why = "exactly one object (the first division / the target army)";
+            else if (nv) why = "this op takes no vals";
+            else if ((j->ndiv = parse_list_u64(divs ? divs : "", j->divs, J2_DIVS)) < 1) why = "divs: 1 to 512 comma-separated division addresses";
+            else if (!strcmp(op, "units.new_army") && j->divs[0] != j->obj[0]) why = "new_army: objs names the first of divs";
+            for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a division is listed twice";
+        } else if (!strcmp(op, "units.leader")) {
+            is = 1;
+            if (j->n != 1 || nv) why = "leader: one army or army group, no vals";
+        } else if (!strcmp(op, "units.rename")) {
+            is = 1;
+            if (j->n != 1) why = "rename: one army or army group";
+            else if (nv < 1 || nv > 22) why = "vals: the new name's 1..22 character codes";
+            else for (int k = 0; k < nv; k++) {
+                if (j->val[k] < 32 || j->val[k] > 126 || j->val[k] == '"' || j->val[k] == '\\') { why = "a name character outside printable ASCII"; break; }
+                j->name[k] = (char)j->val[k];
+            }
+            j->nname = nv;
+        } else if (!strcmp(op, "units.army_group_new")) {
+            is = 1;
+            if (j->n < 2 || nv) why = "army_group_new: 2..32 armies, no vals";
+            else { for (int k = 0; k < j->n; k++) j->divs[k] = j->obj[k]; j->ndiv = j->n; } /* the job resolves the theatre */
+        } else if (!strcmp(op, "units.to_army_group") || !strcmp(op, "units.from_army_group") || !strcmp(op, "units.delete_group")) {
+            is = 1;
+            if (nv) why = "this op takes no vals";
+        }
+        if (!is && !why) why = "unknown units op";
+        if (!why && divs && *divs && strcmp(op, "units.new_army") && strcmp(op, "units.transfer")) why = "this op takes no divs";
+        if (!why && obj2 && *obj2) {
+            uint64_t o2[1];
+            if (strcmp(op, "units.leader") && strcmp(op, "units.to_army_group")) why = "obj2 is for units.leader / units.to_army_group";
+            else if (parse_list_u64(obj2, o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0];
+        }
+        if (!why && !strcmp(op, "units.to_army_group") && !j->obj2) why = "obj2: the army group";
     } else if (nv) why = "this op takes no vals";
-    if (!why && divs && *divs && strncmp(op, "orders2.", 8)) why = "only orders2 ops take divs";
+    if (!why && divs && *divs && strncmp(op, "orders2.", 8) && strncmp(op, "units.", 6)) why = "only orders2 and units ops take divs";
     if (!why && !strcmp(op, "airwing.merge") && j->n < 2) why = "a merge takes at least two wings";
     if (!why && (!strcmp(op, "air.transfer") || !strcmp(op, "air.enable_mission") || !strcmp(op, "airwing.attach"))) {
         uint64_t o2[1];
@@ -1053,6 +1281,33 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             if (pending) usleep(2000);
         }
         if (!pending) { executed = j->posted; rb_us = mono_us() - t0; }
+        else {
+            reads_t r; do_reads(&r);
+            if (!(r.ok && r.has_date && r.paused)) snprintf(j->reason, sizeof j->reason, "posted; not seen executed after 3 s in a running game");
+            else snprintf(j->reason, sizeof j->reason, "posted; not executed yet (game paused)");
+        }
+    }
+    /* units (engineer 75): the divisions' own army field (the one Assign's check reads): a new army = every division in
+     * ONE group that none of them was in before; a transfer = every division in the target army. Within 3 s,
+     * paused-aware; the other units ops are judged by the MCP's read-back (the external roster) */
+    if ((!strcmp(op, "units.new_army") || !strcmp(op, "units.transfer")) && j->posted) {
+        uint32_t go = g_t.st2.common.unit_group_off;
+        long long start = mono_us();
+        uint64_t g0 = 0;
+        pending = 1;
+        while (pending && mono_us() - start < 3000000) {
+            int same = 1; g0 = 0;
+            for (int d = 0; same && d < j->ndiv; d++) {
+                uint64_t g = 0;
+                if (!sq(j->divs[d] + go, &g) || !g) { same = 0; break; }
+                if (!d) g0 = g; else if (g != g0) same = 0;
+                if (!strcmp(op, "units.new_army")) { for (int e = 0; same && e < j->ndiv; e++) if (j->grp_before[e] == g) same = 0; }
+                else if (g != j->obj[0]) same = 0;
+            }
+            pending = !same;
+            if (pending) usleep(2000);
+        }
+        if (!pending) { executed = j->posted; rb_us = mono_us() - t0; snprintf(rbx, sizeof rbx, ",\"army\":\"0x%llx\",\"divisions\":%d", (unsigned long long)g0, j->ndiv); }
         else {
             reads_t r; do_reads(&r);
             if (!(r.ok && r.has_date && r.paused)) snprintf(j->reason, sizeof j->reason, "posted; not seen executed after 3 s in a running game");

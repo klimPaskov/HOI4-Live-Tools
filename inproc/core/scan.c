@@ -252,6 +252,20 @@ int scan_command_factory(const scan_image *im, const char *cls, scan_cap *factor
         if (riprel(f, i, 0xa0, factory->value, 1, &tg) && tg >= im->dconst_addr &&
             tg < im->dconst_addr + im->dconst_size && rtti_name_is(im, tg, mangled)) { vtable->value = tg; break; }
     }
+    /* engineer 75: a factory that calls a separate default constructor (CArmyGroupCommand: operator new, then call
+     * ctor): the vtable store is in that constructor; follow the first direct call after the allocation */
+    for (unsigned i = 0; !vtable->value && i + 5 <= 0x60; i++) {
+        if (f[i] != 0xe8 || i < 8) continue;
+        uint64_t callee = factory->value + i + 5 + (int64_t)(int32_t)rd32(f + i + 1);
+        const uint8_t *cb = (callee >= im->text_addr && callee < im->text_addr + im->text_size) ? scan_ptr(im, callee, 0x80) : NULL;
+        if (!cb || cb[0] != 0x55) continue; /* operator new is a stub, not a frame */
+        for (unsigned k = 0; k + 7 <= 0x80; k++) {
+            uint64_t tg;
+            if (riprel(cb, k, 0x80, callee, 1, &tg) && tg >= im->dconst_addr && tg < im->dconst_addr + im->dconst_size &&
+                rtti_name_is(im, tg, mangled)) { vtable->value = tg; break; }
+        }
+        break;
+    }
     factory->ok = 1;
     snprintf(factory->evidence, sizeof factory->evidence, "symbol table entry %.120s", sym + 1);
     if (!vtable->value) { snprintf(vtable->evidence, sizeof vtable->evidence, "no RTTI-verified vtable store"); return 0; }

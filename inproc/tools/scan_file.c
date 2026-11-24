@@ -101,6 +101,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "alloc_slot")) got = t.st2.common.alloc_slot;
         else if (!strcmp(argv[a], "unit_group_off")) got = t.st2.common.unit_group_off;
         else if (!strcmp(argv[a], "unit_hint")) got = t.st2.common.unit_hint;
+        else if (!strcmp(argv[a], "unit_theatre_off")) got = t.st2.common.unit_theatre_off;
+        else if (!strcmp(argv[a], "group_parent_ptr_off")) got = t.st2.common.group_parent_ptr_off;
         else if (!strncmp(argv[a], "ctor:", 5) || !strncmp(argv[a], "on:", 3) || !strncmp(argv[a], "type:", 5)) {
             /* per stage-2 op (engineer 71): ctor:OP = the UI constructor found, on:OP = 1 when every check resolved,
              * type:OP = the protocol type id */
