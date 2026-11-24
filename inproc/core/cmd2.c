@@ -352,6 +352,42 @@ const cmd_spec CMD2_SPECS[] = {
     {"mio", "mio.line", "CSetIndustrialManufacturerCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x28, "24CEquipmentProductionLine", 3,
      {{"line", 0x28, FK_REF, 0, 0x2f6f, 0}, {"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"org", 0x30, FK_REF, 0, 0x2ecb, 0}},
      OBJ2_CAST, 0, AUTH_HANDLE, NULL, "N23NIndustrialOrganisation13COrganisationE", 1},
+    /* ---- navy (engineer 85, 24 Nov): task forces and fleets, as the navy view posts them. Read from 1.20.0.0 and
+     * 1.19.4.1 (the same type ids, offsets and field ids; offline expectations in test_offline.sh).
+     * mission: the mission bar's button (UI 1.20 0x101dc9930): the selected task forces (CTaskForce *, count), the
+     * button's mission (the active one again = 0, hold), byte +0x45 = 1, +0x44 = 0 (1 only for training under a game
+     * setting the module does not use: the module keeps the factory's 0), "can do", Post.
+     * CNavalMissionSetTypeCommand 12272 (0x48): task force handles +0x28/+0x34 (0x289e), mission +0x40 (0x2cba),
+     * +0x44 (0x4a84, written when set), +0x45 (0x28e5). "Can do": mission <= 9 and every handle a CTaskForce. Auth:
+     * each task force's owner (the typed resolver 0x100b41520). ONE command for the selection, as the button. */
+    {"navy", "navy.mission", "CNavalMissionSetTypeCommand", 0x48, BUILD_FIELDS, CTOR_NONE, 1, 0x28, "10CTaskForce", 4,
+     {{"task_forces", 0x28, FK_REF_ARRAY, 0x34, 0x289e, 0}, {"mission", 0x40, FK_I32, 0, 0x2cba, 0, 1},
+      {"setting", 0x44, FK_U8, 0, 0x4a84, 0, 0, 1}, {"ui", 0x45, FK_U8, 0, 0x28e5, 1, 0, 1}}, OBJ2_NONE, 1},
+    /* merge: the fleet toolbar's merge (UI 1.20 0x101dca940: (cmd, CTaskForce **, count, 0), then Post):
+     * CMergeNaviesCommand 13176 (0x48): task force handles +0x28/+0x34 (0x289e), byte +0x40 (0x3c73, the UI's 0) */
+    {"navy", "navy.merge", "CMergeNaviesCommand", 0x48, BUILD_FIELDS, CTOR_NONE, 1, 0x28, "10CTaskForce", 2,
+     {{"task_forces", 0x28, FK_REF_ARRAY, 0x34, 0x289e, 0}, {"flag", 0x40, FK_U8, 0, 0x3c73, 0, 0, 1}}, OBJ2_NONE, 1},
+    /* add_region: a right click on a sea region with the fleet selected: CNavalMissionAddRegionCommand 12274 (0x30):
+     * fleet +0x24 (0x289e; the resolver 0x100b415b0 casts to CFleet), strategic region id +0x2c (0x2a4b). "Can do":
+     * the fleet resolves and the fleet's own region check (1.20 0x100615cd0) accepts the id */
+    {"navy", "navy.add_region", "CNavalMissionAddRegionCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "6CFleet", 2,
+     {{"fleet", 0x24, FK_REF, 0, 0x289e, 0}, {"region", 0x2c, FK_I32, 0, 0x2a4b, 0, 1}}, OBJ2_NONE, 0},
+    /* remove_region: the remove-region tool then a right click: CNavalMissionRemoveRegionCommand 12275 (0x48): fleet
+     * +0x24 (0x289e), region ids +0x30/+0x3c (0x2f21; the module sends the one region) */
+    {"navy", "navy.remove_region", "CNavalMissionRemoveRegionCommand", 0x48, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "6CFleet", 2,
+     {{"fleet", 0x24, FK_REF, 0, 0x289e, 0}, {"regions", 0x30, FK_I32_ARRAY, 0x3c, 0x2f21, 0}}, OBJ2_NONE, 0},
+    /* leader: the fleet panel's commander list: CSetFleetLeaderCommand 12370 (0x38): admiral +0x24 (0x28b7; empty =
+     * unassign, written only when set), fleet +0x2c (0x3b34). "Can do": the fleet resolves as a CFleet, the admiral
+     * (when set) as a CNavyLeader. Auth: the fleet's owner AND the admiral's owner */
+    {"navy", "navy.leader", "CSetFleetLeaderCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x2c, "6CFleet", 2,
+     {{"fleet", 0x2c, FK_REF, 0, 0x3b34, 0}, {"admiral", 0x24, FK_REF, 0, 0x28b7, 0}},
+     OBJ2_CAST, 0, AUTH_HANDLE, NULL, "11CNavyLeader", 1},
+    /* assign: task forces into another fleet (a fleet card as the drop target): CSetFleetCommand 15165 (0x48): fleet
+     * +0x24 (0x3b34), task force handles +0x30/+0x3c (0x3b35). "Can do": the fleet a CFleet, each handle a CTaskForce.
+     * Auth: the fleet's owner and each task force's owner. The task forces travel in the request's divisions list and
+     * are checked by the navy.mission type's own task force resolver and owner getter */
+    {"navy", "navy.assign", "CSetFleetCommand", 0x48, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "6CFleet", 2,
+     {{"fleet", 0x24, FK_REF, 0, 0x3b34, 0}, {"task_forces", 0x30, FK_REF_ARRAY, 0x3c, 0x3b35, 0}}, OBJ2_NONE, 0},
 };
 const int CMD2_NSPECS = (int)(sizeof CMD2_SPECS / sizeof CMD2_SPECS[0]);
 
@@ -598,8 +634,16 @@ static int auth_shape(const scan_image *im, uint64_t fn, const cmd_spec *s, cmd_
     /* the owner getter: a null check returning 0, then a short read-only body (an inline pointer chain or one call
      * plus a load) ending in pop rbp; ret */
     const uint8_t *ob = scan_ptr(im, owner, 0x40);
-    if (!ob || !cmd_pmatch(ob, 0x40, "48 85 ff 74 B 55 48 89 e5", c, 8) || c[0] < 6 || c[0] > 0x30) return 0;
-    if (!cmd_pmatch(ob + 5 + c[0], 3, "31 c0 c3", c + 1, 1) || !cmd_pmatch(ob + 5 + c[0] - 2, 2, "5d c3", c + 1, 1)) return 0;
+    if (ob && cmd_pmatch(ob, 0x40, "55 48 89 e5 53 50 31 db 48 85 ff 74 B e8 D 48 85 c0 74 B 8b 58 B 89 d8 48 83 c4 08 5b 5d c3", c, 8)) {
+        /* engineer 85: a framed getter (the fleet's owner: 0 for NULL, else one getter call (a single load: the fleet's
+         * country) and that object's tag field); the callee must be a one-load leaf */
+        const uint8_t *lb = scan_ptr(im, owner + 18 + (int64_t)(int32_t)c[1], 16);
+        uint32_t d[2];
+        if (!lb || !cmd_pmatch(lb, 13, "55 48 89 e5 48 8b 87 D 5d c3", d, 2)) return 0;
+    } else {
+        if (!ob || !cmd_pmatch(ob, 0x40, "48 85 ff 74 B 55 48 89 e5", c, 8) || c[0] < 6 || c[0] > 0x30) return 0;
+        if (!cmd_pmatch(ob + 5 + c[0], 3, "31 c0 c3", c + 1, 1) || !cmd_pmatch(ob + 5 + c[0] - 2, 2, "5d c3", c + 1, 1)) return 0;
+    }
     if (!in_text(im, resolve) || !in_text(im, controls)) return 0;
     o->resolve_fn = resolve; o->owner_fn = owner; o->controls_fn = controls;
     return 1;

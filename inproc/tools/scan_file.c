@@ -152,12 +152,13 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "ev_opts_off")) got = t.st2.events.ev_opts_off;
         else if (!strcmp(argv[a], "opt_index_off")) got = t.st2.events.opt_index_off;
         else if (!strcmp(argv[a], "pend_arr_off")) got = t.st2.events.pend_arr_off;
-        else if (!strncmp(argv[a], "ctor:", 5) || !strncmp(argv[a], "on:", 3) || !strncmp(argv[a], "type:", 5)) {
+        else if (!strncmp(argv[a], "ctor:", 5) || !strncmp(argv[a], "on:", 3) || !strncmp(argv[a], "type:", 5) ||
+                 !strncmp(argv[a], "conf:", 5)) {
             /* per stage-2 op (engineer 71): ctor:OP = the UI constructor found, on:OP = 1 when every check resolved,
-             * type:OP = the protocol type id */
+             * type:OP = the protocol type id; conf:OP (engineer 85) = the confidence bits (C_* in cmd2.h) */
             const cmd_type *x = stage2_find(&t.st2, strchr(argv[a], ':') + 1);
             found = x != NULL;
-            if (x) got = argv[a][0] == 'c' ? x->ctor : argv[a][0] == 'o' ? (uint64_t)x->ok : x->type_id;
+            if (x) got = !strncmp(argv[a], "conf:", 5) ? x->conf : argv[a][0] == 'c' ? x->ctor : argv[a][0] == 'o' ? (uint64_t)x->ok : x->type_id;
         }
         else {
             found = 0;

@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
            ipc_optin_valid("set_game_speed", why, sizeof why),
            ipc_optin_valid("set_game_speed,set_research", why, sizeof why), ipc_optin_valid("", why, sizeof why),
            ipc_optin_valid("set_game_speed,production,air", why, sizeof why), ipc_family_of("production.add_factories"),
-           ipc_family_of("air.transfer"), ipc_family_of("navy.move"), ipc_family_of("set_game_speed"));
+           ipc_family_of("air.transfer"), ipc_family_of("console.move"), ipc_family_of("set_game_speed"));
     static ipc_member m[8];
     printf("{\"parse_ok\":%d,\"parse_nested\":%d,\"parse_escape\":%d,\"parse_dup\":%d,\"parse_float\":%d}\n",
            ipc_parse("{\"v\":1,\"op\":\"post\",\"speed\":-2}", m, 8), ipc_parse("{\"v\":{\"a\":1}}", m, 8),

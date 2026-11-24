@@ -970,6 +970,24 @@ static const char *holds_prep(job2_t *j, int i) {
     return NULL;
 }
 
+/* engineer 85: the task forces a navy.assign names (request divs): each must be a live CTaskForce (the navy.mission type's
+ * typed resolver gives it back from its handle) owned by the player (that type's owner getter), as the command's own
+ * authorisation asks for every task force. Their handles become the command's list. */
+static const char *navy_task_forces(job2_t *j) {
+    const cmd_type *tt = stage2_find(&g_t.st2, "navy.mission");
+    if (!tt || !tt->ok) return "the task force resolver is not resolved on this build";
+    uint64_t of = tt->owner_fn + (uint64_t)g_slide;
+    if (!code_ptr(of)) return "the task force owner getter is not game code";
+    for (int k = 0; k < j->ndiv; k++) {
+        uint64_t h = 0;
+        if (!roundtrip(tt, j->divs[k], &h)) return "a task force is not a live CTaskForce";
+        if (((owner_fn2)(uintptr_t)of)((void *)(uintptr_t)j->divs[k]) != j->player_tag) return "a task force is not the player's";
+        j->divh[k] = h;
+    }
+    j->ndivh = j->ndiv;
+    return NULL;
+}
+
 static void run_job2(void *ctx) {
     job2_t *j = (job2_t *)ctx;
     const stage2_common *c = &g_t.st2.common;
@@ -1148,6 +1166,10 @@ static void run_job2(void *ctx) {
                 continue;
             }
         }
+        if (!strcmp(op, "navy.assign")) { /* engineer 85: the task forces, by the task force type's own resolver and owner */
+            const char *why = navy_task_forces(j);
+            if (why) { j->res[i] = R_BAD_OBJ2; j->refused++; snprintf(j->reason, sizeof j->reason, "%s", why); continue; }
+        }
         if (!strcmp(ct->spec->family, "mio")) { /* engineer 84: the player's own organisation, the tree, the policy gate */
             int inv = 0;
             const char *why = mio_prep(j, i, &inv);
@@ -1174,6 +1196,11 @@ static void run_job2(void *ctx) {
         for (int i = 0; i < j->n; i++) if (j->res[i] == R_NONE) { j->res[i] = R_SKIPPED; }
         snprintf(j->reason, sizeof j->reason, "a group command is posted whole or not at all");
         j->post_us = 0; finish2(j); return;
+    }
+    if (!strcmp(ct->spec->family, "navy") && ct->spec->one_cmd && ct->spec->build == BUILD_FIELDS) {
+        /* engineer 85: the selection's handles (each passed its resolver and owner above) are the command's list */
+        for (int i = 0; i < j->n; i++) j->divh[i] = hs[i];
+        j->ndivh = j->n;
     }
     int ncmd = ct->spec->one_cmd ? 1 : j->n;
     for (int ci = 0; ci < ncmd; ci++) {
@@ -1697,6 +1724,41 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             else if (nv != 1 || j->val[0] <= 0 || j->val[0] > 0x7fffffff) why = "vals: one token from the organisations read";
         } else why = "unknown mio op";
         nv = 0;
+    } else if (!strncmp(op, "navy.", 5)) {
+        /* engineer 85: task forces and fleets, as the navy view posts them.
+         *   mission:       objs = own task forces (1..32, ONE command, the mission bar's selection); vals = the mission
+         *                  code of a mission button (0 hold, 1 patrol, 2 strike force, 3 convoy raiding, 4 convoy escort,
+         *                  5 mine laying, 6 mine sweeping, 7 training, 9 invasion support; 8 = the reserve: no button)
+         *   merge:         objs = own task forces (2..32, ONE command: the toolbar's merge of the selection)
+         *   add_region / remove_region: objs = ONE own fleet; vals = the strategic region id
+         *   leader:        objs = ONE own fleet; obj2 = the admiral (CNavyLeader) or none (unassign)
+         *   assign:        objs = ONE own fleet (the receiving card); divs = own task forces (1..32) */
+        uint64_t o2[1];
+        if (flag || (provs && *provs)) why = "navy ops take no flag or provs";
+        else if (divs && *divs && strcmp(op, "navy.assign")) why = "only navy.assign takes divs (the task forces)";
+        else if (obj2 && *obj2 && strcmp(op, "navy.leader")) why = "only navy.leader takes obj2 (the admiral)";
+        else if (!strcmp(op, "navy.mission")) {
+            if (nv != 1 || j->val[0] < 0 || j->val[0] > 9 || j->val[0] == 8) why = "vals: one mission code of a mission button (0..7, 9)";
+            else for (int i = 1; i < j->n; i++) j->val[i] = j->val[0];
+        } else if (!strcmp(op, "navy.merge")) {
+            if (nv) why = "navy.merge takes no vals";
+            else if (j->n < 2) why = "a merge takes at least two task forces";
+        } else if (!strcmp(op, "navy.add_region") || !strcmp(op, "navy.remove_region")) {
+            if (j->n != 1) why = "exactly one fleet";
+            else if (nv != 1 || j->val[0] < 1 || j->val[0] > 100000) why = "vals: one strategic region id";
+            else if (!strcmp(op, "navy.remove_region")) { j->provs[0] = (int32_t)j->val[0]; j->nprov = 1; }
+        } else if (!strcmp(op, "navy.leader")) {
+            if (j->n != 1) why = "exactly one fleet";
+            else if (nv) why = "navy.leader takes no vals";
+            else if (obj2 && *obj2 && parse_list_u64(obj2, o2, 1) != 1) why = "obj2: one hex address (an own admiral) or none";
+            else j->obj2 = obj2 && *obj2 ? o2[0] : 0;
+        } else if (!strcmp(op, "navy.assign")) {
+            if (j->n != 1) why = "exactly one receiving fleet";
+            else if (nv) why = "navy.assign takes no vals";
+            else if ((j->ndiv = parse_list_u64(divs ? divs : "", j->divs, J2_MAX)) < 1) why = "divs: 1..32 comma-separated hex task force addresses";
+            else for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a task force is listed twice";
+        } else why = "unknown navy op";
+        nv = 0;
     } else if (!strncmp(op, "picks.", 6)) {
         /* engineer 75: the player's own picks. focus: objs = ONE CNationalFocus of the own tree (exact vtable; the game's
          * own "can start" with the player's country decides) */
@@ -1716,7 +1778,7 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             why = "vals: the option's shown place (0..7) and the shown option count (1..8)";
         else if (flag || (obj2 && *obj2) || (provs && *provs)) why = "events.answer takes no flag, obj2 or provs";
     } else if (nv) why = "this op takes no vals";
-    if (!why && divs && *divs && strncmp(op, "orders2.", 8) && strncmp(op, "units.", 6)) why = "only orders2 and units ops take divs";
+    if (!why && divs && *divs && strncmp(op, "orders2.", 8) && strncmp(op, "units.", 6) && strcmp(op, "navy.assign")) why = "only orders2, units and navy.assign take divs";
     if (!why && !strcmp(op, "airwing.merge") && j->n < 2) why = "a merge takes at least two wings";
     if (!why && (!strcmp(op, "air.transfer") || !strcmp(op, "air.enable_mission") || !strcmp(op, "airwing.attach"))) {
         uint64_t o2[1];
