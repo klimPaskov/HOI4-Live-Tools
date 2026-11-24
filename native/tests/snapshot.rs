@@ -1192,7 +1192,7 @@ impl Fixture {
                 "CFrameAnimatedSpriteType",
                 base + 0x44e98d8,
                 base + 0x44e83b0,
-                base + 0x367f000,
+                base + 0x3a0f000,
             ),
         ] {
             self.word(object, vptr);
@@ -1226,7 +1226,7 @@ impl Fixture {
         let base = 0x10000;
         for (object, table, info, text, name) in [
             (0xb2000, 0x44f51d8, 0x44e7280, 0x3a2c750, "7CSprite"),
-            (0xb3000, 0x44f5530, 0x44e83b0, 0x367f000, "11CSpriteType"),
+            (0xb3000, 0x44f5530, 0x44e83b0, 0x3a0f000, "11CSpriteType"),
         ] {
             self.word(object, base + table);
             self.word(base + table - 16, 0);
@@ -1314,7 +1314,7 @@ impl Fixture {
         .enumerate()
         {
             let info = base + 0x44e93b0 + i as u64 * 0x100;
-            let text = base + 0x3680000 + i as u64 * 0x100;
+            let text = base + 0x3a10000 + i as u64 * 0x100;
             self.word(*a, base + vt);
             self.word(base + vt - 16, 0);
             self.word(base + vt - 8, info);
@@ -1825,7 +1825,7 @@ impl Fixture {
         self.word(base + 0x44f2160, base + 0x3684000);
         self.region(base + 0x3684000, 128);
         self.put(base + 0x3684000, b"9CPdxMouse");
-        self.word(base + 0x44faf38 + 0xc8, base + 0x3119a20);
+        self.word(base + 0x44faf38 + 0xc8, base + 0x311f650);
         self.word(base + 0x452f008, base + 0x3186960);
         self.number(base + 0x47da960, 256);
         self.number(base + 0x47da964, 8);
@@ -1838,9 +1838,9 @@ impl Fixture {
         // have no SDL display, list links or unrelated window payload.
         let base = 0x10000;
         self.word(base + 0x47dabf8, MOUSE_VIDEO);
-        self.word(MOUSE_VIDEO + 0x48, base + 0x31e99f0);
+        self.word(MOUSE_VIDEO + 0x48, base + 0x31ef620);
         self.word(MOUSE_VIDEO + 0x58, base + 0x307e0d0);
-        self.word(MOUSE_VIDEO + 0x228, base + 0x32622f0);
+        self.word(MOUSE_VIDEO + 0x228, base + 0x3267f20);
         self.word(base + 0x47da958, MOUSE_WINDOW);
         self.word(MOUSE_WINDOW, MOUSE_VIDEO + 0x2d8);
         self.number(MOUSE_WINDOW + 0x28, 512);

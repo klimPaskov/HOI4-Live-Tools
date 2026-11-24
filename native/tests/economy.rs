@@ -552,7 +552,7 @@ fn unknown_production(f: &mut Fixture, secondary: bool) {
     let base = 0x10000;
     let table = base + 0x44b6028;
     let info = base + 0x44f8440;
-    let name = base + 0x3682000;
+    let name = base + 0x3a12000;
     f.array(0x40058, 0x70000, 4);
     f.word(0x70018, 0x90000);
     f.word(0x90000, table);
@@ -747,7 +747,7 @@ fn production_lines_protocol_is_read_only_no_foreign_or_action_arguments() {
 fn production_lines_maximum_page_with_long_metadata_fits_owned_mcp_wire_bound() {
     let mut f = production_fixture();
     unknown_production(&mut f, false);
-    f.put(0x10000 + 0x3682000, &[b'A'; 127]);
+    f.put(0x10000 + 0x3a12000, &[b'A'; 127]);
     for offset in [0x14, 0x18, 0xe8] {
         f.number(0x80000 + offset, i32::MIN);
     }
@@ -844,7 +844,7 @@ fn production_lines_paging_never_skips_outside_page_guards_or_witnesses() {
     let mut changed = vec![0; 128];
     let name = b"21CGeneratedChangedLine";
     changed[..name.len()].copy_from_slice(name);
-    f.fault = Some((0x10000 + 0x3682000, 1, changed));
+    f.fault = Some((0x10000 + 0x3a12000, 1, changed));
     assert_eq!(
         hoi4_live_native::production_lines::page(&f, 0, 1)
             .unwrap_err()

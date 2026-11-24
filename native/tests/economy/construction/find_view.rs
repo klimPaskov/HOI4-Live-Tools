@@ -174,7 +174,7 @@ fn type_refusals_name_the_object_and_image_relative_primary_only() {
     f.word(TEMPLATE, BASE + 0x4397678);
     let e = find_view(&f, Some(1)).unwrap_err();
     assert!(e.message.contains("state template"));
-    assert!(e.message.contains("observed rva_4390588"));
+    assert!(e.message.contains("observed rva_4397678"));
     let mut f = find_fixture();
     f.word(FIND, 0x7f00_0000_0000);
     let e = find_view(&f, None).unwrap_err();
