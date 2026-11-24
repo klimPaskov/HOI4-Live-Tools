@@ -854,7 +854,7 @@ Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,training ./inproc_sta
 T1 paused, `HOI4_BACKEND=inprocess`: `hoi4_train {"template":"Infanterie-Division","count":3,"deploy_state_id":64}`:
 Verified; `in_process.posts` = create, series, add_lines, location; open the panel by hand AFTER: one queue, 3 lines,
 1 division each, location Brandenburg (not "No location set").
-T2 count 7 (two add_lines commands of 5 and 1? no: one of 5 + one of 1 = 6 extra): Verified, 7 lines.
+T2 count 7 (6 extra lines: the module posts AddConveyorLine 5 then 1): Verified, 7 lines.
 T3 a template the game cannot train now (e.g. one needing equipment the country cannot produce, or no manpower) ->
 `game_refused`, nothing posted, no queue added. A template name that does not exist -> the mouse path's own error.
 T4 hoi4_deploy_locations: create a queue by hand without a location; `{"state_id":64}`: Verified, the label set.
