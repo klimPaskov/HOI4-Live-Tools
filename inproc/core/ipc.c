@@ -15,12 +15,13 @@
 #include <time.h>
 #include <unistd.h>
 
-const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2"};
-const int IPC_ALLOWED_COUNT = 5;
+const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders"};
+const int IPC_ALLOWED_COUNT = 6;
 /* airwing (engineer 71, 24 Nov): split, merge, disband, attach, detach, region by id / hold; OFF in auto until its
  * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
 const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */, 0 /* airwing */,
-                                0 /* production2: add line, priority (S3-PROD2) */};
+                                0 /* production2: add line, priority (S3-PROD2) */,
+                                0 /* orders (engineer 73): delete, execute, set_path, new_front (S4-ORDERS) */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;
@@ -188,8 +189,9 @@ static int rate_ok(rate_state *r, const ipc_policy *p, char *why, size_t n) {
 }
 
 static void handle(int fd, const ipc_backend *b, ipc_policy *p, rate_state *rs, const char *token) {
-    char line[1100]; size_t at = 0; int authed = 0;
-    static char frag[16384], out[17000];
+    static char line[9000]; size_t at = 0; int authed = 0; /* one request at a time per connection (one client) */
+    static char frag[65536], out[66000];
+    static ipc_member m[8];
     for (;;) {
         if (b->killed()) return;
         struct pollfd pf = {fd, POLLIN, 0};
@@ -203,7 +205,7 @@ static void handle(int fd, const ipc_backend *b, ipc_policy *p, rate_state *rs, 
         char *nl;
         while ((nl = strchr(line, '\n'))) {
             *nl = 0;
-            ipc_member m[8]; int nm = ipc_parse(line, m, 8);
+            int nm = ipc_parse(line, m, 8);
             const ipc_member *v = nm > 0 ? get(m, nm, "v") : NULL, *op = nm > 0 ? get(m, nm, "op") : NULL;
             const ipc_member *idm = nm > 0 ? get(m, nm, "id") : NULL;
             long id = idm && idm->is_num ? (long)idm->num : 0;
@@ -236,24 +238,31 @@ static void handle(int fd, const ipc_backend *b, ipc_policy *p, rate_state *rs, 
             } else if (authed != 1) err = "hello first";
             else if (!strcmp(op->str, "read")) ok = b->read(frag, sizeof frag);
             else if (!strcmp(op->str, "probe")) ok = b->probe(frag, sizeof frag);
+            else if (!strcmp(op->str, "orders")) {
+                const ipc_member *g = get(m, nm, "group");
+                if (!g || g->is_num || !g->str[0]) err = "group: the hex address of an own army or army group";
+                else ok = b->orders(g->str, frag, sizeof frag);
+            }
             else if (!strcmp(op->str, "post")) {
                 const ipc_member *c = get(m, nm, "cmd"), *sp = get(m, nm, "speed");
                 int allowed = 0, fam = c && !c->is_num ? ipc_family_of(c->str) : -1;
                 for (int i = 0; c && !c->is_num && i < 1; i++) if (!strcmp(c->str, IPC_ALLOWED[i])) allowed = 1;
                 if (fam > 0) { /* STAGE 2: a family command */
-                    const ipc_member *ob = get(m, nm, "objs"), *va = get(m, nm, "vals"), *o2 = get(m, nm, "obj2"), *fl = get(m, nm, "flag");
+                    const ipc_member *ob = get(m, nm, "objs"), *va = get(m, nm, "vals"), *o2 = get(m, nm, "obj2"), *fl = get(m, nm, "flag"),
+                                     *pv = get(m, nm, "provs");
                     int nobj = 0;
                     if (ob && !ob->is_num && ob->str[0]) { nobj = 1; for (const char *q = ob->str; *q; q++) if (*q == ',') nobj++; }
                     if (!p->post_enabled) { snprintf(why, sizeof why, "posting off: %s", p->post_off_reason); err = why; }
                     else if (fam >= IPC_MAX_FAMILIES || !p->fam_on[fam]) { snprintf(why, sizeof why, "family %s off: %s", IPC_ALLOWED[fam], fam < IPC_MAX_FAMILIES ? p->fam_reason[fam] : "?"); err = why; }
                     else if (!ob || ob->is_num || nobj < 1 || nobj > 32) err = "objs: 1 to 32 comma-separated object addresses";
-                    else if ((va && va->is_num) || (o2 && o2->is_num) || (fl && !fl->is_num)) err = "member types";
+                    else if ((va && va->is_num) || (o2 && o2->is_num) || (fl && !fl->is_num) || (pv && pv->is_num)) err = "member types";
                     else if (!rate2_ok(rs, p, nobj, why, sizeof why)) err = why;
                     else {
                         int unexplained = 0;
                         rs->in_flight = 1;
                         long long t0 = mono_ms();
-                        ok = b->post2(c->str, ob->str, va ? va->str : "", o2 ? o2->str : "", fl ? fl->num : 0, id, frag, sizeof frag, &unexplained);
+                        ok = b->post2(c->str, ob->str, va ? va->str : "", o2 ? o2->str : "", pv ? pv->str : "", fl ? fl->num : 0, id, frag,
+                                      sizeof frag, &unexplained);
                         rs->in_flight = 0;
                         rs->last2 = t0;
                         if (rs->nwin2 < 128) { rs->win2[rs->nwin2] = t0; rs->cmds2[rs->nwin2] = nobj; rs->nwin2++; }
@@ -298,7 +307,7 @@ static void handle(int fd, const ipc_backend *b, ipc_policy *p, rate_state *rs, 
             size_t rest = at - (size_t)(nl + 1 - line);
             memmove(line, nl + 1, rest + 1); at = rest;
         }
-        if (at >= sizeof line - 1) return; /* a line longer than 1 KiB: drop the client */
+        if (at >= sizeof line - 1) return; /* a line longer than about 9 KB: drop the client */
     }
 }
 

@@ -62,6 +62,31 @@ const cmd_spec CMD2_SPECS[] = {
     /* air: detach from its army (Detach(wing)) */
     {"airwing", "airwing.detach", "CDetachAirWingFromArmyCommand", 0x40, BUILD_CTOR, CTOR_OBJ, 1, 0x28, "8CAirWing", 1,
      {{"wings", 0x28, FK_REF_ARRAY, 0x34, 0x3369}}, OBJ2_NONE, 0},
+    /* ---- orders (engineer 73, 24 Nov): battle plans. One object = the orders group (army or army group) whose plan
+     * the command edits; the order is named by its id, found with the game's own lookup (the one every order
+     * command's "can do" calls). Layouts read from 1.20.0.0 and 1.19.4.1 (identical field ids); see
+     * INPROCESS-COMMANDS-1123.md "Battle plans BUILT".
+     * delete ONE order (the plan bar's delete on one order): Delete(group, id); the check: lookup(group, id) != NULL */
+    {"orders", "orders.delete", "COrderDeleteCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "12COrdersGroup", 2,
+     {{"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0}}, OBJ2_NONE, 0},
+    /* execute / stop: Execute(group, id or 0 = the whole plan, execute); the factory's defaults are execute 1, +0x31 0
+     * (+0x31, id 0x2b97, the plan bar's Shift-toggle path, is left at its default) */
+    {"orders", "orders.execute", "COrderExecuteCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "12COrdersGroup", 3,
+     {{"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0}, {"execute", 0x30, FK_U8, 0, 0x3041, 1}},
+     OBJ2_NONE, 0},
+    /* a new province path for an EXISTING order (the front tool's edit of a drawn line, the arrow's path): the UI's
+     * constructor (cmd, order, &provinces, 1); the check: the group is a COrdersGroup, lookup(group, id) != NULL and
+     * the order's lock handle is empty. The order keeps its id (and what hangs on it) */
+    {"orders", "orders.set_path", "COrderSetPathCommand", 0x50, BUILD_CTOR, CTOR_ORDER_PATH, 0, 0x24, "12COrdersGroup", 3,
+     {{"provinces", 0x30, FK_I32_ARRAY, 0x3c, 0x174, 0}, {"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0}},
+     OBJ2_NONE, 0},
+    /* a new front line under a parent order (the front tool's commit): the UI's constructor with the divisions the UI
+     * hands over (the parent's divisions no child order holds), flags 0 (not a spearhead, not a withdraw), the drawing
+     * group = obj2 or the group itself. The check: provinces given, groups live, parent id set, lookup(group, parent);
+     * execution keeps only provinces the country controls, split into runs of consecutive valid ids */
+    {"orders", "orders.new_front", "COrderNewFrontCommand", 0x70, BUILD_CTOR, CTOR_NEW_FRONT, 0, 0x24, "12COrdersGroup", 4,
+     {{"provinces", 0x50, FK_I32_ARRAY, 0x5c, 0x174, 0}, {"group", 0x24, FK_REF, 0, 0x3f, 0}, {"parent_id", 0x68, FK_I32, 0, 0x152, 0},
+      {"divisions", 0x38, FK_REF_ARRAY, 0x44, 0x28a3, 0}}, OBJ2_NONE, 0},
 };
 const int CMD2_NSPECS = (int)(sizeof CMD2_SPECS / sizeof CMD2_SPECS[0]);
 
@@ -351,6 +376,24 @@ static int find_ctor(const scan_image *im, const cmd_spec *s, cmd_type *o) {
             cmd_pmatch(body, 0x40, "48 8d 05 D 48 89 07 8b 06 89 47 24 48 8d 1d D 48 8b 03 48 89 47 28 48 8b 42 08 48 89 47 28", c, 8)) {
             o->ctor = fs; return 1;
         }
+        /* engineer 73: SetPath's UI constructor (a thunk jumps to it): flag in r15d, provinces r14, order r12, then the
+         * vptr, the group's handle [[order + owner] + 8] and the order's id into +0x2c */
+        if (s->ctor == CTOR_ORDER_PATH &&
+            cmd_pmatch(pre, 0x1e, "55 48 89 e5 41 57 41 56 41 55 41 54 53 50 41 89 cf 49 89 d6 49 89 f4 48 89 fb", c, 8) &&
+            cmd_pmatch(body, 0x10, "48 8d 05 D 48 89 07 48 8b 46 38", c, 8)) {
+            o->ctor = fs; return 1;
+        }
+        /* NewFront's UI constructor: the divisions pointer kept at [rbp-0x38], parent r13, provinces r12, the drawing
+         * group from the stack, then the vptr and the group's handle into +0x24 */
+        if (s->ctor == CTOR_NEW_FRONT &&
+            cmd_pmatch(pre, 0x22, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 48 4c 89 45 c8 49 89 cd 49 89 d4 48 89 fb 4c 8b 7d 20", c, 8) &&
+            cmd_pmatch(body, 0x18, "48 8d 05 D 48 89 07 4c 8d 35 D 49 8b 06 48 89 47 24", c, 8)) {
+            const uint8_t *all = scan_ptr(im, fs, 0x200);
+            uint32_t c2[4]; int flags = 0;
+            for (size_t k = 0; all && k + 0x30 <= 0x200 && !flags; k++)
+                if (cmd_pmatch(all + k, 0x30, "44 88 4b 6c 40 88 73 6d", c2, 4)) flags = 1;
+            if (flags) { o->ctor = fs; return 1; }
+        }
         if (s->ctor == CTOR_ARRAY &&
             cmd_pmatch(pre, 4, "55 48 89 e5", c, 8) &&
             cmd_pmatch(body, 0x60, "48 8d 05 D 48 89 07 4c 8b 26 4c 63 6e 0c 0f 57 c0 0f 11 47 28", c, 8)) {
@@ -405,7 +448,7 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
     if (o->conf & C_SLOTS) {
         int all = 1;
         for (int i = 0; i < s->nf; i++) {
-            int ok1 = s->f[i].kind == FK_REF_ARRAY
+            int ok1 = (s->f[i].kind == FK_REF_ARRAY || s->f[i].kind == FK_I32_ARRAY)
                           ? serial_has2(im, o->write_fn, s->f[i].field_id, s->f[i].count_off, s->f[i].off)
                           : serial_has(im, o->write_fn, s->f[i].field_id, s->f[i].off);
             if (!ok1) all = 0;
@@ -427,6 +470,7 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
 int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global, stage2_table *t) {
     memset(t, 0, sizeof *t);
     scan_stage2_common(im, pl, gs_global, &t->common);
+    scan_orders_facts(im, &t->orders);
     int on = 0;
     for (int i = 0; i < CMD2_NSPECS && i < CMD2_MAX; i++) {
         on += scan_cmd_type(im, pl, &t->common, &CMD2_SPECS[i], &t->t[i]);
@@ -449,6 +493,7 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
         if (!strcmp(fam, "production") && !t->common.line_factories_off && t->t[i].ok) { t->t[i].ok = 0; on--; }
         if ((!strcmp(t->t[i].spec->op, "air.enable_mission") || t->t[i].spec->obj2 == OBJ2_REGION_ID) && !t->common.region_id_off && t->t[i].ok) { t->t[i].ok = 0; on--; }
         if (t->t[i].spec->obj2 == OBJ2_REGION_ID && (!t->common.regions_arr_off || !t->common.regions_cnt_off) && t->t[i].ok) { t->t[i].ok = 0; on--; }
+        if (!strcmp(fam, "orders") && !t->orders.ok && t->t[i].ok) { t->t[i].ok = 0; on--; }
         if (t->t[i].spec->obj2 == OBJ2_ORDERS_GROUP && (!t->common.ti_reference || !t->common.ti_orders_group) && t->t[i].ok) { t->t[i].ok = 0; on--; }
     }
     return on;
@@ -489,6 +534,8 @@ const char *stage2_json(const stage2_table *t, char *buf, size_t n) {
                                (unsigned long long)x->resolve_fn, (unsigned long long)x->owner_fn, x->target_hint,
                                (unsigned long long)x->ctor);
     }
-    if (at < n) snprintf(buf + at, n - at, "]}");
+    if (at < n) at += (size_t)snprintf(buf + at, n - at, "],\"orders\":");
+    if (at < n) { orders_facts_json(&t->orders, buf + at, n - at); at += strlen(buf + at); }
+    if (at < n) snprintf(buf + at, n - at, "}");
     return buf;
 }

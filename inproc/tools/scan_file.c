@@ -80,6 +80,15 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "regions_arr")) got = t.st2.common.regions_arr_off;
         else if (!strcmp(argv[a], "regions_cnt")) got = t.st2.common.regions_cnt_off;
         else if (!strcmp(argv[a], "ti_orders_group")) got = t.st2.common.ti_orders_group;
+        /* engineer 73: the battle-plan order tree facts */
+        else if (!strcmp(argv[a], "orders_ok")) got = (uint64_t)t.st2.orders.ok;
+        else if (!strcmp(argv[a], "orders_vt")) got = t.st2.orders.vt_order;
+        else if (!strcmp(argv[a], "orders_lookup")) got = t.st2.orders.lookup_fn;
+        else if (!strcmp(argv[a], "order_id_off")) got = t.st2.orders.id_off;
+        else if (!strcmp(argv[a], "order_provs_off")) got = t.st2.orders.provs_off;
+        else if (!strcmp(argv[a], "order_divs_off")) got = t.st2.orders.divs_off;
+        else if (!strcmp(argv[a], "order_children_off")) got = t.st2.orders.child_off[0];
+        else if (!strcmp(argv[a], "group_lists_off")) got = t.st2.orders.list_off[0];
         else if (!strncmp(argv[a], "ctor:", 5) || !strncmp(argv[a], "on:", 3) || !strncmp(argv[a], "type:", 5)) {
             /* per stage-2 op (engineer 71): ctor:OP = the UI constructor found, on:OP = 1 when every check resolved,
              * type:OP = the protocol type id */

@@ -26,8 +26,9 @@
 #ifndef HOI4_INPROC_CMD2_H
 #define HOI4_INPROC_CMD2_H
 #include "cmd.h"
+#include "orders.h"
 
-enum { FK_I32 = 1, FK_U8, FK_REF, FK_REF_ARRAY };
+enum { FK_I32 = 1, FK_U8, FK_REF, FK_REF_ARRAY, FK_I32_ARRAY /* a CPdxArray<int> (province ids) */ };
 /* How the module builds the command:
  *   BUILD_FIELDS: the game's factory makes the default object; the module writes the spec's scalar and handle fields
  *                 into that fresh object (each field's default and serializer entry checked first).
@@ -41,7 +42,11 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
        CTOR_TAGP_OBJ = 4,     /* (cmd, const tag *, obj): the country tag then one handle (disband a wing) */
        CTOR_OBJ_OBJ2 = 5,     /* (cmd, obj, obj2): one handle in the list, obj2's handle in its own field (attach) */
        CTOR_ARRAY = 6,        /* (cmd, const CPdxArray<T *> *): ONE command for every object (merge wings) */
-       CTOR_ADDLINE = 7 };    /* (cmd, const tag *, variant, organisation or NULL, at_top): a new production line */
+       CTOR_ADDLINE = 7,      /* (cmd, const tag *, variant, organisation or NULL, at_top): a new production line */
+       /* engineer 73 (24 Nov): battle plans */
+       CTOR_ORDER_PATH = 8,   /* (cmd, COrderInstance *, const CPdxArray<int> *provinces, bool ui): a new path for an order */
+       CTOR_NEW_FRONT = 9 };  /* (cmd, group, const CPdxArray<int> *provinces, parent order, const CPdxArray<CArmy *> *
+                               *  divisions, bool, bool blitz, bool withdraw, drawing group): a new front under a parent */
 /* how the command's authorisation slot names the objects: through a typed resolver of a handle (the default), or as
  * "the sender controls the country tag at +auth_off" (the objects are then checked by the cast the "can do" makes) */
 enum { AUTH_HANDLE = 0, AUTH_TAG = 1 };
@@ -61,7 +66,7 @@ typedef struct {
     int auth_array;          /* 0: one handle at auth_off; 1: handle array(s) starting at auth_off */
     uint16_t auth_off;
     const char *target;      /* Itanium name of the class the typed resolver casts to ("8CAirWing") */
-    int nf; cmd_field f[5];
+    int nf; cmd_field f[5];  /* BUILD_CTOR: f[0] is the container the fresh object must hold empty */
     int obj2;                /* OBJ2_* */
     int one_cmd;             /* 1: all objects go in ONE command (CTOR_ARRAY); 0: one command per object */
     int auth_kind;           /* AUTH_* */
@@ -108,9 +113,11 @@ typedef struct {
     char evidence[300];
 } stage2_common;
 
+
 #define CMD2_MAX 32
 typedef struct {
     stage2_common common;
+    orders_facts orders;      /* engineer 73: the battle-plan order tree (core/orders.c) */
     int n;
     cmd_type t[CMD2_MAX];
 } stage2_table;

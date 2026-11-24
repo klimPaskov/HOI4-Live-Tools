@@ -377,6 +377,13 @@ typedef void (*ctor_obj_obj2)(void *, void *, void *);
 typedef struct { void **data; int32_t capacity, size; } pdx_array;
 typedef void (*ctor_array)(void *, const pdx_array *);
 typedef void (*ctor_addline)(void *, const int32_t *, void *, void *, int);
+/* engineer 73: battle plans */
+typedef struct { int32_t *data; int32_t capacity, size; } pdx_iarray; /* CPdxArray<int> {data, capacity, size} */
+typedef void (*ctor_order_path)(void *, void *, const pdx_iarray *, int);
+typedef void (*ctor_new_front)(void *, void *, const pdx_iarray *, void *, const pdx_array *, int, int, int, void *);
+typedef void *(*order_lookup_fn)(void *, int32_t);
+#define J2_PROVS 1024
+#define J2_DIVS 512
 
 #define J2_MAX 32
 enum { R_NONE = 0, R_POSTED, R_INVALID, R_NOT_OWN, R_BAD_OBJ, R_BAD_OBJ2, R_DROPPED, R_UNEXPECTED, R_SKIPPED };
@@ -391,6 +398,12 @@ typedef struct {
     int ran, main_thread, forbid, requeues, unexplained, posted, refused;
     int32_t player_tag, region_id;
     int res[J2_MAX]; int32_t before[J2_MAX];
+    /* orders (engineer 73): the province list, the order named by id (vals[0]), the divisions a new front gets, the
+     * drawing group, and the before-state the read-back compares */
+    int32_t provs[J2_PROVS]; int nprov;
+    uint64_t order, drawer; int32_t order_id;
+    uint64_t divs[J2_DIVS]; int ndiv;
+    int32_t before_children; uint8_t before_exec;
     long long ran_us, post_us;
     char reason[200], queue_type[64], server_type[64];
     dispatch_semaphore_t done;
@@ -425,6 +438,42 @@ static int roundtrip(const cmd_type *ct, uint64_t obj, uint64_t *handle) {
     void *back = ((resolve_fn2)(uintptr_t)rf)(&h);
     *handle = h;
     return (uint64_t)(uintptr_t)back == obj;
+}
+
+/* engineer 73: the order a battle-plan command names, found with the game's OWN lookup (the function every order
+ * command's "can do" check calls: a pure read over the group's three lists), on the main thread after the group passed
+ * its resolver and owner checks. Returns NULL when ready, else the reason (nothing is posted). */
+static const char *orders_prep(job2_t *j) {
+    const orders_facts *of = &g_t.st2.orders;
+    const char *op = j->ct->spec->op;
+    uint64_t grp = j->obj[0], vt = of->vt_order + (uint64_t)g_slide, v = 0, own = 0;
+    static char why[160];
+    if (!strcmp(op, "orders.execute") && j->order_id == 0) return NULL; /* 0 = the whole plan (the plan bar's button) */
+    uint64_t lk = of->lookup_fn + (uint64_t)g_slide;
+    if (!code_ptr(lk)) return "the order lookup is not game code";
+    uint64_t o = (uint64_t)(uintptr_t)((order_lookup_fn)(uintptr_t)lk)((void *)(uintptr_t)grp, j->order_id);
+    if (!o || !sq(o, &v) || v != vt) { snprintf(why, sizeof why, "order %d is not in this group's plan", j->order_id); return why; }
+    if (!sq(o + of->owner_off, &own) || own != grp) {
+        snprintf(why, sizeof why, "order %d belongs to another orders group (name that group)", j->order_id); return why;
+    }
+    j->order = o;
+    if (!strcmp(op, "orders.execute") && !sread(o + of->exec_off, &j->before_exec, 1)) return "executing byte unreadable";
+    if (!strcmp(op, "orders.new_front")) {
+        int n = orders_free_divisions(of, sread, o, j->divs, J2_DIVS);
+        if (n < 0) return "the parent's divisions are unreadable";
+        j->ndiv = n;
+        if (!sread(o + of->child_cnt[0], &j->before_children, 4)) return "the parent's children are unreadable";
+        j->drawer = grp;
+        if (j->obj2) { /* the drawing group (the UI's selected army or army group): a live own COrdersGroup */
+            const cmd_type *dt = stage2_find(&g_t.st2, "orders.delete");
+            uint64_t h = 0, owner_f = dt ? dt->owner_fn + (uint64_t)g_slide : 0;
+            if (!dt || !dt->ok || !roundtrip(dt, j->obj2, &h) || !code_ptr(owner_f) ||
+                ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)j->obj2) != j->player_tag)
+                return "obj2 (the drawing group) is not a live own army or army group";
+            j->drawer = j->obj2;
+        }
+    }
+    return NULL;
 }
 
 static void run_job2(void *ctx) {
@@ -521,6 +570,10 @@ static void run_job2(void *ctx) {
         /* AUTH_TAG: the command names the player's own tag; whether the country may use the object is the game's check */
         if (ct->spec->auth_kind != AUTH_TAG &&
             (!code_ptr(owner_f) || ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)j->obj[i]) != j->player_tag)) { j->res[i] = R_NOT_OWN; j->refused++; continue; }
+        if (!strcmp(ct->spec->family, "orders")) {
+            const char *why = orders_prep(j);
+            if (why) { j->res[i] = R_BAD_OBJ2; j->refused++; snprintf(j->reason, sizeof j->reason, "%s", why); continue; }
+        }
         good++;
     }
     /* one command for the whole group (merge) only when every object passed: a group is never posted in part */
@@ -547,12 +600,14 @@ static void run_job2(void *ctx) {
                 uint64_t cur = 0;
                 if (f->kind == FK_REF) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == nullref;
                 else if (f->kind == FK_I32) { int32_t v = 1; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 4) && v == f->def; }
+                else if (f->kind == FK_U8) { uint8_t v = 9; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 1) && v == (uint8_t)f->def; }
                 else ok = 0;
             }
             if (ok) { /* fill: our own fresh command object, never game state */
                 for (int k = 0; k < ct->spec->nf; k++) {
                     const cmd_field *f = &ct->spec->f[k];
                     if (f->kind == FK_REF) *(uint64_t *)(cmd + f->off) = k == 0 ? h : h2;
+                    else if (f->kind == FK_U8) *(uint8_t *)(cmd + f->off) = j->flag ? 1 : 0; /* orders.execute: 1 execute, 0 stop */
                     else *(int32_t *)(cmd + f->off) = (int32_t)j->val[i];
                 }
             }
@@ -573,6 +628,16 @@ static void run_job2(void *ctx) {
                 case CTOR_TAGP_OBJ: ((ctor_tagp_obj)(uintptr_t)ctor)(cmd, &j->player_tag, obj); break;
                 case CTOR_OBJ_OBJ2: ((ctor_obj_obj2)(uintptr_t)ctor)(cmd, obj, (void *)(uintptr_t)j->obj2); break;
                 case CTOR_ADDLINE: ((ctor_addline)(uintptr_t)ctor)(cmd, &j->player_tag, obj, NULL, j->flag ? 1 : 0); break;
+                case CTOR_ORDER_PATH: { /* the order found by id; 1 = the UI's own edit (the AI passes 0) */
+                    pdx_iarray pa = {j->provs, j->nprov, j->nprov};
+                    ((ctor_order_path)(uintptr_t)ctor)(cmd, (void *)(uintptr_t)j->order, &pa, 1); break;
+                }
+                case CTOR_NEW_FRONT: { /* group, provinces, parent, the divisions the UI hands over, no flags, the drawer */
+                    pdx_iarray pa = {j->provs, j->nprov, j->nprov};
+                    pdx_array da = {(void **)(uintptr_t)j->divs, j->ndiv, j->ndiv};
+                    ((ctor_new_front)(uintptr_t)ctor)(cmd, obj, &pa, (void *)(uintptr_t)j->order, &da, 0, 0, 0, (void *)(uintptr_t)j->drawer);
+                    break;
+                }
                 case CTOR_ARRAY: {
                     pdx_array a = {(void **)(uintptr_t)j->obj, j->n, j->n}; /* the game's CPdxArray<T *> {data, capacity, size} */
                     ((ctor_array)(uintptr_t)ctor)(cmd, &a); break;
@@ -587,6 +652,22 @@ static void run_job2(void *ctx) {
                      sq((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &hv) && hv == h &&
                      sq((uint64_t)(uintptr_t)cmd + 0x30, &ho) && ho == nullref &&
                      sread((uint64_t)(uintptr_t)cmd + 0x38, &top, 1) && top == (j->flag ? 1 : 0);
+                if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+            } else if (ok && (ct->spec->ctor == CTOR_ORDER_PATH || ct->spec->ctor == CTOR_NEW_FRONT)) {
+                /* the group's handle, the order id, the provinces in order (and for a front: the divisions, no flags) */
+                int nf = ct->spec->ctor == CTOR_NEW_FRONT;
+                uint64_t hg = 0, pd = 0; int32_t pn = -1, idv = -1; uint8_t fl[3] = {9, 9, 9}, top = 9;
+                ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
+                     sq((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &hg) && hg == h &&
+                     sread((uint64_t)(uintptr_t)cmd + ct->spec->f[2].off, &idv, 4) && idv == j->order_id &&
+                     sq((uint64_t)(uintptr_t)cmd + ct->spec->f[0].off, &pd) && sread((uint64_t)(uintptr_t)cmd + ct->spec->f[0].count_off, &pn, 4) &&
+                     pn == j->nprov;
+                for (int e = 0; ok && e < j->nprov; e++) { int32_t x = 0; ok = sread(pd + 4 * (uint64_t)e, &x, 4) && x == j->provs[e]; }
+                if (ok && nf) {
+                    uint64_t dd = 0; int32_t dn = -1;
+                    ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[3].off, &dd) && sread((uint64_t)(uintptr_t)cmd + ct->spec->f[3].count_off, &dn, 4) &&
+                         dn == j->ndiv && sread((uint64_t)(uintptr_t)cmd + 0x6c, fl, 3) && !fl[0] && !fl[1] && !fl[2];
+                } else if (ok) ok = sread((uint64_t)(uintptr_t)cmd + 0x48, &top, 1) && top == 1;
                 if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
             } else if (ok) { /* what the game built must be exactly what was asked: the handles in order, then the second field */
                 uint64_t d2 = 0; int32_t s2 = 0;
@@ -647,8 +728,20 @@ static int parse_list_i64(const char *s, int64_t *out, int max) {
     return *s ? -1 : n;
 }
 
-static int be_post2(const char *op, const char *objs, const char *vals, const char *obj2, int64_t flag, long id, char *out, size_t n,
-                    int *unexplained) {
+static int parse_list_i32(const char *s, int32_t *out, int max) {
+    int n = 0;
+    while (*s && n < max) {
+        char *e; long v = strtol(s, &e, 10);
+        if (e == s || v <= 0 || v > 1000000) return -1;
+        out[n++] = (int32_t)v;
+        if (*e == ',') e++; else if (*e) return -1;
+        s = e;
+    }
+    return *s ? -1 : n;
+}
+
+static int be_post2(const char *op, const char *objs, const char *vals, const char *obj2, const char *provs, int64_t flag, long id,
+                    char *out, size_t n, int *unexplained) {
     const cmd_type *ct = stage2_find(&g_t.st2, op);
     if (!ct || !ct->ok) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused\",\"reason\":\"type not resolved on this build\"", op); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
     job2_t *j = (job2_t *)calloc(1, sizeof *j);
@@ -677,6 +770,27 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         /* a region by id (no own base there) or 0 = hold: the UI's region click and its Hold button post this command */
         if (nv != 1 || j->val[0] < 0 || j->val[0] > 100000) why = "vals: one strategic region id (0 = hold)";
         else { j->region_id = (int32_t)j->val[0]; for (int i = 1; i < j->n; i++) j->val[i] = j->val[0]; }
+    } else if (!strncmp(op, "orders.", 7)) {
+        /* battle plans: ONE orders group, vals = the order id (orders.execute: 0 = the whole plan), flag = execute 1 /
+         * stop 0 (orders.execute only), provs = the province ids in drawing order (set_path, new_front), obj2 = the
+         * drawing group (new_front, optional) */
+        int wants_provs = !strcmp(op, "orders.set_path") || !strcmp(op, "orders.new_front");
+        if (j->n != 1) why = "orders: exactly one orders group per request";
+        else if (nv != 1 || j->val[0] < (strcmp(op, "orders.execute") ? 1 : 0) || j->val[0] > 100000000) why = "vals: one order id";
+        else if (strcmp(op, "orders.execute") && flag) why = "flag is for orders.execute only (1 execute, 0 stop)";
+        else if (flag != 0 && flag != 1) why = "flag: 1 execute, 0 stop";
+        else if (wants_provs && (j->nprov = parse_list_i32(provs ? provs : "", j->provs, J2_PROVS)) < 1)
+            why = "provs: 1 to 1024 comma-separated province ids in drawing order";
+        else if (!wants_provs && provs && *provs) why = "this op takes no provs";
+        else {
+            j->order_id = (int32_t)j->val[0];
+            for (int a = 0; !why && a < j->nprov; a++) for (int b = a + 1; b < j->nprov; b++) if (j->provs[a] == j->provs[b]) why = "a province is listed twice";
+        }
+        if (!why && obj2 && *obj2) {
+            uint64_t o2[1];
+            if (strcmp(op, "orders.new_front")) why = "obj2 is for orders.new_front only (the drawing group)";
+            else if (parse_list_u64(obj2, o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0];
+        }
     } else if (nv) why = "this op takes no vals";
     if (!why && !strcmp(op, "airwing.merge") && j->n < 2) why = "a merge takes at least two wings";
     if (!why && (!strcmp(op, "air.transfer") || !strcmp(op, "air.enable_mission") || !strcmp(op, "airwing.attach"))) {
@@ -714,6 +828,52 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             else snprintf(j->reason, sizeof j->reason, "posted; %d not executed yet (game paused)", pending);
         }
     }
+    /* orders: the module reads back the order tree itself (the same facts as the reader), within 3 s, paused-aware */
+    char rbx[600] = "";
+    if (!strncmp(op, "orders.", 7) && j->posted) {
+        const orders_facts *of = &g_t.st2.orders;
+        uint64_t vt = of->vt_order + (uint64_t)g_slide;
+        long long start = mono_us();
+        pending = 1;
+        while (pending && mono_us() - start < 3000000) {
+            if (!strcmp(op, "orders.delete")) pending = orders_find(of, sread, vt, j->obj[0], j->order_id) != 0;
+            else if (!strcmp(op, "orders.execute")) {
+                uint8_t ex = 9;
+                pending = j->order && !(sread(j->order + of->exec_off, &ex, 1) && ex == (j->flag ? 1 : 0));
+                if (!j->order) pending = 0; /* the whole plan: the MCP's read-back judges every order */
+            } else if (!strcmp(op, "orders.set_path")) {
+                uint64_t pd = 0; int32_t pn = -1, x = 0; int same = 1;
+                if (orders_find(of, sread, vt, j->obj[0], j->order_id) != j->order || !sq(j->order + of->provs_off, &pd) ||
+                    !sread(j->order + of->provs_cnt, &pn, 4)) same = 0;
+                /* executed = the order now holds the provinces the country controls, in the order given: the game keeps
+                 * a subsequence of the request (it drops what the country does not control) */
+                int k = 0;
+                for (int32_t e = 0; same && e < pn; e++) {
+                    if (!sread(pd + 4 * (uint64_t)e, &x, 4)) { same = 0; break; }
+                    while (k < j->nprov && j->provs[k] != x) k++;
+                    if (k == j->nprov) same = 0; else k++;
+                }
+                pending = !(same && pn > 0);
+                if (!pending) snprintf(rbx, sizeof rbx, ",\"provinces_after\":%d", pn);
+            } else if (!strcmp(op, "orders.new_front")) {
+                int32_t cn = -1;
+                pending = !(orders_find(of, sread, vt, j->obj[0], j->order_id) == j->order && sread(j->order + of->child_cnt[0], &cn, 4) &&
+                            cn > j->before_children);
+                if (!pending) {
+                    uint64_t cd = 0; int32_t nid = 0;
+                    if (sq(j->order + of->child_off[0], &cd) && sread(cd + 8 * (uint64_t)(cn - 1), &cd, 8) && sread(cd + of->id_off, &nid, 4))
+                        snprintf(rbx, sizeof rbx, ",\"new_children\":%d,\"last_child_id\":%d,\"divisions_handed\":%d", cn - j->before_children, nid, j->ndiv);
+                }
+            }
+            if (pending) usleep(2000);
+        }
+        if (!pending) { executed = j->posted; rb_us = mono_us() - t0; }
+        else {
+            reads_t r; do_reads(&r);
+            if (!(r.ok && r.has_date && r.paused)) snprintf(j->reason, sizeof j->reason, "posted; not seen executed after 3 s in a running game");
+            else snprintf(j->reason, sizeof j->reason, "posted; not executed yet (game paused)");
+        }
+    }
     *unexplained = j->unexplained;
     size_t at = (size_t)snprintf(out, n, "\"op\":\"%s\",\"type_id\":%u,\"objects\":%d,\"posted\":%d,\"refused\":%d,\"executed\":%d,"
                                  "\"result\":\"%s\",\"reason\":\"%s\",\"main_wait_ms\":%.2f,\"requeues\":%d,\"forbid\":%d,"
@@ -725,10 +885,62 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
     for (int i = 0; i < j->n && at < n; i++)
         at += (size_t)snprintf(out + at, n - at, "%s{\"obj\":\"0x%llx\",\"result\":\"%s\"%s}", i ? "," : "", (unsigned long long)j->obj[i],
                                R_NAMES[j->res[i]], "");
-    if (at < n) snprintf(out + at, n - at, "]");
+    if (at < n) at += (size_t)snprintf(out + at, n - at, "]%s", rbx);
     logj("\"event\":\"post2\",\"id\":%ld,%s", id, out);
     int ok = j->ran && !j->unexplained && j->refused == 0 && j->posted == j->n && (pending == 0);
     job2_release(j);
+    return ok;
+}
+
+/* engineer 73: the order-tree read. A main-thread job (between frames: a consistent snapshot, nothing changes while it
+ * reads), on an own group only: the group must round-trip through the game's COrdersGroup resolver and its owner must
+ * be the player's tag (the same checks the order commands make). Then a pure read (core/orders.c). */
+typedef struct {
+    int refs; uint64_t group; int ok, n; char reason[160]; char *out; size_t cap;
+    dispatch_semaphore_t done;
+} jobo_t;
+static void jobo_release(jobo_t *j) {
+    if (__atomic_sub_fetch(&j->refs, 1, __ATOMIC_ACQ_REL) == 0) { dispatch_release(j->done); free(j->out); free(j); }
+}
+static void run_jobo(void *ctx) {
+    jobo_t *j = (jobo_t *)ctx;
+    const cmd_type *dt = stage2_find(&g_t.st2, "orders.delete");
+    uint64_t gs = 0, vp = 0, h = 0; int32_t tag = 0;
+    if (killed()) snprintf(j->reason, sizeof j->reason, "kill switch");
+    else if (!g_t.st2.orders.ok || !dt || !dt->ok) snprintf(j->reason, sizeof j->reason, "order facts unresolved on this build");
+    else if (!g_gs_glob || !sq(g_gs_glob + (uint64_t)g_slide, &gs) || !sq(gs, &vp) || vp != g_vt_gs ||
+             !sread(gs + g_t.st2.common.player_tag_off, &tag, 4) || tag <= 0)
+        snprintf(j->reason, sizeof j->reason, "no loaded game with a player country");
+    else if (!roundtrip(dt, j->group, &h)) snprintf(j->reason, sizeof j->reason, "not a live army or army group");
+    else if (!code_ptr(dt->owner_fn + (uint64_t)g_slide) ||
+             ((owner_fn2)(uintptr_t)(dt->owner_fn + (uint64_t)g_slide))((void *)(uintptr_t)j->group) != tag)
+        snprintf(j->reason, sizeof j->reason, "not an own army or army group");
+    else {
+        j->n = orders_tree_json(&g_t.st2.orders, sread, g_t.st2.orders.vt_order + (uint64_t)g_slide, j->group, j->out, j->cap);
+        j->ok = j->n >= 0;
+        if (!j->ok) snprintf(j->reason, sizeof j->reason, "an order is not what the facts say (nothing guessed)");
+    }
+    dispatch_semaphore_signal(j->done);
+    jobo_release(j);
+}
+static int be_orders(const char *group, char *out, size_t n) {
+    uint64_t g[1];
+    if (parse_list_u64(group, g, 1) != 1) { snprintf(out, n, "\"reason\":\"group: one hex address\""); return 0; }
+    jobo_t *j = (jobo_t *)calloc(1, sizeof *j);
+    if (!j || !(j->out = (char *)malloc(n))) { free(j); return 0; }
+    j->refs = 2; j->group = g[0]; j->cap = n; j->done = dispatch_semaphore_create(0);
+    long long t0 = mono_us();
+    dispatch_async_f(dispatch_get_main_queue(), j, run_jobo);
+    if (dispatch_semaphore_wait(j->done, dispatch_time(DISPATCH_TIME_NOW, 1500 * NSEC_PER_MSEC))) {
+        snprintf(out, n, "\"reason\":\"the main thread did not run the read within 1.5 s\"");
+        jobo_release(j); return 0;
+    }
+    int ok = j->ok;
+    if (ok) { snprintf(out, n, "%s,\"read_ms\":%.2f", j->out, (mono_us() - t0) / 1000.0); }
+    else snprintf(out, n, "\"reason\":\"%s\"", j->reason);
+    logj("\"event\":\"orders_read\",\"group\":\"0x%llx\",\"ok\":%s,\"orders\":%d,\"ms\":%.2f", (unsigned long long)g[0],
+         ok ? "true" : "false", j->n, (mono_us() - t0) / 1000.0);
+    jobo_release(j);
     return ok;
 }
 
@@ -736,7 +948,7 @@ static void be_log(const char *members) { logj("%s", members); }
 
 static void *ipc_thread(void *arg) {
     pthread_setname_np("hoi4-live-inproc-ipc");
-    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, be_post2, killed, be_log};
+    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, be_post2, be_orders, killed, be_log};
     ipc_serve((const char *)arg, &be, &g_policy);
     return NULL;
 }

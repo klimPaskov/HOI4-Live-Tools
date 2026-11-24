@@ -29,8 +29,11 @@ typedef struct {
     /* STAGE 2: posts one family command for each listed object (objs, comma-separated hex addresses of own game
      * objects the client read; vals, per-object integers; obj2, a second object (air base, strategic region); flag).
      * Returns 1 when every object was handled (posted and, where the module can, read back), 0 otherwise. */
-    int (*post2)(const char *op, const char *objs, const char *vals, const char *obj2, int64_t flag, long id, char *out,
-                 size_t n, int *unexplained);
+    int (*post2)(const char *op, const char *objs, const char *vals, const char *obj2, const char *provs, int64_t flag, long id,
+                 char *out, size_t n, int *unexplained);
+    /* engineer 73: the battle-plan order tree of one own orders group (army or army group; hex address): a pure read,
+     * served whenever the order facts resolved (no opt-in needed: it reads only the player's own orders) */
+    int (*orders)(const char *group, char *out, size_t n);
     int (*killed)(void);
     void (*log)(const char *json_members);
 } ipc_backend;
@@ -64,6 +67,6 @@ int ipc_optin_has(const char *list, const char *name);
 int ipc_serve(const char *sock_path, const ipc_backend *b, ipc_policy *p);
 
 /* Exposed for the offline test: parse one request line into at most 8 members (strings or integers). */
-typedef struct { char key[24]; char str[640]; int64_t num; int is_num; } ipc_member;
+typedef struct { char key[24]; char str[8192]; int64_t num; int is_num; } ipc_member; /* 8 KiB: a front's province list */
 int ipc_parse(const char *line, ipc_member *m, int max);
 #endif

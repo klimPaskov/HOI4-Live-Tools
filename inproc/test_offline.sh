@@ -20,10 +20,13 @@ S2=(valid_slot=0x50 exec_flag=0x624 player_tag=0x4d8 line_factories=0xe8 region_
 # +0x2a8 array, +0x2b4 count; the army cast's typeinfo COrdersGroup)
 S2N=(regions_arr=0x2a8 regions_cnt=0x2b4 on:airwing.split=1 on:airwing.merge=1 on:airwing.disband=1 on:airwing.attach=1 on:airwing.detach=1
      type:airwing.split=12231 type:airwing.merge=12234 type:airwing.disband=13651 type:airwing.attach=14636 type:airwing.detach=14637 on:airwing.region=1 type:airwing.region=12222
-     on:production2.add_line=1 on:production2.priority=1 type:production2.add_line=13101 type:production2.priority=12147)
-S2_1194=(stage2_on=13 ctor:production2.add_line=0x1001eef30 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
+     on:production2.add_line=1 on:production2.priority=1 type:production2.add_line=13101 type:production2.priority=12147
+     on:orders.delete=1 on:orders.execute=1 on:orders.set_path=1 on:orders.new_front=1 type:orders.delete=12351
+     type:orders.execute=12352 type:orders.set_path=12345 type:orders.new_front=13095 orders_ok=1 order_id_off=0x214
+     order_provs_off=0x70 order_divs_off=0x1e0 order_children_off=0x1c8 group_lists_off=0x98)
+S2_1194=(stage2_on=17 orders_vt=0x103512bf0 orders_lookup=0x10095a510 ctor:orders.set_path=0x1009355a0 ctor:orders.new_front=0x100940c60 ctor:production2.add_line=0x1001eef30 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
          ctor:airwing.detach=0x100a293b0 ti_orders_group=0x103516d08)
-S2_120=(stage2_on=13 ctor:production2.add_line=0x1001ef670 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
+S2_120=(stage2_on=17 orders_vt=0x1035173b8 orders_lookup=0x10095b520 ctor:orders.set_path=0x1009365b0 ctor:orders.new_front=0x100941c70 ctor:production2.add_line=0x1001ef670 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
         ctor:airwing.detach=0x100a2a3c0 ti_orders_group=0x10351b6b0)
 fail=0
 echo "== 1.19.4.1 f584 ($NEW)"
@@ -47,6 +50,10 @@ if [ -f "$V120" ]; then
   [ ${pipestatus[1]} = 0 ] || fail=1
 fi
 
+echo "== battle-plan order reader (engineer 73) on a structure laid out with each build's scanned facts"
+./build/orders_test $NEW | grep -E "FAIL|ALL PASS" || fail=1
+[ ${pipestatus[1]} = 0 ] || fail=1
+if [ -f "$V120" ]; then ./build/orders_test $V120 | grep -E "FAIL|ALL PASS" || fail=1; [ ${pipestatus[1]} = 0 ] || fail=1; fi
 echo "== 1.19.4.1 through the PROCESS view (segments laid out at a nonzero slide, as dyld maps them)"
 SCAN_AS_PROCESS=1 ./build/scan_file $NEW command_post=0x10284d4a0 queue_root=0x10372afc0 queue_slot=0x90 \
   research_factory=0x10022bb70 research_vtable=0x1034b7fa8 research_type_id=0x2f70 \
