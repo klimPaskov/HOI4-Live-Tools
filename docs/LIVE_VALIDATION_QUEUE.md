@@ -800,3 +800,38 @@ spent); too little PP -> `game_refused`; an active law -> `invalid_target` befor
 P5 an advisor key -> the mouse path serves it in the same call (no in-process post). P6 save + reload; a plain load.
 Stop at once on: a crash, any `unexplained`, PP spent without the law, two laws of one category active.
 Pass -> IPC_LIVE_PASSED entry 15 (politics) = 1.
+
+## Session S14-CONSTRUCTION: the in-process module, the construction queue (family `construction`; about 25 minutes) -- after S13-POLITICS
+
+Built by engineer 82 (24 Nov 2026), offline-proven only: stage 2 49/49 on 1.20.0.0 and 1.19.4.1 macOS; Linux/Windows 1.20
+CAddConstructionCommand 12151 / CRemoveConstructionCommand 13088 / CSetProductionLinePlacementCommand 17412 by RTTI (3/3
+each). OFF under `auto` until this session passes.
+- add: the map click's own command through its own constructor (1.20 0x1001f9e80, 1.19.4.1 0x1001f9740): (mode 2 = after
+  the last active line, as a plain click; own tag; the building reference {location id, the template's id}; count 1), one
+  command per click. The module reads the template (exact CBuildingTemplate from the game's building database by key):
+  real (+0x18) and province count (+0x26c > 0 = a province building) as the game's reference constructors do, so a
+  supply hub / naval base / bunker names the province, a factory / dockyard / refinery / infrastructure the state. The
+  game's "can do" (free slots, own state, the building's own conditions) decides; refused -> nothing posted.
+- remove: RemoveConstruction(line, its own level count) = the whole line leaves (no confirmation popup in process).
+- move: SetProductionLinePlacement(line, index, placed-by-hand byte); the MCP computes the byte by the view's rule (1.20
+  0x10204cc20: 0 when the line lands next to an active, not-hand-placed line of the same building, else 1).
+- MCP: hoi4_construction_add (Verified = the state's queued amount grew by `count`; `fill` and a province building without
+  a province_id stay on the mouse) and hoi4_construction_order (Verified = the line at its new index / gone); reply
+  `in_process.module`. Railways (CBuildRailwayCommand carries the UI route finder's province path) stay on the mouse.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,construction ./inproc_stage2.sh PREV-1936 s14c` (Germany 1936).
+C1 paused, `HOI4_BACKEND=inprocess`: `hoi4_construction_add {"building":"industrial_complex","state_id":64,"count":2}`
+(Brandenburg): Verified; `per_object` two "posted"; hoi4_construction_queue shows the line(s) with 2 levels in state 64.
+C2 a province building: `{"building":"supply_node","state_id":<state>,"province_id":<a province with a free slot>}`:
+Verified; the queue's line has that province as location. `{"building":"naval_base","state_id":64,"province_id":<inland>}`
+-> `game_refused`, nothing posted.
+C3 refusals: a state with no free slot (count 10 of `arms_factory` in a small state) -> the game refuses the first click
+that does not fit (per_object shows posted then refused); a foreign state id -> `game_refused`; a province building without
+a province_id -> the mouse path serves it.
+C4 order: queue three lines A, B, A' (two of one building): `hoi4_construction_order {"line":2,"action":"top"}` ->
+Verified `{from:2,to:0}`; the in-game row shows A' at the top grouped with A (no "placed by hand" mark); `up`/`down`/
+`bottom` on B: Verified at the right index each time; compare the game's own drag of a row once (same result).
+C5 `{"line":<i>,"action":"remove"}` on a 3-level line: Verified removed; the queue length drops by one; no other line changed.
+C6 running at speed 3: C1 and C4 again: Verified within 3 s. C7 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, a line placed in another state / province than named, a line changed that the
+request did not name, civilian factories assigned wrongly (queue rows' factories differ from the game's own after C4).
+Pass -> IPC_LIVE_PASSED entry 16 (construction) = 1.

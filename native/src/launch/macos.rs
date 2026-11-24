@@ -22,6 +22,7 @@ mod construction;
 mod construction_find;
 mod fair_facts;
 mod inproc;
+mod inproc_construction;
 mod inproc_diplomacy;
 mod inproc_events;
 mod inproc_holds;
@@ -3955,7 +3956,26 @@ impl MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            self.keys.preflight()?;
+            // engineer 82: in process (family `construction`): the view's own move / the line's removal, no panel
+            let order_retry = args
+                .get("request_id")
+                .and_then(Value::as_str)
+                .is_some_and(|id| actions.receipt_exists(id));
+            let mut order_route = if order_retry {
+                None
+            } else {
+                inproc::route("construction")
+            };
+            let order_queue = match order_route {
+                Some(_) => ui::read(process, crate::construction::inproc_queue).ok(),
+                None => None,
+            };
+            if order_queue.is_none() {
+                order_route = None;
+            }
+            if order_route.is_none() {
+                self.keys.preflight()?;
+            }
             let line = args
                 .get("line")
                 .and_then(Value::as_u64)
@@ -3980,8 +4000,23 @@ impl MacClock {
                 })
             };
             let keys = &self.keys;
+            let mut order_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(queue) = order_queue.as_ref() {
+                    match construction_order_in_process(process, &mut order_route, queue, line as usize, order) {
+                        Ok(Some((body, reply))) => {
+                            order_reply = Some(reply);
+                            *done.borrow_mut() = Some(body);
+                            return Ok(());
+                        }
+                        Ok(None) => keys.preflight()?,
+                        Err(e) => {
+                            refused.set(matches!(e.code, "invalid_arguments" | "invalid_target"));
+                            return Err(e);
+                        }
+                    }
+                }
                 match construction::reorder(process, keys, line as usize, order) {
                     Ok(body) => {
                         *done.borrow_mut() = Some(body);
@@ -3998,7 +4033,7 @@ impl MacClock {
                 }
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, order_reply));
         }
         if name == "hoi4_railway_build" {
             allowed(
@@ -8067,19 +8102,57 @@ impl MacClock {
             let action = json!({"kind":"construction_add","building":key,"state_id":state,"province_id":province,"count":count});
             let start = construction::queued(process, key, state)?;
             let retry = actions.receipt_exists(id);
-            if !retry {
+            // engineer 82: in process (family `construction`): the map click's own command, one per click, the building
+            // reference as the game builds it (a province building on the named province, a state building in the
+            // state); Shift's fill and a province building without a province stay on the mouse
+            let mut build_route = if retry || fill {
+                None
+            } else {
+                inproc::route("construction")
+            };
+            let placement = match build_route {
+                Some(_) => ui::read(process, |r, i| crate::construction::template_placement(r, i, key)).ok(),
+                None => None,
+            };
+            let on_province = placement.is_some_and(|(_, p)| p);
+            let template = placement
+                .filter(|(_, p)| !*p || province.is_some())
+                .map(|(t, _)| t);
+            if template.is_none() {
+                build_route = None;
+            }
+            let in_process = build_route.is_some();
+            let location = if on_province { province.unwrap_or(0) } else { state };
+            if !retry && !in_process {
                 self.keys.preflight()?;
             }
             let keys = &self.keys;
+            // a command posted in process runs on the game's next frame: an unchanged queue counts only after IPC_SETTLE
+            let ipc_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
             // The pre-input amount is stored in the intent, so a retry settles against it.
             let mut settle = |baseline: &Value| {
                 let original = baseline.as_i64().unwrap_or(start);
                 let now = construction::queued(process, key, state)?;
                 let detail = json!({"building":key,"state_id":state,"queued_in_state":now,"queued_before":original});
+                let early = ipc_posted.get().is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                if early && now < original + count {
+                    return Ok(journal::Outcome::Unknown);
+                }
                 Ok(settle::queue_growth(original, now, count).outcome(detail))
             };
+            let mut build_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(t) = template {
+                    build_reply = module_in_process(&mut build_route, |ch| {
+                        Ok(inproc_construction::add(ch, t, location, on_province, count))
+                    })?;
+                    if build_reply.is_some() {
+                        ipc_posted.set(Some(Instant::now()));
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 construction::add(process, keys, key, state, count, province, fill)
             };
             let receipt = actions.execute_baselined(
@@ -8090,7 +8163,7 @@ impl MacClock {
                 &mut settle,
                 &mut dispatch,
             )?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, build_reply));
         }
         if name == "hoi4_focus_start" {
             allowed(args, &["focus", "request_id", "lease_token"])?;
@@ -8662,6 +8735,68 @@ fn with_inproc<R: serde::Serialize>(receipt: R, reply: Option<Value>) -> Value {
     match reply {
         Some(r) => json!({"receipt":receipt,"in_process":r}),
         None => json!({"receipt":receipt}),
+    }
+}
+
+/// engineer 82: one construction-queue order in process: the line's removal or the view's move, then the queue read
+/// back until the game ran it (it runs on the next frame; a paused game runs commands too). Ok(None): the mouse path
+/// runs (no channel, or the module could not explain its answer); a game refusal is the typed error.
+fn construction_order_in_process(
+    process: &dyn Process,
+    route: &mut Option<inproc::Channel>,
+    queue: &[crate::construction::InprocLine],
+    line: usize,
+    action: &str,
+) -> Result<Option<(Value, Value)>> {
+    let n = queue.len();
+    let Some(target) = queue.get(line) else {
+        return Err(Error::new(
+            "invalid_target",
+            format!("No construction line {line}: the queue has {n} (hoi4_construction_queue lists them in order)"),
+        ));
+    };
+    let address = target.address;
+    let to = inproc_construction::target_index(action, line, n);
+    if action != "remove" && to.is_none() {
+        return Err(Error::new(
+            "invalid_arguments",
+            "action must be top, up, down, bottom or remove",
+        ));
+    }
+    if to == Some(line) {
+        return Ok(Some((
+            json!({"position": line, "unchanged": "already there"}),
+            json!({"backend":"inprocess","posted":0}),
+        )));
+    }
+    let reply = module_in_process(route, |ch| {
+        Ok(match to {
+            None => inproc_construction::remove(ch, target),
+            Some(to) => inproc_construction::move_line(ch, queue, line, to),
+        })
+    })?;
+    let Some(reply) = reply else {
+        return Ok(None);
+    };
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        let now = ui::read(process, crate::construction::inproc_queue)?;
+        let at = now.iter().position(|l| l.address == address);
+        let body = match (to, at) {
+            (None, None) => Some(json!({"removed": true, "lines_before": n, "lines_after": now.len()})),
+            (Some(want), Some(at)) if at == want => Some(json!({"from": line, "to": want})),
+            _ => None,
+        };
+        if let Some(body) = body {
+            return Ok(Some((body, reply)));
+        }
+        if Instant::now() >= deadline {
+            return Err(Error::new(
+                "input_readback_failed",
+                format!("The module posted the order, but the line is at {at:?} after 3 s (wanted {to:?}; None = removed)"),
+            ));
+        }
+        crate::phase::sleep(Duration::from_millis(30));
     }
 }
 

@@ -391,6 +391,7 @@ typedef void (*ctor_area_state)(void *, void *, int32_t, int32_t, int32_t); /* e
 typedef void (*ctor_research)(void *, const int32_t *, void *, int32_t, int, int, int); /* engineer 79: (cmd, &tag, template, slot, b34, b35, b36) */
 typedef void (*ctor_idea)(void *, const int32_t *, void *);           /* engineer 79: AddIdea (cmd, &tag, idea) */
 typedef void (*ctor_idea2)(void *, const int32_t *, void *, void *);  /* engineer 79: ReplaceIdea (cmd, &tag, old, new) */
+typedef void (*ctor_construction)(void *, int, const int32_t *, const void *, int32_t); /* engineer 82: (cmd, mode, &tag, &reference, count) */
 typedef unsigned char (*option_test_fn)(void *, const void *, unsigned char);
 typedef void (*ctor_groups_obj)(void *, const pdx_array *, void *);
 typedef void (*ctor_groups_obj_i32)(void *, const pdx_array *, void *, int32_t);
@@ -431,6 +432,9 @@ typedef struct {
     /* holds (engineer 79): the area order's settings mask the click carries, the group's area-order ids before a new
      * order is created (the read-back finds the one new id), the new order's id */
     int32_t hold_setting, hold_before[64], new_order_id; int hold_nbefore;
+    /* construction (engineer 82): the building reference the click builds (location id, building id) and the kind of
+     * location the request names (0 a state, 1 a province) */
+    int32_t bld_loc, bld_id, bld_kind;
     long long ran_us, post_us;
     char reason[200], queue_type[64], server_type[64];
     dispatch_semaphore_t done;
@@ -984,6 +988,20 @@ static void run_job2(void *ctx) {
         const char *w = units_theatre(j);
         if (w) { for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2; snprintf(j->reason, sizeof j->reason, "%s", w); finish2(j); return; }
     }
+    if (!strcmp(op, "construction.add")) { /* engineer 82: the template as the game's reference constructors read it */
+        const construction_facts *bf = &g_t.st2.build;
+        uint8_t real = 0; int32_t prov = 0, bid = 0; uint64_t vt = 0;
+        const char *w = NULL;
+        if (!bf->ok || !plausible(j->obj[0]) || !sq(j->obj[0], &vt) || vt != ct->vt_obj + (uint64_t)g_slide ||
+            !sread(j->obj[0] + bf->tmpl_real_off, &real, 1) || !sread(j->obj[0] + bf->tmpl_prov_off, &prov, 4) ||
+            !sread(j->obj[0] + bf->tmpl_id_off, &bid, 4))
+            w = "the building template is not a live CBuildingTemplate";
+        else if (!real) w = "the building template is not a real one (the game's reference constructors refuse it)";
+        else if ((prov > 0) != (j->bld_kind == 1))
+            w = prov > 0 ? "this building is placed on a province: name a province id" : "this building is placed in a state: name a state id";
+        if (w) { for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2; snprintf(j->reason, sizeof j->reason, "%s", w); finish2(j); return; }
+        j->bld_id = bid;
+    }
     uint64_t fac = ct->factory + (uint64_t)g_slide, post = g_t.post.post + (uint64_t)g_slide, nullref = 0;
     if (!code_ptr(fac) || !code_ptr(post) || !sq(c->null_ref_global + (uint64_t)g_slide, &nullref)) { snprintf(j->reason, sizeof j->reason, "factory/post not game code"); j->unexplained = 1; finish2(j); return; }
     long long tp = 0;
@@ -1086,7 +1104,8 @@ static void run_job2(void *ctx) {
             if (ct->spec->ctor == CTOR_ADDLINE) /* no list: the variant's handle field still holds the empty handle */
                 ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &data) && data == nullref;
             else if (ct->spec->ctor == CTOR_LEADER || ct->spec->ctor == CTOR_GROUP_NAME || ct->spec->ctor == CTOR_EVENT_OPTION ||
-                     ct->spec->ctor == CTOR_RESEARCH || ct->spec->ctor == CTOR_IDEA_ADD || ct->spec->ctor == CTOR_IDEA_REPLACE) {
+                     ct->spec->ctor == CTOR_RESEARCH || ct->spec->ctor == CTOR_IDEA_ADD || ct->spec->ctor == CTOR_IDEA_REPLACE ||
+                     ct->spec->ctor == CTOR_CONSTRUCTION) {
                 /* no list: every handle still empty */
                 for (int k = 0; k < ct->spec->nf && ok; k++)
                     if (ct->spec->f[k].kind == FK_REF) ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[k].off, &data) && data == nullref;
@@ -1122,6 +1141,12 @@ static void run_job2(void *ctx) {
                 case CTOR_IDEA_REPLACE: ((ctor_idea2)(uintptr_t)ctor)(cmd, &j->player_tag, (void *)(uintptr_t)j->obj2, obj); break;
                 case CTOR_RESEARCH: /* engineer 79: the research view's call: own tag, the template, the slot, (0, 1, 0) */
                     ((ctor_research)(uintptr_t)ctor)(cmd, &j->player_tag, obj, (int32_t)j->val[0], 0, 1, 0); break;
+                case CTOR_CONSTRUCTION: { /* engineer 82: the click's call: mode 2, own tag, the reference, count 1 */
+                    uint8_t ref[24] = {0};
+                    uint64_t rv = g_t.st2.build.ref_vt + (uint64_t)g_slide;
+                    memcpy(ref, &rv, 8); memcpy(ref + 8, &j->bld_loc, 4); memcpy(ref + 12, &j->bld_id, 4); /* tag +0x10 stays 0 */
+                    ((ctor_construction)(uintptr_t)ctor)(cmd, 2, &j->player_tag, ref, 1); break;
+                }
                 case CTOR_AREA_STATE: /* engineer 79: the map tool's click: group, order id (0 = new), the state, settings */
                     ((ctor_area_state)(uintptr_t)ctor)(cmd, obj, j->order_id, j->provs[i], j->hold_setting); break;
                 case CTOR_EVENT_OPTION: /* the window's own fields, as its option click passes them */
@@ -1192,6 +1217,17 @@ static void run_job2(void *ctx) {
                      sread((uint64_t)(uintptr_t)cmd + 0x24, &tg, 4) && tg == j->player_tag &&
                      sq((uint64_t)(uintptr_t)cmd + 0x28, &a) && a == (rep ? j->obj2 : j->obj[i]) &&
                      (!rep || (sq((uint64_t)(uintptr_t)cmd + 0x30, &b) && b == j->obj[i]));
+                if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+            } else if (ok && ct->spec->ctor == CTOR_CONSTRUCTION) { /* engineer 82: tag, the reference, count 1, mode 2 */
+                int32_t tg = 0, loc = 0, bid = 0, rt = -1, cnt = 0; uint64_t rv = 0; uint8_t md = 9;
+                ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x24, &tg, 4) && tg == j->player_tag &&
+                     sq((uint64_t)(uintptr_t)cmd + 0x28, &rv) && rv == g_t.st2.build.ref_vt + (uint64_t)g_slide &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x30, &loc, 4) && loc == j->bld_loc &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x34, &bid, 4) && bid == j->bld_id &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x38, &rt, 4) && rt == 0 &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x40, &cnt, 4) && cnt == 1 &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x44, &md, 1) && md == 2;
                 if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
             } else if (ok && ct->spec->ctor == CTOR_RESEARCH) { /* engineer 79: tag, template, slot, bytes 0/1/0 */
                 int32_t tg = 0, sl = -1; uint64_t tp = 0; uint8_t b[3] = {9, 9, 9};
@@ -1449,6 +1485,33 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         if (j->n != 1) why = "research.start: exactly one technology";
         else if (nv != 1 || j->val[0] < 0 || j->val[0] > 31) why = "vals: one research slot index (0..31)";
         else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "research.start takes no flag, obj2, provs or divs";
+    } else if (!strncmp(op, "construction.", 13)) {
+        /* engineer 82: construction.
+         *   add:    objs = ONE building template (exact CBuildingTemplate); vals = the location id, its kind (0 a state id, 1 a
+         *           province id: the module checks it against the template as the game's reference constructors decide),
+         *           the clicks (1..10: one command each, count 1)
+         *   remove: objs = own construction lines (1..32); vals = the levels each loses (1..1000: the line's own amount
+         *           takes the whole line)
+         *   move:   objs = ONE own construction line; vals = the new index (0..2047), the "placed by hand" byte (0/1) */
+        if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "construction ops take no flag, obj2, provs or divs";
+        else if (!strcmp(op, "construction.add")) {
+            if (j->n != 1) why = "construction.add: exactly one building template";
+            else if (nv != 3 || j->val[0] < 1 || j->val[0] > 1000000 || (j->val[1] != 0 && j->val[1] != 1) || j->val[2] < 1 || j->val[2] > 10)
+                why = "vals: the location id, its kind (0 state, 1 province), the clicks (1..10)";
+            else {
+                uint64_t t0 = j->obj[0];
+                j->bld_loc = (int32_t)j->val[0]; j->bld_kind = (int32_t)j->val[1];
+                j->n = (int)j->val[2];
+                for (int k = 0; k < j->n; k++) j->obj[k] = t0; /* one click each, the same building */
+            }
+        } else if (!strcmp(op, "construction.remove")) {
+            if (nv != j->n) why = "vals: the levels each line loses";
+            else for (int k = 0; k < j->n; k++) if (j->val[k] < 1 || j->val[k] > 1000) why = "levels outside 1..1000";
+        } else if (!strcmp(op, "construction.move")) {
+            if (j->n != 1) why = "construction.move: exactly one line";
+            else if (nv != 2 || j->val[0] < 0 || j->val[0] > 2047 || (j->val[1] != 0 && j->val[1] != 1)) why = "vals: the new index (0..2047), the placed-by-hand byte (0/1)";
+        } else why = "unknown construction op";
+        nv = 0;
     } else if (!strncmp(op, "holds.", 6)) {
         /* engineer 79: an area-defence order, one map click per state. objs = ONE army (or army group); vals = the area
          * order's id (0 = a new area-defence order: exactly one state, its first click) then the state ids (one command
@@ -1496,7 +1559,7 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         uint64_t o2[1];
         if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0];
     }
-    for (int a = 0; !why && strncmp(op, "holds.", 6) && a < j->n; a++) for (int b = a + 1; b < j->n; b++) if (j->obj[a] == j->obj[b]) why = "an object is listed twice (no duplicate orders)";
+    for (int a = 0; !why && strncmp(op, "holds.", 6) && strcmp(op, "construction.add") && a < j->n; a++) for (int b = a + 1; b < j->n; b++) if (j->obj[a] == j->obj[b]) why = "an object is listed twice (no duplicate orders)";
     if (why) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused_by_policy\",\"reason\":\"%s\"", op, why); free(j); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
     long long t0 = mono_us();
     j->done = dispatch_semaphore_create(0);

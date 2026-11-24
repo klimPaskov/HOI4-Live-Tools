@@ -78,7 +78,11 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
        CTOR_RESEARCH = 20,
        /* engineer 79: laws (ideas): the politics view's own constructors (cmd, const tag *, idea) and
         * (cmd, const tag *, the slot's current idea, the new idea) */
-       CTOR_IDEA_ADD = 21, CTOR_IDEA_REPLACE = 22 };
+       CTOR_IDEA_ADD = 21, CTOR_IDEA_REPLACE = 22,
+       /* engineer 82: construction: the map click's own constructor (cmd, mode byte, const tag *, const CBuildingReference *,
+        * count); the reference {vptr, location id, building id, tag} is built by the module the way the game's reference
+        * constructors build it (a state id for a state building, a province id for a province building) */
+       CTOR_CONSTRUCTION = 23 };
 /* engineer 74: BUILD_FIELDS also fills CPdxArray fields (a division handle list, a province list): the fresh object's
  * array is empty ({data 0, capacity 0, size 0} and its allocator set by the factory); the module allocates the
  * elements through THAT allocator's own allocate slot (read from the game's array growth code), so the command's
@@ -233,6 +237,18 @@ typedef struct {
     char evidence[200];
 } holds_facts;
 
+/* engineer 82: a building reference as the game's own reference constructors build it from (template, state) and
+ * (template, province), read from both (identical on 1.19.4.1 and 1.20.0.0): the template must be a real one (its byte
+ * +tmpl_real_off set), its province-level count +tmpl_prov_off decides the location kind (> 0: a province id, else a
+ * state id), its id +tmpl_id_off goes into the reference. The reference's own class vtable (18CBuildingReference) is the
+ * one the command's constructor stores */
+typedef struct {
+    int ok;
+    uint32_t tmpl_real_off, tmpl_prov_off, tmpl_id_off, state_id_off, prov_id_off;
+    uint64_t ref_vt;            /* CBuildingReference primary vtable (unslid; the address the ctor stores) */
+    char evidence[200];
+} construction_facts;
+
 #define CMD2_MAX 96
 typedef struct {
     stage2_common common;
@@ -241,6 +257,7 @@ typedef struct {
     events_facts events;      /* engineer 76: the event window and the pending-event records */
     diplo_facts diplo;        /* engineer 78: the command maker, the date, the war goals */
     holds_facts holds;        /* engineer 79: the area-defence order */
+    construction_facts build; /* engineer 82: the building reference */
     int n;
     cmd_type t[CMD2_MAX];
 } stage2_table;

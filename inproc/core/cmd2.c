@@ -250,6 +250,36 @@ const cmd_spec CMD2_SPECS[] = {
     {"politics", "politics.replace", "CReplaceIdeaCommand", 0x38, BUILD_CTOR, CTOR_IDEA_REPLACE, 0, 0x24, "5CIdea", 3,
      {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"old", 0x28, FK_PTR, 0, 0x332e, 0}, {"idea", 0x30, FK_PTR, 0, 0x331a, 0}},
      OBJ2_SAME_PTR, 0, AUTH_TAG_PTR, "5CIdea"},
+    /* ---- construction (engineer 82, 24 Nov): the construction view's three posts, read from 1.20.0.0 and 1.19.4.1
+     * (identical code and field ids).
+     * add: the map click in construction mode (UI 1.20 0x1019d2630; the state view's build-max 0x10225cf90 posts the same
+     * command with the game's own free-slot count): AddConstruction(mode, &own tag, &reference, count) through the
+     * click's own constructor (1.20 0x1001f9ef0, 1.19.4.1 0x1001f97b0). CAddConstructionCommand 12151 (0x48): tag +0x24
+     * (0x289a), a CBuildingReference by value +0x28 (0x284f: vptr; location id +0x30 (0x286d), building id +0x34
+     * (0x4c1a), tag +0x38 (0x289a, 0 for a state or province location)), count +0x40 (0x2f78), mode +0x44 (0x8d: the
+     * queue placement of the new line; the plain click passes 2). The "can do" (1.20 0x1001fa840): the tag is a
+     * country, the reference names a building, its location resolves, the country may build it there now
+     * (0x100dc0770(location, template, &tag, 1): slots, ownership, the building's own conditions), mode < 4. The module
+     * posts one command per click (count 1, mode 2), as a player clicking `count` times. */
+    {"construction", "construction.add", "CAddConstructionCommand", 0x48, BUILD_CTOR, CTOR_CONSTRUCTION, 0, 0x24, "17CBuildingTemplate", 4,
+     {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"reference", 0x28, FK_I32, 0, 0x284f, 0}, {"count", 0x40, FK_I32, 0, 0x2f78, 0},
+      {"mode", 0x44, FK_U8, 0, 0x8d, 0}}, OBJ2_NONE, 0, AUTH_TAG_PTR, "17CBuildingTemplate"},
+    /* remove: CRemoveConstructionCommand 13088 (0x30): the line's handle +0x24 (0x2fb3), levels +0x2c (0x1a1). The row's
+     * close button posts it with 1 level (behind a confirmation when one level is left), the map's removal with the
+     * levels it takes away (ctor 1.20 0x1001faf60 (cmd, line, levels)); a building line loses the levels, a line with
+     * none left leaves the queue. Authorisation: the line resolves as a CGeneralProductionLine owned by the sender's
+     * country; the "can do": the line resolves. The module posts the line's own level count (the whole line). */
+    {"construction", "construction.remove", "CRemoveConstructionCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
+     "22CGeneralProductionLine", 2, {{"line", 0x24, FK_REF, 0, 0x2fb3, 0}, {"levels", 0x2c, FK_I32, 0, 0x1a1, 0}}, OBJ2_NONE, 0},
+    /* move: the construction view's own move (CCountryConstructionsView slot 0xc0 (from, to), behind the rows'
+     * increase/decrease priority buttons; Shift = to the top / bottom): CSetProductionLinePlacementCommand 17412 (0x38;
+     * ctor 1.20 0x1001fe090 (cmd, line, index, grouped)): the line's handle +0x24 (0x2fb3), the new index +0x2c (0x2f72),
+     * the line's "placed by hand" byte +0x30 (0x32ed) the view computes from the neighbours at the new place (1.20
+     * 0x10204cc20: 0 when the line joins a group of the same building, else 1). Its execution moves the line and stores
+     * the byte in the line (+0x70). The MCP computes the byte by the view's rule from the queue it reads. */
+    {"construction", "construction.move", "CSetProductionLinePlacementCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
+     "22CGeneralProductionLine", 3, {{"line", 0x24, FK_REF, 0, 0x2fb3, 0}, {"index", 0x2c, FK_I32, 0, 0x2f72, -1, 1},
+      {"grouped", 0x30, FK_U8, 0, 0x32ed, 0, 2}}, OBJ2_NONE, 0},
     {"holds", "holds.area_defense", "CEditAreaDefenseStateCommand", 0x50, BUILD_CTOR, CTOR_AREA_STATE, 0, 0x24, "12COrdersGroup", 5,
      {{"states", 0x30, FK_I32_ARRAY, 0x3c, 0x1b7, 0}, {"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0},
       {"settings", 0x4c, FK_I32, 0, 0x2b5d, 0}, {"replace", 0x48, FK_U8, 0, 0x29f1, 0}}, OBJ2_NONE, 0},
@@ -606,6 +636,9 @@ static int find_ctor(const scan_image *im, const cmd_spec *s, cmd_type *o) {
             /* engineer 79: the idea commands: no frame, the tag by reference, then the pointers (and nothing else); <= 12 bytes */
             {CTOR_IDEA_ADD, "55 48 89 e5 c6 47 08 00", "8b 06 89 47 24 48 89 57 28 5d c3"},
             {CTOR_IDEA_REPLACE, "55 48 89 e5 c6 47 08 00", "89 47 24 48 89 57 28 48 89 4f 30 5d"},
+            /* engineer 82: construction: no frame, the tag by reference into +0x24, the reference's location/building/tag
+             * copied into +0x30..+0x3b, count r8d +0x40, mode sil +0x44 */
+            {CTOR_CONSTRUCTION, "55 48 89 e5 c6 47 08 00", "48 89 47 30 8b 41 10 89 47 38 44 89"},
             /* engineer 76: the event answer: option r9d -> ebx, scope r8 -> r12, country * rcx -> r14, cmd -> r13; the
              * option index stored at +0xe8 (the serializer's offset of field 0x2966) */
             {CTOR_EVENT_OPTION, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 18 44 89 cb 4d 89 c4 49 89 ce 49 89 fd",
@@ -992,6 +1025,39 @@ static void scan_holds_facts(const scan_image *im, const cmd_type *ad, holds_fac
              (unsigned long long)ex, o->kind_area, o->area_off, o->area_cnt, o->setting_off);
 }
 
+/* engineer 82: the building reference, from the game's own reference constructors (template rsi, location rdx): the
+ * template's "real" byte and its province count decide which constructor applies; the state one stores the state's id,
+ * the province one the province's id; both store the template's id at +0xc and the location at +8. Every match on the
+ * build must agree. The vptr the command's constructor stores at +0x28 must be CBuildingReference's own vtable. */
+static void scan_construction_facts(const scan_image *im, const cmd_type *add, construction_facts *o) {
+    memset(o, 0, sizeof *o);
+    const uint8_t *tx = scan_ptr(im, im->text_addr, im->text_size);
+    uint32_t c[8]; unsigned ns = 0, np = 0, bad = 0;
+    for (uint64_t i = 0; tx && i + 40 <= im->text_size; i++) {
+        if (tx[i] != 0x80 || tx[i + 1] != 0x7e) continue;
+        int st = cmd_pmatch(tx + i, 27, "80 7e B 00 74 ?? 83 be D 00 7f ?? 8b 46 B 89 47 0c 8b 42 B 89 47 08", c, 8);
+        int pv = !st && cmd_pmatch(tx + i, 30, "80 7e B 00 74 ?? 83 be D 00 7e ?? 8b 46 B 89 47 0c 8b 82 D 89 47 08", c, 8);
+        if (!st && !pv) continue;
+        if (!o->tmpl_real_off) { o->tmpl_real_off = c[0]; o->tmpl_prov_off = c[1]; o->tmpl_id_off = c[2]; }
+        if (c[0] != o->tmpl_real_off || c[1] != o->tmpl_prov_off || c[2] != o->tmpl_id_off) { bad++; continue; }
+        if (st) { if (o->state_id_off && o->state_id_off != c[3]) bad++; o->state_id_off = c[3]; ns++; }
+        else { if (o->prov_id_off && o->prov_id_off != c[3]) bad++; o->prov_id_off = c[3]; np++; }
+    }
+    scan_cap vc;
+    uint64_t cls = scan_class_vtable(im, "18CBuildingReference", &vc) ? vc.value : 0, stored = 0;
+    if (add && add->ctor) {
+        unsigned m = 0;
+        long k = pfind_at(im, add->ctor, 0x60, "48 8d 05 D 48 83 c0 10 48 89 47 28", c, 8, &m);
+        if (k >= 0 && m == 1) stored = add->ctor + (uint64_t)k + 7 + (int64_t)(int32_t)c[0] + 0x10;
+    }
+    o->ref_vt = stored == cls ? cls : 0;
+    o->ok = !bad && ns >= 1 && np >= 1 && o->tmpl_real_off && o->tmpl_prov_off && o->tmpl_id_off && o->ref_vt;
+    snprintf(o->evidence, sizeof o->evidence, "%u state / %u province reference ctors (%u disagree): template real +0x%x, "
+             "province +0x%x, id +0x%x; state id +0x%x, province id +0x%x; reference vtable 0x%llx (ctor stores 0x%llx)",
+             ns, np, bad, o->tmpl_real_off, o->tmpl_prov_off, o->tmpl_id_off, o->state_id_off, o->prov_id_off,
+             (unsigned long long)cls, (unsigned long long)stored);
+}
+
 int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global, stage2_table *t) {
     memset(t, 0, sizeof *t);
     scan_stage2_common(im, pl, gs_global, &t->common);
@@ -1013,6 +1079,7 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
     }
     scan_diplo_facts(im, t, &t->diplo); /* engineer 78 */
     scan_holds_facts(im, stage2_find(t, "holds.area_defense"), &t->holds); /* engineer 79 */
+    scan_construction_facts(im, stage2_find(t, "construction.add"), &t->build); /* engineer 82 */
     /* every type must agree on the "sender controls" check and the generic lookup (one game, one rule) */
     for (int i = 1; i < t->n; i++)
         if (t->t[i].ok && t->t[0].ok &&
@@ -1083,6 +1150,8 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
         if (!strcmp(fam, "events") && !t->events.ok && t->t[i].ok) { t->t[i].ok = 0; on--; }
         /* holds: the area order's facts, the order tree (the order named by id), the array allocator is the ctor's own */
         if (!strcmp(fam, "holds") && t->t[i].ok && (!t->holds.ok || !t->orders.ok)) { t->t[i].ok = 0; on--; }
+        /* construction: the building reference (add) */
+        if (!strcmp(t->t[i].spec->op, "construction.add") && t->t[i].ok && !t->build.ok) { t->t[i].ok = 0; on--; }
         /* diplomacy: the command maker and the date; declare war also the war-goal list */
         if (t->t[i].spec->auth_kind == AUTH_DIPLO && t->t[i].ok &&
             (!t->diplo.ok || (t->t[i].spec->ctor == CTOR_DIPLO_WAR && !t->diplo.war_ok))) { t->t[i].ok = 0; on--; }
