@@ -499,6 +499,7 @@ pub(super) enum RegionRef {
 /// wings again until it holds (the call's Verified read-back follows at once; a read right after the post can still
 /// see the old state, s2d/s2g 24 Nov 2026). Refused when the game's own check refused every object; Gui on any other
 /// refusal or silence (the GUI path decides in the same call).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn airwing_post(
     ch: &mut Channel,
     op: &str,
@@ -752,6 +753,18 @@ mod tests {
         assert!(!family_usable(&hello, "airwing", Mode::Auto));
         assert!(family_usable(&hello, "airwing", Mode::InProcess));
         assert!(family_usable(&hello, "air", Mode::Auto));
+    }
+
+    #[test]
+    fn production2_is_off_in_auto_and_a_new_line_needs_both_families() {
+        let hello = json!({"post":{"enabled":true},"families":{
+            "production":{"on":true,"live_passed":true},"production2":{"on":true,"live_passed":false}}});
+        assert!(!family_usable(&hello, "production2", Mode::Auto));
+        assert!(family_usable(&hello, "production2", Mode::InProcess));
+        // the add path posts the line (production2) and then its factories (production)
+        assert!(family_usable(&hello, "production", Mode::InProcess));
+        // the factories of the new line: from 0 to 5 is one add_factories of 5
+        assert_eq!(production_op(0, 5), Some(("production.add_factories", 5)));
     }
 
     #[test]
