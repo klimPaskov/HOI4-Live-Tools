@@ -5636,9 +5636,20 @@ fn advance(
             state.skip(now, "opexec", &u.name, DAY / 4);
             let rk = key(id, &format!("restart:{}:{k}", u.name));
             let restarts = state.done.get(&rk).copied().unwrap_or(0);
-            let stop_first = executing(roster, &u.name) && restarts < REDRAWS;
+            // a stop sent this game hour or the last is the stop: the roster read in the same
+            // burst still shows the army executing, and a second stop went out instead of the
+            // execute (t1939j, 24 Nov 2026: execute:false twice for Army 7, 9 and 2, I0169/I0172)
+            let sk = key(id, &format!("stopped:{}", u.name));
+            let just_stopped = state
+                .done
+                .get(&sk)
+                .is_some_and(|t| now.saturating_sub(*t) <= 1);
+            let stop_first = executing(roster, &u.name) && restarts < REDRAWS && !just_stopped;
             if stop_first {
                 state.done.insert(rk, restarts + 1);
+                state.done.insert(sk, now);
+            } else {
+                state.done.remove(&sk);
             }
             let line = order(
                 state,
