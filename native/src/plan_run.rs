@@ -2085,6 +2085,20 @@ fn lanes_tick_inner(
         state.sched.turns.insert("speed", now);
         return Ok(Tick::Acted(line));
     }
+    // Before the war, a role an operation names that has no army takes the tick ahead of every
+    // lane, the paused first day included (t1939e-g, 24 Nov 2026: the layout behind the lanes
+    // formed its first role on day 10-20 of the 1939 bookmark and the war began without them).
+    if war_first
+        && !state.war_active
+        && !state.skipped(now, "layoutfirst", "all")
+        && operation_roles_missing(state, plan)
+    {
+        if let Some(line) = layout_step(state, tools, plan, lease, now)? {
+            state.round.war_acted(now);
+            return Ok(Tick::Acted(line));
+        }
+        state.skip(now, "layoutfirst", "all", 6);
+    }
     // `scheduler.war_every_tick`: the war-first block takes every tick it has an order for
     // While an operation executes, the war lane is offered first in every tick (it gives the
     // tick back at once when nothing is due): pb1 (19 Nov 2026) sent about 25 army orders in 56
@@ -4632,6 +4646,25 @@ fn layout_step(
         state.skip(now, "layoutmove", hint, if ok { 20 * DAY } else { 3 * DAY });
         return Ok(Some(format!(
             "layout: {army} ({hint}) marches to its state {home}: {ok} {why}"
+        )));
+    }
+    // The layout sends the gather itself while a role an operation names is missing (t1939f/g,
+    // 24 Nov 2026: left to the armies lane, the 121 loose divisions of the 1939 bookmark were
+    // gathered on day 10-20 and no role formed before the war). The roles then carve from it.
+    let loose: u64 = list(&roster, "unassigned_by_state")
+        .iter()
+        .filter_map(|r| r["divisions"].as_u64())
+        .sum();
+    if loose > 0
+        && operation_roles_missing(state, plan)
+        && !state.skipped(now, "layoutgather", "all")
+        && gather_takes_loose(tools, plan)
+    {
+        let max = plan["armies"]["max"].as_u64().unwrap_or(24);
+        let (ok, why) = state.act(tools, lease, "hoi4_army_gather", json!({"max": max}), "lg")?;
+        state.skip(now, "layoutgather", "all", DAY);
+        return Ok(Some(format!(
+            "layout: the {loose} loose division(s) gathered first: {ok} {why}"
         )));
     }
     for (index, e) in entries.iter().enumerate() {
@@ -16629,6 +16662,7 @@ mod tests {
                         .armies
                         .borrow()
                         .iter()
+                        .filter(|(a, _, _)| !a.is_empty())
                         .map(|(a, s, d)| {
                             let mut at = serde_json::Map::new();
                             at.insert(s.to_string(), json!(d.len()));
@@ -16637,7 +16671,30 @@ mod tests {
                                 "defensive_orders": i64::from(self.orders.borrow().contains(a))})
                         })
                         .collect();
-                    json!({"armies": rows})
+                    // the army named "" holds the divisions in no army
+                    let loose: Vec<Value> = self
+                        .armies
+                        .borrow()
+                        .iter()
+                        .filter(|(a, _, d)| a.is_empty() && !d.is_empty())
+                        .map(|(_, s, d)| json!({"state_id": s, "divisions": d.len()}))
+                        .collect();
+                    json!({"armies": rows, "unassigned_by_state": loose})
+                }
+                "hoi4_alerts" => {
+                    let loose = self.size("") > 0;
+                    json!({"alerts": if loose { json!([{"alert": "unassigned_divisions"}]) } else { json!([]) }})
+                }
+                "hoi4_army_gather" => {
+                    let mut all = self.armies.borrow_mut();
+                    let n = (1..)
+                        .find(|n| !all.iter().any(|a| a.0 == format!("Army {n}")))
+                        .unwrap();
+                    let src = all.iter_mut().find(|a| a.0.is_empty()).unwrap();
+                    let moved = std::mem::take(&mut src.2);
+                    let at = moved.first().map_or(src.1, |d| d.2);
+                    all.push((format!("Army {n}"), at, moved));
+                    ok
                 }
                 "hoi4_supply" => {
                     let army = text(&args["army"]);
@@ -16822,6 +16879,40 @@ mod tests {
         assert_eq!(
             got("Armee Süd") + got("Armee West"),
             16,
+            "{:?}",
+            state.layout
+        );
+    }
+
+    #[test]
+    fn a_start_with_every_division_in_no_army_is_gathered_by_the_layout_itself() {
+        // t1939g: the bookmark's 121 divisions stood in no army; the layout left them to the
+        // armies lane's gather, which came on day 20
+        let loose: Vec<(String, &str, i64)> =
+            (0..60).map(|i| (format!("d{i}"), "Inf", 63)).collect();
+        let board = Board::new(vec![(
+            "",
+            63,
+            loose.iter().map(|(i, t, s)| (i.as_str(), *t, *s)).collect(),
+        )]);
+        let plan = bookmark_plan();
+        let mut state = State::default();
+        let first = layout_step(&mut state, &board, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(first.contains("gathered first: true"), "{first}");
+        for _ in 0..20 {
+            if layout_step(&mut state, &board, &plan, "l", START)
+                .unwrap()
+                .is_none()
+            {
+                break;
+            }
+        }
+        assert_eq!(board.sent("hoi4_army_gather"), 1);
+        let got = |h: &str| board.size(state.layout.get(h).map_or("", String::as_str));
+        assert!(
+            got("Armee Mitte") >= 3 && got("Armee Süd") >= 2,
             "{:?}",
             state.layout
         );
