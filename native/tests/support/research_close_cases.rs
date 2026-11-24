@@ -8,7 +8,7 @@ mod research_close_cases {
 
     fn window(f: &mut Fixture, address: u64, shown: bool) {
         f.region(address, 0xf00);
-        f.word(address, 0x10000 + 0x44de2b0);
+        f.word(address, 0x10000 + 0x44e62b0);
         f.word(address + 0x98, 0x70000);
         f.put(address + 0xa5, &[if shown { 8 } else { 0 }]);
     }
@@ -28,10 +28,10 @@ mod research_close_cases {
         f.region(0x32700, 0x200);
         f.region(0x30738, 0x328);
         f.put(0x30a59, &[1]);
-        f.word(base + 0x470e6d8, 0x70000);
+        f.word(base + 0x47166f8, 0x70000);
         f.word(0x90218, MENU);
         f.region(MENU, 0x1a00);
-        f.word(MENU, base + 0x43f2360);
+        f.word(MENU, base + 0x43f9610);
         f.word(MENU + 0x19a0, 0x32000);
         f.word(MENU + 0x19a8, 0x90000);
         f.put(POLITICS_WINDOW + 0xa5, &[0]);
@@ -43,7 +43,7 @@ mod research_close_cases {
         f.word(0x91900, FACILITIES);
         f.word(0x91910, FACILITIES_PARENT);
         f.region(FACILITIES, 0x100);
-        f.word(FACILITIES, base + 0x4487c30);
+        f.word(FACILITIES, base + 0x448fbb8);
         f.word(FACILITIES + 0x60, FACILITIES_PARENT);
         f.word(FACILITIES + 0x68, 0x32000);
         f.word(FACILITIES + 0x70, FACILITIES_ROOT);
@@ -63,8 +63,8 @@ mod research_close_cases {
     }
     fn selected_folder(f: &mut Fixture) {
         let base = 0x10000;
-        f.word(base + 0x453a120, 0x340000);
-        f.word(0x340000, base + 0x43a63d0);
+        f.word(base + 0x4542120, 0x340000);
+        f.word(0x340000, base + 0x43ad518);
         folder_catalog_key(f, 0x341000, "industry_folder", 0);
         f.array(0x360a8, 0x343000, 2);
         f.word(0x343000, 0x340000);
@@ -127,7 +127,7 @@ mod research_close_cases {
     #[test]
     fn research_close_producer_rejects_facilities_type_and_owner_before_child_payload() {
         for (field, value) in [
-            (0, 0x10000 + 0x44de2b0),
+            (0, 0x10000 + 0x44e62b0),
             (0x68, 0xdead0000),
             (0x60, 0xdead0000),
         ] {
