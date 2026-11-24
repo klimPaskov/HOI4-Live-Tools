@@ -7845,10 +7845,19 @@ fn air_war_missions(
                 let name = text(&wing["wing"]).to_string();
                 // a wing training in peace (plan_manage air_idle_step) is free for the war
                 let training_only = strings(wing, "missions") == ["training"];
-                if (wing["standing_by"] != json!(true) && !training_only)
-                    || plan_manage::air_plan_claims(plan, wing)
-                {
+                if wing["standing_by"] != json!(true) && !training_only {
+                    state.done.remove(&format!("airidle:{name}"));
                     continue;
+                }
+                // a wing an `air_plan` entry claims is the entry's while it orders it; one it has
+                // left on the ground for AIR_CLAIM_IDLE (its entry full at max_wings, or not due)
+                // takes the default mission: 6 fighter/CAS and 3 naval bomber wings stood by all
+                // the way to the Polish war (t1939v1, 24 Nov 2026)
+                if plan_manage::air_plan_claims(plan, wing) {
+                    let since = *state.done.entry(format!("airidle:{name}")).or_insert(now);
+                    if now - since < AIR_CLAIM_IDLE {
+                        continue;
+                    }
                 }
                 if state.skipped(now, "airwing", &name) {
                     waiting = true;
@@ -8140,6 +8149,8 @@ fn operation_targets(tools: &dyn Tools) -> Vec<i64> {
 /// The state a war wing based in `base` flies over: an operation target across the border its
 /// base lies on, else the first operation target, else the first enemy state across its border,
 /// else (no enemy states listed) the front state itself.
+/// Game hours a wing an `air_plan` entry claims may stand by before it takes the default mission.
+const AIR_CLAIM_IDLE: GameHour = 2 * DAY;
 /// Wings one air mission order takes at most (`hoi4_air_mission` wings).
 const AIR_BATCH: usize = 12;
 
@@ -14516,10 +14527,12 @@ mod tests {
         let mut state = State::default();
         // the tactical bomber flies its ground support too (s7n: 13 bomber wings stood by)
         let steps: Vec<String> = (0..3)
-            .filter_map(|_| match tick(&mut state, &tools, &plan, "l", START).unwrap() {
-                Tick::Acted(s) => Some(s),
-                _ => None,
-            })
+            .filter_map(
+                |_| match tick(&mut state, &tools, &plan, "l", START).unwrap() {
+                    Tick::Acted(s) => Some(s),
+                    _ => None,
+                },
+            )
             .collect();
         assert!(
             steps
@@ -14528,7 +14541,9 @@ mod tests {
             "{steps:?}"
         );
         assert!(
-            steps.iter().any(|s| s.contains(" cas over ") && s.contains("(KG 1)")),
+            steps
+                .iter()
+                .any(|s| s.contains(" cas over ") && s.contains("(KG 1)")),
             "{steps:?}"
         );
     }
@@ -14834,7 +14849,12 @@ mod tests {
             {"equipment": "small_plane_airframe_1", "from": "1937.1.1", "factories": 7},
             {"equipment": "light_tank_chassis_2", "from": "1936.9.1", "remove": true}]});
         let rows = list(&plan, "production");
-        let at = |d: &str| crate::alarms::stop_on_date(&json!({"stop_on_date": d})).unwrap().unwrap().0;
+        let at = |d: &str| {
+            crate::alarms::stop_on_date(&json!({"stop_on_date": d}))
+                .unwrap()
+                .unwrap()
+                .0
+        };
         assert!(removal_superseded(&plan, &rows[0], at("1939.8.14")));
         // before the later floor is reached the removal stands
         assert!(!removal_superseded(&plan, &rows[0], at("1936.6.1")));
