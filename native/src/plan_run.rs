@@ -4987,7 +4987,11 @@ fn form_strike_role(
     Ok(Some(format!(
         "layout: {hint} formed from {} division(s) of {donor} -> {new} (target {need}{})",
         pick.len(),
-        if named { ", an operation's role" } else { "" }
+        if named {
+            ", a role of an operation"
+        } else {
+            ""
+        }
     )))
 }
 
@@ -5221,12 +5225,23 @@ fn layout_candidates(
             .map(|x| strings(x, "templates"))
             .unwrap_or_default();
         let wanted: Vec<&String> = templates.iter().filter(|t| !keeps.contains(t)).collect();
-        if wanted.is_empty() {
+        // a role's army above its own size gives the surplus of its own templates too (t1939d,
+        // 24 Nov 2026: the bookmark's gathered army of 96 was bound as Armee Pommern and kept
+        // every infantry division, so Armee Mitte and Armee Süd never formed and no war began)
+        let size = a["division_count"].as_u64().unwrap_or(0) as usize;
+        let own_size = role_of
+            .get(name)
+            .map(|h| own_role_size(state, plan, h, a))
+            .unwrap_or(usize::MAX);
+        let surplus = size.saturating_sub(own_size);
+        if wanted.is_empty() && surplus == 0 {
             continue;
         }
         let detail = tools.call("hoi4_supply", &json!({"army": name}))?;
+        let mut spare: Vec<(String, String, f64)> = Vec::new();
         for d in list(&detail, "divisions") {
-            if text(&d["army"]) != name || !wanted.iter().any(|t| *t == text(&d["template"])) {
+            let template = text(&d["template"]);
+            if text(&d["army"]) != name || !templates.iter().any(|t| t == template) {
                 continue;
             }
             let Some(id) = d["id"].as_str() else { continue };
@@ -5239,11 +5254,33 @@ fn layout_candidates(
             if name != gather {
                 dist += 1e-6;
             }
-            out.push((name.to_string(), id.to_string(), dist));
+            let row = (name.to_string(), id.to_string(), dist);
+            if wanted.iter().any(|t| *t == template) {
+                out.push(row);
+            } else {
+                spare.push(row);
+            }
         }
+        spare.sort_by(|x, y| x.2.total_cmp(&y.2));
+        spare.truncate(surplus);
+        out.extend(spare);
     }
     out.sort_by(|x, y| x.2.total_cmp(&y.2));
     Ok(out)
+}
+
+/// The divisions role `hint`'s own army keeps: its formed target (`layouttarget:`), else the
+/// plan's `armies.max` held to the army's commander limit (`division_limit`).
+fn own_role_size(state: &State, plan: &Value, hint: &str, row: &Value) -> usize {
+    if let Some(t) = state.done.get(&format!("layouttarget:{hint}")) {
+        return (*t).max(1) as usize;
+    }
+    let cap = plan["armies"]["max"].as_u64().unwrap_or(24).max(1);
+    let limit = row["division_limit"]
+        .as_u64()
+        .filter(|l| *l > 0)
+        .unwrap_or(cap);
+    cap.min(limit) as usize
 }
 
 /// The divisions an operation's role aims at: its share of `available` divisions of its
@@ -16698,6 +16735,33 @@ mod tests {
         // the dated role is not formed before its date
         assert!(bound("Garnison").is_empty());
         assert!(board.sent("hoi4_army_merge") >= 1, "{log:?}");
+        // a role whose army is far above its size gives its surplus to the roles still forming
+        let big: Vec<(String, &str, i64)> = (0..40).map(|i| (format!("p{i}"), "Inf", 63)).collect();
+        let board = Board::new(vec![(
+            "Armee Mitte",
+            63,
+            big.iter().map(|(i, t, s)| (i.as_str(), *t, *s)).collect(),
+        )]);
+        let mut state = State::default();
+        state
+            .layout
+            .insert("Armee Mitte".into(), "Armee Mitte".into());
+        for _ in 0..12 {
+            if layout_step(&mut state, &board, &plan, "l", now)
+                .unwrap()
+                .is_none()
+            {
+                break;
+            }
+        }
+        let got = |h: &str| board.size(state.layout.get(h).map_or("", String::as_str));
+        assert_eq!(got("Armee Mitte"), 24, "{:?}", state.layout);
+        assert_eq!(
+            got("Armee Süd") + got("Armee West"),
+            16,
+            "{:?}",
+            state.layout
+        );
     }
 
     #[test]
@@ -16752,10 +16816,18 @@ mod tests {
         let roster = board.call("hoi4_armies", &json!({})).unwrap();
         let active = vec![("op".to_string(), plan["operations"][0].clone())];
         let now = hour("1939.08.20");
-        let line =
-            plan_operation::idle_holds_for_test(&mut state, &board, &plan, &active, &roster, now)
-                .unwrap()
-                .unwrap();
+        let line = plan_operation::idle_holds(
+            &mut state,
+            &board,
+            &plan,
+            &active,
+            &roster,
+            &json!({}),
+            "l",
+            now,
+        )
+        .unwrap()
+        .unwrap();
         assert!(
             line.contains("Army 1 has no order: it holds [42]"),
             "{line}"
@@ -16763,12 +16835,14 @@ mod tests {
         // the owned army is the operation's; the held one is not ordered twice
         let roster = board.call("hoi4_armies", &json!({})).unwrap();
         assert_eq!(
-            plan_operation::idle_holds_for_test(
+            plan_operation::idle_holds(
                 &mut state,
                 &board,
                 &plan,
                 &active,
                 &roster,
+                &json!({}),
+                "l",
                 now + 2 * DAY
             )
             .unwrap(),
@@ -16778,8 +16852,17 @@ mod tests {
         let on = json!({"operations": plan["operations"].clone()});
         let mut fresh = State::default();
         assert_eq!(
-            plan_operation::idle_holds_for_test(&mut fresh, &board, &on, &active, &roster, now)
-                .unwrap(),
+            plan_operation::idle_holds(
+                &mut fresh,
+                &board,
+                &on,
+                &active,
+                &roster,
+                &json!({}),
+                "l",
+                now
+            )
+            .unwrap(),
             None
         );
     }
