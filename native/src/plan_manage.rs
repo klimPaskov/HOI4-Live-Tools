@@ -3751,7 +3751,7 @@ fn follow_fighting(
     mission: Option<&str>,
     owned: &[&Value],
     now: GameHour,
-) -> Option<Value> {
+) -> Option<(Value, Option<(f64, f64)>)> {
     if entry["follow_front"] == json!(false)
         || !mission.is_some_and(|m| FOLLOW_MISSIONS.contains(&m))
     {
@@ -3803,17 +3803,22 @@ fn follow_fighting(
         .filter_map(|w| w["air_base"]["state_id"].as_i64())
         .filter_map(|s| state.centers.get(&(s as i32)).copied())
         .collect();
-    let target = if pts.is_empty() {
+    let (target, anchor) = if pts.is_empty() {
         let mut counts: HashMap<i64, usize> = HashMap::new();
         for s in &contact {
             if let Some(r) = region_of(*s) {
                 *counts.entry(r).or_default() += 1;
             }
         }
-        counts
+        let r = counts
             .into_iter()
             .max_by_key(|(r, n)| (*n, -*r))
-            .map(|(r, _)| r)
+            .map(|(r, _)| r)?;
+        let at = contact
+            .iter()
+            .filter(|s| region_of(**s) == Some(r))
+            .find_map(|s| state.centers.get(&(*s as i32)).copied());
+        (r, at)
     } else {
         let n = pts.len() as f64;
         let (x, z) = (
@@ -3824,11 +3829,11 @@ fn follow_fighting(
             .iter()
             .filter_map(|s| {
                 let p = state.centers.get(&(*s as i32))?;
-                Some((region_of(*s)?, (p.0 - x).powi(2) + (p.1 - z).powi(2)))
+                Some((region_of(*s)?, (p.0 - x).powi(2) + (p.1 - z).powi(2), *p))
             })
             .min_by(|a, b| a.1.total_cmp(&b.1))
-            .map(|(r, _)| r)
-    }?;
+            .map(|(r, _, p)| (r, Some(p)))?
+    };
     note(
         state,
         "air_plan",
@@ -3838,7 +3843,37 @@ fn follow_fighting(
             mission.unwrap_or("")
         ),
     );
-    Some(json!(target))
+    Some((json!(target), anchor))
+}
+
+/// The own base with room for `planes` nearest to `point` (the contact state a followed mission
+/// flies over), only when it lies nearer than the wing's own base: a mission that follows the
+/// fighting moves its wing towards it, never away (t1939k, 24 Nov 2026: twelve fighter wings were
+/// sent over the French border from Silesian bases, out of range, read back unchanged twice, and
+/// 89% of the planes stayed over Poland for six days). Pure.
+fn nearest_base_to(
+    bases: &[Value],
+    point: (f64, f64),
+    here: Option<i64>,
+    planes: i64,
+    centers: &HashMap<i32, (f64, f64)>,
+) -> Option<i64> {
+    let dist = |s: i64| {
+        centers
+            .get(&(s as i32))
+            .map(|c| ((c.0 - point.0).powi(2) + (c.1 - point.1).powi(2)).sqrt())
+    };
+    let own = here.and_then(dist).unwrap_or(f64::MAX);
+    bases
+        .iter()
+        .filter(|b| b["state_id"].as_i64() != here && b["free"].as_i64().unwrap_or(0) >= planes)
+        .filter_map(|b| {
+            let s = b["state_id"].as_i64()?;
+            Some((dist(s)?, s))
+        })
+        .filter(|(d, _)| *d < own)
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, s)| s)
 }
 
 pub(super) fn air_plan_step(
@@ -3957,10 +3992,11 @@ pub(super) fn air_plan_step(
         // a land mission follows the fighting: once the war has left the entry's region, its
         // wings fly over the fighting region nearest them (t1939j, 24 Nov 2026: 80% of the planes
         // kept flying over Western Poland for three weeks after the front had moved east)
-        let followed = if active[index] {
+        let (followed, anchor) = if active[index] {
             follow_fighting(state, tools, plan, entry, planned, mission, &owned, now)
+                .map_or((None, None), |(r, a)| (Some(r), a))
         } else {
-            None
+            (None, None)
         };
         let region = followed.as_ref().unwrap_or(planned);
         let region_arg = match region {
@@ -4003,21 +4039,31 @@ pub(super) fn air_plan_step(
                 state.done.get(&format!("airref:{name}:{r}")).copied() == here.or(Some(-1))
             });
             let want = &entry["base_region"];
-            let target = rebase_target(entry, region, wing, &open)
-                .or_else(|| {
-                    refused_here
-                        .then(|| roomiest_base(&open, region, here, planes))
+            // a followed mission: the entry's planned bases belong to the region the war left;
+            // the wing moves to the base with room nearest the new fighting instead
+            let in_transit = wing["transfer_to_base_id"].as_i64().is_some();
+            let target = if followed.is_some() {
+                anchor
+                    .filter(|_| !in_transit)
+                    .and_then(|p| nearest_base_to(&open, p, here, planes, &state.centers))
+                    .filter(|_| !state.skipped(now, "airrebase", &name))
+            } else {
+                rebase_target(entry, region, wing, &open)
+                    .or_else(|| {
+                        refused_here
+                            .then(|| roomiest_base(&open, region, here, planes))
+                            .flatten()
+                    })
+                    .or_else(|| {
+                        (entry["base_state"].is_null()
+                            && !want.is_null()
+                            && !based_in(wing, &open, want)
+                            && wing["transfer_to_base_id"].as_i64().is_none())
+                        .then(|| nearest_room_base(&open, want, here, planes, &state.centers))
                         .flatten()
-                })
-                .or_else(|| {
-                    (entry["base_state"].is_null()
-                        && !want.is_null()
-                        && !based_in(wing, &open, want)
-                        && wing["transfer_to_base_id"].as_i64().is_none())
-                    .then(|| nearest_room_base(&open, want, here, planes, &state.centers))
-                    .flatten()
-                })
-                .filter(|_| !state.skipped(now, "airrebase", &name));
+                    })
+                    .filter(|_| !state.skipped(now, "airrebase", &name))
+            };
             if let Some(base) = target {
                 let planes = wing["aircraft"].as_i64().unwrap_or(0);
                 for b in room.iter_mut() {
@@ -12454,6 +12500,41 @@ mod tests {
             balance_decide(&b),
             None,
             "a short shortfall waits for new factories"
+        );
+    }
+
+    /// t1939k (24 Nov 2026): a followed mission moves its wing to the base with room nearest the
+    /// new fighting, never to a full base and never further away than its own.
+    #[test]
+    fn followed_mission_rebases_toward_the_fighting() {
+        let centers: HashMap<i32, (f64, f64)> = [
+            (66, (100.0, 0.0)),
+            (57, (10.0, 0.0)),
+            (51, (5.0, 0.0)),
+            (92, (200.0, 0.0)),
+        ]
+        .into_iter()
+        .collect();
+        let bases = vec![
+            json!({"state_id": 66, "free": 500}),
+            json!({"state_id": 57, "free": 300}),
+            json!({"state_id": 51, "free": 50}),
+            json!({"state_id": 92, "free": 900}),
+        ];
+        // from Silesia (66) to the French border (x 0): 51 is nearest but full for 100 planes
+        assert_eq!(
+            nearest_base_to(&bases, (0.0, 0.0), Some(66), 100, &centers),
+            Some(57)
+        );
+        // already at the nearest base with room: stays
+        assert_eq!(
+            nearest_base_to(&bases, (0.0, 0.0), Some(57), 100, &centers),
+            None
+        );
+        // never further away
+        assert_eq!(
+            nearest_base_to(&bases, (300.0, 0.0), Some(92), 100, &centers),
+            None
         );
     }
 }

@@ -259,7 +259,9 @@ class Detector:
             sev = f.get("severity") or "medium"
             esc = True
             if code.startswith("frame_") or code.startswith("game_alert"):
-                sev, esc = "low", False
+                # a game alert a lane owns escalates once its deadline passes acted-but-open (the
+                # lane acted and the flag stayed); an alert no lane owns stays a quiet row
+                sev, esc = "low", R.lane_of(code) not in (None, "alerts")
             if code in ("executor_repeated_refusal", "plan_item_blocked"):
                 esc = False  # the executor's ledger: answered by lessons, reported at the gate
             lane = R.lane_of(f.get("subject") or "") if code == "lane_wait_outlived" else None

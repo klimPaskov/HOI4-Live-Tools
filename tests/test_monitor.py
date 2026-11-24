@@ -173,6 +173,23 @@ class MonitorTest(unittest.TestCase):
         it = det.issues["frame_4"]
         assert it["severity"] == "low" and it["escalate"] is False
 
+    def test_game_alerts_go_to_the_lane_that_owns_them(self):
+        # t1939k (24 Nov 2026): with the game_alert: prefix every alert fell to the "alerts" lane
+        # no executor lane owns; doctrines, MIO traits, officer corps, decisions, operatives and
+        # dockyards stayed flagged through the war
+        want = {"doctrines_available": "extras", "mio_traits": "mio_traits",
+                "modify_officer_corps": "officer_corps", "decisions_available": "decisions",
+                "operative_recruitable": "intelligence", "free_dockyards": "dockyards",
+                "admiral_assignable": "navy", "no_divisions_in_training": "training"}
+        for name, lane in want.items():
+            self.assertEqual(R.lane_of(f"game_alert:{name}:{name}"), lane, name)
+        self.assertEqual(R.lane_of("game_alert:some_mod_alert:x"), "alerts")
+        det = Detector(str(self.tmp))
+        det.snapshot(snap("1940.05.08.22", [finding("game_alert:mio_traits", "the game flags mio_traits",
+                                                    subject="mio_traits")]))
+        it = det.issues["game_alert:mio_traits:mio_traits"]
+        assert it["lane"] == "mio_traits" and it["severity"] == "low" and it["escalate"] is True
+
 
     # --- detection: logs (calls, executor orders, refusals) ------------------------------------------------
 
