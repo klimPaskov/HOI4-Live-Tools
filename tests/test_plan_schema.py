@@ -429,7 +429,7 @@ class CoverageKeys(unittest.TestCase):
                                                           "casualties", "air_superiority", "overdrawn", "convoys", "fuel",
                                                           "balance", "dockyards", "doctrines", "exercises",
                                                           "cp_spend", "mio_lines", "mio_traits",
-                                                          "air_idle", "air_reserve", "group_marshals", "speed"})
+                                                          "air_idle", "air_reserve", "air_attach", "group_marshals", "speed"})
         want = {"wake_repeat_days": 7, "alert_persist_days": 14, "manpower_months": 2, "stability_floor": 0.5,
                 "equipment_fill_floor": 0.8, "stockpile_days_critical": 7, "stockpile_days_warning": 30,
                 "trucks_ratio": 1.5, "deficit_wake_days": 14,
@@ -453,6 +453,8 @@ class CoverageKeys(unittest.TestCase):
                 # plan_manage.rs: idle wings train, fuel cuts missions, unplanned reserve founds wings
                 "air_training": True, "air_training_why": "", "air_training_fuel": 0.5, "fuel_days_floor": 30,
                 "air_reserve_min": 50,
+                # plan_military.rs: wings to the attacking armies (air_attach_rule)
+                "air_attach": {},
                 # plan_run.rs: the game's bulk paths, each off until its live probe passes
                 "bulk": []}
         for k, v in want.items():

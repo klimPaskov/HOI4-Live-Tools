@@ -1,3 +1,4 @@
+use crate::xlayout::UNMAPPED;
 // Own research semantics derived from Clausewitz-MCP calling/game.py.
 // Copyright (c) 2026 smerss, MIT; ../LICENSE.clausewitz retains full notice.
 // Primary types, canonical joins and raw field widths are independently recovered.
@@ -51,10 +52,23 @@ const MACOS: Layout = Layout {
     status_vtable: 0x35a7258,
     slot_vtable: 0x35a71f8,
 };
+/// Windows: no reviewed layout yet. Every offset and address is past the readable range, so
+/// each read through it fails with `read_bound` instead of reading a guessed place.
+const WINDOWS: Layout = Layout {
+    database_vtable: UNMAPPED,
+    template_vtable: UNMAPPED,
+    database_templates: UNMAPPED,
+    template_index: UNMAPPED,
+    template_threshold: UNMAPPED,
+    technology_vtable: UNMAPPED,
+    status_vtable: UNMAPPED,
+    slot_vtable: UNMAPPED,
+};
 pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {
         crate::memory::StringAbi::LibStdCxx => &LINUX,
         crate::memory::StringAbi::LibCxx => &MACOS,
+        crate::memory::StringAbi::Msvc => &WINDOWS,
     }
 }
 

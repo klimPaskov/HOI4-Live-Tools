@@ -142,6 +142,12 @@ impl Table {
     }
 }
 
+/// Offset and address of a key with no reviewed value on this platform (the Windows core
+/// layouts until live checks give them values): any address built from it lies past the
+/// readable user range, so the read fails with `read_bound`. Products with object indexes stay
+/// below 2^64.
+pub(crate) const UNMAPPED: u64 = 1 << 47;
+
 /// Table for the Linux build (HOI4 1.20.0.0, GNU build ID 71806afa): the 1.19.4.1 table (from
 /// `scripts/gen_linux_layout.py generate` plus the reviewed hints and live corrections) moved to
 /// this build by `scripts/linux_build_migrate.py --table`; entries the migration could not confirm
@@ -190,6 +196,20 @@ fn linux() -> Result<&'static Table> {
         .map_err(|m| Error::new("layout_unmapped", m.clone()))
 }
 
+/// No Windows table ships yet: the vtables are mapped by RTTI
+/// (`scripts/pe_rtti_map.py`), globals and fields need live reads. A development build reads
+/// its working table from `HOI4_LIVE_DEV_TABLE` like on Linux.
+fn windows() -> Result<&'static Table> {
+    #[cfg(feature = "dev-table")]
+    if let Some(table) = dev_table() {
+        return table;
+    }
+    Err(Error::new(
+        "layout_unmapped",
+        "No verified Windows layout ships for the management tools",
+    ))
+}
+
 /// The management tools may bind on Linux: a generated table ships and was
 /// made for exactly the running build.
 #[cfg(target_os = "linux")]
@@ -212,6 +232,7 @@ pub(crate) fn img(abi: StringAbi, mac: u64) -> Result<u64> {
     match abi {
         StringAbi::LibCxx => Ok(mac),
         StringAbi::LibStdCxx => linux()?.image(mac),
+        StringAbi::Msvc => windows()?.image(mac),
     }
 }
 
@@ -220,6 +241,7 @@ pub(crate) fn fld(abi: StringAbi, class: &Class, mac: u64) -> Result<u64> {
     match abi {
         StringAbi::LibCxx => Ok(mac),
         StringAbi::LibStdCxx => linux()?.field(class, mac),
+        StringAbi::Msvc => windows()?.field(class, mac),
     }
 }
 

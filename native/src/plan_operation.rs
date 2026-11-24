@@ -310,13 +310,14 @@ const LAYOUT_WAIT_DAYS: i64 = 14;
 /// for them: ownership and the prepare start only once the layout has formed, so the layout and
 /// the operation's assembly never race over the same armies (it27b, 18 Nov 2026: the operation
 /// named and owned Army 2 as North Strike before the layout split it). Dated roles (`when`) and
-/// a plan without land orders are not waited for; after LAYOUT_WAIT_DAYS the operations go on.
+/// a plan without land orders whose operations name no layout role are not waited for; after
+/// LAYOUT_WAIT_DAYS the operations go on.
 pub(super) fn layout_pending(
     state: &mut State,
     plan: &Value,
     now: GameHour,
 ) -> Option<Vec<String>> {
-    if !super::land_orders(plan) {
+    if !super::land_orders(plan) && !layout_needed(plan) {
         return None;
     }
     let pending: Vec<String> = list(plan, "army_layout")
@@ -334,6 +335,18 @@ pub(super) fn layout_pending(
     }
     let since = *state.done.entry("op:layoutwait".to_string()).or_insert(now);
     (now - since < LAYOUT_WAIT_DAYS * DAY).then_some(pending)
+}
+
+/// Whether an operation of the plan names a role of the `army_layout`: then the layout binds its
+/// roles even in a phase whose `war.land_orders` is false. `land_orders: false` hands the land war
+/// to the operations' drawn plans, and those plans find their armies through the layout (t1939a,
+/// 24 Nov 2026: the 1939 bookmark entered the Poland phase, land orders off, before any role was
+/// bound; the layout never ran, op_poland read "Armee Nord is not on the map" and no front or
+/// attack was drawn for two months of war).
+pub(super) fn layout_needed(plan: &Value) -> bool {
+    list(plan, "army_layout")
+        .iter()
+        .any(|e| names_army(plan, text(&e["name_hint"])))
 }
 
 /// Whether an operation of the plan names `hint` as one of its formation or hold armies.

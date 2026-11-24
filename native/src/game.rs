@@ -1,3 +1,4 @@
+use crate::xlayout::UNMAPPED;
 // Own-country object semantics derived from Clausewitz-MCP calling/{api,game}.py.
 // Copyright (c) 2026 smerss, MIT; ../LICENSE.clausewitz retains full notice.
 // Offsets below belong only to the independently inspected current Linux ELF.
@@ -120,6 +121,48 @@ pub(crate) const MACOS: Layout = Layout {
     build_id: "DFA875A5-25BA-35E0-9736-627F8A5C4396",
     source: "native mach_vm_read",
 };
+/// Windows PE hoi4.exe 1.20.0.0 (MSVC), SHA-256 1beb2a38...b63a9f, read live on 24 November
+/// 2026 from a game this runtime started: globals are the only `.data` pointers to objects
+/// whose vtable is the class's (vtables by RTTI name, `scripts/pe_rtti_map.py`); the date moved
+/// while unpaused, speed with the speed buttons, `paused` with the clock, the country join by
+/// tag (the tag database names the player tag GER), difficulty and historical match the lobby
+/// choices, country members by their vtables.
+/// What was not measured stays past the readable range, so that read fails with `read_bound`
+/// instead of reading a guessed place.
+pub(crate) const WINDOWS: Layout = Layout {
+    gs_global: 0x33e3b30,
+    idler_global: 0x33e3f88,
+    technology_db_global: 0x33e3968,
+    tag_db_global: 0x33e5708,
+    gs_vtable: 0x27a31b8,
+    idler_vtable: 0x29ea628,
+    playthrough: 0x728,
+    date: 0x468,
+    speed: 0x4bc,
+    paused: 0x6c1,
+    player_tag: 0x520,
+    tag_country_index: 0x340,
+    countries: 0x310,
+    difficulty: 0x630,
+    historical: 0x638,
+    tag_stride: 32,
+    country_focus_progress: 0x1380,
+    country_technology_status: 0xf60,
+    country_vtable: 0x28691d0,
+    country_production: 0xf68,
+    country_politics: 0xf90,
+    country_focus_tree: 0x1370,
+    production_vtable: 0x29f1de8,
+    politics_vtable: 0x29d1738,
+    type_metadata: (UNMAPPED, UNMAPPED),
+    type_names: (UNMAPPED, UNMAPPED),
+    focus_name: UNMAPPED,
+    // CProductionStatus members are not measured on Windows: every one fails.
+    production_shift_from: 0,
+    production_shift: UNMAPPED,
+    build_id: "1beb2a38fe2d747e5b7adb9b9648e350b0b851845dd228ffb87d2d2ac1b63a9f",
+    source: "native ReadProcessMemory",
+};
 /// Each supported string ABI belongs to exactly one inspected build.
 impl Layout {
     /// Offset of a CProductionStatus field given its 1.19.3 (Linux-reviewed) offset.
@@ -135,6 +178,7 @@ pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {
         crate::memory::StringAbi::LibStdCxx => &LINUX,
         crate::memory::StringAbi::LibCxx => &MACOS,
+        crate::memory::StringAbi::Msvc => &WINDOWS,
     }
 }
 pub const SHA256: &str = "f8fe17fb1047cc94a64e7cc8f13780494e8eb111b9c3a3468256bfbc4f499874";

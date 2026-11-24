@@ -85,6 +85,9 @@ pub(super) struct Wing {
     pub transfer_base_id: i32,
     /// The wing object's address (probes map its fields from it).
     pub address: u64,
+    /// The army the wing is attached to (hoi4_air_attach), by name; None when not attached or the
+    /// link reads 0 (a wing loaded attached from a save reads unlinked until attached again).
+    pub attached_army: Option<String>,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Base {
@@ -146,6 +149,12 @@ fn wing(r: &Reader<'_>, image: u64, address: u64, base: &Base) -> Result<Wing> {
         base_state: base.state,
         transfer_base_id: r.i32(address + w(WING_TRANSFER_BASE)?)?,
         address,
+        attached_army: w(WING_ATTACHED_ARMY)
+            .ok()
+            .and_then(|at| r.u64(address + at).ok())
+            .filter(|a| *a != 0)
+            .and_then(|a| super::armies::army_name(r, a).ok())
+            .filter(|n| !n.is_empty()),
     })
 }
 /// Own air bases and the wings stationed at each, from `strategic`.
@@ -303,6 +312,7 @@ fn view(
                 "transfer_to_base_id":(w.transfer_base_id > 0).then_some(w.transfer_base_id),
                 "missions":if w.region_id > 0 { missions_in(w.mission_mask) } else if training(w.mission_mask) { vec!["training"] } else { Vec::new() },
                 "standing_by":w.region_id <= 0 && !training(w.mission_mask),"last_mission_selection":missions_in(w.mission_mask),
+                "attached_army":w.attached_army,
                 "region":(w.region_id > 0).then(|| json!({"id":w.region_id,"name":w.region_name.as_ref().or_else(|| names.get(&w.region_id))}))})
         })
         .collect();

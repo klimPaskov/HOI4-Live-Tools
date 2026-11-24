@@ -66,6 +66,8 @@ fn root_offsets(abi: StringAbi) -> &'static [u64] {
     match abi {
         StringAbi::LibCxx => &ROOT_OFFSETS,
         StringAbi::LibStdCxx => &ROOT_OFFSETS_LINUX,
+        // No Windows window root is measured yet: no candidate, so no widget tree is read.
+        StringAbi::Msvc => &[],
     }
 }
 const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
@@ -671,9 +673,7 @@ fn mods_now(process: &dyn Process) -> Vec<(String, String)> {
 pub(super) fn learned_on_now(process: &dyn Process) -> LearnedOn {
     let mods = mods_now(process);
     LearnedOn {
-        game_version: crate::builds::SUPPORTED
-            .iter()
-            .find(|b| b.system == std::env::consts::OS)
+        game_version: crate::builds::current()
             .map(|b| b.game_version.to_string())
             .unwrap_or_default(),
         mod_set: skills::mod_set_id(&mods),

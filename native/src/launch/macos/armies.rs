@@ -622,7 +622,7 @@ fn counter_select_with(
         }))
     })
 }
-fn army_name(r: &Reader<'_>, group: u64) -> Result<String> {
+pub(super) fn army_name(r: &Reader<'_>, group: u64) -> Result<String> {
     r.string_bounded(group + ui(r)?.group_name, 128)
 }
 /// Own armies with their division ids, plus unassigned division ids.
