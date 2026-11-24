@@ -20986,6 +20986,17 @@ mod tests {
             "army_layout": [{"name_hint": "Armee Nord", "state": 5, "role": "strike"}]});
         assert!(!plan_operation::layout_needed(&bare));
         assert_eq!(plan_operation::layout_pending(&mut fresh, &bare, now), None);
+        // a guard no operation names does not hold the operations back (t1939i)
+        let guarded = json!({"war": {"land_orders": false},
+            "army_layout": [{"name_hint": "Armee Nord", "state": 5, "role": "strike", "count": 2},
+                {"name_hint": "Nord Guard", "state": 6, "role": "guard", "count": 1}],
+            "operations": [{"id": "op_poland", "formations": [{"army": "Armee Nord", "role": "line"}]}]});
+        let mut bound = State::default();
+        bound.layout.insert("Armee Nord".into(), "Army 6".into());
+        assert_eq!(
+            plan_operation::layout_pending(&mut bound, &guarded, now),
+            None
+        );
     }
 
     #[test]

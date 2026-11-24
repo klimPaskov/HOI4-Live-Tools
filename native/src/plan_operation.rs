@@ -324,8 +324,12 @@ pub(super) fn layout_pending(
         .iter()
         .filter(|e| e["when"].is_null())
         .map(|e| text(&e["name_hint"]).to_string())
+        // only the roles an operation names: a guard no operation names forms later and must not
+        // hold the operations back (t1939i, 24 Nov 2026: the guards held the prepare 14 days and
+        // no line was drawn by 11 September)
         .filter(|h| {
             !h.is_empty()
+                && names_army(plan, h)
                 && !state.layout.contains_key(h)
                 && !state.done.contains_key(&format!("layout:impossible:{h}"))
         })
