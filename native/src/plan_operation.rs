@@ -4079,6 +4079,25 @@ fn redeploy(
     Ok(None)
 }
 
+/// The operation's own-front units (holds, mobile and wing armies) that stand on the map with no
+/// order at all, holds first: the ones the HANDOVER draws before the rest of the prepare. Pure.
+fn orderless_first<'a>(units: &'a [Unit], roster: &Value) -> Vec<&'a Unit> {
+    let bare =
+        |u: &&Unit| army_row(roster, &u.name).is_some() && orders(roster, &u.name).is_empty();
+    let mut out: Vec<&Unit> = units
+        .iter()
+        .filter(|u| u.role == Role::Hold)
+        .filter(bare)
+        .collect();
+    out.extend(
+        units
+            .iter()
+            .filter(|u| matches!(u.role, Role::Mobile | Role::Wing))
+            .filter(bare),
+    );
+    out
+}
+
 #[allow(clippy::too_many_arguments)]
 fn prepare(
     state: &mut State,
@@ -4455,6 +4474,27 @@ fn prepare(
         if let Some(line) = reconcile(state, tools, id, u, &line, roster, wars, lease, now, peace)?
         {
             return Ok(Some(line));
+        }
+    }
+    // HANDOVER: while the country is at war, an army of this operation that carries no order at
+    // all (the operation it fought in ended: the capitulation took its fronts with it) gets its
+    // own front here before any assembly, marshal or commander order (t1939k, 24 Nov 2026: after
+    // Poland fell six armies stood without an order 5-10 days while the next operation's prepare
+    // shuffled divisions and named commanders first; an orderless army at war fights only where
+    // each division wanders)
+    if state.war_active {
+        for u in orderless_first(units, roster) {
+            let one = key(id, &format!("one:{}:{}", u.name, line_tag(&u.line)));
+            let line = match state.done.get(&one) {
+                Some(first) => vec![*first],
+                None => u.line.clone(),
+            };
+            let peace = !fighting.contains(&u.enemy);
+            if let Some(line) =
+                reconcile(state, tools, id, u, &line, roster, wars, lease, now, peace)?
+            {
+                return Ok(Some(line));
+            }
         }
     }
     // ASSEMBLE: a mobile formation gathers its templates' divisions out of the other armies

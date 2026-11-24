@@ -273,7 +273,31 @@ def family(code):
     return FAMILY.get(code, code)
 
 
+# game alerts the rules above do not name under the alert's own code
+ALERT_RULES = {
+    "operative_recruitable": ("idling", "intelligence", 14, 30, "an operative slot left empty builds no network"),
+    "no_divisions_in_training": ("idling", "training", 14, 30, "manpower and factories make no division"),
+    "not_enough_garrison": ("gameplay", "occupation", 14, 30, "resistance grows where the garrison is short"),
+    "research_slot_available": ("idling", "research", 1, 1, "a day without research in a slot is lost"),
+    "can_assign_field_marshal": ("idling", "command", 3, 14, "a group without a field marshal plans and fights without him"),
+}
+
+
+def alert_name(code):
+    """The game alert a `game_alert:<name>[:<subject>]` issue code stands for, else None."""
+    if not code.startswith("game_alert:"):
+        return None
+    return code.split(":", 2)[1] or None
+
+
 def rule(code):
+    # a game alert is owned by the lane of its own rule (or its sitrep family's): with the prefix
+    # every alert fell to the default "alerts" lane no executor lane owns, and doctrines, MIO
+    # traits, the officer corps, decisions, operatives and dockyards stayed flagged for a whole
+    # war (t1939k, 24 Nov 2026)
+    name = alert_name(code)
+    if name:
+        return RULES.get(name) or RULES.get(family(name)) or ALERT_RULES.get(name) or DEFAULT_RULE
     base = code.split(":", 1)[0]
     return RULES.get(code) or RULES.get(base) or DEFAULT_RULE
 

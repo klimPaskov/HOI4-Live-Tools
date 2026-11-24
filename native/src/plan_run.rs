@@ -3682,7 +3682,22 @@ fn production_step(
                 );
             }
         }
-        let (ok, why) = state.act(tools, lease, "hoi4_production_add", args, "pr")?;
+        let (mut ok, mut why) =
+            state.act(tools, lease, "hoi4_production_add", args.clone(), "pr")?;
+        // the named model is not offered while a newer one of its kind is (a 1939 start offers
+        // the Submarine II hull and no Submarine I): the next newer offered of its kind, at once
+        // (t1939k, 24 Nov 2026: the U-boat line was given up after one refusal and the dockyards
+        // stood idle through the Polish war)
+        if !ok {
+            if let Some(newer) = newer_offered(&equipment, &why) {
+                args["equipment"] = json!(newer);
+                let (ok2, why2) = state.act(tools, lease, "hoi4_production_add", args, "pr")?;
+                (ok, why) = (
+                    ok2,
+                    format!("{why2} ({equipment} not offered: {newer} instead)"),
+                );
+            }
+        }
         if ok {
             state.done.insert(format!("prod:{equipment}"), now);
             // the line's age for the mature-line guard (plan_affairs.rs): only lines the
@@ -3694,6 +3709,24 @@ fn production_step(
         return Ok(Some(format!("production {equipment}: {ok} {why}{held}")));
     }
     Ok(None)
+}
+
+/// The next newer model of `equipment`'s kind (its name without the trailing `_<n>`) that a
+/// production refusal lists as offered (the nearest to what the plan asked). Pure.
+fn newer_offered(equipment: &str, why: &str) -> Option<String> {
+    let (_, offered) = why.split_once("offered: ")?;
+    let split = |name: &str| -> Option<(String, u32)> {
+        let (base, n) = name.rsplit_once('_')?;
+        Some((base.to_string(), n.parse().ok()?))
+    };
+    let (base, asked) = split(equipment)?;
+    offered
+        .split(',')
+        .map(|t| t.trim().trim_end_matches(['.', ')', ';']))
+        .filter_map(|t| split(t).map(|(b, n)| (b, n, t.to_string())))
+        .filter(|(b, n, _)| *b == base && *n > asked)
+        .min_by_key(|(_, n, _)| *n)
+        .map(|(_, _, t)| t)
 }
 
 /// The organisation a `production` entry names for its line (`organization`, or `organisation`).
@@ -6849,6 +6882,16 @@ fn construction_step(
                 std::cmp::Reverse(state.con.free.get(id).map_or(1, |(f, _)| (*f).min(99)))
             });
         }
+        // a state that took this building in the last week goes after the others: the same
+        // count-1 order to the same state twice in a week read as a duplicate action (t1939k,
+        // 24 Nov 2026: 8 of 13 duplicate issues were air bases added one level at a time to one
+        // state while other listed states took none); the order is stable otherwise
+        eligible.sort_by_key(|id| {
+            state
+                .done
+                .get(&format!("conlast:{building}:{id}"))
+                .is_some_and(|at| now - *at < 7 * DAY)
+        });
         let Some(&id) = eligible.first() else {
             continue;
         };
@@ -6879,6 +6922,7 @@ fn construction_step(
             continue;
         }
         if ok {
+            state.done.insert(format!("conlast:{building}:{id}"), now);
             state.con.full_streak.remove(&full_key(&building, id));
             state.con.fails.remove(&id);
             state.con.queued_total += count as u64;
@@ -13400,6 +13444,40 @@ mod tests {
         );
         assert_eq!(b.added.borrow()[1], (51, 1));
         assert!(state.con.digest.clone().unwrap().contains("55:full"));
+    }
+
+    /// t1939k (24 Nov 2026): a state that took this building in the last week goes after the
+    /// other listed states, so the same order does not go to one state twice in a week.
+    #[test]
+    fn construction_spreads_a_building_over_the_listed_states_within_a_week() {
+        let b = Builder::new();
+        let plan =
+            json!({"construction": [{"building": "air_base", "states": [67, 42], "count": 1}]});
+        let mut state = State::default();
+        state.done.insert("conlast:air_base:67".into(), START - DAY);
+        state
+            .done
+            .insert("conlast:air_base:42".into(), START - 10 * DAY);
+        let first = acted(tick(&mut state, &b, &plan, "l", START).unwrap());
+        assert!(first.starts_with("construct air_base 42"), "{first}");
+        assert_eq!(state.done.get("conlast:air_base:42"), Some(&START));
+    }
+
+    #[test]
+    fn a_model_not_offered_takes_the_next_newer_offered_of_its_kind() {
+        let why = "invalid_target: No producible design of this equipment is offered; offered: \
+                   convoy_1, ship_hull_carrier_1, ship_hull_submarine_2, ship_hull_submarine_3, \
+                   ship_hull_light_2";
+        assert_eq!(
+            newer_offered("ship_hull_submarine_1", why).as_deref(),
+            Some("ship_hull_submarine_2")
+        );
+        assert_eq!(newer_offered("ship_hull_light_2", why), None);
+        assert_eq!(newer_offered("ship_hull_heavy_1", why), None);
+        assert_eq!(
+            newer_offered("ship_hull_submarine_1", "invalid_target: busy"),
+            None
+        );
     }
 
     #[test]
