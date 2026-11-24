@@ -41,6 +41,8 @@ struct Game {
     /// what hoi4_province_graph answers, when set
     graph: RefCell<Option<Value>>,
     calls: RefCell<Vec<(String, Value)>>,
+    /// the roster does not show a stop (a read taken before the stop landed)
+    stale_stop: RefCell<bool>,
 }
 
 impl Game {
@@ -81,6 +83,7 @@ impl Game {
             supply: RefCell::new(None),
             graph: RefCell::new(None),
             calls: RefCell::new(vec![]),
+            stale_stop: RefCell::new(false),
         }
     }
     fn orders(&self) -> Vec<(String, Value)> {
@@ -236,6 +239,7 @@ impl Tools for Game {
             "hoi4_army_plan" if args["clear_orders"] == json!(true) => {
                 self.unit(&army, |r| r["plan"] = json!([]))
             }
+            "hoi4_army_plan" if args["execute"] == json!(false) && *self.stale_stop.borrow() => {}
             "hoi4_army_plan" if args["execute"].is_boolean() => {
                 let on = args["execute"].clone();
                 self.unit(&army, |r| {
@@ -522,6 +526,35 @@ fn a_stalled_line_draws_the_next_phase_line_and_executes_it() {
     assert!(!sent
         .iter()
         .any(|(n, a)| n == "hoi4_army_offensive" && a["army"] == json!("Panzer")));
+}
+
+#[test]
+fn a_stop_the_roster_does_not_show_yet_is_followed_by_the_execute_not_a_second_stop() {
+    let game = Game::new();
+    let plan = plan();
+    let mut state = State::default();
+    prepared(&mut state, &game, &plan);
+    for a in ["Mitte", "Sued"] {
+        game.unit(a, |r| r["plan_executing"] = json!(true));
+    }
+    *game.enemies.borrow_mut() = vec!["POL"];
+    burst(&mut state, &game, &plan, START + DAY);
+    *game.held.borrow_mut() = vec![86];
+    burst(&mut state, &game, &plan, START + 4 * DAY);
+    game.calls.borrow_mut().clear();
+    *game.stale_stop.borrow_mut() = true;
+    burst(&mut state, &game, &plan, START + 13 * DAY);
+    let group: Vec<Value> = game
+        .orders()
+        .iter()
+        .filter(|(n, a)| n == "hoi4_army_plan" && a["army"] == json!("Army Group 1"))
+        .map(|(_, a)| a["execute"].clone())
+        .collect();
+    assert_eq!(
+        group,
+        [json!(false), json!(true)],
+        "t1939j: execute:false went out twice"
+    );
 }
 
 #[test]

@@ -50,6 +50,7 @@ LANES = [
     ("events", True, "events"),          # tick step 1, ahead of every lane (not in LANE_WEIGHT: an event is minor)
     ("research", True, "research"),
     ("focus", True, "focus"),
+    ("factories", True, "production"),   # fast lane: free military factories every tick
     ("hold", False, "war"),
     ("manage", True, "signals"),
     ("stockpile", False, "production"),
