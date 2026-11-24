@@ -375,3 +375,31 @@ Stop at once on the S2 stop list (crash/hang, posting_off, family_off, inert, `u
 not Verified while the GUI's is, "Dropped command" / "during command execution" in game.log, a save that will not load).
 Pass: A1-A6 clean on both beds: set `IPC_LIVE_PASSED` for `airwing` (4th entry in `inproc/core/ipc.c`), rebuild, and
 record "S3 PASS: airwing" in NOTES-1116.md with the numbers.
+
+## Session S3-PROD2: the in-process module, new production lines and priority (family `production2`; about 30 minutes)
+
+Built by engineer 71 (24 Nov 2026), offline-proven only (both types on with every check on 1.19.4.1 and 1.20.0.0 macOS;
+the add-line constructor hand-checked: 1.20 0x1001ef670, 1.19.4.1 0x1001eef30). OFF under `auto` until this session passes.
+`production2.add_line` -> `CAddProductionLineCommand(&own tag, design, NULL, at_top 0)` (the production view's Add with a
+design chosen; the line's organisation stays empty: the module cannot name an organisation object yet), then the
+factories through `production.add_factories` (live-passed). The command's authorisation is "the sender controls the tag";
+the module checks the design with the game's lookup and the C++ cast the "can do" check makes (CEquipmentVariant); the
+game's check decides whether the country may produce it. `production2.priority` ->
+`CChangeProductionLinePriorityCommand(line, place)` with the absolute place (the UI passes 0 for top, count-1 for bottom).
+MCP: `hoi4_production_add` WITH `design` (without it the GUI picks the selection window's first design: stays GUI) and
+`hoi4_production_priority` (read-back in process from the country's own line order, no view needed).
+
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,production2 ./inproc_stage2.sh PREV s3p`; broker as in S2.
+B1 paused: `hoi4_designs` -> pick an own design id of a type that has no line; `hoi4_production_add` in process with
+`design` and `factories` 5 -> Verified (a new line of that design with 5 factories); the module log shows
+`production2.add_line` posted 1, then `production.add_factories` posted 1. Same with `gui` for the timing.
+B2 the at-top question: in B1 the new line lands at the BOTTOM of the list (flag 0); record where it lands (if at the top,
+the flag's meaning is the reverse: fix the comment, the flag stays 0).
+B3 refusals: a design of another country (if one is readable) -> `not_a_live_object`/`refused_by_game_check`; an
+obsolete or unproducible design -> `refused_by_game_check`, nothing posted.
+B4 priority: with 6+ lines: `hoi4_production_priority` top, down, up, bottom in process -> each Verified; compare the
+country's own order (the in-process read-back) with the production view's shown order (open the view, screenshot): they
+must agree; if the own list order is NOT the priority order, the route is wrong: stop and record it.
+B5 soak 10 min at speed 3: one add (then remove via hoi4_production_set factories 0) and two priority moves per minute,
+all Verified; save, reload, plain load.
+Pass: B1-B5 clean on the 1940 and a 1936 bed -> `IPC_LIVE_PASSED` for `production2` (5th entry), "S3 PASS: production2".

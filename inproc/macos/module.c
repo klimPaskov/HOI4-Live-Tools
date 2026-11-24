@@ -376,6 +376,7 @@ typedef void (*ctor_tagp_obj)(void *, const int32_t *, void *);
 typedef void (*ctor_obj_obj2)(void *, void *, void *);
 typedef struct { void **data; int32_t capacity, size; } pdx_array;
 typedef void (*ctor_array)(void *, const pdx_array *);
+typedef void (*ctor_addline)(void *, const int32_t *, void *, void *, int);
 
 #define J2_MAX 32
 enum { R_NONE = 0, R_POSTED, R_INVALID, R_NOT_OWN, R_BAD_OBJ, R_BAD_OBJ2, R_DROPPED, R_UNEXPECTED, R_SKIPPED };
@@ -400,10 +401,24 @@ static void job2_release(job2_t *j) {
 }
 static void finish2(job2_t *j) { dispatch_semaphore_signal(j->done); job2_release(j); }
 
-/* fault-free read of a handle at obj+off; then the game's typed resolver must give back obj */
+typedef void *(*dyncast_fn)(const void *, const void *, const void *, long);
+static dyncast_fn g_dyncast;
+
+/* fault-free read of a handle at obj+off; then the game's typed resolver must give back obj. For a type whose
+ * authorisation is the country tag (AUTH_TAG), the object is checked the way its "can do" check reads it: the generic
+ * lookup gives it back and the C++ cast to the class the check casts to accepts it. */
 static int roundtrip(const cmd_type *ct, uint64_t obj, uint64_t *handle) {
     const stage2_common *c = &g_t.st2.common;
     uint64_t h;
+    if (ct->spec->auth_kind == AUTH_TAG) {
+        uint64_t lk = ct->lookup_fn + (uint64_t)g_slide;
+        if (!g_dyncast) g_dyncast = (dyncast_fn)dlsym(RTLD_DEFAULT, "__dynamic_cast");
+        if (!g_dyncast || !ct->ti_dst || !plausible(obj) || !sq(obj + c->cref_handle_off, &h) || h == 0 || !code_ptr(lk)) return 0;
+        if ((uint64_t)(uintptr_t)((resolve_fn2)(uintptr_t)lk)(&h) != obj) return 0;
+        *handle = h;
+        return (uint64_t)(uintptr_t)g_dyncast((void *)(uintptr_t)obj, (void *)(uintptr_t)(ct->ti_src + (uint64_t)g_slide),
+                                              (void *)(uintptr_t)(ct->ti_dst + (uint64_t)g_slide), -1) == obj;
+    }
     if (!plausible(obj) || !sq(obj + ct->target_hint + c->cref_handle_off, &h) || h == 0) return 0;
     uint64_t rf = ct->resolve_fn + (uint64_t)g_slide;
     if (!code_ptr(rf)) return 0;
@@ -503,7 +518,9 @@ static void run_job2(void *ctx) {
     for (int i = 0; i < j->n; i++) {
         uint64_t owner_f = ct->owner_fn + (uint64_t)g_slide;
         if (!roundtrip(ct, j->obj[i], &hs[i])) { j->res[i] = R_BAD_OBJ; j->refused++; continue; }
-        if (!code_ptr(owner_f) || ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)j->obj[i]) != j->player_tag) { j->res[i] = R_NOT_OWN; j->refused++; continue; }
+        /* AUTH_TAG: the command names the player's own tag; whether the country may use the object is the game's check */
+        if (ct->spec->auth_kind != AUTH_TAG &&
+            (!code_ptr(owner_f) || ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)j->obj[i]) != j->player_tag)) { j->res[i] = R_NOT_OWN; j->refused++; continue; }
         good++;
     }
     /* one command for the whole group (merge) only when every object passed: a group is never posted in part */
@@ -529,7 +546,7 @@ static void run_job2(void *ctx) {
                 const cmd_field *f = &ct->spec->f[k];
                 uint64_t cur = 0;
                 if (f->kind == FK_REF) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == nullref;
-                else if (f->kind == FK_I32) { int32_t v = 1; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 4) && v == 0; }
+                else if (f->kind == FK_I32) { int32_t v = 1; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 4) && v == f->def; }
                 else ok = 0;
             }
             if (ok) { /* fill: our own fresh command object, never game state */
@@ -541,8 +558,11 @@ static void run_job2(void *ctx) {
             }
         } else { /* the UI's own constructor, on the fresh object whose containers are still empty */
             uint64_t data = 1; int32_t size = 1;
-            ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[0].off, &data) && data == 0 &&
-                 sread((uint64_t)(uintptr_t)cmd + ct->spec->f[0].count_off, &size, 4) && size == 0;
+            if (ct->spec->ctor == CTOR_ADDLINE) /* no list: the variant's handle field still holds the empty handle */
+                ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &data) && data == nullref;
+            else
+                ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[0].off, &data) && data == 0 &&
+                     sread((uint64_t)(uintptr_t)cmd + ct->spec->f[0].count_off, &size, 4) && size == 0;
             uint64_t ctor = ct->ctor + (uint64_t)g_slide;
             void *obj = (void *)(uintptr_t)j->obj[i];
             if (ok && code_ptr(ctor)) {
@@ -552,6 +572,7 @@ static void run_job2(void *ctx) {
                 case CTOR_OBJ: ((ctor_obj)(uintptr_t)ctor)(cmd, obj); break;
                 case CTOR_TAGP_OBJ: ((ctor_tagp_obj)(uintptr_t)ctor)(cmd, &j->player_tag, obj); break;
                 case CTOR_OBJ_OBJ2: ((ctor_obj_obj2)(uintptr_t)ctor)(cmd, obj, (void *)(uintptr_t)j->obj2); break;
+                case CTOR_ADDLINE: ((ctor_addline)(uintptr_t)ctor)(cmd, &j->player_tag, obj, NULL, j->flag ? 1 : 0); break;
                 case CTOR_ARRAY: {
                     pdx_array a = {(void **)(uintptr_t)j->obj, j->n, j->n}; /* the game's CPdxArray<T *> {data, capacity, size} */
                     ((ctor_array)(uintptr_t)ctor)(cmd, &a); break;
@@ -559,7 +580,15 @@ static void run_job2(void *ctx) {
                 default: ok = 0;
                 }
             } else ok = 0;
-            if (ok) { /* what the game built must be exactly what was asked: the handles in order, then the second field */
+            if (ok && ct->spec->ctor == CTOR_ADDLINE) { /* tag = player, variant = this object's handle, no organisation, the flag */
+                int32_t tg = 0; uint64_t hv = 0, ho = 0; uint8_t top = 9;
+                ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x24, &tg, 4) && tg == j->player_tag &&
+                     sq((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &hv) && hv == h &&
+                     sq((uint64_t)(uintptr_t)cmd + 0x30, &ho) && ho == nullref &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x38, &top, 1) && top == (j->flag ? 1 : 0);
+                if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+            } else if (ok) { /* what the game built must be exactly what was asked: the handles in order, then the second field */
                 uint64_t d2 = 0; int32_t s2 = 0;
                 int want_n = ct->spec->one_cmd ? j->n : 1;
                 ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
@@ -635,6 +664,12 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
     } else if (!strcmp(op, "air.set_mission")) {
         if (nv != 1 || j->val[0] <= 0 || j->val[0] > 0x40000000 || (j->val[0] & (j->val[0] - 1))) why = "vals: one mission mask with exactly one bit";
         else { for (int i = 1; i < j->n; i++) j->val[i] = j->val[0]; if (flag != 0 && flag != 1) why = "flag: 1 enable, 0 disable"; }
+    } else if (!strcmp(op, "production2.priority")) {
+        if (nv != j->n) why = "vals: one target place per line (0 = top)";
+        else for (int i = 0; i < j->n; i++) if (j->val[i] < 0 || j->val[i] > 2047) why = "a place is outside 0..2047";
+    } else if (!strcmp(op, "production2.add_line")) {
+        if (nv) why = "add_line takes no vals (flag 1 = at the top)";
+        else if (flag != 0 && flag != 1) why = "flag: 1 at the top, 0 at the bottom";
     } else if (!strcmp(op, "airwing.split")) {
         if (nv != j->n) why = "vals: one aircraft count per wing (the aircraft that leave for the new wing)";
         else for (int i = 0; i < j->n; i++) if (j->val[i] < 1 || j->val[i] > 1000) why = "an aircraft count is outside 1..1000";

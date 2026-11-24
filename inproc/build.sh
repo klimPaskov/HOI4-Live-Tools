@@ -4,7 +4,7 @@
 set -e
 cd "${0:A:h}"
 mkdir -p build
-CF=(-arch x86_64 -mmacosx-version-min=11.0 -O2 -Wall -Wextra -std=c11)
+CF=(-arch x86_64 -mmacosx-version-min=11.0 -O2 -Wall -Wextra -Wno-missing-field-initializers -std=c11) # spec rows leave trailing fields zero on purpose
 xcrun clang $CF -o build/scan_file tools/scan_file.c core/scan.c core/caps.c core/cmd.c core/cmd2.c
 xcrun clang $CF -dynamiclib -fvisibility=hidden -install_name @rpath/libhoi4live_inproc.dylib \
   -o build/libhoi4live_inproc.dylib macos/module.c core/scan.c core/caps.c core/cmd.c core/cmd2.c core/ipc.c

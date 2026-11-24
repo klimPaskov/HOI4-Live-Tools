@@ -248,6 +248,88 @@ pub(super) fn production_op(requested_now: i32, wanted: i32) -> Option<(&'static
     }
 }
 
+/// A new production line in process (family production2 for the line, production for its factories): one
+/// AddProductionLine(own tag, variant, no organisation, not at the top), read until the new line shows, then one
+/// AddProductionLineFactories for the difference to `factories`, read until it shows. `new_line` answers the new line's
+/// (address, requested factories). Gui when the line did not appear (nothing else posted).
+pub(super) fn add_line(
+    ch: &mut Channel,
+    variant: u64,
+    factories: i32,
+    new_line: &mut dyn FnMut() -> Option<(u64, i32)>,
+) -> Routed {
+    let Ok(r) = ch.post("production2.add_line", &[variant], &[], None, Some(0)) else {
+        return Routed::Gui;
+    };
+    if game_refused(&r) {
+        return Routed::Refused("a line of this design".into());
+    }
+    if !all_posted(&r) {
+        return Routed::Gui;
+    }
+    let start = std::time::Instant::now();
+    let mut line = None;
+    while start.elapsed() < MISSION_BIT_WAIT {
+        line = new_line();
+        if line.is_some() {
+            break;
+        }
+        std::thread::sleep(MISSION_BIT_POLL);
+    }
+    let Some((address, requested)) = line else {
+        // posted but not seen: the journal's settle decides (never post a second line)
+        return Routed::Done(json!({"backend":"inprocess","module":[r,{"line_seen":false}]}));
+    };
+    let mut replies = vec![
+        r,
+        json!({"line_seen":true,"waited_ms":start.elapsed().as_millis() as u64}),
+    ];
+    if let Some((op, delta)) = production_op(requested, factories) {
+        if op == "production.add_factories" {
+            if let Ok(f) = ch.post(op, &[address], &[delta], None, None) {
+                let t = std::time::Instant::now();
+                while t.elapsed() < MISSION_BIT_WAIT
+                    && new_line().map(|(_, n)| n) != Some(factories)
+                {
+                    std::thread::sleep(MISSION_BIT_POLL);
+                }
+                replies.push(f);
+            }
+        }
+    }
+    Routed::Done(json!({"backend":"inprocess","module":replies}))
+}
+
+/// A line's priority in process (family production2): ChangePriority(line, place), then read until `at_place` holds.
+pub(super) fn priority_post(
+    ch: &mut Channel,
+    line: u64,
+    place: usize,
+    at_place: &mut dyn FnMut() -> Option<bool>,
+) -> Routed {
+    let Ok(r) = ch.post("production2.priority", &[line], &[place as i64], None, None) else {
+        return Routed::Gui;
+    };
+    if game_refused(&r) {
+        return Routed::Refused("this line's priority".into());
+    }
+    if !all_posted(&r) {
+        return Routed::Gui;
+    }
+    let start = std::time::Instant::now();
+    let mut seen = false;
+    while start.elapsed() < MISSION_BIT_WAIT {
+        if at_place() == Some(true) {
+            seen = true;
+            break;
+        }
+        std::thread::sleep(MISSION_BIT_POLL);
+    }
+    Routed::Done(
+        json!({"backend":"inprocess","module":[r,{"executed":seen,"waited_ms":start.elapsed().as_millis() as u64}]}),
+    )
+}
+
 /// The air mission plan per wing: (assign the region, set the mission bit). Posted in the UI's order: the mission
 /// button first (CStratAirSetMissionCommand), then the region (CStratAirEnableMissionCommand).
 pub(super) fn mission_steps(

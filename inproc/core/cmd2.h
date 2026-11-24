@@ -40,12 +40,17 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
        CTOR_OBJ = 3,          /* (cmd, obj): one handle appended to the list (detach a wing from its army) */
        CTOR_TAGP_OBJ = 4,     /* (cmd, const tag *, obj): the country tag then one handle (disband a wing) */
        CTOR_OBJ_OBJ2 = 5,     /* (cmd, obj, obj2): one handle in the list, obj2's handle in its own field (attach) */
-       CTOR_ARRAY = 6 };      /* (cmd, const CPdxArray<T *> *): ONE command for every object (merge wings) */
+       CTOR_ARRAY = 6,        /* (cmd, const CPdxArray<T *> *): ONE command for every object (merge wings) */
+       CTOR_ADDLINE = 7 };    /* (cmd, const tag *, variant, organisation or NULL, at_top): a new production line */
+/* how the command's authorisation slot names the objects: through a typed resolver of a handle (the default), or as
+ * "the sender controls the country tag at +auth_off" (the objects are then checked by the cast the "can do" makes) */
+enum { AUTH_HANDLE = 0, AUTH_TAG = 1 };
 /* the second object a type takes, checked before posting */
 enum { OBJ2_NONE = 0, OBJ2_AIR_BASE, OBJ2_REGION, OBJ2_ORDERS_GROUP,
        OBJ2_REGION_ID }; /* a strategic region given by id in vals (0 = none: hold), looked up as the game's check does */
 
-typedef struct { const char *name; uint16_t off; uint8_t kind; uint16_t count_off; uint32_t field_id; } cmd_field;
+/* def: the factory's default for an FK_I32 field (checked before the module writes the field; 0 unless given) */
+typedef struct { const char *name; uint16_t off; uint8_t kind; uint16_t count_off; uint32_t field_id; int32_t def; } cmd_field;
 
 typedef struct {
     const char *family;      /* allow-list unit: "production", "air", "airwing" (a family = one live pass) */
@@ -59,6 +64,8 @@ typedef struct {
     int nf; cmd_field f[5];
     int obj2;                /* OBJ2_* */
     int one_cmd;             /* 1: all objects go in ONE command (CTOR_ARRAY); 0: one command per object */
+    int auth_kind;           /* AUTH_* */
+    const char *obj_cast;    /* AUTH_TAG: the class the "can do" check casts the objects to ("17CEquipmentVariant") */
 } cmd_spec;
 
 enum { /* confidence bits: a type is on only when all are set */
@@ -72,6 +79,7 @@ typedef struct {
     uint64_t factory, vtable, valid_fn, auth_fn, write_fn, ctor;   /* unslid */
     uint64_t resolve_fn, owner_fn, controls_fn, lookup_fn;        /* from the auth slot / the typed resolver */
     uint32_t type_id, size, slots, target_hint;                   /* hint: offset of the reference base in the object */
+    uint64_t ti_src, ti_dst;                                      /* AUTH_TAG: CReferenceObject -> obj_cast typeinfos */
     unsigned conf, need;
     char evidence[300];
 } cmd_type;

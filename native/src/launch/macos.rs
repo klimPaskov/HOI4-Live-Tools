@@ -3218,22 +3218,42 @@ impl MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            let handle = production::lines(process)?
+            let all_lines = production::lines(process)?;
+            let (handle, address) = all_lines
                 .get(index)
                 .filter(|l| l.key.as_deref() == Some(key))
-                .map(|l| l.handle)
+                .map(|l| (l.handle, l.address))
                 .ok_or_else(|| {
                     Error::new(
                         "invalid_target",
                         "No own line with this index and equipment",
                     )
                 })?;
-            let order = || ui::read(process, production::shown_order);
+            // in process (family production2): the arrows' command, ChangePriority(line, place) with the absolute
+            // place; the order is then read from the country's own line list (no view needs to be open)
+            let mut prio_route = if actions.receipt_exists(id) {
+                None
+            } else {
+                inproc::route("production2")
+            };
+            let own_order = || {
+                production::lines(process)
+                    .ok()
+                    .map(|v| v.iter().map(|l| l.handle).collect::<Vec<u64>>())
+            };
+            let in_process = prio_route.is_some();
+            let order = || {
+                if in_process {
+                    own_order().ok_or_else(|| Error::new("read_failed", "own lines"))
+                } else {
+                    ui::read(process, production::shown_order)
+                }
+            };
             let before = order().ok();
             let place =
                 |o: &Option<Vec<u64>>| o.as_ref().and_then(|o| o.iter().position(|h| *h == handle));
             let retry = actions.receipt_exists(id);
-            if !retry {
+            if !retry && !in_process {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"production_priority","line":index,"equipment":key,
@@ -3261,10 +3281,30 @@ impl MacClock {
             let keys = &self.keys;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let (Some(ch), Some(now)) = (prio_route.as_mut(), own_order()) {
+                    if let Some(at) = now.iter().position(|h| *h == handle) {
+                        let want = to.target(at, now.len());
+                        if want == at {
+                            return Ok(());
+                        }
+                        match inproc::priority_post(ch, address, want, &mut || {
+                            own_order().map(|o| o.iter().position(|h| *h == handle) == Some(want))
+                        }) {
+                            inproc::Routed::Done(_) => return Ok(()),
+                            inproc::Routed::Refused(what) => {
+                                return Err(inproc::refused_error(&what))
+                            }
+                            inproc::Routed::Gui => {}
+                        }
+                    }
+                    keys.preflight()?;
+                }
                 production::prioritize(process, keys, handle, to)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(
+                json!({"receipt":receipt,"backend":if in_process { "inprocess" } else { "gui" }}),
+            );
         }
         if name == "hoi4_production_add" || name == "hoi4_production_set" {
             let adding = name == "hoi4_production_add";
@@ -3403,8 +3443,23 @@ impl MacClock {
             // own command path; no input, no focus. Adding a line stays on the GUI (not in the families yet).
             let mut inproc_route = match index {
                 Some(_) if !retry => inproc::route("production"),
+                // a NEW line (engineer 71, family production2): AddProductionLine(own tag, the named design, no
+                // organisation), then the factories through the production family; only with an explicit design
+                // (without one the GUI picks the selection window's first design, an order the reads do not hold)
+                None if !retry && design.is_some() => inproc::route("production2")
+                    .filter(|ch| inproc::family_usable(&ch.hello, "production", inproc::mode())),
                 _ => None,
             };
+            let add_variant = match (index, design, inproc_route.is_some()) {
+                (None, Some(wanted), true) => designs::read_all(process)?
+                    .iter()
+                    .find(|d| d.variant.id == wanted && d.variant.address != 0)
+                    .map(|d| d.variant.address),
+                _ => None,
+            };
+            if index.is_none() && add_variant.is_none() {
+                inproc_route = None;
+            }
             if !retry && inproc_route.is_none() {
                 bounded_keys.preflight()?;
             }
@@ -3472,6 +3527,24 @@ impl MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let (None, Some(variant), Some(ch)) = (index, add_variant, inproc_route.as_mut())
+                {
+                    let known: Vec<u64> = before.iter().map(|l| l.handle).collect();
+                    let mut new_line = || {
+                        production::lines(process).ok().and_then(|now| {
+                            now.into_iter()
+                                .find(|l| {
+                                    !known.contains(&l.handle) && l.key.as_deref() == Some(key)
+                                })
+                                .map(|l| (l.address, l.requested))
+                        })
+                    };
+                    match inproc::add_line(ch, variant, factories, &mut new_line) {
+                        inproc::Routed::Done(_) => return Ok(()),
+                        inproc::Routed::Refused(what) => return Err(inproc::refused_error(&what)),
+                        inproc::Routed::Gui => bounded_keys.preflight()?,
+                    }
+                }
                 if let (Some(index), Some(ch)) = (index, inproc_route.as_mut()) {
                     let line = &before[index];
                     match inproc::production_op(line.requested, factories) {

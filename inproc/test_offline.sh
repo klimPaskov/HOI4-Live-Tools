@@ -19,10 +19,11 @@ S2=(valid_slot=0x50 exec_flag=0x624 player_tag=0x4d8 line_factories=0xe8 region_
 # air (split, merge, disband, attach, detach; a region by id the way EnableMission's own check reads it: gamestate
 # +0x2a8 array, +0x2b4 count; the army cast's typeinfo COrdersGroup)
 S2N=(regions_arr=0x2a8 regions_cnt=0x2b4 on:airwing.split=1 on:airwing.merge=1 on:airwing.disband=1 on:airwing.attach=1 on:airwing.detach=1
-     type:airwing.split=12231 type:airwing.merge=12234 type:airwing.disband=13651 type:airwing.attach=14636 type:airwing.detach=14637 on:airwing.region=1 type:airwing.region=12222)
-S2_1194=(stage2_on=11 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
+     type:airwing.split=12231 type:airwing.merge=12234 type:airwing.disband=13651 type:airwing.attach=14636 type:airwing.detach=14637 on:airwing.region=1 type:airwing.region=12222
+     on:production2.add_line=1 on:production2.priority=1 type:production2.add_line=13101 type:production2.priority=12147)
+S2_1194=(stage2_on=13 ctor:production2.add_line=0x1001eef30 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
          ctor:airwing.detach=0x100a293b0 ti_orders_group=0x103516d08)
-S2_120=(stage2_on=11 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
+S2_120=(stage2_on=13 ctor:production2.add_line=0x1001ef670 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
         ctor:airwing.detach=0x100a2a3c0 ti_orders_group=0x10351b6b0)
 fail=0
 echo "== 1.19.4.1 f584 ($NEW)"

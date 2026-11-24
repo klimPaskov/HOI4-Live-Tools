@@ -44,6 +44,21 @@ const cmd_spec CMD2_SPECS[] = {
      * (after a CancelTransfer when the wing is flying a transfer: such wings stay on the GUI path) */
     {"airwing", "airwing.region", "CStratAirEnableMissionCommand", 0x60, BUILD_CTOR, CTOR_WING_I32_NULL, 1, 0x28,
      "8CAirWing", 2, {{"wings", 0x28, FK_REF_ARRAY, 0x34, 0x2fb5}, {"region_id", 0x58, FK_I32, 0, 0x2eee}}, OBJ2_REGION_ID, 0},
+    /* ---- production2 (engineer 71): a NEW line and the priority order; one live pass for both ----
+     * add_line: the production view's Add (UI helper 1.20 0x10211e320): AddProductionLine(&own tag, variant, organisation
+     * or NULL, at_top). Fields: tag +0x24 (0x6b), variant handle +0x28 (0x2f4e), organisation handle +0x30 (0x4ad8,
+     * written only when set), at_top byte +0x38 (0x25a; execution then calls the same set-priority-0 routine as the
+     * priority command). Authorisation: the sender controls the tag; the "can do" check casts the variant to
+     * CEquipmentVariant and asks whether the country may produce it. The organisation stays NULL until the module
+     * can name an organisation object (MIO objects are not read yet). */
+    {"production2", "production2.add_line", "CAddProductionLineCommand", 0x40, BUILD_CTOR, CTOR_ADDLINE, 0, 0x24,
+     "17CEquipmentVariant", 2, {{"tag", 0x24, FK_I32, 0, 0x6b, 0}, {"variant", 0x28, FK_REF, 0, 0x2f4e, 0}}, OBJ2_NONE, 0,
+     AUTH_TAG, "17CEquipmentVariant"},
+    /* priority: the line's arrows / Shift+click: ChangePriority(line, index) with the absolute place (callers pass 0 for
+     * the top and count-1 for the bottom); the factory's default index is -1 */
+    {"production2", "production2.priority", "CChangeProductionLinePriorityCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
+     "15CProductionLine", /* the base class: equipment AND naval lines (its resolver casts to CProductionLine) */ 2, {{"line", 0x24, FK_REF, 0, 0x2fb3, 0}, {"index", 0x2c, FK_I32, 0, 0x2f72, -1}},
+     OBJ2_NONE, 0},
     /* air: detach from its army (Detach(wing)) */
     {"airwing", "airwing.detach", "CDetachAirWingFromArmyCommand", 0x40, BUILD_CTOR, CTOR_OBJ, 1, 0x28, "8CAirWing", 1,
      {{"wings", 0x28, FK_REF_ARRAY, 0x34, 0x3369}}, OBJ2_NONE, 0},
@@ -331,6 +346,11 @@ static int find_ctor(const scan_image *im, const cmd_spec *s, cmd_type *o) {
             if (cmd_pmatch(pre, 0x20, "55 48 89 e5 41 57 41 56 41 54 53 48 83 ec 10 49 89 f6", c, 8) &&
                 cmd_pmatch(body, 0x60, pat, c, 8) && wing_read) { o->ctor = fs; return 1; }
         }
+        if (s->ctor == CTOR_ADDLINE && /* tag by reference into +0x24, the empty handle into +0x28, then [rdx + 8] */
+            cmd_pmatch(pre, 0x14, "55 48 89 e5 41 57 41 56 41 55 41 54 53 50 49 89 cf 49 89 fe", c, 8) &&
+            cmd_pmatch(body, 0x40, "48 8d 05 D 48 89 07 8b 06 89 47 24 48 8d 1d D 48 8b 03 48 89 47 28 48 8b 42 08 48 89 47 28", c, 8)) {
+            o->ctor = fs; return 1;
+        }
         if (s->ctor == CTOR_ARRAY &&
             cmd_pmatch(pre, 4, "55 48 89 e5", c, 8) &&
             cmd_pmatch(body, 0x60, "48 8d 05 D 48 89 07 4c 8b 26 4c 63 6e 0c 0f 57 c0 0f 11 47 28", c, 8)) {
@@ -361,8 +381,27 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
         const uint8_t *g = scan_ptr(im, gate_fn, 8); uint32_t c[2];
         if (!(g && cmd_pmatch(g, 8, "55 48 89 e5 b0 01 5d c3", c, 2))) o->conf |= C_SLOTS;
     }
-    if ((o->conf & C_SLOTS) && auth_shape(im, o->auth_fn, s, o)) o->conf |= C_AUTH;
-    if ((o->conf & C_AUTH) && resolver_shape(im, s, o)) o->conf |= C_RESOLVER;
+    if (s->auth_kind == AUTH_TAG) {
+        /* auth: mov rdx, rsi; lea rsi, [rdi + TAG]; pop rbp; jmp controls -- the sender must control the tag */
+        uint32_t c[4];
+        const uint8_t *ab = (o->conf & C_SLOTS) ? scan_ptr(im, o->auth_fn, 0x12) : NULL;
+        if (ab && cmd_pmatch(ab, 0x11, "55 48 89 e5 48 89 f2 48 8d 77 B 5d e9 D", c, 4) && c[0] == s->auth_off) {
+            o->controls_fn = o->auth_fn + 17 + (int64_t)(int32_t)c[1];
+            o->conf |= C_AUTH;
+        }
+        /* the objects' class: the cast the "can do" check makes (CReferenceObject -> obj_cast) */
+        const uint8_t *vb = (o->conf & C_AUTH) ? scan_ptr(im, o->valid_fn, 0x300) : NULL;
+        for (size_t k = 0; vb && k + 14 <= 0x300 && !o->ti_dst; k++) {
+            if (!cmd_pmatch(vb + k, 14, "48 8d 35 D 48 8d 15 D", c, 4)) continue;
+            uint64_t a = o->valid_fn + k, src = a + 7 + (int64_t)(int32_t)c[0], dst = a + 14 + (int64_t)(int32_t)c[1];
+            char sn[64], dn[64];
+            if (ti_name(im, src, sn, sizeof sn) && !strcmp(sn, "16CReferenceObject") && ti_name(im, dst, dn, sizeof dn) &&
+                !strcmp(dn, s->obj_cast)) { o->ti_src = src; o->ti_dst = dst; o->conf |= C_RESOLVER; }
+        }
+    } else {
+        if ((o->conf & C_SLOTS) && auth_shape(im, o->auth_fn, s, o)) o->conf |= C_AUTH;
+        if ((o->conf & C_AUTH) && resolver_shape(im, s, o)) o->conf |= C_RESOLVER;
+    }
     if (o->conf & C_SLOTS) {
         int all = 1;
         for (int i = 0; i < s->nf; i++) {
@@ -393,6 +432,9 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
         on += scan_cmd_type(im, pl, &t->common, &CMD2_SPECS[i], &t->t[i]);
         t->n++;
     }
+    /* AUTH_TAG types: the generic lookup (for the module's own object check) is the one every handle type uses */
+    for (int i = 1; i < t->n; i++)
+        if (t->t[i].spec->auth_kind == AUTH_TAG && t->t[0].ok) t->t[i].lookup_fn = t->t[0].lookup_fn;
     /* every type must agree on the "sender controls" check and the generic lookup (one game, one rule) */
     for (int i = 1; i < t->n; i++)
         if (t->t[i].ok && t->t[0].ok &&
