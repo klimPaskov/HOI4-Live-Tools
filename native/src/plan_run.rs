@@ -3036,7 +3036,25 @@ fn lane_of(list: &[Lane], name: &str) -> Lane {
 /// air, navy, intelligence and the rest. Each manage, military and affairs rule is its own lane,
 /// so a rule with work every pass never holds back the rules behind it.
 /// The lanes checked every tick ahead of the pass (see `lanes_tick`).
-const FAST_LANES: [Lane; 2] = [("research", research_lane), ("focus", focus_lane)];
+const FAST_LANES: [Lane; 3] = [
+    ("research", research_lane),
+    ("focus", focus_lane),
+    ("factories", factories_lane),
+];
+
+/// Military factories on no line are checked every tick like a free research slot (two memory
+/// reads) and fed at once by the production rules (plan_manage::free_factories_step). As a turn
+/// of the production lane they waited behind slow lanes and a two-day rest: 22-27 of 75 stood
+/// idle from the bookmark's first day to the war (s7n, t1939i, 24 Nov 2026).
+fn factories_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    plan_manage::free_factories_step(state, tools, plan, lease, now)
+}
 /// Lanes that wait while an operation executes: slow GUI listings (a design-company trait read
 /// took 54 s of a war's input in pb1), but never for the whole attack.
 const WAR_DEFERRED_LANES: [&str; 4] = ["mio_lines", "mio", "mio_traits", "intelligence"];
@@ -3055,8 +3073,13 @@ const LANE_MAX_WAIT: GameHour = DAY;
 /// choosin a research, spending pp, etc"). HEAVY: many inputs or reads, or orders whose timing
 /// matters within a day: speed 3 from its first action until it has been quiet for a while.
 /// A lane not listed is heavy. (lane, minor, why)
-pub(super) const LANE_WEIGHT: [(&str, bool, &str); 48] = [
+pub(super) const LANE_WEIGHT: [(&str, bool, &str); 49] = [
     ("research", true, "one pick in the research view"),
+    (
+        "factories",
+        true,
+        "free military factories to their lines: one set per line",
+    ),
     ("focus", true, "one pick in the focus tree"),
     ("politics", true, "a law, advisor or idea: one pick"),
     ("officer_corps", true, "one officer-corps pick"),
@@ -3509,7 +3532,9 @@ fn production_step(
     // entry_index, so the player never has to look up line numbers.
     let removals: Vec<String> = list(plan, "production")
         .iter()
-        .filter(|l| l["remove"] == json!(true) && reached(l, now))
+        .filter(|l| {
+            l["remove"] == json!(true) && reached(l, now) && !removal_superseded(plan, l, now)
+        })
         .map(|l| text(&l["equipment"]).to_string())
         .filter(|e| {
             !e.is_empty()
@@ -3711,7 +3736,41 @@ fn declare_first(
     // waits for that war executes in the same tick (e1h1, 18 Nov 2026: the executor declared and
     // the groups executed a day later).
     state.last_ok = None;
+    // EXECUTE, THEN DECLARE: a prepared operation whose declaration is due now executes in this
+    // tick before the declaration, so the attack starts on the declaration's hour; the events
+    // the declaration opens no longer hold it (s7n, 24 Nov 2026: declared on 1 September, the
+    // execute came on the 4th behind germany_mefo_bills). Once per declaration (a day).
+    let mut pre: Option<String> = None;
+    if plan_operation::awaiting_war(state)
+        && !plan_operation::executing_any(state)
+        && !state
+            .done
+            .get("preexec")
+            .is_some_and(|at| now >= *at && now - *at < DAY)
+        && plan_affairs::declaration_near(state, tools, plan, now, 0)
+    {
+        state.done.insert("preexec".to_string(), now);
+        pre = war_burst_for(
+            state,
+            tools,
+            plan,
+            lease,
+            now,
+            plan_operation::step,
+            BETWEEN_DECLARATIONS_SECONDS,
+        )?;
+        state.last_ok = None;
+    }
     let declared = plan_affairs::declare_due_step(state, tools, plan, lease, now)?;
+    let declared = match (pre, declared) {
+        (Some(p), Some(d)) => Some(format!("executed before the declaration: {p}; {d}")),
+        (Some(p), None) => {
+            return Ok(Some(format!(
+                "executed before the declaration (not sent yet): {p}"
+            )))
+        }
+        (None, d) => d,
+    };
     if declared.is_none() {
         state.done.remove("declnext");
     }
@@ -6895,6 +6954,35 @@ fn construction_step(
 }
 fn text_or(v: &Value) -> String {
     v.as_str().map_or_else(|| v.to_string(), String::from)
+}
+
+/// The game hour of an entry's optional "from" date (0 without one or unreadable).
+fn from_hour(entry: &Value) -> GameHour {
+    match entry.get("from") {
+        Some(v) if !v.is_null() => crate::alarms::stop_on_date(&json!({"stop_on_date": v}))
+            .ok()
+            .flatten()
+            .map_or(0, |(h, _)| h),
+        _ => 0,
+    }
+}
+
+/// A `remove` entry that a later-dated, reached entry of the same equipment family sizes again
+/// is over: the plan closed a start line and opened it again by date. Applied on a later start
+/// it closed the very lines the plan's current floors want (s7n, 24 Nov 2026: the 1936 day-0
+/// removals closed the fighter, CAS and bomber lines of the 1939 bookmark, the balance re-added
+/// them and the next removal closed them again: 22-27 of 75 military factories on no line).
+fn removal_superseded(plan: &Value, removal: &Value, now: GameHour) -> bool {
+    let family = plan_manage::family(text(&removal["equipment"])).to_string();
+    let since = from_hour(removal);
+    list(plan, "production").iter().any(|e| {
+        e["remove"] != json!(true)
+            && e["replace"].is_null()
+            && e["factories"].as_i64().is_some_and(|f| f > 0)
+            && reached(e, now)
+            && from_hour(e) > since
+            && plan_manage::family(text(&e["equipment"])) == family
+    })
 }
 
 /// Whether an entry with an optional "from" date ("YYYY.MM.DD") is due at `now`.
@@ -11794,6 +11882,16 @@ fn war_mission(kind: &str) -> Option<&'static str> {
         || k.starts_with("cv_small_plane_airframe")
     {
         Some("air_superiority")
+    } else if k.contains("naval_bomber") {
+        // a naval bomber over a land operation strikes its ports (the fleets it would hunt
+        // lie in them); with no mission it stood on the ground through the war (s7n)
+        Some("port_strike")
+    } else if k.starts_with("medium_plane") || k.contains("tac_bomber") {
+        // the tactical bomber supports the attack on the ground: 13 He 111 / Do 17 wings
+        // stood by on the Polish war's first day (s7n, 24 Nov 2026)
+        Some("cas")
+    } else if k.starts_with("large_plane") || k.contains("strat_bomber") {
+        Some("strategic_bombing")
     } else {
         None
     }
@@ -11926,8 +12024,16 @@ mod tests {
         );
         assert_eq!(war_mission("small_plane_cas_airframe_1"), Some("cas"));
         assert_eq!(war_mission("CAS_equipment_1"), Some("cas"));
-        assert_eq!(war_mission("medium_plane_airframe_1"), None);
-        assert_eq!(war_mission("small_plane_naval_bomber_airframe_1"), None);
+        assert_eq!(war_mission("medium_plane_airframe_1"), Some("cas"));
+        assert_eq!(
+            war_mission("medium_plane_fighter_airframe_1"),
+            Some("air_superiority")
+        );
+        assert_eq!(
+            war_mission("small_plane_naval_bomber_airframe_1"),
+            Some("port_strike")
+        );
+        assert_eq!(war_mission("transport_plane_equipment_1"), None);
     }
     use super::*;
     #[test]
@@ -14408,10 +14514,22 @@ mod tests {
         let tools = Extras(Default::default());
         let plan = json!({"air": {"war_missions": true}});
         let mut state = State::default();
-        let step = acted(tick(&mut state, &tools, &plan, "l", START).unwrap());
+        // the tactical bomber flies its ground support too (s7n: 13 bomber wings stood by)
+        let steps: Vec<String> = (0..3)
+            .filter_map(|_| match tick(&mut state, &tools, &plan, "l", START).unwrap() {
+                Tick::Acted(s) => Some(s),
+                _ => None,
+            })
+            .collect();
         assert!(
-            step.starts_with("air 1 wing(s) air_superiority over state 64 (JG 1): true"),
-            "{step}"
+            steps
+                .iter()
+                .any(|s| s.starts_with("air 1 wing(s) air_superiority over state 64 (JG 1): true")),
+            "{steps:?}"
+        );
+        assert!(
+            steps.iter().any(|s| s.contains(" cas over ") && s.contains("(KG 1)")),
+            "{steps:?}"
         );
     }
 
@@ -14705,6 +14823,23 @@ mod tests {
         assert!(!reached(&line, early));
         assert!(reached(&line, late));
         assert!(reached(&json!({"equipment": "x"}), early));
+    }
+
+    #[test]
+    fn a_removal_a_later_floor_sizes_again_is_over() {
+        // the 1936 plan closes the start fighter line on day 0 and sizes it again from 1937;
+        // on the 1939 bookmark the removal is over and the live line is kept
+        let plan = json!({"production": [
+            {"equipment": "small_plane_airframe_1", "from": "1936.1.1", "remove": true},
+            {"equipment": "small_plane_airframe_1", "from": "1937.1.1", "factories": 7},
+            {"equipment": "light_tank_chassis_2", "from": "1936.9.1", "remove": true}]});
+        let rows = list(&plan, "production");
+        let at = |d: &str| crate::alarms::stop_on_date(&json!({"stop_on_date": d})).unwrap().unwrap().0;
+        assert!(removal_superseded(&plan, &rows[0], at("1939.8.14")));
+        // before the later floor is reached the removal stands
+        assert!(!removal_superseded(&plan, &rows[0], at("1936.6.1")));
+        // a removal no later entry sizes stands
+        assert!(!removal_superseded(&plan, &rows[2], at("1939.8.14")));
     }
 
     #[test]
