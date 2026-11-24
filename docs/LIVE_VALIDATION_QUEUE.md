@@ -39,15 +39,12 @@ hoi4_special_project_unassign.
    in an enemy state, the agency view watched; `hoi4_intelligence` two game days later; `hoi4_operations` and,
    when ready, `hoi4_operation_start` (collaboration government). Question: which click or read-back fails.
 3. Design companies (10 min): `hoi4_mios`, `hoi4_mio_policy` on one organisation with the view watched,
-    OPEN v65i/v65j (23 Nov 2026): hoi4_mio_policy fails input_readback_failed "open policy window": the Policies window draws (burst, 3 s) but neither the CPolicyWindow class path (primary vtable 0x362de58 confirmed by RTTI) nor a depth-6 search below the detail window finds it, and hoi4_ui_inspect lists no MIO window among its roots; finding Mauser took 47 s (detail windows opened one by one).
    `hoi4_mio_design_team` once. Question: where the organisation list lives on 1.19.4.1.
 4. Templates (8 min): `hoi4_template_create` one infantry template with the designer watched. Question: why the
-    DONE v65i (23 Nov 2026): 6 infantry + artillery + engineer Verified, layout_saved true, 13.3 s, 65 army XP.
    layout is not saved.
 5. Special-forces doctrine (5 min): `hoi4_doctrines`, then `hoi4_doctrine_adopt special_forces_quantity` with
    the doctrine window watched. Question: where the folder's slot is.
 6. Command power (5 min): the top bar's command power tooltip (value and cap) beside `hoi4_country_status`;
-    DONE v65i (23 Nov 2026): tooltip cap 210 = base 80 + 130 allocated to six leaders; at the cap the 0.81 daily gain is wasted (hoi4_general_trait base_max 80 is the define only). No trait pickable for Manstein, Hoth, Heinrici: general traits need an earned parent, field marshal traits a field marshal.
    `hoi4_general_trait {general, list:true}` for three generals. Question: the real cap; whether any trait can be
    picked.
 7. Defensive orders (10 min): `hoi4_army_fallback`, `hoi4_army_area_defense`, `hoi4_army_halt` on three armies,
@@ -58,7 +55,6 @@ hoi4_special_project_unassign.
 10. Events left open (5 min, speed 2): when a news event opens, `hoi4_event_choose` with the window watched.
 11. Saves (10 min, speed 2): ten `hoi4_save` calls a game day apart while events arrive; first-try successes and
     each failure's code.
-    DONE v65h (23 Nov 2026): 10/10 paused and 10/10 running at speed 1, every other try from the naval map mode, all first try, 3.2-8.7 s. Causes fixed: every call (reads included) closed a shown game menu at the end of its pause bracket, so the resident watcher shut the menu the save had opened; a hover sent a zero wheel event.
 12. Focus (10 min): executor on with only the focus lane for a game week; when a start is not applied, read
     `hoi4_focus_available` for it and look at the tree.
 
@@ -92,18 +88,15 @@ The May 1940 Germany bed source (1 May 1940, paused, executor off unless said):
     timing shows the click count), no trace "chords off". Before: 1.3 s + about 0.3 s a factory (23 factories
     about 8 s); after about 2.5 s. When a chord moves the line by one only, the game on macOS reads another
     modifier: note which (Ctrl or Command) and leave `production_chords` off.
-    DONE v60a (23 Nov 2026): anti_air line 1 -> 24 -> 1 Verified both ways, 5 clicks each, 2.56 s and 2.13 s. production_chords on by default.
 17. Air missions by base (10 min): `hoi4_air`; a base whose wings are all fighters (three or more) and one
     fighter at a base it shares with another type. `hoi4_air_mission {wings: [the base's wings and the shared
     one], mission: "air_superiority", region, bulk: true}` with the map watched. Expected: Verified; the result's
     `by_base` row for the clean base ok, the shared base's wing ordered by the single path; one base click, one
     mission click and one region click for the clean base. Before: 2.5-5 s a wing; after about 4 s a base. The
     same call again clicks nothing (every wing flies it already).
-    DONE v60a: 9 wings (8 of one base, 1 of a mixed base) air_superiority Verified in 7.9 s (0.88 s a wing), 9 clicks; the same call again 1.2 s, no click. air_base_select on by default.
 18. Air rebase by base (5 min): `hoi4_air_rebase {wings: [every wing of one base], state_id: another own base
     with room, bulk: true}`. Expected: each wing's transfer_to_base_id is the target; one base click and one
     right click. Before: 1.8-3.4 s a wing; after about 3 s a base.
-    DONE v60a: 4 wings of one base rebased Verified in 1.35 s, 3 clicks.
 19. Selection questions for the next step (5 min, by hand, nothing kept): in air mode, Shift+Click a second
     base circle while one base is selected (are its wings added?), and Shift+Click (then Ctrl+Click) a wing row
     of the selection view (`airwing_selection_item`): is that wing taken out of the selection? Either answer lets
@@ -114,7 +107,6 @@ The May 1940 Germany bed source (1 May 1940, paused, executor off unless said):
     three traits read queue numbers in the result's `entries`, the second organisation has two enabled traits
     queued. Before: 8.3 s a trait plus 8 s for a listing visit; after about 10 s a visit. Note how often the
     detail window had to be opened again after a click.
-    RUN v60a, NOT FASTER: three traits Verified in 26 s (8.7 s a trait, 40 clicks): after each queued trait the detail window closes and the organisation is found again row by row. mio_queue_many stays off until the found row is reopened directly.
 21. Executor bed with every bulk path (25 min): a STUDY bed of 7 war days from the same source with the plan's
     `manage.bulk: ["all"]`, hands off; compare its cleanliness table with a bed of the same plan without it
     (air_mission, air_rebase, production_set, mio_trait: calls, elements changed, s per element). Expected: air
@@ -126,56 +118,20 @@ A 1936 start (Germany, paused unless said):
     `hoi4_construction_add {building: "arms_factory", state_id, count: <free slots>, fill: true, bulk: true}`.
     Expected: Verified, the state's queue grew by the free slots after one Shift+Click. Before: about 1 s a
     building after the first (a 600 ms settle and a read); after one click.
-    DONE v65i (23 Nov 2026): 4 arms factories in Oberbayern Verified 0 -> 4 in one call, 2.86 s.
 23. Peace years with every bulk path (20 min): executor on with `manage.bulk: ["all"]` for 60 game days at speed
     3; the cleanliness table against the 1936 campaign baseline (production_set about 1.3 s a line, mio_trait
     8.3 s a trait, construction_add 2.9 s a state).
 
-## Session 5: support, supply and logistics (about 85 minutes, Germany 1939-40 save, executor off unless said)
+Total: about 240 minutes in four sessions.
 
-Ordered by value. Each item names the read-back; memory structures are mapped the way `supplymem.rs` (supply nodes
-and province flows) and `stockpile.rs` (the country's equipment stockpile) were: find the number on screen,
-search the country object for it, confirm on a second value, then read it without opening the view.
+## Session S0: the in-process module, stage 0 (read-only; about 5 minutes, then a 30-minute soak)
 
-24. Hub motorisation, first (10 min, executor off): `hoi4_army_motorization` level 2 on an army at the front (never
-    PARTIAL v65i (23 Nov 2026): Panzergruppe Ost 1 -> 2 Verified, hoi4_armies reads 2; trucks 179 -> 82 in 2 game days. Per-hub range not read.
-   set live above 1), read it back in `hoi4_armies`, then open the supply map mode and read the supply range of
-   the hubs it draws from before and after (screenshot and `hoi4_supply` province supply/headroom of the
-   provinces 2-4 beyond the hub); note the trucks taken from the stockpile (`hoi4_stockpile` motorized_equipment
-   before and after). Questions: does the army level set every hub it draws from, or only some; how many trucks a
-   hub took at level 1 and 2; whether a per-hub level is readable from memory (the hub's node object in
-   `supplymem.rs`). Then the executor on with `logistics.hubs` and an operation prepared: the formation's hubs
-   go to its `supply.motorization` before the execute.
-25. Railway legs (10 min, executor on with one `construction_plan` item `legs: true` from Silesia to a Polish state
-   at war): the first leg queued (`hoi4_railway_build` leg:true), the queue read back, the item re-sent after
-   `leg_days`. Question: does the leg stop at the own-controlled edge and re-use existing track.
-26. Train need (10 min): the top bar's `logistics_button` opens `countrylogisticsview`; the train row of
-   `logistics_overview_land_other_entry` shows stock against `needs`/`in_need`. Map the need beside the stockpile
-   row `stockpile.rs` already reads; add `need` and `short` to `hoi4_stockpile` train_equipment and trucks
-   (hub motorisation use). Read-back: the view's numbers on two dates.
-27. Rail and hub throughput (10 min): the supply map mode (`hoi4_map_mode supply`) tooltip of a hub and a railway
-   segment: flow, level, damage. Map the railway segment flow next to the node flows `supplymem.rs` reads; add
-   `rail_flow` and `damaged` to `hoi4_supply` supply_nodes. Read-back: the tooltip text.
-28. Damage and repair (10 min, after an RAF raid or our own logistics strike on the enemy): damaged railway levels
-   and infrastructure of a state from the state object the slot read uses; the construction view's `repair`
-   entries (`countryconstructionsview`, `production_railway_gun_repair_entry`) and their priority. A tool
-   `hoi4_repair_priority {state|building}` if the game exposes one; else the read alone feeds an omission row.
-29. Logistics strike (10 min): `hoi4_air_mission logistics_strike` one CAS wing over the Polish or French front
-   region; two game days later `hoi4_air_wings` mission mask and the wing's kills in the air view; the enemy's
-   supply in `hoi4_wars`. Question: does the mission stay set and does the tool read it back.
-30. Railway guns (5 min, read only): `railway_gun.gui` army list (`armies_count_box`, `btn_select_half`); the
-   railway gun as a unit in memory; production via `hoi4_production_add railway_gun_equipment` (refused or not).
-31. Radar coverage (5 min): `hoi4_construction_add radar_station` in a state once radio_detection is held (the
-   executor's `requires` path), the queue read-back; radar level per state from the state's buildings; the radar
-   map icon. Coverage is then computed offline from RADAR_RANGE_* and the state centres.
-32. Special projects (10 min): `hoi4_special_projects_panel`, a prototype reward choice in the project's reward
-   window (`multiple_selection_reward_window`, `reward_option`, `confirm_option_button`): a typed
-   `hoi4_special_project_reward {facility_id, option}`; `dismantle_facility_button` read only (100 days).
-   Also GAPS Q12 (recruit, unassign, stop).
-33. Change a division's template (5 min): the division panel's `template_change_icon` / `change_template_icon`
-   (unitview.gui) on one Sicherungs-Division: a typed `hoi4_division_change_template {army, divisions, template}`
-   would move weak divisions to the line template without retraining; the `formations` rule then prefers it to
-   an in-place layout edit when the weak template has other uses.
+The owner lifted the "no memory writes" rule for this module only (23 Nov). Stage 0 writes nothing and calls
+nothing in the game: the module scans the game's image in memory, finds the game-state and idler roots by their
+RTTI type, and logs three reads. It is loaded only through the opt-in `HOI4_INPROC` switch of the harness launcher
+`launch-probe-cont.py` (default off: every other run is unaffected); no game file is changed. Design, evidence and
+the later stages: `INPROCESS-FEASIBILITY-1123.md` in the harness folder; code: `inproc/` on branch
+`research/inproc-feasibility` (build `inproc/build.sh`, offline proof `inproc/test_offline.sh`).
 
 Total: about 325 minutes in five sessions.
 34. Air wings attached to an army (5 min): `hoi4_air_attach {wings, army}`.
@@ -184,3 +140,200 @@ Total: about 325 minutes in five sessions.
     read attached from memory: Panzergruppe Ost 4 CAS + 1 fighter wing, Panzergruppe Nord 4 CAS + 1 fighter wing, Armee
     Pommern 2 CAS. As a plain military lane the rule first acted on war day 14 (two 21-day beds); it now runs at the
     head of the war air step.
+
+Needs: the game slot, no game running, Steam closed, a run folder that saved (`PREV/userdata/continue_game.json`).
+
+Part A (automatic, about 5 minutes):
+
+    cd <harness folder>
+    ./inproc_stage0.sh PREV s0a      # optional 3rd argument: the module dylib (default: the branch's build)
+
+Pass when `s0a/stage0-result.json` has `"pass_": true`: the module loaded and did not go inert; every capability
+resolved (8 at stage 0, 11 with the stage-1 build); dlsym finds the same research-command factory as the scan; the idler root found by RTTI is the global the
+UI posts commands through; the save loaded; and the module's date (raw and text), speed, pause and player equal the
+external runtime's `hoi4_overview` on the paused game. Also look at the main menu and the loaded save on screen: both
+must look and behave as usual (the module draws nothing).
+
+Part B (soak, 30 minutes, by hand, same game): start the broker as usual (`./deploybin.sh s0a bins/<build>`), then
+`macplay.py s0a call hoi4_time '{"speed":4}'` (the game's speed 5) and `'{"paused":false}'`. Let it run 30 minutes
+with no orders; the game's monthly autosave must happen (a new autosave in `s0a/userdata/save games`). Every few
+minutes compare `tail -1 s0a/inproc.log` with `macplay.py s0a call hoi4_overview` (dates within a few game days at
+speed 5). Then `./endrun.sh s0a`.
+
+Pass when: no crash or hang, the date kept advancing, an autosave was written, `inproc.log` ends without an
+`inert` event and is under 8 MiB, `s0a/closed.json` shows the game exited and settings restored, and no new
+`hoi4` crash report appeared (`ls -t ~/Library/Logs/DiagnosticReports | head`; the game's own crash folder in
+`s0a/userdata` is empty).
+
+STOP at once (`./endrun.sh s0a`) on: any Part A check false; the game freezing, stuttering or crashing; the date
+not advancing while unpaused; an `inert` event; anything on screen that differs from a normal run. A stop is a
+finding, not a retry: record it in NOTES-1116.md and leave stage 1 closed. Kill switch without closing the game:
+`touch s0a/inproc.log.off` (the module goes inert within 2 s).
+
+After a pass: tick here, record the numbers in NOTES-1116.md ("stage 0 passed"), and stage 1 (one harmless command
+through the game's own command queue, with read-back) may be built.
+
+- [x] S0 PASSED 23 Nov (run s0a): 8/8 capabilities, scan 81 ms, reads equal hoi4_overview, 30-minute soak at speed 5
+  over 3.7 game years clean, exit clean.
+
+## Session S1: the in-process module, stage 1 (ONE command: set_game_speed; about 6 minutes, then two 15-minute soaks)
+
+Stage 1 posts exactly one command type, `CSetGameSpeedCommand` (the game's speed, index 0..4 = speeds 1..5), through
+the game's own command path, the way the UI's speed keys do: the module queues a job onto the process main thread
+(the thread whose event pump delivers the UI's input), checks there the game's own thread rule
+(`_ThreadForbidCount == 0`), that the session is single player (server `CDummyServer`) and that Post will stamp the
+sender this command's authorisation requires, creates the command with the game's exported factory, fills its one
+field, and calls the game's Post. The game stamps the sender and executes the command on its next command step; the
+module never writes game state. Posting is OFF unless the launcher passes the explicit opt-in
+(`HOI4_INPROC_CHANNEL=1 HOI4_INPROC_POST=set_game_speed`, set only by `inproc_stage1.sh`) AND every stage-1 capability
+resolved on the running build. Allow-list: one command. Rate limit: 200 ms apart, 60 a minute, one in flight. Every
+post is logged in `RUN/inproc.log` (`"event":"post"`: type id, fields, result, timings). Any refusal the module cannot
+explain switches posting off for the rest of the process (`"event":"posting_off"`). The local channel is a Unix
+socket in the 0700 run folder, owner-only, peer-uid checked, plus a per-process token file. Design and evidence:
+`INPROCESS-FEASIBILITY-1123.md` section 8; the offline proof `inproc/test_offline.sh` (ALL PASS) covers the scans on
+1.19.4.1, 1.20.0.0 and 1.19.3, the channel and policy against a mock game, and the main-thread route in an
+SDL-style Cocoa event pump.
+
+Needs: the game slot, no game running, Steam closed, a run folder that saved, the branch's module built
+(`inproc/build.sh`; the scripts check it is the stage-1 build). Python client: `inproc/tools/inproc_client.py`
+(copied into the run by the script).
+
+Part A (automatic, about 6 minutes; the game loads PAUSED):
+
+    cd <harness folder>
+    ./inproc_stage1.sh PREV s1a
+
+It prints the module's capability, policy and channel lines, then runs: hello; probe (no post); one post (speed
+index 2, or 1 if already 2) read back by the module AND by the external runtime's `hoi4_overview`; a screenshot
+`s1a/stage1-after-post.png`; the undo (back to the starting speed) checked the same way + `stage1-after-undo.png`;
+20 repetitions of post + undo (40 posts) with timings. Pass when `s1a/stage1-result.json` has `"pass_": true`:
+posting enabled with an allow-list of one; the probe ran on the main thread with the session `8CSession` and the
+server `12CDummyServer`; every post `executed` with `speed_after` equal to the request; the external read equal after
+the post and after the undo; 40 of 40 repetitions; the module's read-back median within one frame-time budget
+(33 ms: two frames at 60 fps); the speed restored. Look at both screenshots: the top bar's speed indicator shows the
+posted speed, then the original one (record what you see in the notes). Record from `timing`: `post_us` (the
+game's Post call, microseconds), `main_wait_ms` (queue to main thread), `readback_ms`, `total_ms`, against today's
+1.3-10 s per GUI order.
+
+Part B, first soak (15 minutes, same game):
+
+    zsh inproc_stage1_soak.sh s1a 15 7
+
+Speed 5, unpaused; once a minute the module posts speed index 3 then 4, each read back; at minute 7 a manual save
+through `hoi4_save`; at the end pause and a second manual save (the file the reload uses). Then `./endrun.sh s1a`.
+Pass when `s1a/stage1-soak-result.json` has `"pass_": true` (about 30 posts, none failed), the watch lines show the
+date advancing and the overview's speed 4 between posts, a manual save appeared, no `posting_off`/`inert`.
+
+Reload in the middle (with the module): `./inproc_stage1.sh s1a s1b quick` (loads s1a's last save, the one made with
+the module; probe + one post + undo: `s1b/stage1-quick.json` `"pass_": true`), then the second soak
+`zsh inproc_stage1_soak.sh s1b 15 7` (the monthly autosave must appear in `s1b/userdata/save games`), then
+`./endrun.sh s1b`.
+
+The save loads in an UNMODIFIED game: `./inproc_stage1.sh s1b s1c plain` launches WITHOUT the module (no
+`HOI4_INPROC`; the script checks no `inproc.json`/`inproc.log` exists in `s1c`) from s1b's last save (made with the
+module after 30 minutes of module posts) and reads `hoi4_overview`. Pass when `s1c/plain-result.json` has
+`"pass_": true` (the save loaded, the date and player read, no load error in the game log). Look at the screen: a
+normal game. Then `./endrun.sh s1c`. (The module never writes game state and changes no data file, so the save
+holds only what the game's own speed command wrote; this proves it on a clean process.)
+
+STOP at once (`./endrun.sh RUN`) on: any check false; `posting_off` or `inert` in `RUN/inproc.log`; a crash, hang or
+frozen date while unpaused; anything on screen that differs from a normal run (the module draws nothing). A stop is
+a finding: record the module log's last `post`/`probe` lines in NOTES-1116.md and leave stage 2 closed. Kill switch
+without closing the game: `touch RUN/inproc.log.off` (no new posts, the channel closes, within 2 s).
+
+After a pass: tick here, record the numbers in NOTES-1116.md ("stage 1 passed"); the multiplayer check (Session S1-MP)
+and stage 2 (INPROCESS-COMMANDS-1123.md) may follow.
+
+## Session S1-MP (later; needs two clients on two machines): the in-process module in multiplayer
+
+Not tonight. Stage 1's module REFUSES to post unless the server is `CDummyServer` (single player), so this session
+first needs a build with the multiplayer gate opened for the host role only (same allow-list; speed is host-only in
+the game: "only the host may change the game speed").
+Roles: HOST = the Mac with the module (opt-in as S1), CLIENT = a second machine with an unmodified game (Linux VM or
+a second Mac; its own licence), same version and checksum (the game's lobby shows both). Steps: host starts a
+multiplayer game from a save; client joins in the lobby; play at speed 3 for 10 minutes with the module posting
+speed 3 -> 2 -> 3 once a minute; then the client leaves and HOT-JOINS again while the game runs (the module must hold
+posts while "ongoing hotjoin": a post refused by the game is logged, never retried blindly); then 60 minutes more.
+Proof of no desync: the game's own out-of-sync indicator never appears on either screen; both `game.log`s show the
+hourly checksum (`CClientChecksumCommand`) accepted and no "NOT in sync", "Validity of command changed
+non-deterministically", "COMMAND LOST" or "Dropped" lines; the host never flags the client modified
+(`CMarkModifiedClientCommand`); the speed changes appear on BOTH clients' top bars at the same game hour. Then the
+client role with the module (its speed posts must be refused by the host's game, exactly like a client pressing
+the speed keys: "only the host may change the game speed").
+
+## Session S2: the in-process module, stage 2 (production and air families; about 70 minutes plus a 30-minute soak)
+
+Stage 2 posts the commands that carry real play the way the game's own UI posts them: the command type's factory
+(or the UI's own constructor for payloads with lists), the game's own "can do" check (the vtable slot the UI's post
+helpers call before posting; refused = the module deletes the command, as the UI does), then `Post(session, cmd, 0)`
+from the main thread. Before any command is made, every object the tool names must round-trip through the command's
+own typed resolver (a live object of the right class) and belong to the player by the command's own owner getter
+(both read from the command's authorisation slot). Five types: `production.add_factories`
+(`CAddProductionLineFactoriesCommand`), `production.remove_line` (`CRemoveProductionLineCommand`), `air.transfer`
+(`CStratAirTransferCommand`), `air.set_mission` (`CStratAirSetMissionCommand`), `air.enable_mission`
+(`CStratAirEnableMissionCommand`). The MCP tools keep their names, schemas and Verified read-backs; the reader's
+switch `HOI4_BACKEND=auto|inprocess|gui` picks the route (`auto` uses a family only once it is marked live-passed in
+the module; until this session passes, only `inprocess` uses it). A refused or unanswered in-process request hands the
+same call to the GUI path. Design and evidence: `INPROCESS-COMMANDS-1123.md` (stage 2 built) and
+`INPROCESS-FEASIBILITY-1123.md` section 10; offline proof `inproc/test_offline.sh` ALL PASS (stage-2 scans 5/5 on
+1.19.4.1 and 1.20.0.0 macOS, off on 1.19.3) and `cargo test --lib inproc` (the switch).
+
+Needs: the game slot, no game running, Steam closed; the module built from the branch (`inproc/build.sh`, version
+`stage2-1`); the READER built from the branch (it carries the switch) and named by `HOI4_BIN`; two saves: PREV-1940 (the
+May 1940 Germany bed of Session 1) and PREV-1936 (any 1936 start that saved, a few days in).
+
+Start (each bed): `./inproc_stage2.sh PREV s2a` (s2b for the 1936 bed). It launches with the opt-in
+`HOI4_INPROC_POST=set_game_speed,production,air`, checks the hello (both families on), and writes `s2a/tool.sh`:
+`zsh s2a/tool.sh gui|inprocess TOOL 'JSON-ARGS'` runs one tool with that backend and logs its body and wall time to
+`s2a/tools.jsonl`. Take an input lease as usual (`hoi4_input_lease`) for the GUI calls; the in-process calls still go
+through the same lease and journal.
+
+P1 production, paused (10 min). Read the lines (`hoi4_production_lines`). For three lines of different equipment: `inprocess`
+`hoi4_production_set` to requested+3, then back; then to 0 on a spare line (removes it). Each call must return
+Verified (the line's factories in memory) and the module's `post2` lines in `s2a/inproc.log` must show
+`"result":"posted"` and `"executed"` equal to `"posted"` (the module reads the line's factories itself; while paused it
+reports "not executed yet (game paused)": then unpause one hour and read again). Then the same three changes with
+`gui`. Record both wall times per call.
+P2 production refusals (5 min): a delta that would go below 0 or above the line's cap must come back
+`refused_by_game_check` (the game's own check), never posted, and the GUI path then refuses the same way; an address
+that is not an own line (another country's line, if the reads expose one) must come back `not_own`.
+P3 air rebase, paused (10 min): three own wings at one base: `inprocess` `hoi4_air_rebase` (`wings` = the three,
+`state_id` = another own state with an air base) must be Verified (transfer base in memory); then back with `gui`.
+A wing already at the target must be skipped (no command). A target state with no own base must be refused before
+posting (the reads plan it).
+P4 air missions, running at speed 3 (15 min): `inprocess` `hoi4_air_mission` with three fighter wings, `mission`
+`air_superiority`, a region that holds an own base: one `air.set_mission` request (3 commands) then one
+`air.enable_mission` request (3 commands), Verified (mask and region in memory); then the same wings to
+`cas` in another region; then `gui` for the reverse. A region with no own base goes through the GUI
+by design (the region object is only known from an own base); check that it does.
+P5 timings (5 min): 20 alternating `hoi4_production_set` calls per backend, and 10 `hoi4_air_rebase` calls of 6 wings per
+backend; report the median and the 90th percentile of the tool's wall time and the module's `total_ms`.
+P6 war, 20 game days twice (20 min): from PREV-1940 at speed 3, the usual war loop for 20 game days with
+`HOI4_BACKEND=inprocess` for production and air, then reload the same save and run the same 20 days with `gui`.
+Compare: tool wall time per production/air call, calls per game day, the casualty ratio and territory change.
+P7 soak (30 min): speed 3, once a minute one production change and one air mission change in process, each Verified;
+one manual save in the middle and a reload of it (the channel must come back and the families must be on again).
+P8 save without the module: `./inproc_stage2.sh s2a s2p plain` (the save made in P7) must load and read in an
+unmodified game.
+
+Stop at once (`endrun.sh RUN`) on: a crash or hang; any `posting_off`, `family_off` or `inert` event; a `post2` result
+`unexplained`; an in-process call whose Verified read-back fails while the GUI path's succeeds; any "Dropped command"
+or "posted during command execution" line in the game's `game.log`; a save that does not load in P8.
+
+Pass: P1-P8 clean on both beds. Then set `IPC_LIVE_PASSED` for production and air in `inproc/core/ipc.c` (that turns
+`auto` on for them), record the numbers in NOTES-1116.md ("stage 2 passed: production, air"), and the next families
+follow (MIO, construction, training, air wing creation: INPROCESS-COMMANDS-1123.md).
+
+- [x] S2 PASSED 24 Nov (runs s2c-s2i, w69b/w69c): production and air on the 1940 and 1936 beds; soak 30 min with 60
+  in-process changes Verified (production median 47.6 ms, air missions 122.7 ms); reload with the families on; the
+  save loads without the module; 21-day wars in process vs GUI 2.3 vs 1.7 actions per game day, air orders 12 in 65 s
+  vs 3 in 66 s; `IPC_LIVE_PASSED` set for both, `auto` checked live (s2i). Numbers in NOTES-1116.md.
+
+## Session S2-MP (later; two clients on two machines): stage 2 in multiplayer
+
+Not before S1-MP and S2 pass. The module still refuses every stage-2 post unless the server is `CDummyServer`; this
+session needs a build with that gate opened for the CLIENT role too (a player's production and air orders are not
+host-only). Same roles and checks as S1-MP (no out-of-sync indicator, the hourly `CClientChecksumCommand` accepted,
+no "NOT in sync", "Validity of command changed non-deterministically", "COMMAND LOST" or "Dropped" lines, never flagged
+by `CMarkModifiedClientCommand`), with the module on the client: P1 and P4 above, each change seen on BOTH machines
+(the host's reads of the client's country) at the same game hour.

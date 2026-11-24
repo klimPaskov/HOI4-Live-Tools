@@ -21,6 +21,7 @@ mod commanders;
 mod construction;
 mod construction_find;
 mod fair_facts;
+mod inproc;
 mod operation_act;
 mod railway;
 // Internal prospective click opener; no tool/configuration registration.
@@ -3397,6 +3398,14 @@ impl MacClock {
                         ));
                     }
                 }
+            }
+            // The in-process backend (HOI4_BACKEND): setting a line's factories is one command through the game's
+            // own command path; no input, no focus. Adding a line stays on the GUI (not in the families yet).
+            let mut inproc_route = match index {
+                Some(_) if !retry => inproc::route("production"),
+                _ => None,
+            };
+            if !retry && inproc_route.is_none() {
                 bounded_keys.preflight()?;
             }
             let keys = &bounded_keys;
@@ -3463,6 +3472,27 @@ impl MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let (Some(index), Some(ch)) = (index, inproc_route.as_mut()) {
+                    let line = &before[index];
+                    match inproc::production_op(line.requested, factories) {
+                        None => return Ok(()),
+                        Some((op, delta)) => {
+                            let vals = if delta == 0 { vec![] } else { vec![delta] };
+                            match ch.post(op, &[line.address], &vals, None, None) {
+                                Ok(reply) if inproc::all_posted(&reply) => return Ok(()),
+                                // the game's own check refused it: that is the answer (the GUI's
+                                // buttons post the same refused command)
+                                Ok(reply) if inproc::game_refused(&reply) => {
+                                    return Err(inproc::refused_error(&format!(
+                                        "{key} line to {factories} factories"
+                                    )))
+                                }
+                                // not run or refused by the module: the GUI path decides, in this same call
+                                Ok(_) | Err(_) => bounded_keys.preflight()?,
+                            }
+                        }
+                    }
+                }
                 match index {
                     None => production::add(process, keys, key, factories, design, chords),
                     Some(index) => production::set(process, keys, index, key, factories, chords),
@@ -5091,6 +5121,13 @@ impl MacClock {
                         merge_plan = Some(airact::plan_merge(&wings, wing, with.as_deref())?)
                     }
                 }
+            }
+            // The in-process backend (HOI4_BACKEND) for missions and rebases: the UI's own commands, no input.
+            let mut air_route = match &op {
+                Air::Mission { .. } | Air::Rebase { .. } if !retry => inproc::route("air"),
+                _ => None,
+            };
+            if !retry && air_route.is_none() {
                 bounded_keys.preflight()?;
             }
             let action = match &op {
@@ -5241,6 +5278,39 @@ impl MacClock {
                         "action_uncertain",
                         "A retried request is never dispatched again",
                     ));
+                }
+                if let Some(ch) = air_route.as_mut() {
+                    let mut reread = || airact::own(process).ok().map(|(_, w)| w);
+                    let done = match &op {
+                        Air::Mission {
+                            wings: names,
+                            region,
+                            mask,
+                            ..
+                        } => inproc::air_mission(
+                            ch,
+                            &bases,
+                            &wings,
+                            names,
+                            *region,
+                            *mask,
+                            &mut reread,
+                        ),
+                        Air::Rebase { .. } => {
+                            inproc::air_rebase(ch, &bases, &wings, &rebase_plans, &mut reread)
+                        }
+                        _ => inproc::Routed::Gui,
+                    };
+                    match done {
+                        inproc::Routed::Done(v) => {
+                            *info.borrow_mut() = v;
+                            return Ok(());
+                        }
+                        inproc::Routed::Refused(what) => return Err(inproc::refused_error(&what)),
+                        inproc::Routed::Gui => {}
+                    }
+                    // refused or not run: the GUI path decides, in this same call
+                    bounded_keys.preflight()?;
                 }
                 *info.borrow_mut() = match &op {
                     Air::Mission {
