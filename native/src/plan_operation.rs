@@ -199,10 +199,17 @@ pub(super) fn refresh(state: &mut State, tools: &dyn Tools, plan: &Value, now: G
         publish(&state.op_owned);
         return;
     }
-    if state.op_owned_at == Some(now) {
+    // s7m (24 Nov 2026): the paused setup stays in one game hour; Panzergruppe Nord formed after
+    // the first read, was not counted as the operation's, and the idle-hold step sent it back to
+    // its old state with an area-defence order: its march never ended and the operation never
+    // read as ready, so the declaration waited past 1 September.
+    let mut roles: Vec<String> = state.layout.iter().map(|(h, a)| format!("{h}={a}")).collect();
+    roles.sort_unstable();
+    let stamp = (now, roles.join("\u{1}"));
+    if state.op_owned_at.as_ref() == Some(&stamp) {
         return;
     }
-    state.op_owned_at = Some(now);
+    state.op_owned_at = Some(stamp);
     for (i, op) in ops.iter().enumerate() {
         let id = op_id(op, i);
         if state.done.contains_key(&key(&id, "prep")) || state.done.contains_key(&key(&id, "end")) {
