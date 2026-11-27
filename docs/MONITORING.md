@@ -86,8 +86,17 @@ no division in training, with what binds: equipment or the training rows), `cons
 `decryption_idle`, `mio_state_unread`, `special_project_kind_without_facility`, and
 `lane_wait_outlived` (an omission row whose rule has said the same thing past the row's own
 deadline). The recorder also writes the derived read `politics.laws_affordable` (every law of each
-group with its cost against the power and whether its conditions hold) into each snapshot. The
-detector computes these on every full snapshot, so a replay of an older run shows them too.
+group with its base cost from the files and whether the conditions a snapshot can judge hold) into
+each snapshot. The detector computes these on every full snapshot, so a replay of an older run
+shows them too.
+
+No cost, cap or price is kept in the monitor's code. The game-file facts come from the files the
+run's game loaded (its game folder from launch.json, the mods enabled in its `-userdir`, with
+overrides and replace_path); with no files a fact is unknown and the finding that needs it says so
+or stays silent. A file's cost is before the game's modifiers, so no finding judges whether
+something is affordable from it: that is the game's own check (its alerts such as
+`doctrines_available`, `modify_officer_corps`, `decisions_available`, its enabled state, its
+refusal).
 
 A refused order is looked up in the lessons before it is retried: a cause a lesson calls transient
 (an event was open) is retried soon and never given up; one it calls permanent is not sent again

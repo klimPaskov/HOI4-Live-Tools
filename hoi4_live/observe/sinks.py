@@ -56,7 +56,7 @@ def experience(snap, prev, facts):
         have = xp.get(pool)
         if have is None:
             continue
-        cap = facts["xp_cap"].get(pool, 500.0)
+        cap = (facts.get("xp_cap") or {}).get(pool)  # the loaded defines; unknown without them
         was = g(back, "doctrines", "experience", pool) if back else None
         gain = (have - was) / span if (was is not None and span) else None
         buys = []
@@ -67,19 +67,20 @@ def experience(snap, prev, facts):
                 buys.append(f"{f['folder']} grand doctrine ({f['grand_xp_cost']:.0f})")
             for t in f.get("open_tracks") or []:
                 buys.append(f"{f['folder']}/{t} subdoctrine")
-        spirit = min(facts["spirit_costs"].get(pool) or [20.0])
-        if "modify_officer_corps" in alerts and have >= spirit:
-            buys.append(f"an empty officer corps spirit slot (from {spirit:.0f})")
-        days_to_cap = (cap - have) / gain if gain and gain > 0 else None
+        # the game's own check that a spirit can be taken (its alert), never a price kept here
+        if "modify_officer_corps" in alerts:
+            buys.append("an officer corps spirit (the game marks a pick open)")
+        days_to_cap = (cap - have) / gain if cap and gain and gain > 0 else None
         spending = gain is not None and gain < 0
         if spending or (not buys and (days_to_cap is None or have < cap / 2)):
             continue
         trend = (f"+{gain * 30:.0f} a month, at the cap ({cap:.0f}, defines) in {days_to_cap:.0f} days: every "
-                 f"day after it is lost" if days_to_cap is not None else "not growing")
+                 f"day after it is lost" if days_to_cap is not None else
+                 ("growing, cap unknown (no defines read)" if gain and gain > 0 and not cap else "not growing"))
         what = ("; it can buy " + ", ".join(buys[:4])) if buys else (
             "; nothing the read shows is open to buy: spirits of the other slots, designs and refits "
             "(equipment designer), template edits, or a completed track's next subdoctrine")
-        sev = "high" if (days_to_cap is not None and days_to_cap <= 30) or have >= cap * 0.6 else "medium"
+        sev = "high" if (days_to_cap is not None and days_to_cap <= 30) or (cap and have >= cap * 0.6) else "medium"
         out.append(F("experience_unspent", sev, f"{pool} experience {have:.0f} unspent ({trend}){what}",
                      subject=pool, experience=round(have, 1), cap=cap,
                      days_to_cap=None if days_to_cap is None else round(days_to_cap),
@@ -105,9 +106,12 @@ def mastery(snap, facts):
             elif m == 0:
                 empty.append(f"{f['folder']}/{t['track']} {sub}")
     if done:
+        bank = (f"is reserved at {facts['bank_rate']:.0%} up to {facts['bank_max']:.0f} (defines)"
+                if facts.get("bank_rate") is not None and facts.get("bank_max") is not None
+                else "is only partly reserved (the defines give how much)")
         out.append(F("doctrine_track_complete", "medium",
                      f"{len(done)} doctrine track(s) past their last reward: {'; '.join(done[:5])}; further mastery "
-                     f"is reserved at {facts['bank_rate']:.0%} up to {facts['bank_max']:.0f}: a new subdoctrine on the "
+                     f"{bank}: a new subdoctrine on the "
                      f"track (its experience cost) starts its rewards with the reserve (what the switch keeps of the "
                      f"old rewards is a live check)", tracks=len(done)))
     if empty:
@@ -224,41 +228,6 @@ def special_projects(snap):
 # --- political power and laws ---------------------------------------------------------------------
 
 
-def pick_costs(facts):
-    """(cheapest, dearest) price of a general pick from the files' law groups (a country's own laws
-    and free ones left out); (150, 150) when the files give none."""
-    costs = sorted({r["cost"] for rows in (facts.get("laws") or {}).values() for r in rows
-                    if not r.get("country_specific") and (r.get("cost") or 0) > 0})
-    return (costs[0], costs[-1]) if costs else (150.0, 150.0)
-
-
-def political_power(snap, prev, facts):
-    """Political power is idle when it pays the dearest single pick and another one at once (no one
-    buy needs more: what lies above waits for nothing), or when it covered a pick and did not fall
-    for two game weeks (nothing was bought). Power saved for a named pick is the politics lane's
-    reason: it says so in its note, and its own row (political_power_unspent) then wins."""
-    pol = snap.get("politics") or {}
-    pp = pol.get("political_power")
-    if pp is None:
-        return []
-    cheapest, dearest = pick_costs(facts)
-    back, span = _back(snap, prev, 14)
-    was = g(back, "politics", "political_power") if back else None
-    not_spent = was is not None and pp >= was - 0.5 and was >= cheapest
-    piled = pp >= dearest + cheapest
-    if not (piled or not_spent):
-        return []
-    gain = (pp - was) / span if was is not None and span else None
-    trend = (f", {gain * 30:+.0f} a month" if gain is not None else "")
-    why = (f"it pays the dearest pick ({dearest:.0f}) and another ({cheapest:.0f}) at once"
-           if piled else f"it covered a pick ({cheapest:.0f}) and has not fallen in {span:.0f} game days")
-    sev = "high" if piled and not_spent else "medium"
-    return [F("political_power_unspent", sev,
-              f"political power {pp:.0f} unspent{trend}: {why}; the politics lane spends it by the plan's "
-              f"order, then by value (advisers, laws, high command, decisions, relations); power saved for a "
-              f"named pick says so in its note", pp=round(pp, 1), was=was, cheapest=cheapest, dearest=dearest)]
-
-
 def laws(snap, prev, facts_dir=None, idle_men=False):
     """The conscription question (owner, 23 Nov 2026: "lower the law then, it gives some bonuses"):
     with men idle, a lower mobilisation law is worth its cost only by the penalties of the law in
@@ -287,8 +256,8 @@ def laws(snap, prev, facts_dir=None, idle_men=False):
     if not drop:
         return []
     return [F("conscription_above_need", "medium",
-              f"{current} costs {drop} (files) while men sit idle; {best['law']} ({best['cost']:.0f} political "
-              f"power) recruits {best['modifiers'].get('conscription', 0):.1%} of the population instead of "
+              f"{current} costs {drop} (files) while men sit idle; {best['law']} (its price and whether it "
+              f"can be taken now are the game's: hoi4_politics_options) recruits {best['modifiers'].get('conscription', 0):.1%} of the population instead of "
               f"{cur['modifiers'].get('conscription', 0):.1%} and drops those penalties; worth it only if the "
               f"force's need (the plan's divisions, losses, garrisons) stays under the lower ceiling",
               law=current, lower=best["law"])]
@@ -336,7 +305,6 @@ def findings(snap, prev=None, game_dir=None):
     out += intelligence(snap)
     out += mios(snap)
     out += special_projects(snap)
-    out += political_power(snap, prev, facts)
     out += laws(snap, prev, game_dir, idle_men=any(x["code"] == "manpower_idle" for x in out))
     out += waits(snap, prev)
     return [f for f in out if f["code"] not in have]
