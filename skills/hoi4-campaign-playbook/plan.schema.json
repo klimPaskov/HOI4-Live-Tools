@@ -983,6 +983,11 @@
           "default": true,
           "description": "true offers the lanes that own an open issue of the run monitor (RUN/issues_open.json, docs/MONITORING.md) ahead of the routine pass, each at most once a game day; false leaves the pass order alone"
         },
+        "politics_fast": {
+          "type": "boolean",
+          "default": true,
+          "description": "true checks the politics lane (the plan's picks, then politics_auto) among the fast lanes at least once a game day, every tick while it buys; false leaves politics to its turn in the pass"
+        },
         "war_every_tick": {
           "type": "boolean",
           "default": false,
