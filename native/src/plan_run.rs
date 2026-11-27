@@ -4443,7 +4443,11 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
         if let Some(step) = plan_manage::rebalance_step(state, tools, plan, lease, now, &economy)? {
             return Ok(Some(step));
         }
-        production_step(state, tools, plan, lease, now)
+        if let Some(step) = production_step(state, tools, plan, lease, now)? {
+            return Ok(Some(step));
+        }
+        // equipment the game says is requested and no line makes (standing work, no plan key)
+        plan_manage::missing_line_step(state, tools, plan, lease, now)
     }));
     for name in ["naval_queue", "dockyards", "convoys"] {
         out.push(lane_of(manage, name));
@@ -12531,6 +12535,7 @@ fn decisions_step(
                 state.manage.decisions_seen = Some((now, offered.clone()));
                 let line = decisions_left_note(plan, &offered, &[]);
                 plan_manage::note(state, "decisions", line);
+                offer_unwanted_decisions(state, plan, &offered, &[], now);
             }
         }
         return Ok(None);
@@ -12547,6 +12552,7 @@ fn decisions_step(
         "decisions",
         decisions_left_note(plan, &offered, &pending),
     );
+    offer_unwanted_decisions(state, plan, &offered, &pending, now);
     // A decision the country cannot afford yet waits for the political power: the game draws
     // it enabled and a click does nothing (g17c: three refusals in nine days, then taken).
     let pp = plan_manage::political_power(tools);
@@ -12715,6 +12721,88 @@ fn learned_step(
         )));
     }
     Ok(None)
+}
+
+/// The enabled decisions no plan entry wants or forbids are a judgement, not a lane choice: while
+/// the game's decisions_available or political_power_unspent alert stands open they go to the
+/// player as one item with the game's options (key, title, cost) and a deadline of the hold
+/// grace. The executor reads no value for a decision's effects (modifiers, scripted effects and
+/// variables differ by country and mod), so past the deadline they stand as left and the note
+/// says the player chose none: the open alert then carries a reason, never a quiet turn
+/// (g92a, 27 Nov 2026: decisions_available open 148 days, "deliberately not taken", nobody asked).
+fn offer_unwanted_decisions(
+    state: &mut State,
+    plan: &Value,
+    offered: &Value,
+    pending: &[String],
+    now: GameHour,
+) {
+    let open = ["decisions_available", "political_power_unspent"]
+        .iter()
+        .any(|k| state.manage.alert_since.contains_key(*k));
+    let mut options: Vec<Value> = Vec::new();
+    let mut keys: Vec<String> = Vec::new();
+    for d in list(offered, "decisions") {
+        let key = text(&d["decision"]).to_string();
+        if d["enabled"] != json!(true)
+            || d["active_timer"].as_bool().unwrap_or(false)
+            || key.is_empty()
+            || pending.contains(&key)
+            || keys.contains(&key)
+            || decision_forbidden(plan, &key)
+        {
+            continue;
+        }
+        keys.push(key.clone());
+        options.push(json!({"decision": key, "title": d["title"], "cost": d["cost"]}));
+    }
+    if !open || options.is_empty() {
+        state.done.remove("decoffer");
+        return;
+    }
+    let since = *state.done.entry("decoffer".into()).or_insert(now);
+    let shown = keys
+        .iter()
+        .zip(&options)
+        .take(12)
+        .map(|(k, o)| match o["cost"].as_f64() {
+            Some(c) => format!("{k} ({c:.0} political power)"),
+            None => k.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let left = (since + plan_xp::HOLD_GRACE).saturating_sub(now);
+    let line = if left > 0 {
+        plan_manage::offer_player(
+            state,
+            plan,
+            now,
+            "decisions_offer",
+            "decisions_unwanted",
+            format!(
+                "the player's choice, {} more day(s): decisions the plan neither takes nor forbids: {shown}; take one (hoi4_decision_take) or name it in decisions or a never rule",
+                (left + DAY - 1) / DAY
+            ),
+            json!({"rule": "decisions", "options": options,
+                   "deadline_days": (left + DAY - 1) / DAY}),
+        );
+        format!(
+            "offered to the player, {} more day(s)",
+            (left + DAY - 1) / DAY
+        )
+    } else {
+        let line = format!(
+            "left: offered to the player {} day(s) ago and none chosen; the executor reads no value for a decision's effects: {shown}",
+            (now - since) / DAY
+        );
+        plan_manage::note(state, "decisions_offer", line.clone());
+        line
+    };
+    // the alert row quotes the decisions note: it carries the offer's state
+    let base = plan_manage::note_of(state, "decisions")
+        .unwrap_or_default()
+        .to_string();
+    plan_manage::note(state, "decisions", format!("{base}; {line}"));
 }
 
 /// The decisions the game offers now that no plan entry wants, named as deliberately not taken
@@ -24309,6 +24397,50 @@ mod tests {
         assert_eq!(taken, vec![json!("ITA_good")]);
         assert!(decision_forbidden(&plan, "ITA_withdraw_from_ethiopia"));
         assert!(!decision_forbidden(&plan, "ITA_good"));
+    }
+
+    /// g92a (27 Nov 2026): decisions_available stood open 148 days with "deliberately not taken"
+    /// and nobody was asked.
+    #[test]
+    fn decisions_no_entry_wants_go_to_the_player_then_stand_as_left_past_the_grace() {
+        let plan = json!({"decision_rules": [{"decision": "GER_cancel_mefos", "never": true}]});
+        let tools = fake(vec![(
+            "hoi4_decisions_list",
+            json!({"decisions": [
+                {"decision": "GER_cancel_mefos", "enabled": true, "active_timer": false},
+                {"decision": "HOL_demand", "title": "Demand", "enabled": true,
+                 "active_timer": false, "cost": 25.0}]}),
+        )]);
+        let mut state = State::default();
+        state
+            .manage
+            .alert_since
+            .insert("decisions_available".into(), START);
+        assert_eq!(
+            decisions_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        let alarms = plan_manage::take_alarms(&mut state);
+        let offer = alarms
+            .iter()
+            .find(|a| a["reason"] == "decisions_unwanted")
+            .expect("an offer to the player");
+        assert_eq!(offer["evidence"]["options"][0]["decision"], "HOL_demand");
+        assert_eq!(offer["evidence"]["options"].as_array().unwrap().len(), 1);
+        let n = plan_manage::note_of(&state, "decisions").unwrap();
+        assert!(n.contains("offered to the player, 7 more day(s)"), "{n}");
+        // past the grace (the monthly read): left, with the reason
+        let later = START + 31 * DAY;
+        decisions_step(&mut state, &tools, &plan, "l", later).unwrap();
+        let n = plan_manage::note_of(&state, "decisions").unwrap();
+        assert!(
+            n.contains("left: offered to the player 31 day(s) ago"),
+            "{n}"
+        );
+        // the alert closed: the offer is forgotten
+        state.manage.alert_since.clear();
+        offer_unwanted_decisions(&mut state, &plan, &json!({}), &[], later);
+        assert!(!state.done.contains_key("decoffer"));
     }
 
     #[test]

@@ -4901,6 +4901,24 @@
           "description": "management inventory item id (manage_inventory.py show: political_power, command_power, officer_corps, ...) -> what happens to it instead of a plan key or executor rule, e.g. a brief line for a lever no tool carries yet (lint manage.owner: every item and alert has an owner or a reason)",
           "x-owner": "lint"
         },
+        "unproduced_ok": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "equipment the missing_equipment_production response leaves without a line (the divisions or wings lack it and no line makes it); the reason goes in unproduced_ok_why",
+          "x-owner": "executor"
+        },
+        "unproduced_ok_why": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "equipment -> why no line makes it although the divisions or wings lack it (manage.unproduced_ok)",
+          "x-owner": "executor"
+        },
         "alerts_ignore_why": {
           "type": "object",
           "additionalProperties": {
