@@ -41,7 +41,7 @@ MAX_PACKET_CHARS = 5000          # about 1,300 tokens
 ANSWER_KINDS = ("action", "plan_edit", "leave")
 TIER1_CLASSES = ("idling", "gameplay", "tool_use")
 COOLDOWN_DAYS = 14       # one escalation of a kind per two game weeks: the answer covers its siblings
-ACTED = "the owning lane acted and it stayed"
+ACTED = "the owning lane's verified orders did not make it go: the remedy did not hold"
 HIGH = "high severity and past its deadline"
 EVERY = (ACTED, HIGH)    # asked per issue: no sibling cooldown, no lane bundle
 
@@ -61,9 +61,12 @@ def build_packet(issue, recent=(), lessons=(), trend=None, date=None):
         f"({issue['severity']})",
         f"WHAT: {issue['text'][:400]}",
         f"SINCE: {issue.get('first_seen')} (deadline {issue.get('deadline')}: {issue.get('deadline_reason', '')[:160]})",
-        f"STATE: {issue.get('state')}; owner lane {issue.get('lane') or '-'}; actions of that lane since: "
+        f"STATE: {issue.get('state')}; owner lane {issue.get('lane') or '-'}; verified orders of that lane since: "
         f"{issue.get('acts', 0)}; recurrences {issue.get('recurrences', 0)}",
     ]
+    if issue.get("acts"):
+        lines.append(f"NOTE: the issue is still seen after those orders ({issue.get('no_effect', 0)} time(s) more than "
+                     f"a few game days after one): they did not fix it. 'The lane already acted' is no reason to leave it.")
     if issue.get("lane_reason") or issue.get("lane_outcome"):
         out = issue.get("lane_outcome") or {}
         lines.append(f"LANE SAYS ({out.get('outcome') or 'its rule note'}): "
@@ -84,12 +87,27 @@ def build_packet(issue, recent=(), lessons=(), trend=None, date=None):
     if tools:
         lines.append('  {"kind":"action","tool":<one of ' + ", ".join(tools) + '>,"args":{...},"why":"..."}')
     lines.append('  {"kind":"plan_edit","path":"<plan key path>","value":<new value>,"why":"..."}')
-    lines.append('  {"kind":"leave","why":"<why it is right to leave it>"}')
+    lines.append('  {"kind":"leave","why":"<why it is right to leave it: the finding is wrong, or the wait has a named '
+                 'end (what closes it and by when)>"}')
     if alts:
         lines.append("NAMED ALTERNATIVES (rank them; pick one):")
         lines += [f"  {i + 1}. {a}" for i, a in enumerate(alts)]
     text = "\n".join(lines)
     return text[:MAX_PACKET_CHARS]
+
+
+def deliver(issue, rec):
+    """A model's checked answer goes with the issue (issues_open.json `answer`, and first in the
+    packet the executor puts in the player's wake): an action is what to do now, a leave is the
+    issue's written reason. Before, the answer stayed in escalations.jsonl and reached no one."""
+    ans = rec.get("answer") if rec.get("answered") else None
+    if not isinstance(ans, dict):
+        return
+    issue["answer"] = ans
+    if ans.get("kind") == "leave":
+        issue["lane_reason"] = f"model: {str(ans.get('why'))[:280]}"
+    head = f"MODEL ANSWER: {json.dumps(ans, ensure_ascii=False)[:500]}"
+    issue["packet"] = (head + "\n" + (issue.get("packet") or ""))[:1200]
 
 
 def validate_answer(text, issue):
@@ -228,6 +246,7 @@ class Escalator:
             rec.update(self._ask(packet, issue))
         elif self.live and answer.available() is None:
             rec.update(self._ask_api(packet, issue, tier))
+        deliver(issue, rec)
         self._write(rec)
         if rec.get("tokens") and rec.get("delivered") != "api":
             self._cost_row(rec)  # the run's own cost file (the API path wrote its row already)
@@ -343,6 +362,9 @@ def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", 
         lines.append("Counters this year: " + "; ".join(
             f"{c} opened {int(cl[c].get('open', 0))}, resolved {int(cl[c].get('resolved', 0))}, overdue "
             f"{int(cl[c].get('overdue', 0))}" for c in R.CLASSES if c in cl))
+    idle = getattr(detector, "idle", None)
+    if idle is not None:
+        lines += ["", idle.table()]
     if cleanliness:
         lines += ["", cleanliness.strip()[:1200]]
     if costs_line:
