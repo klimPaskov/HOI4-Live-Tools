@@ -178,11 +178,41 @@ def _spirit_costs(common):
 
 
 _CACHE = {}
+# the run's own game folder (set by the monitor from the run's launch record): without it the
+# law ladder and the slot costs were the fallback's, and every law finding stayed silent
+DEFAULT_DIR = ""
+
+
+def game_dir_of_run(run_dir):
+    """The game folder a run launched (the folder holding `common` above the executable named in
+    the run's launch.json or identity.json), or "" when the run does not say."""
+    exe = ""
+    for name, path in (("launch.json", ("arguments", 0)), ("identity.json", ("game", "exe"))):
+        try:
+            with open(os.path.join(run_dir, name), encoding="utf-8") as f:
+                v = __import__("json").load(f)
+            for k in path:
+                v = v[k]
+            if isinstance(v, str) and v:
+                exe = v
+                break
+        except (OSError, ValueError, KeyError, IndexError, TypeError):
+            continue
+    d = os.path.dirname(exe)
+    for _ in range(6):
+        if d and os.path.isdir(os.path.join(d, "common")):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    return ""
 
 
 def facts(game_dir=None):
-    """The facts for `game_dir` (env HOI4_GAME_DIR when None); the 1.20 fallback without one."""
-    game_dir = game_dir or os.environ.get("HOI4_GAME_DIR") or ""
+    """The facts for `game_dir` (env HOI4_GAME_DIR, then the run's own game folder, when None);
+    the 1.20 fallback without one."""
+    game_dir = game_dir or os.environ.get("HOI4_GAME_DIR") or DEFAULT_DIR or ""
     if game_dir in _CACHE:
         return _CACHE[game_dir]
     out = {k: (dict(v) if isinstance(v, dict) else v) for k, v in FALLBACK.items()}

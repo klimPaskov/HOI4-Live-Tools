@@ -5176,7 +5176,19 @@ pub(super) fn politics_reserve(
         // A pick the game refused while the power was below its cost was refused for power:
         // it keeps its cost (live 16 Nov 2026: the stability pick, refused at 76 of 150, let
         // the standing policy spend 81 points the next day and waited two more months).
-        let short_of_power = state.pol_pp_at_fail.get(&key).is_some_and(|pp| *pp < cost);
+        let refused_at = state.pol_pp_at_fail.get(&key).copied();
+        let short_of_power = refused_at.is_some_and(|pp| pp < cost);
+        // A pick the game refused while the power covered it was refused by its own conditions
+        // (not offered, a law's gate, a seat that cannot take it): power held for it is idle
+        // power, so it holds nothing until it passes (cmps1, 27 Nov 2026: three such picks held
+        // 375 of the power for the whole war and the standing order stopped at about 480).
+        if let Some(pp) = refused_at.filter(|_| !short_of_power) {
+            lines.push(format!(
+                "{idea} not held (refused at PP {} by its conditions)",
+                pp.round()
+            ));
+            continue;
+        }
         if state.skipped(now, "pol", &key) && !short_of_power {
             let left = state
                 .bad
@@ -11651,6 +11663,40 @@ mod tests {
         assert!(wakes(&mut state).is_empty());
         assert!(state.manage.notes["politics_auto"].contains("saved for the next buy"));
         assert!(actions(&tools).is_empty());
+    }
+
+    #[test]
+    fn a_pick_refused_by_its_conditions_holds_no_power_and_one_short_of_power_does() {
+        // cmps1 (27 Nov 2026): free_trade (refused by its conditions at PP 1,100), Schacht (not
+        // offered) and war_economy (already active) held 375 of the power all war
+        let tools = fake(vec![("hoi4_economy", pp(480.0))]);
+        let plan = json!({"politics": [
+            {"id": "law", "category": "government", "slot": 1, "idea": "free_trade", "cost": 150},
+            {"id": "adv", "category": "government", "slot": 3, "idea": "X_adv", "cost": 75},
+            {"id": "big", "category": "government", "slot": 2, "idea": "X_big", "cost": 300}]});
+        let mut state = State::default();
+        let key = |i: usize| super::super::politics_key(i, &plan["politics"][i]);
+        state.pol_pp_at_fail.insert(key(0), 1100.0);
+        state.pol_pp_at_fail.insert(key(1), 900.0);
+        // refused while short of its price: the price still holds
+        state.pol_pp_at_fail.insert(key(2), 200.0);
+        let (reserve, lines) = politics_reserve(&mut state, &tools, &plan, START);
+        assert_eq!(reserve, 300.0, "{lines:?}");
+        assert!(
+            lines[0].contains("refused at PP 1100 by its conditions"),
+            "{lines:?}"
+        );
+        assert!(lines[1].contains("by its conditions"), "{lines:?}");
+        assert!(lines[2].contains("holds 300"), "{lines:?}");
+        assert!(super::super::politics_already_held(
+            "invalid_target: war_economy is already active (own active ideas)"
+        ));
+        assert!(super::super::politics_already_held(
+            "The slot already holds this idea (or another slot of the category does)"
+        ));
+        assert!(!super::super::politics_already_held(
+            "invalid_target: This idea is not offered for the slot"
+        ));
     }
 
     #[test]
