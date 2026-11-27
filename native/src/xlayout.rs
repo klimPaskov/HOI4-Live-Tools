@@ -148,10 +148,12 @@ impl Table {
 /// below 2^64.
 pub(crate) const UNMAPPED: u64 = 1 << 47;
 
-/// Generated table for the Linux build (HOI4 1.19.4.1, GNU build ID 2265e6e7), from
-/// `scripts/gen_linux_layout.py generate` plus the reviewed hints and live corrections.
+/// Table for the Linux build (HOI4 1.20.0.0, GNU build ID 71806afa): the 1.19.4.1 table (from
+/// `scripts/gen_linux_layout.py generate` plus the reviewed hints and live corrections) moved to
+/// this build by `scripts/linux_build_migrate.py --table`; entries the migration could not confirm
+/// are left out.
 const LINUX_TABLE: Option<&str> = Some(include_str!(
-    "../layouts/linux-2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082.json"
+    "../layouts/linux-71806afa707a46fb72f0738a719c3f1c3f5e2e42.json"
 ));
 
 /// Development builds only (`--features dev-table`, never in releases): the

@@ -91,6 +91,33 @@ class MonitorTest(unittest.TestCase):
         assert "air_plan" in det.render()
 
 
+    def test_planning_at_the_declaration_counts_only_attacking_armies(self):
+        # s7n (24 Nov 2026): the Westwall hold (area defence, a front with no offensive) was
+        # counted as an attacker with 0 planning
+        det = Detector(str(self.tmp))
+        armies = [
+            {"army": "Hold", "divisions": 24, "planning": {"mean": 0.0},
+             "orders": [{"kind": "area_defense", "offensives": []}]},
+            {"army": "West", "divisions": 16, "planning": {"mean": 0.0},
+             "orders": [{"kind": "front", "offensives": []}]},
+            {"army": "Nord", "divisions": 23, "planning": {"mean": 0.36},
+             "orders": [{"kind": "front", "offensives": [{"id": 1}]}]},
+        ]
+        det.snapshot(snap("1939.09.01.01", [], trigger="war_declared:POL", land={"armies": armies}))
+        assert not [k for k in det.issues if k.startswith("planning_low_at_declaration")]
+        armies[2]["planning"]["mean"] = 0.02
+        det.snapshot(snap("1939.09.01.02", [], trigger="war_declared:POL", land={"armies": armies}))
+        assert [k for k in det.issues if k.startswith("planning_low_at_declaration")]
+
+    def test_transport_wings_standing_by_are_not_idle(self):
+        from hoi4_live.observe import findings as fm
+        a = {"wings": [{"wing": "LG Greifswald", "airframe": "transport_plane_equipment_1", "missions": []},
+                       {"wing": "KG 1", "airframe": "medium_plane_airframe_1", "missions": []}],
+             "wings_without_mission": ["LG Greifswald", "KG 1"]}
+        out = fm.air({"air": a}, None)
+        hit = [f for f in out if f["code"] == "air_wings_without_mission"]
+        assert len(hit) == 1 and hit[0]["numbers"]["wings"] == 1 and "KG 1" in hit[0]["text"]
+
     def test_group_without_field_marshal_is_idling_owned_by_the_command_lane(self):
         tmp_path = self.tmp
         det = Detector(str(tmp_path))

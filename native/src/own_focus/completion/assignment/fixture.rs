@@ -113,7 +113,7 @@ impl Fixture {
         f.int(GS + g.date, DATE);
         let (playthrough, speed, paused, difficulty, historical, slot_table) = match abi {
             StringAbi::LibCxx => (0x6c8, 0x47c, 0x679, 0x5d0, 0x5d8, 0x35a71f8),
-            StringAbi::LibStdCxx => (0x718, 0x4b4, 0x6c1, 0x620, 0x628, 0x43a56f0),
+            StringAbi::LibStdCxx => (0x718, 0x4b4, 0x6c1, 0x620, 0x628, 0x43ac838),
             StringAbi::Msvc => unreachable!("the fixture models the macOS and Linux builds only"),
         };
         f.int(GS + speed, 0);

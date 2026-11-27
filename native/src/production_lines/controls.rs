@@ -61,7 +61,7 @@ fn members(r: &Reader<'_>, address: u64, bound: usize) -> Result<Vec<u64>> {
         .collect()
 }
 fn window(r: &Reader<'_>, base: u64, p: u64, registry: u64) -> Result<Value> {
-    exact(r, p, base + 0x44de2b0)?;
+    exact(r, p, base + 0x44e62b0)?;
     if r.u64(p + 0x98)? != registry {
         return Err(invalid("Production container must belong to own registry"));
     }
@@ -87,7 +87,7 @@ fn modal(
         return Ok(json!({"available":false,"locally_hidden_settled":false,
             "reason":"selection_unmaterialized"}));
     }
-    exact(r, p, base + 0x44b72c0)?;
+    exact(r, p, base + 0x44bf260)?;
     if r.u64(p + 0x7f0)? != idler || r.u64(p + 0x7f8)? != view {
         return Err(invalid("Production equipment selection owner changed"));
     }
@@ -133,7 +133,7 @@ fn control(
         }
     }
     scope.push(button);
-    if r.u64(button)? != base + 0x44dd4f0 {
+    if r.u64(button)? != base + 0x44e54f0 {
         out["reason"] = json!("factory_control_layout_unavailable");
         return Ok(out);
     }
@@ -162,7 +162,7 @@ fn control(
     out["local_dispatch_ready"] = json!(dispatch_ready);
     out["local"] = json!({"optional_gate_1a8_null":optional["absent"],"optional_gate":optional,
         "block201_raw":blocked,"delegate_d0_null":delegate_null});
-    if r.u64(button + 0x80)? != base + 0x44dd8d0 || r.u64(button + 0xa0)? != 0 {
+    if r.u64(button + 0x80)? != base + 0x44e58d0 || r.u64(button + 0xa0)? != 0 {
         out["reason"] = json!("factory_observer_override_or_layout_unavailable");
         return Ok(out);
     }
@@ -186,7 +186,7 @@ fn control(
     let glue = row + 0xaa8;
     scope.extend([head, glue]);
     if r.u64(head)? != glue
-        || r.u64(glue)? != base + 0x43fcc90
+        || r.u64(glue)? != base + 0x4403f40
         || r.u64(glue + 0x18)? != 0
         || r.u64(glue + 0x1d8)? != 0
         || r.u64(glue + 0x38)? != base + 0x18157d0
@@ -224,7 +224,7 @@ fn control(
         } else {
             pointer(render)?;
             let primary = r.u64(render)?;
-            if ![0x44ed1d8, 0x44ef818, 0x44e15e0]
+            if ![0x44f51d8, 0x44f7818, 0x44e95e0]
                 .iter()
                 .any(|p| primary == base + p)
             {
@@ -277,7 +277,7 @@ pub(crate) fn observe(
     exact(
         r,
         line.address,
-        base + if line.naval { 0x4483600 } else { 0x4483480 },
+        base + if line.naval { 0x448b4d8 } else { 0x448b358 },
     )?;
     if r.u64(line.address + 0x20)? != production
         || r.u64(line.address + 8)? != line.handle
@@ -287,10 +287,10 @@ pub(crate) fn observe(
             "Own production target changed before UI association",
         ));
     }
-    let idler = r.u64(base + 0x459e908)?;
-    exact(r, idler, base + 0x4460048)?;
+    let idler = r.u64(base + 0x45a6918)?;
+    exact(r, idler, base + 0x4467770)?;
     let registry = r.u64(idler + 0x4f8)?;
-    exact(r, registry, base + 0x4409f68)?;
+    exact(r, registry, base + 0x4411218)?;
     let manager = r.u64(idler + 0x6b8)?;
     pointer(manager)?;
     if r.u64(manager + 0x180)? != idler {
@@ -312,7 +312,7 @@ pub(crate) fn observe(
             geometry: geometry_reads,
         });
     }
-    exact(r, view, base + 0x44a9ea8)?;
+    exact(r, view, base + 0x44b1e48)?;
     if r.u64(view + 0x2f0)? != idler {
         return Err(invalid("Production view must belong to own idler"));
     }
@@ -340,7 +340,7 @@ pub(crate) fn observe(
     let mut found = None;
     for row in rows {
         let primary = r.u64(row)?;
-        if primary != base + 0x43fb478 && primary != base + 0x43fb5c0 {
+        if primary != base + 0x4402728 && primary != base + 0x4402870 {
             continue;
         }
         if r.u64(row + 0x538)? != registry || r.u64(row + 0x590)? != view {
@@ -349,7 +349,7 @@ pub(crate) fn observe(
         if r.u64(row + 0xfd0)? != line.handle {
             continue;
         }
-        if (primary == base + 0x43fb5c0) != line.naval || found.replace(row).is_some() {
+        if (primary == base + 0x4402870) != line.naval || found.replace(row).is_some() {
             return Err(invalid("Unique matching typed production row required"));
         }
     }

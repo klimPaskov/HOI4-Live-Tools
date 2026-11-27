@@ -9,7 +9,7 @@ fn fixture() -> Fake {
     let mut f = Fake::new();
     f.array(VIEW + 0x1138, CURRENT, &[ITEM]);
     f.region(ITEM, 0x2b8);
-    f.word(ITEM, 0x43df668);
+    f.word(ITEM, 0x43e6918);
     f.word(ITEM + 0x2b0, VIEW);
     f.word(ITEM + 0x20, F);
     f.array(VIEW + 0x12f8, CACHE, &[ITEM]);
@@ -157,7 +157,7 @@ fn search_later_duplicate_match_is_not_hidden_by_requested_first_match() {
     let mut f = fixture();
     const SECOND: u64 = 0x340000;
     f.region(SECOND, 0x2b8);
-    f.word(SECOND, 0x43df668);
+    f.word(SECOND, 0x43e6918);
     f.word(SECOND + 0x2b0, VIEW);
     f.word(SECOND + 0x20, F);
     f.array(VIEW + 0x1138, CURRENT, &[ITEM, SECOND]);
@@ -222,29 +222,29 @@ fn query_fixture(text: &str) -> Fake {
     f.region(ROOT, 0x1000);
     f.region(LISTENER, 0x20);
     f.word(VIEW + 0x1200, EDIT);
-    f.word(EDIT, 0x44dfdd0);
+    f.word(EDIT, 0x44e7dd0);
     f.word(EDIT + 0x68, GUI);
-    f.word(0x470e6d8, GUI);
-    f.word(EDIT + 0x1a0, 0x44e0110);
+    f.word(0x47166f8, GUI);
+    f.word(EDIT + 0x1a0, 0x44e8110);
     // This definition is intentionally unmapped: never interpret it as a window.
     f.word(EDIT + 0x60, DEFINITION);
     f.word(VIEW + 0x2f8, ROOT);
-    f.word(ROOT, 0x44de2b0);
+    f.word(ROOT, 0x44e62b0);
     f.word(ROOT + 0x98, GUI);
     f.array(ROOT + 0xbb0, WINDOWS, &[CONTAINER]);
     f.array(ROOT + 0xbc8, WINDOW_NAMES, &[0]);
     f.string(WINDOW_NAMES, "find_view");
-    f.word(CONTAINER, 0x44de2b0);
+    f.word(CONTAINER, 0x44e62b0);
     f.word(CONTAINER + 0x98, GUI);
     f.array(CONTAINER + 0xac0, CHILDREN, &[EDIT]);
     f.array(CONTAINER + 0xad8, NAMES, &[0]);
     f.string(NAMES, "to_find_text");
-    f.word(EDIT + 0x80, 0x44e00a0);
+    f.word(EDIT + 0x80, 0x44e80a0);
     f.word(EDIT + 0x88, LISTENER);
     f.word(EDIT + 0x90, LISTENER);
     f.int(EDIT + 0x98, 1);
     f.word(LISTENER, VIEW + 0x678);
-    f.word(VIEW + 0x678, 0x43e0560);
+    f.word(VIEW + 0x678, 0x43e7810);
     f.word(VIEW + 0x680, VIEW);
     for (offset, member) in [
         (0x688, 0x15dedf0),
@@ -278,7 +278,7 @@ fn instant_fixture() -> Fake {
     let mut f = query_fixture("");
     f.focus_geometry_fixture(CONTAINER, EDIT, true);
     f.word(EDIT + 0x1b0, 0x244000);
-    f.word(0x244000, 0x44e2ee8);
+    f.word(0x244000, 0x44eaee8);
     f.int(0x2441f0, 5);
     f.int(0x2441f4, 9);
     f.int(0x244208, -101);
@@ -291,8 +291,8 @@ fn instant_fixture() -> Fake {
     f.array(0x2420c0, 0x250000, &[0x244000]);
     f.word(0x241108, 0x2401f0);
     f.array(0x2402b0, 0x251000, &[0x241000]);
-    f.word(0x44dea48, 0);
-    f.word(0x44dea50, 0x44ee5d0);
+    f.word(0x44e6a48, 0);
+    f.word(0x44e6a50, 0x44ee5d0);
     f.region(0x44ee5d0, 16);
     f.word(0x44ee5d8, 0x3687700);
     f.region(0x3687700, 128);
@@ -333,15 +333,15 @@ fn search_instant_text_closes_owned_hierarchy_without_text_sprite_or_font_payloa
 
 #[test]
 fn search_unknown_renderers_return_bounded_table_diagnostic_without_payload_reads() {
-    for table in [0, 0x44e2820, 0x41adddf, 0x45039f8, u64::MAX] {
+    for table in [0, 0x44ea820, 0x41adddf, 0x450b9f8, u64::MAX] {
         let mut f = query_fixture("");
         f.word(EDIT + 0x1b0, 0x244000);
         f.word(0x244000, table); // only vptr mapped
         let v = query_result(&f).unwrap();
         let g = &v["search"]["query_control"]["render_diagnostic"];
         assert_eq!(g["available"], false);
-        if table == 0x44e2820 {
-            assert_eq!(g["observed_table_rva"], "0x44e2820");
+        if table == 0x44ea820 {
+            assert_eq!(g["observed_table_rva"], "0x44ea820");
         } else {
             assert!(g["observed_table_rva"].is_null());
         }
@@ -355,7 +355,7 @@ fn search_unknown_renderers_return_bounded_table_diagnostic_without_payload_read
 
 #[test]
 fn search_renderer_control_equality_precedes_all_renderer_payload() {
-    for table in [0x44e2ee8, 0x44ef818] {
+    for table in [0x44eaee8, 0x44f7818] {
         let mut f = query_fixture("");
         f.word(EDIT + 0x1b0, 0x244000);
         f.word(0x244000, table);
@@ -419,7 +419,7 @@ fn search_keyboard_and_text_receiver_require_independent_identities_and_flags() 
 #[test]
 fn search_foreign_global_and_receiver_type_cannot_borrow_owned_routing() {
     let mut f = query_fixture("");
-    f.word(0x470e6d8, UNSELECTED);
+    f.word(0x47166f8, UNSELECTED);
     let v = query_result(&f).unwrap();
     assert_eq!(
         v["search"]["query_control"]["routing_diagnostic"]["available"],
@@ -428,10 +428,10 @@ fn search_foreign_global_and_receiver_type_cannot_borrow_owned_routing() {
     assert!(f.untouched(UNSELECTED, 0x1000));
     assert!(f.untouched(GUI + 0x158, 8) && f.untouched(GUI + 0x230, 8));
     let mut f = query_fixture("");
-    f.word(EDIT + 0x1a0, 0x44e00a0);
+    f.word(EDIT + 0x1a0, 0x44e80a0);
     assert_eq!(
         query_result(&f).unwrap_err().message,
-        "Search text_receiver: expected_rva=0x44e0110 observed_rva=0x44e00a0"
+        "Search text_receiver: expected_rva=0x44e8110 observed_rva=0x44e80a0"
     );
     assert!(f.untouched(GUI + 0x158, 8) && f.untouched(GUI + 0x230, 8));
 }
@@ -447,7 +447,7 @@ fn search_new_render_and_receiver_fields_are_final_snapshot_witnesses() {
         0x244218,
         0x244228,
         0x244108,
-        0x470e6d8,
+        0x47166f8,
         EDIT + 0x1a0,
         GUI + 0x158,
         GUI + 0x230,
@@ -465,40 +465,40 @@ fn search_new_render_and_receiver_fields_are_final_snapshot_witnesses() {
 #[test]
 fn search_type_refusal_identifies_object_without_reading_its_payload() {
     for (object, label, expected, payload, size) in [
-        (ITEM, "current_item", 0x43df668, ITEM + 0x20, 8),
-        (EDIT, "query_control", 0x44dfdd0, EDIT + 0x60, 16),
-        (ROOT, "query_root", 0x44de2b0, ROOT + 0x98, 8),
-        (CONTAINER, "query_container", 0x44de2b0, CONTAINER + 0x98, 8),
-        (EDIT + 0x80, "embedded_editor", 0x44e00a0, EDIT + 0x88, 32),
+        (ITEM, "current_item", 0x43e6918, ITEM + 0x20, 8),
+        (EDIT, "query_control", 0x44e7dd0, EDIT + 0x60, 16),
+        (ROOT, "query_root", 0x44e62b0, ROOT + 0x98, 8),
+        (CONTAINER, "query_container", 0x44e62b0, CONTAINER + 0x98, 8),
+        (EDIT + 0x80, "embedded_editor", 0x44e80a0, EDIT + 0x88, 32),
         (
             VIEW + 0x678,
             "own_view_listener",
-            0x43e0560,
+            0x43e7810,
             VIEW + 0x680,
             8,
         ),
     ] {
         let mut f = query_fixture("");
-        f.word(object, 0x44dd4f0);
+        f.word(object, 0x44e54f0);
         let error = query_result(&f).unwrap_err();
         assert_eq!(error.code, "invalid_focus_type");
         assert_eq!(
             error.message,
-            format!("Search {label}: expected_rva=0x{expected:x} observed_rva=0x44dd4f0")
+            format!("Search {label}: expected_rva=0x{expected:x} observed_rva=0x44e54f0")
         );
         assert!(f.untouched(payload, size));
-        assert!(f.untouched(0x44dd4f0, 8));
+        assert!(f.untouched(0x44e54f0, 8));
     }
 }
 
 #[test]
 fn search_type_diagnostics_hide_outside_section_values_and_never_follow_them() {
-    for table in [0, 0x41adddf, 0x45039f8, u64::MAX] {
+    for table in [0, 0x41adddf, 0x450b9f8, u64::MAX] {
         let mut f = query_fixture("");
         f.word(EDIT, table);
         let error = query_result(&f).unwrap_err();
         assert_eq!(error.code, "invalid_focus_type");
-        assert_eq!(error.message, "Search query_control: expected_rva=0x44dfdd0 observed_rva=outside_verified_table_section");
+        assert_eq!(error.message, "Search query_control: expected_rva=0x44e7dd0 observed_rva=outside_verified_table_section");
         assert!(f.untouched(EDIT + 0x60, 16));
     }
     let mut f = query_fixture("");
@@ -673,7 +673,7 @@ fn query_definition_type_is_still_rejected_if_substituted_into_named_windows() {
     assert_eq!(error.code, "invalid_focus_type");
     assert_eq!(
         error.message,
-        "Search query_container: expected_rva=0x44de2b0 observed_rva=0x44e0438"
+        "Search query_container: expected_rva=0x44e62b0 observed_rva=0x44e0438"
     );
     assert!(f.untouched(DEFINITION + 8, 0xff8));
     assert!(f.untouched(EDIT + 0xb0, 16));

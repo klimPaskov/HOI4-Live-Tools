@@ -10,7 +10,7 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-pub const BUILD_ID: &str = "2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082";
+pub const BUILD_ID: &str = "71806afa707a46fb72f0738a719c3f1c3f5e2e42";
 /// Overview offsets of one inspected build. Image offsets are relative to the
 /// verified image base; the rest are object field offsets.
 #[derive(Debug)]
@@ -50,15 +50,16 @@ pub(crate) struct Layout {
     pub(crate) build_id: &'static str,
     source: &'static str,
 }
-/// Linux ELF 2265e6e7 (HOI4 1.19.4.1, libstdc++), migrated from ELF a4971c9e (1.19.3) by
-/// scripts/linux_build_migrate.py: image addresses moved, own-country fields did not.
+/// Linux ELF 71806afa (HOI4 1.20.0.0, libstdc++), migrated from ELF 2265e6e7 (1.19.4.1), itself
+/// migrated from a4971c9e (1.19.3), by scripts/linux_build_migrate.py: image addresses moved,
+/// own-country fields did not.
 pub(crate) const LINUX: Layout = Layout {
-    gs_global: 0x459e9f0,
-    idler_global: 0x459e908,
-    technology_db_global: 0x45353b0,
-    tag_db_global: 0x458a088,
-    gs_vtable: 0x445e068,
-    idler_vtable: 0x4460048,
+    gs_global: 0x45a6a00,
+    idler_global: 0x45a6918,
+    technology_db_global: 0x453d3b0,
+    tag_db_global: 0x4592088,
+    gs_vtable: 0x4465768,
+    idler_vtable: 0x4467770,
     playthrough: 0x718,
     date: 0x460,
     speed: 0x4b4,
@@ -71,14 +72,14 @@ pub(crate) const LINUX: Layout = Layout {
     tag_stride: 32,
     country_focus_progress: 0x1348,
     country_technology_status: 0xf38,
-    country_vtable: 0x438fe10,
+    country_vtable: 0x4396f00,
     country_production: 0xf40,
     country_politics: 0xf68,
     country_focus_tree: 0x1338,
-    production_vtable: 0x439b308,
-    politics_vtable: 0x4397cf0,
-    type_metadata: (0x4342540, 0x45039f8),
-    type_names: (0x367e000, 0x3af0809),
+    production_vtable: 0x43a2450,
+    politics_vtable: 0x439ede8,
+    type_metadata: (0x4349500, 0x450b9f8),
+    type_names: (0x3684000, 0x3af6f29),
     focus_name: 0x60,
     production_shift_from: 0x288,
     production_shift: 0x18,
@@ -180,7 +181,7 @@ pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
         crate::memory::StringAbi::Msvc => &WINDOWS,
     }
 }
-pub const SHA256: &str = "36a69ea446df3903baa0d1b2dec1331cfd2fe16eacee482d84cc36e5b6f9b5da";
+pub const SHA256: &str = "f8fe17fb1047cc94a64e7cc8f13780494e8eb111b9c3a3468256bfbc4f499874";
 /// Additional own-campaign context for ordinary clock input. The persisted
 /// playthrough ID distinguishes campaigns, but is not a load-generation token.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

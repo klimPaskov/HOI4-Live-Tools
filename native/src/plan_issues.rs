@@ -377,13 +377,28 @@ fn usable_treat(le: &Value, run: Option<&str>) -> Option<Treat> {
 }
 
 #[cfg(test)]
+impl Issues {
+    /// A store with these lessons for run `run`, not re-read from disk for a while.
+    pub fn with_lessons(lessons: Vec<Value>, run: &str) -> Issues {
+        Issues {
+            lessons,
+            run_name: Some(run.to_string()),
+            checked: Some(Instant::now()),
+            ..Default::default()
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     fn lesson(id: &str, tool: &str, cause: &str, treat: &str, conf: f64) -> Value {
+        // Learned on the build this binary reads here (macOS and Linux may be on different versions).
+        let version = crate::builds::current().map_or("1.19.4.1", |b| b.game_version);
         json!({"id": id, "statement": "s", "situation": {"tool": tool, "cause": cause},
                "scope": "any", "confidence": conf, "status": "active",
-               "learned_on": {"game_version": "1.19.4.1", "mod_set": "plain"},
+               "learned_on": {"game_version": version, "mod_set": "plain"},
                "executor": {"treat_as": treat, "advice": format!("advice {id}"), "days": 30}})
     }
 
