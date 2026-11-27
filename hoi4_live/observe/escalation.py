@@ -424,7 +424,7 @@ def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", 
             f"{int(cl[c].get('overdue', 0))}" for c in R.CLASSES if c in cl))
     idle = getattr(detector, "idle", None)
     if idle is not None:
-        lines += ["", idle.table()]
+        lines += ["", idle.table(snap.get("lane_turns"))]
     if cleanliness:
         lines += ["", cleanliness.strip()[:1200]]
     if costs_line:
