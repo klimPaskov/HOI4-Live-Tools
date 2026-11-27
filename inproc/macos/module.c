@@ -1074,6 +1074,12 @@ static void run_job2(void *ctx) {
             for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
             snprintf(j->reason, sizeof j->reason, "obj2 is not another live %s", ct->spec->obj_cast); finish2(j); return;
         }
+    } else if (k2 == OBJ2_PTR_EXACT) { /* engineer 85: a raw pointer of exactly the named class (a doctrine folder template) */
+        uint64_t v2 = 0;
+        if (!ct->vt_obj2 || !plausible(j->obj2) || !sq(j->obj2, &v2) || v2 != ct->vt_obj2 + (uint64_t)g_slide) {
+            for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
+            snprintf(j->reason, sizeof j->reason, "obj2 is not a live %s", ct->spec->obj2_cast); finish2(j); return;
+        }
     } else if (k2 == OBJ2_CAST) { /* engineer 75: a leader / an army group, as the type's own check casts it */
         uint64_t nr = 0, ref = j->obj2 + ct->hint2, lk = ct->lookup_fn + (uint64_t)g_slide;
         if (!g_dyncast) g_dyncast = (dyncast_fn)dlsym(RTLD_DEFAULT, "__dynamic_cast");
@@ -1218,6 +1224,7 @@ static void run_job2(void *ctx) {
             for (int k = 0; k < ct->spec->nf && ok; k++) { /* every field still holds the factory's default */
                 const cmd_field *f = &ct->spec->f[k];
                 uint64_t cur = 0;
+                if (f->keep < 0) continue; /* engineer 85: the factory leaves it unwritten (the UI's constructor fills it) */
                 if (f->kind == FK_REF || f->kind == FK_HANDLE) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == nullref;
                 else if (f->kind == FK_I32 || f->kind == FK_TAG) { int32_t v = 1; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 4) && v == f->def; }
                 else if (f->kind == FK_PTR) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == 0;
@@ -1230,11 +1237,12 @@ static void run_job2(void *ctx) {
                 for (int k = 0; k < ct->spec->nf && ok; k++) {
                     const cmd_field *f = &ct->spec->f[k];
                     int64_t val = f->vi > 0 ? j->val[f->vi - 1] : j->val[i];
-                    if (f->keep) continue;
+                    if (f->keep > 0) continue;
                     if (f->kind == FK_REF) *(uint64_t *)(cmd + f->off) = k == 0 ? h : h2;
                     else if (f->kind == FK_HANDLE) *(uint64_t *)(cmd + f->off) = j->hx;
                     else if (f->kind == FK_TAG) *(int32_t *)(cmd + f->off) = j->player_tag; /* picks: the player's own tag */
                     else if (f->kind == FK_PTR) *(uint64_t *)(cmd + f->off) = j->obj[i];    /* picks: the checked object */
+                    else if (f->kind == FK_PTR2) *(uint64_t *)(cmd + f->off) = j->obj2;     /* engineer 85: the checked second object */
                     else if (f->kind == FK_I64) *(int64_t *)(cmd + f->off) = val;
                     else if (f->kind == FK_REF_ARRAY) ok = fill_array(cmd, f, j->divh, j->ndivh, 8);
                     else if (f->kind == FK_I32_ARRAY) ok = fill_array(cmd, f, j->provs, j->nprov, 4);
@@ -1765,6 +1773,17 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             else for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a task force is listed twice";
         } else why = "unknown navy op";
         nv = 0;
+    } else if (!strncmp(op, "doctrine.", 9)) {
+        /* engineer 85: the officer corps view's doctrine picks.
+         *   grand: objs = ONE grand doctrine template (exact class); no vals, no obj2
+         *   sub:   objs = ONE subdoctrine template (exact class); obj2 = the folder template (exact class); vals = the
+         *          track's place in the folder's grand doctrine (0..31: the game's own check reads the track count) */
+        int sub = !strcmp(op, "doctrine.sub");
+        if (j->n != 1) why = "doctrine: exactly one doctrine";
+        else if (flag || (provs && *provs) || (divs && *divs)) why = "doctrine ops take no flag, provs or divs";
+        else if (!sub && (nv || (obj2 && *obj2))) why = "doctrine.grand takes no vals or obj2";
+        else if (sub && (nv != 1 || j->val[0] < 0 || j->val[0] > 31)) why = "vals: the track's place (0..31)";
+        else if (sub) { uint64_t o2[1]; if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: the folder template's hex address"; else j->obj2 = o2[0]; }
     } else if (!strncmp(op, "picks.", 6)) {
         /* engineer 75: the player's own picks. focus: objs = ONE CNationalFocus of the own tree (exact vtable; the game's
          * own "can start" with the player's country decides) */

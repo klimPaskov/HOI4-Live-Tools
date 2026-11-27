@@ -231,7 +231,11 @@ int scan_command_factory(const scan_image *im, const char *cls, scan_cap *factor
                          scan_cap *type_id) {
     char sym[256], mangled[160];
     cap_init(factory, "factory", "export"); cap_init(vtable, "vtable", "rtti"); cap_init(type_id, "type_id", "scan");
-    snprintf(mangled, sizeof mangled, "%zu%s", strlen(cls), cls);
+    /* engineer 85: a class inside a namespace comes already mangled (N10NDoctrines27CUnlockGrandDoctrineCommandE): no
+     * length prefix */
+    size_t cl = strlen(cls);
+    if (cl > 2 && cls[0] == 'N' && cls[cl - 1] == 'E' && cls[1] >= '1' && cls[1] <= '9') snprintf(mangled, sizeof mangled, "%s", cls);
+    else snprintf(mangled, sizeof mangled, "%zu%s", cl, cls);
     snprintf(sym, sizeof sym, "__ZN14CCommandHelperI%sE18CommandRegistrator6CreateEv", mangled);
     const uint8_t *syms = linkedit(im, im->symoff, (size_t)im->nsyms * 16);
     const uint8_t *strs = linkedit(im, im->stroff, im->strsize);

@@ -386,6 +386,26 @@ const cmd_spec CMD2_SPECS[] = {
      * +0x24 (0x3b34), task force handles +0x30/+0x3c (0x3b35). "Can do": the fleet a CFleet, each handle a CTaskForce.
      * Auth: the fleet's owner and each task force's owner. The task forces travel in the request's divisions list and
      * are checked by the navy.mission type's own task force resolver and owner getter */
+    /* ---- doctrine (engineer 85, 24 Nov): the officer corps view's doctrine selection (UI 1.20 0x101051db0), read from
+     * 1.20.0.0 and 1.19.4.1. Both commands are nested classes; the factories leave the payload unwritten (the view's own
+     * constructors fill it): those fields are not default-checked (keep -1) and the module writes them.
+     * grand: CUnlockGrandDoctrineCommand 18800-range (0x38): template +0x28 (0x4187, a CGrandDoctrineTemplate by
+     * pointer), tag +0x30 (0x289a). Auth: the sender controls the tag. "Can do": a template, a country, and the doctrine
+     * status's can-unlock(status, template, 0, 0) (1.20 0x101020940: the folder, the experience and its cost). */
+    {"doctrine", "doctrine.grand", "N10NDoctrines27CUnlockGrandDoctrineCommandE", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x30,
+     "N10NDoctrines22CGrandDoctrineTemplateE", 2,
+     {{"tag", 0x30, FK_TAG, 0, 0x289a, 0}, {"grand", 0x28, FK_PTR, 0, 0x4187, 0, 0, -1}},
+     OBJ2_NONE, 0, AUTH_TAG_PTR, "N10NDoctrines22CGrandDoctrineTemplateE"},
+    /* sub: the view's track slot (constructor 1.20 0x10103a1b0: (cmd, &tag, track index, subdoctrine, folder)):
+     * CUnlockSubDoctrineCommand (0x40): folder template +0x28 (0x2e61), subdoctrine template +0x30 (0x418a), the track's
+     * place in the folder's grand doctrine track list +0x38 (0x8b), tag +0x3c (0x289a). "Can do" (1.20 0x10103a7b0): the
+     * folder's status, the doctrine status's can-unlock-sub (experience, cost), the track at that place fits the
+     * subdoctrine (its own track list), the track slot free. */
+    {"doctrine", "doctrine.sub", "N10NDoctrines25CUnlockSubDoctrineCommandE", 0x40, BUILD_FIELDS, CTOR_NONE, 0, 0x3c,
+     "N10NDoctrines20CSubDoctrineTemplateE", 4,
+     {{"tag", 0x3c, FK_TAG, 0, 0x289a, 0}, {"sub", 0x30, FK_PTR, 0, 0x418a, 0, 0, -1},
+      {"folder", 0x28, FK_PTR2, 0, 0x2e61, 0, 0, -1}, {"track", 0x38, FK_I32, 0, 0x8b, 0, 1, -1}},
+     OBJ2_PTR_EXACT, 0, AUTH_TAG_PTR, "N10NDoctrines20CSubDoctrineTemplateE", "N10NDoctrines15CFolderTemplateE"},
     {"navy", "navy.assign", "CSetFleetCommand", 0x48, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "6CFleet", 2,
      {{"fleet", 0x24, FK_REF, 0, 0x3b34, 0}, {"task_forces", 0x30, FK_REF_ARRAY, 0x3c, 0x3b35, 0}}, OBJ2_NONE, 0},
 };
@@ -908,6 +928,12 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
     } else {
         if ((o->conf & C_SLOTS) && auth_shape(im, o->auth_fn, s, o)) o->conf |= C_AUTH;
         if ((o->conf & C_AUTH) && resolver_shape(im, s, o)) o->conf |= C_RESOLVER;
+    }
+    /* engineer 85: a second object by raw pointer of an exact class (a doctrine folder template) */
+    if (s->obj2 == OBJ2_PTR_EXACT && (o->conf & C_RESOLVER)) {
+        scan_cap v2;
+        if (s->obj2_cast && scan_class_vtable(im, s->obj2_cast, &v2) && v2.value) o->vt_obj2 = v2.value;
+        else o->conf &= ~(unsigned)C_RESOLVER;
     }
     /* engineer 75: a second object the "can do" casts (a leader, an army group): its typeinfo and hint from that cast */
     if (s->obj2 == OBJ2_CAST && (o->conf & C_RESOLVER)) {

@@ -926,3 +926,29 @@ N5 running at speed 3: N2 again, Verified within 2 s. N6 save + reload; a plain 
 Stop at once on: a crash, any `unexplained`, a task force of another country moved, a mission code outside the buttons'
 set read back, a fleet left with no task force and not deleted by the game, an admiral who appears in two fleets.
 Pass -> IPC_LIVE_PASSED entry 19 (navy) = 1.
+
+## Session S18-DOCTRINE: the in-process module, grand doctrines and subdoctrines (family `doctrine`; about 15 minutes) -- after S17-NAVY
+
+Built by engineer 85 (24-27 Nov 2026), offline-proven only: stage 2 67/67 on 1.20.0.0 and 1.19.4.1 macOS (identical type
+ids, offsets and field ids); Linux/Windows 1.20 NDoctrines::CUnlockGrandDoctrineCommand 16777 /
+NDoctrines::CUnlockSubDoctrineCommand 16779 by RTTI and type id (2/2 each). OFF under `auto` until this session passes.
+- grand: the officer corps view's doctrine selection (1.20 0x101051db0): own tag, the grand doctrine template (from the
+  game's grand doctrine database by name key, exact class). The game's own "can do" (the folder, the experience, its cost).
+- sub: own tag, the track's place in the folder's grand doctrine, the subdoctrine template (the subdoctrine database), the
+  folder template (the own doctrine status). The game's check: the subdoctrine fits the track at that place, the cost.
+- MCP: hoi4_doctrine_adopt routes in process after its own typed refusals (already_adopted, grand_doctrine_set,
+  track_occupied, insufficient_experience, ...); a module refusal of its own runs the mouse path in the same call.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,doctrine ./inproc_stage2.sh PREV-1939 s18d` (Germany 1939: the
+three folders have grand doctrines, special forces empty, experience held), calls with `HOI4_BACKEND=inprocess`.
+D1 paused: `hoi4_doctrines {"include_catalog":true}`; pick a subdoctrine the land grand doctrine offers on an EMPTY track
+whose cost the army experience covers. `hoi4_doctrine_adopt {"doctrine":"<it>"}` (with `track` when it fits several):
+Verified (hoi4_doctrines shows it on THAT track; the officer corps view too; experience spent by the cost). RECORD the
+track: it proves the track place (the doctrine read's script order) is the game's order. Wrong track = stop.
+D2 a grand doctrine for special forces (if the DLC folder is present and the experience covers it): Verified.
+D3 one the experience does not cover: insufficient_experience before posting, or the game's refusal (`refused_by_game_check`)
+with nothing changed.
+D4 running at speed 3: a second subdoctrine (navy or air folder): Verified within 2 s. D5 save + reload; a plain load
+without the module.
+Stop at once on: a crash, any `unexplained`, a doctrine set on another country, a subdoctrine on a track it does not
+fit, experience spent with no doctrine set, two subdoctrines on one track.
+Pass -> IPC_LIVE_PASSED entry 20 (doctrine) = 1.

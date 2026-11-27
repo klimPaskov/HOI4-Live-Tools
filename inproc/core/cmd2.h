@@ -35,7 +35,9 @@ enum { FK_I32 = 1, FK_U8, FK_REF, FK_REF_ARRAY, FK_I32_ARRAY /* a CPdxArray<int>
        /* engineer 75 (24 Nov): a libc++ std::string held inline (the UI constructor copies a short string; names <= 22 bytes) */
        FK_STR,
        /* engineer 75 (picks): the player's own country tag; a raw object pointer (a focus: no handle, an exact vtable) */
-       FK_TAG, FK_PTR };
+       FK_TAG, FK_PTR,
+       /* engineer 85: the second object as a raw pointer (OBJ2_PTR_EXACT: a doctrine folder template) */
+       FK_PTR2 };
 /* How the module builds the command:
  *   BUILD_FIELDS: the game's factory makes the default object; the module writes the spec's scalar and handle fields
  *                 into that fresh object (each field's default and serializer entry checked first).
@@ -108,12 +110,14 @@ enum { OBJ2_NONE = 0, OBJ2_AIR_BASE, OBJ2_REGION, OBJ2_ORDERS_GROUP,
        OBJ2_REGION_ID, /* a strategic region given by id in vals (0 = none: hold), looked up as the game's check does */
        OBJ2_FRONT,       /* engineer 74: a CFront of the group's own theatre (exact vtable, its handle resolves to it) */
        OBJ2_CAST,
-       OBJ2_SAME_PTR };  /* engineer 79: a raw pointer of exactly the class of the first object (the idea a law replaces) */      /* engineer 75: an object the type's own "can do" casts to spec->obj2_cast (its handle resolves to it,
+       OBJ2_SAME_PTR,
+       OBJ2_PTR_EXACT }; /* engineer 85: a raw pointer of exactly the class obj2_cast names (its RTTI vtable), written by FK_PTR2 */  /* engineer 79: a raw pointer of exactly the class of the first object (the idea a law replaces) */      /* engineer 75: an object the type's own "can do" casts to spec->obj2_cast (its handle resolves to it,
                           * the C++ cast with the check's own typeinfo accepts it); optional where the spec says so */
 
 /* def: the factory's default for an FK_I32 / FK_U8 / FK_I64 field (checked before the module writes the field; 0 unless
  * given). vi (engineer 74): 1-based index of the request's vals that fills this scalar; 0 = the older rule (the value of
- * the object's own row). keep: 1 = the field keeps the factory's default (checked, not written). */
+ * the object's own row). keep: 1 = the field keeps the factory's default (checked, not written); -1 (engineer 85) = the
+ * factory leaves the field unwritten (the UI's constructor fills it): not checked, written by the module. */
 typedef struct { const char *name; uint16_t off; uint8_t kind; uint16_t count_off; uint32_t field_id; int32_t def; int8_t vi; int8_t keep; } cmd_field;
 
 typedef struct {
@@ -148,6 +152,7 @@ typedef struct {
     uint64_t ti_src, ti_dst;                                      /* AUTH_TAG: CReferenceObject -> obj_cast typeinfos */
     uint64_t vt_obj;                                              /* AUTH_TAG_PTR: the object's exact vtable */
     uint64_t ti2; uint32_t hint2;                                 /* OBJ2_CAST: the check's typeinfo and hint */
+    uint64_t vt_obj2;                                             /* OBJ2_PTR_EXACT: the second object's exact vtable */
     /* engineer 78, AUTH_DIPLO: the action class's constructor, object size (from its own Clone), type id (its SetType),
      * the base constructor it calls, the sender field (from the command's auth slot); WAR: the war goal handle field and
      * the flag byte the constructor writes */
