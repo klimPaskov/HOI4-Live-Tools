@@ -109,6 +109,9 @@ int main(int argc, char **argv) {
     n = fronts_json(&ff, rd, VFR, VSE, TH, out, sizeof out);
     CHECK("fronts read: one front, two sections with their province ids",
           n == 1 && strstr(out, "{\"id\":4,\"provinces\":[3001,3002]}") && strstr(out, "{\"id\":7,\"provinces\":[3003]}"));
+    {   int sq = 0; for (const char *c = out; *c; c++) sq += (*c == '[') - (*c == ']');
+        CHECK("fronts read: the fronts array is closed", sq == 0 && strstr(out, "]}]}],\"truncated\""));
+    }
     CHECK("section check: present", fronts_has_section(&ff, rd, VFR, VSE, TH, FR1, 7) == 1);
     CHECK("section check: unknown section", fronts_has_section(&ff, rd, VFR, VSE, TH, FR1, 9) == 0);
     CHECK("section check: a front of another theatre", fronts_has_section(&ff, rd, VFR, VSE, TH, BASE + 0xc800, 4) == 0);

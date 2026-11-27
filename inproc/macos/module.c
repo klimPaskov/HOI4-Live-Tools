@@ -1363,7 +1363,17 @@ static void run_job2(void *ctx) {
                     ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[3].off, &dd) && sread((uint64_t)(uintptr_t)cmd + ct->spec->f[3].count_off, &dn, 4) &&
                          dn == j->ndiv && sread((uint64_t)(uintptr_t)cmd + 0x6c, fl, 3) && !fl[0] && fl[1] == (j->blitz ? 1 : 0) && !fl[2];
                 } else if (ok) ok = sread((uint64_t)(uintptr_t)cmd + 0x48, &top, 1) && top == 1;
-                if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+                if (!ok) {
+                    /* what differed, for the session notes (s45b, 27 Nov 2026: a new front was refused here) */
+                    uint64_t dd2 = 0; int32_t dn2 = -1, pn2 = -1, id2 = -1; uint64_t hg2 = 0; uint8_t f2[3] = {9, 9, 9};
+                    sq((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &hg2); sread((uint64_t)(uintptr_t)cmd + ct->spec->f[2].off, &id2, 4);
+                    sread((uint64_t)(uintptr_t)cmd + ct->spec->f[0].count_off, &pn2, 4);
+                    if (nf) { sq((uint64_t)(uintptr_t)cmd + ct->spec->f[3].off, &dd2); sread((uint64_t)(uintptr_t)cmd + ct->spec->f[3].count_off, &dn2, 4); sread((uint64_t)(uintptr_t)cmd + 0x6c, f2, 3); }
+                    j->res[i] = R_UNEXPECTED; j->unexplained = 1;
+                    snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload (group %s, id %d of %d, provinces %d of %d, divisions %d of %d, flags %u/%u/%u)",
+                             hg2 == h ? "ok" : "differs", id2, j->order_id, pn2, j->nprov, dn2, j->ndiv, f2[0], f2[1], f2[2]);
+                    break;
+                }
             } else if (ok && ct->spec->ctor == CTOR_EVENT_OPTION) { /* engineer 76: id, event handle, country, option */
                 const events_facts *e = &g_t.st2.events;
                 int32_t a = 0, b = 0, d = -1; uint64_t hv = 0;

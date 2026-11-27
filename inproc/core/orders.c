@@ -394,6 +394,7 @@ int fronts_json(const fronts_facts *f, orders_rd rd, uint64_t vt_front, uint64_t
         w(&b, "]}");
         nfr++;
     }
+    w(&b, "]");
     int trunc = b.trunc;
     if (trunc) { b.trunc = 0; b.at = 0; w(&b, "\"theatre\":\"0x%llx\",\"fronts\":[]", (unsigned long long)theatre); }
     w(&b, ",\"truncated\":%s", trunc ? "true" : "false");
