@@ -179,6 +179,18 @@ class Budget:
             self._save(d)
 
 
+def role_line(bud, run):
+    """This run's spend on the key by role and model, from the ledger: 'player haiku $0.21 (40 calls), ...'."""
+    if not bud.active:
+        return "no ledger"
+    rows = (bud.load()["runs"].get(run) or {})
+    parts = []
+    for role in sorted(rows):
+        for model, r in sorted((rows[role] or {}).items()):
+            parts.append(f"{role} {model.replace('claude-', '')} ${r.get('usd', 0.0):.2f} ({r.get('calls', 0)} calls)")
+    return "on the key by role: " + (", ".join(parts) or "nothing yet")
+
+
 def _empty():
     return {"calls": 0, "input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "usd": 0.0}
 

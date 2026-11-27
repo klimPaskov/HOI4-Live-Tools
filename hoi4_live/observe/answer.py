@@ -21,17 +21,26 @@ import time
 
 from . import budget as B
 
-MODELS = {1: "claude-haiku-5-5", 2: "claude-opus-5-5"}
-LIMITS = {1: {"max_tokens": 2000, "effort": "low"}, 2: {"max_tokens": 6000, "effort": "medium"}}
-TIMEOUT = {1: 60.0, 2: 180.0}
+MODELS = {1: "claude-haiku-5-5", 2: "claude-opus-5-5", 3: "claude-opus-5-5"}
+LIMITS = {1: {"max_tokens": 2000, "effort": "low"}, 2: {"max_tokens": 6000, "effort": "medium"},
+          3: {"max_tokens": 8000, "effort": "high"}}
+TIMEOUT = {1: 60.0, 2: 180.0, 3: 300.0}
 SYSTEM = {
     1: ("You answer escalations of a rule-based monitor of an autonomous Hearts of Iron IV campaign. "
         "Read the packet and reply with exactly one JSON object from its ALLOWED RESPONSES, nothing else. "
         "Prefer the smallest action that clears the issue; give the reason in one sentence."),
     2: ("You review a gate packet of an autonomous Hearts of Iron IV campaign (a declaration of war, a "
-        "capitulation, a new year, a failure or the end of a run). In at most 300 words: the three to five "
-        "problems that most decide the campaign, each with the executor lane or plan key that owns it and one "
-        "concrete remedy; then whether the plan must change before the next phase, and how. No preamble."),
+        "capitulation, a new year, 60 game days, a failure or the end of a run). In at most 300 words: first "
+        "TOP 3 ROOT CAUSES, numbered: for each the cause behind the symptoms (the executor rule, plan key or "
+        "tool behaviour that produces them, not the symptom itself), the lane or plan key that owns it, the "
+        "packet lines that show it, and one concrete remedy; then whether the plan must change before the next "
+        "phase, and how. No preamble."),
+    3: ("You review one finished segment of an autonomous Hearts of Iron IV campaign for its engineer: the "
+        "issue list, the last gate packet and the lessons the run wrote. Propose at most six changes, each "
+        "either a PLAN change (the plan key and the new value) or an EXECUTOR RULE change (the lane, the rule "
+        "as it is and as it should be, said generally: for any country and any war, never a scripted move), "
+        "with the issue ids it removes and the evidence. Order them by how much of the campaign they decide. "
+        "Then one line: what the next segment must measure. No preamble."),
 }
 
 
@@ -51,8 +60,10 @@ def available():
     return None
 
 
-def ask(packet, tier=1, run=None, role=None):
-    """One bounded call. Returns {"result", "usage", "model", "usd", "seconds"} or {"error", ...}."""
+def ask(packet, tier=1, run=None, role=None, system=None):
+    """One bounded call. Returns {"result", "usage", "model", "usd", "seconds"} or {"error", ...}.
+    Tier 1 the small model, 2 the strong one, 3 the strong one at high effort (a segment review);
+    `system` overrides the tier's instructions (a Tier 2 escalation answers in the Tier 1 format)."""
     role = role or ("escalation" if tier == 1 else "review")
     why = available()
     if why:
@@ -71,7 +82,7 @@ def ask(packet, tier=1, run=None, role=None):
         resp = client.messages.create(
             model=model,
             max_tokens=LIMITS[tier]["max_tokens"],
-            system=SYSTEM[tier],
+            system=system or SYSTEM[tier],
             output_config={"effort": LIMITS[tier]["effort"]},
             messages=[{"role": "user", "content": packet}],
         )
@@ -93,7 +104,7 @@ def ask(packet, tier=1, run=None, role=None):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="one bounded monitor model call (packet on stdin)")
-    ap.add_argument("--tier", type=int, choices=(1, 2), default=1)
+    ap.add_argument("--tier", type=int, choices=(1, 2, 3), default=1)
     ap.add_argument("--run")
     a = ap.parse_args(argv)
     out = ask(sys.stdin.read(), a.tier, a.run)

@@ -356,6 +356,48 @@ class MonitorTest(unittest.TestCase):
         assert rec["tokens"]["input"] == 900 and rec["seconds"] >= 0
 
 
+    def test_every_acted_but_open_issue_and_every_overdue_high_one_is_asked_once(self):
+        tmp_path = self.tmp
+        esc = Escalator(str(tmp_path), live=False)
+        base = {"class": "tool_use", "severity": "low", "lane": "construction", "state": "open", "text": "x"}
+        acted = [dict(base, id=f"I{i}", key=f"k{i}", code="construction_refused", acts=2) for i in range(3)]
+        recs = [esc.consider("overdue", it, "1940.05.20.00") for it in acted]
+        assert all(r and r["why"] == "the owning lane acted and it stayed" and r["tier"] == 1 for r in recs)
+        assert esc.consider("overdue", acted[0], "1940.05.21.00") is None   # one answer per issue
+        high = dict(base, id="I9", key="k9", code="supply_short", severity="high", lane="construction")
+        rec = esc.consider("overdue", high, "1940.05.20.00")
+        assert rec["tier"] == 2 and rec["why"] == "high severity and past its deadline"
+
+    def test_a_gate_every_60_game_days_between_the_event_gates(self):
+        assert gate_kind("1940.03.01.00", {"date": "1940.03.02.00"}, last_gate="1940.01.01.00") == "days_60"
+        assert gate_kind("1940.03.01.00", {"date": "1940.03.02.00"}, last_gate="1940.02.02.00") is None
+        assert gate_kind("1940.03.01.00", {"date": "1940.03.02.00"}) is None
+
+    def test_the_segment_review_reads_issues_gate_and_the_runs_lessons(self):
+        from hoi4_live.observe import segment_review as SR
+        run = self.tmp / "runs" / "t1"
+        run.mkdir(parents=True)
+        (run / "ISSUES.md").write_text("# Issues\n- I1 overdue supply_short", encoding="utf-8")
+        (run / "GATE.md").write_text("# GATE capitulated at 1939.10.14.02", encoding="utf-8")
+        les = self.tmp / "learned" / "lessons"
+        les.mkdir(parents=True)
+        (les / "l1.json").write_text(json.dumps({"id": "l1", "statement": "spread the stack", "confidence": 0.6,
+                                                 "evidence": ["t1 1939.10.01 3 tries"]}), encoding="utf-8")
+        (les / "l2.json").write_text(json.dumps({"id": "l2", "statement": "other run", "evidence": ["t0 x"]}),
+                                     encoding="utf-8")
+        packet = SR.build_packet(str(run))
+        assert "I1 overdue supply_short" in packet and "GATE capitulated" in packet
+        assert "spread the stack" in packet and "other run" not in packet
+        calls = []
+
+        def ask(packet, tier, run, role):
+            calls.append((tier, run, role))
+            return {"result": "1. PLAN supply", "usage": {"input_tokens": 900, "output_tokens": 300},
+                    "model": "claude-opus-5-5", "usd": 0.02, "seconds": 3.0}
+        path, row = SR.review(str(run), ask=ask)
+        assert calls == [(3, "t1", "segment_review")] and row["usd"] == 0.02
+        assert "1. PLAN supply" in Path(path).read_text(encoding="utf-8")
+
     def test_gate_kinds(self):
         assert gate_kind("1939.12.30.00", {"date": "1940.01.01.00"}) == "new_year"
         assert gate_kind("1940.05.09", {"date": "1940.05.10", "trigger": "war_declared:HOL"}) == "war_declared"

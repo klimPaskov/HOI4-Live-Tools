@@ -55,6 +55,7 @@ class Monitor:
         self.country = None
         self.last_gate_seq = 0
         self.last_snap_date = None
+        self.last_gate_date = None   # game date of the last gate (or of the first snapshot): the 60-day gate
         self.poll_ms = []
         self.gates = []
         self.lesson_events = 0
@@ -69,7 +70,7 @@ class Monitor:
         if event in ("overdue", "recurred", "stale"):
             rec = self.esc.consider(event, issue, self.det.date, self.det.at_war)
             if rec:
-                self.det._emit("escalated", issue, tier=1, why=rec.get("why"))
+                self.det._emit("escalated", issue, tier=rec.get("tier", 1), why=rec.get("why"))
         if event in ("resolved", "recurred", "overdue", "repeated"):
             le = lessons_from_issue(self.lessons, issue, event, self.name, self.plan_name, self.country)
             if le:
@@ -127,8 +128,9 @@ class Monitor:
         self.det.clock(snap.get("date"), snap.get("paused"), snap.get("utc"))
         self.det.snapshot(snap, list(self.prev))
         self.det.executor_silent_check()
-        kind = gate_kind(self.last_snap_date, snap)
+        kind = gate_kind(self.last_snap_date, snap, last_gate=self.last_gate_date)
         self.last_snap_date = snap.get("date") or self.last_snap_date
+        self.last_gate_date = self.last_gate_date or snap.get("date")
         self.prev.append(snap)
         if kind:
             self.gate(kind, snap)
@@ -199,6 +201,7 @@ class Monitor:
         _atomic(os.path.join(self.out, "gates", name), text)
         _atomic(os.path.join(self.out, "GATE.md"), text)
         self.last_gate_seq = self.det.seq
+        self.last_gate_date = snap.get("date") or self.last_gate_date
         self.gates.append({"kind": kind, "date": snap.get("date"), "chars": len(text)})
         if not self.replaying:
             self._review(kind, snap, text, name)
@@ -260,10 +263,13 @@ class Monitor:
             calls = sum(r["calls"] for r in usage.values())
         except Exception:
             usd, calls = 0.0, 0
-        esc = len([e for e in self.esc.log if not e.get("skipped")])
-        return (f"Costs so far: player {calls} model calls ${usd:.2f}; escalations {esc} (Tier 1 budget "
-                f"{self.esc.per_year}/game year); monitor overhead mean "
-                f"{_mean(self.det.overhead_ms):.1f} ms a snapshot, no model calls (Tier 0)")
+        esc = [e for e in self.esc.log if not e.get("skipped") and not e.get("bundled_into")]
+        by_tier = {t: [e for e in esc if e.get("tier", 1) == t] for t in (1, 2)}
+        spent = lambda rows: sum(((e.get("tokens") or {}).get("cost_usd") or 0.0) for e in rows)
+        line = (f"Costs so far: player {calls} model calls ${usd:.2f}; escalations Tier 1 {len(by_tier[1])} "
+                f"${spent(by_tier[1]):.2f}, Tier 2 {len(by_tier[2])} ${spent(by_tier[2]):.2f}")
+        line += "; " + budget.role_line(self.budget, self.name)
+        return line + f"; monitor overhead mean {_mean(self.det.overhead_ms):.1f} ms a snapshot"
 
     def _stats(self):
         st = {"snapshots": len(self.det.overhead_ms), "ms_per_snapshot_mean": _mean(self.det.overhead_ms),
@@ -297,8 +303,10 @@ class Monitor:
             _atomic(path, json.dumps(hist, indent=1, sort_keys=True))
 
 
-REVIEW_KINDS = ("war_declared", "capitulated", "new_year", "failure", "run_end")
-REVIEWS_PER_YEAR = 8
+# every gate is reviewed by the strong model (owner, 27 Nov 2026: use the API where it buys reliability);
+# the money caps bound it, this count stops a runaway
+REVIEW_KINDS = ("war_declared", "capitulated", "war_ended", "new_year", "days_60", "failure", "run_end")
+REVIEWS_PER_YEAR = 40
 
 
 def _mean(v):
