@@ -5367,6 +5367,15 @@ pub(super) fn politics_auto_step(
             }
             continue;
         }
+        // an entry without a price spends nothing while the power is held for another pick:
+        // whatever it costs, it delays the held one
+        if cost.is_none() && budget - saving <= 0.0 {
+            seen.push(format!(
+                "{slot_key} waits: the power is held ({} free above the reserve)",
+                (budget - saving).round()
+            ));
+            continue;
+        }
         // an entry priced by the plan could be paid; one without a price only when the game's
         // read below enables something at its seat
         if cost.is_some() {
@@ -10520,7 +10529,9 @@ mod tests {
             officer_corps_step(&mut state, &tools, &plan, "l", START).unwrap(),
             None
         );
-        assert!(state.manage.notes["officer_corps"].contains("needs 30 army experience"));
+        // no price in code: with no estimate the game's own check (its alert) decides
+        assert!(state.manage.notes["officer_corps"]
+            .contains("the game shows no officer corps pick open"));
         assert!(actions(&tools).is_empty());
         // a refusal rests 30 days and three drop the entry
         let mut state = State::default();
