@@ -118,3 +118,21 @@ fn documented_x64_ffi_structure_sizes_are_exact() {
     assert_eq!(size_of::<ModuleEntry>(), 1080);
     assert_eq!(size_of::<FileId>(), 24);
 }
+
+#[test]
+fn another_spelling_of_the_same_file_is_the_same_file_and_another_file_is_not() {
+    let dir = std::env::temp_dir().join(format!("hoi4-same-file-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let a = dir.join("image-a.exe");
+    let b = dir.join("image-b.exe");
+    std::fs::write(&a, b"MZ one").unwrap();
+    std::fs::write(&b, b"MZ two").unwrap();
+    let path = a.to_str().unwrap().to_string();
+    // Windows paths are case-insensitive: another spelling of the same file.
+    let other_spelling = path.to_uppercase();
+    assert_ne!(path, other_spelling);
+    assert!(Native::same_file(&path, &other_spelling));
+    assert!(!Native::same_file(&path, b.to_str().unwrap()));
+    assert!(!Native::same_file(&path, &format!("{path}.missing")));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
