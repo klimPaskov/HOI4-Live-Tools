@@ -103,7 +103,7 @@ fn the_sweep_offers_the_lanes_whose_last_turn_needed_no_input() {
     let mut state = State::default();
     let plan = two_picks();
     state.sched.begin_tick(START);
-    state.sched.lane_input.insert("politics", false);
+    state.sched.lane_input.insert("fast:politics", false);
     let mut lines = Vec::new();
     sweep(
         &mut state,
@@ -123,7 +123,7 @@ fn the_sweep_offers_the_lanes_whose_last_turn_needed_no_input() {
     assert_eq!(lines.len(), 1, "{lines:?}");
     // a lane whose last turn needed the input waits for the scheduler's order
     state.sched.begin_tick(START + 1);
-    state.sched.lane_input.insert("politics", true);
+    state.sched.lane_input.insert("fast:politics", true);
     let mut lines = Vec::new();
     sweep(
         &mut state,

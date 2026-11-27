@@ -2760,12 +2760,16 @@ fn sweep(
         && plan["war"]["enabled"] != json!(false)
         && plan["war"]["first"] != json!(false);
     let pass = lanes(plan, war_first);
-    for &(name, step) in FAST_LANES.iter().chain(pass.iter()) {
+    let fast_lanes = FAST_LANES;
+    let fast = fast_lanes
+        .iter()
+        .map(|&(name, step)| (name, fast_key(name), step));
+    let rest = pass.iter().map(|&(name, step)| (name, name, step));
+    for (name, key, step) in fast.chain(rest) {
         if started.elapsed() >= TICK_BUDGET {
             break;
         }
-        if state.sched.tick_turned.contains(name)
-            || state.sched.lane_input.get(name) != Some(&false)
+        if state.sched.tick_turned.contains(key) || state.sched.lane_input.get(key) != Some(&false)
         {
             continue;
         }
@@ -2779,18 +2783,23 @@ fn sweep(
         {
             continue;
         }
-        state.sched.turns.insert(name, now);
+        // a pass lane's turn counts when it opens, a fast lane's when it acts (as in their own
+        // turns)
+        if key == name {
+            state.sched.turns.insert(name, now);
+        }
         state.last_ok = None;
         let before = all_notes(state);
         let at = std::time::Instant::now();
-        let opened = open_turn(state, name, now);
+        let opened = open_turn(state, key, now);
         let result = step(state, tools, plan, lease, now)?;
-        let (result, input) = close_turn(state, name, opened, result);
+        let (result, input) = close_turn(state, key, opened, result);
         // one turn in the sweep, whatever the turn sent
-        state.sched.tick_turned.insert(name);
+        state.sched.tick_turned.insert(key);
         state.round.timed(name, result.is_some(), at);
         record_turn(state, name, result.as_ref(), &before, now);
         if let Some(line) = result {
+            state.sched.turns.insert(name, now);
             state.round.lane_acted(name, now);
             trace_lanes(now, &format!("sweep {name} acted"));
             lines.push(line);
@@ -4081,6 +4090,19 @@ fn lane_of(list: &[Lane], name: &str) -> Lane {
 /// air, navy, intelligence and the rest. Each manage, military and affairs rule is its own lane,
 /// so a rule with work every pass never holds back the rules behind it.
 /// The lanes checked every tick ahead of the pass (see `lanes_tick`).
+/// A fast lane's turn in a tick, apart from the pass lane of the same name (the pass's
+/// `politics` and `construction` run more than their fast checks).
+fn fast_key(name: &'static str) -> &'static str {
+    match name {
+        "factories" => "fast:factories",
+        "research" => "fast:research",
+        "focus" => "fast:focus",
+        "politics" => "fast:politics",
+        "construction" => "fast:construction",
+        _ => name,
+    }
+}
+
 const FAST_LANES: [Lane; 5] = [
     ("factories", factories_lane),
     ("research", research_lane),
@@ -4144,15 +4166,16 @@ fn fast_lanes_turn(
     // is a day of the slot): a pass of slow GUI orders left the focus idle for 14 game days
     // (g17j 1936.4). They act before the pass resumes.
     for (name, step) in FAST_LANES {
-        if state.sched.tick_turned.contains(name) || opening_holds(state, tools, plan, name, now) {
+        let key = fast_key(name);
+        if state.sched.tick_turned.contains(key) || opening_holds(state, tools, plan, name, now) {
             continue;
         }
         state.last_ok = None;
         let before = all_notes(state);
         let started = std::time::Instant::now();
-        let opened = open_turn(state, name, now);
+        let opened = open_turn(state, key, now);
         let result = step(state, tools, plan, lease, now)?;
-        let (result, _) = close_turn(state, name, opened, result);
+        let (result, _) = close_turn(state, key, opened, result);
         state.round.timed(name, result.is_some(), started);
         record_turn(state, name, result.as_ref(), &before, now);
         // the fast lanes answer the issues they own too (s7m, 24 Nov 2026: the focus issues
