@@ -7591,7 +7591,10 @@ impl MacClock {
                 let mut route = inproc::route("orders2").ok_or_else(|| {
                     Error::new(
                         "inproc_refused",
-                        "assigning divisions to an order goes by command (in-process family orders2), which is not usable here",
+                        format!(
+                            "assigning divisions to an order goes by command (in-process family orders2), which is not usable here{}",
+                            inproc::os_unavailable().map(|r| format!(": {r}")).unwrap_or_default()
+                        ),
                     )
                 })?;
                 let retry = actions.receipt_exists(id);

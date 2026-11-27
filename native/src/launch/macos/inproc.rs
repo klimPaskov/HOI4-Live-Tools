@@ -14,7 +14,60 @@
 use crate::error::{Error, Result};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
+#[cfg(not(unix))]
+use transport::UnixStream;
+
+/// Why no in-process route exists on this system, when the reason is the system itself: the module is a macOS
+/// dylib reached over a Unix socket; elsewhere every tool takes its mouse path (and a by-command-only call names this).
+pub(super) const OS_UNAVAILABLE: &str = "in-process module not available on this OS yet";
+
+/// The in-process transport of this system: None where there is one, Some(the reason) where there is none.
+pub(super) fn os_unavailable() -> Option<&'static str> {
+    if cfg!(unix) {
+        None
+    } else {
+        Some(OS_UNAVAILABLE)
+    }
+}
+
+/// No Unix socket off Unix (Windows): a stream that never connects, so `Channel::connect` is None and the GUI
+/// path runs; the in-process-only calls report OS_UNAVAILABLE.
+#[cfg(not(unix))]
+mod transport {
+    use std::io::{Error, ErrorKind, Read, Result, Write};
+    use std::time::Duration;
+
+    pub(super) struct UnixStream;
+
+    impl UnixStream {
+        pub(super) fn connect(_path: &str) -> Result<UnixStream> {
+            Err(Error::new(ErrorKind::Unsupported, super::OS_UNAVAILABLE))
+        }
+        pub(super) fn set_read_timeout(&self, _t: Option<Duration>) -> Result<()> {
+            Err(Error::new(ErrorKind::Unsupported, super::OS_UNAVAILABLE))
+        }
+        pub(super) fn try_clone(&self) -> Result<UnixStream> {
+            Err(Error::new(ErrorKind::Unsupported, super::OS_UNAVAILABLE))
+        }
+    }
+
+    impl Read for UnixStream {
+        fn read(&mut self, _buf: &mut [u8]) -> Result<usize> {
+            Err(Error::new(ErrorKind::Unsupported, super::OS_UNAVAILABLE))
+        }
+    }
+
+    impl Write for UnixStream {
+        fn write(&mut self, _buf: &[u8]) -> Result<usize> {
+            Err(Error::new(ErrorKind::Unsupported, super::OS_UNAVAILABLE))
+        }
+        fn flush(&mut self) -> Result<()> {
+            Ok(())
+        }
+    }
+}
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -219,7 +272,7 @@ fn request_line(req: &Value) -> Result<String> {
 /// A route for one tool call: Some(channel) when this family goes in process.
 pub(super) fn route(family: &str) -> Option<Channel> {
     let m = mode();
-    if m == Mode::Gui {
+    if m == Mode::Gui || os_unavailable().is_some() {
         return None;
     }
     let ch = Channel::connect()?;
@@ -754,6 +807,16 @@ pub(super) fn transfers_executed(wings: &[super::airread::Wing], want: &[(u64, i
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn off_unix_no_route_exists_and_the_reason_is_named() {
+        // the module is a macOS dylib over a Unix socket: elsewhere every tool takes its mouse path
+        assert_eq!(os_unavailable().is_some(), !cfg!(unix));
+        if !cfg!(unix) {
+            assert!(route("orders").is_none());
+            assert!(UnixStream::connect("unused").is_err());
+        }
+    }
 
     #[test]
     fn modes() {
