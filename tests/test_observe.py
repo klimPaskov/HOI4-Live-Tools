@@ -117,6 +117,27 @@ class FindingFixtures(unittest.TestCase):
         peace = F.findings(snap(land=land, wars={"at_war": False}), [])
         self.assertEqual([f["severity"] for f in peace if f["code"] == "army_without_order"], ["low"])
 
+    def test_arrows_that_do_not_execute_and_an_army_outside_its_groups_front(self):
+        # t1939n (27 Nov 2026): Army Group 2's front executing, its 37 divisions on idle arrows;
+        # Armee Süd on an area defence inside the group
+        idle = {"id": 109, "target_states": [977], "divisions": 37, "executing": False}
+        empty = {"id": 112, "target_states": [977], "divisions": 0, "executing": False}
+        land = {"armies": [army("Army 2", 23, group="Army Group 2"),
+                           army("Armee Süd", 15, [{"kind": "area_defense", "states": [], "offensives": []}],
+                                group="Army Group 2"),
+                           army("Army 6", 24, [front([978, 42], 24)])],
+                "groups": [{"group": "Army Group 2", "field_marshal": "Rundstedt",
+                            "orders": [front([35, 7], 37, [idle, empty])]}],
+                "divisions": [], "unassigned": 0}
+        fs = F.findings(snap(land=land), [])
+        hit = [f for f in fs if f["code"] == "arrow_not_executing"]
+        self.assertEqual([f["subject"] for f in hit], ["Army Group 2"])
+        self.assertEqual(hit[0]["numbers"]["divisions"], 37)
+        out = [f for f in fs if f["code"] == "army_outside_group_front"]
+        self.assertEqual([f["subject"] for f in out], ["Armee Süd"])  # the hold front of Army 6 is no case
+        peace = F.findings(snap(land=land, wars={"at_war": False}), [])
+        self.assertFalse([f for f in peace if f["code"] in ("arrow_not_executing", "army_outside_group_front")])
+
     def test_free_field_marshal_and_a_group_without_one(self):
         land = {"armies": [army("Armee Pommern", 23, [front([980], 23)], group="Army Group 2")],
                 "groups": [{"group": "Army Group 2", "field_marshal": None, "orders": []}],

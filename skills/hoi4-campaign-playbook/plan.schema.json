@@ -2838,7 +2838,7 @@
               "mouse",
               "command"
             ],
-            "description": "command: the operation's orders carry exact provinces for the in-process army commands (a front with against + own_states, one order per stretch; a spearhead with target_provinces under its front's id; an arrow that misses its line gets a new path on the same order with replace_order, keeping the order and its planning bonus, never a delete or a clear). Default mouse. Only on a build with the in-process orders families proven live"
+            "description": "command: the operation's orders carry exact provinces for the in-process army commands (a front with against + own_states, one order per stretch; a spearhead with target_provinces under its front's id; an arrow that misses its line gets a new path on the same order with replace_order, keeping the order and its planning bonus, never a delete or a clear). Default: command when the run posts both in-process battle-plan families (orders and orders2), else mouse. mouse keeps the mouse path on such a run"
           },
           "axis_by": {
             "enum": [
