@@ -88,10 +88,26 @@ fn operation_armies(state: &State, plan: &Value) -> BTreeMap<String, (u64, Strin
             .as_u64()
             .unwrap_or(FULL)
             .min(FULL);
+        // the game name of each formation (the layout binds a plan role to the army that took
+        // it: t1939n, 27 Nov 2026, op_lowlands named "Armee Pommern", the roster read "Army 3",
+        // and no army of the operation was ever motorised)
         for f in list(op, "formations") {
             let army = text(&f["army"]);
-            if !army.is_empty() {
-                out.insert(army.to_string(), (level, id.to_string()));
+            if army.is_empty() {
+                continue;
+            }
+            let bound = state
+                .layout
+                .get(army)
+                .filter(|a| !a.is_empty())
+                .map_or(army, String::as_str);
+            out.insert(bound.to_string(), (level, id.to_string()));
+        }
+        // its second echelons follow the line they feed
+        let prefix = format!("echelon:{id}:");
+        for (k, e) in &state.layout {
+            if k.starts_with(&prefix) && !e.is_empty() {
+                out.insert(e.clone(), (level, id.to_string()));
             }
         }
     }
@@ -211,7 +227,7 @@ fn hubs_step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    if plan["logistics"]["hubs"] != json!(true) || state.skipped(now, "logi", "hubs") {
+    if !hubs_on(plan) || state.skipped(now, "logi", "hubs") {
         return Ok(None);
     }
     state.skip(now, "logi", "hubs", DAY / 2);
@@ -266,6 +282,19 @@ fn hubs_step(
     Ok(None)
 }
 
+/// The hubs rule runs with `logistics.hubs: true`, and also when an operation names its
+/// `supply.motorization` (an operation that asks for trucks gets them without a second key;
+/// t1939n, 27 Nov 2026: op_lowlands asked for level 2, the plan had no `logistics`, every army
+/// stood at 0 and the divisions past the border starved). `logistics.hubs: false` keeps it off.
+fn hubs_on(plan: &Value) -> bool {
+    match &plan["logistics"]["hubs"] {
+        Value::Bool(b) => *b,
+        _ => list(plan, "operations")
+            .iter()
+            .any(|op| op["supply"]["motorization"].as_u64().is_some()),
+    }
+}
+
 /// The logistics rule: the train line first, then the hubs.
 pub(super) fn logistics_step(
     state: &mut State,
@@ -274,7 +303,7 @@ pub(super) fn logistics_step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    if !plan["logistics"].is_object() {
+    if !plan["logistics"].is_object() && !hubs_on(plan) {
         return Ok(None);
     }
     if let Some(line) = train_line_step(state, tools, plan, lease, now)? {
@@ -348,6 +377,28 @@ mod tests {
         assert!(hub_wants(&plan, &roster(), &supply(), &ops)
             .iter()
             .all(|w| w.army != "Ost"));
+    }
+
+    #[test]
+    fn an_operation_that_names_its_trucks_gets_them_by_the_armies_game_names() {
+        // t1939n (27 Nov 2026): op_lowlands asked for level 2, the plan had no `logistics`, the
+        // formations were named by their plan roles, and every army stood at 0
+        let plan = json!({"operations": [{"id": "op_west", "supply": {"motorization": 2},
+            "formations": [{"army": "Armee Pommern"}]}]});
+        assert!(hubs_on(&plan));
+        assert!(!hubs_on(&json!({"logistics": {"hubs": false},
+            "operations": [{"id": "x", "supply": {"motorization": 2}}]})));
+        assert!(!hubs_on(&json!({"operations": [{"id": "x"}]})));
+        let mut state = State::default();
+        state.done.insert("op:op_west:prep".into(), START);
+        state.layout.insert("Armee Pommern".into(), "Ost".into());
+        state
+            .layout
+            .insert("echelon:op_west:Ost".into(), "Sud".into());
+        let ops = operation_armies(&state, &plan);
+        assert_eq!(ops.get("Ost"), Some(&(2, "op_west".to_string())));
+        assert_eq!(ops.get("Sud"), Some(&(2, "op_west".to_string())));
+        assert!(!ops.contains_key("Armee Pommern"));
     }
 
     #[test]

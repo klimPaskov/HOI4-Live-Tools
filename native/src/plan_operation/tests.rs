@@ -51,6 +51,8 @@ struct Game {
     battles: RefCell<Option<Value>>,
     /// what hoi4_template_get answers, when set
     templates: RefCell<Option<Value>>,
+    /// every offensive draw read back Diverged: the game drew the arrow to this state instead
+    diverge_to: RefCell<Option<i64>>,
 }
 
 impl Game {
@@ -96,6 +98,7 @@ impl Game {
             own_border: RefCell::new(vec![]),
             battles: RefCell::new(None),
             templates: RefCell::new(None),
+            diverge_to: RefCell::new(None),
         }
     }
     fn orders(&self) -> Vec<(String, Value)> {
@@ -164,6 +167,21 @@ impl Tools for Game {
             "hoi4_encirclement_candidates" => return Ok(self.pockets.borrow().clone()),
             "hoi4_army_detach" if *self.refuse_detach.borrow() => {
                 return Ok(json!({"receipt": {"status": "NotApplied"}}));
+            }
+            "hoi4_army_offensive" if self.diverge_to.borrow().is_some() => {
+                let to = self.diverge_to.borrow().unwrap();
+                self.unit(&army, |r| {
+                    let plan = r["plan"].as_array_mut().unwrap();
+                    let front = plan
+                        .iter_mut()
+                        .find(|o| o["kind"] == json!("front"))
+                        .unwrap();
+                    let offs = front["offensives"].as_array_mut().unwrap();
+                    let id = 200 + offs.len();
+                    offs.push(json!({"id": id, "executing": false, "divisions": 20,
+                                     "target": {"states": [to]}}));
+                });
+                return Ok(json!({"receipt": {"status": "Diverged"}}));
             }
             "hoi4_army_offensive" if *self.refuse_all.borrow() => {
                 return Ok(json!({"receipt": {"status": "NotApplied"}}));
@@ -2682,9 +2700,11 @@ fn a_reserve_inside_the_operations_group_is_left_out_when_the_group_is_formed_ag
         ..State::default()
     };
     burst(&mut state, &game, &plan, START);
+    // the reserve stays out; Panzer, standing in the group and named by nothing, commits with
+    // the line armies (THE GROUP COMMITS WHOLE)
     assert_eq!(
         group_creates(&game).first(),
-        Some(&json!({"armies": ["Mitte", "Nord"]}))
+        Some(&json!({"armies": ["Mitte", "Nord", "Panzer"]}))
     );
 }
 
@@ -3917,4 +3937,297 @@ fn the_opening_sends_an_echelon_to_a_small_enemy_short_of_force_or_past_its_dead
 /// The supply-only stack read (no width caps).
 fn stack_read(read: &Value, line: &HashSet<String>, pick: &HashSet<String>, max: i64) -> StackRead {
     stack_read_caps(read, line, pick, max, &HashMap::new(), false)
+}
+
+// ---- engineer 91 (t1939n, the West): commitment, arrows that execute, the echelon's general ----
+
+#[test]
+fn the_groups_other_armies_are_owned_and_fight_on_its_front() {
+    // t1939n: Armee Süd stood in Army Group 2 on an area defence the whole West war
+    let game = Game::new();
+    game.roster.borrow_mut()["armies"]
+        .as_array_mut()
+        .unwrap()
+        .push(
+            json!({"army": "Extra", "army_group": "Army Group 1", "commander": "x",
+                     "plan": [{"kind": "area_defense", "executing": false, "offensives": []}],
+                     "defensive_orders": 1, "exercising": false, "division_count": 15}),
+        );
+    let plan = plan();
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    assert_eq!(
+        state.op_owned.get("Extra").map(String::as_str),
+        Some("op_pol")
+    );
+    assert!(
+        game.orders()
+            .iter()
+            .any(|(n, a)| n == "hoi4_army_plan"
+                && a == &json!({"army": "Extra", "clear_orders": true})),
+        "{:?}",
+        game.orders()
+    );
+    // at war it is given an order of its own again: cleared once, so the group front carries it
+    *game.enemies.borrow_mut() = vec!["POL"];
+    burst(&mut state, &game, &plan, START + DAY);
+    assert!(state.done.contains_key("op:op_pol:exec"));
+    game.unit(
+        "Extra",
+        |r| r["plan"] = json!([{"kind": "area_defense", "executing": false, "offensives": []}]),
+    );
+    game.calls.borrow_mut().clear();
+    burst(&mut state, &game, &plan, START + 2 * DAY);
+    let clears = |game: &Game| {
+        game.orders()
+            .iter()
+            .filter(|(n, a)| {
+                n == "hoi4_army_plan" && a == &json!({"army": "Extra", "clear_orders": true})
+            })
+            .count()
+    };
+    assert_eq!(clears(&game), 1);
+    game.unit(
+        "Extra",
+        |r| r["plan"] = json!([{"kind": "area_defense", "executing": false, "offensives": []}]),
+    );
+    game.calls.borrow_mut().clear();
+    burst(&mut state, &game, &plan, START + 3 * DAY);
+    assert_eq!(clears(&game), 0, "once at war, never a loop");
+    // the units of the operation hold it as a line army; an army the operation names stays itself
+    let roster = game.roster.borrow().clone();
+    let (units, group) = units(&state, "op_pol", &plan["operations"][0], &roster);
+    assert_eq!(group.as_deref(), Some("Army Group 1"));
+    assert!(units
+        .iter()
+        .any(|u| u.name == "Extra" && u.role == Role::Line));
+    assert_eq!(units.iter().filter(|u| u.name == "Panzer").count(), 1);
+}
+
+#[test]
+fn at_war_an_arrow_that_holds_divisions_and_does_not_execute_is_executed() {
+    // t1939n: Army Group 2's front read executing while its 37 divisions stood on arrows that did not
+    let game = Game::new();
+    let plan = plan();
+    let mut state = State::default();
+    prepared(&mut state, &game, &plan);
+    *game.enemies.borrow_mut() = vec!["POL"];
+    burst(&mut state, &game, &plan, START + DAY);
+    assert!(state.done.contains_key("op:op_pol:exec"));
+    let stuck = || {
+        json!([{"kind": "front", "executing": true, "offensives": [
+            {"id": 5, "executing": true, "divisions": 0, "target": {"states": [85, 86, 10, 88]}},
+            {"id": 7, "executing": false, "divisions": 30, "target": {"states": [977]}}]}])
+    };
+    game.unit("Army Group 1", |r| r["plan"] = stuck());
+    game.calls.borrow_mut().clear();
+    burst(&mut state, &game, &plan, START + 2 * DAY);
+    let group: Vec<Value> = game
+        .orders()
+        .iter()
+        .filter(|(n, a)| n == "hoi4_army_plan" && a["army"] == json!("Army Group 1"))
+        .map(|(_, a)| a["execute"].clone())
+        .collect();
+    assert_eq!(group, [json!(false), json!(true)], "stop, then execute");
+    // an attacker still standing a day on is named in the notes; executing again clears them
+    let at_war = vec!["POL".to_string()];
+    let u = unit(
+        "Army Group 1".into(),
+        Role::Group,
+        &json!({"enemy": "POL"}),
+        &Value::Null,
+    );
+    let mut st = State::default();
+    note_not_executing(&mut st, "op", &u, true, &at_war, START);
+    assert!(st.op_notes.is_empty(), "not before a day");
+    note_not_executing(&mut st, "op", &u, true, &at_war, START + DAY + 1);
+    assert!(st.op_notes["op:notexec:Army Group 1"].contains("NOT EXECUTING for 1.0 days"));
+    note_not_executing(&mut st, "op", &u, false, &at_war, START + DAY + 2);
+    assert!(st.op_notes.is_empty());
+    assert!(!st.done.contains_key("op:op:notexec:Army Group 1"));
+}
+
+#[test]
+fn at_war_a_stroke_the_game_draws_elsewhere_is_kept_and_executed_never_stacked() {
+    // t1939n: four strokes at Gelderland came back over Antwerp, four arrows, none executing
+    let game = Game::new();
+    let plan = plan();
+    let mut state = State::default();
+    prepared(&mut state, &game, &plan);
+    *game.enemies.borrow_mut() = vec!["POL"];
+    burst(&mut state, &game, &plan, START + DAY);
+    assert!(state.done.contains_key("op:op_pol:exec"));
+    // the group's arrow came off (the front reached its line); every new stroke goes elsewhere
+    game.unit("Army Group 1", |r| {
+        r["plan"] = json!([{"kind": "front", "executing": true, "offensives": []}])
+    });
+    *game.diverge_to.borrow_mut() = Some(977);
+    game.calls.borrow_mut().clear();
+    for h in 0..12 {
+        burst(&mut state, &game, &plan, START + 2 * DAY + h * 6);
+    }
+    let strokes = game
+        .orders()
+        .iter()
+        .filter(|(n, a)| n == "hoi4_army_offensive" && a["army"] == json!("Army Group 1"))
+        .count();
+    assert_eq!(strokes, 1, "{:?}", game.orders());
+    // the arrow it left executes
+    let roster = game.roster.borrow().clone();
+    let offs = offensives(&roster, "Army Group 1");
+    assert_eq!(offs.len(), 1);
+    assert_eq!(offs[0]["executing"], json!(true));
+}
+
+#[test]
+fn orders_go_by_command_by_default_when_the_run_posts_both_battle_plan_families() {
+    let none = json!({});
+    let both = Some("set_game_speed,production, orders ,orders2,mio");
+    assert!(orders_by_command(&none, both, Some("auto")));
+    assert!(orders_by_command(&none, both, None));
+    assert!(!orders_by_command(&none, both, Some("gui")));
+    assert!(!orders_by_command(&none, Some("orders"), Some("auto")));
+    assert!(!orders_by_command(&none, None, Some("auto")));
+    assert!(!orders_by_command(
+        &json!({"orders_by": "mouse"}),
+        both,
+        Some("auto")
+    ));
+    assert!(orders_by_command(
+        &json!({"orders_by": "command"}),
+        None,
+        None
+    ));
+}
+
+#[test]
+fn the_opening_never_sends_an_echelon_back_into_the_army_the_width_thinned() {
+    // t1939n: Army 3's six divisions went out for width and back in by the opening, six times
+    let game = Game::new();
+    game.unit("Nord", |r| {
+        r["division_count"] = json!(14);
+        r["division_limit"] = json!(24);
+    });
+    game.roster.borrow_mut()["armies"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"army": "Army 9", "army_group": null, "plan": [], "division_count": 6}));
+    let f = json!({"enemy": "BEL", "own_states": [51]});
+    let units = vec![unit(
+        "Nord".into(),
+        Role::Wing,
+        &f,
+        &json!({"target_line": [6]}),
+    )];
+    let wars = json!({"borders": [{"neighbour_tag": "BEL", "neighbour_states": [6],
+        "hostile_divisions_in_border_states": 20}]});
+    let op = json!({"id": "op", "opening": {"deadline_days": {"BEL": 16}, "ratio": 2}});
+    let at_war = vec!["BEL".to_string()];
+    let roster = game.roster.borrow().clone();
+    let mut state = State::default();
+    // the echelon came out of Nord itself
+    state
+        .layout
+        .insert("echelon:op:Nord".into(), "Army 9".into());
+    assert!(
+        opening(&mut state, &game, "op", &op, &units, &roster, &wars, &at_war, "l", START)
+            .unwrap()
+            .is_none()
+    );
+    assert!(game.orders().is_empty(), "{:?}", game.orders());
+    assert!(
+        state.op_notes["op:opening:BEL"].contains("full for width"),
+        "{:?}",
+        state.op_notes
+    );
+    // an echelon of another army goes to it while it is not thinned
+    let mut state = State::default();
+    state
+        .layout
+        .insert("echelon:op:Mitte".into(), "Army 9".into());
+    assert!(
+        opening(&mut state, &game, "op", &op, &units, &roster, &wars, &at_war, "l", START)
+            .unwrap()
+            .is_some()
+    );
+    // but not once the width thinned it
+    let mut state = State::default();
+    state
+        .layout
+        .insert("echelon:op:Mitte".into(), "Army 9".into());
+    state.done.insert("op:op:thinned:Nord".into(), START);
+    game.calls.borrow_mut().clear();
+    assert!(
+        opening(&mut state, &game, "op", &op, &units, &roster, &wars, &at_war, "l", START)
+            .unwrap()
+            .is_none()
+    );
+    assert!(game.orders().is_empty());
+}
+
+#[test]
+fn the_operations_execution_mode_is_sent_once_per_attacker_before_its_war() {
+    let game = Game::new();
+    let mut plan = plan();
+    plan["operations"][0]["execution"] = json!("balanced");
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let modes: Vec<String> = game
+        .orders()
+        .iter()
+        .filter(|(n, a)| n == "hoi4_army_plan" && a["mode"] == json!("balanced"))
+        .map(|(_, a)| text(&a["army"]).to_string())
+        .collect();
+    assert_eq!(modes.len(), 3, "{modes:?}");
+    for a in ["Army Group 1", "Panzer", "Nord"] {
+        assert!(modes.contains(&a.to_string()), "{modes:?}");
+    }
+    game.calls.borrow_mut().clear();
+    burst(&mut state, &game, &plan, START + DAY);
+    assert!(!game.orders().iter().any(|(_, a)| a["mode"].is_string()));
+}
+
+#[test]
+fn a_second_echelon_without_a_general_gets_a_free_one_before_its_order() {
+    // t1939n: "second echelon Army 1 holds its station 57: false no_commander"
+    let game = Game::new();
+    game.roster.borrow_mut()["armies"]
+        .as_array_mut()
+        .unwrap()
+        .push(
+            json!({"army": "Army 9", "army_group": null, "commander": null, "plan": [],
+                     "exercising": false, "division_count": 6}),
+        );
+    *game.commanders.borrow_mut() = json!({"commanders": [
+        {"name": "Busch", "id": "GER_busch", "assigned_to": "Mitte"},
+        {"name": "Rundstedt", "id": "GER_r", "assigned_to": null, "rank": "field_marshal"},
+        {"name": "Kluge", "id": "GER_k", "assigned_to": null}]});
+    *game.supply.borrow_mut() = Some(supply_read(&[]));
+    let plan = json!({"war": {"me": "GER"}});
+    let op = json!({"id": "op", "stacking": {"by_width": false}});
+    let units = vec![unit("Mitte".into(), Role::Line, &Value::Null, &Value::Null)];
+    let wars = json!({"borders": []});
+    let roster = game.roster.borrow().clone();
+    let mut state = State::default();
+    state.done.insert("op:op:exec".into(), START);
+    state.done.insert("op:op:echmade:Army 9".into(), START);
+    state
+        .layout
+        .insert("echelon:op:Mitte".into(), "Army 9".into());
+    let line = stacking(
+        &mut state, &game, &plan, "op", &op, &units, &roster, &wars, "l", START,
+    )
+    .unwrap()
+    .expect("an order");
+    assert!(
+        line.contains("Kluge leads the second echelon Army 9"),
+        "{line}"
+    );
+    assert_eq!(
+        game.orders()[0],
+        (
+            "hoi4_army_commander".to_string(),
+            json!({"army": "Army 9", "general": "Kluge"})
+        )
+    );
 }

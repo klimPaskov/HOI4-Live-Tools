@@ -186,6 +186,20 @@ ARMY_DIVISIONS_BASE = 24
 GROUP_ARMIES_BASE = 5
 
 
+
+def _idle_arrows(out, name, order):
+    """An arrow that holds divisions and does not execute while the war is on (its front may read
+    executing): those divisions stand still. t1939n (27 Nov 2026): Army Group 2's front read
+    executing from W+13 to W+20 while its 37 divisions stood on unexecuted arrows."""
+    idle = [x for x in order.get("offensives") or []
+            if not x.get("executing") and (x.get("divisions") is None or x.get("divisions") > 0)]
+    if idle and order.get("executing"):
+        held = sum(x.get("divisions") or 0 for x in idle)
+        out.append(F("arrow_not_executing", "high",
+                     f"{name}: {len(idle)} arrow(s) holding {held} divisions do not execute on a front that "
+                     f"does (targets {[x.get('target_states') for x in idle][:3]}): those divisions stand still",
+                     subject=name, divisions=held))
+
 def land(snap, prev):
     out = []
     for grp in g(snap, "land", "groups", default=[]):
@@ -251,6 +265,22 @@ def land(snap, prev):
                 out.append(F("order_not_executing", "medium",
                              f"army {a['army']}'s battle plan on {o.get('states')} is not executing",
                              subject=a["army"]))
+            elif at_war:
+                _idle_arrows(out, a["army"], o)
+        # an army with an order of its own inside a group whose front is drawn takes no part in it
+        # (t1939n, 27 Nov 2026: Armee Süd, 15 divisions, on an area defence in Army Group 2)
+        if at_war and orders and a.get("group") and group_orders.get(a.get("group")) and \
+                not any(o.get("offensives") for o in orders) and \
+                any(o.get("kind") == "front" for o in group_orders[a["group"]]):
+            kinds = sorted({str(o.get("kind")) for o in orders})
+            out.append(F("army_outside_group_front", "high",
+                         f"army {a['army']} ({n} divisions) stands in {a['group']} with an order of its own "
+                         f"({', '.join(kinds)}) while the group has a front: its divisions take no part in the "
+                         f"group's attack", subject=a["army"], divisions=n))
+    if at_war:
+        for grp in g(snap, "land", "groups", default=[]):
+            for o in grp.get("orders") or []:
+                _idle_arrows(out, grp.get("group"), o)
     # stacking: provinces whose divisions draw more than the province gives
     rows = []
     for p in g(snap, "stacking", "provinces", default=[]):
