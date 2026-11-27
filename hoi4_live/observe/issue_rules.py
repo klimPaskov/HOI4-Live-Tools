@@ -111,12 +111,12 @@ RULES = {
                     "a rule past the row's deadline that neither acts nor states why is a fault of the rule: "
                     "the gate counts it"),
     "officer_corps_slot_empty": ("idling", "officer_corps", 14, 30, "an empty spirit slot gives no bonus"),
-    "weak_formation_fielded": ("gameplay", "war", 30, 60,
+    "weak_formation_fielded": ("gameplay", "formations", 30, 60,
                                "a weak formation takes width, supply and a place in an army; a month covers "
                                "converting it"),
-    "train_line_missing": ("gameplay", "war", 30, 60,
+    "train_line_missing": ("gameplay", "logistics", 30, 60,
                            "the start trains cover only the start network; fronts and strikes eat them"),
-    "trains_falling": ("gameplay", "war", 14, 30, "short trains cut supply up to half"),
+    "trains_falling": ("gameplay", "logistics", 14, 30, "short trains cut supply up to half"),
     "starving_hubs_low": ("gameplay", "war", 7, 14,
                           "an army under its supply floor with hubs not motorised loses strength daily"),
     "special_project_facility_idle": ("idling", "extras", 7, 14,
@@ -209,7 +209,7 @@ LANE_KINDS = {
     "war": ("army", "air"), "intelligence": ("operative", "intel"), "designs": ("design",),
     "trade": ("trade",), "occupation": ("occupation",), "events": ("event",), "training": ("train", "template"),
     "strategy": (), "plan": (), "gate": (), "peace": ("peace",), "alerts": (), "ledger": (), "saves": ("save",),
-    "executor": (),
+    "executor": (), "logistics": ("army_motorization",), "formations": ("division_disband", "template_edit"),
 }
 
 # tools a response may use, by lane (the allowed responses of an escalation packet)
@@ -227,6 +227,8 @@ LANE_TOOLS = {
     "intelligence": ["hoi4_operative_assign"], "designs": ["hoi4_design_set_production"],
     "trade": ["hoi4_trade"], "occupation": ["hoi4_occupation_law"], "events": ["hoi4_event_choose"],
     "training": ["hoi4_train"], "saves": ["hoi4_save"], "focus": ["hoi4_focus_start"],
+    "logistics": ["hoi4_production_add", "hoi4_production_set", "hoi4_army_motorization"],
+    "formations": ["hoi4_division_disband", "hoi4_template_edit"],
 }
 
 # judgement calls: the named alternatives a rule cannot rank (the escalation offers them)

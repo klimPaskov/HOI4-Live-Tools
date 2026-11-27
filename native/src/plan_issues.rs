@@ -36,13 +36,12 @@ const MAX_ROWS: usize = 8;
 /// rule's lane (admirals, task forces, missions: plan_military's `navy`), not the sea-transfer
 /// step `ship`: mapped there, the admiral and idle task force issues of t1939n (27 Nov 2026)
 /// were offered to the sea transfers and stayed open for 158 days.
-const LANE_ALIAS: [(&str, &str); 6] = [
+const LANE_ALIAS: [(&str, &str); 5] = [
     ("mio_lines", "mio"),
     ("cp_spend", "seams"),
     ("doctrines", "extras"),
     ("special_projects", "extras"),
     ("air", "air_plan"),
-    ("logistics", "stockpile"),
 ];
 
 #[derive(Debug, Clone, PartialEq)]

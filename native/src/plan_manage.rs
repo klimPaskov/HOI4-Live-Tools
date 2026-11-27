@@ -6045,7 +6045,7 @@ fn equipment_rule(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameH
 
 /// Military lines (entry index, equipment, requested factories) and the military factories on
 /// no line (`hoi4_economy` total minus the lines' requested factories).
-fn military_lines(tools: &dyn Tools, economy: &Value) -> Result<(Vec<MilLine>, i64)> {
+pub(super) fn military_lines(tools: &dyn Tools, economy: &Value) -> Result<(Vec<MilLine>, i64)> {
     let total = economy["factory_trigger_count"]["military"]
         .as_i64()
         .unwrap_or(0);
@@ -6096,7 +6096,7 @@ fn shortfall(stock: Option<&Value>, supply: Option<&Value>) -> HashMap<String, f
 }
 
 /// One military line: (entry index, equipment, requested factories, efficiency percent read).
-type MilLine = (i64, String, i64, Option<f64>);
+pub(super) type MilLine = (i64, String, i64, Option<f64>);
 
 /// The line that gets the next idle factories: of the `production_priority` lines (the plan's
 /// removed equipment never), the one whose archetype the divisions lack most; with no shortage
@@ -6636,7 +6636,16 @@ fn stockpile_rule(
     // target. Without this owner a stock stayed at 0 for eight months while every factory
     // built what was already plenty (live 15 Nov 2026: artillery 0 from May, the strike army
     // at a sixth of its equipment, the missing-production alert open all year).
-    let felt = short_of(&read, &archetype) > 0.0 || days < critical;
+    // Trucks below what the fielded divisions themselves need are a shortage the front feels
+    // too (hub motorisation and refits draw on the same stock): with every factory on a line
+    // they stayed under half the need for months while only idle factories could raise them
+    // (t1939n, 27 Nov 2026: 1535 trucks against 3170 needed; owner: "trains and trucks matter")
+    let trucks_short = archetype.starts_with("motorized_equipment")
+        && read["trucks"]["stockpile"]
+            .as_f64()
+            .zip(read["trucks"]["fielded_need"].as_f64())
+            .is_some_and(|(stock, need)| need > 0.0 && stock < need);
+    let felt = short_of(&read, &archetype) > 0.0 || days < critical || trucks_short;
     if give <= 0 && felt && m["shift_factories"] != json!(false) {
         let recent: HashSet<String> = state
             .manage

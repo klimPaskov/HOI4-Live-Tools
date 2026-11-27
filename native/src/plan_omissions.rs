@@ -453,8 +453,8 @@ pub(super) fn derived(
             open.push((
                 "trains_falling".to_string(),
                 todo,
-                "stockpile",
-                super::plan_manage::note_of(state, "stockpile").map(String::from),
+                "logistics",
+                super::plan_manage::note_of(state, "logistics").map(String::from),
             ));
         } else if let Some(todo) = trains_no_line(&read) {
             open.push((

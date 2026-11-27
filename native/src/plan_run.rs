@@ -894,12 +894,11 @@ fn record_turn(
 
 /// The owner names omission rows carry that are not lane names (the rule writes under one name,
 /// its lane runs under another).
-const OWNER_LANES: [(&str, &str); 5] = [
+const OWNER_LANES: [(&str, &str); 4] = [
     ("doctrines", "extras"),
     ("special_projects", "extras"),
     ("air", "air_plan"),
     ("cp_spend", "seams"),
-    ("logistics", "stockpile"),
 ];
 
 /// Why the rule `owner` has not acted, from its lane's turns (see [`record_turn`]): the reason and
@@ -3491,7 +3490,7 @@ const LANE_MAX_WAIT: GameHour = DAY;
 /// choosin a research, spending pp, etc"). HEAVY: many inputs or reads, or orders whose timing
 /// matters within a day: speed 3 from its first action until it has been quiet for a while.
 /// A lane not listed is heavy. (lane, minor, why)
-pub(super) const LANE_WEIGHT: [(&str, bool, &str); 49] = [
+pub(super) const LANE_WEIGHT: [(&str, bool, &str); 50] = [
     ("research", true, "one pick in the research view"),
     (
         "factories",
@@ -3537,6 +3536,11 @@ pub(super) const LANE_WEIGHT: [(&str, bool, &str); 49] = [
         "production lines: several inputs per line",
     ),
     ("stockpile", false, "production rework for the stockpile"),
+    (
+        "logistics",
+        false,
+        "a train line or a hub's motorisation: a few orders",
+    ),
     ("balance", false, "production rebalanced: many lines"),
     ("naval_queue", false, "the naval queue: several inputs"),
     ("dockyards", false, "dockyards assigned: several inputs"),
@@ -3649,6 +3653,9 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
     for name in ["stockpile", "balance"] {
         out.push(lane_of(manage, name));
     }
+    // the train line from the first day (on by default) and the hubs (`logistics.hubs`): a lane
+    // of every plan, not only of the war-first block (t1939n, 27 Nov 2026)
+    out.push(("logistics", plan_logistics::logistics_step));
     out.push(("production", |state, tools, plan, lease, now| {
         // idle military factories to the priority lines when the balance rule is off, then the
         // plan's own lines (plan_manage.rs)
