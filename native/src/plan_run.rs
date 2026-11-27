@@ -2264,8 +2264,11 @@ fn lanes_tick_inner(
     // leg and stayed empty all war in the other, so 2.7 M idle manpower, 480 political power and
     // an army group without a field marshal reached no one).
     plan_manage::daily_reads(state, tools, plan, now);
-    if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
-        return Ok(Tick::Acted(line));
+    // (ran already ahead of the war's turn unless a declaration was due: once a tick)
+    if due {
+        if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(line));
+        }
     }
     // Lanes that own an open issue of the run monitor go before the routine pass, each at most
     // once a game day (`scheduler.issues_due: false` turns it off). On by default: the monitor's
@@ -3130,9 +3133,9 @@ fn construction_fast_lane(
     } else {
         None
     };
-    if out.is_none() {
-        state.skip(now, "confast", "x", 6);
-    }
+    // after an order, two game hours (a quarter second in a pause) so the war and the pass get
+    // their ticks between the orders of a long queue
+    state.skip(now, "confast", "x", if out.is_some() { 2 } else { 6 });
     Ok(out)
 }
 
@@ -15831,16 +15834,6 @@ mod tests {
                 .filter(|(n, _)| n == "hoi4_politics_choose")
                 .count()
         };
-        // the war-first block acts on the first tick
-        assert!(matches!(
-            tick(&mut state, &w, &plan, "l", START).unwrap(),
-            Tick::Acted(_)
-        ));
-        assert_eq!(politics(&w), 0);
-        // the next tick belongs to a lane: politics, in the same game hour
-        tick(&mut state, &w, &plan, "l", START).unwrap();
-        assert_eq!(politics(&w), 1);
-        // and the next one to the war-first block again
         let armies = |w: &War| {
             w.calls
                 .borrow()
@@ -15848,6 +15841,18 @@ mod tests {
                 .filter(|(n, _)| n.starts_with("hoi4_army_"))
                 .count()
         };
+        // a fast lane (the plan's pick) takes the first tick, ahead of the war (t1939n, 27 Nov
+        // 2026: the war block kept the fast lanes waiting on the paused first day)
+        assert!(matches!(
+            tick(&mut state, &w, &plan, "l", START).unwrap(),
+            Tick::Acted(_)
+        ));
+        assert_eq!(politics(&w), 1);
+        // the next tick, in the same game hour, is the war-first block's
+        let before = armies(&w);
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert!(armies(&w) > before);
+        // and the war keeps its turns: the pick is not asked again
         let before = armies(&w);
         tick(&mut state, &w, &plan, "l", START + DAY).unwrap();
         assert!(armies(&w) > before);
