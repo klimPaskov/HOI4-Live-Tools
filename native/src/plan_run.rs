@@ -12419,11 +12419,20 @@ mod tests {
     #[test]
     fn a_tick_with_nothing_to_do_sleeps_short_while_a_declaration_is_near() {
         let mut state = super::State::default();
-        assert_eq!(super::nothing_pause(&mut state), std::time::Duration::from_secs(12));
+        assert_eq!(
+            super::nothing_pause(&mut state),
+            std::time::Duration::from_secs(12)
+        );
         state.done.insert(super::DECLARING_IDLE.to_string(), 1);
-        assert_eq!(super::nothing_pause(&mut state), std::time::Duration::from_secs(1));
+        assert_eq!(
+            super::nothing_pause(&mut state),
+            std::time::Duration::from_secs(1)
+        );
         // taken once: the next idle tick sleeps the usual time unless the window says so again
-        assert_eq!(super::nothing_pause(&mut state), std::time::Duration::from_secs(12));
+        assert_eq!(
+            super::nothing_pause(&mut state),
+            std::time::Duration::from_secs(12)
+        );
     }
 
     #[test]
