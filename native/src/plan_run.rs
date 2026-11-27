@@ -6912,7 +6912,15 @@ fn disband_step(
         return Ok(None);
     }
     let max = cfg["max"].as_u64().unwrap_or(u64::MAX);
-    if state.disbanded >= max || state.skipped(now, "disband", "all") {
+    if state.disbanded >= max {
+        plan_manage::note(
+            state,
+            "disband",
+            format!("disband.max {max} reached ({} disbanded)", state.disbanded),
+        );
+        return Ok(None);
+    }
+    if state.skipped(now, "disband", "all") {
         return Ok(None);
     }
     let keep: HashSet<i64> = list(cfg, "keep_states")
@@ -6923,13 +6931,30 @@ fn disband_step(
     // Only divisions standing in own states are candidates: an army fighting in enemy land
     // is never thinned (live 6 Nov 2026: Army 1 in Hararghe was picked).
     let me = text(&tools.call("hoi4_overview", &json!({}))?["player"]).to_string();
+    // Own land: controlled by us and owned by us or by a country no longer at war with us (land
+    // of a capitulated enemy is held, not fought over). Counting only owned states, every army
+    // standing in conquered land counted as fighting for good, and the weak formations in it were
+    // never disbanded (t1939n, 27 Nov 2026: weak_formation_fielded "acted 6x, no effect").
+    // (an unreadable war list counts every other owner as an enemy, as before)
+    let enemies: Option<Vec<String>> = tools
+        .call("hoi4_wars", &json!({}))
+        .ok()
+        .map(|w| plan_speed::enemies_at_war(&w));
     let own: HashSet<i64> = list(&tools.call("hoi4_states", &json!({"query": me}))?, "states")
         .iter()
-        .filter(|row| text(&row["owner"]) == me && text(&row["controller"]) == me)
+        .filter(|row| {
+            let owner = text(&row["owner"]);
+            text(&row["controller"]) == me
+                && (owner == me
+                    || enemies
+                        .as_ref()
+                        .is_some_and(|e| !e.iter().any(|t| t.as_str() == owner)))
+        })
         .filter_map(|row| row["state_id"].as_i64())
         .collect();
     let Some(home) = plan_war::home_land(state, tools) else {
         state.skip(now, "disband", "all", 7 * DAY);
+        plan_manage::note(state, "disband", "the home land is unreadable: tried again in 7 days");
         return Ok(None);
     };
     let supply = tools.call("hoi4_supply", &json!({}))?;
@@ -6948,6 +6973,8 @@ fn disband_step(
         }
     }
     let mut by_army: Vec<(String, Vec<String>)> = Vec::new();
+    // why each wanted division stays (the rule's note when it disbands nothing)
+    let mut stay: Vec<(String, usize)> = Vec::new();
     // Loose divisions (in no army) that the plan would disband, by the state they stand in. The
     // tool disbands divisions of an army, so they are formed into one first (below).
     let mut loose: Vec<(i64, Vec<String>)> = Vec::new();
@@ -6983,7 +7010,30 @@ fn disband_step(
             overseas.push(id.to_string());
             continue;
         }
-        if !wanted || !candidate || fighting.contains(army) || state.skipped(now, "disband", army) {
+        if wanted {
+            let why = if !candidate {
+                Some(if standing.is_some_and(|at| keep.contains(&at)) {
+                    "in a kept state (disband.keep_states or the war's theatre)"
+                } else {
+                    "on land that is not ours"
+                })
+            } else if fighting.contains(army) {
+                Some("in an army fighting in enemy-held land or at risk of encirclement")
+            } else if state.skipped(now, "disband", army) {
+                Some("in an army whose disband the game refused lately")
+            } else {
+                None
+            };
+            if let Some(why) = why {
+                let line = format!("{} ({army})", why);
+                match stay.iter_mut().find(|(w, _)| *w == line) {
+                    Some((_, n)) => *n += 1,
+                    None => stay.push((line, 1)),
+                }
+                continue;
+            }
+        }
+        if !wanted {
             continue;
         }
         match by_army.iter_mut().find(|(a, _)| a == army) {
@@ -7015,6 +7065,26 @@ fn disband_step(
             )));
         }
         state.skip(now, "disband", "all", 7 * DAY);
+        let shown: Vec<String> = stay
+            .iter()
+            .take(6)
+            .map(|(why, n)| format!("{n} {why}"))
+            .collect();
+        plan_manage::note(
+            state,
+            "disband",
+            if shown.is_empty() {
+                format!(
+                    "no division of {} stands to disband (none fielded, all overseas or shipped)",
+                    templates.join(", ")
+                )
+            } else {
+                format!(
+                    "nothing disbanded, the wanted divisions stay: {}; looked at again in 7 days",
+                    shown.join("; ")
+                )
+            },
+        );
         return Ok(None);
     };
     ids.truncate((max - state.disbanded).min(24) as usize);
@@ -11709,13 +11779,16 @@ fn decisions_step(
             args["target"] = json!(t);
         }
         let (ok, why) = state.act(tools, lease, "hoi4_decision_take", args, "dr")?;
-        state.skip(now, "dec", &skip, if ok { 30 * DAY } else { 3 * DAY });
+        let on = target.map_or_else(String::new, |t| format!(" on {t}"));
+        let rest = decision_rest(state, &skip, ok, now);
+        state.skip(now, "dec", &skip, rest);
         if ok {
             state
                 .done
                 .insert(format!("decrule:{id}#{}", taken + 1), now);
+        } else {
+            decision_refused_note(state, &key, &on, &skip, &why, rest);
         }
-        let on = target.map_or_else(String::new, |t| format!(" on {t}"));
         return Ok(Some(format!("decision {key}{on} (rule {id}): {ok} {why}")));
     }
     for d in list(&offered, "decisions") {
@@ -11728,11 +11801,66 @@ fn decisions_step(
                 json!({"decision": key}),
                 "de",
             )?;
-            state.skip(now, "dec", key, if ok { 30 * DAY } else { 3 * DAY });
+            let rest = decision_rest(state, key, ok, now);
+            state.skip(now, "dec", key, rest);
+            if !ok {
+                let key = key.to_string();
+                decision_refused_note(state, &key, "", &key, &why, rest);
+            }
             return Ok(Some(format!("decision {key}: {ok} {why}")));
         }
     }
     Ok(None)
+}
+
+/// How long a decision rests after a take (game hours): 30 days once taken; after a take that
+/// did not hold, 3 game days, doubled for each failure in a row (3, 6, 12, 24, 48). A take whose
+/// read-back shows no change is the same order meeting the same cause: sent every 3 days, the
+/// targeted GER_operational_planning on France failed five times in a row and the alert stayed
+/// open 158 days (t1939n, 27 Nov 2026).
+fn decision_rest(state: &mut State, skip: &str, ok: bool, now: GameHour) -> GameHour {
+    let prefix = format!("decfail:{skip}#");
+    let fails = state.done.keys().filter(|k| k.starts_with(&prefix)).count();
+    if ok {
+        state.done.retain(|k, _| !k.starts_with(&prefix));
+        return 30 * DAY;
+    }
+    state.done.insert(format!("{prefix}{}", fails + 1), now);
+    (3 * DAY) << fails.min(4)
+}
+
+/// The decisions lane's note after a take that did not hold: the decision, the game's or the
+/// tool's reason, how often in a row and how long it rests (the alert's row quotes it).
+fn decision_refused_note(
+    state: &mut State,
+    key: &str,
+    on: &str,
+    skip: &str,
+    why: &str,
+    rest: GameHour,
+) {
+    let prefix = format!("decfail:{skip}#");
+    let fails = state.done.keys().filter(|k| k.starts_with(&prefix)).count();
+    let before = plan_manage::note_of(state, "decisions")
+        .map(|n| n.split("; not taken: ").next().unwrap_or(n).to_string())
+        .unwrap_or_default();
+    let mut line = format!(
+        "not taken: {key}{on} {fails} time(s) in a row ({}); rests {} game days",
+        why.chars().take(160).collect::<String>(),
+        rest / DAY
+    );
+    if fails >= 3 {
+        line.push_str(
+            ": the same take keeps showing no change, so the order or its read-back is wrong for \
+             this decision (a targeted row goes by the mouse; its cost may not be political power)",
+        );
+    }
+    let text = if before.is_empty() {
+        line
+    } else {
+        format!("{before}; {line}")
+    };
+    plan_manage::note(state, "decisions", text);
 }
 
 /// `learned`: skills the player learned on panels no typed tool knows (a mod's mechanics) join
@@ -12776,6 +12904,26 @@ mod tests {
         let (why, silent) = super::lane_reason(&state, "doctrines", now).unwrap();
         assert!(!silent && why.contains("refused: doctrine x"), "{why}");
         assert!(super::lane_reason(&state, "player (manage.alerts_ignore)", now).is_none());
+    }
+
+    /// t1939n (27 Nov 2026): GER_operational_planning on France read back "no political power
+    /// spent, timer or removal observed" five times, every 3 days, with no word in the alert row.
+    #[test]
+    fn a_decision_take_that_does_not_hold_rests_longer_each_time_and_says_why() {
+        let mut state = State::default();
+        let rests: Vec<GameHour> = (0..6)
+            .map(|i| super::decision_rest(&mut state, "d@FRA", false, i * DAY))
+            .collect();
+        assert_eq!(
+            rests,
+            vec![3 * DAY, 6 * DAY, 12 * DAY, 24 * DAY, 48 * DAY, 48 * DAY]
+        );
+        super::decision_refused_note(&mut state, "d", " on FRA", "d@FRA", "input_readback_failed: x", 48 * DAY);
+        let n = plan_manage::note_of(&state, "decisions").unwrap().to_string();
+        assert!(n.contains("not taken: d on FRA 6 time(s) in a row") && n.contains("rests 48"), "{n}");
+        assert!(n.contains("keeps showing no change"), "{n}");
+        assert_eq!(super::decision_rest(&mut state, "d@FRA", true, 7 * DAY), 30 * DAY);
+        assert_eq!(super::decision_rest(&mut state, "d@FRA", false, 8 * DAY), 3 * DAY);
     }
 
     /// t1939n (27 Nov 2026): GER_autonomy_in_the_kriegsschulen failed six starts on the GUI path
