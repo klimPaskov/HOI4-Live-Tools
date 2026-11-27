@@ -2287,7 +2287,10 @@ fn lanes_tick_inner(
     // two 60-day legs (cmph1, cmps1, 27 Nov 2026: hoi4_decisions_list and hoi4_train never called).
     if plan["scheduler"]["issues_due"] != json!(false) && !state.round.issue_last {
         if let Some(line) = issue_lanes(state, tools, plan, lease, now, &lanes)? {
-            trace_lanes(now, &format!("issue: {}", line.chars().take(60).collect::<String>()));
+            trace_lanes(
+                now,
+                &format!("issue: {}", line.chars().take(60).collect::<String>()),
+            );
             state.round.issue_last = true;
             return Ok(Tick::Acted(line));
         }
