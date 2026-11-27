@@ -27,6 +27,10 @@
 //!   more for rough, narrow and fortified ground than infantry does.
 //! - LINE PROVINCES (`line_provinces`): the provinces of a line of states as one chain of
 //!   neighbours, in drawing order (the in-process set-path and spearhead commands take provinces).
+//! - THE FAR EDGE (`far_edge`): the back of a line of enemy states seen from our land: the
+//!   provinces of those states, in the far half of their depth (steps from our provinces), that
+//!   touch the sea or land beyond the line which is not ours and not nearer: the target line a
+//!   player draws so the whole front advances through the states, not a province into them.
 use super::{ints, list, text};
 use serde_json::Value;
 use std::cmp::Ordering;
@@ -62,6 +66,8 @@ pub(super) struct Prov {
     pub forts: i64,
     /// (neighbour province, the attack penalty of the river on that border, 0 or below)
     pub borders: Vec<(i64, f64)>,
+    /// the province touches the sea
+    pub coastal: bool,
 }
 
 /// The provinces of a `hoi4_province_graph` read (impassable borders left out).
@@ -105,6 +111,7 @@ pub(super) fn read_graph(read: &Value) -> HashMap<i64, Prov> {
                 movement: row["movement_cost"].as_f64().unwrap_or(1.0).max(0.1),
                 forts,
                 borders,
+                coastal: row["coastal"] == serde_json::json!(true),
             },
         );
     }
@@ -492,6 +499,102 @@ pub(super) fn line_provinces(g: &HashMap<i64, Prov>, line: &[i64]) -> Vec<i64> {
     out
 }
 
+/// THE FAR EDGE of `line` (enemy states) seen from the provinces of `ours` (own states), in
+/// drawing order: every province of the line's states whose depth (steps from our provinces
+/// through the graph) is in the far half of the line's depth and that touches the sea, a
+/// province outside the read, or a province beyond the line that is neither ours nor nearer.
+/// Every state of the line keeps at least its deepest province, so the line reads back across
+/// all of its states. A province the steps never reach counts as deepest. Empty when the graph
+/// holds no province of the line, none of ours, or no way from ours to the line (the caller keeps
+/// its own line then). Pure.
+///
+/// Why (w92c, 28 Nov 2026): every plain offensive was a stroke between two state centres, read
+/// back 1-4 provinces in the first enemy state; a front of 15-37 divisions converged on them,
+/// piled 21-31 to a province and stopped once they were reached.
+pub(super) fn far_edge(g: &HashMap<i64, Prov>, line: &[i64], ours: &[i64]) -> Vec<i64> {
+    let inside: HashSet<i64> = g
+        .iter()
+        .filter(|(_, r)| line.contains(&r.state))
+        .map(|(p, _)| *p)
+        .collect();
+    let own: HashSet<i64> = g
+        .iter()
+        .filter(|(_, r)| ours.contains(&r.state))
+        .map(|(p, _)| *p)
+        .collect();
+    if inside.is_empty() || own.is_empty() {
+        return Vec::new();
+    }
+    // steps from our provinces through everything the read holds that is not ours
+    let mut dist: HashMap<i64, usize> = own.iter().map(|p| (*p, 0)).collect();
+    let mut ring: Vec<i64> = {
+        let mut r: Vec<i64> = own.iter().copied().collect();
+        r.sort_unstable();
+        r
+    };
+    let mut d = 0;
+    while !ring.is_empty() {
+        d += 1;
+        let mut next = Vec::new();
+        for p in &ring {
+            for (q, _) in g.get(p).map(|r| r.borders.as_slice()).unwrap_or(&[]) {
+                if g.contains_key(q) && !dist.contains_key(q) {
+                    dist.insert(*q, d);
+                    next.push(*q);
+                }
+            }
+        }
+        next.sort_unstable();
+        ring = next;
+    }
+    // a line the steps never reach (the states between not read) has no depth: no edge
+    let Some(max) = inside.iter().filter_map(|p| dist.get(p)).copied().max() else {
+        return Vec::new();
+    };
+    let depth = |p: i64| dist.get(&p).copied().unwrap_or(max);
+    let floor = max.div_ceil(2).max(1);
+    let mut far: HashSet<i64> = inside
+        .iter()
+        .copied()
+        .filter(|p| {
+            let dp = depth(*p);
+            dp >= floor
+                && g.get(p).is_some_and(|r| {
+                    r.coastal
+                        || r.borders.iter().any(|(q, _)| {
+                            !inside.contains(q)
+                                && !own.contains(q)
+                                && dist.get(q).is_none_or(|dq| *dq >= dp)
+                        })
+                })
+        })
+        .collect();
+    // every state of the line keeps its deepest province
+    for s in line {
+        let mine: Vec<i64> = inside
+            .iter()
+            .copied()
+            .filter(|p| g.get(p).is_some_and(|r| r.state == *s))
+            .collect();
+        if mine.is_empty() || mine.iter().any(|p| far.contains(p)) {
+            continue;
+        }
+        if let Some(p) = mine.iter().copied().max_by_key(|p| (depth(*p), -*p)) {
+            far.insert(p);
+        }
+    }
+    let sub: HashMap<i64, Prov> = g
+        .iter()
+        .filter(|(p, _)| far.contains(p))
+        .map(|(p, r)| {
+            let mut r = r.clone();
+            r.borders.retain(|(q, _)| far.contains(q));
+            (*p, r)
+        })
+        .collect();
+    line_provinces(&sub, line)
+}
+
 /// The provinces of `g` that are the enemy's: in a state of `enemy_states` and not one of
 /// `ours` (provinces where our divisions stand, or a state we hold). Pure helper for callers.
 pub(super) fn enemy_provinces(
@@ -557,6 +660,7 @@ mod tests {
                 movement,
                 forts: 0,
                 borders: borders.to_vec(),
+                coastal: false,
             },
         )
     }
@@ -795,5 +899,48 @@ mod tests {
         assert_eq!(seen[&6], 5.0);
         let enemy = enemy_provinces(&g, &[7].into(), &HashSet::new(), &HashSet::new());
         assert!(enemy.contains(&1));
+    }
+
+    #[test]
+    fn the_far_edge_is_the_back_of_the_line_not_its_first_provinces() {
+        // own 1-2; the near enemy state 10 two provinces deep (11-12, then 13-14); state 20
+        // behind it on the sea (21-22); 13 also touches a third country outside the read (99)
+        let mut g: HashMap<i64, Prov> = [
+            prov(1, 1, "plains", &[(2, 0.0), (11, 0.0)]),
+            prov(2, 1, "plains", &[(1, 0.0), (12, 0.0)]),
+            prov(11, 10, "plains", &[(1, 0.0), (12, 0.0), (13, 0.0)]),
+            prov(12, 10, "plains", &[(2, 0.0), (11, 0.0), (14, 0.0)]),
+            prov(
+                13,
+                10,
+                "forest",
+                &[(11, 0.0), (14, 0.0), (21, 0.0), (99, 0.0)],
+            ),
+            prov(14, 10, "plains", &[(12, 0.0), (13, 0.0), (22, 0.0)]),
+            prov(21, 20, "plains", &[(13, 0.0), (22, 0.0)]),
+            prov(22, 20, "urban", &[(14, 0.0), (21, 0.0)]),
+        ]
+        .into_iter()
+        .collect();
+        for p in [21, 22] {
+            g.get_mut(&p).unwrap().coastal = true;
+        }
+        // the whole country: its coast and the third-country border, never 11 or 12 on ours
+        assert_eq!(far_edge(&g, &[10, 20], &[1]), vec![13, 21, 22]);
+        // the near state alone: its back (the third country, the state behind), not its front
+        assert_eq!(far_edge(&g, &[10], &[1]), vec![13, 14]);
+        // without our provinces in the read, or no way from them, there is no depth: the caller
+        // keeps its line
+        assert!(far_edge(&g, &[10], &[5]).is_empty());
+        let cut: HashMap<i64, Prov> = g
+            .iter()
+            .filter(|(p, _)| ![11, 12].contains(*p))
+            .map(|(p, r)| (*p, r.clone()))
+            .collect();
+        assert!(far_edge(&cut, &[20], &[1]).is_empty());
+        // the graph read carries the coast
+        let read = json!({"provinces": [{"province": 7, "state_id": 3, "coastal": true,
+            "borders": []}]});
+        assert!(read_graph(&read)[&7].coastal);
     }
 }

@@ -143,6 +143,12 @@ RULES = {
                                     "the declaration came before the attacking armies had planned: the first "
                                     "battles are fought without the bonus"),
     "order_not_executing": ("gameplay", "war", 7, 30, "a battle plan that never executes"),
+    "arrow_not_executing": ("gameplay", "war", 1, 3,
+                            "divisions on an arrow that does not execute stand still; a day is the bar for "
+                            "the operation's repair (stop and execute)"),
+    "army_outside_group_front": ("gameplay", "war", 1, 3,
+                                 "an army with its own order inside a group takes no part in the group's front; "
+                                 "a day is the bar for the operation to clear it"),
     "air_away_from_front": ("gameplay", "air_plan", 3, 14,
                             "planes flying land missions where no front of ours lies do not help the war"),
     "supply_collapsing": ("gameplay", "war", 7, 14,

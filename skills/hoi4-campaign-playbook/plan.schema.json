@@ -2839,6 +2839,10 @@
                 "type": "integer",
                 "minimum": 0,
                 "description": "with by_width: divisions a battle's reserve keeps, the freshest (default 0: a reserve joins only by over-filling the width)"
+              },
+              "thin_at_war": {
+                "type": "boolean",
+                "description": "true: at war the surplus is taken out into a second echelon as above. Default false: at war no division is taken off its order (each one moved arrives with planning 0); the stack is noted and the deep line keeps the front spread. An echelon that exists is still fed forward"
               }
             },
             "additionalProperties": false
@@ -2848,7 +2852,7 @@
               "mouse",
               "command"
             ],
-            "description": "command: the operation's orders carry exact provinces for the in-process army commands (a front with against + own_states, one order per stretch; a spearhead with target_provinces under its front's id; an arrow that misses its line gets a new path on the same order with replace_order, keeping the order and its planning bonus, never a delete or a clear). Default mouse. Only on a build with the in-process orders families proven live"
+            "description": "command: the operation's orders carry exact provinces for the in-process army commands (a front with against + own_states, one order per stretch; a spearhead with target_provinces under its front's id; an arrow that misses its line gets a new path on the same order with replace_order, keeping the order and its planning bonus, never a delete or a clear). Default: command when the run posts both in-process battle-plan families (orders and orders2), else mouse. mouse keeps the mouse path on such a run"
           },
           "axis_by": {
             "enum": [
@@ -2908,8 +2912,25 @@
             "description": "several small enemies in one window: while the armies facing one are under ratio:1 against the hostile divisions seen in its border states, or its deadline has passed with it still in the war, the operation's largest second echelon goes to the army facing it with the most room (merged, else the part that fits); at most two sends per enemy, one a game day"
           },
           "assault_guard": {
+            "type": [
+              "boolean",
+              "string"
+            ],
+            "enum": [
+              true,
+              false,
+              "odds"
+            ],
+            "description": "default true. A wing (an army attacking on its own, not armour) never starts its attack alone: it executes once an attack of the same war executes (or an army of the operation attacks into the same states), and an executing order is never stopped by the guard. \"odds\": it also waits for twice the enemy divisions seen in the target's border states (or a second direction, or 21 days of the joint attack). false: no guard"
+          },
+          "refine_days": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "game days an army rests from the operation's refinements at war once one acted on it (default 5): a width thinning out of it, an echelon fed into it, an opening send into it, a supply stop of it. Each takes divisions off their orders or stops the plan, so it acts at most once in this many days per army"
+          },
+          "deep_line": {
             "type": "boolean",
-            "description": "default true. A wing (an army attacking on its own, not armour) whose every way into its enemy states crosses a river, a fort or rough ground worth -0.4 attack or worse (hoi4_province_graph) keeps its front and planning and attacks only once a way in opens (a neighbouring state taken)"
+            "description": "default true when orders go by command: a plain offensive's target line is the far edge of its line's states seen from our border (the coast, the far border, the back of the last state; every line state keeps a province, none on our border), sent as exact provinces, so the whole front advances through the country instead of converging on the few provinces a stroke between two state centres reads back. A target the module or the game does not take is drawn by the stroke in the same call. false: the stroke"
           },
           "pockets": {
             "type": "boolean",
@@ -2917,7 +2938,7 @@
           },
           "wing_stall": {
             "type": "boolean",
-            "description": "default true. A wing that stood WING_STALL_DAYS at war with no state of its line taken gives the line's first state up (to the group or a pocket) and attacks the next one: its orders are cleared once, the front is clicked at the new line and the offensive drawn again. false: a stalled wing keeps its line"
+            "description": "default false. true: a wing that stood WING_STALL_DAYS at war with no state of its line taken gives the line's first state up (to the group or a pocket) and attacks the next one: its orders are cleared once (every division's planning goes with them), the front is clicked at the new line and the offensive drawn again. Default: a stalled wing keeps its line and its planning"
           },
           "regroup_at_war": {
             "type": "boolean",

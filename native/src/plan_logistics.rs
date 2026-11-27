@@ -36,9 +36,17 @@ use crate::error::Result;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Trucks a hub needs for full motorisation (game define SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST).
-const HUB_FULL_TRUCKS: f64 = 60.0;
+/// The levels of the motorisation setting (none, partial, full: hoi4_army_motorization's range).
 const FULL: u64 = 2;
+
+/// The trucks a hub takes for full motorisation, as the running game loads its defines
+/// (hoi4_supply `defines`, SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST); None when unread: the
+/// executor carries no number of its own for it (a mod may change it).
+fn hub_full_trucks(supply: &Value) -> Option<f64> {
+    supply["defines"]["SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST"]
+        .as_f64()
+        .filter(|v| *v >= 0.0)
+}
 
 /// What one army is wanted at and why.
 #[derive(Debug, PartialEq)]
@@ -46,7 +54,8 @@ pub(super) struct Want {
     pub army: String,
     pub level: u64,
     pub wanted: u64,
-    pub trucks: f64,
+    /// the trucks the raise takes (None: the game's cost per hub is unread)
+    pub trucks: Option<f64>,
     pub why: String,
 }
 
@@ -88,10 +97,26 @@ fn operation_armies(state: &State, plan: &Value) -> BTreeMap<String, (u64, Strin
             .as_u64()
             .unwrap_or(FULL)
             .min(FULL);
+        // the game name of each formation (the layout binds a plan role to the army that took
+        // it: t1939n, 27 Nov 2026, op_lowlands named "Armee Pommern", the roster read "Army 3",
+        // and no army of the operation was ever motorised)
         for f in list(op, "formations") {
             let army = text(&f["army"]);
-            if !army.is_empty() {
-                out.insert(army.to_string(), (level, id.to_string()));
+            if army.is_empty() {
+                continue;
+            }
+            let bound = state
+                .layout
+                .get(army)
+                .filter(|a| !a.is_empty())
+                .map_or(army, String::as_str);
+            out.insert(bound.to_string(), (level, id.to_string()));
+        }
+        // its second echelons follow the line they feed
+        let prefix = format!("echelon:{id}:");
+        for (k, e) in &state.layout {
+            if k.starts_with(&prefix) && !e.is_empty() {
+                out.insert(e.clone(), (level, id.to_string()));
             }
         }
     }
@@ -112,6 +137,7 @@ pub(super) fn hub_wants(
         .unwrap_or(50.0);
     let standing = plan["war"]["motorization"].as_u64().unwrap_or(0).min(FULL);
     let supplies = army_supply(supply);
+    let per_hub = hub_full_trucks(supply);
     let mut out = Vec::new();
     for a in list(roster, "armies") {
         let army = text(&a["army"]).to_string();
@@ -136,9 +162,9 @@ pub(super) fn hub_wants(
         }
         let hubs = states.len().max(1) as f64;
         let trucks = if wanted > level {
-            HUB_FULL_TRUCKS / FULL as f64 * (wanted - level) as f64 * hubs
+            per_hub.map(|full| full / FULL as f64 * (wanted - level) as f64 * hubs)
         } else {
-            0.0
+            Some(0.0)
         };
         out.push(Want {
             army,
@@ -150,9 +176,11 @@ pub(super) fn hub_wants(
     }
     // raises first, the hungriest (most trucks) last among them so a short stock serves more
     out.sort_by(|a, b| {
-        (b.wanted > b.level)
-            .cmp(&(a.wanted > a.level))
-            .then(a.trucks.total_cmp(&b.trucks))
+        (b.wanted > b.level).cmp(&(a.wanted > a.level)).then(
+            a.trucks
+                .unwrap_or(f64::MAX)
+                .total_cmp(&b.trucks.unwrap_or(f64::MAX)),
+        )
     });
     out
 }
@@ -296,14 +324,15 @@ pub(super) fn hub_raise_trucks(
     roster: &Value,
     supply: &Value,
 ) -> Option<f64> {
-    if plan["logistics"]["hubs"] != json!(true) {
+    if !hubs_on(plan) {
         return None;
     }
     let ops = operation_armies(state, plan);
+    // a raise whose cost per hub is unread adds nothing: the stock it needs is unknown
     let need: f64 = hub_wants(plan, roster, supply, &ops)
         .iter()
         .filter(|w| w.wanted > w.level)
-        .map(|w| w.trucks)
+        .filter_map(|w| w.trucks)
         .sum();
     Some(need)
 }
@@ -315,7 +344,7 @@ fn hubs_step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    if plan["logistics"]["hubs"] != json!(true) || state.skipped(now, "logi", "hubs") {
+    if !hubs_on(plan) || state.skipped(now, "logi", "hubs") {
         return Ok(None);
     }
     state.skip(now, "logi", "hubs", DAY / 2);
@@ -337,12 +366,25 @@ fn hubs_step(
         if state.skipped(now, "logi-army", &w.army) {
             continue;
         }
-        if w.trucks > stock {
-            short.push(format!(
-                "{} {} -> {} ({}) needs about {:.0} trucks, {:.0} in stock",
-                w.army, w.level, w.wanted, w.why, w.trucks, stock
-            ));
-            continue;
+        match w.trucks {
+            Some(need) if need > stock => {
+                short.push(format!(
+                    "{} {} -> {} ({}) needs about {need:.0} trucks, {stock:.0} in stock",
+                    w.army, w.level, w.wanted, w.why
+                ));
+                continue;
+            }
+            Some(_) => {}
+            // the cost is the game's: unread, the raise goes out and the game takes what the
+            // stock holds (the note says so: the read, not the rule, is missing)
+            None => super::plan_manage::note(
+                state,
+                "logistics",
+                format!(
+                    "{} {} -> {}: the hub's truck cost is unread (hoi4_supply defines): raised without a stock check ({stock:.0} trucks in stock)",
+                    w.army, w.level, w.wanted
+                ),
+            ),
         }
         let (ok, why) = state.act(
             tools,
@@ -370,6 +412,19 @@ fn hubs_step(
     Ok(None)
 }
 
+/// The hubs rule runs with `logistics.hubs: true`, and also when an operation names its
+/// `supply.motorization` (an operation that asks for trucks gets them without a second key;
+/// t1939n, 27 Nov 2026: op_lowlands asked for level 2, the plan had no `logistics`, every army
+/// stood at 0 and the divisions past the border starved). `logistics.hubs: false` keeps it off.
+fn hubs_on(plan: &Value) -> bool {
+    match &plan["logistics"]["hubs"] {
+        Value::Bool(b) => *b,
+        _ => list(plan, "operations")
+            .iter()
+            .any(|op| op["supply"]["motorization"].as_u64().is_some()),
+    }
+}
+
 /// The logistics rule: the train line first, then the hubs.
 pub(super) fn logistics_step(
     state: &mut State,
@@ -378,7 +433,7 @@ pub(super) fn logistics_step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    // the train line runs without the key; the hubs only with `logistics.hubs`
+    // the train line runs without the key; the hubs by `hubs_on`
     if let Some(line) = train_line_step(state, tools, plan, lease, now)? {
         return Ok(Some(line));
     }
@@ -422,7 +477,8 @@ mod tests {
             {"army": "Ost", "supply_percent": 70.0, "state_id": 11},
             {"army": "West", "supply_percent": 90.0, "state_id": 42},
             {"army": "Sud", "supply_percent": 30.0, "state_id": 7},
-            {"army": "Nord", "supply_percent": 95.0, "state_id": 5}]})
+            {"army": "Nord", "supply_percent": 95.0, "state_id": 5}],
+            "defines": {"SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST": 60.0}})
     }
 
     #[test]
@@ -442,8 +498,21 @@ mod tests {
         // goes back to the standing level; Nord attacks and keeps its trucks
         // (raises before lowerings; equal truck needs keep the roster order)
         assert_eq!(got, vec![("Ost", 1, 2), ("Sud", 0, 2), ("West", 2, 1)]);
-        assert_eq!(wants[0].trucks, 60.0, "two states, half a hub's cost each");
-        assert_eq!(wants[1].trucks, 60.0, "one state, two levels");
+        assert_eq!(
+            wants[0].trucks,
+            Some(60.0),
+            "two states, half a hub's cost each"
+        );
+        assert_eq!(wants[1].trucks, Some(60.0), "one state, two levels");
+        // the cost is the game's as loaded (a mod's 40 a hub), and unread it is no number
+        let mut modded = supply();
+        modded["defines"]["SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST"] = json!(40.0);
+        let wants = hub_wants(&plan, &roster(), &modded, &ops);
+        assert_eq!(wants[0].trucks, Some(40.0));
+        let mut unread = supply();
+        unread.as_object_mut().unwrap().remove("defines");
+        let wants = hub_wants(&plan, &roster(), &unread, &ops);
+        assert_eq!(wants[0].trucks, None);
         // the production response counts the raises' trucks (lowerings give none back here)
         assert_eq!(
             hub_raise_trucks(&state, &plan, &roster(), &supply()),
@@ -459,6 +528,28 @@ mod tests {
         assert!(hub_wants(&plan, &roster(), &supply(), &ops)
             .iter()
             .all(|w| w.army != "Ost"));
+    }
+
+    #[test]
+    fn an_operation_that_names_its_trucks_gets_them_by_the_armies_game_names() {
+        // t1939n (27 Nov 2026): op_lowlands asked for level 2, the plan had no `logistics`, the
+        // formations were named by their plan roles, and every army stood at 0
+        let plan = json!({"operations": [{"id": "op_west", "supply": {"motorization": 2},
+            "formations": [{"army": "Armee Pommern"}]}]});
+        assert!(hubs_on(&plan));
+        assert!(!hubs_on(&json!({"logistics": {"hubs": false},
+            "operations": [{"id": "x", "supply": {"motorization": 2}}]})));
+        assert!(!hubs_on(&json!({"operations": [{"id": "x"}]})));
+        let mut state = State::default();
+        state.done.insert("op:op_west:prep".into(), START);
+        state.layout.insert("Armee Pommern".into(), "Ost".into());
+        state
+            .layout
+            .insert("echelon:op_west:Ost".into(), "Sud".into());
+        let ops = operation_armies(&state, &plan);
+        assert_eq!(ops.get("Ost"), Some(&(2, "op_west".to_string())));
+        assert_eq!(ops.get("Sud"), Some(&(2, "op_west".to_string())));
+        assert!(!ops.contains_key("Armee Pommern"));
     }
 
     #[test]
