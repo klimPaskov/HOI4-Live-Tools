@@ -2864,19 +2864,99 @@ fn fleet_shape(
             break;
         }
     }
+    if order.is_none() && cfg["reserve_stays"] != json!(true) {
+        order = reserve_out(state, cfg, fleets, invasion, now);
+    }
     let Some((tool, args, key, what)) = order else {
         return Ok(None);
     };
     let (ok, why) = state.act(tools, lease, tool, args, "ns")?;
-    // a refused order waits a week; a merge is not repeated within the week either (task
-    // forces in other ports stay apart and would be merged again every tick)
-    if !ok || tool == "hoi4_fleet_merge" {
+    // a refused order waits a week; a merge or a move out of the reserve is not repeated within
+    // the week either (task forces in other ports stay apart and would be merged again every
+    // tick; a moved task force shows in its new fleet on the next read)
+    if !ok || tool == "hoi4_fleet_merge" || what.contains("out of the reserve fleet") {
         state.skip(now, "nshape", &key, 7 * DAY);
     }
     if !ok && code(&why) == "nothing_to_change" {
         note(state, "navy_shape", format!("{what}: nothing to change"));
     }
     Ok(Some(format!("navy shape: {what}: {ok} {why}")))
+}
+
+/// Submarines in a task force's `ships_by_type` (the unit type names the hull: "submarine").
+fn subs_of(tf: &Value) -> (u64, u64) {
+    tf["ships_by_type"].as_object().map_or((0, 0), |m| {
+        m.iter().fold((0, 0), |(subs, all), (kind, n)| {
+            let n = n.as_u64().unwrap_or(0);
+            (subs + if kind.contains("submarine") { n } else { 0 }, all + n)
+        })
+    })
+}
+
+/// A task force of the reserve fleet the plan does not keep there (`navy.reserve`) goes to a
+/// fleet with an admiral by its role: submarines to the fleet that holds the most submarines (the
+/// raiders), surface ships to the one with the most surface ships. A reserve fleet takes no
+/// admiral and no mission, and new ships land in it (t1939n, 27 Nov 2026: 23 ships idle there,
+/// the admiral_assignable alert open 259 days on it). `navy.reserve_stays: true` keeps them; pure
+/// but for the skip check.
+fn reserve_out(
+    state: &State,
+    cfg: &Value,
+    fleets: &[Value],
+    invasion: Option<&str>,
+    now: GameHour,
+) -> Option<(&'static str, Value, String, String)> {
+    let reserve = reserve_fleet(fleets)?;
+    let kept = strings(cfg, "reserve");
+    let led: Vec<&Value> = fleets
+        .iter()
+        .filter(|f| {
+            let name = text(&f["fleet"]);
+            !same_name(name, reserve)
+                && !invasion.is_some_and(|i| same_name(i, name))
+                && f["admiral"].as_str().is_some_and(|a| !a.trim().is_empty())
+        })
+        .collect();
+    let share = |f: &Value, subs: bool| -> u64 {
+        list(f, "task_forces")
+            .iter()
+            .map(|t| {
+                let (s, all) = subs_of(t);
+                if subs {
+                    s
+                } else {
+                    all - s
+                }
+            })
+            .sum()
+    };
+    let row = fleets.iter().find(|f| same_name(text(&f["fleet"]), reserve))?;
+    for tf in list(row, "task_forces") {
+        let name = text(&tf["task_force"]).to_string();
+        if name.is_empty()
+            || kept.iter().any(|k| same_name(k, &name))
+            || state.done.contains_key(&format!("nrep:{name}"))
+            || state.skipped(now, "nshape", &name)
+        {
+            continue;
+        }
+        let (subs, all) = subs_of(tf);
+        let raider = all > 0 && subs * 2 >= all;
+        let to = led
+            .iter()
+            .max_by_key(|f| share(f, raider))
+            .map(|f| text(&f["fleet"]).trim().to_string())?;
+        return Some((
+            "hoi4_fleet_assign",
+            json!({"task_force": name, "to_fleet": to}),
+            name.clone(),
+            format!(
+                "{name} ({all} ships{}) out of the reserve fleet into {to}",
+                if raider { ", submarines" } else { "" }
+            ),
+        ));
+    }
+    None
 }
 
 fn navy_step(
@@ -4699,6 +4779,45 @@ mod tests {
             why.starts_with("Kriegsmarine: Raeder; Flotta 1: the reserve fleet, no admiral slot; every fleet that takes an admiral has one"),
             "{why}"
         );
+    }
+
+    #[test]
+    fn reserve_fleet_ships_go_to_a_led_fleet_by_role_unless_the_plan_keeps_them() {
+        let fleets = json!([
+            {"fleet": "Kriegsmarine", "admiral": "Raeder", "task_forces": [
+                {"task_force": "Main", "mission": {"name": "strike_force"},
+                 "ships_by_type": {"heavy_cruiser": 3, "destroyer": 6}}]},
+            {"fleet": "U-Boote", "admiral": "Dönitz", "task_forces": [
+                {"task_force": "Wolf", "mission": {"name": "convoy_raiding"},
+                 "ships_by_type": {"submarine": 12}}]},
+            {"fleet": "Flotta 1", "admiral": null, "task_forces": [
+                {"task_force": "New subs", "mission": {"name": "reserve"},
+                 "ships_by_type": {"submarine": 4}},
+                {"task_force": "New screens", "mission": {"name": "reserve"},
+                 "ships_by_type": {"destroyer": 2}}]}]);
+        let rows = fleets.as_array().unwrap();
+        let state = State::default();
+        let (tool, args, _, what) =
+            reserve_out(&state, &json!({}), rows, None, START).unwrap();
+        assert_eq!(tool, "hoi4_fleet_assign");
+        assert_eq!(args, json!({"task_force": "New subs", "to_fleet": "U-Boote"}));
+        assert!(what.contains("4 ships, submarines"), "{what}");
+        let keep = json!({"reserve": ["New subs"]});
+        let (_, args, _, _) = reserve_out(&state, &keep, rows, None, START).unwrap();
+        assert_eq!(args, json!({"task_force": "New screens", "to_fleet": "Kriegsmarine"}));
+        // the move goes out once a week, not every tick
+        let tools = fake(vec![("hoi4_fleets", json!({"fleets": fleets}))]);
+        let plan = json!({"navy": {"posture": "coastal", "reserve": ["New screens"]}});
+        let mut state = State::default();
+        for day in 0..3 {
+            navy_step(&mut state, &tools, &plan, "l", START + day * DAY).unwrap();
+        }
+        let moved: Vec<Value> = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_fleet_assign")
+            .map(|(_, a)| a["task_force"].clone())
+            .collect();
+        assert_eq!(moved, vec![json!("New subs")]);
     }
 
     #[test]
