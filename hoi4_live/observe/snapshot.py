@@ -600,6 +600,7 @@ def build(raw, states_by_tag=None, executor=None, player_calls=None, trigger=Non
         "intelligence": _intel(raw),
         **_misc(raw),
         "omissions": g(raw, "observe", "now", "omissions", default=[]) or [],
+        "lane_turns": g(raw, "observe", "now", "lane_turns", default=[]) or [],
         "changes": [{"kind": c.get("kind"), "date": c.get("date"), "urgent": c.get("urgent"),
                      "detail": c.get("detail")} for c in g(raw, "observe", "changes", default=[]) or []],
         "executor": executor or {},

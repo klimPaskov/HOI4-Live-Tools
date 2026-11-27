@@ -109,7 +109,7 @@
 //!                    once at least `min_planes` wait and fewer than `max_wings` wings match; the new
 //!                    wing matches the entry and gets its mission on the next tick
 //!   politics_auto    {"enabled":true,"threshold":100,"cap":2000,"cap_margin":30,"order"?,"never"?,
-//!                    "recheck_days":30,"recheck_pp":25,"idle_wake_days":30} or false (rule 4, run by
+//!                    "recheck_days":30,"recheck_pp":25,"idle_wake_days":7} or false (rule 4, run by
 //!                    the politics domain after the plan's `politics` picks): political power at or
 //!                    above `threshold` beyond the reserve (the cost of each pending pick that could
 //!                    be bought now: its `when` holds and it is not backing off after a refusal), or
@@ -659,6 +659,8 @@ fn route(alert: &str) -> Route {
             &["air", "air_plan"],
         ),
         "no_divisions_in_training" => Route::Step("training", &["train"], &["training"]),
+        "deployment_ready" => Route::Step("training", &["train"], &["training"]),
+        "raid_detected" => Route::Info,
         "resistance" => Route::Step("occupation", &["mocc"], &["occupation"]),
         "unassigned_divisions" => Route::Step("armies", &["armycreate"], &["armies"]),
         "decisions_available" => Route::Step("decisions", &[], &["decisions", "decision_rules"]),
@@ -982,6 +984,7 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
         }
     }
     crate::watch::feed().set_omissions(Value::Array(omissions));
+    crate::watch::feed().set_lane_turns(super::lane_turns(state, now));
     let line = if lines.is_empty() {
         "no alerts".to_string()
     } else {
@@ -5388,7 +5391,7 @@ pub(super) fn politics_reserve(
 /// nothing. Every entry passed over says why in the digest (`manage.politics_auto`): short of
 /// power, its `when`, the last read's finding and when it is read again. Power at the cap wakes
 /// the player (`political_power_at_cap`), and so does power above the threshold that nothing in
-/// the order can use for `idle_wake_days` (30) (`political_power_idle`).
+/// the order can use for `idle_wake_days` (7, the hold grace) (`political_power_idle`), with what the game offers now.
 pub(super) fn politics_auto_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -5735,7 +5738,32 @@ pub(super) fn politics_auto_step(
         return Ok(None);
     }
     let since = *state.manage.pp_idle_since.get_or_insert(now);
-    let idle_days = cfg["idle_wake_days"].as_i64().unwrap_or(30);
+    // the same grace as a held pick: power with nothing in the order and no vacant seat is a
+    // judgement for the player within days, not a month (t1939o, 27 Nov 2026: 337 power, the
+    // order and the seats empty, enabled decisions open, "buys nothing" for 30 days)
+    let idle_days = cfg["idle_wake_days"]
+        .as_i64()
+        .unwrap_or(super::plan_xp::HOLD_GRACE / DAY);
+    // what the game offers now that the power pays (the decisions step's last read): the
+    // player picks by value from these, the executor does not price them
+    let offers: Vec<String> = state
+        .manage
+        .decisions_seen
+        .as_ref()
+        .filter(|(at, _)| now.saturating_sub(*at) <= 31 * DAY)
+        .map(|(_, read)| {
+            super::plan_omissions::affordable_decisions(read, budget, plan)
+                .into_iter()
+                .filter(|(k, _)| !super::decision_forbidden(plan, k))
+                .map(|(k, c)| format!("{k} ({c:.0})"))
+                .collect()
+        })
+        .unwrap_or_default();
+    let open = if offers.is_empty() {
+        String::new()
+    } else {
+        format!("; the game offers now: {}", offers.join(", "))
+    };
     if now.saturating_sub(since) >= idle_days * DAY {
         wake(
             state,
@@ -5743,15 +5771,15 @@ pub(super) fn politics_auto_step(
             now,
             4,
             "political_power_idle",
-            format!("political power {pp_text} has had nothing to buy for {idle_days} game days ({}); name advisors, laws or decisions in politics_auto.order or the plan's politics", seen.join("; ")),
-            json!({"political_power": pp_text, "reserve": reserve, "picks": picks, "order": seen}),
+            format!("political power {pp_text} has had nothing to buy for {idle_days} game days ({}){open}; choose by value now (hoi4_decision_take, hoi4_politics_options / hoi4_politics_choose, a war goal or relations the plan wants) and name the choice in decision_rules or politics_auto.order", seen.join("; ")),
+            json!({"political_power": pp_text, "reserve": reserve, "picks": picks, "order": seen, "offers": offers}),
         );
     }
     note(
         state,
         "politics_auto",
         format!(
-            "PP {pp_text} ({reserve_text}): nothing to buy [{}]",
+            "PP {pp_text} ({reserve_text}): nothing to buy in the order or a vacant seat [{}]{open}",
             seen.join(", ")
         ),
     );

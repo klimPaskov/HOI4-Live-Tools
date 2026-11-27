@@ -733,9 +733,9 @@
         },
         "idle_wake_days": {
           "type": "integer",
-          "default": 30,
+          "default": 7,
           "minimum": 0,
-          "description": "power above the threshold that nothing in the order can use for this long wakes the player (political_power_idle)"
+          "description": "power above the threshold that nothing in the order or a vacant seat can use for this long wakes the player (political_power_idle) with the decisions the game offers now that the power pays; the player chooses by value"
         },
         "why": {
           "type": "string",
@@ -982,6 +982,11 @@
           "type": "boolean",
           "default": true,
           "description": "true offers the lanes that own an open issue of the run monitor (RUN/issues_open.json, docs/MONITORING.md) ahead of the routine pass, each at most once a game day; false leaves the pass order alone"
+        },
+        "fair_turns": {
+          "type": "boolean",
+          "default": true,
+          "description": "true offers every pass lane a turn within 3 game days ahead of the setup layout, the war's turn and the issue lanes (oldest wait first, the first that acts takes the tick, quiet ones until 1.5 s of wall time); false leaves the lanes to the war share and the pass"
         },
         "construction_fast": {
           "type": "boolean",
