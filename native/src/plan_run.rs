@@ -12103,10 +12103,14 @@ mod tests {
         let day = super::date_hour("1939.9.1").unwrap();
         let mut state = State::default();
         // preparing (re-drawing): not ready, not executed
-        state.done.insert("op:op_poland:prep".into(), day - 20 * DAY);
+        state
+            .done
+            .insert("op:op_poland:prep".into(), day - 20 * DAY);
         let t0 = std::time::Instant::now() - std::time::Duration::from_secs(9);
         state.round.timed("designs", true, t0);
-        state.round.timed("politics", true, std::time::Instant::now());
+        state
+            .round
+            .timed("politics", true, std::time::Instant::now());
         state.round.timed("construction", false, t0);
         assert!(state.round.slow("designs"));
         assert!(!state.round.slow("politics"));
@@ -12126,7 +12130,11 @@ mod tests {
             assert!(!held(&mut state, "hold", now));
         }
         // the hold ends after the tail, and once the operation executes
-        assert!(!held(&mut state, "designs", day + super::OPENING_HOLD_TAIL + DAY));
+        assert!(!held(
+            &mut state,
+            "designs",
+            day + super::OPENING_HOLD_TAIL + DAY
+        ));
         state.done.insert("op:op_poland:exec".into(), day);
         assert!(!held(&mut state, "designs", day));
         // no operation against the target: no hold
