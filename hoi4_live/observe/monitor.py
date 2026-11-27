@@ -12,7 +12,7 @@ import os
 import time
 from collections import deque
 
-from . import answer, budget, cleanliness, costs
+from . import answer, budget, cleanliness, costs, gamerules
 from .escalation import ESCALATIONS_PER_YEAR, Escalator, gate_kind, gate_packet
 from .issues import Detector, _atomic
 from .lessons import LessonStore, lessons_from_issue, store_dir
@@ -36,6 +36,9 @@ class Monitor:
         self.name = os.path.basename(os.path.abspath(run_dir))
         self.replaying = replay
         self.plan = _load(os.path.join(run_dir, "plan.json"), {}) or {}
+        if not os.environ.get("HOI4_GAME_DIR") and not gamerules.DEFAULT_DIR:
+            gamerules.DEFAULT_DIR = gamerules.game_dir_of_run(run_dir)
+            gamerules.DEFAULT_MODS = gamerules.mods_of_run(run_dir)
         self.plan_name = ((self.plan.get("_meta") or {}).get("name") if isinstance(self.plan.get("_meta"), dict)
                           else None) or self.name
         self.store_path = store or store_dir(run_dir)

@@ -2089,15 +2089,27 @@ pub fn tick(
         }
         waiting.get_or_insert((key, new));
     }
-    if let Some((event, new)) = waiting {
-        return Ok(Tick::Waiting { event, new });
+    // A new event waiting for the model ends the run so the model sees it. Once seen, the wait
+    // holds the event only, never the other lanes: the game runs on under an open event, and a
+    // step whose click an event covers is refused as event_covered and rests. Waiting blocked
+    // every lane for its patience and longer (dg86b, 27 Nov 2026: one tick in 14 game days while
+    // an unruled choice and two events covered by it waited; the pass never ran, political power
+    // and experience banked, nothing trained).
+    if let Some((event, true)) = waiting.as_ref() {
+        return Ok(Tick::Waiting {
+            event: event.clone(),
+            new: true,
+        });
     }
     // 1a. day 0, paused before the first unpause: free military factories to the starting lines
     // the plan keeps, before anything else (plan_manage.rs)
     if let Some(step) = plan_manage::day0_step(state, tools, plan, lease, now)? {
         return Ok(Tick::Acted(step));
     }
-    lanes_tick(state, tools, plan, lease, now)
+    match (lanes_tick(state, tools, plan, lease, now)?, waiting) {
+        (Tick::Nothing, Some((event, new))) => Ok(Tick::Waiting { event, new }),
+        (out, _) => Ok(out),
+    }
 }
 
 /// The pass scheduler (EVERY-TICK DESIGN). A pass offers every lane once, in value order; a lane
@@ -2153,6 +2165,16 @@ fn lanes_tick_inner(
         state.sched.turns.insert("speed", now);
         trace_lanes(now, "speed");
         return Ok(Tick::Acted(line));
+    }
+    // the fast lanes before the setup layout and the war's turn (see `fast_lanes_turn`), unless
+    // a dated declaration is due: its orders go out on the date
+    let due = war_first
+        && plan_operation::awaiting_war(state)
+        && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD);
+    if !due {
+        if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(line));
+        }
     }
     // Before the war, a role an operation names that has no army takes the tick ahead of every
     // lane, the paused first day included (t1939e-g, 24 Nov 2026: the layout behind the lanes
@@ -2242,37 +2264,9 @@ fn lanes_tick_inner(
     // leg and stayed empty all war in the other, so 2.7 M idle manpower, 480 political power and
     // an army group without a field marshal reached no one).
     plan_manage::daily_reads(state, tools, plan, now);
-    // A free research slot and a free focus are checked every tick (cheap reads, each lost day
-    // is a day of the slot): a pass of slow GUI orders left the focus idle for 14 game days
-    // (g17j 1936.4). They act before the pass resumes.
-    for (name, step) in FAST_LANES {
-        if opening_holds(state, tools, plan, name, now) {
-            continue;
-        }
-        state.last_ok = None;
-        let started = std::time::Instant::now();
-        let result = step(state, tools, plan, lease, now)?;
-        state.round.timed(name, result.is_some(), started);
-        // the fast lanes answer the issues they own too (s7m, 24 Nov 2026: the focus issues
-        // escalated with no lane outcome while the lesson held the refused focus): an order
-        // passed or was refused, or the lane's stage says what it waits for
-        let said = match (&result, state.last_ok) {
-            (Some(line), Some(false)) => Some(("refused", line.clone())),
-            (Some(line), _) => Some(("acted", line.clone())),
-            (None, _) if name == "focus" => state
-                .stages
-                .focus
-                .as_ref()
-                .map(|(t, _)| ("waiting", t.clone())),
-            (None, _) => None,
-        };
-        if let Some((outcome, reason)) = said {
-            state.issues.record_outcome(name, outcome, &reason, now);
-        }
-        if let Some(line) = result {
-            state.sched.turns.insert(name, now);
-            state.round.lane_acted(name, now);
-            trace_lanes(now, &format!("fast {name}"));
+    // (ran already ahead of the war's turn unless a declaration was due: once a tick)
+    if due {
+        if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(line));
         }
     }
@@ -2286,7 +2280,14 @@ fn lanes_tick_inner(
     // and the routine pass (decisions, training, officer corps, the manage reads) never ran in
     // two 60-day legs (cmph1, cmps1, 27 Nov 2026: hoi4_decisions_list and hoi4_train never called).
     if plan["scheduler"]["issues_due"] != json!(false) && !state.round.issue_last {
-        if let Some(line) = issue_lanes(state, tools, plan, lease, now, &lanes)? {
+        if let Some(line) = issue_lanes(
+            state,
+            tools,
+            plan,
+            lease,
+            now,
+            &issue_owners(plan, war_first),
+        )? {
             trace_lanes(
                 now,
                 &format!("issue: {}", line.chars().take(60).collect::<String>()),
@@ -3093,11 +3094,101 @@ fn lane_of(list: &[Lane], name: &str) -> Lane {
 /// air, navy, intelligence and the rest. Each manage, military and affairs rule is its own lane,
 /// so a rule with work every pass never holds back the rules behind it.
 /// The lanes checked every tick ahead of the pass (see `lanes_tick`).
-const FAST_LANES: [Lane; 3] = [
+const FAST_LANES: [Lane; 5] = [
+    ("factories", factories_lane),
     ("research", research_lane),
     ("focus", focus_lane),
-    ("factories", factories_lane),
+    ("politics", politics_fast_lane),
+    ("construction", construction_fast_lane),
 ];
+
+/// Civilian factories with nothing to build are checked every tick like a free military factory
+/// (one economy read; at most every 6 game hours when they are all busy): the plan's ordered
+/// items, then its open jobs (t1939n, 27 Nov 2026: "free civilian factories build nothing" open
+/// 13 days from the first day while the pass did not come round). `scheduler.construction_fast:
+/// false` leaves construction to the pass alone.
+fn construction_fast_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if plan["scheduler"]["construction_fast"] == json!(false) || state.skipped(now, "confast", "x")
+    {
+        return Ok(None);
+    }
+    let Ok(economy) = tools.call("hoi4_economy", &json!({})) else {
+        return Ok(None);
+    };
+    let idle = economy["civilian_factories_idle"]
+        .as_i64()
+        .or(economy["civilian_factories_available_for_projects"].as_i64())
+        .unwrap_or(0);
+    let out = if idle > 0 {
+        match construction_plan_step(state, tools, plan, lease, now)? {
+            Some(line) => Some(line),
+            None => construction_step(state, tools, plan, lease, now, &economy)?,
+        }
+    } else {
+        None
+    };
+    // after an order, two game hours (a quarter second in a pause) so the war and the pass get
+    // their ticks between the orders of a long queue
+    state.skip(now, "confast", "x", if out.is_some() { 2 } else { 6 });
+    Ok(out)
+}
+
+/// The fast lanes' turn (FAST_LANES): the first that acts takes the tick. Called ahead of the
+/// war's turn and the setup layout as well as before the pass, so a free factory, research slot,
+/// focus, unspent power or idle civilian factory never waits behind slow war orders (t1939n,
+/// 27 Nov 2026: 35 of 75 military factories stood on no line and the civilian factories built
+/// nothing from the paused first day until the 29th: on the paused day the war block took three
+/// ticks of four and research and focus took the fourth one by one, then an open event held
+/// every lane). Never while a dated declaration is due (`declaring`).
+fn fast_lanes_turn(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    // A free research slot and a free focus are checked every tick (cheap reads, each lost day
+    // is a day of the slot): a pass of slow GUI orders left the focus idle for 14 game days
+    // (g17j 1936.4). They act before the pass resumes.
+    for (name, step) in FAST_LANES {
+        if opening_holds(state, tools, plan, name, now) {
+            continue;
+        }
+        state.last_ok = None;
+        let started = std::time::Instant::now();
+        let result = step(state, tools, plan, lease, now)?;
+        state.round.timed(name, result.is_some(), started);
+        // the fast lanes answer the issues they own too (s7m, 24 Nov 2026: the focus issues
+        // escalated with no lane outcome while the lesson held the refused focus): an order
+        // passed or was refused, or the lane's stage says what it waits for
+        let said = match (&result, state.last_ok) {
+            (Some(line), Some(false)) => Some(("refused", line.clone())),
+            (Some(line), _) => Some(("acted", line.clone())),
+            (None, _) if name == "focus" => state
+                .stages
+                .focus
+                .as_ref()
+                .map(|(t, _)| ("waiting", t.clone())),
+            (None, _) => None,
+        };
+        if let Some((outcome, reason)) = said {
+            state.issues.record_outcome(name, outcome, &reason, now);
+        }
+        if let Some(line) = result {
+            state.sched.turns.insert(name, now);
+            state.round.lane_acted(name, now);
+            trace_lanes(now, &format!("fast {name}"));
+            return Ok(Some(line));
+        }
+    }
+    Ok(None)
+}
 
 /// Military factories on no line are checked every tick like a free research slot (two memory
 /// reads) and fed at once by the production rules (plan_manage::free_factories_step). As a turn
@@ -3379,6 +3470,42 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
     out
 }
 
+/// Steps of the war-first block that answer a monitor issue on their own: their lanes are not in
+/// a war-first plan's pass, so before them an issue of theirs found no lane and went to the player
+/// (cmph1, cmps1, 27 Nov 2026: eight armies without a general and an army group without a field
+/// marshal stayed open for a month as "no executor lane acts on it (command)" while free leaders
+/// waited; the command step sat sixth in the war block, behind steps that took every turn).
+const WAR_BLOCK_ISSUE_LANES: [Lane; 2] = [
+    ("command", plan_formations::command_step),
+    ("ship", plan_ship::step),
+];
+
+/// The lanes that can be offered for a monitor issue: the pass's lanes, and in a war-first plan
+/// the war block's own steps that answer an issue alone (WAR_BLOCK_ISSUE_LANES).
+fn issue_owners(plan: &Value, war_first: bool) -> Vec<Lane> {
+    let mut out = lanes(plan, war_first);
+    for lane in WAR_BLOCK_ISSUE_LANES {
+        if !out.iter().any(|(n, _)| *n == lane.0) {
+            out.push(lane);
+        }
+    }
+    out
+}
+
+/// The names of every lane that owns monitor issues (any plan): an issue of another lane goes to
+/// the player in the omissions feed.
+pub(super) fn issue_owner_names(plan: &Value) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = issue_owners(plan, true)
+        .iter()
+        .chain(issue_owners(plan, false).iter())
+        .map(|(n, _)| *n)
+        .chain(["research", "focus", "war"])
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
 /// Where the pass stands (see [`lanes_tick`]).
 #[derive(Default)]
 struct Round {
@@ -3536,6 +3663,34 @@ fn politics_key(index: usize, pick: &Value) -> String {
     )
 }
 
+/// A politics refusal that says the pick is already in force (the seat holds it, or the country
+/// has the idea); pure.
+pub(super) fn politics_already_held(why: &str) -> bool {
+    let w = why.to_lowercase();
+    w.contains("already holds") || w.contains("already active") || w.contains("already has")
+}
+
+/// Politics as a fast lane: at most once a game day unless it bought something, so power the
+/// pass's slow lanes would leave banked is spent within a day (cmps1/cmph1, 27 Nov 2026: in the
+/// 1939 opening the pass reached politics only on day 27 while the power stood at 1,077-1,136).
+/// Its reads are the power (a memory read) and, when there is something to buy, one options read.
+fn politics_fast_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if plan["scheduler"]["politics_fast"] == json!(false) || state.skipped(now, "polfast", "x") {
+        return Ok(None);
+    }
+    let out = politics_step(state, tools, plan, lease, now)?;
+    if out.is_none() {
+        state.skip(now, "polfast", "x", DAY);
+    }
+    Ok(out)
+}
+
 /// Politics (tick step 4): the plan's one-shot picks, then the standing political-power policy
 /// (`politics_auto`, plan_manage.rs) for the power the picks leave unspent.
 fn politics_step(
@@ -3566,8 +3721,9 @@ fn politics_step(
                 .and_then(|e| e["political_power"]["raw_signed"].as_f64())
                 .map(|raw| raw / 100_000.0);
         }
-        // Not before the country has gained 15 points since the last refusal, or the
-        // pick's own "cost" when the plan names it (above what earlier picks wait for). A
+        // Not before the power has grown since the last refusal (the backoff sets how often),
+        // nor below the pick's own "cost" when the plan names it (above what earlier picks wait
+        // for); no amount is kept in code (it was 15 points). A
         // power that cannot be read is no reason to try: the game refused such a blind try
         // and the refusal let the standing policy spend the power the pick was waiting for.
         let need = pick["cost"].as_f64().unwrap_or(0.0);
@@ -3576,12 +3732,12 @@ fn politics_step(
                 let since = state
                     .pol_pp_at_fail
                     .get(&key)
-                    .map_or(f64::MIN, |p| p + 15.0);
+                    .map_or(f64::MIN, |p| p.next_up());
                 if pp < need + held_back {
                     held_back += need;
                     continue;
                 }
-                // Waiting only for 15 points since its last refusal (a refusal that was not the
+                // Waiting only for the power to grow since its last refusal (a refusal that was not the
                 // price: a focus or a law first): it holds no power back for later picks.
                 if pp < since {
                     continue;
@@ -3597,7 +3753,10 @@ fn politics_step(
             json!({"category": pick["category"], "slot": pick["slot"], "idea": pick["idea"]}),
             "po",
         )?;
-        if ok || why.contains("already holds") {
+        // a pick already in force is done: "already holds" (the seat) and "already active" (an
+        // idea the country has: cmps1, 27 Nov 2026, war_economy refused as already active kept
+        // its 150 in the reserve for the rest of the run)
+        if ok || politics_already_held(&why) {
             state.pol_fails.remove(&key);
             state.pol_pp_at_fail.remove(&key);
             state.done.insert(key, now);
@@ -7647,12 +7806,42 @@ fn special_projects_step(
     )))
 }
 
+/// The experience the doctrines read shows for `id` (a grand doctrine or subdoctrine on offer):
+/// the game's price with its reduction, else the read's base cost; pure.
+fn doctrine_price(read: &Value, id: &str) -> Option<f64> {
+    list(read, "folders").iter().find_map(|f| {
+        list(f, "available_grand_doctrines")
+            .iter()
+            .chain(
+                list(f, "tracks")
+                    .iter()
+                    .flat_map(|t| list(t, "available_subdoctrines").iter()),
+            )
+            .find(|o| text(&o["id"]) == id)
+            .and_then(|o| {
+                o["estimated_cost_after_reduction"]
+                    .as_f64()
+                    .or_else(|| o["xp_cost"].as_f64())
+            })
+    })
+}
+
+/// Whether the doctrines read shows `id` taken: a folder's grand doctrine or a track's
+/// subdoctrine (an object with its `id`, or the bare key); pure.
+fn doctrine_taken(read: &Value, id: &str) -> bool {
+    let is = |v: &Value| v.as_str() == Some(id) || v["id"].as_str() == Some(id);
+    list(read, "folders").iter().any(|f| {
+        is(&f["grand_doctrine"]) || list(f, "tracks").iter().any(|t| is(&t["subdoctrine"]))
+    })
+}
+
 /// Experience never idles on an empty doctrine track. Every 14 days: for each folder that holds
 /// a grand doctrine, an empty track takes a subdoctrine once the folder's experience covers its
 /// price above the reserve. The plan's own `doctrines` entries for a folder go first (a pending
 /// one holds that folder's experience); then `doctrine_defaults.<folder>` (subdoctrine ids in
 /// preference order), else the first subdoctrine the game offers on the track. Experience kept
-/// back: `manage.xp_reserve.<army|navy|air>` (army 30 by default, for templates and designs).
+/// back: `manage.xp_reserve.<army|navy|air>` (none by default: the plan's `xp_budget` holds what
+/// templates and designs need, and no amount is kept in code).
 /// Grand doctrines are the plan's decision and never chosen here. `manage.off` "doctrines" stops it.
 fn doctrine_fill(
     state: &mut State,
@@ -7695,9 +7884,7 @@ fn doctrine_fill(
             _ => "army",
         };
         // every spend the plan's xp_budget lists comes before a default fill (plan_xp.rs)
-        let reserve = plan["manage"]["xp_reserve"][kind]
-            .as_f64()
-            .unwrap_or(if kind == "army" { 30.0 } else { 0.0 })
+        let reserve = plan["manage"]["xp_reserve"][kind].as_f64().unwrap_or(0.0)
             + plan_xp::ahead(state, tools, plan, kind, &plan_xp::Spender::Unlisted, now).0;
         let xp = folder["experience"]
             .as_f64()
@@ -7846,6 +8033,16 @@ fn extras_step(
                 // nothing to adopt: the entry is not this step's to fix
                 (None, None) => continue,
             };
+            // already the game's (the start doctrine, a focus, an earlier run): done, so it
+            // neither holds the folder's experience nor keeps the fill off the folder's empty
+            // tracks (t1939n, 27 Nov 2026: the plan's first land entry, mobile_infantry, was
+            // the infantry track's since the start; it waited on experience holds all war and
+            // the armour track stayed empty with 105-117 army experience banked)
+            if doctrine_taken(&read, doctrine) {
+                state.doc_xp.remove(&part_key);
+                state.done.insert(part_key, now);
+                continue;
+            }
             if state.skipped(now, "doc", &part_key) {
                 break;
             }
@@ -7856,7 +8053,11 @@ fn extras_step(
                 _ => "army",
             };
             let xp = read["experience"][kind]["value"].as_f64().unwrap_or(0.0);
-            let cost = entry["xp"].as_f64().unwrap_or(100.0);
+            // the price the game's read shows for this doctrine (its cost reduction applied),
+            // else the plan's estimate, else none: then the game's Unlock decides alone (owner,
+            // 27 Nov 2026: no cost in code; it was 100 for every entry without `xp`)
+            let price = doctrine_price(&read, doctrine).or_else(|| entry["xp"].as_f64());
+            let cost = price.unwrap_or(0.0);
             // the spends the plan's xp_budget lists before this doctrine (templates, officer
             // corps, designs) are paid first (plan_xp.rs)
             let who = item_id(entry).map_or(plan_xp::Spender::Unlisted, |id| {
@@ -7878,15 +8079,13 @@ fn extras_step(
             }
             // the game disabled Unlock at this experience (the plan's cost is an estimate; the
             // game's own cost modifiers are not read): wait until it has grown
-            if let Some(failed) = state.doc_xp.get(&part_key) {
-                let more = (cost * 0.2).max(10.0);
-                if xp < failed + more {
+            if let Some(failed) = state.doc_xp.get(&part_key).copied() {
+                if xp < failed {
                     plan_manage::note(
                         state,
                         "doctrines",
                         format!(
-                            "{doctrine}: Unlock was disabled at {failed:.0} experience; waits for {:.0}",
-                            failed + more
+                            "{doctrine}: Unlock was disabled; waits for {failed:.0} experience"
                         ),
                     );
                     break;
@@ -7928,10 +8127,7 @@ fn extras_step(
                     .and_then(|t| t.split_whitespace().next())
                     .and_then(|n| n.parse::<f64>().ok());
                 if let Some(n) = needed {
-                    let more = (cost * 0.2).max(10.0);
-                    state
-                        .doc_xp
-                        .insert(part_key.clone(), (n * 0.75 - more).max(xp));
+                    state.doc_xp.insert(part_key.clone(), (n * 0.75).max(xp));
                     plan_manage::note(
                         state,
                         "doctrines",
@@ -7940,16 +8136,13 @@ fn extras_step(
                         ),
                     );
                 } else if let Some(price) = priced {
-                    let more = (cost * 0.2).max(10.0);
-                    state
-                        .doc_xp
-                        .insert(part_key.clone(), (price - more).max(xp));
+                    state.doc_xp.insert(part_key.clone(), price.max(xp));
                     plan_manage::note(
                         state,
                         "doctrines",
                         format!(
                             "{doctrine}: the game prices it at {price:.0} experience ({xp:.0} held); \
-                             waits for it (the plan's xp {cost:.0} is below the game's price)"
+                             waits for it"
                         ),
                     );
                 } else if why.contains("doctrine_unavailable") || why.contains("Unlock") {
@@ -7959,7 +8152,7 @@ fn extras_step(
                     // (live 15 Nov 2026: the same refusal four times in 285 days).
                     let n = state.doc_refused.entry(part_key.clone()).or_insert(0);
                     *n += 1;
-                    if *n >= 3 || xp >= 2.0 * cost {
+                    if *n >= 3 || price.is_some_and(|c| xp >= 2.0 * c) {
                         let n = *n;
                         state.done.insert(part_key.clone(), now);
                         plan_manage::note(
@@ -7972,7 +8165,8 @@ fn extras_step(
                             ),
                         );
                     } else {
-                        state.doc_xp.insert(part_key.clone(), xp);
+                        // tried again only once the experience has grown past this refusal
+                        state.doc_xp.insert(part_key.clone(), xp.next_up());
                     }
                 }
                 state.skip(now, "doc", &part_key, 15 * DAY);
@@ -8303,20 +8497,31 @@ fn air_war_missions(
                 // they fly to the new base, and a mission left to a later tick came a war day
                 // or more after the rebase (rd2-rd6, 19 Nov 2026: 6 of 12 fighters flew on
                 // war day 1, the 6 rebased ones only from day 3-5)
-                let went: Vec<String> = names
-                    .iter()
-                    .filter(|n| moved.contains(*n))
-                    .cloned()
-                    .collect();
+                // Each wing takes its own mission: one base's batch holds fighters, close air
+                // support and naval bombers alike, and the batch's first mission sent for all of
+                // them was refused for the others after a 34 s read-back that held the dated
+                // declaration a day (t1939n, 27 Nov 2026: air_superiority for 8 wings, 5 of them
+                // Stukas and naval bombers, Diverged; Poland declared 09.02 instead of 09.01).
                 let mut then = String::new();
-                if !went.is_empty() {
-                    let mut targets: Vec<i64> = operation.clone();
-                    targets.sort_by_key(|t| !contact.contains(t));
-                    let over = air_target(&borders, &targets, Some(to), first);
+                let mut missions: Vec<&str> = Vec::new();
+                for (n, _, m) in &rebases {
+                    if moved.contains(n) && !missions.contains(m) {
+                        missions.push(*m);
+                    }
+                }
+                let mut targets: Vec<i64> = operation.clone();
+                targets.sort_by_key(|t| !contact.contains(t));
+                let over = air_target(&borders, &targets, Some(to), first);
+                for m in missions {
+                    let went: Vec<String> = rebases
+                        .iter()
+                        .filter(|(n, _, wm)| *wm == m && moved.contains(n))
+                        .map(|(n, _, _)| n.clone())
+                        .collect();
                     let args = if went.len() == 1 {
-                        json!({"wing": went[0], "mission": mission, "state_id": over})
+                        json!({"wing": went[0], "mission": m, "state_id": over})
                     } else {
-                        json!({"wings": went, "mission": mission, "state_id": over})
+                        json!({"wings": went, "mission": m, "state_id": over})
                     };
                     let (flew, how) = state.act(tools, lease, "hoi4_air_mission", args, "am")?;
                     if flew {
@@ -8324,7 +8529,7 @@ fn air_war_missions(
                             state.skip(now, "airwing", name, 30 * DAY);
                         }
                     }
-                    then = format!("; then {mission} over state {over}: {flew} {how}");
+                    then.push_str(&format!("; then {m} over state {over}: {flew} {how}"));
                 }
                 return Ok(Some(format!(
                     "air {} wing(s) rebase to front state {to} for {mission} ({}): {ok} {why}{then}",
@@ -13219,6 +13424,60 @@ mod tests {
     }
 
     #[test]
+    fn a_seen_event_waiting_for_the_model_holds_itself_and_not_the_lanes() {
+        // dg86b (27 Nov 2026): an unruled choice waited for the model and every lane with it:
+        // one scheduler tick in 14 game days
+        let lab = IdleLab(War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        });
+        struct Open<'a>(&'a IdleLab);
+        impl Tools for Open<'_> {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_events" {
+                    return Ok(json!({"events": [{"event": "denmark_trade_deal.1",
+                        "options": ["This could be beneficial", "We have no need"]}]}));
+                }
+                self.0.call(name, args)
+            }
+        }
+        let tools = Open(&lab);
+        let mut state = State::default();
+        let mut plan = war_plan();
+        plan["research_priority"] = json!(["tech_a"]);
+        plan["wait_events_days"] = json!(3);
+        // the model sees the new event first: nothing else acts on that tick
+        assert_eq!(
+            tick(&mut state, &tools, &plan, "l", START).unwrap(),
+            Tick::Waiting {
+                event: "denmark_trade_deal.1".into(),
+                new: true
+            }
+        );
+        assert!(!lab
+            .0
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, _)| n == "hoi4_research_start"));
+        // then, while it waits for the model, the lanes go on (the idle research slot is filled)
+        for i in 1..=(super::WAR_SHARE as i64 + 2) {
+            let out = tick(&mut state, &tools, &plan, "l", START + i).unwrap();
+            assert!(
+                !matches!(&out, Tick::Acted(s) if s.starts_with("event ")),
+                "{out:?}"
+            );
+        }
+        assert!(lab
+            .0
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, _)| n == "hoi4_research_start"));
+    }
+
+    #[test]
     fn an_event_whose_answer_rests_gives_the_turn_to_the_other_open_events() {
         // i18b (18 Nov 2026): the listed last event lay under a later one; its answer failed
         // three times and the backoff held the whole tick for 13 game days.
@@ -15144,6 +15403,63 @@ mod tests {
     }
 
     #[test]
+    fn rebased_wings_of_one_batch_each_take_their_own_mission() {
+        // t1939n (27 Nov 2026): fighters, Stukas and naval bombers rebased in one order were
+        // all sent air_superiority; five refused after a 34 s read-back and the declaration
+        // came a day late
+        struct Mixed(std::cell::RefCell<Vec<Value>>, std::cell::Cell<i64>);
+        impl Tools for Mixed {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_air_mission" {
+                    self.0.borrow_mut().push(args.clone());
+                }
+                let wing = |n: &str, t: &str| {
+                    json!({"wing": n, "aircraft_type": t, "aircraft": 50, "standing_by": false,
+                        "missions": ["training"],
+                        "air_base": {"base_id": 3, "state_id": self.1.get()}})
+                };
+                match name {
+                    "hoi4_wars" => Ok(json!({"borders": [
+                        {"neighbour_tag": "POL", "hostile": false, "own_border_states": [66], "neighbour_states": [85]}]})),
+                    "hoi4_armies" => Ok(json!({"army_groups": [{"plan": [{"offensives": [
+                        {"executing": false, "target": {"states": [85]}}]}]}]})),
+                    "hoi4_air" => Ok(json!({"air_bases": [{"state_id": 66, "free": 400}],
+                        "wings": [wing("JG 1", "small_plane_airframe_0"),
+                            wing("StG 2", "small_plane_cas_airframe_0")]})),
+                    "hoi4_air_rebase" => {
+                        self.1.set(args["state_id"].as_i64().unwrap());
+                        Ok(json!({"receipt": {"status": "Verified"}}))
+                    }
+                    _ => Ok(json!({"receipt": {"status": "Verified"}})),
+                }
+            }
+        }
+        let tools = Mixed(Default::default(), std::cell::Cell::new(52));
+        let plan = json!({"air": {"war_missions": true}});
+        let mut state = State::default();
+        state.done.insert("op:op_poland:prep".into(), START);
+        let first = air_war_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(first.contains("rebase to front state 66"), "{first}");
+        let sent = tools.0.borrow();
+        let by: Vec<(String, Value)> = sent
+            .iter()
+            .map(|a| {
+                (
+                    text(&a["mission"]).to_string(),
+                    a.get("wing").cloned().unwrap_or_else(|| a["wings"].clone()),
+                )
+            })
+            .collect();
+        assert!(
+            by.contains(&("air_superiority".into(), json!("JG 1"))),
+            "{by:?}"
+        );
+        assert!(by.contains(&("cas".into(), json!("StG 2"))), "{by:?}");
+    }
+
+    #[test]
     fn a_wing_that_fails_over_one_operation_region_tries_the_next_contact_region() {
         // o1k: Danzig (807) is named most but out of range; Lodz (87) on the contact line takes it
         struct Two(std::cell::RefCell<Vec<i64>>, std::cell::Cell<i64>);
@@ -15518,16 +15834,6 @@ mod tests {
                 .filter(|(n, _)| n == "hoi4_politics_choose")
                 .count()
         };
-        // the war-first block acts on the first tick
-        assert!(matches!(
-            tick(&mut state, &w, &plan, "l", START).unwrap(),
-            Tick::Acted(_)
-        ));
-        assert_eq!(politics(&w), 0);
-        // the next tick belongs to a lane: politics, in the same game hour
-        tick(&mut state, &w, &plan, "l", START).unwrap();
-        assert_eq!(politics(&w), 1);
-        // and the next one to the war-first block again
         let armies = |w: &War| {
             w.calls
                 .borrow()
@@ -15535,6 +15841,18 @@ mod tests {
                 .filter(|(n, _)| n.starts_with("hoi4_army_"))
                 .count()
         };
+        // a fast lane (the plan's pick) takes the first tick, ahead of the war (t1939n, 27 Nov
+        // 2026: the war block kept the fast lanes waiting on the paused first day)
+        assert!(matches!(
+            tick(&mut state, &w, &plan, "l", START).unwrap(),
+            Tick::Acted(_)
+        ));
+        assert_eq!(politics(&w), 1);
+        // the next tick, in the same game hour, is the war-first block's
+        let before = armies(&w);
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert!(armies(&w) > before);
+        // and the war keeps its turns: the pick is not asked again
         let before = armies(&w);
         tick(&mut state, &w, &plan, "l", START + DAY).unwrap();
         assert!(armies(&w) > before);
@@ -15562,6 +15880,55 @@ mod tests {
     }
 
     #[test]
+    fn a_pick_the_game_says_is_already_in_place_counts_as_done() {
+        // cmps1 (27 Nov 2026): War Economy under Total Mobilisation was refused as "already
+        // active" and tried again every few days; the backoff kept the plan's later picks waiting
+        assert!(super::politics_already_held(
+            "Germany already holds war_economy"
+        ));
+        assert!(super::politics_already_held(
+            "Law War Economy is Already Active"
+        ));
+        assert!(super::politics_already_held(
+            "the country already has this adviser"
+        ));
+        assert!(!super::politics_already_held("not enough political power"));
+    }
+
+    #[test]
+    fn a_war_first_plan_offers_its_command_and_navy_steps_for_their_issues() {
+        // cmph1 (27 Nov 2026): army_without_general and army_group_without_field_marshal went to
+        // the player for a month: the command lane is not in a war-first pass
+        let plan = war_plan();
+        let pass: Vec<&str> = super::lanes(&plan, true).iter().map(|(n, _)| *n).collect();
+        assert!(!pass.contains(&"command"));
+        let owners: Vec<&str> = super::issue_owners(&plan, true)
+            .iter()
+            .map(|(n, _)| *n)
+            .collect();
+        for lane in ["command", "ship", "politics", "officer_corps"] {
+            assert!(owners.contains(&lane), "{lane}: {owners:?}");
+        }
+        assert_eq!(
+            owners.iter().filter(|n| **n == "command").count(),
+            1,
+            "{owners:?}"
+        );
+        // without the war first the pass has them already, once each
+        let calm: Vec<&str> = super::issue_owners(&plan, false)
+            .iter()
+            .map(|(n, _)| *n)
+            .collect();
+        assert_eq!(calm.iter().filter(|n| **n == "command").count(), 1);
+        assert_eq!(calm.iter().filter(|n| **n == "ship").count(), 1);
+        // and neither goes to the player as a lane no one owns
+        let names = super::issue_owner_names(&plan);
+        for lane in ["command", "ship", "hold", "research", "war"] {
+            assert!(names.contains(&lane), "{lane}: {names:?}");
+        }
+    }
+
+    #[test]
     fn an_idle_research_slot_gets_the_tick_after_the_war() {
         let lab = IdleLab(War {
             liberate: false,
@@ -15571,13 +15938,19 @@ mod tests {
         let mut state = State::default();
         let mut plan = war_plan();
         plan["research_priority"] = json!(["tech_a"]);
-        // the war takes the first tick, the idle slot the second (no game hour passes)
-        tick(&mut state, &lab, &plan, "l", START).unwrap();
-        tick(&mut state, &lab, &plan, "l", START).unwrap();
+        // the idle slot takes the first tick, ahead of the war (t1939n, 27 Nov 2026: free
+        // factories and slots waited behind the war block on the paused first day)
+        let first = tick(&mut state, &lab, &plan, "l", START).unwrap();
         let calls = lab.0.calls.borrow();
         assert!(
             calls.iter().any(|(n, _)| n == "hoi4_research_start"),
-            "{calls:?}"
+            "{first:?} {calls:?}"
+        );
+        assert!(
+            !calls
+                .iter()
+                .any(|(n, a)| a.get("request_id").is_some() && n != "hoi4_research_start"),
+            "nothing else acted first: {calls:?}"
         );
     }
 
@@ -21382,7 +21755,7 @@ mod tests {
             doctrine_fill(&mut state, &tools, &plan, "l", START).unwrap(),
             None
         );
-        // no plan entry: the plan's default for the track (inf_b, 60 <= 120 - 30), not the first
+        // no plan entry: the plan's default for the track (inf_b, 60 <= 120), not the first
         let plan = json!({"doctrine_defaults": {"land": ["inf_b"]}});
         let mut state = State::default();
         let step = doctrine_fill(&mut state, &tools, &plan, "l", START)
@@ -21392,15 +21765,16 @@ mod tests {
             step.starts_with("doctrine fill land/infantry: inf_b"),
             "{step}"
         );
-        // without a default: the first offered (100 > 120 - 30 reserve: waits); naval too poor;
-        // air has no grand doctrine (the plan's decision): nothing
-        let plan = json!({});
+        // without a default: the first offered, 100 > 120 - the plan's reserve of 30: waits;
+        // naval too poor; air has no grand doctrine (the plan's decision): nothing
+        let plan = json!({"manage": {"xp_reserve": {"army": 30}}});
         let mut state = State::default();
         assert_eq!(
             doctrine_fill(&mut state, &tools, &plan, "l", START).unwrap(),
             None
         );
-        let plan = json!({"manage": {"xp_reserve": {"army": 0}}});
+        // no reserve is kept in code: without the plan's, the first offered is adopted
+        let plan = json!({});
         let mut state = State::default();
         let step = doctrine_fill(&mut state, &tools, &plan, "l", START)
             .unwrap()
@@ -21473,6 +21847,62 @@ mod tests {
     }
 
     #[test]
+    fn a_doctrine_is_judged_by_the_price_the_game_shows_and_a_changed_price_changes_it() {
+        // owner, 27 Nov 2026: no cost in code; an entry without `xp` was priced 100
+        let with_price = |price: f64| {
+            let tools = fake(vec![(
+                "hoi4_doctrines",
+                json!({"experience": {"army": {"value": 60.0}},
+                    "folders": [{"folder": "land", "tracks": [{"track": "infantry",
+                        "available_subdoctrines": [{"id": "great_war_infantry", "xp_cost": 100.0,
+                            "estimated_cost_after_reduction": price}]}]}]}),
+            )]);
+            let plan = json!({"doctrines": [{"id": "inf", "folder": "land", "track": "infantry",
+                "subdoctrine": "great_war_infantry"}]});
+            let mut state = State::default();
+            doctrine_pass(&mut state, &tools, &plan, 0);
+            adopted(&tools).len()
+        };
+        // 60 experience: the game's reduced price 50 is paid, 75 waits
+        assert_eq!(with_price(50.0), 1);
+        assert_eq!(with_price(75.0), 0);
+        assert_eq!(
+            super::doctrine_price(
+                &json!({"folders": [{"available_grand_doctrines": [{"id": "g", "xp_cost": 40.0}]}]}),
+                "g"
+            ),
+            Some(40.0)
+        );
+    }
+
+    #[test]
+    fn a_planned_doctrine_the_game_already_holds_is_done_and_the_next_one_goes() {
+        // t1939n (27 Nov 2026): mobile_infantry was the infantry track's since the start; the
+        // plan entry waited on experience holds and kept every later entry and the fill waiting
+        let tools = fake(vec![(
+            "hoi4_doctrines",
+            json!({"experience": {"army": {"value": 150.0}},
+                "folders": [{"folder": "land", "grand_doctrine": {"id": "new_mobile_warfare"},
+                    "tracks": [{"track": "infantry", "subdoctrine": {"id": "mobile_infantry"}},
+                        {"track": "operations", "subdoctrine": null}]}]}),
+        )]);
+        let plan = json!({"doctrines": [
+            {"id": "inf", "folder": "land", "track": "infantry", "subdoctrine": "mobile_infantry", "xp": 100},
+            {"id": "ops", "folder": "land", "track": "operations", "subdoctrine": "mission_type_tactics", "xp": 100}]});
+        let mut state = State::default();
+        doctrine_pass(&mut state, &tools, &plan, 0);
+        assert!(state.done.contains_key("doc:id:inf"));
+        assert_eq!(
+            adopted(&tools),
+            vec![json!({"doctrine": "mission_type_tactics", "track": "operations"})]
+        );
+        assert!(super::doctrine_taken(
+            &json!({"folders": [{"grand_doctrine": "g"}]}),
+            "g"
+        ));
+    }
+
+    #[test]
     fn a_doctrine_short_of_experience_waits_and_is_never_dropped() {
         let plan = json!({"doctrines": [
             {"id": "inf", "folder": "land", "track": "infantry", "subdoctrine": "great_war_infantry", "xp": 55}]});
@@ -21490,7 +21920,7 @@ mod tests {
         assert_eq!(adopted(&tools).len(), 1);
         assert!(!state.done.contains_key("doc:id:inf"));
         assert!(!state.doc_refused.contains_key("doc:id:inf"));
-        assert_eq!(state.doc_xp.get("doc:id:inf").copied(), Some(289.0)); // retried at 289 + 11 = 300
+        assert_eq!(state.doc_xp.get("doc:id:inf").copied(), Some(300.0)); // 75% of 400
     }
 
     #[test]
@@ -22225,13 +22655,13 @@ mod tests {
         let enough = power(160.0);
         tick(&mut state, &enough, &plan, "l", START + 2 * DAY).unwrap();
         assert_eq!(chosen(&enough).first(), Some(&json!("big")));
-        // a pick waiting only for 15 points after a refusal that was not its price (paid for,
-        // refused for a missing focus) holds no power back: the cheap pick goes
+        // a pick waiting only for the power to grow after a refusal that was not its price (paid
+        // for, refused for a missing focus) holds no power back: the cheap pick goes
         let mut state = State::default();
         state
             .pol_pp_at_fail
             .insert(politics_key(0, &plan["politics"][0]), 160.0);
-        let some = power(165.0);
+        let some = power(160.0);
         tick(&mut state, &some, &plan, "l", START + 3 * DAY).unwrap();
         assert_eq!(chosen(&some), vec![json!("small")]);
         // refused while the power covered it (a law the focus tree replaced): the plan's reserve
@@ -22248,6 +22678,42 @@ mod tests {
         state.pol_pp_at_fail.insert(key, 100.0);
         let (reserve, _) = plan_manage::politics_reserve(&mut state, &read, &plan, START + DAY);
         assert_eq!(reserve, 200.0);
+    }
+
+    #[test]
+    fn a_pick_the_power_covers_that_no_lane_buys_stops_holding_power_after_the_grace() {
+        // t1939n (27 Nov 2026): 975 of 1123 power held for months for picks no lane bought
+        let plan = json!({"politics": [
+            {"id": "law", "category": "government", "slot": 0, "idea": "X_law", "cost": 150},
+            {"id": "adv", "category": "government", "slot": 3, "idea": "X_adv", "cost": 150}]});
+        let read = fake(vec![(
+            "hoi4_economy",
+            json!({"political_power": {"raw_signed": 100_000_000}}),
+        )]);
+        let mut state = State::default();
+        let (reserve, _) = plan_manage::politics_reserve(&mut state, &read, &plan, START);
+        assert_eq!(reserve, 300.0);
+        // a week later the picks still hold (their lane's turn)
+        let (reserve, _) = plan_manage::politics_reserve(&mut state, &read, &plan, START + 7 * DAY);
+        assert_eq!(reserve, 300.0);
+        // past the grace they hold nothing and say why
+        let (reserve, lines) =
+            plan_manage::politics_reserve(&mut state, &read, &plan, START + 8 * DAY);
+        assert_eq!(reserve, 0.0, "{lines:?}");
+        assert!(
+            lines[0].contains("payable for 8 days and not bought"),
+            "{lines:?}"
+        );
+        // power the picks cannot yet cover is saved for them: no grace runs
+        let poor = fake(vec![(
+            "hoi4_economy",
+            json!({"political_power": {"raw_signed": 10_000_000}}),
+        )]);
+        let mut state = State::default();
+        plan_manage::politics_reserve(&mut state, &poor, &plan, START);
+        let (reserve, _) =
+            plan_manage::politics_reserve(&mut state, &poor, &plan, START + 30 * DAY);
+        assert_eq!(reserve, 300.0);
     }
 
     #[test]

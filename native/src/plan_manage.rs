@@ -238,6 +238,9 @@ pub(super) struct Memory {
     /// `xp_budget` entries the pool could already pay, by id -> since when (plan_xp.rs: a hold
     /// for a spend its lane does not make stops holding the other spends back).
     pub(super) xp_payable_since: HashMap<String, GameHour>,
+    /// Plan `politics` picks the power could already pay, by key -> since when
+    /// ([`politics_reserve`]: a pick its lane does not buy within the grace holds nothing back).
+    pub(super) pol_payable_since: HashMap<String, GameHour>,
     /// Since when political power above the threshold found nothing to buy (`politics_auto`).
     pp_idle_since: Option<GameHour>,
     /// `politics_auto`: what the last options read of each order slot found.
@@ -955,11 +958,7 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
     // the run monitor's open issues that no executor lane acts on (a plan decision, a tool fault,
     // an escalated issue with its packet) go to the player with the rest (docs/MONITORING.md)
     state.issues.refresh();
-    let names: Vec<&str> = super::lanes(plan, true)
-        .iter()
-        .map(|(n, _)| *n)
-        .chain(["research", "focus", "war"])
-        .collect();
+    let names = super::issue_owner_names(plan);
     omissions.extend(state.issues.wake_rows(&names, Some(now)));
     omissions.sort_by_key(|r| -r["days_open"].as_i64().unwrap_or(0));
     // what the executor could act on now: a row with its owner's written reason to wait is not,
@@ -4488,18 +4487,15 @@ fn air_idle_step(
     Ok(None)
 }
 
-/// Experience a spirit slot costs by its place in the branch (common/idea_tags/00_idea.txt
-/// idea_categories: army and navy slots 20, 35, 50; every air slot 50 on 1.20, so an air spirit
-/// priced 20 was tried and refused below 50). An entry's `cost` overrides.
-const SPIRIT_SLOT_COST: [f64; 3] = [20.0, 35.0, 50.0];
-const AIR_SPIRIT_SLOT_COST: f64 = 50.0;
-
-fn spirit_slot_cost(branch: &str, index: &str) -> f64 {
-    if branch == "air" {
-        AIR_SPIRIT_SLOT_COST
-    } else {
-        SPIRIT_SLOT_COST[index.parse::<usize>().unwrap_or(0).min(2)]
-    }
+/// Whether the game itself says an officer corps pick can be made now: its `modify_officer_corps`
+/// alert is up (the alert row, read once a game day). No read gives a spirit's price: slot costs
+/// differ by version, mod and modifier, so no cost is kept in code (owner, 27 Nov 2026: "don't
+/// hardcode anything"); the game's own check and its refusal decide.
+fn officer_corps_open(state: &State) -> bool {
+    state
+        .manage
+        .alert_since
+        .contains_key("modify_officer_corps")
 }
 
 /// The refusals an officer corps pick has had (plan_xp.rs: a dropped pick holds nothing back).
@@ -4542,9 +4538,10 @@ fn without_dates(when: &Value) -> Value {
 }
 
 /// W: advisors.officer_corps_spirits. `officer_corps`: [{slot: "army:0", spirit: "Bold Attack",
-/// cost?, when?}] picked in plan order, one a tick, once the branch's experience covers the
-/// cost (`xp:<branch> >= cost`) on top of `manage.xp_reserve.<branch>` and of what the
-/// `xp_budget` spends listed before it still need (plan_xp.rs); a pick the game does not take
+/// cost?, when?}] picked in plan order, one a tick, on top of `manage.xp_reserve.<branch>` and of
+/// what the `xp_budget` spends listed before it still need (plan_xp.rs), once the game's own
+/// check says a pick is open (its `modify_officer_corps` alert) or the plan's `cost` estimate is
+/// covered (`xp:<branch> >= cost`); no price is computed in code. A pick the game does not take
 /// rests 30 days, the third refusal drops the entry with a note. A spirit its slot does not offer
 /// (`spirit_unknown`: the plan named the wrong slot, fk1 18 Nov 2026: Effective Training
 /// Programs is air:0, not air:1) is looked for in the branch's other slots the next day. Every 7
@@ -4586,9 +4583,7 @@ fn officer_corps_step(
             continue;
         }
         let (branch, index) = slot.split_once(':').unwrap_or((slot, "0"));
-        let cost = entry["cost"]
-            .as_f64()
-            .unwrap_or_else(|| spirit_slot_cost(branch, index));
+        let estimate = entry["cost"].as_f64();
         let reserve = plan["manage"]["xp_reserve"][branch].as_f64().unwrap_or(0.0);
         let (before, names) = super::plan_xp::ahead(
             state,
@@ -4598,17 +4593,24 @@ fn officer_corps_step(
             &super::plan_xp::Spender::Spirit(entry),
             now,
         );
-        let need = cost + reserve + before;
-        let gate = json!(format!("xp:{branch} >= {need}"));
-        if when_holds(state, tools, &gate, now) != Truth::True {
+        let covers = |state: &mut State, need: f64| {
+            when_holds(state, tools, &json!(format!("xp:{branch} >= {need}")), now) == Truth::True
+        };
+        // the game's check first (it knows every cost modifier), then the plan's estimate; the
+        // holds of earlier spends apply either way
+        let open = officer_corps_open(state) && covers(state, reserve + before);
+        let estimated = estimate.is_some_and(|c| covers(state, c + reserve + before));
+        if !open && !estimated {
             let held = if names.is_empty() {
                 String::new()
             } else {
                 format!(" ({before:.0} held for {} first)", names.join(", "))
             };
-            waiting.push(format!(
-                "{spirit} ({slot}): needs {need} {branch} experience{held}"
-            ));
+            let need = match estimate {
+                Some(c) => format!("needs {} {branch} experience", c + reserve + before),
+                None => "the game shows no officer corps pick open".to_string(),
+            };
+            waiting.push(format!("{spirit} ({slot}): {need}{held}"));
             continue;
         }
         // the slot tried: the plan's, else the next one of the branch after a spirit_unknown
@@ -5055,7 +5057,7 @@ fn politics_auto_default(state: &State, now: GameHour, recheck: GameHour) -> Val
         seats
             .into_iter()
             .map(|slot| {
-                json!({"category": "military_staff", "slot": slot, "cost": 50,
+                json!({"category": "military_staff", "slot": slot,
                     "why": "a vacant military staff seat: the first advisor the game enables"})
             })
             .collect(),
@@ -5068,23 +5070,22 @@ fn politics_auto_default(state: &State, now: GameHour, recheck: GameHour) -> Val
 /// game enables there (`never` respected). Until a category has been read, one seat stands for
 /// it (its read lists the seats). Without it a plan whose order named keys the game does not
 /// offer let the power pile up beside six vacant seats (gr3 16 Nov, pm2 17 Nov 2026: 165 PP,
-/// every seat vacant, nothing bought).
+/// every seat vacant, nothing bought). A fill names no price: whether the power pays is the
+/// game's enabled state in the seat's read (costs differ by advisor, modifier and mod).
 fn politics_auto_fill(state: &State, now: GameHour, recheck: GameHour) -> Vec<Value> {
     let mut out = Vec::new();
-    for (category, seed, cost) in [
-        ("government", 0, 150),
-        ("research_production", 5, 100),
-        ("military_staff", 0, 50),
+    for (category, seed) in [
+        ("government", 0),
+        ("research_production", 5),
+        ("military_staff", 0),
     ] {
         let seats = match state.manage.pp_vacant.get(category) {
             Some((at, seats)) if now.saturating_sub(*at) < recheck => seats.clone(),
             _ => vec![seed],
         };
         for slot in seats {
-            out.push(
-                json!({"category": category, "slot": slot, "cost": cost, "fill": true,
-                "why": "a vacant seat: the first advisor the game enables"}),
-            );
+            out.push(json!({"category": category, "slot": slot, "fill": true,
+                "why": "a vacant seat: the first advisor the game enables"}));
         }
     }
     out
@@ -5211,6 +5212,33 @@ pub(super) fn politics_reserve(
         }
         match when_holds(state, tools, &pick["when"], now) {
             Truth::True => {
+                // payable now (the power covers it after the picks before it): its lane has had
+                // the power since then; past the grace it holds nothing back, so the standing
+                // order spends the power by value (t1939n, 27 Nov 2026: 975 of 1123 power held
+                // for months for picks no lane bought: laws already in force, advisers the lane
+                // never reached)
+                let payable = when_holds(
+                    state,
+                    tools,
+                    &json!(format!("pp >= {}", reserve + cost)),
+                    now,
+                ) == Truth::True;
+                if payable {
+                    let since = *state
+                        .manage
+                        .pol_payable_since
+                        .entry(key.clone())
+                        .or_insert(now);
+                    if now.saturating_sub(since) > super::plan_xp::HOLD_GRACE {
+                        lines.push(format!(
+                            "{idea} not held (payable for {} days and not bought)",
+                            now.saturating_sub(since) / DAY
+                        ));
+                        continue;
+                    }
+                } else {
+                    state.manage.pol_payable_since.remove(&key);
+                }
                 reserve += cost;
                 lines.push(format!("{idea} holds {cost}"));
             }
@@ -5334,14 +5362,11 @@ pub(super) fn politics_auto_step(
     for entry in order.as_array().map_or(&[][..], Vec::as_slice) {
         let (category, slot) = (text(&entry["category"]).to_string(), &entry["slot"]);
         let slot_key = format!("{category}:{slot}");
-        let cost = entry["cost"]
-            .as_f64()
-            .unwrap_or(if category == "military_staff" {
-                50.0
-            } else {
-                150.0
-            });
-        if budget - saving < cost {
+        // The entry's own `cost` (the plan's estimate) holds the order's priority. An entry
+        // without one names no price: the seat's read and the game's enabled state decide
+        // whether the power pays (owner, 27 Nov 2026: no cost in code; it was 150, staff 50).
+        let cost = entry["cost"].as_f64();
+        if let Some(cost) = cost.filter(|c| budget - saving < *c) {
             // an entry whose `when` does not hold is no reason to call the power saved
             if !entry["when"].is_null()
                 && !matches!(when_holds(state, tools, &entry["when"], now), Truth::True)
@@ -5368,7 +5393,20 @@ pub(super) fn politics_auto_step(
             }
             continue;
         }
-        could_buy = true;
+        // an entry without a price spends nothing while the power is held for another pick:
+        // whatever it costs, it delays the held one
+        if cost.is_none() && budget - saving <= 0.0 {
+            seen.push(format!(
+                "{slot_key} waits: the power is held ({} free above the reserve)",
+                (budget - saving).round()
+            ));
+            continue;
+        }
+        // an entry priced by the plan could be paid; one without a price only when the game's
+        // read below enables something at its seat
+        if cost.is_some() {
+            could_buy = true;
+        }
         if state.skipped(now, "pauto", &slot_key) {
             let last = state.manage.pp_reads.get(&slot_key);
             if !last.is_some_and(|r| r.disabled && pp >= r.pp + grow) {
@@ -5441,6 +5479,9 @@ pub(super) fn politics_auto_step(
             .iter()
             .map(|i| (text(&i["idea"]).to_string(), i["enabled"] == json!(true)))
             .collect();
+        if offered.iter().any(|(_, enabled)| *enabled) {
+            could_buy = true;
+        }
         let mut slot = slot.clone();
         let mut choice = politics_auto_choice(entry, &current, &offered, &never, &conscription);
         // The order names advisors, not seats: an entry whose seat holds what the order does not
@@ -8306,10 +8347,46 @@ mod tests {
     const START: GameHour = 1_000_000;
 
     #[test]
-    fn an_air_spirit_slot_costs_fifty_and_the_others_by_place() {
-        assert_eq!(spirit_slot_cost("air", "0"), 50.0);
-        assert_eq!(spirit_slot_cost("navy", "0"), 20.0);
-        assert_eq!(spirit_slot_cost("army", "2"), 50.0);
+    fn a_spirit_is_bought_when_the_game_says_a_pick_is_open_and_not_by_a_price_in_code() {
+        // owner, 27 Nov 2026: costs come from the game, never from a constant
+        let tools = fake(vec![
+            ("hoi4_country_status", json!({"fields": {}})),
+            (
+                "hoi4_doctrines",
+                json!({"experience": {"army": {"value": 40.0}}}),
+            ),
+            (
+                "hoi4_officer_corps",
+                json!({"receipt": {"status": "Verified"}}),
+            ),
+        ]);
+        let plan = json!({"officer_corps": [{"slot": "army:2", "spirit": "Bold Attack"}]});
+        // no alert, no estimate: it waits for the game's check
+        let mut state = State::default();
+        assert_eq!(
+            officer_corps_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(state.manage.notes["officer_corps"].contains("no officer corps pick open"));
+        // the game says a pick is open: it is made with 40 experience
+        let mut state = State::default();
+        state
+            .manage
+            .alert_since
+            .insert("modify_officer_corps".into(), START);
+        let out = officer_corps_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out.is_some_and(|l| l.contains("Bold Attack (army:2): true")));
+        // the plan's estimate decides only by its own number: a changed cost changes the decision
+        let priced = |cost: f64| {
+            let plan = json!({"officer_corps": [
+                {"slot": "army:2", "spirit": "Bold Attack", "cost": cost}]});
+            let mut state = State::default();
+            officer_corps_step(&mut state, &tools, &plan, "l", START)
+                .unwrap()
+                .is_some()
+        };
+        assert!(priced(35.0));
+        assert!(!priced(50.0));
     }
 
     /// Reads answer from `replies`; actions are Verified unless `refuse` names their tool.
@@ -10478,7 +10555,9 @@ mod tests {
             officer_corps_step(&mut state, &tools, &plan, "l", START).unwrap(),
             None
         );
-        assert!(state.manage.notes["officer_corps"].contains("needs 30 army experience"));
+        // no price in code: with no estimate the game's own check (its alert) decides
+        assert!(state.manage.notes["officer_corps"]
+            .contains("the game shows no officer corps pick open"));
         assert!(actions(&tools).is_empty());
         // a refusal rests 30 days and three drop the entry
         let mut state = State::default();
@@ -11436,7 +11515,7 @@ mod tests {
                  "cost": 150, "when": "war_support > 0.5"},
                 {"id": "st", "category": "military_staff", "slot": 4, "idea": "ITA_starace",
                  "cost": 50}],
-            "politics_auto": {"threshold": 0, "order": [
+            "politics_auto": {"threshold": 0, "fill_vacant": false, "order": [
                 {"category": "military_staff", "slot": 5, "ideas": ["ITA_roatta"], "cost": 50}]}});
         let mut state = State::default();
         // the advisor was refused: it backs off (tick step 4)
@@ -11668,6 +11747,32 @@ mod tests {
         let opened = reads(&tools, "hoi4_politics_options");
         politics_auto_step(&mut state, &tools, &plan, "l", START + 2).unwrap();
         assert_eq!(reads(&tools, "hoi4_politics_options"), opened);
+    }
+
+    #[test]
+    fn a_vacancy_fill_carries_no_price_and_the_games_enabled_state_decides() {
+        // owner, 27 Nov 2026: the fill priced every seat 150/100/50 in code; the game's price
+        // differs by advisor, modifier and mod. 40 power: the game enables the advisor (cheap
+        // here), so it is bought; disabled, nothing is
+        let read = |enabled: bool| {
+            json!({"current": null, "options": [{"idea": "X_cheap", "enabled": enabled}],
+                "slots": [{"slot": 0, "current": null}]})
+        };
+        for (enabled, bought) in [(true, true), (false, false)] {
+            let tools = fake(vec![
+                ("hoi4_economy", pp(40.0)),
+                ("hoi4_politics_options", read(enabled)),
+            ]);
+            let plan = json!({"politics_auto": {"threshold": 0, "order": []}});
+            let mut state = State::default();
+            let out = politics_auto_step(&mut state, &tools, &plan, "l", START).unwrap();
+            assert_eq!(
+                out.as_deref().unwrap_or("").contains("-> X_cheap"),
+                bought,
+                "{out:?} {:?}",
+                state.manage.notes
+            );
+        }
     }
 
     #[test]

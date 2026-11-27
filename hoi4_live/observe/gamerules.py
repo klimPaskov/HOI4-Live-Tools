@@ -1,5 +1,10 @@
-"""Game-file facts the sink and slot detectors need, read from the game's own files (vanilla or a
-mod laid over it), with the 1.20 values as the fallback when no game folder is known.
+"""Game-file facts the sink and slot detectors need, read from the files the running game loaded:
+the game folder of the run and the mods enabled in its user folder, with mod overrides and
+replace_path. No value is kept in code: with no files a fact is unknown (None or empty) and the
+finding that needs it says so or stays silent (owner, 27 Nov 2026: "don't hardcode anything").
+A file's cost is the base cost before modifiers (ideas, laws, traits and mods change prices), so
+no finding judges affordability from it: that is the game's own check (its alerts, its enabled
+state, its refusal).
 
 - experience caps per pool (common/defines NMilitary MAX_ARMY/NAVY/AIR_EXPERIENCE);
 - spirit slot costs per branch (common/idea_tags: academy, branch and command slots);
@@ -17,13 +22,13 @@ from __future__ import annotations
 import os
 import re
 
-# 1.20.0.0 values (the fallback when the files cannot be read)
-FALLBACK = {
-    "xp_cap": {"army": 500.0, "navy": 500.0, "air": 500.0},
-    "spirit_costs": {"army": [20.0, 35.0, 50.0], "navy": [20.0, 35.0, 50.0], "air": [50.0, 50.0, 50.0]},
-    "reward_mastery": 100.0,
-    "bank_rate": 0.25,
-    "bank_max": 200.0,
+# the facts when no files can be read: every one unknown
+UNKNOWN = {
+    "xp_cap": {},
+    "spirit_costs": {},
+    "reward_mastery": None,
+    "bank_rate": None,
+    "bank_max": None,
 }
 
 _TOKEN = re.compile(r'"[^"]*"|[{}]|[<>]=?|=|[^\s{}=<>"#]+|#[^\n]*')
@@ -85,16 +90,32 @@ def _read(path):
 
 
 def _define(text, name):
-    m = re.search(rf"\b{name}\s*=\s*(-?[\d.]+)", text)
-    return float(m.group(1)) if m else None
+    """The last value of define `name` in `text` (a mod's defines file loads after the game's and
+    overrides it)."""
+    m = re.findall(rf"\b{name}\s*=\s*(-?[\d.]+)", text)
+    return float(m[-1]) if m else None
 
 
-def _files(folder):
-    try:
-        names = sorted(os.listdir(folder))
-    except OSError:
-        return []
-    return [os.path.join(folder, n) for n in names if n.endswith(".txt")]
+# (game folder, mods) of the facts being read: set by `facts` for the helpers below
+_ROOT = ("", ())
+
+
+def _files(folder, ext=(".txt",)):
+    """The effective files of `folder` (relative to the game folder, e.g. "common/ideas") for the
+    game and its enabled mods; a path that is already absolute is listed as it is."""
+    if os.path.isabs(folder):
+        try:
+            names = sorted(os.listdir(folder))
+        except OSError:
+            return []
+        return [os.path.join(folder, n) for n in names if n.endswith(ext)]
+    from ..gamedata import scriptdb
+    game_dir, mods = _ROOT
+    return scriptdb.effective_files(folder, game_dir, list(mods), ext=ext)
+
+
+def _file(folder, name, ext=(".txt",)):
+    return next((p for p in _files(folder, ext) if os.path.basename(p).lower() == name.lower()), "")
 
 
 def _conditions(node):
@@ -115,9 +136,9 @@ def _conditions(node):
     return judged, unread
 
 
-def _laws(common):
+def _laws():
     groups = {}
-    for path in _files(os.path.join(common, "ideas")):
+    for path in _files("common/ideas"):
         base = os.path.basename(path)
         if not base.startswith("_"):
             continue
@@ -137,16 +158,16 @@ def _laws(common):
                     judged, unread = _conditions(get(law, "available", []))
                     if get(law, "allowed") is not None:
                         unread += 1  # a country's own law (allowed = {...}): not judged from a snapshot
-                    rows.append({"law": name, "cost": _num(get(law, "cost"), 150.0),
+                    rows.append({"law": name, "cost": _num(get(law, "cost")),
                                  "country_specific": get(law, "allowed") is not None,
                                  "modifiers": mods, "conditions": judged, "unreadable_conditions": unread})
     return groups
 
 
-def _subdoctrine_mastery(common, default_reward):
+def _subdoctrine_mastery(default_reward):
     out = {}
     for sub in ("land", "air", "sea", "special_forces"):
-        for path in _files(os.path.join(common, "doctrines", "subdoctrines", sub)):
+        for path in _files(f"common/doctrines/subdoctrines/{sub}"):
             for name, _, body in parse(_read(path)):
                 if not isinstance(body, list):
                     continue
@@ -156,14 +177,15 @@ def _subdoctrine_mastery(common, default_reward):
                 for _, _, r in rewards or []:
                     if isinstance(r, list):
                         count += 1
-                        total += _num(get(r, "mastery"), default_reward)
-                out[name] = {"xp_cost": _num(get(body, "xp_cost"), 100.0), "rewards": count,
+                        m = _num(get(r, "mastery"), default_reward)
+                        total = None if (m is None or total is None) else total + m
+                out[name] = {"xp_cost": _num(get(body, "xp_cost")), "rewards": count,
                              "mastery_to_complete": total}
     return out
 
 
-def _spirit_costs(common):
-    text = parse(_read(os.path.join(common, "idea_tags", "00_idea.txt")))
+def _spirit_costs():
+    text = parse(_read(_file("common/idea_tags", "00_idea.txt")))
     slots = get(text, "idea_categories", []) or get(text, "slots", [])
     branch = {"army_spirit": "army", "navy_spirit": "navy", "air_spirit": "air"}
     out = {}
@@ -178,35 +200,84 @@ def _spirit_costs(common):
 
 
 _CACHE = {}
+# the run's own game folder (set by the monitor from the run's launch record): without it the
+# law ladder and the slot costs were the fallback's, and every law finding stayed silent
+DEFAULT_DIR = ""
+# the mods of the run (scriptdb roots: [{path, replace_path}]); set by the monitor with DEFAULT_DIR
+DEFAULT_MODS = ()
 
 
-def facts(game_dir=None):
-    """The facts for `game_dir` (env HOI4_GAME_DIR when None); the 1.20 fallback without one."""
-    game_dir = game_dir or os.environ.get("HOI4_GAME_DIR") or ""
-    if game_dir in _CACHE:
-        return _CACHE[game_dir]
-    out = {k: (dict(v) if isinstance(v, dict) else v) for k, v in FALLBACK.items()}
-    out["source"] = "fallback 1.20"
+def mods_of_run(run_dir):
+    """The mods the run's game loaded: the enabled mods of the user folder named by its launch
+    arguments (-userdir=...), in load order; () when the run does not say."""
+    try:
+        with open(os.path.join(run_dir, "launch.json"), encoding="utf-8") as f:
+            args = __import__("json").load(f).get("arguments") or []
+    except (OSError, ValueError, AttributeError):
+        return ()
+    user = next((a.split("=", 1)[1] for a in args if isinstance(a, str) and a.startswith("-userdir=")), "")
+    if not user:
+        return ()
+    from ..telemetry.modgen import mod_paths
+    return tuple(mod_paths(user))
+
+
+def game_dir_of_run(run_dir):
+    """The game folder a run launched (the folder holding `common` above the executable named in
+    the run's launch.json or identity.json), or "" when the run does not say."""
+    exe = ""
+    for name, path in (("launch.json", ("arguments", 0)), ("identity.json", ("game", "exe"))):
+        try:
+            with open(os.path.join(run_dir, name), encoding="utf-8") as f:
+                v = __import__("json").load(f)
+            for k in path:
+                v = v[k]
+            if isinstance(v, str) and v:
+                exe = v
+                break
+        except (OSError, ValueError, KeyError, IndexError, TypeError):
+            continue
+    d = os.path.dirname(exe)
+    for _ in range(6):
+        if d and os.path.isdir(os.path.join(d, "common")):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    return ""
+
+
+def facts(game_dir=None, mods=None):
+    """The facts for `game_dir` (env HOI4_GAME_DIR, then the run's own game folder, when None) with
+    `mods` (the run's enabled mods when None); every fact unknown without a game folder."""
+    game_dir = game_dir or os.environ.get("HOI4_GAME_DIR") or DEFAULT_DIR or ""
+    mods = tuple(DEFAULT_MODS if mods is None else mods)
+    key = (game_dir, tuple(m.get("path") for m in mods))
+    if key in _CACHE:
+        return _CACHE[key]
+    global _ROOT
+    out = {k: (dict(v) if isinstance(v, dict) else v) for k, v in UNKNOWN.items()}
+    out["source"] = "no game files"
     out["laws"], out["subdoctrines"] = {}, {}
     common = os.path.join(game_dir, "common") if game_dir else ""
     if common and os.path.isdir(common):
-        defines = _read(os.path.join(common, "defines", "00_defines.lua"))
+        _ROOT = (game_dir, mods)
+        defines = "\n".join(_read(p) for p in _files("common/defines", (".lua",)))
         for pool, name in (("army", "MAX_ARMY_EXPERIENCE"), ("navy", "MAX_NAVY_EXPERIENCE"),
                            ("air", "MAX_AIR_EXPERIENCE")):
             v = _define(defines, name)
             if v:
                 out["xp_cap"][pool] = v
-        reward = _define(defines, "DEFAULT_REWARD_MASTERY") or FALLBACK["reward_mastery"]
+        reward = _define(defines, "DEFAULT_REWARD_MASTERY")
         out["reward_mastery"] = reward
-        out["bank_rate"] = _define(defines, "MASTERY_BANK_CONVERSION_RATE") or FALLBACK["bank_rate"]
-        out["bank_max"] = _define(defines, "MASTERY_BANK_MAX") or FALLBACK["bank_max"]
-        costs = _spirit_costs(common)
-        if costs:
-            out["spirit_costs"] = costs
-        out["laws"] = _laws(common)
-        out["subdoctrines"] = _subdoctrine_mastery(common, reward)
-        out["source"] = game_dir
-    _CACHE[game_dir] = out
+        out["bank_rate"] = _define(defines, "MASTERY_BANK_CONVERSION_RATE")
+        out["bank_max"] = _define(defines, "MASTERY_BANK_MAX")
+        out["spirit_costs"] = _spirit_costs()
+        out["laws"] = _laws()
+        out["subdoctrines"] = _subdoctrine_mastery(reward)
+        out["source"] = game_dir + "".join(f" + {m.get('path')}" for m in mods)
+    _CACHE[key] = out
     return out
 
 
@@ -230,11 +301,12 @@ def law_available(law, politics, at_war):
 
 
 def laws_affordable(politics, at_war, game_dir=None):
-    """The derived read for 'laws affordable now': every law of each group above or below the one in
-    force, with its cost against the political power, its modifiers from the files and whether its
-    conditions hold. A pure function of the files and the snapshot: no input, no game read."""
+    """The derived read of the laws on offer: every law of each group above or below the one in
+    force, with its base cost and modifiers from the files and whether the conditions a snapshot
+    can judge hold. Whether the power pays is not judged here: the files' cost is before modifiers,
+    and the game's own enabled state (hoi4_politics_options) decides. A pure function of the files
+    and the snapshot: no input, no game read."""
     f = facts(game_dir)
-    pp = politics.get("political_power")
     held = politics.get("laws") or {}
     group_of = {"mobilization_laws": "conscription", "economy": "economy", "trade_laws": "trade"}
     rows = []
@@ -246,7 +318,7 @@ def laws_affordable(politics, at_war, game_dir=None):
             ok, why = law_available(law, politics, at_war)
             if law.get("country_specific"):
                 continue  # a country's own law (allowed = {...}) is the plan's to name
-            rows.append({"group": group_of.get(group, group), "law": law["law"], "cost": law["cost"],
-                         "affordable": pp is not None and pp >= law["cost"], "available": ok, "why": why,
+            rows.append({"group": group_of.get(group, group), "law": law["law"], "base_cost": law["cost"],
+                         "available": ok, "why": why,
                          "modifiers": law["modifiers"], "current": current})
     return rows

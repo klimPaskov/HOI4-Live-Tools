@@ -179,6 +179,18 @@ class GermanyConditions(unittest.TestCase):
         f = self.hits("politics.visible")
         self.assertTrue(any("GER_hermann_goring" in x["message"] and x["severity"] == "error" for x in f), f)
 
+    def test_a_pick_the_start_already_holds_is_an_error_and_a_new_one_is_not(self):
+        # t1939n (27 Nov 2026): laws and an adviser the bookmark already gives held 450 power
+        plan = copy.deepcopy(self.plan)
+        plan["politics"] = [
+            {"id": "a", "category": "government", "slot": 0, "idea": "limited_conscription", "cost": 150},
+            {"id": "b", "category": "government", "slot": 0, "idea": "extensive_conscription", "cost": 150}]
+        out = lint_plan.lint(plan, self.game)
+        f = [x for x in out["findings"] if x["rule"] == "politics.held_at_start"]
+        self.assertEqual([x["where"] for x in f], ["politics[0]"], f)
+        self.assertEqual(f[0]["severity"], "error")
+        self.assertIn("limited_conscription", f[0]["message"])
+
     def test_declaration_waits_on_gained_border_states(self):
         f = self.hits("diplomacy.borders_unheld")
         self.assertTrue(f)

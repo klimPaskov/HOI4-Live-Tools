@@ -136,7 +136,6 @@ def assignable(snap, prev):
                              f"army {a['army']} ({a['divisions']} divisions) has no general: no leader "
                              f"skills, no experience gained", subject=a["army"]))
     out.extend(political_power(snap, prev, have))
-    out.extend(doctrines(snap, have))
     sp = snap.get("special_projects") or {}
     idle_fac = [f for f in sp.get("facilities") or [] if not f.get("project")]
     if idle_fac and "special_project_idle" not in have:
@@ -173,28 +172,9 @@ def political_power(snap, prev, have):
               political_power=pp, gain_14d=gain)]
 
 
-def doctrines(snap, have):
-    if "doctrine_affordable" in have or "doctrines_available" in have:
-        return []
-    out = []
-    for f in g(snap, "doctrines", "folders", default=[]):
-        xp = f.get("experience")
-        if xp is None:
-            continue
-        costs = [t.get("xp_cost") for t in f.get("tracks") or [] if t.get("xp_cost")]
-        if not f.get("grand_doctrine"):
-            cost = f.get("grand_xp_cost") or (min(costs) if costs else None)
-            if cost and xp >= cost:
-                out.append(F("doctrine_affordable", "medium",
-                             f"{f['folder']} experience {xp:.0f} buys a grand doctrine ({cost}) and none is "
-                             f"picked", subject=f["folder"], experience=xp))
-            continue
-        if f.get("open_tracks") and costs and xp >= min(costs):
-            out.append(F("doctrine_affordable", "medium",
-                         f"{f['folder']} experience {xp:.0f} and {len(f['open_tracks'])} track(s) without a "
-                         f"subdoctrine ({', '.join(f['open_tracks'][:3])}; a subdoctrine costs about "
-                         f"{min(costs)})", subject=f["folder"], experience=xp))
-    return out
+# The doctrine finding is the game's own: its doctrines_available alert (issue doctrine_affordable)
+# and the executor's omission row. A price compared here would be the files' base cost, before the
+# modifiers the game applies (owner, 27 Nov 2026: no cost judged in code).
 
 
 # --- force distribution --------------------------------------------------------
@@ -409,10 +389,22 @@ def supply_and_stock(snap):
     out = []
     for e in g(snap, "production", "stockpile", default=[]):
         short = e.get("fielded_short") or 0
-        if short > 0 and (e.get("net_per_day") or 0) <= 0 and not e.get("stockpile"):
-            out.append(F("equipment_short", "high",
-                         f"divisions lack {short:.0f} {e['archetype']} with an empty stockpile and "
-                         f"{e.get('net_per_day') or 0:+.1f}/day: add or raise a line", subject=e["archetype"]))
+        net = e.get("net_per_day")
+        made = e.get("produced_per_day") or 0
+        if short > 0 and (net or 0) <= 0 and not e.get("stockpile"):
+            # what the lines make, not an unread net shown as zero (t1939n, 27 Nov 2026: "+0.0/day"
+            # for support equipment whose line of 3 factories made 4.25 a day)
+            if made > 0:
+                how = (f"its {e.get('production_lines') or 'its'} line(s) make {made:.1f}/day "
+                       f"({short / made:.0f} days to cover the shortfall alone"
+                       + (f", net {net:+.1f}/day after losses" if net is not None else "") + ")")
+                fix = "raise its line if those days are too long for the war"
+            else:
+                how = "no line makes it"
+                fix = "add a line"
+            out.append(F("equipment_short", "high" if made <= 0 else "medium",
+                         f"divisions lack {short:.0f} {e['archetype']} with an empty stockpile; {how}: {fix}",
+                         subject=e["archetype"], short=short, produced_per_day=made))
         elif e.get("depleting") and e.get("days_of_cover") is not None and e["days_of_cover"] < 30:
             out.append(F("equipment_depleting", "medium",
                          f"{e['archetype']} stockpile runs out in {e['days_of_cover']:.0f} days at "

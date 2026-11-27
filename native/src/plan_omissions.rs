@@ -118,31 +118,19 @@ pub(super) fn affordable_decisions(read: &Value, budget: f64, plan: &Value) -> V
     out
 }
 
-/// Doctrine picks the banked experience pays now: an empty track of a folder whose grand
-/// doctrine is taken, or a folder with no grand doctrine, where the folder's experience covers
-/// the cost the game shows for that folder's picks; pure.
-pub(super) fn affordable_doctrines(read: &Value) -> Vec<String> {
+/// Doctrine picks open now: an empty track of a folder whose grand doctrine is taken, or a folder
+/// with no grand doctrine, while the game itself says a doctrine can be taken (`game_open`: its
+/// doctrines_available alert). No price is compared here: the read's cost is the files' before
+/// the game's cost modifiers (owner, 27 Nov 2026: costs are the game's to judge); pure.
+pub(super) fn affordable_doctrines(read: &Value, game_open: bool) -> Vec<String> {
     let mut out = Vec::new();
+    if !game_open {
+        return out;
+    }
     for f in list(read, "folders") {
         let folder = text(&f["folder"]);
         let xp = f["experience"].as_f64().unwrap_or(0.0);
         let grand = &f["grand_doctrine"];
-        // the cheapest cost the read shows in this folder (the game files give each pick its
-        // xp_cost; a folder with none shown is not judged)
-        let costs: Vec<f64> = std::iter::once(grand["xp_cost"].as_f64())
-            .chain(
-                list(f, "tracks")
-                    .iter()
-                    .map(|t| t["subdoctrine"]["xp_cost"].as_f64()),
-            )
-            .flatten()
-            .collect();
-        let Some(cost) = costs.iter().copied().reduce(f64::min) else {
-            continue;
-        };
-        if xp < cost {
-            continue;
-        }
         if grand.is_null() || grand["id"].is_null() {
             out.push(format!("{folder}: no grand doctrine ({xp:.0} experience)"));
             continue;
@@ -150,7 +138,7 @@ pub(super) fn affordable_doctrines(read: &Value) -> Vec<String> {
         for t in list(f, "tracks") {
             if t["subdoctrine"].is_null() || t["subdoctrine"]["id"].is_null() {
                 out.push(format!(
-                    "{folder}/{}: empty track ({xp:.0} experience, picks cost {cost:.0})",
+                    "{folder}/{}: empty track ({xp:.0} experience)",
                     text(&t["track"])
                 ));
             }
@@ -324,8 +312,22 @@ pub(super) fn derived(
     // political power: an enabled decision the power pays now that nothing in the plan takes,
     // while the standing politics order has nothing to buy (power saved for a pick is no row)
     if let Some(pp) = super::plan_manage::political_power(tools) {
-        let (reserve, _) = super::plan_manage::politics_reserve(state, tools, plan, now);
-        let pol = super::plan_manage::note_of(state, "politics_auto").map(String::from);
+        let (reserve, held) = super::plan_manage::politics_reserve(state, tools, plan, now);
+        // the lane always says why the power waits: what each plan pick holds and the standing
+        // order's last finding (t1939n, 27 Nov 2026: "no reason given" for 118 days while the
+        // standing order had not run and 975 power sat held for picks)
+        let auto = super::plan_manage::note_of(state, "politics_auto").map(String::from);
+        let picks = if held.is_empty() {
+            String::new()
+        } else {
+            format!("picks: {}", held.join(", "))
+        };
+        let pol = match (auto.as_deref(), picks.is_empty()) {
+            (Some(n), true) => Some(n.to_string()),
+            (Some(n), false) => Some(format!("{n}; {picks}")),
+            (None, false) => Some(format!("standing order not run yet; {picks}")),
+            (None, true) => Some("standing order not run yet; no plan pick pending".to_string()),
+        };
         let saving = pol
             .as_deref()
             .is_some_and(|n| n.contains("saved for") || n.contains("power is saved"));
@@ -372,14 +374,15 @@ pub(super) fn derived(
                         note.chars().take(400).collect::<String>()
                     ),
                     "politics",
-                    None,
+                    pol.clone(),
                 ));
             }
         }
     }
     // doctrine
     if let Ok(read) = tools.call("hoi4_doctrines", &json!({})) {
-        let picks = affordable_doctrines(&read);
+        let open_now = state.manage.alert_since.contains_key("doctrines_available");
+        let picks = affordable_doctrines(&read, open_now);
         if !picks.is_empty() {
             open.push((
                 "doctrine_affordable".to_string(),
@@ -677,8 +680,13 @@ mod tests {
             {"folder": "naval", "experience": 167.0,
              "grand_doctrine": {"id": "new_convoy_raiding", "xp_cost": 100},
              "tracks": [{"track": "screens", "subdoctrine": {"id": "convoy_escort", "xp_cost": 100}}]}]});
-        let out = affordable_doctrines(&read);
-        assert_eq!(out.len(), 1, "{out:?}");
-        assert!(out[0].starts_with("air/strike_aircraft: empty track (176 experience"));
+        // the game says a doctrine can be taken: every empty track is named, whatever the files'
+        // base cost says (the game's price carries its modifiers)
+        let out = affordable_doctrines(&read, true);
+        assert_eq!(out.len(), 2, "{out:?}");
+        assert!(out[0].starts_with("land/armor: empty track (79 experience"));
+        assert!(out[1].starts_with("air/strike_aircraft: empty track (176 experience"));
+        // without the game's check nothing is judged
+        assert!(affordable_doctrines(&read, false).is_empty());
     }
 }

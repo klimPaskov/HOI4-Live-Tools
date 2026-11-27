@@ -983,6 +983,16 @@
           "default": true,
           "description": "true offers the lanes that own an open issue of the run monitor (RUN/issues_open.json, docs/MONITORING.md) ahead of the routine pass, each at most once a game day; false leaves the pass order alone"
         },
+        "construction_fast": {
+          "type": "boolean",
+          "default": true,
+          "description": "true checks idle civilian factories among the fast lanes every tick (at most every 6 game hours while all are busy) and queues the plan's ordered items, then its open jobs; false leaves construction to its turn in the pass"
+        },
+        "politics_fast": {
+          "type": "boolean",
+          "default": true,
+          "description": "true checks the politics lane (the plan's picks, then politics_auto) among the fast lanes at least once a game day, every tick while it buys; false leaves politics to its turn in the pass"
+        },
         "war_every_tick": {
           "type": "boolean",
           "default": false,
@@ -1343,7 +1353,7 @@
           "when_strict": {"type": "boolean", "description": "true: the dates in `when` are kept as the first day; by default a date is the latest day and an affordable spirit is bought at once"},
           "slot": {"type": "string", "pattern": "^(army|navy|air):[0-5]$", "description": "VIEW:INDEX as hoi4_officer_corps list reads it"},
           "spirit": {"type": "string", "description": "the spirit's name as its window shows it"},
-          "cost": {"type": "number", "description": "experience; default by slot place 20, 35, 50"},
+          "cost": {"type": "number", "description": "the plan's experience estimate (optional): with it the pick is tried once the experience covers it; without it the game's own check (its modify_officer_corps alert) decides; no price is kept in code"},
           "when": {"description": "plan predicate"},
           "why": {"type": "string"}
         }
@@ -4918,7 +4928,7 @@
         "xp_reserve": {
           "type": "object",
           "x-owner": "executor",
-          "description": "experience the doctrine fill keeps back per kind (templates, designs): {army, navy, air}; default army 30, others 0",
+          "description": "experience the doctrine fill keeps back per kind (templates, designs): {army, navy, air}; none by default (no amount is kept in code)",
           "properties": {
             "army": {
               "type": "number",
