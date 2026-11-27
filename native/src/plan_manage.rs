@@ -238,6 +238,9 @@ pub(super) struct Memory {
     /// `xp_budget` entries the pool could already pay, by id -> since when (plan_xp.rs: a hold
     /// for a spend its lane does not make stops holding the other spends back).
     pub(super) xp_payable_since: HashMap<String, GameHour>,
+    /// Plan `politics` picks the power could already pay, by key -> since when
+    /// ([`politics_reserve`]: a pick its lane does not buy within the grace holds nothing back).
+    pub(super) pol_payable_since: HashMap<String, GameHour>,
     /// Since when political power above the threshold found nothing to buy (`politics_auto`).
     pp_idle_since: Option<GameHour>,
     /// `politics_auto`: what the last options read of each order slot found.
@@ -5209,6 +5212,33 @@ pub(super) fn politics_reserve(
         }
         match when_holds(state, tools, &pick["when"], now) {
             Truth::True => {
+                // payable now (the power covers it after the picks before it): its lane has had
+                // the power since then; past the grace it holds nothing back, so the standing
+                // order spends the power by value (t1939n, 27 Nov 2026: 975 of 1123 power held
+                // for months for picks no lane bought: laws already in force, advisers the lane
+                // never reached)
+                let payable = when_holds(
+                    state,
+                    tools,
+                    &json!(format!("pp >= {}", reserve + cost)),
+                    now,
+                ) == Truth::True;
+                if payable {
+                    let since = *state
+                        .manage
+                        .pol_payable_since
+                        .entry(key.clone())
+                        .or_insert(now);
+                    if now.saturating_sub(since) > super::plan_xp::HOLD_GRACE {
+                        lines.push(format!(
+                            "{idea} not held (payable for {} days and not bought)",
+                            now.saturating_sub(since) / DAY
+                        ));
+                        continue;
+                    }
+                } else {
+                    state.manage.pol_payable_since.remove(&key);
+                }
                 reserve += cost;
                 lines.push(format!("{idea} holds {cost}"));
             }
