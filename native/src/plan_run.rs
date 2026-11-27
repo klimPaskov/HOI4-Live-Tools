@@ -345,6 +345,7 @@ mod plan_issues;
 // Game speed by the war the country manages (peace 3, a war to manage 2; a human's choice kept).
 #[path = "plan_speed.rs"]
 mod plan_speed;
+pub use plan_speed::note_agent_speed;
 // One spending order per experience pool (plan key `xp_budget`).
 #[path = "plan_xp.rs"]
 mod plan_xp;
@@ -6229,6 +6230,11 @@ fn item_failed(state: &mut State, item: &Value, key: &str, label: &str, why: &st
         entry.0
     };
     if !hopeless && tries < PLAN_ITEM_TRIES {
+        // a refused item rests a week per failure before the next try: sent again on the next
+        // tick it met the same refusal (t1939l/t1939m, 24 Nov 2026: an anti-air building in a
+        // state with no free slot, 14 s of mouse input each, retried unchanged in the last days
+        // before the declaration)
+        state.skip(now, "cplan", key, 7 * DAY * GameHour::from(tries));
         return;
     }
     state.plan_tries.remove(key);
@@ -17227,10 +17233,18 @@ mod tests {
         let mut now = START;
         for _ in 0..PLAN_ITEM_TRIES {
             construction_plan_step(&mut state, &tools, &plan, "l", now).unwrap();
-            now += 3 * DAY;
+            // a refused item rests a week per failure
+            now += 7 * DAY * GameHour::from(PLAN_ITEM_TRIES);
             state.failures.clear(); // the ledger's own back-off is not under test here
         }
         assert_eq!(*tools.0.borrow(), PLAN_ITEM_TRIES);
+        // and not sooner: a fresh failure rests the item for a week
+        let fresh = Fail(RefCell::new(0));
+        let mut rested = State::default();
+        construction_plan_step(&mut rested, &fresh, &plan, "l", START).unwrap();
+        rested.failures.clear();
+        construction_plan_step(&mut rested, &fresh, &plan, "l", START + 3 * DAY).unwrap();
+        assert_eq!(*fresh.0.borrow(), 1);
         assert!(state.plan_blocked.contains_key("id:r1"));
         let news = news_of(&state, crate::watch::CONSTRUCTION_BLOCKED);
         assert_eq!(news.len(), 1);

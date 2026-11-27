@@ -478,6 +478,26 @@ fn next_due(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) -
     due.into_iter().min()
 }
 
+/// When the run's player (any caller outside the executor) last sent `hoi4_time`.
+static AGENT_SPEED: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+/// How long after the player's `hoi4_time` a speed change counts as the agent's (wall time).
+const AGENT_SPEED_WINDOW: std::time::Duration = std::time::Duration::from_secs(600);
+
+/// Called by the server for a `hoi4_time` call that does not come from the executor.
+pub fn note_agent_speed() {
+    if let Ok(mut slot) = AGENT_SPEED.lock() {
+        *slot = Some(std::time::Instant::now());
+    }
+}
+
+fn agent_speed_recent() -> bool {
+    AGENT_SPEED
+        .lock()
+        .ok()
+        .and_then(|slot| *slot)
+        .is_some_and(|at| at.elapsed() < AGENT_SPEED_WINDOW)
+}
+
 /// What the rule does now; pure.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Decision {
@@ -659,7 +679,15 @@ pub(super) fn step(
             }
         ),
     };
-    match decide(current, paused, want, set, human, before) {
+    let mut decision = decide(current, paused, want, set, human, before);
+    // the run's own player set this speed through the server (an unpause at its brief's speed):
+    // an agent of the system, not a human at the keyboard; the rule's speed again (t1939m,
+    // 24 Nov 2026: the player unpaused at game speed 3 on 30 August, the rule took it for a
+    // human's choice and kept speed 3 through the declaration it wanted at speed 2)
+    if decision == Decision::Human && agent_speed_recent() {
+        decision = Decision::Set(set.unwrap_or(want));
+    }
+    match decision {
         Decision::Keep => Ok(None),
         Decision::Holds => {
             state.done.insert(format!("spd:set:{current}"), now);
