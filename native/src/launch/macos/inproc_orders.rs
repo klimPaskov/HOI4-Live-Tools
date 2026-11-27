@@ -407,6 +407,104 @@ fn hex_list(v: &Value) -> Vec<u64> {
         .collect()
 }
 
+/// Every `division_ptrs` value of the module's order tree (an order's +0x1e0 list), in no order.
+pub(super) fn tree_division_values(tree: &Value) -> Vec<u64> {
+    fn walk(v: &Value, out: &mut Vec<u64>) {
+        match v {
+            Value::Object(m) => {
+                for (k, x) in m {
+                    if k == "division_ptrs" {
+                        out.extend(hex_list(x));
+                    } else {
+                        walk(x, out);
+                    }
+                }
+            }
+            Value::Array(a) => a.iter().for_each(|x| walk(x, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk(tree, &mut out);
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+/// The group's divisions (as the country's division list holds them: `armies::group_division_ptrs`) for the values an
+/// order's division list holds (engineer 95). o96a (28 Nov 2026): the two did not compare equal: distribute read 44
+/// divisions on the Dutch front and still sent all 45 of its share as new, and assign by count picked divisions that
+/// stood on the order already (+3, then +0). The value is matched as the division's own address, else as its handle
+/// (the u64 at the division + the module's handle offset: `handles`), else by the one address offset that maps most
+/// values onto divisions (a base inside the object), only when it maps at least half of them. Pure.
+pub(super) fn match_divisions(values: &[u64], group: &[(u64, u64)]) -> BTreeMap<u64, u64> {
+    let mut out = BTreeMap::new();
+    let by_ptr: BTreeSet<u64> = group.iter().map(|(d, _)| *d).collect();
+    let by_handle: BTreeMap<u64, u64> = group
+        .iter()
+        .filter(|(_, h)| *h != 0)
+        .map(|(d, h)| (*h, *d))
+        .collect();
+    for v in values {
+        if by_ptr.contains(v) {
+            out.insert(*v, *v);
+        } else if let Some(d) = by_handle.get(v) {
+            out.insert(*v, *d);
+        }
+    }
+    let left: Vec<u64> = values
+        .iter()
+        .copied()
+        .filter(|v| !out.contains_key(v))
+        .collect();
+    if left.is_empty() {
+        return out;
+    }
+    let mut votes: BTreeMap<i64, usize> = BTreeMap::new();
+    for v in &left {
+        for (d, _) in group {
+            let delta = *v as i64 - *d as i64;
+            if delta != 0 && delta.abs() <= 0x1000 && delta % 8 == 0 {
+                *votes.entry(delta).or_default() += 1;
+            }
+        }
+    }
+    if let Some((delta, n)) = votes.into_iter().max_by_key(|(d, n)| (*n, -d.abs())) {
+        if n * 2 >= left.len() {
+            for v in left {
+                let d = (v as i64 - delta) as u64;
+                if by_ptr.contains(&d) {
+                    out.insert(v, d);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The tree with every `division_ptrs` value replaced by the division it names (`matched`); a value that names no
+/// division of the group is dropped (it is no division this tool may move).
+pub(super) fn translate_divisions(tree: &mut Value, matched: &BTreeMap<u64, u64>) {
+    match tree {
+        Value::Object(m) => {
+            for (k, x) in m.iter_mut() {
+                if k == "division_ptrs" {
+                    let list: Vec<Value> = hex_list(x)
+                        .into_iter()
+                        .filter_map(|v| matched.get(&v))
+                        .map(|d| json!(format!("0x{d:x}")))
+                        .collect();
+                    *x = Value::Array(list);
+                } else {
+                    translate_divisions(x, matched);
+                }
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(|x| translate_divisions(x, matched)),
+        _ => {}
+    }
+}
+
 /// The group's plan roots from the module's order tree (top list, kind 2), in the tree's order.
 pub(super) fn root_rows(tree: &Value) -> Vec<RootRow> {
     let mut out = Vec::new();
@@ -845,6 +943,36 @@ mod tests {
         let e = request("orders.execute", 0xabc, 0, &[], None, Some(1)).unwrap();
         assert_eq!(e["flag"], 1);
         assert!(request("orders.move", 0xabc, 1, &[], None, None).is_err());
+    }
+
+    #[test]
+    fn an_orders_division_values_are_matched_to_the_groups_divisions() {
+        let group = [(0x1000, 0x51), (0x2000, 0x52), (0x3000, 0x53)];
+        // the same addresses
+        let m = match_divisions(&[0x1000, 0x3000], &group);
+        assert_eq!(m.get(&0x3000), Some(&0x3000));
+        // handles
+        let m = match_divisions(&[0x52, 0x53], &group);
+        assert_eq!((m.get(&0x52), m.get(&0x53)), (Some(&0x2000), Some(&0x3000)));
+        // a base inside the object: one offset for all
+        let m = match_divisions(&[0x1010, 0x2010, 0x3010], &group);
+        assert_eq!(m.len(), 3);
+        assert_eq!(m.get(&0x2010), Some(&0x2000));
+        // no offset that maps half: nothing guessed
+        assert!(match_divisions(&[0x1010, 0x2420, 0x9999990], &group).is_empty());
+        // the tree reads back in the group's own addresses; an unknown value is dropped
+        let mut tree = json!({"lists": [{"orders": [{"id": 5, "division_ptrs": ["0x1010", "0x77"],
+            "children": [{"id": 6, "division_ptrs": ["0x2010"]}]}]}]});
+        let m = match_divisions(&tree_division_values(&tree), &group);
+        translate_divisions(&mut tree, &m);
+        assert_eq!(
+            tree["lists"][0]["orders"][0]["division_ptrs"],
+            json!(["0x1000"])
+        );
+        assert_eq!(
+            tree["lists"][0]["orders"][0]["children"][0]["division_ptrs"],
+            json!(["0x2000"])
+        );
     }
 
     #[test]

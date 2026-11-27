@@ -7201,6 +7201,24 @@ impl MacClock {
                 if let Some(m) = &miss {
                     detail["missed"] = m.clone();
                 }
+                // engineer 95: a new path keeps the order (no order grows): verified by the same id standing with a
+                // target line that changed (o96a, 28 Nov 2026: the path took, id 100 with its 11 new provinces, and the
+                // receipt said NotApplied because no order was added)
+                if let Some(rid) = replace_order.filter(|_| target.is_some()) {
+                    let (was, is) = (
+                        replaced_target(&plan_before, rid),
+                        replaced_target(&plan, rid),
+                    );
+                    detail["replaced"] =
+                        json!({"order": rid, "before": was.clone(), "after": is.clone()});
+                    return Ok(match (&was, &is) {
+                        _ if retry => journal::Outcome::Diverged(detail),
+                        (_, None) => journal::Outcome::Diverged(detail),
+                        // the game takes the path on a later frame: looked at again within the window
+                        (Some(a), Some(b)) if a == b => journal::Outcome::Unknown,
+                        _ => journal::Outcome::Reached(detail),
+                    });
+                }
                 Ok(if retry {
                     journal::Outcome::Diverged(detail)
                 } else if miss.is_some() && now > before {
@@ -7911,9 +7929,14 @@ impl MacClock {
             let keys = &self.keys;
             // engineer 95: a stated line the game's sections did not hold whole is reported, never Verified
             let cut: std::cell::RefCell<Option<Value>> = std::cell::RefCell::new(None);
+            // the coverage goes in the receipt itself too (o96a, 28 Nov 2026: read in the receipt, not found)
+            let covered: std::cell::RefCell<Option<Value>> = std::cell::RefCell::new(None);
             let mut settle = || {
                 let now = orders()?;
                 let mut detail = json!({"army":army,"orders":now});
+                if let Some(c) = covered.borrow().as_ref() {
+                    detail["coverage"] = c.clone();
+                }
                 if let Some(c) = cut.borrow().as_ref() {
                     detail["front_cut"] = c.clone();
                     return Ok(journal::Outcome::Diverged(detail));
@@ -7931,6 +7954,7 @@ impl MacClock {
                 if let (Some(ch), Some(st)) = (inproc_route.as_mut(), stated.as_ref()) {
                     inproc_reply = front_in_process(process, ch, army, st)?;
                     let c = &inproc_reply["coverage"];
+                    *covered.borrow_mut() = Some(c.clone());
                     if c["uncovered"].as_array().is_some_and(|a| !a.is_empty()) {
                         *cut.borrow_mut() = Some(c.clone());
                     }
@@ -8722,6 +8746,17 @@ impl MacClock {
 /// The new offensive arrows of a plan read back after a draw (ids absent `before`) when none of
 /// them reaches a wanted state: the arrow's target states (a spearhead's path as well). None
 /// when no new arrow stands or one reaches the line.
+/// The target line of offensive `id` in a plan read (`armies::orders::of_named`): its province count, ends and
+/// states; None when no front holds that offensive. Pure.
+fn replaced_target(plan: &Value, id: i32) -> Option<Value> {
+    plan.as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|front| front["offensives"].as_array().cloned().unwrap_or_default())
+        .find(|o| o["id"].as_i64() == Some(i64::from(id)))
+        .map(|o| o["target"].clone())
+}
+
 fn offensive_miss(before: &Value, now: &Value, want: &[i32], spearhead: bool) -> Option<Value> {
     let arrows = |plan: &Value| -> Vec<Value> {
         plan.as_array()
@@ -8794,6 +8829,16 @@ mod offensive_miss_tests {
         assert!(offensive_miss(&now, &now, &[34], false).is_none());
         // a spearhead reaches through its path
         assert!(offensive_miss(&before, &now, &[8], true).is_none());
+    }
+
+    #[test]
+    fn a_new_path_is_read_on_the_same_order() {
+        // o96a: the path took on order 100 and no order was added
+        let before = plan(&[(100, &[6, 34])]);
+        let now = plan(&[(100, &[8, 6, 977, 34, 980])]);
+        let (a, b) = (replaced_target(&before, 100), replaced_target(&now, 100));
+        assert!(a.is_some() && b.is_some() && a != b);
+        assert_eq!(replaced_target(&now, 101), None);
     }
 }
 
@@ -9412,6 +9457,29 @@ fn shares_by_place(
     Ok(inproc_orders::split_by_place(&divs, &current, &lines, &q))
 }
 
+/// engineer 95: the group's order tree with each order's divisions in the group's own division addresses (the ones
+/// orders2 takes and `group_divisions_placed` reads), matched by `inproc_orders::match_divisions`: an order's list did
+/// not compare equal to them (o96a, 28 Nov 2026), so a front's own divisions read as none of its own.
+fn group_tree(process: &dyn Process, ch: &mut inproc::Channel, group: u64) -> Result<Value> {
+    let mut tree = ch.orders_tree(group)?;
+    // the module's reference handle offset (stage2.common.handle_off: 8 on 1.20.1.0)
+    let handle_off = ch.hello["stage2"]["common"]["handle_off"]
+        .as_u64()
+        .unwrap_or(8);
+    let group_divs = ui::read(process, |r, i| {
+        let mut out = Vec::new();
+        for d in armies::group_division_ptrs(r, i, group)? {
+            out.push((d, r.u64(d + handle_off).unwrap_or(0)));
+        }
+        Ok(out)
+    })?;
+    let values = inproc_orders::tree_division_values(&tree);
+    let matched = inproc_orders::match_divisions(&values, &group_divs);
+    inproc_orders::translate_divisions(&mut tree, &matched);
+    tree["division_match"] = json!({"values": values.len(), "matched": matched.len()});
+    Ok(tree)
+}
+
 /// engineer 95: divisions onto one order through the module (orders2.assign: the plan bar's assign); nothing is posted
 /// for none.
 fn assign_in_process(
@@ -9466,7 +9534,7 @@ fn distribute_in_process(
     weights: &BTreeMap<i32, f64>,
 ) -> Result<(Value, BTreeMap<i32, usize>)> {
     let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
-    let tree = ch.orders_tree(group)?;
+    let tree = group_tree(process, ch, group)?;
     let roots = inproc_orders::root_rows(&tree);
     if roots.is_empty() {
         return Err(Error::new(
@@ -9518,7 +9586,10 @@ fn distribute_in_process(
             "share":shares[t].len(),"held_before":has.len(),"moved_in":moving.len(),"reply":reply}),
         );
     }
-    Ok((json!({"fronts":rows}), want))
+    Ok((
+        json!({"fronts":rows,"division_match":tree["division_match"]}),
+        want,
+    ))
 }
 
 /// engineer 95: divisions onto one order of `army`: the listed ones, or the `count` of the group nearest the order's
@@ -9533,7 +9604,7 @@ fn assign_order_in_process(
     count: Option<usize>,
 ) -> Result<(Value, BTreeMap<i32, usize>)> {
     let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
-    let tree = ch.orders_tree(group)?;
+    let tree = group_tree(process, ch, group)?;
     let (line, on) = inproc_orders::order_row(&tree, order).ok_or_else(|| {
         Error::new(
             "invalid_arguments",
@@ -9577,7 +9648,8 @@ fn assign_order_in_process(
     let reply = assign_in_process(ch, group, order, &divisions)?;
     let want = BTreeMap::from([(order, on.len() + divisions.len())]);
     Ok((
-        json!({"order":order,"held_before":on.len(),"moved_in":divisions.len(),"reply":reply}),
+        json!({"order":order,"held_before":on.len(),"moved_in":divisions.len(),"reply":reply,
+               "division_match":tree["division_match"]}),
         want,
     ))
 }
@@ -9593,7 +9665,7 @@ fn front_in_process(
     st: &FrontStated,
 ) -> Result<Value> {
     let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
-    let tree = ch.orders_tree(group)?;
+    let tree = group_tree(process, ch, group)?;
     let nodes = inproc_orders::tree_nodes(&tree)?;
     let exe = &process
         .identity()
