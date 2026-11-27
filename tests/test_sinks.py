@@ -177,6 +177,20 @@ class Sinks(unittest.TestCase):
         self.assertIn("waiting for the game or its rule", got[0]["text"])
         self.assertEqual(R.lane_of(got[0]["subject"]), "decisions")
 
+    def test_a_lane_past_the_deadline_without_a_reason_is_a_fault_of_its_own_and_owned_by_that_lane(self):
+        # t1939n (27 Nov 2026): "lane training says: no reason given" for 151 days, and the issue
+        # went to the lane "alerts", which no executor lane answers
+        s = snapshot(omissions=[{"item": "no_divisions_in_training", "days_open": 40, "owner": "training",
+                                 "owner_note": "SILENT: lane training had 3 turn(s), the last 1 day(s) ago, "
+                                               "and never stated a reason", "owner_silent": True},
+                                {"item": "operative_recruitable", "days_open": 40, "owner": "intelligence"}])
+        got = {f["subject"]: f for f in sinks.findings(s, (), self.g) if f["code"].startswith("lane_")}
+        self.assertEqual(got["no_divisions_in_training"]["code"], "lane_silent")
+        self.assertEqual(got["operative_recruitable"]["code"], "lane_silent")
+        self.assertEqual(R.class_of("lane_silent"), "technical")
+        self.assertEqual(R.executor_owner_lane(got["no_divisions_in_training"]["numbers"]), "training")
+        self.assertIsNone(R.executor_owner_lane({"owner_rule": "player (manage.alerts_ignore)"}))
+
 
 class LoopCloses(unittest.TestCase):
     def test_an_offered_issue_past_its_deadline_escalates_with_the_lane_reason_and_bundles(self):

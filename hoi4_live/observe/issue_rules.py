@@ -107,6 +107,9 @@ RULES = {
     "lane_wait_outlived": ("idling", None, 0, 0,
                            "the owning rule has said the same thing past the row's own deadline: the wait "
                            "outlived its reason"),
+    "lane_silent": ("technical", None, 0, 0,
+                    "a rule past the row's deadline that neither acts nor states why is a fault of the rule: "
+                    "the gate counts it"),
     "officer_corps_slot_empty": ("idling", "officer_corps", 14, 30, "an empty spirit slot gives no bonus"),
     "weak_formation_fielded": ("gameplay", "war", 30, 60,
                                "a weak formation takes width, supply and a place in an army; a month covers "
@@ -317,6 +320,18 @@ def lane_of(code, tool=None):
             if any(t.startswith(k) for k in kinds if k):
                 return name
     return None
+
+
+def executor_owner_lane(numbers):
+    """The executor lane an omission row names as its owner (`owner_rule` of a row, `owner` of a
+    lane-wait finding), or None for the player's rows and findings without one. The executor knows
+    which of its rules owns a row; the code's default lane does not (t1939n, 27 Nov 2026: the
+    training, intelligence and decryption rows went to the lane "alerts", which no executor lane
+    answers, and stayed open 118-158 days)."""
+    owner = str((numbers or {}).get("owner_rule") or (numbers or {}).get("owner") or "").strip()
+    if not owner or owner.startswith("player") or owner == "server omissions":
+        return None
+    return owner
 
 
 def class_of(code):

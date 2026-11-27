@@ -194,6 +194,11 @@ pub(super) fn digest(state: &State) -> Option<Value> {
 }
 
 /// A section's last status line (the alerts rule reads the owning step's reason here).
+/// Every note of these rules (the lane-turn record reads them).
+pub(super) fn notes(state: &State) -> &BTreeMap<String, String> {
+    &state.affairs.notes
+}
+
 pub(super) fn note_of<'a>(state: &'a State, key: &str) -> Option<&'a str> {
     state.affairs.notes.get(key).map(String::as_str)
 }

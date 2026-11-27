@@ -398,6 +398,21 @@ class MonitorTest(unittest.TestCase):
         assert rows["MIO points"][1] == 10 and rows["game alerts (any)"][1] == 10
         text = gate_packet("run_end", {"date": "1939.08.24.12"}, det, 0)
         assert "| army experience | 10 | 10 |" in text
+        assert "Silent lanes past their deadline (FAIL while any): 0" in text
+
+    def test_the_gate_packet_counts_a_silent_lane_and_the_issue_goes_to_the_row_owner(self):
+        from hoi4_live.observe.escalation import gate_packet
+        det = Detector(str(self.tmp), write=False)
+        det.snapshot(snap("1939.10.01.00", [finding(
+            "lane_silent", "no_divisions_in_training open 40 days, past its 14-day deadline, and lane "
+            "training states no reason", subject="no_divisions_in_training", owner="training"), finding(
+            "operative_recruitable", "an operative can be recruited", owner_rule="intelligence")]))
+        it = det.issues["lane_silent:no_divisions_in_training"]
+        assert it["lane"] == "training" and it["class"] == "technical"
+        assert det.issues["operative_recruitable"]["lane"] == "intelligence"
+        text = gate_packet("run_end", {"date": "1939.10.01.00"}, det, 0)
+        assert "Silent lanes past their deadline (FAIL while any): 1" in text
+        assert "SILENT " in text and "lane training" in text
 
     def test_every_acted_but_open_issue_and_every_overdue_high_one_is_asked_once(self):
         tmp_path = self.tmp

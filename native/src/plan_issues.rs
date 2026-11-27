@@ -32,8 +32,18 @@ pub const TRANSIENT_REST: GameHour = 2;
 /// Most rows the wake list takes from the monitor.
 const MAX_ROWS: usize = 8;
 
-/// A monitor lane name that is not an executor lane name.
-const LANE_ALIAS: [(&str, &str); 2] = [("navy", "ship"), ("mio_lines", "mio")];
+/// A monitor lane name that is not an executor lane name. The monitor's "navy" is the navy
+/// rule's lane (admirals, task forces, missions: plan_military's `navy`), not the sea-transfer
+/// step `ship`: mapped there, the admiral and idle task force issues of t1939n (27 Nov 2026)
+/// were offered to the sea transfers and stayed open for 158 days.
+const LANE_ALIAS: [(&str, &str); 6] = [
+    ("mio_lines", "mio"),
+    ("cp_spend", "seams"),
+    ("doctrines", "extras"),
+    ("special_projects", "extras"),
+    ("air", "air_plan"),
+    ("logistics", "stockpile"),
+];
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Treat {

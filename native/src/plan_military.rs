@@ -303,6 +303,11 @@ fn when_holds(state: &mut State, tools: &dyn Tools, when: &Value, now: GameHour)
 }
 
 /// A section's last status line (the alerts rule reads the owning step's reason here).
+/// Every note of these rules (the lane-turn record reads them).
+pub(super) fn notes(state: &State) -> &BTreeMap<String, String> {
+    &state.military.notes
+}
+
 pub(super) fn note_of<'a>(state: &'a State, key: &str) -> Option<&'a str> {
     state.military.notes.get(key).map(String::as_str)
 }

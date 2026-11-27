@@ -330,6 +330,17 @@ def gate_kind(prev_date, snap, failure=None, last_gate=None):
     return None
 
 
+def silent_lanes(detector):
+    """Open issues whose owning lane is past the deadline and has said nothing: the lane_silent
+    findings, and rows recorded before them that quote "no reason given"."""
+    out = []
+    for i in detector.open_issues():
+        text = str(i.get("text") or "")
+        if i.get("code") == "lane_silent" or (i.get("overdue") and ("no reason given" in text or "SILENT:" in text)):
+            out.append(i)
+    return out
+
+
 def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", budget_line=""):
     """One page: what happened, issues opened and closed since the last gate, overdue, counters, costs."""
     w = snap.get("wars") or {}
@@ -355,6 +366,12 @@ def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", 
         lines.append(f"- OVERDUE {i['id']} {i['class']} {i['code']} since {i['first_seen']}: {i['text'][:150]}")
     for i in [i for i in opened if i["severity"] == "high" and not i["overdue"]][:8]:
         lines.append(f"- new {i['id']} {i['class']} {i['code']}: {i['text'][:150]}")
+    # a lane past an issue's deadline that states no reason is a failure of the rule, counted
+    # apart from the waits (t1939n, 27 Nov 2026: 20 overdue rows read "no reason given")
+    silent = silent_lanes(detector)
+    lines.append(f"Silent lanes past their deadline (FAIL while any): {len(silent)}")
+    for i in silent[:10]:
+        lines.append(f"- SILENT {i['id']} lane {i.get('lane')} {i.get('subject') or i['code']}: {i['text'][:150]}")
     counts = detector.count_table()
     year = (snap.get("date") or "?")[:4]
     if year in counts:

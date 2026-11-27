@@ -809,6 +809,146 @@ struct Sched {
     /// Open omissions the executor could act on at the last alert read (rows without a written
     /// reason to wait): the speed rule never waits at speed 4 over one.
     omissions: usize,
+    /// What each lane said at its turns (see [`record_turn`]): the reason an omission row quotes
+    /// when the owning rule wrote no note of its own.
+    said: HashMap<String, LaneSaid>,
+}
+
+/// A lane's stated reason: its last line that said something (an order, a refusal, a note it
+/// wrote), when, and how many turns it has had; `silent` while no turn has said anything.
+#[derive(Clone, Debug, Default)]
+pub(super) struct LaneSaid {
+    pub at: GameHour,
+    pub line: String,
+    pub turns: u32,
+    pub silent: bool,
+}
+
+/// Every status line the lanes write (manage, affairs, military, seams rules and the focus and
+/// research stages), flattened under one key each; pure.
+fn all_notes(state: &State) -> BTreeMap<String, String> {
+    let mut out: BTreeMap<String, String> = BTreeMap::new();
+    for (k, v) in &state.manage.notes {
+        out.insert(format!("manage:{k}"), v.clone());
+    }
+    for (k, v) in plan_affairs::notes(state) {
+        out.insert(format!("affairs:{k}"), v.clone());
+    }
+    for (k, v) in plan_military::notes(state) {
+        out.insert(format!("military:{k}"), v.clone());
+    }
+    for (k, v) in plan_seams::notes(state) {
+        out.insert(format!("seams:{k}"), v.clone());
+    }
+    if let Some((line, _)) = &state.stages.focus {
+        out.insert("stage:focus".into(), line.clone());
+    }
+    if let Some((line, _)) = &state.stages.research {
+        out.insert("stage:research".into(), line.clone());
+    }
+    out
+}
+
+/// After a lane's turn: what it said. An order (passed or refused) is said; so is any note the
+/// turn wrote or changed, or the lane's own standing note (a rule that writes the same reason
+/// each turn). A turn that says nothing keeps the last thing said (a rest timer is the earlier
+/// reason still running); a lane that has never said anything stays `silent`, which the
+/// omission rows and the run monitor count as a failure of the rule (t1939n, 27 Nov 2026: 20 rows
+/// past their deadline read "lane training says: no reason given").
+fn record_turn(
+    state: &mut State,
+    name: &str,
+    result: Option<&String>,
+    before: &BTreeMap<String, String>,
+    now: GameHour,
+) {
+    let after = all_notes(state);
+    let changed: Vec<String> = after
+        .iter()
+        .filter(|(k, v)| before.get(*k) != Some(*v))
+        .map(|(k, v)| format!("{}: {v}", k.split_once(':').map_or(k.as_str(), |(_, r)| r)))
+        .collect();
+    let own = ["manage", "affairs", "military", "seams", "stage"]
+        .iter()
+        .find_map(|m| after.get(&format!("{m}:{name}")))
+        .cloned();
+    let line = match (result, state.last_ok) {
+        (Some(l), Some(false)) => Some(format!("refused: {l}")),
+        (Some(l), _) => Some(format!("acted: {l}")),
+        (None, _) if !changed.is_empty() => Some(changed.join("; ")),
+        (None, _) => own,
+    };
+    let entry = state.sched.said.entry(name.to_string()).or_insert(LaneSaid {
+        silent: true,
+        ..Default::default()
+    });
+    entry.turns += 1;
+    if let Some(line) = line {
+        entry.line = line.chars().take(400).collect();
+        entry.at = now;
+        entry.silent = false;
+    } else if entry.silent {
+        entry.at = now;
+    }
+}
+
+/// The owner names omission rows carry that are not lane names (the rule writes under one name,
+/// its lane runs under another).
+const OWNER_LANES: [(&str, &str); 5] = [
+    ("doctrines", "extras"),
+    ("special_projects", "extras"),
+    ("air", "air_plan"),
+    ("cp_spend", "seams"),
+    ("logistics", "stockpile"),
+];
+
+/// Why the rule `owner` has not acted, from its lane's turns (see [`record_turn`]): the reason and
+/// whether it is a silence (the lane never had a turn, or never said anything). None for the
+/// player's rows.
+pub(super) fn lane_reason(state: &State, owner: &str, now: GameHour) -> Option<(String, bool)> {
+    if owner.is_empty() || owner.starts_with("player") {
+        return None;
+    }
+    let lane = OWNER_LANES
+        .iter()
+        .find(|(o, _)| *o == owner)
+        .map_or(owner, |(_, l)| l);
+    let days = |at: GameHour| (now - at).max(0) / DAY;
+    Some(match state.sched.said.get(lane) {
+        Some(s) if !s.silent => (
+            format!(
+                "lane {lane} (its last word {} day(s) ago): {}",
+                days(s.at),
+                s.line
+            ),
+            false,
+        ),
+        Some(s) => (
+            format!(
+                "SILENT: lane {lane} had {} turn(s), the last {} day(s) ago, and never stated a \
+                 reason or sent an order: the rule has a path that neither acts nor says why",
+                s.turns,
+                days(s.at)
+            ),
+            true,
+        ),
+        None => match state.sched.turns.get(lane) {
+            Some(at) => (
+                format!(
+                    "SILENT: lane {lane} last had a turn {} day(s) ago and stated nothing",
+                    days(*at)
+                ),
+                true,
+            ),
+            None => (
+                format!(
+                    "SILENT: lane {lane} has had no turn in this run (the scheduler never offered \
+                     it, or the rule {owner} runs inside another step that writes no note)"
+                ),
+                true,
+            ),
+        },
+    })
 }
 
 /// What the research and focus stages saw this tick (the digest lines).
@@ -836,10 +976,21 @@ struct Stages {
     /// Game hour since which a research slot (0) or the focus slot (1) the plan's lists own has
     /// been seen empty at the end of a run; None while it is busy.
     owned_empty_since: [Option<GameHour>; 2],
+    /// Starts of a focus that failed in a row on the GUI path (not refused by the game: the
+    /// detail window did not open, a torn read). At FOCUS_GUI_FAILS the key goes behind every
+    /// other startable key, so one focus the mouse cannot reach never leaves the slot empty
+    /// (t1939n, 27 Nov 2026: GER_autonomy_in_the_kriegsschulen failed six times with
+    /// focus_detail_not_opened and no focus ran for 81 days).
+    focus_gui_fails: HashMap<String, u32>,
+    /// Focuses a missed checkpoint needs (`focus_completed:` rows of its `must`), started ahead of
+    /// the path until done: the plan's "revise" for a focus is the focus lane's order.
+    focus_urgent: Vec<String>,
 }
 
 /// Refused focuses one tick may open (each look costs seconds of the input lane).
 const FOCUS_PROBES_PER_TICK: u32 = 2;
+/// GUI failures in a row after which a focus goes behind the other startable ones.
+const FOCUS_GUI_FAILS: u32 = 2;
 /// A focus refused again waits `2^n` times the blocked window, up to this many doublings.
 const FOCUS_REFUSAL_DOUBLINGS: u32 = 3;
 /// Skip window in game hours: `skip_hours.<key>` of the plan, else `default`.
@@ -2333,9 +2484,11 @@ fn lanes_tick_inner(
         }
         state.sched.turns.insert(name, now);
         state.last_ok = None;
+        let before = all_notes(state);
         let started = std::time::Instant::now();
         let result = step(state, tools, plan, lease, now)?;
         state.round.timed(name, result.is_some(), started);
+        record_turn(state, name, result.as_ref(), &before, now);
         if let Some(line) = result {
             state.round.acted.push(name);
             state.round.lane_acted(name, now);
@@ -2381,17 +2534,20 @@ fn issue_lanes(
         }
         state.sched.turns.insert(name, now);
         state.last_ok = None;
-        let before = plan_manage::notes_snapshot(state);
+        let all_before = all_notes(state);
         let started = std::time::Instant::now();
         let result = step(state, tools, plan, lease, now)?;
         state.round.timed(name, result.is_some(), started);
+        record_turn(state, name, result.as_ref(), &all_before, now);
         // the lane's typed answer for the issues it owns (docs/MONITORING.md): an order passed,
         // was refused, or the lane wrote why it waits; a lane that neither acts nor says why has
         // no rule for the issue
-        let changed: Vec<String> = plan_manage::notes_snapshot(state)
+        // every rule family's notes, not the manage rules' alone (the navy, intelligence and MIO
+        // rules write theirs elsewhere: their answers read "found nothing to do")
+        let changed: Vec<String> = all_notes(state)
             .into_iter()
-            .filter(|(k, v)| before.get(k) != Some(v))
-            .map(|(k, v)| format!("{k}: {v}"))
+            .filter(|(k, v)| all_before.get(k) != Some(v))
+            .map(|(k, v)| format!("{}: {v}", k.split_once(':').map_or(k.as_str(), |(_, r)| r)))
             .collect();
         let (outcome, reason) = match (&result, state.last_ok) {
             (Some(line), Some(true)) => ("acted", line.clone()),
@@ -2843,8 +2999,46 @@ fn research_lane(
     Ok(None)
 }
 
-/// The national focus (a lane): the next focus of the path, else the fallback.
+/// The national focus (a lane): the next focus of the path, else the fallback. Its stage line
+/// is also the lane's note, so the no_national_focus row quotes it (t1939n, 27 Nov 2026: the
+/// line lived in the digest alone and the row read "no reason given" for 81 days).
 fn focus_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let out = focus_lane_inner(state, tools, plan, lease, now);
+    if let Some((line, _)) = state.stages.focus.clone() {
+        plan_manage::note(state, "focus", line);
+    }
+    out
+}
+
+/// The focus order of one tick: a missed checkpoint's focuses first, then the path, keys the
+/// GUI failed to start FOCUS_GUI_FAILS times in a row behind the rest; pure.
+fn focus_order(
+    urgent: &[String],
+    keys: &[String],
+    completed: &[String],
+    gui_fails: &HashMap<String, u32>,
+) -> Vec<String> {
+    let mut out: Vec<String> = urgent
+        .iter()
+        .chain(keys)
+        .filter(|k| !completed.contains(*k))
+        .fold(Vec::new(), |mut v, k| {
+            if !v.contains(k) {
+                v.push(k.clone());
+            }
+            v
+        });
+    out.sort_by_key(|k| gui_fails.get(k).is_some_and(|n| *n >= FOCUS_GUI_FAILS));
+    out
+}
+
+fn focus_lane_inner(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,
@@ -2856,8 +3050,22 @@ fn focus_lane(
         state.stages.focus = Some((format!("focus: active {active}"), false));
     } else {
         let completed = strings(&focus, "completed");
-        let path = strings(plan, "focus_path");
-        let fallback = strings(plan, "focus_fallback");
+        state
+            .stages
+            .focus_urgent
+            .retain(|k| !completed.contains(k));
+        let path = focus_order(
+            &state.stages.focus_urgent,
+            &strings(plan, "focus_path"),
+            &completed,
+            &state.stages.focus_gui_fails,
+        );
+        let fallback = focus_order(
+            &[],
+            &strings(plan, "focus_fallback"),
+            &completed,
+            &state.stages.focus_gui_fails,
+        );
         // The next focus of the path, waiting out a passing failure (a GUI read, not a refusal
         // by the game), holds the step: no later focus starts in its place. g17b (17 Nov 2026):
         // Reorganize the Wehrmacht failed once on gui_target_unavailable, a fallback focus of 35
@@ -2877,6 +3085,11 @@ fn focus_lane(
                         .failed_run
                         .get(&format!("hoi4_focus_start {}", json!({"focus": f})))
                         .is_none_or(|(n, _)| *n < 3)
+                    && state
+                        .stages
+                        .focus_gui_fails
+                        .get(*f)
+                        .is_none_or(|n| *n < FOCUS_GUI_FAILS)
             })
             .cloned();
         let startable = |state: &State, keys: &[String]| -> Vec<String> {
@@ -2967,6 +3180,7 @@ fn focus_lane(
             )?;
             if ok {
                 state.stages.focus_why.remove(&key);
+                state.stages.focus_gui_fails.remove(&key);
                 state.stages.focus = Some((format!("focus: started {key}"), false));
                 return Ok(Some(format!("focus {key}")));
             }
@@ -2979,6 +3193,7 @@ fn focus_lane(
                 || why.contains("prerequisite")
                 || why.contains("exclusive")
                 || why.contains("invalid_target");
+            let mut gui_failed = 0;
             let hours = if blocked {
                 // The same focus refused again and again waits twice as long each time (10, 20,
                 // 40, 80 game days by default): in one shakedown three fallback focuses that
@@ -2989,11 +3204,34 @@ fn focus_lane(
                 *refusals += 1;
                 skip_hours(plan, "focus_blocked", 10 * DAY) * doubling
             } else {
-                skip_hours(plan, "focus", DAY)
+                // A start the GUI failed (the game did not refuse it): the key waits a day, then
+                // twice as long each time it fails again, and from FOCUS_GUI_FAILS on it stands
+                // behind every other startable key (see `focus_order`)
+                let fails = state.stages.focus_gui_fails.entry(key.clone()).or_insert(0);
+                *fails += 1;
+                gui_failed = *fails;
+                skip_hours(plan, "focus", DAY) << (*fails - 1).min(FOCUS_REFUSAL_DOUBLINGS)
             };
             state.skip(now, "focus", &key, hours);
             let code = why.split(':').next().unwrap_or("refused").to_string();
-            state.stages.focus_why.insert(key, code);
+            state.stages.focus_why.insert(key.clone(), code.clone());
+            if gui_failed >= FOCUS_GUI_FAILS {
+                // this key cannot be started by the GUI for now: the next one gets its chance in
+                // the same tick, and the lane says why the plan's order changed
+                state.stages.focus = Some((
+                    format!(
+                        "focus: {key} failed {gui_failed} times in a row on the GUI path ({code}): it \
+                         waits {} game days behind the other startable focuses",
+                        hours / DAY
+                    ),
+                    false,
+                ));
+                probes_left = probes_left.saturating_sub(1);
+                if probes_left == 0 {
+                    break;
+                }
+                continue;
+            }
             if !blocked {
                 break;
             }
@@ -3022,7 +3260,23 @@ fn focus_lane(
                         .filter(|r| r["state"] == json!("available"))
                         .filter_map(|r| r["focus"].as_str().map(str::to_string))
                         .collect();
-                    if let Some(key) = open.iter().find(|k| ready.contains(k)).cloned() {
+                    // `open` is in focus_order: a key the GUI failed comes after every other
+                    // ready one, so the rescue never sends it again while another can start
+                    if let Some(key) = open
+                        .iter()
+                        .find(|k| ready.contains(k) && !state.skipped(now, "focus", k))
+                        .or_else(|| {
+                            open.iter().find(|k| {
+                                ready.contains(k)
+                                    && state
+                                        .stages
+                                        .focus_gui_fails
+                                        .get(*k)
+                                        .is_none_or(|n| *n < FOCUS_GUI_FAILS)
+                            })
+                        })
+                        .cloned()
+                    {
                         state.ledger_forget("hoi4_focus_start", &json!({"focus": key}));
                         let (ok, why) = state.act(
                             tools,
@@ -3033,6 +3287,7 @@ fn focus_lane(
                         )?;
                         if ok {
                             state.stages.focus_why.remove(&key);
+                            state.stages.focus_gui_fails.remove(&key);
                             state.stages.focus =
                                 Some((format!("focus: started {key} (rescue)"), false));
                             return Ok(Some(format!("focus {key} (rescue: the next keys waited)")));
@@ -3042,16 +3297,32 @@ fn focus_lane(
                 }
             }
         }
-        if !path.is_empty() || !fallback.is_empty() {
+        if !strings(plan, "focus_path").is_empty() || !strings(plan, "focus_fallback").is_empty() {
             let left = startable(state, &path).len() + startable(state, &fallback).len();
             let all_done = path.iter().chain(&fallback).all(|f| completed.contains(f));
             let blocked = focus_blocked(state, plan, now);
             let line = if all_done {
                 "focus: none active, focus_path and focus_fallback are all completed".to_string()
             } else {
+                let mut behind: Vec<String> = state
+                    .stages
+                    .focus_gui_fails
+                    .iter()
+                    .filter(|(_, n)| **n >= FOCUS_GUI_FAILS)
+                    .map(|(k, n)| format!("{k} ({n} GUI failures)"))
+                    .collect();
+                behind.sort();
                 format!(
-                    "focus: none active, nothing started; blocked [{}]",
-                    blocked.join(", ")
+                    "focus: none active, nothing started; blocked [{}]{}",
+                    blocked.join(", "),
+                    if behind.is_empty() {
+                        String::new()
+                    } else {
+                        format!(
+                            "; behind the others after failed starts: {}",
+                            behind.join(", ")
+                        )
+                    }
                 )
             };
             state.stages.focus = Some((line, left == 0));
@@ -3158,9 +3429,11 @@ fn fast_lanes_turn(
             continue;
         }
         state.last_ok = None;
+        let before = all_notes(state);
         let started = std::time::Instant::now();
         let result = step(state, tools, plan, lease, now)?;
         state.round.timed(name, result.is_some(), started);
+        record_turn(state, name, result.as_ref(), &before, now);
         // the fast lanes answer the issues they own too (s7m, 24 Nov 2026: the focus issues
         // escalated with no lane outcome while the lesson held the refused focus): an order
         // passed or was refused, or the lane's stage says what it waits for
@@ -3411,10 +3684,7 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
     out.push(("decisions", decisions_step));
     out.push(("learned", learned_step));
     out.push(("training", |state, tools, plan, lease, now| {
-        // one template or a list, with training_rules (plan_manage.rs)
-        if plan["training"].is_null() {
-            return Ok(None);
-        }
+        // one template or a list, with training_rules (plan_manage.rs); with none it says so
         plan_manage::training_step(state, tools, plan, lease, now)
     }));
     for name in [
@@ -3472,10 +3742,30 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
 /// (cmph1, cmps1, 27 Nov 2026: eight armies without a general and an army group without a field
 /// marshal stayed open for a month as "no executor lane acts on it (command)" while free leaders
 /// waited; the command step sat sixth in the war block, behind steps that took every turn).
-const WAR_BLOCK_ISSUE_LANES: [Lane; 2] = [
+/// The weak-formation rule (`formations.act`) runs inside the war block too: its issue (a weak
+/// template fielded) found no lane and was counted "acted" by the war's orders (t1939n, 27 Nov
+/// 2026: six times, no effect).
+const WAR_BLOCK_ISSUE_LANES: [Lane; 3] = [
     ("command", plan_formations::command_step),
     ("ship", plan_ship::step),
+    ("formations", formations_lane),
 ];
+
+/// The weak-formation rule as a lane: the plan's disband list first, then the weak templates.
+fn formations_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if plan["disband"].is_object() {
+        if let Some(line) = disband_step(state, tools, plan, lease, now)? {
+            return Ok(Some(line));
+        }
+    }
+    plan_divisions::formations_step(state, tools, plan, lease, now)
+}
 
 /// The lanes that can be offered for a monitor issue: the pass's lanes, and in a war-first plan
 /// the war block's own steps that answer an issue alone (WAR_BLOCK_ISSUE_LANES).
@@ -4377,14 +4667,7 @@ fn war_first_steps(
         // The sea transfers go first: a division a route ships is not disbanded.
         plan_ship::step,
         // then the weak fielded templates (`formations.act`): converted in place, else disbanded
-        |state, tools, plan, lease, now| {
-            if plan["disband"].is_object() {
-                if let Some(line) = disband_step(state, tools, plan, lease, now)? {
-                    return Ok(Some(line));
-                }
-            }
-            plan_divisions::formations_step(state, tools, plan, lease, now)
-        },
+        formations_lane,
         |state, tools, plan, lease, now| war_burst(state, tools, plan, lease, now, war_step),
         |state, tools, plan, lease, now| {
             if air_waits_for_war(state, tools, plan, now) {
@@ -10876,6 +11159,25 @@ fn activate_contingency(
     }
 }
 
+/// What "revise" does for a missed checkpoint's rows that a lane can still bring about: a
+/// `focus_completed:` row puts that focus ahead of the path (the focus lane starts it next), the
+/// rows no lane owns stay with the plan's `else` (its contingency, phase or the revision alarm).
+/// `rows` are the current truths of `must`, in order. Before, "revise" only raised the alarm and
+/// a missed checkpoint's focus waited its turn behind the path (t1939n, 27 Nov 2026).
+fn revise_missed(state: &mut State, checkpoint: &Value, rows: &[Truth]) {
+    for (must, truth) in list(checkpoint, "must").iter().zip(rows) {
+        if *truth == Truth::True {
+            continue;
+        }
+        if let Some(key) = must.as_str().and_then(|m| m.strip_prefix("focus_completed:")) {
+            let key = key.trim().to_string();
+            if !key.is_empty() && !state.stages.focus_urgent.contains(&key) {
+                state.stages.focus_urgent.push(key);
+            }
+        }
+    }
+}
+
 /// One judgement of the strategy keys: phases in order, then checkpoints that are due, then
 /// contingencies (both may force a phase), then the goal; the digest block is rebuilt.
 fn judge_strategy(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
@@ -10951,10 +11253,28 @@ fn judge_strategy(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameH
             None => break,
         }
     }
-    // b. checkpoints whose date has come, each settled once
+    // b. checkpoints whose date has come, each settled once; a missed one is judged again until
+    // its rows hold, then it is recovered (met late, the miss stays in the news and the feed),
+    // and while it is missed the lanes that own its rows act on them (`revise_missed`)
     for c in list(plan, "checkpoints") {
         let Some(id) = item_id(c) else { continue };
-        if state.strategy.checkpoints.contains_key(&id) {
+        if let Some((_, met)) = state.strategy.checkpoints.get(&id).copied() {
+            if !met {
+                let rows: Vec<Truth> = list(c, "must")
+                    .iter()
+                    .map(|m| judge(state, tools, m, now))
+                    .collect();
+                if !rows.is_empty() && rows.iter().all(|t| *t == Truth::True) {
+                    state.strategy.checkpoints.insert(id.clone(), (now, true));
+                    let detail = json!({"checkpoint": id, "by": c["by"], "game_hour": now});
+                    state
+                        .strategy
+                        .news
+                        .push(json!({"kind": "checkpoint_recovered", "detail": detail}));
+                } else {
+                    revise_missed(state, c, &rows);
+                }
+            }
             continue;
         }
         let Some(by) = c["by"].as_str().and_then(crate::plan_predicate::date_hour) else {
@@ -10984,6 +11304,11 @@ fn judge_strategy(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameH
             continue;
         }
         state.strategy.checkpoints.insert(id.clone(), (now, false));
+        let rows: Vec<Truth> = list(c, "must")
+            .iter()
+            .map(|m| judge(state, tools, m, now))
+            .collect();
+        revise_missed(state, c, &rows);
         let otherwise = text(&c["else"]).trim().to_string();
         let detail = json!({"checkpoint": id, "by": c["by"], "failed": failed,
             "else": otherwise, "game_hour": now});
@@ -12417,6 +12742,67 @@ mod tests {
             Some(0),
             DAY
         ));
+    }
+
+    /// t1939n (27 Nov 2026): omission rows past their deadline read "lane training says: no
+    /// reason given". Every turn now records what the lane said; a lane that never says anything
+    /// (or never gets a turn) is named SILENT, and a later rest keeps the last reason.
+    #[test]
+    fn a_lane_turn_records_its_reason_and_a_lane_that_never_says_one_is_silent() {
+        let mut state = State::default();
+        let now = 1000 * DAY;
+        // never offered
+        let (why, silent) = super::lane_reason(&state, "training", now).unwrap();
+        assert!(silent && why.contains("no turn in this run"), "{why}");
+        // a turn that says nothing
+        let before = super::all_notes(&state);
+        super::record_turn(&mut state, "training", None, &before, now);
+        let (why, silent) = super::lane_reason(&state, "training", now).unwrap();
+        assert!(silent && why.contains("never stated a reason"), "{why}");
+        // a turn that writes a note: the reason, and it outlives a later silent rest
+        let before = super::all_notes(&state);
+        plan_manage::note(&mut state, "training", "Infanterie-Division: waits, infantry_equipment 0 below 950");
+        super::record_turn(&mut state, "training", None, &before, now + DAY);
+        let before = super::all_notes(&state);
+        super::record_turn(&mut state, "training", None, &before, now + 3 * DAY);
+        let (why, silent) = super::lane_reason(&state, "training", now + 4 * DAY).unwrap();
+        assert!(!silent && why.contains("infantry_equipment 0 below 950"), "{why}");
+        // the lane's own standing note is said again at each turn
+        assert!(why.contains("1 day(s) ago"), "{why}");
+        // an order is said; an owner under another name finds its lane; the player has no lane
+        let before = super::all_notes(&state);
+        state.last_ok = Some(false);
+        super::record_turn(&mut state, "extras", Some(&"doctrine x: false refused".to_string()), &before, now);
+        let (why, silent) = super::lane_reason(&state, "doctrines", now).unwrap();
+        assert!(!silent && why.contains("refused: doctrine x"), "{why}");
+        assert!(super::lane_reason(&state, "player (manage.alerts_ignore)", now).is_none());
+    }
+
+    /// t1939n (27 Nov 2026): GER_autonomy_in_the_kriegsschulen failed six starts on the GUI path
+    /// (focus_detail_not_opened) and no focus ran for 81 days; a missed checkpoint's focus
+    /// waited behind the path. A key the GUI failed twice goes behind every other key; a missed
+    /// checkpoint's focus goes first.
+    #[test]
+    fn a_focus_the_gui_cannot_start_goes_behind_and_a_missed_checkpoints_focus_goes_first() {
+        let keys = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let path = keys(&["a", "b", "c"]);
+        let mut fails: HashMap<String, u32> = HashMap::new();
+        assert_eq!(super::focus_order(&[], &path, &[], &fails), path);
+        fails.insert("a".into(), 1);
+        assert_eq!(super::focus_order(&[], &path, &[], &fails), path);
+        fails.insert("a".into(), super::FOCUS_GUI_FAILS);
+        assert_eq!(super::focus_order(&[], &path, &[], &fails), keys(&["b", "c", "a"]));
+        assert_eq!(
+            super::focus_order(&keys(&["c", "z"]), &path, &keys(&["z"]), &fails),
+            keys(&["c", "b", "a"])
+        );
+        let mut state = State::default();
+        let cp = json!({"id": "cp", "by": "1939.8.31",
+            "must": ["focus_completed:GER_danzig_or_war", "at_war_with:POL", "focus_completed:x"]});
+        super::revise_missed(&mut state, &cp, &[Truth::False, Truth::False, Truth::True]);
+        assert_eq!(state.stages.focus_urgent, keys(&["GER_danzig_or_war"]));
+        super::revise_missed(&mut state, &cp, &[Truth::False, Truth::False, Truth::False]);
+        assert_eq!(state.stages.focus_urgent, keys(&["GER_danzig_or_war", "x"]));
     }
 
     /// t1939m (24 Nov 2026): in the opening a 9 s design and two design-company trait orders
