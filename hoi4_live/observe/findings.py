@@ -136,7 +136,6 @@ def assignable(snap, prev):
                              f"army {a['army']} ({a['divisions']} divisions) has no general: no leader "
                              f"skills, no experience gained", subject=a["army"]))
     out.extend(political_power(snap, prev, have))
-    out.extend(doctrines(snap, have))
     sp = snap.get("special_projects") or {}
     idle_fac = [f for f in sp.get("facilities") or [] if not f.get("project")]
     if idle_fac and "special_project_idle" not in have:
@@ -173,28 +172,9 @@ def political_power(snap, prev, have):
               political_power=pp, gain_14d=gain)]
 
 
-def doctrines(snap, have):
-    if "doctrine_affordable" in have or "doctrines_available" in have:
-        return []
-    out = []
-    for f in g(snap, "doctrines", "folders", default=[]):
-        xp = f.get("experience")
-        if xp is None:
-            continue
-        costs = [t.get("xp_cost") for t in f.get("tracks") or [] if t.get("xp_cost")]
-        if not f.get("grand_doctrine"):
-            cost = f.get("grand_xp_cost") or (min(costs) if costs else None)
-            if cost and xp >= cost:
-                out.append(F("doctrine_affordable", "medium",
-                             f"{f['folder']} experience {xp:.0f} buys a grand doctrine ({cost}) and none is "
-                             f"picked", subject=f["folder"], experience=xp))
-            continue
-        if f.get("open_tracks") and costs and xp >= min(costs):
-            out.append(F("doctrine_affordable", "medium",
-                         f"{f['folder']} experience {xp:.0f} and {len(f['open_tracks'])} track(s) without a "
-                         f"subdoctrine ({', '.join(f['open_tracks'][:3])}; a subdoctrine costs about "
-                         f"{min(costs)})", subject=f["folder"], experience=xp))
-    return out
+# The doctrine finding is the game's own: its doctrines_available alert (issue doctrine_affordable)
+# and the executor's omission row. A price compared here would be the files' base cost, before the
+# modifiers the game applies (owner, 27 Nov 2026: no cost judged in code).
 
 
 # --- force distribution --------------------------------------------------------
