@@ -8,9 +8,17 @@
 //! still need is held back for them, as long as such an entry is DUE (its `when` holds once its
 //! own experience clause is left out), not yet done, and not resting after a refusal (a spend
 //! the game refuses never blocks the rest). A spend the budget does not list comes after every
-//! listed one.
-use super::{item_id, list, text, GameHour, State, Tools, Truth};
-use serde_json::Value;
+//! listed one. A listed spend the pool could already pay that its own lane has not made within
+//! [`HOLD_GRACE`] holds nothing back any more: the reserve then serves a spend nobody makes
+//! (cmps1/cmph1, 27 Nov 2026: a 15-experience garrison template held the doctrine back for the
+//! last three weeks of the run with 96-119 army experience banked and a subdoctrine affordable).
+use super::{item_id, list, text, GameHour, State, Tools, Truth, DAY};
+use serde_json::{json, Value};
+
+/// How long an earlier spend the pool can already pay may hold the later spends back: a few game
+/// days cover its own lane's turn (owner, 27 Nov 2026: nothing assignable idle for more than a
+/// few game days).
+pub(super) const HOLD_GRACE: GameHour = 7 * DAY;
 
 /// What spends experience, as the budget's `ref` names it.
 pub(super) enum Spender<'a> {
@@ -194,8 +202,29 @@ pub(super) fn ahead(
         if !own.is_null() && super::judge(state, tools, &without_xp(&own), now) != Truth::True {
             continue;
         }
+        let id = item_id(entry).unwrap_or_else(|| text(&entry["ref"]).to_string());
+        // payable now (the pool covers it after the spends before it): its lane has had the
+        // experience since then; past the grace it holds nothing back
+        let payable = super::judge(
+            state,
+            tools,
+            &json!(format!("xp:{pool} >= {}", held + cost)),
+            now,
+        ) == Truth::True;
+        if payable {
+            let since = *state
+                .manage
+                .xp_payable_since
+                .entry(id.clone())
+                .or_insert(now);
+            if now.saturating_sub(since) > HOLD_GRACE {
+                continue;
+            }
+        } else {
+            state.manage.xp_payable_since.remove(&id);
+        }
         held += cost;
-        names.push(item_id(entry).unwrap_or_else(|| text(&entry["ref"]).to_string()));
+        names.push(id);
     }
     (held, names)
 }
