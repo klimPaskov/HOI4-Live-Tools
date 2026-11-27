@@ -3783,32 +3783,45 @@ fn wing_owners(entries: &[Value], active: &[bool], wings: &[Value]) -> HashMap<S
             owner.insert(text(&w["wing"]).to_string(), i);
         }
     }
-    for w in wings {
-        let name = text(&w["wing"]);
-        if name.is_empty() || owner.contains_key(name) {
-            continue;
-        }
-        if let Some(i) = (0..entries.len()).find(|i| active[*i] && wing_matches(&entries[*i], w)) {
-            owner.insert(name.to_string(), i);
-        }
+    // Wings left over join an active entry, in this order: one they match with room under its
+    // cap; one of their airframe (any version) with room; with no room anywhere, the active entry
+    // of their airframe with the largest cap (the main front), never the first one listed. A small
+    // entry used to take every leftover (t1939n, 27 Nov 2026: ap_weser_fighters, count 100 and no
+    // version, took ten newer fighter wings, 912 planes over Jutland before any war with Denmark,
+    // while the western entries named Bf 109 D).
+    let airframe_only = |e: &Value, w: &Value| {
+        e["wing"].as_str().is_none_or(str::is_empty)
+            && e["airframe"]
+                .as_str()
+                .filter(|a| !a.is_empty())
+                .is_some_and(|a| text(&w["aircraft_type"]).starts_with(a))
+    };
+    let mut taken: Vec<usize> = vec![0; entries.len()];
+    for i in owner.values() {
+        taken[*i] += 1;
     }
-    // a wing no entry claims (its own entry is over, or it flies an older model than the active
-    // entries name) joins an active entry of its airframe: no wing stays on a finished war's
-    // region (w46c1, 23 Nov 2026: 800 planes over Western Poland for the whole western war after
-    // the Polish entries had ended)
+    let room = |i: usize, taken: &[usize]| taken[i] < wing_cap(&entries[i]).unwrap_or(usize::MAX);
     for w in wings {
         let name = text(&w["wing"]);
         if name.is_empty() || owner.contains_key(name) {
             continue;
         }
-        let airframe_only = |e: &Value| {
-            e["wing"].as_str().is_none_or(str::is_empty)
-                && e["airframe"]
-                    .as_str()
-                    .filter(|a| !a.is_empty())
-                    .is_some_and(|a| text(&w["aircraft_type"]).starts_with(a))
-        };
-        if let Some(i) = (0..entries.len()).find(|i| active[*i] && airframe_only(&entries[*i])) {
+        let pick = (0..entries.len())
+            .find(|i| active[*i] && wing_matches(&entries[*i], w) && room(*i, &taken))
+            .or_else(|| {
+                (0..entries.len())
+                    .find(|i| active[*i] && airframe_only(&entries[*i], w) && room(*i, &taken))
+            })
+            .or_else(|| {
+                (0..entries.len())
+                    .filter(|i| {
+                        active[*i]
+                            && (wing_matches(&entries[*i], w) || airframe_only(&entries[*i], w))
+                    })
+                    .max_by_key(|i| (wing_cap(&entries[*i]).unwrap_or(usize::MAX), usize::MAX - i))
+            });
+        if let Some(i) = pick {
+            taken[i] += 1;
             owner.insert(name.to_string(), i);
         }
     }
@@ -10253,6 +10266,33 @@ mod tests {
              "region": {"id": 38}, "air_base": {"base_id": 4, "state_id": 551}, "missions": ["air_superiority"]}));
         let owners = wing_owners(entries, &[false, true], list(&read, "wings"));
         assert_eq!(owners["JG 4"], 1);
+    }
+
+    #[test]
+    fn leftover_wings_fill_entries_with_room_and_then_the_main_front_not_a_small_entry() {
+        // t1939n (27 Nov 2026): ap_weser_fighters (count 100, no version) took ten newer fighter
+        // wings, 912 planes over Jutland, while the western entries named Bf 109 D
+        let wing = |n: &str, v: &str| json!({"wing": n, "aircraft_type": "small_plane_airframe_1",
+            "variant": v, "aircraft": 100, "air_base": {"base_id": 1, "state_id": 56}, "missions": []});
+        let wings = vec![
+            wing("JG 1", "Bf 109 D"),
+            wing("JG 2", "Bf 109 E"),
+            wing("JG 3", "Bf 109 E"),
+            wing("JG 4", "Bf 109 E"),
+            wing("JG 5", "Bf 109 E"),
+        ];
+        let plan = json!({"air_plan": [
+            {"id": "west", "airframe": "small_plane_airframe_1", "version": "Bf 109 D", "region": 5,
+             "mission": "air_superiority", "deploy": {"max_wings": 3}},
+            {"id": "weser", "airframe": "small_plane_airframe_1", "count": 100, "region": 275,
+             "mission": "air_superiority"}]});
+        let entries = list(&plan, "air_plan");
+        let owners = wing_owners(entries, &[true, true], &wings);
+        let to = |e: usize| owners.values().filter(|i| **i == e).count();
+        // weser takes its one wing; west fills to its cap of 3; the one left over joins the
+        // largest front, not the small entry listed after it
+        assert_eq!(to(1), 1, "{owners:?}");
+        assert_eq!(to(0), 4, "{owners:?}");
     }
 
     #[test]
