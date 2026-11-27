@@ -55,6 +55,7 @@ LANES = [
     ("manage", True, "signals"),
     ("stockpile", False, "production"),
     ("balance", False, "production"),
+    ("logistics", False, "production"),  # the train line and hubs (plan_logistics.rs)
     ("production", False, "production"),
     ("naval_queue", False, "navy"),
     ("dockyards", False, "navy"),
