@@ -6198,7 +6198,33 @@ fn construction_plan_step(
             }
             ("hoi4_construction_add", a)
         };
+        // The plan's other pending items of the same building in the same state (one item per
+        // level: cp_ab_42_1 .. cp_ab_42_5) go in the same order as its count: sent one level at a
+        // time they were the same order to the same state twice within days (t1939l/t1939m,
+        // 24 Nov 2026: 7 of 10 duplicate-action issues were air base levels of one state).
+        let mut args = args;
+        let siblings: Vec<String> = if tool == "hoi4_construction_add" {
+            same_order_siblings(items, item, &key_of, |k| {
+                !state.plan_built.contains_key(k)
+                    && !state.plan_blocked.contains_key(k)
+                    && !state.skipped(now, "cplan", k)
+            })
+        } else {
+            Vec::new()
+        };
+        if !siblings.is_empty() {
+            args["count"] = json!(1 + siblings.len());
+        }
         let (ok, why) = state.act(tools, lease, tool, args, "cp")?;
+        for k in &siblings {
+            if ok {
+                state.plan_built.insert(k.clone(), now);
+                state.plan_tries.remove(k);
+            } else {
+                // they rest with the item that led the order and go again with it
+                state.skip(now, "cplan", k, 2 * DAY);
+            }
+        }
         let legs = item["legs"] == json!(true) && tool == "hoi4_railway_build";
         let leg_wait = item["leg_days"].as_i64().unwrap_or(LEG_DAYS).max(1) * DAY;
         if legs && (ok || why.starts_with("leg_built")) {
@@ -6222,6 +6248,36 @@ fn construction_plan_step(
         plan_manage::note(state, "construction_plan", waits.join("; "));
     }
     Ok(None)
+}
+
+/// The keys of the `construction_plan` items after `item` that one order can carry with it: the
+/// same building in the same state, no province, path or `requires` of their own, the same
+/// `when`, still pending (`pending`). At most 9 (an order queues at most 10 levels).
+fn same_order_siblings(
+    items: &[Value],
+    item: &Value,
+    key_of: &dyn Fn(&Value) -> String,
+    pending: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    let alone = |i: &Value| {
+        i["province"].is_null() && i["path"].is_null() && i["requires"].is_null()
+    };
+    if !alone(item) || item["state"].as_i64().is_none() {
+        return Vec::new();
+    }
+    let me = key_of(item);
+    items
+        .iter()
+        .filter(|i| {
+            i["building"] == item["building"]
+                && i["state"] == item["state"]
+                && i["when"] == item["when"]
+                && alone(i)
+        })
+        .map(key_of)
+        .filter(|k| *k != me && pending(k))
+        .take(9)
+        .collect()
 }
 
 /// The first technology of a `construction_plan` item's `requires` (one key or a list) that is
@@ -17065,6 +17121,30 @@ mod tests {
         );
         assert_eq!(super::date_hour("1936.13.01"), None);
         assert_eq!(super::game_year(60759371), Some(1936));
+    }
+
+    /// t1939l/t1939m: one plan item per air base level in a state went out one level at a time,
+    /// the same order to the same state twice within days; the levels now go in one order.
+    #[test]
+    fn plan_items_of_one_building_in_one_state_go_in_one_order() {
+        let items = vec![
+            json!({"id": "ab_42_1", "building": "air_base", "state": 42, "when": "1938.3.1"}),
+            json!({"id": "ab_42_2", "building": "air_base", "state": 42, "when": "1938.3.1"}),
+            json!({"id": "ab_42_3", "building": "air_base", "state": 42, "when": "1938.3.1"}),
+            json!({"id": "ab_51_1", "building": "air_base", "state": 51, "when": "1938.3.1"}),
+            json!({"id": "ab_42_p", "building": "air_base", "state": 42, "province": 9, "when": "1938.3.1"}),
+            json!({"id": "rd_42", "building": "radar_station", "state": 42, "when": "1938.3.1"}),
+            json!({"id": "ab_42_late", "building": "air_base", "state": 42, "when": "1940.1.1"}),
+        ];
+        let key_of = |i: &Value| format!("id:{}", i["id"].as_str().unwrap());
+        let all = super::same_order_siblings(&items, &items[0], &key_of, |_| true);
+        assert_eq!(all, vec!["id:ab_42_2", "id:ab_42_3"]);
+        // a level already queued is not sent again
+        let rest = super::same_order_siblings(&items, &items[0], &key_of, |k| k != "id:ab_42_2");
+        assert_eq!(rest, vec!["id:ab_42_3"]);
+        // an item with its own province goes alone
+        assert!(super::same_order_siblings(&items, &items[4], &key_of, |_| true).is_empty());
+        assert!(super::same_order_siblings(&items, &items[3], &key_of, |_| true).is_empty());
     }
 
     #[test]
