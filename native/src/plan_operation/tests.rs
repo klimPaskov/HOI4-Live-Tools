@@ -3913,3 +3913,8 @@ fn the_opening_sends_an_echelon_to_a_small_enemy_short_of_force_or_past_its_dead
     .unwrap()
     .is_some());
 }
+
+/// The supply-only stack read (no width caps).
+fn stack_read(read: &Value, line: &HashSet<String>, pick: &HashSet<String>, max: i64) -> StackRead {
+    stack_read_caps(read, line, pick, max, &HashMap::new(), false)
+}

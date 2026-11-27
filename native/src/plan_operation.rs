@@ -3498,13 +3498,7 @@ fn stack_carry(divisions: i64, supply: f64, demand: f64, max: i64) -> i64 {
 /// The surplus of the operation's line armies (`line`) from a hoi4_supply read: in each province
 /// where they stand, the divisions over its carry (`stack_carry`), the line armies' most worn
 /// divisions there first (lowest organisation); and the room the line's other provinces have.
-/// Pure.
-#[cfg(test)]
-fn stack_read(read: &Value, line: &HashSet<String>, pick: &HashSet<String>, max: i64) -> StackRead {
-    stack_read_caps(read, line, pick, max, &HashMap::new(), false)
-}
-
-/// `stack_read` with a cap per province (`caps`: province -> the divisions its battles take, see
+/// A province holds at most its cap (`caps`: province -> the divisions its battles take, see
 /// `width_caps`; `max` elsewhere). With `by_width` a province of a state where the armour stands
 /// is thinned by its width cap alone (never for supply: the breakthrough keeps its weight, but no
 /// more divisions than its battles take). Pure.
