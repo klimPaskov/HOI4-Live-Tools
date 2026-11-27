@@ -330,6 +330,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - NA47 Strike after the big battle
 - NA48 Light cruisers kill screens
 - NA49 Sponge destroyers
+- NA50 Naval headquarters admirals
 
 ## Peace conference: [war-air-naval-peace.md §18](war-air-naval-peace.md#18-tactics-peace-conference)
 
