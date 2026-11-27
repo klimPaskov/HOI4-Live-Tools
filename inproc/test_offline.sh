@@ -49,6 +49,7 @@ S2N=(regions_arr=0x2a8 regions_cnt=0x2b4 on:airwing.split=1 on:airwing.merge=1 o
      on:orders.delete=1 on:orders.execute=1 on:orders.set_path=1 on:orders.new_front=1 type:orders.delete=12351
      type:orders.execute=12352 type:orders.set_path=12345 type:orders.new_front=13095 orders_ok=1 order_id_off=0x214
      order_provs_off=0x70 order_divs_off=0x1e0 order_children_off=0x1c8 group_lists_off=0x98
+     order_div_get_slot=0x28 order_div_alive=0xc order_div_sub=0xb8
      on:orders2.new_root=1 on:orders2.assign=1 on:orders2.unassign=1 on:orders2.fallback=1 on:orders2.edit_root=1
      on:orders2.invasion_target=1 on:orders2.paradrop_target=1 on:orders2.spearhead=1 type:orders2.new_root=13096
      type:orders2.assign=12350 type:orders2.unassign=12365 type:orders2.fallback=13271 type:orders2.edit_root=13097

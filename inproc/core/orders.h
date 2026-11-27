@@ -35,7 +35,14 @@ typedef struct {
     uint32_t child_off[2], child_cnt[2];        /* order: arrows/target, target copy */
     uint32_t provs_off, provs_cnt, divs_off, divs_cnt;
     uint32_t blitz_off, withdraw_off, drawer_off, lock_off;
-    char evidence[400];
+    /* engineer 89 (27 Nov): an order's division list holds each division's membership base (division + div_sub_off),
+     * not the division. The front tool turns each entry into its division with the entry's own getter (vtable slot
+     * div_get_slot), skips a division whose byte div_alive_off is 0, and hands the divisions to NewFront, whose
+     * constructor keeps only those of the group's country (division +0x1d8 against the group's tag). Read from the
+     * front tool's loop (1.20.1.0 0x1025bc25b; one site in 1.19.4.1, 1.20.0.0 and 1.20.1.0). 0 = not found. */
+    uint32_t div_get_slot, div_alive_off, div_sub_off;
+    uint64_t div_ui_site;
+    char evidence[480];
 } orders_facts;
 
 int scan_orders_facts(const scan_image *im, orders_facts *f);
