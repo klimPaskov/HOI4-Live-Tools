@@ -11,6 +11,7 @@ from pathlib import Path
 from hoi4_live.observe import issue_rules as R
 from hoi4_live.observe.escalation import ACTED, MAX_PACKET_CHARS, Escalator, build_packet, gate_kind, validate_answer
 from hoi4_live.observe.issues import Detector
+from hoi4_live.observe.runlogs import game_days
 from hoi4_live.observe.lessons import LessonStore, lessons_from_issue, walk
 from hoi4_live.observe.monitor import Monitor
 from hoi4_live.observe.runlogs import date_of_days, game_days
@@ -332,6 +333,20 @@ class MonitorTest(unittest.TestCase):
         assert it2["lane"] == "gate" and esc.trigger("overdue", it2) is None
 
 
+    def test_a_missed_checkpoint_goes_to_the_lane_of_its_first_must(self):
+        # t1939n (27 Nov 2026): missed focus checkpoints sat in lane "gate" with no reason given
+        assert R.checkpoint_lane(["focus_completed:GER_danzig_or_war"]) == "focus"
+        assert R.checkpoint_lane(["capitulated:POL", "focus_completed:x"]) == "war"
+        assert R.checkpoint_lane(["something_new:1"]) == "gate"
+        assert R.checkpoint_lane(None) == "gate"
+        plan = {"checkpoints": [{"id": "cp_f", "by": "1939.9.1", "must": ["focus_completed:GER_x"]}]}
+        det = Detector(str(self.tmp), plan=plan)
+        det.date = "1939.10.01.00"
+        det.days = game_days(det.date)
+        det._plan_rules({})
+        assert det.issues["checkpoint_missed:cp_f"]["lane"] == "focus"
+
+
     def test_answers_are_constrained_to_allowed_actions(self):
         tmp_path = self.tmp
         _, it = overdue_issue(tmp_path)
@@ -398,6 +413,21 @@ class MonitorTest(unittest.TestCase):
         assert rows["MIO points"][1] == 10 and rows["game alerts (any)"][1] == 10
         text = gate_packet("run_end", {"date": "1939.08.24.12"}, det, 0)
         assert "| army experience | 10 | 10 |" in text
+        assert "Silent lanes past their deadline (FAIL while any): 0" in text
+
+    def test_the_gate_packet_counts_a_silent_lane_and_the_issue_goes_to_the_row_owner(self):
+        from hoi4_live.observe.escalation import gate_packet
+        det = Detector(str(self.tmp), write=False)
+        det.snapshot(snap("1939.10.01.00", [finding(
+            "lane_silent", "no_divisions_in_training open 40 days, past its 14-day deadline, and lane "
+            "training states no reason", subject="no_divisions_in_training", owner="training"), finding(
+            "operative_recruitable", "an operative can be recruited", owner_rule="intelligence")]))
+        it = det.issues["lane_silent:no_divisions_in_training"]
+        assert it["lane"] == "training" and it["class"] == "technical"
+        assert det.issues["operative_recruitable"]["lane"] == "intelligence"
+        text = gate_packet("run_end", {"date": "1939.10.01.00"}, det, 0)
+        assert "Silent lanes past their deadline (FAIL while any): 1" in text
+        assert "SILENT " in text and "lane training" in text
 
     def test_every_acted_but_open_issue_and_every_overdue_high_one_is_asked_once(self):
         tmp_path = self.tmp

@@ -286,9 +286,17 @@ def waits(snap, prev):
         limit, _ = R.deadline_days(o["item"], at_war)
         if days <= max(limit, 1):
             continue
-        said = note[:160] if note else "no reason given"
+        if o.get("owner_silent") or not note:
+            # a lane past the row's deadline that never said why it does not act is a fault of the
+            # rule, not a wait: its own code, counted by the gate packet (t1939n, 27 Nov 2026: 20
+            # rows read "lane training says: no reason given" for 100-150 game days)
+            out.append(F("lane_silent", "high",
+                         f"{o['item']} open {days} days, past its {limit}-day deadline, and lane {o.get('owner')} "
+                         f"states no reason: {note[:200] or 'the row carries no note'}",
+                         subject=o["item"], days_open=days, owner=o.get("owner"), note=note[:300]))
+            continue
         out.append(F("lane_wait_outlived", "high",
-                     f"{o['item']} open {days} days, past its {limit}-day deadline; lane {o.get('owner')} says: {said}",
+                     f"{o['item']} open {days} days, past its {limit}-day deadline; lane {o.get('owner')} says: {note[:160]}",
                      subject=o["item"], days_open=days, owner=o.get("owner"), note=note[:300]))
     return out
 
