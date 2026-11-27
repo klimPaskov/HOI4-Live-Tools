@@ -498,6 +498,162 @@ fn unproduced_army_gaps(read: &Value) -> Vec<String> {
         .collect()
 }
 
+/// What the game's missing_equipment_production alert asks for, as equipment a line can make:
+/// the archetypes the fielded divisions lack that no line makes (hoi4_stockpile), then the plane
+/// each air wing flies whose family no line makes (hoi4_air against the lines); pure.
+fn unproduced_needs(
+    stock: Option<&Value>,
+    air: Option<&Value>,
+    lines: Option<&Value>,
+) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for row in stock.map(|s| list(s, "equipment")).unwrap_or_default() {
+        if row["fielded_short"].as_f64().unwrap_or(0.0) > 0.0
+            && row["production_lines"].as_i64().unwrap_or(0) == 0
+        {
+            let a = text(&row["archetype"]).to_string();
+            if !a.is_empty() && !out.contains(&a) {
+                out.push(a);
+            }
+        }
+    }
+    if let (Some(air), Some(lines)) = (air, lines) {
+        let made: BTreeSet<String> = list(lines, "lines")
+            .iter()
+            .map(|l| family(text(&l["equipment_id"])).to_string())
+            .collect();
+        for wing in list(air, "wings") {
+            let kind = text(&wing["aircraft_type"]);
+            if kind.is_empty() || made.contains(family(kind)) {
+                continue;
+            }
+            if !out.iter().any(|o| family(o) == family(kind)) {
+                out.push(kind.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// Rule: equipment the game says is requested (its missing_equipment_production alert) that no
+/// line makes gets a line of one factory, one equipment at a time: an idle military factory if
+/// there is one, else one taken from the largest line (never below the plan's own production
+/// entry for it, plan_logistics.rs `largest_line`). Standing work of every plan: the alert's
+/// wake alone (the production step nudged, nothing made) kept it open for whole runs (g92a,
+/// 27 Nov 2026: 150.8 idle days on the military factories row, the production lane quiet 143
+/// turns). The plan declines it by `manage.alerts_ignore` with its why (said in the note), or for
+/// one equipment by naming it in `manage.unproduced_ok` with the reason in
+/// `manage.unproduced_ok_why`. A refused equipment rests 30 days, then the next one is tried.
+pub(super) fn missing_line_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let key = "missing_equipment_production";
+    if !state.manage.alert_since.contains_key(key) || state.skipped(now, "mline", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "mline", "x", DAY);
+    if strings(&plan["manage"], "alerts_ignore")
+        .iter()
+        .any(|a| a == key)
+    {
+        let why = text(&plan["manage"]["alerts_ignore_why"][key]).to_string();
+        note(
+            state,
+            key,
+            format!(
+                "missing equipment: the plan leaves it (manage.alerts_ignore){}",
+                if why.is_empty() {
+                    ": no reason written".to_string()
+                } else {
+                    format!(": {why}")
+                }
+            ),
+        );
+        return Ok(None);
+    }
+    let ok_list = strings(&plan["manage"], "unproduced_ok");
+    let stock = stockpile(state, tools, now);
+    let air = tools.call("hoi4_air", &json!({})).ok();
+    let lines = tools
+        .call("hoi4_production_lines", &json!({"limit": 128}))
+        .ok();
+    let needs: Vec<String> = unproduced_needs(stock.as_ref(), air.as_ref(), lines.as_ref())
+        .into_iter()
+        .filter(|e| !ok_list.iter().any(|o| family(o) == family(e)))
+        .collect();
+    let Some(equipment) = needs
+        .iter()
+        .find(|e| !state.skipped(now, "mlinee", family(e)))
+        .cloned()
+    else {
+        note(
+            state,
+            key,
+            if needs.is_empty() {
+                "missing equipment: every equipment the divisions lack and every plane the wings \
+                 fly has a line (the alert's request comes from a garrison or a queued division, \
+                 which the server does not read)"
+                    .to_string()
+            } else {
+                format!(
+                    "missing equipment: {} refused a line in the last 30 days",
+                    needs.join(", ")
+                )
+            },
+        );
+        return Ok(None);
+    };
+    let economy = tools.call("hoi4_economy", &json!({}))?;
+    let (military, idle) = military_lines(tools, &economy)?;
+    if idle < 1 {
+        let Some((index, donor, have)) = super::plan_logistics::largest_line(&military, plan, 1)
+        else {
+            note(
+                state,
+                key,
+                format!(
+                    "missing equipment: {equipment} has no line; no idle military factory and no \
+                     line large enough to give one"
+                ),
+            );
+            return Ok(None);
+        };
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_production_set",
+            json!({"line": index, "equipment": donor, "factories": have - 1}),
+            "ml",
+        )?;
+        if !ok {
+            state.skip(now, "mlinee", family(&equipment), 30 * DAY);
+        }
+        let line = format!(
+            "missing equipment: one factory from {donor} ({have} -> {}) for a {equipment} line: {ok} {why}",
+            have - 1
+        );
+        note(state, key, line.clone());
+        return Ok(Some(line));
+    }
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_production_add",
+        json!({"equipment": equipment, "factories": 1}),
+        "ml",
+    )?;
+    if !ok {
+        state.skip(now, "mlinee", family(&equipment), 30 * DAY);
+    }
+    let line = format!("missing equipment: a {equipment} line on one factory: {ok} {why}");
+    note(state, key, line.clone());
+    Ok(Some(line))
+}
+
 /// hoi4_stockpile, read at most once a game day (None when unreadable or listing nothing).
 fn stockpile(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Value> {
     if let Some((at, read)) = &state.manage.stockpile {
@@ -2706,7 +2862,24 @@ fn trade_judge_rule(
             })
             .filter(|s| !s.country.is_empty())
             .collect();
-        let (ranked, excluded) = rank_sellers(&world, &sellers);
+        // a seller whose deal did not hold rests 30 days for this resource: the next seller
+        // is asked (g92a, 27 Nov 2026: oil from Italy NotApplied, units bought 0, asked again;
+        // the deficit stayed open all run)
+        let resting: Vec<String> = sellers
+            .iter()
+            .filter(|s| state.skipped(now, "tradesell", &format!("{resource}@{}", s.country)))
+            .map(|s| s.country.clone())
+            .collect();
+        let sellers: Vec<Seller> = sellers
+            .into_iter()
+            .filter(|s| !resting.contains(&s.country))
+            .collect();
+        let (ranked, mut excluded) = rank_sellers(&world, &sellers);
+        excluded.extend(
+            resting
+                .iter()
+                .map(|c| format!("{c}: its last deal for {resource} did not hold (rests 30 days)")),
+        );
         let best_price = ranked.first().map_or(1.0, |(s, _)| world.price(&s.country));
         let buy = if short_factories > 0.0 {
             worth_buying(deficit, short_factories, best_price, civ_worth)
@@ -2749,6 +2922,7 @@ fn trade_judge_rule(
         )?;
         if !ok {
             state.skip(now, "mtradej", "x", DAY);
+            state.skip(now, "tradesell", &format!("{resource}@{country}"), 30 * DAY);
         }
         let line = format!("{resource} {deficit:.1} short: {what} {amount} from {country}: {ok}");
         note(state, "trade", format!("{line}; {}", left.join("; ")));
@@ -4709,9 +4883,28 @@ fn officer_corps_step(
         } else {
             without_dates(&entry["when"])
         };
+        // A `when` that is not a date is the plan's preferred moment, not a ban: while the game
+        // shows a pick open (its alert) it holds the pick back for HOLD_GRACE at most, then the
+        // pick is judged by its price like any other (g92a, 27 Nov 2026: Political Loyalty and
+        // Independent Air Force waited on focuses 112 days with the slots open; the checkpoint
+        // that would have opened them was missed). `when_strict: true` keeps the whole `when`.
+        let waited = format!("ofcwhen:{key}");
+        let mut past_when: Option<GameHour> = None;
         if when_holds(state, tools, &when, now) != Truth::True {
-            waiting.push(format!("{spirit} ({slot}): when"));
-            continue;
+            let since = if officer_corps_open(state) {
+                *state.done.entry(waited.clone()).or_insert(now)
+            } else {
+                state.done.remove(&waited);
+                now
+            };
+            let days = now.saturating_sub(since);
+            if entry["when_strict"] == json!(true) || days <= super::plan_xp::HOLD_GRACE {
+                waiting.push(format!("{spirit} ({slot}): when"));
+                continue;
+            }
+            past_when = Some(days / DAY);
+        } else {
+            state.done.remove(&waited);
         }
         let (branch, index) = slot.split_once(':').unwrap_or((slot, "0"));
         let estimate = entry["cost"].as_f64();
@@ -4771,8 +4964,14 @@ fn officer_corps_step(
             *state.manage.ofc_refused.entry(key.clone()).or_insert(0) += 1;
             state.skip(now, "ofc", &key, 30 * DAY);
         }
+        let early = past_when.map_or(String::new(), |d| {
+            format!(" (its when did not hold; the pick stood open {d} days)")
+        });
+        if ok {
+            state.done.remove(&waited);
+        }
         return Ok(Some(format!(
-            "officer corps {spirit} ({tried}): {ok} {why}"
+            "officer corps {spirit} ({tried}){early}: {ok} {why}"
         )));
     }
     state.skip(now, "mofc", "x", 7 * DAY);
@@ -6661,13 +6860,36 @@ fn stockpile_rule(
             }
         }
     }
+    let mut hub_trucks = 0.0;
     if trucks_on {
         if let Some(t) = read["trucks"].as_object() {
             let stock = t.get("stockpile").and_then(Value::as_f64).unwrap_or(0.0);
-            let need = t.get("fielded_need").and_then(Value::as_f64).unwrap_or(0.0);
+            let fielded = t.get("fielded_need").and_then(Value::as_f64).unwrap_or(0.0);
+            // the hubs' wanted motorisation takes trucks from the same stock (plan_logistics.rs)
+            let hubs = (if plan["logistics"]["hubs"] == json!(true) {
+                match (
+                    tools.call("hoi4_armies", &json!({"threat": false})).ok(),
+                    supply(state, tools, now),
+                ) {
+                    (Some(roster), Some(s)) => {
+                        super::plan_logistics::hub_raise_trucks(state, plan, &roster, &s)
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            })
+            .unwrap_or(0.0);
+            hub_trucks = hubs;
+            let need = fielded + hubs;
             let days = t.get("days_of_cover").and_then(Value::as_f64);
+            let hub_part = if hubs > 0.0 {
+                format!(" ({hubs:.0} of them for the hubs' wanted motorisation)")
+            } else {
+                String::new()
+            };
             seen.push(format!(
-                "trucks {stock:.0} in stock, {need:.0} needed, cover {}",
+                "trucks {stock:.0} in stock, {need:.0} needed{hub_part}, cover {}",
                 days.map_or("not falling or unmeasured".into(), |d| format!(
                     "{d:.0} days"
                 ))
@@ -6762,7 +6984,7 @@ fn stockpile_rule(
         && read["trucks"]["stockpile"]
             .as_f64()
             .zip(read["trucks"]["fielded_need"].as_f64())
-            .is_some_and(|(stock, need)| need > 0.0 && stock < need)
+            .is_some_and(|(stock, need)| need + hub_trucks > 0.0 && stock < need + hub_trucks)
         && at_war(state, tools, plan, now);
     let felt = short_of(&read, &archetype) > 0.0 || days < critical || trucks_short;
     if give <= 0 && felt && m["shift_factories"] != json!(false) {
@@ -9957,6 +10179,82 @@ mod tests {
         );
     }
 
+    /// g92a (27 Nov 2026): the alert said equipment was requested that no line makes (the
+    /// transport wing's planes, the naval bombers), and the production lane answered quiet 143
+    /// turns. The lane now makes a line of one factory for it, freeing one from the largest line
+    /// when none is idle; the plan's alerts_ignore leaves it with the plan's reason said.
+    #[test]
+    fn requested_equipment_no_line_makes_gets_a_line_of_one_factory_from_the_largest_line() {
+        let lines = json!({"lines": [
+            {"line_kind": "military", "entry_index": 0, "equipment_id": "infantry_equipment_1",
+             "factory_counters": {"requested_factories_raw_signed": 20}},
+            {"line_kind": "military", "entry_index": 1, "equipment_id": "small_plane_airframe_1",
+             "factory_counters": {"requested_factories_raw_signed": 5}}]});
+        let air = json!({"wings": [
+            {"wing": "JG 1", "aircraft_type": "small_plane_airframe_0"},
+            {"wing": "LG 'Greifswald'", "aircraft_type": "transport_plane_equipment_1"}]});
+        let tools = fake(vec![
+            ("hoi4_production_lines", lines),
+            ("hoi4_air", air),
+            ("hoi4_stockpile", json!({"equipment": []})),
+            (
+                "hoi4_economy",
+                json!({"factory_trigger_count": {"military": 25}}),
+            ),
+        ]);
+        let plan = json!({"production": [{"equipment": "infantry_equipment_1", "factories": 12}]});
+        let mut state = State::default();
+        // no alert: nothing asked
+        assert!(missing_line_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .is_none());
+        state
+            .manage
+            .alert_since
+            .insert("missing_equipment_production".into(), START);
+        let out = missing_line_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.contains("one factory from infantry_equipment_1 (20 -> 19)")
+                && out.contains("transport_plane_equipment_1"),
+            "{out}"
+        );
+        // a factory idle: the line itself, on one factory
+        set_reply(
+            &tools,
+            "hoi4_economy",
+            json!({"factory_trigger_count": {"military": 26}}),
+        );
+        let out = missing_line_step(&mut state, &tools, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with(
+                "missing equipment: a transport_plane_equipment_1 line on one factory: true"
+            ),
+            "{out}"
+        );
+        let sent = actions(&tools);
+        assert!(sent.iter().any(|(n, a)| n == "hoi4_production_add"
+            && a["equipment"] == "transport_plane_equipment_1"
+            && a["factories"] == 1));
+        // the plan's alerts_ignore: nothing sent, its reason said
+        let plan = json!({"manage": {"alerts_ignore": ["missing_equipment_production"],
+            "alerts_ignore_why": {"missing_equipment_production": "no paratroopers planned"}}});
+        let mut state = State::default();
+        state
+            .manage
+            .alert_since
+            .insert("missing_equipment_production".into(), START);
+        assert!(missing_line_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .is_none());
+        assert!(note_of(&state, "missing_equipment_production")
+            .unwrap()
+            .contains("no paratroopers planned"));
+    }
+
     fn set_reply(tools: &Fake, tool: &str, v: Value) {
         tools.replies.borrow_mut().insert(tool.to_string(), v);
     }
@@ -10811,6 +11109,51 @@ mod tests {
             state.manage.notes["officer_corps"],
             "every planned spirit is taken or dropped"
         );
+    }
+
+    /// g92a (27 Nov 2026): Political Loyalty waited on its focus `when` for 112 days while the
+    /// game showed the pick open and the experience was there. A `when` that is not a date
+    /// holds an open pick back for the hold grace, then the pick is bought by its price;
+    /// `when_strict` keeps it.
+    #[test]
+    fn an_open_pick_waits_on_its_when_only_for_the_hold_grace_unless_strict() {
+        let tools = fake(vec![
+            ("hoi4_country_status", json!({"fields": {}})),
+            (
+                "hoi4_doctrines",
+                json!({"experience": {"army": {"value": 60.0}}}),
+            ),
+        ]);
+        let entry = |strict: bool| {
+            json!({"officer_corps": [{"slot": "army:0", "spirit": "Political Loyalty", "cost": 20,
+                "when": "focus_completed:GER_remilitarize_the_rhineland", "when_strict": strict}]})
+        };
+        for strict in [false, true] {
+            let plan = entry(strict);
+            let mut state = State::default();
+            state
+                .manage
+                .alert_since
+                .insert("modify_officer_corps".into(), START);
+            assert_eq!(
+                officer_corps_step(&mut state, &tools, &plan, "l", START).unwrap(),
+                None
+            );
+            assert!(
+                state.manage.notes["officer_corps"].contains("Political Loyalty (army:0): when")
+            );
+            // the step's own 7-day rest, then the grace has passed
+            let out = officer_corps_step(&mut state, &tools, &plan, "l", START + 8 * DAY).unwrap();
+            if strict {
+                assert_eq!(out, None);
+            } else {
+                let out = out.unwrap();
+                assert!(
+                    out.contains("Political Loyalty (army:0) (its when did not hold; the pick stood open 8 days): true"),
+                    "{out}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -12723,6 +13066,29 @@ mod tests {
         assert_eq!(acts[1].0, "hoi4_trade_set");
         assert_eq!(acts[1].1["country"], "Sweden");
         assert_eq!(acts[1].1["amount"], 8);
+        // a deal that does not hold rests that seller for the resource: the next judgement asks
+        // another (g92a: oil from Italy NotApplied, asked again all run)
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_trade_set".into(), "not_applied");
+        let out = trade_judge_rule(&mut state, &tools, &plan, "l", START + 14 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("from Sweden: false"), "{out}");
+        tools.refuse.borrow_mut().clear();
+        tools.replies.borrow_mut().insert(
+            "hoi4_trade".into(),
+            json!({"partners": [
+                {"country": "Sweden", "delivered_over_contracted": "0/0",
+                 "available": "0/12", "convoys": "0"},
+                {"country": "Romania", "delivered_over_contracted": "0/0",
+                 "available": "0/16", "convoys": "0"}]}),
+        );
+        let out = trade_judge_rule(&mut state, &tools, &plan, "l", START + 16 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("from Romania: true"), "{out}");
         // the auto-import rules stand aside
         assert!(trade_judged(&plan));
         assert_eq!(

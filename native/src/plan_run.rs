@@ -3844,7 +3844,11 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
         if let Some(step) = plan_manage::rebalance_step(state, tools, plan, lease, now, &economy)? {
             return Ok(Some(step));
         }
-        production_step(state, tools, plan, lease, now)
+        if let Some(step) = production_step(state, tools, plan, lease, now)? {
+            return Ok(Some(step));
+        }
+        // equipment the game says is requested and no line makes (standing work, no plan key)
+        plan_manage::missing_line_step(state, tools, plan, lease, now)
     }));
     for name in ["naval_queue", "dockyards", "convoys"] {
         out.push(lane_of(manage, name));

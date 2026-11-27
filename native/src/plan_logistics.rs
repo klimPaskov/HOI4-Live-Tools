@@ -285,6 +285,29 @@ pub(super) fn largest_line(
         .map(|(i, e, have, _)| (*i, e.clone(), *have))
 }
 
+/// The trucks the hubs rule's wanted raises still take (the armies its read wants motorised
+/// above their level), for the production response to a truck shortfall: the stockpile rule
+/// counts them with the divisions' own need, so the trucks the hubs wait on are made (engineer
+/// 91, 27 Nov 2026: the hubs rule sat on "trucks short" while the trucks rule saw no shortfall).
+/// None when the hubs rule is off or its reads fail; pure over the reads.
+pub(super) fn hub_raise_trucks(
+    state: &State,
+    plan: &Value,
+    roster: &Value,
+    supply: &Value,
+) -> Option<f64> {
+    if plan["logistics"]["hubs"] != json!(true) {
+        return None;
+    }
+    let ops = operation_armies(state, plan);
+    let need: f64 = hub_wants(plan, roster, supply, &ops)
+        .iter()
+        .filter(|w| w.wanted > w.level)
+        .map(|w| w.trucks)
+        .sum();
+    Some(need)
+}
+
 fn hubs_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -421,6 +444,15 @@ mod tests {
         assert_eq!(got, vec![("Ost", 1, 2), ("Sud", 0, 2), ("West", 2, 1)]);
         assert_eq!(wants[0].trucks, 60.0, "two states, half a hub's cost each");
         assert_eq!(wants[1].trucks, 60.0, "one state, two levels");
+        // the production response counts the raises' trucks (lowerings give none back here)
+        assert_eq!(
+            hub_raise_trucks(&state, &plan, &roster(), &supply()),
+            Some(120.0)
+        );
+        assert_eq!(
+            hub_raise_trucks(&state, &json!({}), &roster(), &supply()),
+            None
+        );
         // an ended operation asks nothing
         state.done.insert("op:op_east:end".into(), START);
         let ops = operation_armies(&state, &plan);
