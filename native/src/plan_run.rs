@@ -22635,6 +22635,42 @@ mod tests {
     }
 
     #[test]
+    fn a_pick_the_power_covers_that_no_lane_buys_stops_holding_power_after_the_grace() {
+        // t1939n (27 Nov 2026): 975 of 1123 power held for months for picks no lane bought
+        let plan = json!({"politics": [
+            {"id": "law", "category": "government", "slot": 0, "idea": "X_law", "cost": 150},
+            {"id": "adv", "category": "government", "slot": 3, "idea": "X_adv", "cost": 150}]});
+        let read = fake(vec![(
+            "hoi4_economy",
+            json!({"political_power": {"raw_signed": 100_000_000}}),
+        )]);
+        let mut state = State::default();
+        let (reserve, _) = plan_manage::politics_reserve(&mut state, &read, &plan, START);
+        assert_eq!(reserve, 300.0);
+        // a week later the picks still hold (their lane's turn)
+        let (reserve, _) = plan_manage::politics_reserve(&mut state, &read, &plan, START + 7 * DAY);
+        assert_eq!(reserve, 300.0);
+        // past the grace they hold nothing and say why
+        let (reserve, lines) =
+            plan_manage::politics_reserve(&mut state, &read, &plan, START + 8 * DAY);
+        assert_eq!(reserve, 0.0, "{lines:?}");
+        assert!(
+            lines[0].contains("payable for 8 days and not bought"),
+            "{lines:?}"
+        );
+        // power the picks cannot yet cover is saved for them: no grace runs
+        let poor = fake(vec![(
+            "hoi4_economy",
+            json!({"political_power": {"raw_signed": 10_000_000}}),
+        )]);
+        let mut state = State::default();
+        plan_manage::politics_reserve(&mut state, &poor, &plan, START);
+        let (reserve, _) =
+            plan_manage::politics_reserve(&mut state, &poor, &plan, START + 30 * DAY);
+        assert_eq!(reserve, 300.0);
+    }
+
+    #[test]
     fn a_gated_law_waits_for_its_gate_then_is_taken() {
         let plan = json!({"politics": [{"id": "econ", "category": "government", "slot": 1,
             "idea": "partial_economic_mobilisation", "when": "war_support >= 25"}]});

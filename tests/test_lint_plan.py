@@ -65,7 +65,8 @@ class CalendarAndHelpers(unittest.TestCase):
 # name a rule from these lists before lint_plan.py or the executor has it; drop a name here once it lands.
 PENDING_LINT_RULES = set()  # every lesson's lint rule is in lint_plan.py now
 THIS_PASS = {"focus.condition", "focus.condition_unchecked", "decision.condition", "decision.condition_unchecked",
-             "politics.visible", "politics.exclusive", "politics.dual_role", "diplomacy.borders_unheld",
+             "politics.visible", "politics.held_at_start", "politics.exclusive", "politics.dual_role",
+             "diplomacy.borders_unheld",
              "plan.stop_date", "manage.owner", "production.start_lines", "production.duplicate_line",
              "production.priority_all", "production.missing_line", "production.need_balance",
              "production.parked_request", "production.need_cap", "construction.capacity", "plan.ai_baseline"}

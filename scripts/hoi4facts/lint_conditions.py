@@ -22,6 +22,10 @@ training lines can field by each day.
                              executor waits on them; the plan should say what makes them true.
   politics.visible           (error) an advisor or law the plan names whose `visible` or `available` gate is
                              closed on every day of the run (a `visible = { always = no }` role is never shown).
+  politics.held_at_start     (error) a plan pick (politics[]) whose idea the country's history already gives at
+                             the start date (add_ideas less remove_ideas): the lane holds its cost as a reserve for a
+                             pick that can never be bought (t1939n: war_economy, extensive_conscription and Seldte
+                             kept 450 of 975 held power at the 1939 bookmark); drop it.
   politics.exclusive         (warning) an advisor that needs another planned character not hired
                              (`<character> = { is_hired_as_advisor = no }`): the order of the two decides.
   politics.dual_role         (warning) a character the plan both commands with (general or marshal) and hires
@@ -294,11 +298,46 @@ def _entry(lint, where):
     return rows[i] if i < len(rows) and isinstance(rows[i], dict) else None
 
 
+def held_at_start(lint):
+    """The ideas the country's history gives at the plan's start (add_ideas less remove_ideas, in
+    order), read from the game's and its mods' files."""
+    game = getattr(lint, "game", None)
+    if game is None or not lint.tag:
+        return set()
+    try:
+        _, fx = derive.history_effects_of(game, lint.tag, lint.ctx, lint.start,
+                                          (getattr(lint, "meta", None) or {}).get("history_file"))
+    except Exception:
+        return set()
+    held = set()
+    for k, v in fx:
+        if k not in ("add_ideas", "remove_ideas"):
+            continue
+        if isinstance(v, list):
+            names = set(derive.bare(v)) | {a for a, b in v if a and b in ("yes", "1")}
+        elif isinstance(v, str):
+            names = {v}
+        else:
+            continue
+        if k == "add_ideas":
+            held |= names
+        else:
+            held -= names
+    return held
+
+
 def politics(lint, tl):
     w = lint.world
     planned = _planned_ideas(lint)
     if not planned:
         return
+    have = held_at_start(lint)
+    for where, idea, _first in planned:
+        if where.startswith("politics[") and idea in have:
+            lint.add("error", "politics.held_at_start", where,
+                     f"{idea} is already the country's at the start ({lint.start}, its history's add_ideas): the "
+                     "pick can never be bought, and while it is pending the executor holds its cost out of the "
+                     "standing order; drop it (the start's own laws and advisers need no pick)")
     end = max([d for d, _ in lint.horizon()] or [tl.start + 365])
     done_rows = [(_day(r["end"]), r["focus"]) for r in (lint.facts.get("focus") or {}).get("schedule") or []]
     done0 = set(lint.meta.get("completed_focuses", []) or [])
