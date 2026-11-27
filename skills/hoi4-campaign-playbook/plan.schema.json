@@ -733,9 +733,9 @@
         },
         "idle_wake_days": {
           "type": "integer",
-          "default": 30,
+          "default": 7,
           "minimum": 0,
-          "description": "power above the threshold that nothing in the order can use for this long wakes the player (political_power_idle)"
+          "description": "power above the threshold that nothing in the order or a vacant seat can use for this long wakes the player (political_power_idle) with the decisions the game offers now that the power pays; the player chooses by value"
         },
         "why": {
           "type": "string",
@@ -983,10 +983,20 @@
           "default": true,
           "description": "true offers the lanes that own an open issue of the run monitor (RUN/issues_open.json, docs/MONITORING.md) ahead of the routine pass, each at most once a game day; false leaves the pass order alone"
         },
+        "fair_turns": {
+          "type": "boolean",
+          "default": true,
+          "description": "true offers every pass lane a turn within 3 game days ahead of the setup layout, the war's turn and the issue lanes (oldest wait first, the first that acts takes the tick, quiet ones until 1.5 s of wall time); false leaves the lanes to the war share and the pass"
+        },
         "construction_fast": {
           "type": "boolean",
           "default": true,
           "description": "true checks idle civilian factories among the fast lanes every tick (at most every 6 game hours while all are busy) and queues the plan's ordered items, then its open jobs; false leaves construction to its turn in the pass"
+        },
+        "many_lanes": {
+          "type": "boolean",
+          "default": true,
+          "description": "true runs every lane whose turn needs no input (a decision over the tick's snapshot, an order by the game's own command) in the same tick, one input sequence (a mouse order, a read through a panel) a tick in the scheduler's order, then a sweep of the lanes whose last turn needed no input; false keeps one acting lane a tick"
         },
         "politics_fast": {
           "type": "boolean",
@@ -4891,6 +4901,24 @@
           "description": "management inventory item id (manage_inventory.py show: political_power, command_power, officer_corps, ...) -> what happens to it instead of a plan key or executor rule, e.g. a brief line for a lever no tool carries yet (lint manage.owner: every item and alert has an owner or a reason)",
           "x-owner": "lint"
         },
+        "unproduced_ok": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "equipment the missing_equipment_production response leaves without a line (the divisions or wings lack it and no line makes it); the reason goes in unproduced_ok_why",
+          "x-owner": "executor"
+        },
+        "unproduced_ok_why": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "equipment -> why no line makes it although the divisions or wings lack it (manage.unproduced_ok)",
+          "x-owner": "executor"
+        },
         "alerts_ignore_why": {
           "type": "object",
           "additionalProperties": {
@@ -5266,6 +5294,11 @@
             ]
           },
           "description": "{\"<fleet>\": \"<admiral>\"} or [{fleet, admiral}], after fleets[].admiral"
+        },
+        "reserve_stays": {
+          "type": "boolean",
+          "default": false,
+          "description": "true keeps the reserve fleet's task forces where they are; false (default) sends each one the plan does not keep in navy.reserve to a fleet with an admiral by its role (submarines to the raiders, surface ships to the surface fleet)"
         },
         "reserve": {
           "type": "array",

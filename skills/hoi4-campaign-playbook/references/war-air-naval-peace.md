@@ -871,6 +871,7 @@ Never improvise raw input for a gap.
 | NA47 | Strike after the big battle | Keep obsolete capital ships out of losing fights; after a big battle the AI fleet goes to repair, which is the moment to strike or land | Fleet war | FAIR |
 | NA48 | Light cruisers kill screens | Screens shield capitals and carriers; light cruisers with four light batteries (light attack ~29, ~4,900 IC) strip the enemy screens first. Light battery III costs 150 IC per mount against 120 for II for 2 against 1.5 light attack and no extra resource (ship modules carry none in 1.19.4) | Surface fleets | FAIR |
 | NA49 | Sponge destroyers | Cheap early-hull destroyers with one light battery and a depth charge (~550 IC) absorb enemy light attack so the cruisers and torpedo destroyers survive | Surface fleets | FAIR |
+| NA50 | Naval headquarters admirals | A naval headquarters (a building on a coastal province with a level 8 naval base) takes an admiral of its own; task forces within its range of strategic regions take his bonus and he gains part of their experience. The game caps how many headquarters hold an admiral at once (define MAX_ADMIRAL_HEADQUARTER_ASSIGNMENTS) and raises the alert 'An admiral can be assigned to the naval headquarters' while one is empty; fleets with admirals do not close it | Every navy with a headquarters | FAIR |
 
 ## 18. Tactics: peace conference
 

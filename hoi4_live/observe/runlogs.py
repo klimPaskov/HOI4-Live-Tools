@@ -184,6 +184,7 @@ def now_snapshot(call):
     return {
         "date": now["date"], "utc": call.get("utc"), "paused": now.get("paused"), "light": True,
         "omissions": now.get("omissions") or [],
+        "lane_turns": now.get("lane_turns") or [],
         "research": {"idle_slots": now.get("idle_research_slots")},
         "economy": {"civilian_idle": now.get("civilian_factories_idle")},
         "wars": {"at_war": bool(now.get("at_war_with")), "enemies": now.get("at_war_with") or [],

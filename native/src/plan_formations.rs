@@ -451,11 +451,11 @@ pub(super) fn command_step(
             return Ok(Some(done));
         }
     }
-    // Armies on objective strikes keep their divisions: no merge moves them between armies.
-    if (plan["armies"].is_object() || plan["army_layout"].is_array())
-        && !state.skipped(now, "command", "armies")
-        && !super::plan_strike::owns_armies(state, plan)
-    {
+    // The merges follow the plan's layout; a general for every army that has none is standing
+    // work of every plan (g92a, 27 Nov 2026: Armee Pommern without a general for 147 days while
+    // free generals were listed). Armies on objective strikes keep their divisions (no merge),
+    // not their vacancies.
+    if !state.skipped(now, "command", "armies") {
         if let Some(done) = merge_and_lead(state, tools, plan, lease, now)? {
             return Ok(Some(done));
         }
@@ -607,7 +607,10 @@ fn merge_and_lead(
         .map(|a| text(&a["army"]).to_string())
         .collect();
     // 1. merges into formations
-    if cfg["concentrate"] != json!(false) && !list(plan, "army_layout").is_empty() {
+    if cfg["concentrate"] != json!(false)
+        && !list(plan, "army_layout").is_empty()
+        && !super::plan_strike::owns_armies(state, plan)
+    {
         let max = cfg["max"].as_u64().unwrap_or(24);
         let formations: Vec<String> = list(plan, "army_layout")
             .iter()
@@ -835,6 +838,7 @@ fn merge_and_lead(
     }
     // 2. a general for every army that has none
     let min_general = cfg["min_for_general"].as_u64().unwrap_or(1).max(1);
+    let lost = fills_that_did_not_hold(state, armies, now);
     let leaderless: Vec<(String, Option<String>)> = armies
         .iter()
         .filter(|a| a["commander"].is_null())
@@ -851,6 +855,22 @@ fn merge_and_lead(
         })
         .collect();
     if leaderless.is_empty() {
+        let resting: Vec<String> = armies
+            .iter()
+            .filter(|a| a["commander"].is_null())
+            .filter(|a| a["division_count"].as_u64().unwrap_or(0) >= min_general)
+            .map(|a| text(&a["army"]).to_string())
+            .collect();
+        let line = if resting.is_empty() {
+            "every army with divisions has a general".to_string()
+        } else {
+            format!(
+                "without a general, waiting for the next try: {}{}",
+                resting.join(", "),
+                lost_note(&lost)
+            )
+        };
+        plan_military::set_note(state, "command", line);
         state.skip(now, "command", "armies", DAY / 2);
         return Ok(None);
     }
@@ -887,6 +907,7 @@ fn merge_and_lead(
                 .find(|c| text(&c["name"]) == name)
                 .is_none_or(|c| free_own(c, &tag))
     };
+    let mut unfilled: Vec<String> = Vec::new();
     for (army, hint) in leaderless {
         let entry = hint.as_ref().and_then(|h| {
             list(plan, "army_layout")
@@ -915,6 +936,7 @@ fn merge_and_lead(
         wanted.extend(pool.iter().map(|c| text(&c["name"]).to_string()));
         let Some(general) = wanted.into_iter().find(|g| usable(state, g)) else {
             state.skip(now, "cgen", &army, 7 * DAY);
+            unfilled.push(army);
             continue;
         };
         let (ok, why) = state.act(
@@ -925,7 +947,18 @@ fn merge_and_lead(
             "cg",
         )?;
         if ok {
-            state.skip(now, "cgen", &army, 365 * DAY);
+            // Filled: the vacancy is looked at again once the reads have settled, not a year
+            // later. A verified fill can be undone (another order takes the general, the game
+            // drops him): Armee Pommern's Hoth was verified at 1936.01.0x and the army read
+            // without a general twelve seconds later, then stayed so for 147 days behind the
+            // old 365-day rest (g92a, 27 Nov 2026). The fill is remembered so a loss names him.
+            state.skip(now, "cgen", &army, 2 * DAY);
+            state.done.insert(format!("cgenfill:{army}|{general}"), now);
+            plan_military::set_note(
+                state,
+                "command",
+                format!("general {general} -> {army}: {why}{}", lost_note(&lost)),
+            );
         } else {
             state.skip(now, "cgen", &army, DAY);
             // A name the commander list does not offer is not a general of this country now:
@@ -944,8 +977,68 @@ fn merge_and_lead(
             "command: general {general} -> {army}: {ok} {why}"
         )));
     }
+    if !unfilled.is_empty() {
+        let free = pickable(rows, &tag).len();
+        plan_military::set_note(
+            state,
+            "command",
+            format!(
+                "without a general: {}: no general to give ({free} free commander(s) read, each \
+                 kept for an army group, leading, or resting after a refusal){}",
+                unfilled.join(", "),
+                lost_note(&lost)
+            ),
+        );
+    }
     state.skip(now, "command", "armies", DAY / 2);
     Ok(None)
+}
+
+/// Fills that did not hold: an army the lane gave a general (verified) that reads without one
+/// again. Each such general rests 30 days for that army's next fill (another general is tried:
+/// the same order would meet the same cause), and the loss is named in the lane's note. A fill
+/// that held (the army reads its general) is forgotten. Returns "army (general)" per loss.
+fn fills_that_did_not_hold(state: &mut State, armies: &[Value], now: GameHour) -> Vec<String> {
+    let fills: Vec<(String, String, String)> = state
+        .done
+        .keys()
+        .filter_map(|k| {
+            let rest = k.strip_prefix("cgenfill:")?;
+            let (army, general) = rest.split_once('|')?;
+            Some((k.clone(), army.to_string(), general.to_string()))
+        })
+        .collect();
+    let mut lost = Vec::new();
+    for (key, army, general) in fills {
+        let Some(row) = armies.iter().find(|a| text(&a["army"]) == army) else {
+            // the army is gone (merged, disbanded): nothing to learn
+            state.done.remove(&key);
+            continue;
+        };
+        match row["commander"].as_str() {
+            Some(c) if !c.trim().is_empty() => {
+                state.done.remove(&key);
+            }
+            _ => {
+                state.done.remove(&key);
+                state.skip(now, "cgenx", &general, 30 * DAY);
+                lost.push(format!("{army} ({general})"));
+            }
+        }
+    }
+    lost
+}
+
+fn lost_note(lost: &[String]) -> String {
+    if lost.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "; verified fills that did not hold (the army reads without a general again; that \
+             general rests 30 days): {}",
+            lost.join(", ")
+        )
+    }
 }
 
 #[cfg(test)]
@@ -1387,8 +1480,66 @@ mod tests {
             out.starts_with("command: general Guillet -> Army 9: true"),
             "{out}"
         );
-        // given once: the army is not looked at again for a year
-        assert!(state.skipped(1000 + 300 * DAY, "cgen", "Army 9"));
+        // given once: the vacancy is looked at again only after the reads settle, and only
+        // while the army reads without a general (a led army is never touched)
+        assert!(state.skipped(1000 + DAY, "cgen", "Army 9"));
+        assert!(!state.skipped(1000 + 3 * DAY, "cgen", "Army 9"));
+    }
+
+    /// g92a (27 Nov 2026): a plan with no `armies` or `army_layout` key; Armee Pommern's verified
+    /// general was gone again within seconds, and the 365-day rest after a fill left the army
+    /// without a general for 147 days while free generals were listed. The vacancy is filled
+    /// without a plan entry, a fill that did not hold is named and another general is tried.
+    #[test]
+    fn a_vacancy_is_filled_without_a_plan_entry_and_a_fill_that_did_not_hold_tries_another_general()
+    {
+        let plan = json!({"war": {"me": "GER"}});
+        let commanders = json!({"commanders": [
+            {"name": "Hermann Hoth", "id": "GER_hoth", "assigned_to": null, "skill": 4, "attack": 4},
+            {"name": "Arno von Lenski", "id": "GER_lenski", "assigned_to": null, "skill": 2, "attack": 2}]});
+        let leaderless = json!({"armies": [
+            {"army": "Armee Pommern", "division_count": 5, "commander": null, "main_state": 1}]});
+        let tools = game(vec![
+            ("hoi4_armies", leaderless.clone()),
+            ("hoi4_commanders", commanders.clone()),
+        ]);
+        let mut state = State::default();
+        let out = command_step(&mut state, &tools, &plan, "l", 1000)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("command: general Hermann Hoth -> Armee Pommern: true"),
+            "{out}"
+        );
+        // two days on the army reads without a general again: Hoth's fill did not hold
+        let later = 1000 + 3 * DAY;
+        let tools = game(vec![
+            ("hoi4_armies", leaderless),
+            ("hoi4_commanders", commanders),
+        ]);
+        let out = command_step(&mut state, &tools, &plan, "l", later)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("command: general Arno von Lenski -> Armee Pommern: true"),
+            "{out}"
+        );
+        let note = plan_military::note_of(&state, "command").unwrap();
+        assert!(
+            note.contains("did not hold") && note.contains("Armee Pommern (Hermann Hoth)"),
+            "{note}"
+        );
+        // every army led: the lane says so (the omission row quotes it, not the marshals' rule)
+        let led = game(vec![(
+            "hoi4_armies",
+            json!({"armies": [{"army": "Armee Pommern", "division_count": 5,
+                "commander": "Arno von Lenski", "main_state": 1}]}),
+        )]);
+        let _ = command_step(&mut state, &led, &plan, "l", later + 3 * DAY).unwrap();
+        assert_eq!(
+            plan_military::note_of(&state, "command"),
+            Some("every army with divisions has a general")
+        );
     }
 
     #[test]

@@ -330,6 +330,53 @@ def gate_kind(prev_date, snap, failure=None, last_gate=None):
     return None
 
 
+def silent_lanes(detector):
+    """Open issues whose owning lane is past the deadline and has said nothing: the lane_silent
+    findings, and rows recorded before them that quote "no reason given"."""
+    out = []
+    for i in detector.open_issues():
+        text = str(i.get("text") or "")
+        if i.get("code") == "lane_silent" or (i.get("overdue") and ("no reason given" in text or "SILENT:" in text)):
+            out.append(i)
+    return out
+
+
+def lane_turns_line(snap):
+    """Turns per lane as the executor reports them (its `lane_turns` in the watcher's brief): the
+    executor's pace first (ticks and lane turns per game day), then the lanes that never had a
+    turn or waited longest, each with its turns per game day, so a starved lane shows at the gate
+    (t1939o, 27 Nov 2026: decisions, resources and intelligence had no turn in 56 days; w92b: one
+    lane per tick, about two ticks a game day)."""
+    all_rows = [r for r in snap.get("lane_turns") or [] if isinstance(r, dict) and r.get("lane")]
+    rows = [r for r in all_rows if r.get("kind") != "ticks"]
+    pace = next((r for r in all_rows if r.get("kind") == "ticks"), None)
+    if not rows and not pace:
+        return ""
+
+    def wait(r):
+        return (r.get("turns") or 0) > 0, -(r.get("days_since") if r.get("days_since") is not None else 10 ** 6)
+
+    parts = []
+    for r in sorted(rows, key=wait):
+        last = r.get("days_since")
+        when = "never" if not r.get("turns") else f"{last}d ago" if last is not None else "?"
+        rate = f", {r['per_day']}/day" if r.get("per_day") is not None else ""
+        cost = ", input" if r.get("input") else ""
+        parts.append(f"{r['lane']} {r.get('turns') or 0} ({when}{rate}{cost}{', silent' if r.get('silent') else ''})")
+    head = ""
+    if pace:
+        head = (f"Executor pace: {pace.get('ticks_per_day')} ticks and {pace.get('lane_turns_per_day')} lane turns "
+                f"per game day ({pace.get('ticks')} ticks, {pace.get('lane_turns')} turns). ")
+    return head + "Turns per lane (turns, last, per game day): " + "; ".join(parts)
+
+
+def starved_lanes(snap):
+    """Lanes the executor reports past the longest wait any of its rules gives a lane (`starved`):
+    a lane with work that had no turn for that long is a failure of the scheduler."""
+    return [r for r in snap.get("lane_turns") or []
+            if isinstance(r, dict) and r.get("lane") and r.get("kind") != "ticks" and r.get("starved")]
+
+
 def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", budget_line=""):
     """One page: what happened, issues opened and closed since the last gate, overdue, counters, costs."""
     w = snap.get("wars") or {}
@@ -355,6 +402,19 @@ def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", 
         lines.append(f"- OVERDUE {i['id']} {i['class']} {i['code']} since {i['first_seen']}: {i['text'][:150]}")
     for i in [i for i in opened if i["severity"] == "high" and not i["overdue"]][:8]:
         lines.append(f"- new {i['id']} {i['class']} {i['code']}: {i['text'][:150]}")
+    # a lane past an issue's deadline that states no reason is a failure of the rule, counted
+    # apart from the waits (t1939n, 27 Nov 2026: 20 overdue rows read "no reason given")
+    silent = silent_lanes(detector)
+    lines.append(f"Silent lanes past their deadline (FAIL while any): {len(silent)}")
+    for i in silent[:10]:
+        lines.append(f"- SILENT {i['id']} lane {i.get('lane')} {i.get('subject') or i['code']}: {i['text'][:150]}")
+    starved = starved_lanes(snap)
+    if snap.get("lane_turns"):
+        lines.append(f"Starved lanes, no turn past the longest wait (FAIL while any): {len(starved)}"
+                     + (": " + ", ".join(f"{r['lane']} ({r.get('days_since')}d)" for r in starved[:12]) if starved else ""))
+    turns = lane_turns_line(snap)
+    if turns:
+        lines.append(turns)
     counts = detector.count_table()
     year = (snap.get("date") or "?")[:4]
     if year in counts:

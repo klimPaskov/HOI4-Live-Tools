@@ -114,7 +114,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_army_assign` (A): Fold the unassigned divisions standing in a state into an existing army there without disturbing other armies, or create a new army when none stands there.
 - `hoi4_army_assign_plan` (R): Pure read:
 - `hoi4_army_attack` (A): Front line, offensive line and execute for one army in one call (the same steps as hoi4_army_front, hoi4_army_offensive and hoi4_army_plan execute:true, each verified and journalled as <request_id>:front, :offensive, :execute).
-- `hoi4_army_commander` (A): Assign a general (exact name as listed by hoi4_commanders) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list.
+- `hoi4_army_commander` (A): Assign a general (by the full name hoi4_commanders lists, a part of it that names one commander only such as the surname, or the character id) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list.
 - `hoi4_army_create` (A): (optional absorb_existing:
 - `hoi4_army_detach` (A): Move chosen divisions out of an army:
 - `hoi4_army_exercise` (A): Start or stop army exercises for own armies:

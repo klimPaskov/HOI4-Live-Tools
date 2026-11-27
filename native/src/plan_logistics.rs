@@ -200,8 +200,11 @@ fn train_line_step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
+    // On by default (owner, 27 Nov 2026: "trains and trucks matter: put one mil on trains in the
+    // beginning"); `logistics.trains: false` (with its why) is the plan's way to decline it.
+    // t1939n had no `logistics` key: no train line all war, the stock fell 246 -> 216.
     let cfg = &plan["logistics"]["trains"];
-    if cfg.is_null() || *cfg == json!(false) || state.skipped(now, "logi", "trains") {
+    if *cfg == json!(false) || state.skipped(now, "logi", "trains") {
         return Ok(None);
     }
     state.skip(now, "logi", "trains", DAY);
@@ -210,12 +213,64 @@ fn train_line_step(
         .iter()
         .find(|r| text(&r["archetype"]).starts_with("train_equipment"))
     else {
+        super::plan_manage::note(
+            state,
+            "logistics",
+            "trains: the stockpile read has no train row",
+        );
         return Ok(None);
     };
+    let stock = row["stockpile"].as_f64().unwrap_or(0.0);
     if row["lines"].as_u64().unwrap_or(0) > 0 {
+        super::plan_manage::note(
+            state,
+            "logistics",
+            format!(
+                "trains: {stock:.0} in stock, a line makes them ({:.2} a day); its growth is the stockpile rule's",
+                row["produced_per_day"].as_f64().unwrap_or(0.0)
+            ),
+        );
         return Ok(None);
     }
     let factories = cfg["factories"].as_u64().unwrap_or(1).max(1);
+    // A line asks for factories the game gives only when some are free: with every factory on a
+    // line, the new line is fed by one factory taken from the largest line (the smallest share
+    // of any output), never from a line the plan's own production entry sizes below that.
+    let economy = tools.call("hoi4_economy", &json!({}))?;
+    let (military, idle) = super::plan_manage::military_lines(tools, &economy)?;
+    let mut freed = String::new();
+    if idle < factories as i64 {
+        let donor = largest_line(&military, plan, factories as i64 - idle.max(0));
+        let Some((index, equipment, have)) = donor else {
+            super::plan_manage::note(
+                state,
+                "logistics",
+                format!("trains: {stock:.0} in stock and no line makes them, no idle military factory and no line large enough to give {factories}: tried again in 3 days"),
+            );
+            state.skip(now, "logi", "trains", 3 * DAY);
+            return Ok(None);
+        };
+        let take = factories as i64 - idle.max(0);
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_production_set",
+            json!({"line": index, "equipment": equipment, "factories": have - take}),
+            "lg",
+        )?;
+        if !ok {
+            state.skip(now, "logi", "trains", 3 * DAY);
+            super::plan_manage::note(
+                state,
+                "logistics",
+                format!("trains: freeing {take} factory from {equipment} was refused: {why}"),
+            );
+            return Ok(Some(format!(
+                "logistics: {take} factory from {equipment} for a train line: {ok} {why}"
+            )));
+        }
+        freed = format!(" ({take} from {equipment}, {have} -> {})", have - take);
+    }
     let (ok, why) = state.act(
         tools,
         lease,
@@ -226,10 +281,60 @@ fn train_line_step(
     if !ok {
         state.skip(now, "logi", "trains", 3 * DAY);
     }
-    let stock = row["stockpile"].as_f64().unwrap_or(0.0);
+    super::plan_manage::note(
+        state,
+        "logistics",
+        format!("trains: line with {factories} factories{freed}: {ok} {why}"),
+    );
     Ok(Some(format!(
-        "logistics: train line with {factories} factories ({stock:.0} trains in stock, none made): {ok} {why}"
+        "logistics: train line with {factories} factories{freed} ({stock:.0} trains in stock, none made): {ok} {why}"
     )))
+}
+
+/// The military line with the most factories that can give `take` and stay at or above the
+/// plan's own production entry for its equipment: (entry index, equipment, factories); pure.
+pub(super) fn largest_line(
+    military: &[super::plan_manage::MilLine],
+    plan: &Value,
+    take: i64,
+) -> Option<(i64, String, i64)> {
+    military
+        .iter()
+        .filter(|(_, equipment, have, _)| {
+            let floor: i64 = list(plan, "production")
+                .iter()
+                .filter(|e| text(&e["equipment"]) == *equipment)
+                .filter_map(|e| e["factories"].as_i64())
+                .sum::<i64>()
+                .max(1);
+            *have - take >= floor && !equipment.starts_with("train_equipment")
+        })
+        .max_by_key(|(_, _, have, _)| *have)
+        .map(|(i, e, have, _)| (*i, e.clone(), *have))
+}
+
+/// The trucks the hubs rule's wanted raises still take (the armies its read wants motorised
+/// above their level), for the production response to a truck shortfall: the stockpile rule
+/// counts them with the divisions' own need, so the trucks the hubs wait on are made (engineer
+/// 91, 27 Nov 2026: the hubs rule sat on "trucks short" while the trucks rule saw no shortfall).
+/// None when the hubs rule is off or its reads fail; pure over the reads.
+pub(super) fn hub_raise_trucks(
+    state: &State,
+    plan: &Value,
+    roster: &Value,
+    supply: &Value,
+) -> Option<f64> {
+    if !hubs_on(plan) {
+        return None;
+    }
+    let ops = operation_armies(state, plan);
+    // a raise whose cost per hub is unread adds nothing: the stock it needs is unknown
+    let need: f64 = hub_wants(plan, roster, supply, &ops)
+        .iter()
+        .filter(|w| w.wanted > w.level)
+        .filter_map(|w| w.trucks)
+        .sum();
+    Some(need)
 }
 
 fn hubs_step(
@@ -328,9 +433,7 @@ pub(super) fn logistics_step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    if !plan["logistics"].is_object() && !hubs_on(plan) {
-        return Ok(None);
-    }
+    // the train line runs without the key; the hubs by `hubs_on`
     if let Some(line) = train_line_step(state, tools, plan, lease, now)? {
         return Ok(Some(line));
     }
@@ -410,6 +513,15 @@ mod tests {
         unread.as_object_mut().unwrap().remove("defines");
         let wants = hub_wants(&plan, &roster(), &unread, &ops);
         assert_eq!(wants[0].trucks, None);
+        // the production response counts the raises' trucks (lowerings give none back here)
+        assert_eq!(
+            hub_raise_trucks(&state, &plan, &roster(), &supply()),
+            Some(120.0)
+        );
+        assert_eq!(
+            hub_raise_trucks(&state, &json!({}), &roster(), &supply()),
+            None
+        );
         // an ended operation asks nothing
         state.done.insert("op:op_east:end".into(), START);
         let ops = operation_armies(&state, &plan);
@@ -495,33 +607,63 @@ mod tests {
     }
 
     #[test]
-    fn a_train_line_opens_when_nothing_makes_trains_and_only_with_the_key() {
+    fn a_train_line_opens_when_nothing_makes_trains_and_a_full_economy_frees_one_factory() {
+        // owner, 27 Nov 2026: "put one mil on trains in the beginning"; t1939n had no
+        // `logistics` key, no train line all war, and every factory on a line
         let stock = |lines: u64| json!({"equipment": [{"archetype": "train_equipment", "stockpile": 71.0, "lines": lines}]});
-        let fake = Fake {
-            replies: BTreeMap::from([("hoi4_stockpile", stock(0))]),
+        let lines = json!({"lines": [
+            {"line_kind": "military", "entry_index": 0, "equipment_id": "infantry_equipment_2",
+             "factory_counters": {"requested_factories_raw_signed": 18}},
+            {"line_kind": "military", "entry_index": 1, "equipment_id": "artillery_equipment_1",
+             "factory_counters": {"requested_factories_raw_signed": 2}}]});
+        let economy = |total: i64| json!({"factory_trigger_count": {"military": total}});
+        let fake = |total: i64, n: u64| Fake {
+            replies: BTreeMap::from([
+                ("hoi4_stockpile", stock(n)),
+                ("hoi4_production_lines", lines.clone()),
+                ("hoi4_economy", economy(total)),
+            ]),
             sent: RefCell::new(Vec::new()),
         };
+        // every factory on a line: one leaves the largest line, then the train line opens
+        let f = fake(20, 0);
         let mut state = State::default();
-        assert_eq!(
-            logistics_step(&mut state, &fake, &json!({}), "l", START).unwrap(),
-            None
-        );
-        let plan = json!({"logistics": {"trains": {"factories": 1}}});
-        let line = logistics_step(&mut state, &fake, &plan, "l", START)
+        let line = logistics_step(&mut state, &f, &json!({}), "l", START)
             .unwrap()
             .unwrap();
-        assert!(line.contains("train line with 1 factories"), "{line}");
-        assert_eq!(fake.sent.borrow()[0].1["equipment"], "train_equipment");
-        // a line already makes trains: nothing
-        let fake = Fake {
-            replies: BTreeMap::from([("hoi4_stockpile", stock(1))]),
-            sent: RefCell::new(Vec::new()),
-        };
+        assert!(
+            line.contains("1 from infantry_equipment_2, 18 -> 17"),
+            "{line}"
+        );
+        let sent = f.sent.borrow();
+        assert_eq!(sent[0].0, "hoi4_production_set");
+        assert_eq!(sent[0].1["factories"], 17);
+        assert_eq!(sent[1].0, "hoi4_production_add");
+        assert_eq!(sent[1].1["equipment"], "train_equipment");
+        drop(sent);
+        // an idle factory: no line gives one
+        let f = fake(21, 0);
+        let mut state = State::default();
+        logistics_step(&mut state, &f, &json!({}), "l", START)
+            .unwrap()
+            .unwrap();
+        assert_eq!(f.sent.borrow().len(), 1);
+        // a line already makes trains, or the plan declines it: nothing sent, a reason noted
+        let f = fake(20, 1);
         let mut state = State::default();
         assert_eq!(
-            logistics_step(&mut state, &fake, &plan, "l", START).unwrap(),
+            logistics_step(&mut state, &f, &json!({}), "l", START).unwrap(),
             None
         );
-        assert!(fake.sent.borrow().is_empty());
+        assert!(f.sent.borrow().is_empty());
+        let note = super::super::plan_manage::digest(&state).unwrap()["logistics"].to_string();
+        assert!(note.contains("a line makes them"), "{note}");
+        let f = fake(20, 0);
+        let off = json!({"logistics": {"trains": false}});
+        assert_eq!(
+            logistics_step(&mut State::default(), &f, &off, "l", START).unwrap(),
+            None
+        );
+        assert!(f.sent.borrow().is_empty());
     }
 }

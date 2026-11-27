@@ -280,7 +280,9 @@ class Detector:
                 sev, esc = "low", R.lane_of(code) not in (None, "alerts")
             if code in ("executor_repeated_refusal", "plan_item_blocked"):
                 esc = False  # the executor's ledger: answered by lessons, reported at the gate
-            lane = R.lane_of(f.get("subject") or "") if code == "lane_wait_outlived" else None
+            lane = R.executor_owner_lane(f.get("numbers") or {})
+            if lane is None and code in ("lane_wait_outlived", "lane_silent"):
+                lane = R.lane_of(f.get("subject") or "")
             it = self.raise_issue(key, code, f.get("text") or code, sev, f.get("numbers"), origin=origin,
                                   subject=f.get("subject"), escalate=esc, lane=lane)
             note = (f.get("numbers") or {}).get("owner_note") or (f.get("numbers") or {}).get("note")
@@ -381,7 +383,7 @@ class Detector:
                 self.raise_issue(key, "checkpoint_missed",
                                  f"checkpoint {cp['id']} (by {cp['by']}: {', '.join(map(str, cp.get('must') or []))[:120]}) "
                                  f"is past and not met; the plan says: {cp.get('else') or 'nothing'}", "high",
-                                 subject=cp["id"])
+                                 subject=cp["id"], lane=R.checkpoint_lane(cp.get("must")))
                 out.append(key)
         fielded = (snap.get("land") or {}).get("division_count")
         rows = (self.plan.get("force_design") or {}).get("land") if isinstance(self.plan.get("force_design"), dict) else None

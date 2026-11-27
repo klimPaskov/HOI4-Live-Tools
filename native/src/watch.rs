@@ -475,6 +475,9 @@ struct FeedState {
     /// What the game lists as actionable and is still open, with the executor rule that owns
     /// each item (written by the executor's alert rule, plan_manage.rs).
     omissions: Option<Value>,
+    /// The executor's turns per lane (written with the omissions): how often each lane was
+    /// offered a turn, when last, and whether it ever said anything.
+    lane_turns: Option<Value>,
     samples: u64,
     sampled_at: Option<Instant>,
 }
@@ -486,6 +489,7 @@ impl Default for Feed {
                 next: 1,
                 last: None,
                 omissions: None,
+                lane_turns: None,
                 samples: 0,
                 sampled_at: None,
             }),
@@ -576,6 +580,9 @@ impl Feed {
             "now": s.last.as_ref().map(|c| {
                 let mut brief = c.brief();
                 brief["omissions"] = s.omissions.clone().unwrap_or(json!([]));
+                if let Some(turns) = &s.lane_turns {
+                    brief["lane_turns"] = turns.clone();
+                }
                 brief
             }),
             "watcher": {"samples": s.samples,
@@ -627,6 +634,13 @@ impl Feed {
     pub fn set_omissions(&self, omissions: Value) {
         if let Ok(mut s) = self.inner.lock() {
             s.omissions = Some(omissions);
+        }
+    }
+
+    /// The executor's turns per lane (see `FeedState::lane_turns`); they ride in every `now`.
+    pub fn set_lane_turns(&self, turns: Value) {
+        if let Ok(mut s) = self.inner.lock() {
+            s.lane_turns = Some(turns);
         }
     }
 

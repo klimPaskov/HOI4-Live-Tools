@@ -573,7 +573,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_commander": {
-   "description": "Assign a general (exact name as listed by hoi4_commanders) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list. Verified when the army's commander is that general. Refused before any click with army_unknown (lists valid armies/groups), unknown_commander (5 closest names) or commander_unavailable (already leads another army/group; pass reassign: true to move them).",
+   "description": "Assign a general (by the full name hoi4_commanders lists, a part of it that names one commander only such as the surname, or the character id) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list. Verified when the army's commander is that general. Refused before any click with army_unknown (lists valid armies/groups), unknown_commander (5 closest names) or commander_unavailable (already leads another army/group; pass reassign: true to move them).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
