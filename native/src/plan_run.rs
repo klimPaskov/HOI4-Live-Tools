@@ -3719,7 +3719,20 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
         out.push(lane_of(manage, name));
     }
     for (name, step) in affairs.iter() {
-        if !["mio_lines", "mio", "mio_traits", "intelligence"].contains(name) {
+        if *name == "trade" {
+            // one trade lane: the plan's own deals, then the judgement of the deficits. The
+            // judge (plan_manage `trade`) shared the name and was never offered: no deficit was
+            // bought all war (t1939n, 27 Nov 2026: insufficient_resources open 151 days,
+            // hoi4_trade never called)
+            out.push(("trade", |state, tools, plan, lease, now| {
+                if let Some(line) =
+                    lane_of(&plan_affairs::LANES, "trade").1(state, tools, plan, lease, now)?
+                {
+                    return Ok(Some(line));
+                }
+                lane_of(&plan_manage::LANES, "trade").1(state, tools, plan, lease, now)
+            }));
+        } else if !["mio_lines", "mio", "mio_traits", "intelligence"].contains(name) {
             out.push((name, *step));
         }
     }
@@ -13249,6 +13262,30 @@ mod tests {
             refuse_text: RefCell::new(HashMap::new()),
         }
     }
+    /// t1939n (27 Nov 2026): the trade judge shared the name `trade` with the plan's deals and
+    /// was never offered; insufficient_resources stayed open 151 days and hoi4_trade was never read.
+    #[test]
+    fn the_pass_trade_lane_reaches_the_judge_and_the_resources_rule_names_it() {
+        let plan = json!({"manage": {}, "trade": {"judge": {"on": true}}});
+        let pass = super::lanes(&plan, false);
+        assert_eq!(pass.iter().filter(|l| l.0 == "trade").count(), 1);
+        let trade = pass.iter().find(|l| l.0 == "trade").unwrap().1;
+        let tools = fake(vec![(
+            "hoi4_resources",
+            json!({"resources": {"steel": {"shortage": {"short": false}}}}),
+        )]);
+        let mut state = State::default();
+        assert_eq!(trade(&mut state, &tools, &plan, "l", 1_000).unwrap(), None);
+        assert!(tools.calls.borrow().iter().any(|(n, _)| n == "hoi4_resources"));
+        assert_eq!(plan_manage::note_of(&state, "trade"), Some("no deficit"));
+        let resources = pass.iter().find(|l| l.0 == "resources").unwrap().1;
+        resources(&mut state, &tools, &plan, "l", 1_000).unwrap();
+        assert_eq!(
+            plan_manage::note_of(&state, "resources"),
+            Some("trade.judge owns the deficits: no deficit")
+        );
+    }
+
     #[test]
     fn the_bulk_paths_whose_probes_passed_are_on_by_default() {
         let none = bulk_paths(&json!({}));

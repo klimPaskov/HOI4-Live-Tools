@@ -2745,9 +2745,16 @@ fn resources_step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
+    if trade_judged(plan) && !off(plan, "resources") {
+        // the deficits are the trade judge's (lane `trade`): its word is this rule's reason
+        let judged = note_of(state, "trade")
+            .unwrap_or("it has not judged the deficits yet")
+            .to_string();
+        note(state, "resources", format!("trade.judge owns the deficits: {judged}"));
+        return Ok(None);
+    }
     if (plan["auto_import"].is_null() && !plan["manage"].is_object())
         || off(plan, "resources")
-        || trade_judged(plan)
         || state.skipped(now, "mres", "x")
     {
         return Ok(None);
@@ -4620,7 +4627,16 @@ fn officer_corps_step(
     now: GameHour,
 ) -> Result<Option<String>> {
     let entries = list(plan, "officer_corps");
-    if entries.is_empty() || state.skipped(now, "mofc", "x") {
+    if entries.is_empty() {
+        note(
+            state,
+            "officer_corps",
+            "the plan names no officer corps spirit: an open pick is the high command seats' \
+             (politics_auto) or the player's",
+        );
+        return Ok(None);
+    }
+    if state.skipped(now, "mofc", "x") {
         return Ok(None);
     }
     let mut waiting: Vec<String> = Vec::new();
