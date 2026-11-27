@@ -94,6 +94,13 @@ const ROLL_STALL_DAYS: i64 = 4;
 /// one (qv1, rs5, qv2, 19 Nov 2026: Armee Nord's 17 divisions stood 14-21 days in East Prussia on
 /// the save's arrow at Danzig and Gdynia, none of them in Poland, while the group fought alone).
 const WING_STALL_DAYS: i64 = 5;
+/// Game days an army rests from the operation's refinements at war (width thinning, an echelon fed
+/// into it, an opening send, a supply stop) once one acted on it (`refine_days` on the
+/// operation): each change takes divisions off their orders or stops the plan, so it acts at most
+/// once in this many days per army (w92c, 28 Nov 2026: 13 detach and merge orders in 28 days moved
+/// some 76 divisions between armies, each arriving with planning 0, while 14% of the divisions
+/// fought).
+const REFINE_DAYS: i64 = 5;
 /// The far line (`offensive.deep`): the share of the enemies' victory points the line must lie
 /// behind (the surrender limit, 0.8 at the base, with margin: Poland stood at 0.81 for weeks
 /// without capitulating on the bed, b38f/b38g), the depth band of its states (a share of the
@@ -1484,6 +1491,13 @@ fn supply_pace(
             state.skip(now, "opsupply", &u.name, DAY / 4);
             return Ok(Paced::Go);
         }
+        // a supply stop is a refinement: at most once per refine_days per army (an army that
+        // goes on after one does not stop again at once)
+        if !refine_due(state, id, op, &u.name, now) {
+            state.skip(now, "opsupply", &u.name, DAY / 4);
+            return Ok(Paced::Go);
+        }
+        refined(state, id, &u.name, now);
         state.done.insert(hk, now);
         let why = format!(
             "{}: supply {mean:.0}% below the floor {:.0}%: the advance waits for its supply \
@@ -2259,6 +2273,10 @@ fn one(
     state
         .done
         .insert(key(id, "by_command"), i64::from(by_command(op)));
+    state.done.insert(
+        key(id, "deep_line"),
+        i64::from(by_command(op) && op["deep_line"] != json!(false)),
+    );
     let executed = state.done.contains_key(&key(id, "exec"));
     // THE AXIS BY TERRAIN: each `axis_by: "terrain"` formation's path is chosen once (in peace,
     // or on its first war day when the operation began at war) before its lines are drawn
@@ -2460,6 +2478,10 @@ fn one(
         state
             .op_notes
             .insert(format!("{id}:planning"), note.clone());
+    } else {
+        // a gate that passed leaves no note behind (w92c, 28 Nov 2026: "planning 0.15 against 0.27"
+        // stood from W-142 to the end of the war while the attackers read 0.34-0.43)
+        state.op_notes.remove(&format!("{id}:planning"));
     }
     if !resting && gate.is_none() {
         state.done.entry(key(id, "ready")).or_insert(now);
@@ -3908,7 +3930,13 @@ fn assault_guarded(
     let ours = army_row(roster, &u.name)
         .and_then(|r| r["division_count"].as_i64())
         .unwrap_or(0);
-    let weak = theirs.is_some_and(|t| t > 0 && ours < ASSAULT_SUPERIORITY * t);
+    // THE ODDS (`assault_guard: "odds"` only): the divisions our country sees in the target's
+    // border states against the wing's. Off by default: the count is what stands at the border,
+    // not what defends the way in, and it held Armee West Süd (14 against 2 x 8 seen) five days
+    // at the opening and Army 3 (8 against 2 x 5) twelve days while the joint attack ran (w92c,
+    // 28 Nov 2026)
+    let odds = op["assault_guard"].as_str() == Some("odds");
+    let weak = odds && theirs.is_some_and(|t| t > 0 && ours < ASSAULT_SUPERIORITY * t);
     let hard_alone = best.2 <= ASSAULT_HARD || weak;
     // NEVER ALONE, NEVER FOREVER (w46c1: the wing assaulted alone and bled 26.2k:0.5k; w46e1/f1:
     // the guard held it all war and Luxembourg was never attacked). The wing attacks together
@@ -3994,11 +4022,14 @@ fn assault_guarded(
         })
         .collect();
     let together = ours + beside.iter().map(|(_, n)| n).sum::<i64>();
-    let one_blow = !beside.is_empty() && theirs.is_none_or(|t| together >= ASSAULT_SUPERIORITY * t);
+    let one_blow =
+        !beside.is_empty() && (!odds || theirs.is_none_or(|t| together >= ASSAULT_SUPERIORITY * t));
+    // NEVER ALONE is the rule: with an attack of the same war executing the wing attacks with it
+    // at once; the wait for a second direction or JOINT_MAX_WAIT applies only with the odds
     let hard = match joint_days {
         _ if one_blow => false,
         None => true,
-        Some(days) => second.is_empty() && (days < JOINT_MAX_WAIT / DAY || weak),
+        Some(days) => odds && second.is_empty() && (days < JOINT_MAX_WAIT / DAY || weak),
     };
     let mut seen: Vec<String> = ways.iter().map(|w| w.3.clone()).collect();
     seen.sort();
@@ -4486,9 +4517,13 @@ fn stacking(
         // by width a rested echelon goes forward only into room the line's battles have (or to
         // relieve a worn army): fed into a full line it would stand in the reserve again
         let rotate = rested && army_room > 0 && (!width || seen.room > 0 || worn);
-        if !(fits || partial || rotate) || state.skipped(now, "opfeed", e) {
+        if !(fits || partial || rotate)
+            || state.skipped(now, "opfeed", e)
+            || !refine_due(state, id, op, src, now)
+        {
             continue;
         }
+        refined(state, id, src, now);
         state.skip(now, "opfeed", e, STACK_REST);
         state.skip(now, "opstkdet", id, DAY);
         state.done.remove(&key(id, "stkseen"));
@@ -4650,7 +4685,20 @@ fn stacking(
             json!({"army": e, "states": [station]}),
         )?));
     }
-    // 3. MAKE AN ECHELON: the surplus seen in STACK_READS reads in a row
+    // 3. MAKE AN ECHELON (`stacking.thin_at_war: true` only): at war a thinned division leaves
+    // its order (planning 0) for an echelon that stands behind on area defence or without a
+    // front, and the feed forward and the opening move it again (w92c, 28 Nov 2026: 13 moves
+    // in 28 days; the overstack itself came from 1-4 province arrows, which the deep line ends)
+    if cfg["thin_at_war"] != json!(true) {
+        state.op_notes.insert(
+            format!("{id}:stacking"),
+            format!(
+                "operation {id}: top province {} holds {}, carries {} (no thinning at war: stacking.thin_at_war)",
+                seen.top.1, seen.top.0, seen.top.2
+            ),
+        );
+        return Ok(None);
+    }
     let sk = key(id, "stkseen");
     if seen.total < min_surplus {
         state.done.remove(&sk);
@@ -4680,7 +4728,10 @@ fn stacking(
             .take(((count / 3).max(0) as usize).min(18))
             .cloned()
             .collect();
-        if take.is_empty() || state.skipped(now, "opdet", army) {
+        if take.is_empty()
+            || state.skipped(now, "opdet", army)
+            || !refine_due(state, id, op, army, now)
+        {
             continue;
         }
         let into = ech.iter().find(|(s, _)| s == army).map(|(_, e)| e.clone());
@@ -4704,6 +4755,7 @@ fn stacking(
             args["into"] = json!(e);
         }
         let (ok, why) = state.act(tools, lease, "hoi4_army_detach", args, "opdt")?;
+        refined(state, id, army, now);
         let made = if ok && into.is_none() {
             tools
                 .call("hoi4_armies", &json!({"threat": false}))
@@ -5743,6 +5795,31 @@ fn reconcile(
     // is painted on the standing front; the unit's orders are never cleared at war (t1939j, 24
     // Nov 2026: each new line cleared Panzergruppe Ost's orders, the front would not draw again
     // where the army stood, and it fought without an order from 24 September to the capitulation)
+    // AN EXECUTING SPEARHEAD STAYS while its own target lies ahead: at war a spearhead whose order
+    // executes toward a state still on the line is never deleted or painted over (each delete
+    // took its divisions off their planning; w92c, 28 Nov 2026: Army 9 was deleted and painted
+    // three times, its set-path never took in the running game); one whose target is behind the
+    // line (taken) has done its work and gives way to the next
+    if stale
+        && u.spear
+        && !peace
+        && offensives(roster, &u.name).iter().any(|off| {
+            !aims(u, off, line)
+                && off["executing"] == json!(true)
+                && ints(&off["target"]["states"])
+                    .iter()
+                    .any(|s| line.contains(s))
+        })
+    {
+        state.op_notes.insert(
+            format!("{id}:{}", u.name),
+            format!(
+                "{}: its spearhead executes off the line {tag}: kept (an executing order is never deleted)",
+                u.name
+            ),
+        );
+        return Ok(None);
+    }
     if stale && u.spear && !peace && redraws == 0 {
         state.done.insert(k.clone(), 1);
         let nodelete = key(id, &format!("nodelete:{}", u.name));
@@ -5881,6 +5958,12 @@ fn reconcile(
     if !peace {
         state.done.insert(wtries, wn + 1);
     }
+    let deep = if u.spear {
+        Vec::new()
+    } else {
+        deep_target(state, tools, id, u, line, wars)
+    };
+    let stroke_args = offensive_order(&u.name, line, u.anchor, false);
     let args = if u.spear {
         command_spear(
             state,
@@ -5892,21 +5975,53 @@ fn reconcile(
             offensive_order(&u.name, &line[line.len() - 1..], None, true),
         )
     } else {
-        offensive_order(&u.name, line, u.anchor, false)
+        let mut args = stroke_args.clone();
+        if !deep.is_empty() {
+            args["target_provinces"] = json!(deep);
+            // under the front that holds the most divisions (a plan of several roots names one)
+            let front = orders(roster, &u.name)
+                .iter()
+                .filter(|o| text(&o["kind"]) == "front")
+                .max_by_key(|o| o["divisions"].as_i64().unwrap_or(0))
+                .and_then(|o| o["id"].as_i64());
+            if let Some(f) = front {
+                args["parent_order"] = json!(f);
+            }
+        }
+        args
     };
-    let line = order(
+    let mut line = order(
         state,
         tools,
         lease,
         id,
         &format!(
-            "{} of {} through {tag}",
+            "{} of {} through {tag}{}",
             if u.spear { "spearhead" } else { "offensive" },
-            u.name
+            u.name,
+            if deep.is_empty() {
+                String::new()
+            } else {
+                format!(" on its far edge ({} provinces by command)", deep.len())
+            }
         ),
         "hoi4_army_offensive",
         args,
     )?;
+    // a deep line the module or the game did not take is drawn by the stroke in the same call:
+    // a front without an offensive gains nothing
+    if state.last_ok == Some(false) && !deep.is_empty() && !line.contains("Diverged") {
+        let stroke = order(
+            state,
+            tools,
+            lease,
+            id,
+            &format!("offensive of {} through {tag} (by the stroke)", u.name),
+            "hoi4_army_offensive",
+            stroke_args,
+        )?;
+        line = format!("{line}; {stroke}");
+    }
     if state.last_ok == Some(false) {
         // the game drew the stroke to other states: the line is out of this front's reach as it
         // stands; the same stroke waits until the front has moved (s55a, 23 Nov 2026: Panzergruppe
@@ -6598,7 +6713,10 @@ fn advance(
         } else {
             still(&u.line)
         };
-        if u.role == Role::Wing && !u.spear && !own_line_held && op["wing_stall"] != json!(false) {
+        // WING STALL (`wing_stall: true` only): it clears an executing wing's orders and draws
+        // them again, which resets the planning of every division (w92c, 28 Nov 2026: Army 3's
+        // clear on W+5 took its planning from 0.41 to 0.32; its new arrow reached one province)
+        if u.role == Role::Wing && !u.spear && !own_line_held && op["wing_stall"] == json!(true) {
             if let Some(line) =
                 wing_stall(state, tools, id, u, &me, roster, &mut wanted, lease, now)?
             {
@@ -6615,23 +6733,12 @@ fn advance(
         )? {
             return Ok(Some(line));
         }
-        // ASSAULT GUARD: a wing with only hard ways in keeps its front and does not attack
-        if assault_guarded(state, tools, plan, id, op, u, roster, wars, now) {
-            if executing(roster, &u.name) && !state.skipped(now, "opexec", &u.name) {
-                state.skip(now, "opexec", &u.name, DAY);
-                return Ok(Some(order(
-                    state,
-                    tools,
-                    lease,
-                    id,
-                    &format!(
-                        "{}: every way in is a hard crossing: stop, hold the front until one opens",
-                        u.name
-                    ),
-                    "hoi4_army_plan",
-                    json!({"army": u.name, "execute": false}),
-                )?));
-            }
+        // ASSAULT GUARD: a wing with only hard ways in keeps its front and does not start its
+        // attack alone; an executing order is never stopped by it (w92c, 28 Nov 2026: Army 3 was
+        // stopped on W+16 and stood twelve days while Belgium held 2 of 86 points)
+        if assault_guarded(state, tools, plan, id, op, u, roster, wars, now)
+            && !executing(roster, &u.name)
+        {
             continue;
         }
         // THE ADVANCE WAITS FOR ITS SUPPLY: an attacker below the supply floor stops its arrow,
@@ -6908,6 +7015,75 @@ fn orders_by_command(op: &Value, posted: Option<&str>, backend: Option<&str>) ->
 /// Whether the operation's orders go by command (set from the plan each tick, see `one`).
 fn by_cmd(state: &State, id: &str) -> bool {
     state.done.get(&key(id, "by_command")) == Some(&1)
+}
+
+/// Whether a refinement may act on `army` now: none acted on it within the operation's
+/// `refine_days` (REFINE_DAYS). Pure.
+fn refine_due(state: &State, id: &str, op: &Value, army: &str, now: GameHour) -> bool {
+    let days = op["refine_days"]
+        .as_i64()
+        .filter(|d| *d >= 0)
+        .unwrap_or(REFINE_DAYS);
+    state
+        .done
+        .get(&key(id, &format!("refine:{army}")))
+        .is_none_or(|t| now.saturating_sub(*t) >= days * DAY)
+}
+
+/// A refinement acted on `army` now (see `refine_due`).
+fn refined(state: &mut State, id: &str, army: &str, now: GameHour) {
+    state.done.insert(key(id, &format!("refine:{army}")), now);
+}
+
+/// THE DEEP LINE (`deep_line`, on by default when orders go by command): the target line of a
+/// plain offensive is the far edge of its line's states seen from our border (`ground::far_edge`:
+/// the coast, the far border, the back of the last state), sent as exact provinces, so the whole
+/// front advances through the enemy country instead of converging on the few provinces a stroke
+/// between two state centres reads back (w92c, 28 Nov 2026: every plain offensive read back 1-4
+/// provinces in the first enemy state; 21-31 divisions piled on one province; Holland 7 was
+/// reached on W+4 and the group sat there until Holland retook it). Empty when off, when the
+/// graph cannot be read, or when it holds none of our provinces: the stroke is drawn then.
+fn deep_target(
+    state: &State,
+    tools: &dyn Tools,
+    id: &str,
+    u: &Unit,
+    line: &[i64],
+    wars: &Value,
+) -> Vec<i64> {
+    if state.done.get(&key(id, "deep_line")) != Some(&1) || line.is_empty() {
+        return Vec::new();
+    }
+    // our side: the unit's own states and every own state on a border that faces its enemy or
+    // touches the line; the enemy states on those borders let the depth reach a line behind them
+    let mut ours: Vec<i64> = u.own_states.clone();
+    let mut between: Vec<i64> = Vec::new();
+    for b in list(wars, "borders") {
+        let theirs = ints(&b["neighbour_states"]);
+        if text(&b["neighbour_tag"]) == u.enemy || theirs.iter().any(|s| line.contains(s)) {
+            ours.extend(ints(&b["own_border_states"]));
+            between.extend(theirs);
+        }
+    }
+    ours.sort_unstable();
+    ours.dedup();
+    ours.retain(|s| !line.contains(s));
+    if ours.is_empty() {
+        return Vec::new();
+    }
+    let mut ask: Vec<i64> = line.to_vec();
+    for s in between.into_iter().chain(ours.iter().copied()) {
+        if !ask.contains(&s) {
+            ask.push(s);
+        }
+    }
+    ask.truncate(128);
+    let Ok(read) = tools.call("hoi4_province_graph", &json!({"states": ask})) else {
+        return Vec::new();
+    };
+    let mut far = ground::far_edge(&ground::read_graph(&read), line, &ours);
+    far.truncate(1024);
+    far
 }
 
 /// A front's arguments with the in-process `against` and `own_states` when orders go by command.
@@ -7707,7 +7883,7 @@ fn opening(
             .collect();
         let target = armies
             .iter()
-            .filter(|a| !thinned.contains(*a))
+            .filter(|a| !thinned.contains(*a) && refine_due(state, id, op, a, now))
             .filter_map(|a| {
                 let r = army_row(roster, a)?;
                 let limit = r["division_limit"]
@@ -7743,6 +7919,7 @@ fn opening(
         }
         state.skip(now, "opopen", tag, DAY);
         state.done.insert(rk, sent + 1);
+        refined(state, id, &target, now);
         let why = if overdue {
             format!("{tag} still in the war on day {day} of {days}")
         } else {

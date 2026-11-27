@@ -2800,7 +2800,8 @@ fn an_overstacked_line_forms_a_second_echelon_on_an_empty_border_state_and_feeds
         .iter()
         .map(|d| (d.clone(), "Mitte".to_string(), "Inf".to_string()))
         .collect();
-    let op = json!({"id": "op_low", "enemies": ["BEL"]});
+    let op = json!({"id": "op_low", "enemies": ["BEL"], "stacking": {"thin_at_war": true},
+        "refine_days": 1});
     let units = vec![unit("Mitte".into(), Role::Line, &Value::Null, &Value::Null)];
     let wars = json!({"wars": {"enemies": ["BEL"]},
         "borders": [{"neighbour_tag": "BEL", "neighbour_states": [6],
@@ -3091,7 +3092,7 @@ fn a_guarded_wing_never_attacks_alone_and_never_waits_forever() {
     game.unit("Mitte", |r| r["plan_executing"] = json!(false));
     let plan = json!({"war": {"me": "GER"}, "operations": [
         {"id": "op_low", "war": "w", "enemies": ["BEL"]},
-        {"id": "op_lux", "war": "w", "enemies": ["LUX"]}]});
+        {"id": "op_lux", "war": "w", "enemies": ["LUX"], "assault_guard": "odds"}]});
     let op = plan["operations"][1].clone();
     let mut u = unit("Nord".into(), Role::Wing, &Value::Null, &Value::Null);
     u.enemy = "LUX".into();
@@ -3176,7 +3177,7 @@ fn a_wing_attacks_at_once_in_one_blow_with_the_armour_into_the_same_state() {
             "offensives": [{"target_states": [8], "executing": true}]}]);
     });
     let plan = json!({"war": {"me": "GER"}, "operations": [
-        {"id": "op_lux", "war": "w", "enemies": ["LUX"]}]});
+        {"id": "op_lux", "war": "w", "enemies": ["LUX"], "assault_guard": "odds"}]});
     let op = plan["operations"][0].clone();
     let mut u = unit("Nord".into(), Role::Wing, &Value::Null, &Value::Null);
     u.enemy = "LUX".into();
@@ -3596,7 +3597,8 @@ fn by_width_a_front_province_keeps_what_its_battles_take_and_the_battle_reserve_
     }
     // by width: the forest takes three 24-wide divisions from one side; nine stand over it
     // (half the stack moves at most: six) and the battle's two waiting divisions go back too
-    let op = json!({"id": "op_low", "enemies": ["BEL"], "stacking": {"by_width": true}});
+    let op = json!({"id": "op_low", "enemies": ["BEL"],
+        "stacking": {"by_width": true, "thin_at_war": true}});
     let mut state = State::default();
     state.done.insert(key("op_low", "exec"), START - DAY);
     assert!(
@@ -4420,4 +4422,175 @@ fn france_at_war_starts_with_the_force_holland_frees_not_on_belgiums_capitulatio
     let mut keep = ops[1].clone();
     keep["start"] = json!("trigger");
     assert_eq!(free_start(&state, &reads, &ops, &keep, "op_fra"), None);
+}
+
+// THE WEST (engineer 95): deep lines, executing orders stay, refinements rest
+
+#[test]
+fn by_command_a_plain_offensive_aims_at_the_far_edge_of_its_line_not_a_province_into_it() {
+    // w92c (28 Nov 2026): every plain offensive was a stroke between two state centres that read
+    // back 1-4 provinces in the first enemy state; 21-31 divisions piled on one province
+    let game = Game::new();
+    let mut plan = plan();
+    plan["operations"][0]["orders_by"] = json!("command");
+    let mut rows = vec![
+        graph_row(660, 66, "plains", &[(670, 0.0), (850, 0.0)]),
+        graph_row(670, 67, "plains", &[(660, 0.0), (860, 0.0)]),
+        graph_row(850, 85, "plains", &[(660, 0.0), (851, 0.0), (860, 0.0)]),
+        graph_row(851, 85, "forest", &[(850, 0.0), (861, 0.0), (500, 0.0)]),
+        graph_row(860, 86, "plains", &[(670, 0.0), (850, 0.0), (861, 0.0)]),
+        graph_row(861, 86, "plains", &[(860, 0.0), (851, 0.0), (100, 0.0)]),
+        graph_row(100, 10, "plains", &[(861, 0.0), (101, 0.0)]),
+        graph_row(101, 10, "plains", &[(100, 0.0), (880, 0.0)]),
+        graph_row(880, 88, "plains", &[(101, 0.0), (881, 0.0), (600, 0.0)]),
+        graph_row(881, 88, "plains", &[(880, 0.0)]),
+    ];
+    rows[9]["coastal"] = json!(true);
+    *game.graph.borrow_mut() = Some(json!({"provinces": rows}));
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let off = game
+        .orders()
+        .into_iter()
+        .find(|(n, a)| n == "hoi4_army_offensive" && a["army"] == json!("Army Group 1"))
+        .expect("the group's offensive");
+    let far = ints(&off.1["target_provinces"]);
+    // the far border and the coast, every state of the line kept, nothing on our border
+    for p in [880, 881] {
+        assert!(far.contains(&p), "{far:?}");
+    }
+    for p in [850, 860] {
+        assert!(!far.contains(&p), "{far:?}");
+    }
+    assert!(
+        far.contains(&101) && far.contains(&851) && far.contains(&861),
+        "{far:?}"
+    );
+    // the stroke's states go with it (the mouse fallback and the read-back cover)
+    assert!(off.1["states"].is_array() || off.1["state_id"].is_i64());
+    // without a graph read the stroke is drawn as before
+    let game = Game::new();
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let off = game
+        .orders()
+        .into_iter()
+        .find(|(n, a)| n == "hoi4_army_offensive" && a["army"] == json!("Army Group 1"))
+        .expect("the group's offensive");
+    assert!(off.1.get("target_provinces").is_none(), "{off:?}");
+    // `deep_line: false` keeps the stroke
+    let game = Game::new();
+    *game.graph.borrow_mut() = Some(json!({"provinces": []}));
+    let mut off_plan = plan.clone();
+    off_plan["operations"][0]["deep_line"] = json!(false);
+    let mut state = State::default();
+    burst(&mut state, &game, &off_plan, START);
+    assert!(!game
+        .orders()
+        .iter()
+        .any(|(_, a)| a.get("target_provinces").is_some()));
+}
+
+#[test]
+fn a_planning_gate_that_passed_leaves_no_note_behind() {
+    // w92c: "planning 0.15 against 0.27" stood from W-142 to the end of the war
+    let game = Game::new();
+    let plan = plan();
+    let mut state = State::default();
+    state.op_notes.insert(
+        "op_pol:planning".into(),
+        "planning 0.15 against 0.27".into(),
+    );
+    burst(&mut state, &game, &plan, START);
+    assert!(!state.op_notes.contains_key("op_pol:planning"));
+}
+
+#[test]
+fn a_refinement_rests_per_army_for_its_days() {
+    let mut state = State::default();
+    let op = json!({});
+    assert!(refine_due(&state, "o", &op, "Mitte", START));
+    refined(&mut state, "o", "Mitte", START);
+    assert!(!refine_due(&state, "o", &op, "Mitte", START + 4 * DAY));
+    assert!(refine_due(&state, "o", &op, "Sued", START + DAY));
+    assert!(refine_due(
+        &state,
+        "o",
+        &op,
+        "Mitte",
+        START + REFINE_DAYS * DAY
+    ));
+    let quick = json!({"refine_days": 0});
+    assert!(refine_due(&state, "o", &quick, "Mitte", START));
+}
+
+#[test]
+fn at_war_an_overstacked_line_is_not_thinned_by_default() {
+    // w92c: 13 detach and merge orders in 28 days, each division arriving with planning 0
+    let game = Game::new();
+    let a = ids("a", 20);
+    game.unit("Mitte", |r| {
+        r["plan"] = json!([]);
+        r["division_count"] = json!(20);
+        r["states"] = json!({"980": 20});
+    });
+    let divs: Vec<(&str, &str, f64)> = a.iter().map(|d| (d.as_str(), "Mitte", 50.0)).collect();
+    *game.supply.borrow_mut() = Some(supply_read(&[(9444, 980, 4.0, 20.0, divs)]));
+    let op = json!({"id": "op_low", "enemies": ["BEL"]});
+    let units = vec![unit("Mitte".into(), Role::Line, &Value::Null, &Value::Null)];
+    let wars = json!({"wars": {"enemies": ["BEL"]},
+        "borders": [{"neighbour_tag": "BEL", "neighbour_states": [6],
+                     "own_border_states": [980, 51, 36], "uncovered_own_border_states": [51]}]});
+    let plan = json!({"war": {"me": "GER"}});
+    let mut state = State::default();
+    state.done.insert(key("op_low", "exec"), START - DAY);
+    let roster = game.roster.borrow().clone();
+    for t in [START, START + DAY / 2, START + DAY] {
+        assert!(
+            stacking(&mut state, &game, &plan, "op_low", &op, &units, &roster, &wars, "l", t)
+                .unwrap()
+                .is_none()
+        );
+    }
+    assert!(!game.orders().iter().any(|(n, _)| n == "hoi4_army_detach"));
+    assert!(state.op_notes["op_low:stacking"].contains("no thinning at war"));
+}
+
+#[test]
+fn by_default_a_wing_attacks_with_the_joint_attack_and_never_alone() {
+    let game = Game::new();
+    *game.graph.borrow_mut() = Some(lux_graph());
+    game.unit("Nord", |r| r["division_count"] = json!(7));
+    game.unit("Mitte", |r| r["plan_executing"] = json!(false));
+    let plan = json!({"war": {"me": "GER"}, "operations": [
+        {"id": "op_low", "war": "w", "enemies": ["BEL"]},
+        {"id": "op_lux", "war": "w", "enemies": ["LUX"]}]});
+    let op = plan["operations"][1].clone();
+    let mut u = unit("Nord".into(), Role::Wing, &Value::Null, &Value::Null);
+    u.enemy = "LUX".into();
+    u.line = vec![8];
+    // fifteen French divisions seen at the border: the count is no reason to wait
+    let wars = json!({"wars": {"enemies": ["LUX", "FRA"]}, "borders": [
+        {"neighbour_tag": "LUX", "neighbour_states": [8], "own_border_states": [42],
+         "neighbour_divisions_in_border_states": 1, "hostile_divisions_in_border_states": 15}]});
+    let mut state = State::default();
+    state.op_owned.insert("Mitte".into(), "op_low".into());
+    let roster = game.roster.borrow().clone();
+    // no attack of the war executes: never alone
+    assert!(assert_guard(
+        &mut state, &game, &plan, &op, &u, &roster, &wars, START
+    ));
+    // the group's attack executes: the wing goes with it at once
+    game.unit("Mitte", |r| r["plan_executing"] = json!(true));
+    let roster = game.roster.borrow().clone();
+    assert!(!assert_guard(
+        &mut state,
+        &game,
+        &plan,
+        &op,
+        &u,
+        &roster,
+        &wars,
+        START + DAY
+    ));
 }
