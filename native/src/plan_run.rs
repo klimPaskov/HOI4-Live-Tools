@@ -2124,6 +2124,15 @@ fn lanes_tick(
     Ok(out)
 }
 
+/// `HOI4_TRACE_LANES=1`: one stderr line per scheduler decision (`[lanes] HOUR WHAT`), to see
+/// which branch takes the ticks in a live run; off by default.
+fn trace_lanes(now: GameHour, what: &str) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ON.get_or_init(|| std::env::var_os("HOI4_TRACE_LANES").is_some_and(|v| v == "1")) {
+        eprintln!("[lanes] {now} {what}");
+    }
+}
+
 fn lanes_tick_inner(
     state: &mut State,
     tools: &dyn Tools,
@@ -2134,6 +2143,7 @@ fn lanes_tick_inner(
     let war_on = plan["war"].is_object() && plan["war"]["enabled"] != json!(false);
     let war_first = war_on && plan["war"]["first"] != json!(false);
     state.sched.war_ran = war_first;
+    trace_lanes(now, "tick");
     let lanes = lanes(plan, war_first);
     // the speed rule ahead of the war lane: it reads every 6 game hours and acts only when the
     // phase changes, and behind a war lane that acts every tick it never ran once an operation
@@ -2141,6 +2151,7 @@ fn lanes_tick_inner(
     state.last_ok = None;
     if let Some(line) = plan_speed::step(state, tools, plan, lease, now)? {
         state.sched.turns.insert("speed", now);
+        trace_lanes(now, "speed");
         return Ok(Tick::Acted(line));
     }
     // Before the war, a role an operation names that has no army takes the tick ahead of every
@@ -2153,6 +2164,7 @@ fn lanes_tick_inner(
     {
         if let Some(line) = layout_step(state, tools, plan, lease, now)? {
             state.round.war_acted(now);
+            trace_lanes(now, "layoutfirst");
             return Ok(Tick::Acted(line));
         }
         state.skip(now, "layoutfirst", "all", 6);
@@ -2181,6 +2193,7 @@ fn lanes_tick_inner(
     {
         if let Some(line) = declare_first(state, tools, plan, lease, now)? {
             state.round.war_acted(now);
+            trace_lanes(now, "declare_first");
             return Ok(Tick::Acted(line));
         }
     }
@@ -2205,6 +2218,7 @@ fn lanes_tick_inner(
     if war_turn {
         if let Some(line) = war_lane(state, tools, plan, lease, now)? {
             state.round.war_acted(now);
+            trace_lanes(now, "war_turn");
             return Ok(Tick::Acted(line));
         }
     }
@@ -2216,6 +2230,7 @@ fn lanes_tick_inner(
                 "diplomacy view read before the declaration".into(),
             ));
         }
+        trace_lanes(now, "declaring: nothing");
         return Ok(Tick::Nothing);
     }
     state.round.war_last = false;
@@ -2257,6 +2272,7 @@ fn lanes_tick_inner(
         if let Some(line) = result {
             state.sched.turns.insert(name, now);
             state.round.lane_acted(name, now);
+            trace_lanes(now, &format!("fast {name}"));
             return Ok(Tick::Acted(line));
         }
     }
@@ -2271,6 +2287,7 @@ fn lanes_tick_inner(
     // two 60-day legs (cmph1, cmps1, 27 Nov 2026: hoi4_decisions_list and hoi4_train never called).
     if plan["scheduler"]["issues_due"] != json!(false) && !state.round.issue_last {
         if let Some(line) = issue_lanes(state, tools, plan, lease, now, &lanes)? {
+            trace_lanes(now, &format!("issue: {}", line.chars().take(60).collect::<String>()));
             state.round.issue_last = true;
             return Ok(Tick::Acted(line));
         }
@@ -2280,6 +2297,7 @@ fn lanes_tick_inner(
     loop {
         if state.round.cursor >= lanes.len() {
             let acted = state.round.end_pass(now);
+            trace_lanes(now, &format!("pass end (acted {acted})"));
             if !acted || restarted {
                 break;
             }
@@ -2303,11 +2321,13 @@ fn lanes_tick_inner(
             now,
         ) || opening_holds(state, tools, plan, name, now)
         {
+            trace_lanes(now, &format!("pass {name} held"));
             continue;
         }
         // the air lanes wait while a prepared operation's declaration is near (see
         // `air_waits_for_war`)
         if name.starts_with("air") && air_waits_for_war(state, tools, plan, now) {
+            trace_lanes(now, &format!("pass {name} air waits"));
             continue;
         }
         state.sched.turns.insert(name, now);
@@ -2318,8 +2338,10 @@ fn lanes_tick_inner(
         if let Some(line) = result {
             state.round.acted.push(name);
             state.round.lane_acted(name, now);
+            trace_lanes(now, &format!("pass {name} acted"));
             return Ok(Tick::Acted(line));
         }
+        trace_lanes(now, &format!("pass {name} quiet"));
     }
     // every lane is quiet: the war takes the turn it left to them
     if war_first && !war_turn {
