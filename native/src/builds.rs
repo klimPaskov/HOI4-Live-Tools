@@ -162,7 +162,7 @@ mod tests {
             .iter()
             .map(|b| b["system"].as_str().unwrap())
             .collect();
-        assert_eq!(systems, ["macos", "macos", "linux"]);
+        assert_eq!(systems, ["macos", "macos", "macos", "linux"]);
         assert_eq!(report["disabled"].as_array().unwrap().len(), DISABLED.len());
         assert!(report["windows"]
             .as_str()

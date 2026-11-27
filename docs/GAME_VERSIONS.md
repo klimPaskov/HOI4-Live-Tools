@@ -13,6 +13,7 @@ reading the game compare.
 | Windows | any | | not yet (see [Windows](#windows)) | supported, last run on 1.19.4.2 |
 | Windows | 1.20.0.0 (checksum 0c4f) | CodeView `3A4878DC2F3A481EA5375E5943C5541C1` | vtables only (164 of 168); no attachment yet | supported |
 | macOS | 1.20.0.0 (checksum 0c4f) | Mach-O UUID `ED135FE5-CDA8-38E8-8835-3F7381B79974` | its own runtime binary, generated from the migration map ([below](#macos-120-a-generated-runtime-per-build)); live self-check pending | |
+| macOS | 1.20.1.0 (checksum 724a) | Mach-O UUID `B8BF4554-DC8D-3381-B277-9F4E6230CBA5` | its own runtime binary, generated from the 1.20.0.0 map: the same code in place (`game_migrate.py same-code`, [below](#a-rebuild-with-the-code-in-place)) | |
 | Linux | 1.20.0.0 (checksum 0c4f) | GNU build ID `71806afa707a46fb72f0738a719c3f1c3f5e2e42` | table generated, not yet proven live or used by the runtime | not available |
 
 `hoi4-live-native --supported-builds` prints the same list as JSON.
@@ -138,6 +139,29 @@ has the same slot count and slot functions in 1.20. Of the 53 literals first lef
 resolved by aligned code or aligned RIP references and checked against the neighbouring delta
 (`scripts/macos_resolve.py`); the other 40 are Linux ELF literals in Linux-only checks or plain numbers.
 A unit test fails when a macOS address in `native/src` has no 1.20 entry.
+
+### A rebuild with the code in place
+
+A hotfix often recompiles the game without moving anything: 1.20.1.0 (Steam build 26921304, 26 Nov 2026)
+differs from 1.20.0.0 in 376 bytes of 75 MB: the Mach-O UUID, the version and build-stamp strings, one
+byte of constant data and the static initializer that stores the version hashes; the changes that
+matter are in the game's script files (Romania and Hungary content, two compliance values). Check and
+carry such a build in seconds instead of running `migrate`:
+
+    python3 scripts/game_migrate.py same-code native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json \
+        PREV/hoi4.app/Contents/MacOS/hoi4 NEW/hoi4.app/Contents/MacOS/hoi4 \
+        --out native/layouts/migrations/macos-DFA875A5-to-<NEW>.json \
+        --table native/layouts/macos-<PREV>.json --table-out native/layouts/macos-<NEW>.json
+
+It requires the same section layout and file size, finds every changed byte (a code change marks its
+whole function, a string change its whole string) and refuses, listing them, when any image value of
+the map lies in or reads from a changed byte; then run `migrate`. The map it writes names its base
+(`same_code_of`), so an address added to the base later reaches the rebuild too. Then: add the build to
+`native/src/builds.rs` `SUPPORTED`, the in-process module's field row (`inproc/core/caps.c` `FIELDS`,
+keyed by UUID), generate and build the runtime with the new map (`macos_build_variant.py`), and run the
+live self-check. On 1.20.1.0: an 8-second download (an APFS clone of the previous full copy, then
+`steamcmd +app_update` into it fetched 18 KB), the check in under a second, the generated runtime in
+about 15 minutes (tests and build); the live self-check is the rest.
 
 ### Adding a macOS game address
 
