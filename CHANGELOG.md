@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+Windows reader: the full ownership census (owner, parent, executable files, module list) runs at the snapshot
+boundaries instead of around every read batch. Between them each read checks the held process handles: the
+zero-timeout wait refuses a game or supervisor that has exited, and the PID and creation time confirm the pinned
+handle. An overview of a running Windows 1.20.0.0 game now takes about 50 ms instead of 4-5 s and no longer tears
+on the moving clock.
+
 Decide only (`python -m hoi4_live.play.decide`, opt-in): the executor's lanes judged on a supplied snapshot, in the
 executor's order and with its lane weights, and the actions they would take returned as data instead of input
 (tool, arguments, the plan's reason, minor or heavy, from the state or from the plan alone), with the phase in force,

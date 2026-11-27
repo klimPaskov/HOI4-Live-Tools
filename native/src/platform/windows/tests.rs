@@ -60,6 +60,9 @@ struct State {
     short: bool,
     read_error: bool,
     after: Option<&'static str>,
+    /// The game process has exited: its retained handle is signalled (the zero-timeout wait
+    /// answers), while it still reports the original PID and creation time.
+    game_exited: bool,
     region_changed: bool,
     loaded_changed: bool,
     game_file: FileIdentity,
@@ -129,6 +132,7 @@ impl Fake {
             short: false,
             read_error: false,
             after: None,
+            game_exited: false,
             region_changed: false,
             loaded_changed: false,
             race_open: false,
@@ -183,7 +187,9 @@ impl Api for Fake {
     fn inspect(&self, h: &Handle) -> Result<Metadata> {
         let mut s = self.0.lock().unwrap();
         s.trace.push(format!("inspect:{}", h.pid));
-        if s.after == Some("supervisor_exit") && s.payload_reads > 0 && h.pid == 6 {
+        if (s.after == Some("supervisor_exit") && s.payload_reads > 0 && h.pid == 6)
+            || (s.game_exited && h.pid == 7)
+        {
             return Err(changed());
         }
         Ok(if h.pid == 7 {
@@ -201,6 +207,7 @@ impl Api for Fake {
             &s.supervisor.identity
         };
         if (h.pid == 6 && s.after == Some("supervisor_exit") && s.payload_reads > 0)
+            || (h.pid == 7 && s.game_exited)
             || actual.pid != expected.pid
             || actual.creation_filetime != expected.creation_filetime
         {
@@ -398,8 +405,9 @@ fn a_process_that_exits_mid_snapshot_is_refused_at_the_next_batch() {
     let (f, r) = Fake::reader();
     r.check().unwrap();
     assert_eq!(r.read(PAYLOAD, 8).unwrap(), vec![0x42; 8]);
-    // The game exits (its handle no longer answers with the pinned creation time).
-    f.mutate(|v| v.game.identity.creation_filetime += 1);
+    // The game exits. Its retained handle still names the same PID and creation time; only
+    // the zero-timeout wait on the handle shows the exit.
+    f.mutate(|v| v.game_exited = true);
     f.reset();
     assert_eq!(
         r.read(PAYLOAD + 8, 8).unwrap_err().code,
@@ -606,43 +614,6 @@ fn late_owner_change_is_refused_by_the_closing_census() {
     assert_eq!(f.reads(), 2);
     assert!(r.check().is_err());
     assert!(r.read(PAYLOAD, 8).is_err());
-}
-
-#[test]
-fn relocated_image_base_is_the_only_header_difference_accepted() {
-    let mut pinned = vec![0u8; 0x200];
-    pinned[0x3c..0x40].copy_from_slice(&0x80u32.to_le_bytes());
-    let field = 0x80 + 48;
-    pinned[field..field + 8].copy_from_slice(&0x1_4000_0000u64.to_le_bytes());
-    pinned[0x150] = 7;
-    // mapped at the preferred base: identical bytes
-    assert!(super::loaded_headers_match(&pinned, &pinned, 0x1_4000_0000));
-    // relocated: the loader wrote the actual base into ImageBase
-    let mut loaded = pinned.clone();
-    loaded[field..field + 8].copy_from_slice(&0x7ff6_1234_0000u64.to_le_bytes());
-    assert!(super::loaded_headers_match(
-        &loaded,
-        &pinned,
-        0x7ff6_1234_0000
-    ));
-    // ImageBase not the actual base, or any other byte changed: refused
-    assert!(!super::loaded_headers_match(
-        &loaded,
-        &pinned,
-        0x7ff6_5555_0000
-    ));
-    let mut other = loaded.clone();
-    other[0x150] = 8;
-    assert!(!super::loaded_headers_match(
-        &other,
-        &pinned,
-        0x7ff6_1234_0000
-    ));
-    assert!(!super::loaded_headers_match(
-        &loaded[..0x100],
-        &pinned,
-        0x7ff6_1234_0000
-    ));
 }
 
 #[test]

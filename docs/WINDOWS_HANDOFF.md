@@ -25,9 +25,10 @@ with read rights available only after an exact test-only profile is approved.
 There is no write, injection, privilege adjustment, input or process-control API.
 
 Reads are bounded and require committed readable regions and exact byte counts.
-A batch checks full ownership before and after its transfers; cheap original
-handle checks and an optional caller deadline/cancellation check surround each
-transfer. Results are all-or-error, and lifetime failures quarantine the reader.
+Full ownership is checked at the snapshot boundaries (`begin_snapshot` and the closing
+`check`); between them the original handles are checked around each transfer (the
+zero-timeout wait detects an exited process; PID and creation time confirm the pinned
+handle), with an optional caller deadline/cancellation check. Results are all-or-error, and lifetime failures quarantine the reader.
 These checks do not make mutable game data atomic. A future snapshot adapter
 must use batches, retain complete structural witnesses and preserve its original
 deadline. No Windows read latency has been qualified.

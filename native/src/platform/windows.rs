@@ -362,12 +362,16 @@ impl<A: Api> OwnedReader<A> {
     }
     /// The full ownership census (`check`: owner, parent, executable files, module list) runs
     /// at the snapshot boundaries: `Process::begin_snapshot` and the tools' closing `check`.
-    /// Between them every read is bracketed by the held handles alone: each must still be a
-    /// live process (a zero-timeout wait) with the pinned creation time. An open handle keeps
-    /// its process object, so its PID cannot be reused while the reader holds it, and a live
-    /// process cannot change its owner, parent or mapped executable; a process that exits or
-    /// is replaced is refused at the next read. A census costs tens of milliseconds; one per
-    /// batch made a multi-read snapshot of a running game tear on its moving clock.
+    /// Between them every read is bracketed by the held handles alone. An open handle keeps
+    /// its process object, so it always names the process it was opened for: its PID cannot be
+    /// reused while the reader holds it, and it keeps reporting the original PID and creation
+    /// time even after that process exits. Those two values therefore only confirm the handle
+    /// is the one pinned at open; what detects an exit is the zero-timeout wait on the handle,
+    /// which answers once the process has ended, so a game or supervisor that exits is refused
+    /// at the next read. A live process cannot change its owner, parent or mapped executable;
+    /// such changes are left to the census at the boundaries. A census costs tens of
+    /// milliseconds; one per batch made a multi-read snapshot of a running game tear on its
+    /// moving clock.
     /// A caller may supply its original cancellation/deadline/lease check; this module never
     /// renews it.
     pub(crate) fn read_many_checked(
