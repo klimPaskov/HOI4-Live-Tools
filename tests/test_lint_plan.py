@@ -339,6 +339,9 @@ class HandPlans(unittest.TestCase):
             ("supply.axis_reach", "war_by_phase.P3_gondar_afar.axes[2] state 837"),
             ("war.encircle", "war.direct_moves"),  # direct moves switch encirclement off
             ("war.planning_wait", "war.direct_moves"),  # direct moves build no planning
+            # no train line: the 1936 colonial war ran on the start trains (the rule came after the plan,
+            # #352; a hand plan reports it as a warning)
+            ("supply.trains", "logistics.trains"),
             ("war.supply_floor", "war.supply_floor"),  # 30 is under the 35% attrition line
             # the Ca.101 and Ca.133 wings at home: no selector names them and the war missions never reach them
             ("air.idle_wings", "air_plan"),
@@ -410,6 +413,9 @@ class HandPlans(unittest.TestCase):
             ("supply.axis_reach", "war_by_phase.P4_south.axes[0] state 844"),
             ("war.encircle", "war.direct_moves"),
             ("war.planning_wait", "war.direct_moves"),
+            # no train line: the 1936 colonial war ran on the start trains (the rule came after the plan,
+            # #352; a hand plan reports it as a warning)
+            ("supply.trains", "logistics.trains"),
             ("war.supply_floor", "war.supply_floor"),  # 20 is under the 35% attrition line
             # with By Blood Alone the category of ETH_defeat_italy is never visible
             ("decision.condition", "decisions[0]"),
