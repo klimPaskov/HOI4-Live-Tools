@@ -72,6 +72,11 @@ int main(int argc, char **argv) {
     CHECK("fallback list", strstr(out, "{\"list\":\"fallback\",\"orders\":[{") && strstr(out, "\"id\":200"));
     CHECK("divisions counted and listed", strstr(out, "\"divisions\":4,\"division_ptrs\":[\"0x7000001\""));
     CHECK("not truncated", strstr(out, "\"truncated\":false") != NULL);
+    {   /* live 27 Nov 2026 (s45a): the lists array was never closed, so no reply parsed */
+        int sq = 0, cu = 0, minsq = 0;
+        for (const char *c = out; *c; c++) { sq += (*c == '[') - (*c == ']'); cu += (*c == '{') - (*c == '}'); if (sq < minsq) minsq = sq; }
+        CHECK("brackets and braces balance", sq == 0 && cu == 0 && minsq == 0 && strstr(out, "{\"list\":\"area\",\"orders\":[]}],\"orders_read\""));
+    }
     CHECK("find by id: nested target", orders_find(&f, rd, VT, G, 192) == TARGET);
     CHECK("find by id: fallback", orders_find(&f, rd, VT, G, 200) == FB);
     CHECK("find by id: missing", orders_find(&f, rd, VT, G, 999) == 0);

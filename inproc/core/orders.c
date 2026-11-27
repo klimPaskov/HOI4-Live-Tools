@@ -202,6 +202,7 @@ int orders_tree_json(const orders_facts *f, orders_rd rd, uint64_t vt, uint64_t 
         }
         w(&b, "]}");
     }
+    w(&b, "]");
     int trunc = b.trunc;
     if (trunc) { b.trunc = 0; b.at = 0; w(&b, "\"group\":\"0x%llx\",\"lists\":[]", (unsigned long long)group); }
     w(&b, ",\"orders_read\":%d,\"truncated\":%s", total, trunc ? "true" : "false");
