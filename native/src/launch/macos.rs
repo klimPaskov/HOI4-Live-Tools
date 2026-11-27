@@ -24,9 +24,11 @@ mod fair_facts;
 mod inproc;
 mod inproc_construction;
 mod inproc_diplomacy;
+mod inproc_doctrine;
 mod inproc_events;
 mod inproc_holds;
 mod inproc_mio;
+mod inproc_navy;
 mod inproc_orders;
 mod inproc_picks;
 mod inproc_politics;
@@ -4659,9 +4661,40 @@ impl MacClock {
             } else {
                 None
             };
-            if !retry {
+            // engineer 85: in process (family `navy`): the mission bar's command for the task force, or the fleet's
+            // region by strategic region id, after the module's checks and the game's own "can do"; the mouse path
+            // serves the call when the module refuses for its own reasons
+            let mut navy_route = if retry { None } else { inproc::route("navy") };
+            let navy_target: Option<(u64, i32)> = if navy_route.is_some() {
+                inproc_navy::objects(process).ok().and_then(|objs| {
+                    if let Some(plan) = &mission_plan {
+                        let (_, _, tf) =
+                            navalact::find_task_force(&fleets, &plan.task_force).ok()?;
+                        Some((
+                            inproc_navy::task_force_object(&fleets, &objs, tf)?,
+                            plan.code,
+                        ))
+                    } else {
+                        let plan = region_plan.as_ref()?;
+                        let f = fleets.iter().find(|f| f.name == plan.fleet)?;
+                        Some((
+                            inproc_navy::fleet_object(&fleets, &objs, f)?,
+                            inproc_navy::region_id(process, &plan.region)?,
+                        ))
+                    }
+                })
+            } else {
+                None
+            };
+            if navy_target.is_none() {
+                navy_route = None;
+            }
+            let had_navy_route = navy_route.is_some();
+            if !retry && !had_navy_route {
                 bounded_keys.preflight()?;
             }
+            let navy_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
+            let navy_reply: std::cell::RefCell<Option<Value>> = std::cell::RefCell::new(None);
             let action = if by_mission {
                 json!({"kind":"fleet_mission","task_force":subject,"mission":detail})
             } else {
@@ -4683,6 +4716,12 @@ impl MacClock {
                         (true, Some(_)) => settle::Verdict::Unchanged,
                         _ => navalact::settle_mission(before_code.unwrap_or(-1), now, target_code),
                     };
+                    let early = navy_posted
+                        .get()
+                        .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                    if early && verdict == settle::Verdict::Unchanged {
+                        return Ok(journal::Outcome::Unknown);
+                    }
                     Ok(verdict.outcome(json!({"task_force":subject,"mission_code":now})))
                 } else {
                     let now = navalact::region_present_now(process, &subject, &detail)?;
@@ -4694,6 +4733,12 @@ impl MacClock {
                             navalact::settle_region(had_region.unwrap_or(false), now, want_present)
                         }
                     };
+                    let early = navy_posted
+                        .get()
+                        .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                    if early && verdict == settle::Verdict::Unchanged {
+                        return Ok(journal::Outcome::Unknown);
+                    }
                     Ok(verdict.outcome(json!({"fleet":subject,"region":detail,"present":now})))
                 }
             };
@@ -4705,6 +4750,23 @@ impl MacClock {
                         "A retried request is never dispatched again",
                     ));
                 }
+                if let Some((object, value)) = navy_target {
+                    let reply = module_in_process(&mut navy_route, |ch| {
+                        Ok(if by_mission {
+                            inproc_navy::mission(ch, &[object], value)
+                        } else {
+                            inproc_navy::region(ch, object, value, remove)
+                        })
+                    })?;
+                    if let Some(r) = reply {
+                        navy_posted.set(Some(Instant::now()));
+                        *navy_reply.borrow_mut() = Some(r);
+                        return Ok(());
+                    }
+                }
+                if had_navy_route {
+                    keys.preflight()?;
+                }
                 *info.borrow_mut() = match (&mission_plan, &region_plan) {
                     (Some(plan), _) => navalact::set_mission(process, keys, plan)?,
                     (_, Some(plan)) => navalact::region_op(process, keys, plan)?,
@@ -4715,10 +4777,12 @@ impl MacClock {
             let receipt =
                 actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
             let after = navalact::own_fleets(process).ok();
-            return Ok(json!({"receipt":receipt,"result":*info.borrow(),
+            return Ok(
+                json!({"receipt":receipt,"result":*info.borrow(),"in_process":navy_reply.into_inner(),
                 "fleets_after":after.map(|f| f.iter().map(|f| json!({"fleet":f.name.trim(),
                     "regions":f.regions.iter().map(|r| &r.1).collect::<Vec<_>>(),
-                    "task_forces":f.task_forces.iter().map(|t| json!({"task_force":t.name,"mission":naval::mission_name(t.mission_code)})).collect::<Vec<_>>()})).collect::<Vec<_>>())}));
+                    "task_forces":f.task_forces.iter().map(|t| json!({"task_force":t.name,"mission":naval::mission_name(t.mission_code)})).collect::<Vec<_>>()})).collect::<Vec<_>>())}),
+            );
         }
         if name == "hoi4_fleet_admiral" {
             allowed(
@@ -4796,7 +4860,26 @@ impl MacClock {
             } else {
                 Some(navalact::plan_admiral(&fleets, &fleet, admiral.as_deref())?)
             };
-            if !retry {
+            // engineer 85: in process (family `navy`): the commander list's command (the fleet, the admiral or none)
+            let mut navy_route = if retry { None } else { inproc::route("navy") };
+            let navy_target: Option<(u64, Option<u64>)> = match (&plan, navy_route.is_some()) {
+                (Some(p), true) => inproc_navy::objects(process).ok().and_then(|objs| {
+                    let f = fleets.iter().find(|f| f.name == p.fleet)?;
+                    let fo = inproc_navy::fleet_object(&fleets, &objs, f)?;
+                    match &p.admiral {
+                        Some(a) => Some((fo, Some(inproc_navy::admiral_object(&objs, a)?))),
+                        None => Some((fo, None)),
+                    }
+                }),
+                _ => None,
+            };
+            if navy_target.is_none() {
+                navy_route = None;
+            }
+            let had_navy_route = navy_route.is_some();
+            let navy_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
+            let navy_reply: std::cell::RefCell<Option<Value>> = std::cell::RefCell::new(None);
+            if !retry && !had_navy_route {
                 bounded_keys.preflight()?;
             }
             let before = fleets
@@ -4823,6 +4906,12 @@ impl MacClock {
                 } else {
                     navalact::settle_admiral(&before, now.as_ref(), &want)
                 };
+                let early = navy_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                if early && verdict == settle::Verdict::Unchanged {
+                    return Ok(journal::Outcome::Unknown);
+                }
                 Ok(verdict.outcome(json!({"fleet":fleet,"admiral":now})))
             };
             let mut dispatch = || {
@@ -4833,12 +4922,27 @@ impl MacClock {
                         "A retried request is never dispatched again",
                     ));
                 };
+                if let Some((fo, admiral)) = navy_target {
+                    let reply = module_in_process(&mut navy_route, |ch| {
+                        Ok(inproc_navy::leader(ch, fo, admiral))
+                    })?;
+                    if let Some(r) = reply {
+                        navy_posted.set(Some(Instant::now()));
+                        *navy_reply.borrow_mut() = Some(r);
+                        return Ok(());
+                    }
+                }
+                if had_navy_route {
+                    keys.preflight()?;
+                }
                 *info.borrow_mut() = navalact::assign_admiral(process, keys, plan)?;
                 Ok(())
             };
             let receipt =
                 actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
-            return Ok(json!({"receipt":receipt,"result":*info.borrow()}));
+            return Ok(
+                json!({"receipt":receipt,"result":*info.borrow(),"in_process":navy_reply.into_inner()}),
+            );
         }
         if name == "hoi4_fleet_create" {
             allowed(args, &["task_force", "request_id", "lease_token"])?;

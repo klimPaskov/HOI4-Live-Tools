@@ -238,6 +238,37 @@ pub(super) fn fleets(r: &Reader<'_>, image: u64, country: u64) -> Result<Vec<Fle
     Ok(out)
 }
 
+/// Object addresses for the in-process navy family (engineer 85): each own fleet with its task forces, in the same
+/// order as `fleets` reads them (memory = fleet card order), and the country's admirals (CNavyLeader objects) by name.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct NavyObjects {
+    pub fleets: Vec<(u64, Vec<u64>)>,
+    pub admirals: Vec<(u64, String)>,
+}
+pub(super) fn fleets_objects(r: &Reader<'_>, image: u64, country: u64) -> Result<NavyObjects> {
+    let mut out = NavyObjects::default();
+    for f in pointers(r, country + at(r, &COUNTRY, COUNTRY_FLEETS)?, FLEET_LIMIT)? {
+        expect(r, f, FLEET_VTABLE, image, "Fleet")?;
+        let mut tfs = Vec::new();
+        for tf in pointers(r, f + at(r, &FLEET, FLEET_TASK_FORCES)?, TF_LIMIT)? {
+            expect(r, tf, TASK_FORCE_VTABLE, image, "Task force")?;
+            tfs.push(tf);
+        }
+        out.fleets.push((f, tfs));
+    }
+    let characters = r.u64(country + at(r, &COUNTRY, COUNTRY_CHARACTERS)?)?;
+    if characters != 0 {
+        let leaders = characters + at(r, &CHARACTERS, CHARACTERS_NAVY_LEADERS)?;
+        for leader in pointers(r, leaders, 64)? {
+            if leader != 0 {
+                let name = r.string_bounded(leader + at(r, &NAVY_LEADER, LEADER_NAME)?, 128)?;
+                out.admirals.push((leader, name));
+            }
+        }
+    }
+    Ok(out)
+}
+
 fn percent(part: f64, whole: f64) -> Option<f64> {
     (whole > 0.0).then(|| round3(100.0 * part / whole))
 }
