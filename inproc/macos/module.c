@@ -1773,6 +1773,18 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             else for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a task force is listed twice";
         } else why = "unknown navy op";
         nv = 0;
+    } else if (!strncmp(op, "projects.", 9)) {
+        /* engineer 85: the experimental facilities tab.
+         *   start:    objs = ONE own facility (NProject::CProgram); obj2 = the project (NProject::CProject)
+         *   stop:     objs = ONE own project
+         *   attach:   objs = ONE own facility; obj2 = the scientist (CCharacter); the flag is the UI's 1
+         *   unattach: objs = ONE own scientist (CCharacter); obj2 = the facility */
+        int stop = !strcmp(op, "projects.stop");
+        if (j->n != 1) why = "projects: exactly one object";
+        else if (nv || flag || (provs && *provs) || (divs && *divs)) why = "projects ops take no vals, flag, provs or divs";
+        else if (stop && obj2 && *obj2) why = "projects.stop takes no obj2";
+        else if (!stop) { uint64_t o2[1]; if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0]; }
+        if (!why && !strcmp(op, "projects.attach")) j->flag = 1;
     } else if (!strncmp(op, "doctrine.", 9)) {
         /* engineer 85: the officer corps view's doctrine picks.
          *   grand: objs = ONE grand doctrine template (exact class); no vals, no obj2

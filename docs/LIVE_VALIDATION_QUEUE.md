@@ -952,3 +952,29 @@ without the module.
 Stop at once on: a crash, any `unexplained`, a doctrine set on another country, a subdoctrine on a track it does not
 fit, experience spent with no doctrine set, two subdoctrines on one track.
 Pass -> IPC_LIVE_PASSED entry 20 (doctrine) = 1.
+
+## Session S19-PROJECTS: the in-process module, special projects (family `projects`; about 15 minutes) -- after S18-DOCTRINE
+
+Built by engineer 85 (27 Nov 2026), offline-proven only: stage 2 71/71 on 1.20.0.0 and 1.19.4.1 macOS (identical type ids,
+offsets and field ids); Linux/Windows 1.20 CStartProjectCommand 16402 / CStopProjectCommand 16403 / CAttachScientistCommand
+16398 / CUnattachScientistCommand 16399 by RTTI and type id (4/4 each). OFF under `auto` until this session passes.
+- attach: the facility (NProject::CProgram handle) and the scientist (CCharacter handle), flag 1 as both UI sites send it.
+  start: the facility and the project (NProject::CProject of the own pool). stop: the project. unattach: the scientist and
+  the facility. Each object through the game's own resolver; the facility / project / scientist owned by the player.
+- MCP: hoi4_special_project_assign (attach, then start, as the panel does), hoi4_special_project_stop,
+  hoi4_special_project_unassign route in process after their own typed refusals; hoi4_special_project_recruit stays on
+  the mouse path (its command's authorisation also reads the candidate pool).
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,projects ./inproc_stage2.sh PREV-1939 s19p` (Germany 1939 with
+La Resistance / By Blood Alone facilities; or a save with a built facility and a free scientist), `HOI4_BACKEND=inprocess`.
+P1 paused: `hoi4_special_projects {}`: pick an empty facility and a free scientist of its specialization.
+`hoi4_special_project_assign {"facility_id":<id>,"scientist":"<name>"}`: Verified (hoi4_special_projects shows the
+scientist in it; the tab's card too).
+P2 `hoi4_special_project_assign {"facility_id":<id>,"project":"<an offered project of that specialization>"}`: Verified
+(the facility runs it; the facility window shows it).
+P3 running at speed 3: `hoi4_special_project_stop {"facility_id":<id>}`: Verified (stopping); then, once stopped,
+`hoi4_special_project_unassign {"facility_id":<id>}`: Verified (no scientist).
+P4 a project of another specialization: the typed refusal before posting, or `refused_by_game_check` with nothing
+changed. P5 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, a scientist in two facilities, a project running in a facility of another
+specialization, another country's facility changed.
+Pass -> IPC_LIVE_PASSED entry 21 (projects) = 1.

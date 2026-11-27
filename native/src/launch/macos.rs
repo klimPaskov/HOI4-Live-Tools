@@ -32,6 +32,7 @@ mod inproc_navy;
 mod inproc_orders;
 mod inproc_picks;
 mod inproc_politics;
+mod inproc_projects;
 mod inproc_research;
 mod inproc_training;
 mod inproc_units;
@@ -2416,10 +2417,29 @@ impl MacClock {
                 // A retry only settles or replays its receipt; it never refuses on new state.
                 special_projects::plan(&before, facility, scientist, project).ok()
             } else {
-                let plan = special_projects::plan(&before, facility, scientist, project)?;
-                bounded_keys.preflight()?;
-                Some(plan)
+                Some(special_projects::plan(
+                    &before, facility, scientist, project,
+                )?)
             };
+            // engineer 85: in process (family `projects`): the tab's own commands for the objects of the game's lists
+            let mut sp_route = if retry {
+                None
+            } else {
+                inproc::route("projects")
+            };
+            let sp_posts = match (sp_route.as_ref(), plan.as_ref()) {
+                (Some(_), Some(p)) => special_projects::objects(process)
+                    .ok()
+                    .and_then(|o| inproc_projects::assign_posts(&o, p).ok().flatten()),
+                _ => None,
+            };
+            if sp_posts.is_none() {
+                sp_route = None;
+            }
+            if !retry && sp_route.is_none() {
+                bounded_keys.preflight()?;
+            }
+            let sp_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
             let action = json!({
                 "kind": "special_project_assign",
                 "facility_id": facility,
@@ -2430,6 +2450,7 @@ impl MacClock {
             let (want_scientist, want_project) =
                 special_projects::wanted(&before, scientist, project);
             let keys = &bounded_keys;
+            let mut sp_reply: Option<Value> = None;
             let mut settle = || {
                 let now = special_projects::slots(process, facility)?;
                 let detail = json!({
@@ -2443,7 +2464,12 @@ impl MacClock {
                     want_scientist,
                     want_project,
                 );
-                Ok(if retry && verdict == settle::Verdict::Unchanged {
+                let early = sp_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                Ok(if early && verdict != settle::Verdict::Reached {
+                    journal::Outcome::Unknown
+                } else if retry && verdict == settle::Verdict::Unchanged {
                     // A retry's own before-snapshot proves nothing about the first attempt.
                     journal::Outcome::Diverged(detail)
                 } else {
@@ -2458,10 +2484,18 @@ impl MacClock {
                         "A retried request is never dispatched again",
                     )
                 })?;
+                if let (Some(ch), Some(posts)) = (sp_route.as_mut(), sp_posts.as_ref()) {
+                    if let Some(r) = inproc_projects::post_all(ch, posts)? {
+                        sp_posted.set(Some(Instant::now()));
+                        sp_reply = Some(json!(r));
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 special_projects::assign(process, keys, plan)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, sp_reply));
         }
         if name == "hoi4_special_project_stop" || name == "hoi4_special_project_unassign" {
             let stopping = name == "hoi4_special_project_stop";
@@ -2493,8 +2527,38 @@ impl MacClock {
                 } else {
                     special_projects::plan_unassign(&before, facility)?;
                 }
+            }
+            // engineer 85: in process (family `projects`)
+            let mut sp_route = if retry {
+                None
+            } else {
+                inproc::route("projects")
+            };
+            let sp_post = match sp_route.as_ref() {
+                Some(_) => special_projects::objects(process).ok().and_then(|o| {
+                    if stopping {
+                        inproc_projects::stop_post(&before, &o, facility)
+                    } else {
+                        inproc_projects::unassign_post(&before, &o, facility)
+                    }
+                    .ok()
+                    .flatten()
+                }),
+                None => None,
+            };
+            if sp_post.is_none() {
+                sp_route = None;
+            }
+            if !retry && sp_route.is_none() {
                 bounded_keys.preflight()?;
             }
+            let sp_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
+            let mut sp_reply: Option<Value> = None;
+            let sp_early = || {
+                sp_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE)
+            };
             let slots_before = special_projects::Slots::of(&before, facility);
             let action = json!({
                 "kind": if stopping { "special_project_stop" } else { "special_project_unassign" },
@@ -2510,7 +2574,9 @@ impl MacClock {
                         "stopping": now.map(|n| n.1),
                     });
                     let verdict = settle::special_stop(slots_before.and_then(|s| s.project), now);
-                    Ok(if retry && verdict == settle::Verdict::Unchanged {
+                    Ok(if sp_early() && verdict != settle::Verdict::Reached {
+                        journal::Outcome::Unknown
+                    } else if retry && verdict == settle::Verdict::Unchanged {
                         journal::Outcome::Diverged(detail)
                     } else {
                         verdict.outcome(detail)
@@ -2523,7 +2589,9 @@ impl MacClock {
                     });
                     let verdict =
                         settle::special_unassign(slots_before.and_then(|s| s.scientist), now);
-                    Ok(if retry && verdict == settle::Verdict::Unchanged {
+                    Ok(if sp_early() && verdict != settle::Verdict::Reached {
+                        journal::Outcome::Unknown
+                    } else if retry && verdict == settle::Verdict::Unchanged {
                         journal::Outcome::Diverged(detail)
                     } else {
                         verdict.outcome(detail)
@@ -2538,6 +2606,14 @@ impl MacClock {
                         "A retried request is never dispatched again",
                     ));
                 }
+                if let (Some(ch), Some(post)) = (sp_route.as_mut(), sp_post.as_ref()) {
+                    if let Some(r) = inproc_projects::post_all(ch, std::slice::from_ref(post))? {
+                        sp_posted.set(Some(Instant::now()));
+                        sp_reply = Some(json!(r));
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 if stopping {
                     special_projects::stop(process, keys, facility)
                 } else {
@@ -2545,7 +2621,7 @@ impl MacClock {
                 }
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, sp_reply));
         }
         if name == "hoi4_design_options" {
             allowed(

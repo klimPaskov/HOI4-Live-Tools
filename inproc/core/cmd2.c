@@ -386,6 +386,27 @@ const cmd_spec CMD2_SPECS[] = {
      * +0x24 (0x3b34), task force handles +0x30/+0x3c (0x3b35). "Can do": the fleet a CFleet, each handle a CTaskForce.
      * Auth: the fleet's owner and each task force's owner. The task forces travel in the request's divisions list and
      * are checked by the navy.mission type's own task force resolver and owner getter */
+    /* ---- projects (engineer 85, 27 Nov): the experimental facilities tab (special projects), read from 1.20.0.0 and
+     * 1.19.4.1. Every command holds handles: a facility is an NProject::CProgram (handle 0x4008, resolver 1.20
+     * 0x100f322c0, owner 0x100135320), a project an NProject::CProject (0x2726, 0x101699a10, 0x100135340), a scientist
+     * its CCharacter (0x4005, 0x10022c8d0, owner 0x1001351c0). Constructors (1.20): Start 0x101697cf0 (program,
+     * project), Stop 0x101698340 (project), Attach 0x101697350 (program, character, flag: 1 at both UI sites
+     * 0x1016d509a / 0x1016e9999), Unattach 0x101697850 (program, character). Each "can do" is the game's.
+     * start: CStartProjectCommand 16402 (0x38): program +0x24, project +0x2c (auth: both owned) */
+    {"projects", "projects.start", "CStartProjectCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "N8NProject8CProgramE", 2,
+     {{"facility", 0x24, FK_REF, 0, 0x4008, 0}, {"project", 0x2c, FK_REF, 0, 0x2726, 0}},
+     OBJ2_CAST, 0, AUTH_HANDLE, NULL, "N8NProject8CProjectE", 0},
+    /* stop: CStopProjectCommand 16403 (0x30): project +0x24 */
+    {"projects", "projects.stop", "CStopProjectCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "N8NProject8CProjectE", 1,
+     {{"project", 0x24, FK_REF, 0, 0x2726, 0}}, OBJ2_NONE, 0},
+    /* attach: CAttachScientistCommand 16398 (0x38): program +0x24, scientist +0x30, flag +0x2c (0x28f9; the UI's 1) */
+    {"projects", "projects.attach", "CAttachScientistCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "N8NProject8CProgramE", 3,
+     {{"facility", 0x24, FK_REF, 0, 0x4008, 0}, {"scientist", 0x30, FK_REF, 0, 0x4005, 0}, {"flag", 0x2c, FK_U8, 0, 0x28f9, 0}},
+     OBJ2_CAST, 0, AUTH_HANDLE, NULL, "10CCharacter", 0},
+    /* unattach: CUnattachScientistCommand 16399 (0x38): scientist +0x24 (auth), program +0x2c */
+    {"projects", "projects.unattach", "CUnattachScientistCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "10CCharacter", 2,
+     {{"scientist", 0x24, FK_REF, 0, 0x4005, 0}, {"facility", 0x2c, FK_REF, 0, 0x4008, 0}},
+     OBJ2_CAST, 0, AUTH_HANDLE, NULL, "N8NProject8CProgramE", 0},
     /* ---- doctrine (engineer 85, 24 Nov): the officer corps view's doctrine selection (UI 1.20 0x101051db0), read from
      * 1.20.0.0 and 1.19.4.1. Both commands are nested classes; the factories leave the payload unwritten (the view's own
      * constructors fill it): those fields are not default-checked (keep -1) and the module writes them.
