@@ -814,6 +814,11 @@ struct Sched {
     said: HashMap<String, LaneSaid>,
     /// Lane -> the game hour the fairness turn first saw it waiting (see [`overdue_turns`]).
     fair_seen: HashMap<&'static str, GameHour>,
+    /// Lanes ticks so far, the tick of the last fairness turn that acted (and its game hour), and
+    /// the tick the war was last offered (see [`fair_turn_open`]).
+    tick_no: u64,
+    fair_tick: Option<(u64, GameHour)>,
+    war_tick: Option<u64>,
 }
 
 /// A lane's stated reason: its last line that said something (an order, a refusal, a note it
@@ -2367,12 +2372,18 @@ fn lanes_tick_inner(
     let due = war_first
         && plan_operation::awaiting_war(state)
         && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD);
+    state.sched.tick_no += 1;
+    let op_war = plan_operation::executing_any(state)
+        || (state.war_active && plan_operation::active(state))
+        || plan_operation::preparing(state);
     if !due {
         if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(line));
         }
-        if let Some(line) = overdue_turns(state, tools, plan, lease, now, &lanes)? {
-            return Ok(Tick::Acted(line));
+        if fair_turn_open(&state.sched, war_first && op_war, now) {
+            if let Some(line) = overdue_turns(state, tools, plan, lease, now, &lanes)? {
+                return Ok(Tick::Acted(line));
+            }
         }
     }
     // Before the war, a role an operation names that has no army takes the tick ahead of every
@@ -2400,9 +2411,6 @@ fn lanes_tick_inner(
     // declaration waits on it, and the ticks it gave to focus and production put the war 4-9
     // days after the plan's day (rd2-rs1, 19 Nov 2026). Once ready the lanes alternate again,
     // so a campaign's months-long prepare costs the economy only the days of its drawing.
-    let op_war = plan_operation::executing_any(state)
-        || (state.war_active && plan_operation::active(state))
-        || plan_operation::preparing(state);
     // A prepared operation waits for its war: the declaration goes first in every tick it is
     // due, ahead of any lane (rs1-rs6, 19 Nov 2026: the prepare read back by 30 August and the
     // declaration came on 7-9 September behind air batches and economy ticks).
@@ -2412,6 +2420,7 @@ fn lanes_tick_inner(
             || (plan_operation::executing_any(state)
                 && plan_affairs::declaration_near(state, tools, plan, now, 0)))
     {
+        state.sched.war_tick = Some(state.sched.tick_no);
         if let Some(line) = declare_first(state, tools, plan, lease, now)? {
             state.round.war_acted(now);
             trace_lanes(now, "declare_first");
@@ -2437,6 +2446,7 @@ fn lanes_tick_inner(
                     || op_war
                     || plan["scheduler"]["war_every_tick"] == json!(true))));
     if war_turn {
+        state.sched.war_tick = Some(state.sched.tick_no);
         if let Some(line) = war_lane(state, tools, plan, lease, now)? {
             state.round.war_acted(now);
             trace_lanes(now, "war_turn");
@@ -2554,6 +2564,7 @@ fn lanes_tick_inner(
     }
     // every lane is quiet: the war takes the turn it left to them
     if war_first && !war_turn {
+        state.sched.war_tick = Some(state.sched.tick_no);
         if let Some(line) = war_lane(state, tools, plan, lease, now)? {
             state.round.war_acted(now);
             return Ok(Tick::Acted(line));
@@ -2617,12 +2628,31 @@ fn overdue_turns(
         record_turn(state, name, result.as_ref(), &before, now);
         if let Some(line) = result {
             state.round.lane_acted(name, now);
+            state.sched.fair_tick = Some((state.sched.tick_no, now));
             trace_lanes(now, &format!("fair {name} acted"));
             return Ok(Some(line));
         }
         trace_lanes(now, &format!("fair {name} quiet"));
     }
     Ok(None)
+}
+
+/// Whether this tick may go to an overdue lane (see [`overdue_turns`]); pure. Never two fairness
+/// ticks in a row, so the war, the issue lanes and the pass keep at least every other tick
+/// whatever the number of lanes waiting; and while an operation prepares or executes (`war_owed`)
+/// none until the war has been offered a tick since the last one (w92b, 27 Nov 2026: with about
+/// two ticks a game day and some 48 lanes due every 3 days the fairness took nearly every tick,
+/// the war step had one turn in 69 days, op_poland never ended after Poland capitulated and the
+/// West never prepared). The war's precedence lapses after [`FAIR_MAX_WAIT`] without an offer, so
+/// a war lane the scheduler never reaches cannot hold the lanes either.
+fn fair_turn_open(sched: &Sched, war_owed: bool, now: GameHour) -> bool {
+    let Some((tick, at)) = sched.fair_tick else {
+        return true;
+    };
+    if tick + 1 >= sched.tick_no {
+        return false;
+    }
+    !war_owed || sched.war_tick.is_some_and(|w| w > tick) || now.saturating_sub(at) > FAIR_MAX_WAIT
 }
 
 /// The lanes the run monitor's open issues name, offered ahead of the pass (see `plan_issues`).
@@ -16642,6 +16672,35 @@ mod tests {
             overdue_turns(&mut state, &tools, &off, "l", now + 9 * DAY, &lanes)
                 .unwrap()
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn the_fairness_never_takes_two_ticks_in_a_row_and_yields_to_a_running_war() {
+        // w92b (27 Nov 2026): the war step had one turn in 69 days behind the fairness
+        let mut s = Sched {
+            tick_no: 1,
+            ..Default::default()
+        };
+        assert!(fair_turn_open(&s, true, START), "no fairness turn yet");
+        s.fair_tick = Some((1, START));
+        s.tick_no = 2;
+        assert!(!fair_turn_open(&s, false, START), "never two in a row");
+        s.tick_no = 3;
+        assert!(
+            fair_turn_open(&s, false, START),
+            "at peace every other tick"
+        );
+        assert!(
+            !fair_turn_open(&s, true, START),
+            "an operation running: the war is offered first"
+        );
+        s.war_tick = Some(2);
+        assert!(fair_turn_open(&s, true, START), "the war had its offer");
+        s.war_tick = None;
+        assert!(
+            fair_turn_open(&s, true, START + FAIR_MAX_WAIT + 1),
+            "a war never offered holds the lanes no longer than the fair wait"
         );
     }
 
