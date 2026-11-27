@@ -2166,6 +2166,16 @@ fn lanes_tick_inner(
         trace_lanes(now, "speed");
         return Ok(Tick::Acted(line));
     }
+    // the fast lanes before the setup layout and the war's turn (see `fast_lanes_turn`), unless
+    // a dated declaration is due: its orders go out on the date
+    let due = war_first
+        && plan_operation::awaiting_war(state)
+        && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD);
+    if !due {
+        if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(line));
+        }
+    }
     // Before the war, a role an operation names that has no army takes the tick ahead of every
     // lane, the paused first day included (t1939e-g, 24 Nov 2026: the layout behind the lanes
     // formed its first role on day 10-20 of the 1939 bookmark and the war began without them).
@@ -2254,39 +2264,8 @@ fn lanes_tick_inner(
     // leg and stayed empty all war in the other, so 2.7 M idle manpower, 480 political power and
     // an army group without a field marshal reached no one).
     plan_manage::daily_reads(state, tools, plan, now);
-    // A free research slot and a free focus are checked every tick (cheap reads, each lost day
-    // is a day of the slot): a pass of slow GUI orders left the focus idle for 14 game days
-    // (g17j 1936.4). They act before the pass resumes.
-    for (name, step) in FAST_LANES {
-        if opening_holds(state, tools, plan, name, now) {
-            continue;
-        }
-        state.last_ok = None;
-        let started = std::time::Instant::now();
-        let result = step(state, tools, plan, lease, now)?;
-        state.round.timed(name, result.is_some(), started);
-        // the fast lanes answer the issues they own too (s7m, 24 Nov 2026: the focus issues
-        // escalated with no lane outcome while the lesson held the refused focus): an order
-        // passed or was refused, or the lane's stage says what it waits for
-        let said = match (&result, state.last_ok) {
-            (Some(line), Some(false)) => Some(("refused", line.clone())),
-            (Some(line), _) => Some(("acted", line.clone())),
-            (None, _) if name == "focus" => state
-                .stages
-                .focus
-                .as_ref()
-                .map(|(t, _)| ("waiting", t.clone())),
-            (None, _) => None,
-        };
-        if let Some((outcome, reason)) = said {
-            state.issues.record_outcome(name, outcome, &reason, now);
-        }
-        if let Some(line) = result {
-            state.sched.turns.insert(name, now);
-            state.round.lane_acted(name, now);
-            trace_lanes(now, &format!("fast {name}"));
-            return Ok(Tick::Acted(line));
-        }
+    if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
+        return Ok(Tick::Acted(line));
     }
     // Lanes that own an open issue of the run monitor go before the routine pass, each at most
     // once a game day (`scheduler.issues_due: false` turns it off). On by default: the monitor's
@@ -3112,12 +3091,101 @@ fn lane_of(list: &[Lane], name: &str) -> Lane {
 /// air, navy, intelligence and the rest. Each manage, military and affairs rule is its own lane,
 /// so a rule with work every pass never holds back the rules behind it.
 /// The lanes checked every tick ahead of the pass (see `lanes_tick`).
-const FAST_LANES: [Lane; 4] = [
+const FAST_LANES: [Lane; 5] = [
+    ("factories", factories_lane),
     ("research", research_lane),
     ("focus", focus_lane),
-    ("factories", factories_lane),
     ("politics", politics_fast_lane),
+    ("construction", construction_fast_lane),
 ];
+
+/// Civilian factories with nothing to build are checked every tick like a free military factory
+/// (one economy read; at most every 6 game hours when they are all busy): the plan's ordered
+/// items, then its open jobs (t1939n, 27 Nov 2026: "free civilian factories build nothing" open
+/// 13 days from the first day while the pass did not come round). `scheduler.construction_fast:
+/// false` leaves construction to the pass alone.
+fn construction_fast_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if plan["scheduler"]["construction_fast"] == json!(false) || state.skipped(now, "confast", "x")
+    {
+        return Ok(None);
+    }
+    let Ok(economy) = tools.call("hoi4_economy", &json!({})) else {
+        return Ok(None);
+    };
+    let idle = economy["civilian_factories_idle"]
+        .as_i64()
+        .or(economy["civilian_factories_available_for_projects"].as_i64())
+        .unwrap_or(0);
+    let out = if idle > 0 {
+        match construction_plan_step(state, tools, plan, lease, now)? {
+            Some(line) => Some(line),
+            None => construction_step(state, tools, plan, lease, now, &economy)?,
+        }
+    } else {
+        None
+    };
+    if out.is_none() {
+        state.skip(now, "confast", "x", 6);
+    }
+    Ok(out)
+}
+
+/// The fast lanes' turn (FAST_LANES): the first that acts takes the tick. Called ahead of the
+/// war's turn and the setup layout as well as before the pass, so a free factory, research slot,
+/// focus, unspent power or idle civilian factory never waits behind slow war orders (t1939n,
+/// 27 Nov 2026: 35 of 75 military factories stood on no line and the civilian factories built
+/// nothing from the paused first day until the 29th: on the paused day the war block took three
+/// ticks of four and research and focus took the fourth one by one, then an open event held
+/// every lane). Never while a dated declaration is due (`declaring`).
+fn fast_lanes_turn(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    // A free research slot and a free focus are checked every tick (cheap reads, each lost day
+    // is a day of the slot): a pass of slow GUI orders left the focus idle for 14 game days
+    // (g17j 1936.4). They act before the pass resumes.
+    for (name, step) in FAST_LANES {
+        if opening_holds(state, tools, plan, name, now) {
+            continue;
+        }
+        state.last_ok = None;
+        let started = std::time::Instant::now();
+        let result = step(state, tools, plan, lease, now)?;
+        state.round.timed(name, result.is_some(), started);
+        // the fast lanes answer the issues they own too (s7m, 24 Nov 2026: the focus issues
+        // escalated with no lane outcome while the lesson held the refused focus): an order
+        // passed or was refused, or the lane's stage says what it waits for
+        let said = match (&result, state.last_ok) {
+            (Some(line), Some(false)) => Some(("refused", line.clone())),
+            (Some(line), _) => Some(("acted", line.clone())),
+            (None, _) if name == "focus" => state
+                .stages
+                .focus
+                .as_ref()
+                .map(|(t, _)| ("waiting", t.clone())),
+            (None, _) => None,
+        };
+        if let Some((outcome, reason)) = said {
+            state.issues.record_outcome(name, outcome, &reason, now);
+        }
+        if let Some(line) = result {
+            state.sched.turns.insert(name, now);
+            state.round.lane_acted(name, now);
+            trace_lanes(now, &format!("fast {name}"));
+            return Ok(Some(line));
+        }
+    }
+    Ok(None)
+}
 
 /// Military factories on no line are checked every tick like a free research slot (two memory
 /// reads) and fed at once by the production rules (plan_manage::free_factories_step). As a turn
@@ -15778,13 +15846,19 @@ mod tests {
         let mut state = State::default();
         let mut plan = war_plan();
         plan["research_priority"] = json!(["tech_a"]);
-        // the war takes the first tick, the idle slot the second (no game hour passes)
-        tick(&mut state, &lab, &plan, "l", START).unwrap();
-        tick(&mut state, &lab, &plan, "l", START).unwrap();
+        // the idle slot takes the first tick, ahead of the war (t1939n, 27 Nov 2026: free
+        // factories and slots waited behind the war block on the paused first day)
+        let first = tick(&mut state, &lab, &plan, "l", START).unwrap();
         let calls = lab.0.calls.borrow();
         assert!(
             calls.iter().any(|(n, _)| n == "hoi4_research_start"),
-            "{calls:?}"
+            "{first:?} {calls:?}"
+        );
+        assert!(
+            !calls
+                .iter()
+                .any(|(n, a)| a.get("request_id").is_some() && n != "hoi4_research_start"),
+            "nothing else acted first: {calls:?}"
         );
     }
 
