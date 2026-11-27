@@ -429,6 +429,21 @@ pub(super) fn tell_player(
     wake(state, plan, now, 0, reason, message, json!({"rule": rule}));
 }
 
+/// A judgement handed to the player: a note and a `wake_player` alarm carrying the game's
+/// options (`evidence.options`) and the deadline, once per `reason` per wake_repeat_days.
+pub(super) fn offer_player(
+    state: &mut State,
+    plan: &Value,
+    now: GameHour,
+    rule: &str,
+    reason: &str,
+    message: String,
+    evidence: Value,
+) {
+    note(state, rule, message.clone());
+    wake(state, plan, now, 0, reason, message, evidence);
+}
+
 /// Clear the skip timers of these kinds so their step runs on the next tick.
 fn nudge(state: &mut State, kinds: &[&str]) -> usize {
     let before = state.bad.len();
