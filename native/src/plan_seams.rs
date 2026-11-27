@@ -139,6 +139,11 @@ pub(super) fn digest(state: &State) -> Option<Value> {
 }
 
 /// A seam step's last status line (the omissions read quotes cp_spend).
+/// Every note of these rules (the lane-turn record reads them).
+pub(super) fn notes(state: &State) -> &BTreeMap<String, String> {
+    &state.seams.notes
+}
+
 pub(super) fn note_of<'a>(state: &'a State, key: &str) -> Option<&'a str> {
     state.seams.notes.get(key).map(String::as_str)
 }

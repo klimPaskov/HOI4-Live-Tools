@@ -166,7 +166,7 @@ pub(super) fn executing_operations(state: &State) -> Vec<String> {
 }
 
 /// The enemies at war (not won) from a hoi4_wars read; pure.
-fn enemies_at_war(wars: &Value) -> Vec<String> {
+pub(super) fn enemies_at_war(wars: &Value) -> Vec<String> {
     let won: Vec<&str> = list(&wars["wars"], "wars_won")
         .iter()
         .filter_map(Value::as_str)

@@ -32,8 +32,17 @@ pub const TRANSIENT_REST: GameHour = 2;
 /// Most rows the wake list takes from the monitor.
 const MAX_ROWS: usize = 8;
 
-/// A monitor lane name that is not an executor lane name.
-const LANE_ALIAS: [(&str, &str); 2] = [("navy", "ship"), ("mio_lines", "mio")];
+/// A monitor lane name that is not an executor lane name. The monitor's "navy" is the navy
+/// rule's lane (admirals, task forces, missions: plan_military's `navy`), not the sea-transfer
+/// step `ship`: mapped there, the admiral and idle task force issues of t1939n (27 Nov 2026)
+/// were offered to the sea transfers and stayed open for 158 days.
+const LANE_ALIAS: [(&str, &str); 5] = [
+    ("mio_lines", "mio"),
+    ("cp_spend", "seams"),
+    ("doctrines", "extras"),
+    ("special_projects", "extras"),
+    ("air", "air_plan"),
+];
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Treat {
@@ -501,8 +510,8 @@ mod tests {
             json!({"id": "I1", "lane": "navy", "state": "overdue"}),
             json!({"id": "I2", "lane": "politics", "state": "open"}),
         ];
-        is.record_outcome("ship", "waiting", "navy: region North Sea not found", 24);
-        is.record_outcome("ship", "waiting", "navy: region North Sea not found", 48);
+        is.record_outcome("navy", "waiting", "navy: region North Sea not found", 24);
+        is.record_outcome("navy", "waiting", "navy: region North Sea not found", 48);
         let text = std::fs::read_to_string(dir.join("issue_outcomes.jsonl")).unwrap();
         assert_eq!(text.lines().count(), 1);
         assert!(text.contains("\"I1\"") && text.contains("waiting"));
@@ -539,7 +548,7 @@ mod tests {
             ..Default::default()
         };
         let lanes: Vec<String> = is.due_lanes().into_iter().map(|(l, _)| l).collect();
-        assert_eq!(lanes, ["dockyards", "ship", "politics"]);
+        assert_eq!(lanes, ["dockyards", "navy", "politics"]);
         assert!(is.take_turn("dockyards", 100));
         assert!(!is.take_turn("dockyards", 110));
         assert!(is.take_turn("dockyards", 130));

@@ -5267,6 +5267,11 @@
           },
           "description": "{\"<fleet>\": \"<admiral>\"} or [{fleet, admiral}], after fleets[].admiral"
         },
+        "reserve_stays": {
+          "type": "boolean",
+          "default": false,
+          "description": "true keeps the reserve fleet's task forces where they are; false (default) sends each one the plan does not keep in navy.reserve to a fleet with an admiral by its role (submarines to the raiders, surface ships to the surface fleet)"
+        },
         "reserve": {
           "type": "array",
           "items": {
