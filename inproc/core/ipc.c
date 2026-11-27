@@ -50,8 +50,10 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                    * remove a line, move a line (S14-CONSTRUCTION) */,
                                 0 /* training (engineer 82): a training queue of a template, its series, lines, location,
                                    * deploy, cancel (S15-TRAINING) */,
-                                0 /* mio (engineer 84): an organisation's trait queue / unlock, its policy, a production
-                                   * line's organisation (S16-MIO) */,
+                                1 /* mio (engineer 84): an organisation's trait queue / unlock, its policy, a production
+                                   * line's organisation (S16-MIO PASSED live 27 Nov 2026, s89c: unlock 0.9 s / 14 ms post
+                                   * (GUI 34.6 s), queue, trait_indices of 3, policy refused by the window's gate unposted,
+                                   * running; the line's organisation not exercised) */,
                                 0 /* navy (engineer 85): task force missions, merge, a fleet's sea regions, its admiral,
                                    * task forces into a fleet (S17-NAVY) */,
                                 0 /* doctrine (engineer 85): a grand doctrine, a subdoctrine into a track slot
