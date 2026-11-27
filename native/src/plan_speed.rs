@@ -350,6 +350,21 @@ pub(super) fn dated_declaration_near(
     at_war: &[String],
     now: GameHour,
 ) -> Option<String> {
+    dated_declarations(plan, at_war, now, DECLARE_LEAD, DECLARE_TAIL)
+        .into_iter()
+        .next()
+}
+
+/// The targets of the planned declarations whose latest date clause lies within `lead` game
+/// hours ahead of `now` or up to `tail` behind it, the targets in `at_war` left out. Pure.
+pub(super) fn dated_declarations(
+    plan: &Value,
+    at_war: &[String],
+    now: GameHour,
+    lead: GameHour,
+    tail: GameHour,
+) -> Vec<String> {
+    let mut out = Vec::new();
     for row in list(plan, "diplomacy") {
         if row["action"].as_str() != Some("declare") {
             continue;
@@ -364,11 +379,11 @@ pub(super) fn dated_declaration_near(
         let Some(day) = at.into_iter().max() else {
             continue;
         };
-        if now + DECLARE_LEAD >= day && now <= day + DECLARE_TAIL {
-            return Some(target.to_string());
+        if now + lead >= day && now <= day + tail {
+            out.push(target.to_string());
         }
     }
-    None
+    out
 }
 
 fn date_clauses(when: &Value, out: &mut Vec<GameHour>) {
