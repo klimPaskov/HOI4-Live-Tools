@@ -26,7 +26,7 @@ pub(super) fn settled(r: &Reader<'_>, base: u64, root: u64, registry: u64) -> Re
     if !(0x10000..=0x7fff_ffff_0000).contains(&root) {
         return Err(refuse("Materialized closing root required"));
     }
-    exact(r, root, base + 0x44de2b0)?;
+    exact(r, root, base + 0x44e62b0)?;
     if r.u64(root + 0x98)? != registry {
         return Err(refuse("Closing root belongs to another registry"));
     }
@@ -88,7 +88,7 @@ pub(super) fn roots(
     }
     settled_named(r, base, parent, registry, "facilities_parent")?;
     let facilities = r.u64(view + 0x900)?;
-    exact(r, facilities, base + 0x4487c30)?;
+    exact(r, facilities, base + 0x448fbb8)?;
     if r.u64(facilities + 0x68)? != idler || r.u64(facilities + 0x60)? != parent {
         return Err(refuse("Facilities view owner changed"));
     }
@@ -126,15 +126,15 @@ pub fn observe(process: &dyn Process) -> Result<Observation> {
     let [country, status] = own.own;
     let [gs, idler, _] = own.campaign.anchors;
     let registry = r.u64(idler + 0x4f8)?;
-    exact(&r, registry, base + 0x4409f68)?;
+    exact(&r, registry, base + 0x4411218)?;
     let manager = r.u64(idler + 0x6b8)?;
-    if r.u64(manager + 0x180)? != idler || r.u64(base + 0x470e6d8)? != registry {
+    if r.u64(manager + 0x180)? != idler || r.u64(base + 0x47166f8)? != registry {
         return Err(refuse("Own closing manager/input registry changed"));
     }
     let view = r.u64(manager + 0xf0)?;
     let tree = r.u64(manager + 0xf8)?;
-    exact(&r, view, base + 0x43e3978)?;
-    exact(&r, tree, base + 0x43e3b88)?;
+    exact(&r, view, base + 0x43eac28)?;
+    exact(&r, tree, base + 0x43eae38)?;
     if r.u64(view + 0x2f0)? != idler || r.u64(tree + 0x2f0)? != idler || r.i32(tree + 0xe24)? != 6 {
         return Err(refuse("Own closing research views changed"));
     }

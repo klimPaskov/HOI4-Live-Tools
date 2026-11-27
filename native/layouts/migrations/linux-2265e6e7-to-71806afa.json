@@ -1,0 +1,4732 @@
+{
+ "old": {
+  "file": "hoi4",
+  "build_id": "2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082",
+  "sha256": "36a69ea446df3903baa0d1b2dec1331cfd2fe16eacee482d84cc36e5b6f9b5da"
+ },
+ "new": {
+  "file": "hoi4",
+  "build_id": "71806afa707a46fb72f0738a719c3f1c3f5e2e42",
+  "sha256": "f8fe17fb1047cc94a64e7cc8f13780494e8eb111b9c3a3468256bfbc4f499874"
+ },
+ "function_pairs": 78907,
+ "image": {},
+ "classes": {},
+ "table": {
+  "image": {
+   "0x34ac5f8": {
+    "old": "0x440e200",
+    "kind": "vtable",
+    "rtti": "8CAirWing",
+    "status": "mapped",
+    "new": "0x44154b0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x34ac6c0": {
+    "old": "0x440e2c8",
+    "kind": "vtable",
+    "rtti": "12CAirWingPool",
+    "status": "mapped",
+    "new": "0x4415578",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x34ace60": {
+    "old": "0x440e880",
+    "kind": "vtable",
+    "rtti": "5CArmy",
+    "status": "mapped",
+    "new": "0x4415b30",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x34b2928": {
+    "old": "0x4412fc8",
+    "kind": "vtable",
+    "rtti": "18CCountryFuelStatus",
+    "status": "mapped",
+    "new": "0x441a2e0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x34fb310": {
+    "old": "0x4457c18",
+    "kind": "vtable",
+    "rtti": "21CDivisionTemplateData",
+    "status": "mapped",
+    "new": "0x445f278",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x34fb370": {
+    "old": "0x4457c78",
+    "kind": "vtable",
+    "rtti": "27CReferencedDivisionTemplate",
+    "status": "mapped",
+    "new": "0x445f2d8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x34fbb48": {
+    "old": "0x44583e0",
+    "kind": "vtable",
+    "rtti": "6CEvent",
+    "status": "mapped",
+    "new": "0x445fa70",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x34fc2e8": {
+    "old": "0x44588e0",
+    "kind": "vtable",
+    "rtti": "6CFleet",
+    "status": "mapped",
+    "new": "0x445ff70",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35044e8": {
+    "old": "0x445e068",
+    "kind": "vtable",
+    "rtti": "17CCurrentGameState",
+    "status": "mapped",
+    "new": "0x4465768",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35089d8": {
+    "old": "0x4460048",
+    "kind": "vtable",
+    "rtti": "12CInGameIdler",
+    "status": "mapped",
+    "new": "0x4467770",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x350ad90": {
+    "old": "0x4461888",
+    "kind": "vtable",
+    "rtti": "16CCountryManpower",
+    "status": "mapped",
+    "new": "0x4469020",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x350cdc0": {
+    "old": "0x4463448",
+    "kind": "vtable",
+    "rtti": "9CModifier",
+    "status": "mapped",
+    "new": "0x446ac60",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3512bf0": {
+    "old": "0x4468ed0",
+    "kind": "vtable",
+    "rtti": "14COrderInstance",
+    "status": "mapped",
+    "new": "0x44708f8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3519a20": {
+    "old": "0x446f4f0",
+    "kind": "vtable",
+    "rtti": "5CShip",
+    "status": "mapped",
+    "new": "0x4477120",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3519c88": {
+    "old": "0x446f758",
+    "kind": "vtable",
+    "rtti": "20CCountryAirContainer",
+    "status": "mapped",
+    "new": "0x4477388",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3519d08": {
+    "old": "0x446f7d8",
+    "kind": "vtable",
+    "rtti": "8CAirBase",
+    "status": "mapped",
+    "new": "0x4477408",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3519d70": {
+    "old": "0x446f840",
+    "kind": "vtable",
+    "rtti": "13CStrategicAir",
+    "status": "mapped",
+    "new": "0x4477470",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x351cf18": {
+    "old": "0x4471e38",
+    "kind": "vtable",
+    "rtti": "10CNavalBase",
+    "status": "mapped",
+    "new": "0x4479b48",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x351e438": {
+    "old": "0x4472e08",
+    "kind": "vtable",
+    "rtti": "18CStrategicResource",
+    "status": "mapped",
+    "new": "0x447ab18",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x351e498": {
+    "old": "0x4472e68",
+    "kind": "vtable",
+    "rtti": "22CStrategicResourcePool",
+    "status": "mapped",
+    "new": "0x447ab78",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x351e5e0": {
+    "old": "0x4472f28",
+    "kind": "vtable",
+    "rtti": "26CStrategicResourceDatabase",
+    "status": "mapped",
+    "new": "0x447ac38",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x351e958": {
+    "old": "0x4473160",
+    "kind": "vtable",
+    "rtti": "18CSubUnitDefinition",
+    "status": "mapped",
+    "new": "0x447ae70",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x351f208": {
+    "old": "0x4473778",
+    "kind": "vtable",
+    "rtti": "10CTaskForce",
+    "status": "mapped",
+    "new": "0x447b488",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3525bf8": {
+    "old": "0x4477d88",
+    "kind": "vtable",
+    "rtti": "8CWarGoal",
+    "status": "mapped",
+    "new": "0x447fbd8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x352ee30": {
+    "old": "0x4348430",
+    "kind": "vtable",
+    "rtti": "9CBuilding",
+    "status": "mapped",
+    "new": "0x434f3f0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x352f828": {
+    "old": "0x4348d38",
+    "kind": "vtable",
+    "rtti": "15CBuildingStatus",
+    "status": "mapped",
+    "new": "0x434fcf8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x352fa88": {
+    "old": "0x4348f98",
+    "kind": "vtable",
+    "rtti": "17CBuildingTemplate",
+    "status": "mapped",
+    "new": "0x434ff58",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3530150": {
+    "old": "0x4349390",
+    "kind": "vtable",
+    "rtti": "10CCharacter",
+    "status": "mapped",
+    "new": "0x4350350",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3530728": {
+    "old": "0x4349800",
+    "kind": "vtable",
+    "rtti": "18CCountryCharacters",
+    "status": "mapped",
+    "new": "0x43507c0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3530f20": {
+    "old": "0x4349d28",
+    "kind": "vtable",
+    "rtti": "10CScientist",
+    "status": "mapped",
+    "new": "0x4350ce8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3531290": {
+    "old": "0x434a128",
+    "kind": "vtable",
+    "rtti": "15CScientistTrait",
+    "status": "mapped",
+    "new": "0x43510e8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3536180": {
+    "old": "0x434e260",
+    "kind": "vtable",
+    "rtti": "N9NFactions3NUi19CCountryFactionViewE",
+    "status": "mapped",
+    "new": "0x4355220",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x353a060": {
+    "old": "0x4350df8",
+    "kind": "vtable",
+    "rtti": "N9NFactions3NUi19CFactionSetupWindowE",
+    "status": "mapped",
+    "new": "0x4357db8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x353e188": {
+    "old": "0x4353758",
+    "kind": "vtable",
+    "rtti": "N9NFactions8CFactionE",
+    "status": "mapped",
+    "new": "0x435a718",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3540478": {
+    "old": "0x4355368",
+    "kind": "vtable",
+    "rtti": "N9NFactions14CFactionSystemE",
+    "status": "mapped",
+    "new": "0x435c328",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35438d8": {
+    "old": "0x447e810",
+    "kind": "vtable",
+    "rtti": "22CAirBaseAccessRelation",
+    "status": "mapped",
+    "new": "0x44866d0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35439a8": {
+    "old": "0x447e8e0",
+    "kind": "vtable",
+    "rtti": "27COfferAirBaseAccessRelation",
+    "status": "mapped",
+    "new": "0x44867a0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3543b30": {
+    "old": "0x447ea68",
+    "kind": "vtable",
+    "rtti": "22CDockingRightsRelation",
+    "status": "mapped",
+    "new": "0x4486928",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3543c00": {
+    "old": "0x447eb38",
+    "kind": "vtable",
+    "rtti": "27COfferDockingRightsRelation",
+    "status": "mapped",
+    "new": "0x44869f8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3543d00": {
+    "old": "0x447ec38",
+    "kind": "vtable",
+    "rtti": "22CNavalBlockadeRelation",
+    "status": "mapped",
+    "new": "0x4486af8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3544048": {
+    "old": "0x4358830",
+    "kind": "vtable",
+    "rtti": "16CAutonomousState",
+    "status": "mapped",
+    "new": "0x435f898",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3544268": {
+    "old": "0x4358a50",
+    "kind": "vtable",
+    "rtti": "16CDiplomacyStatus",
+    "status": "mapped",
+    "new": "0x435fab8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354a170": {
+    "old": "0x435e6b8",
+    "kind": "vtable",
+    "rtti": "12CWarRelation",
+    "status": "mapped",
+    "new": "0x4365730",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354a240": {
+    "old": "0x435e788",
+    "kind": "vtable",
+    "rtti": "32CLicenceProductionAccessRelation",
+    "status": "mapped",
+    "new": "0x4365800",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354a310": {
+    "old": "0x435e858",
+    "kind": "vtable",
+    "rtti": "23CMilitaryAccessRelation",
+    "status": "mapped",
+    "new": "0x43658d0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354a3e0": {
+    "old": "0x435e928",
+    "kind": "vtable",
+    "rtti": "28COfferMilitaryAccessRelation",
+    "status": "mapped",
+    "new": "0x43659a0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354a4b0": {
+    "old": "0x435e9f8",
+    "kind": "vtable",
+    "rtti": "25CImproveRelationsRelation",
+    "status": "mapped",
+    "new": "0x4365a70",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354a580": {
+    "old": "0x435eac8",
+    "kind": "vtable",
+    "rtti": "16CAttacheRelation",
+    "status": "mapped",
+    "new": "0x4365b40",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354a650": {
+    "old": "0x435eb98",
+    "kind": "vtable",
+    "rtti": "29CBoostPartyPopularityRelation",
+    "status": "mapped",
+    "new": "0x4365c10",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354a720": {
+    "old": "0x435ec68",
+    "kind": "vtable",
+    "rtti": "18CGuaranteeRelation",
+    "status": "mapped",
+    "new": "0x4365ce0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354a7f0": {
+    "old": "0x435ed38",
+    "kind": "vtable",
+    "rtti": "26CNonAggressionPactRelation",
+    "status": "mapped",
+    "new": "0x4365db0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354a8c0": {
+    "old": "0x435ee08",
+    "kind": "vtable",
+    "rtti": "18CLendLeaseRelation",
+    "status": "mapped",
+    "new": "0x4365e80",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354aa60": {
+    "old": "0x435efa8",
+    "kind": "vtable",
+    "rtti": "16CSubjectRelation",
+    "status": "mapped",
+    "new": "0x4366020",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354abc0": {
+    "old": "0x435f108",
+    "kind": "vtable",
+    "rtti": "16CEmbargoRelation",
+    "status": "mapped",
+    "new": "0x4366180",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354b628": {
+    "old": "0x435fcb0",
+    "kind": "vtable",
+    "rtti": "12CWorldThreat",
+    "status": "mapped",
+    "new": "0x4366d28",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354e610": {
+    "old": "0x4362230",
+    "kind": "vtable",
+    "rtti": "N10NDoctrines20CCountryDoctrineViewE",
+    "status": "mapped",
+    "new": "0x43692b8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x354e920": {
+    "old": "0x447f848",
+    "kind": "vtable",
+    "rtti": "N10NDoctrines22CDoctrineSelectionListE",
+    "status": "mapped",
+    "new": "0x4487708",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x357bad8": {
+    "old": "0x438d730",
+    "kind": "vtable",
+    "rtti": "14CEquipmentType",
+    "status": "mapped",
+    "new": "0x43947c0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x357ccd8": {
+    "old": "0x438e9f8",
+    "kind": "vtable",
+    "rtti": "16CEquipmentModule",
+    "status": "mapped",
+    "new": "0x4395ae8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x357ce80": {
+    "old": "0x438ec40",
+    "kind": "vtable",
+    "rtti": "20CEquipmentModuleSlot",
+    "status": "mapped",
+    "new": "0x4395d30",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x357d1b8": {
+    "old": "0x438f000",
+    "kind": "vtable",
+    "rtti": "17CEquipmentVariant",
+    "status": "mapped",
+    "new": "0x43960f0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x357e388": {
+    "old": "0x438fe10",
+    "kind": "vtable",
+    "rtti": "8CCountry",
+    "status": "mapped",
+    "new": "0x4396f00",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x357f020": {
+    "old": "0x4390588",
+    "kind": "vtable",
+    "rtti": "9CProvince",
+    "status": "mapped",
+    "new": "0x4397678",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x357f410": {
+    "old": "0x43908f8",
+    "kind": "vtable",
+    "rtti": "6CState",
+    "status": "mapped",
+    "new": "0x43979e8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3587fd0": {
+    "old": "0x43965b0",
+    "kind": "vtable",
+    "rtti": "12CWarGoalType",
+    "status": "mapped",
+    "new": "0x439d6a8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35882b8": {
+    "old": "0x4396898",
+    "kind": "vtable",
+    "rtti": "5CIdea",
+    "status": "mapped",
+    "new": "0x439d990",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3589e48": {
+    "old": "0x4397cf0",
+    "kind": "vtable",
+    "rtti": "16CPoliticalStatus",
+    "status": "mapped",
+    "new": "0x439ede8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358c220": {
+    "old": "0x4399a48",
+    "kind": "vtable",
+    "rtti": "N23NIndustrialOrganisation21COrganisationDatabaseE",
+    "status": "mapped",
+    "new": "0x43a0b90",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358ca80": {
+    "old": "0x4483480",
+    "kind": "vtable",
+    "rtti": "23CMilitaryProductionLine",
+    "status": "mapped",
+    "new": "0x448b358",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358cc00": {
+    "old": "0x4483600",
+    "kind": "vtable",
+    "rtti": "20CNavalProductionLine",
+    "status": "mapped",
+    "new": "0x448b4d8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358ce80": {
+    "old": "0x439a6a0",
+    "kind": "vtable",
+    "rtti": "15CProductionLine",
+    "status": "mapped",
+    "new": "0x43a17e8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358d580": {
+    "old": "0x4483ba0",
+    "kind": "vtable",
+    "rtti": "22CConsumerGoodsConsumer",
+    "status": "mapped",
+    "new": "0x448ba78",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358d5c0": {
+    "old": "0x4483be0",
+    "kind": "vtable",
+    "rtti": "24CSpecialProjectsConsumer",
+    "status": "mapped",
+    "new": "0x448bab8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358d600": {
+    "old": "0x4483c20",
+    "kind": "vtable",
+    "rtti": "27CLicensedProductionConsumer",
+    "status": "mapped",
+    "new": "0x448baf8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358d640": {
+    "old": "0x4483c60",
+    "kind": "vtable",
+    "rtti": "14CTradeConsumer",
+    "status": "mapped",
+    "new": "0x448bb38",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358d680": {
+    "old": "0x439a980",
+    "kind": "vtable",
+    "rtti": "24CContractPaymentConsumer",
+    "status": "mapped",
+    "new": "0x43a1ac8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358d850": {
+    "old": "0x439ab50",
+    "kind": "vtable",
+    "rtti": "17CDeploymentStatus",
+    "status": "mapped",
+    "new": "0x43a1c98",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358dff8": {
+    "old": "0x439b238",
+    "kind": "vtable",
+    "rtti": "27CMilitaryDeploymentConveyor",
+    "status": "mapped",
+    "new": "0x43a2380",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358e0c8": {
+    "old": "0x439b308",
+    "kind": "vtable",
+    "rtti": "17CProductionStatus",
+    "status": "mapped",
+    "new": "0x43a2450",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358e878": {
+    "old": "0x439b670",
+    "kind": "vtable",
+    "rtti": "23CProductionResourceCost",
+    "status": "mapped",
+    "new": "0x43a27b8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x358ff80": {
+    "old": "0x4350930",
+    "kind": "vtable",
+    "rtti": "38CGenericDefaultConfirmationPopUpWindow",
+    "status": "mapped",
+    "new": "0x43578f0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x359c918": {
+    "old": "0x439f830",
+    "kind": "vtable",
+    "rtti": "N8NProject8CProgramE",
+    "status": "mapped",
+    "new": "0x43a6978",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x359ca08": {
+    "old": "0x439f9a0",
+    "kind": "vtable",
+    "rtti": "N8NProject8CProjectE",
+    "status": "mapped",
+    "new": "0x43a6ae8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x359d7f8": {
+    "old": "0x4487978",
+    "kind": "vtable",
+    "rtti": "N8NProject16CProjectTemplateE",
+    "status": "mapped",
+    "new": "0x448f900",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x359f820": {
+    "old": "0x43a1940",
+    "kind": "vtable",
+    "rtti": "N8NProject15SProjectHistoryE",
+    "status": "mapped",
+    "new": "0x43a8a88",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x359f8b0": {
+    "old": "0x43a19d0",
+    "kind": "vtable",
+    "rtti": "N8NProject12CProjectPoolE",
+    "status": "mapped",
+    "new": "0x43a8b18",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x359f990": {
+    "old": "0x43a1c80",
+    "kind": "vtable",
+    "rtti": "N8NProject19CSimpleProjectStateE",
+    "status": "mapped",
+    "new": "0x43a8dc8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x359fa60": {
+    "old": "0x43a1b18",
+    "kind": "vtable",
+    "rtti": "N8NProject20CProjectStateMachineE",
+    "status": "mapped",
+    "new": "0x43a8c60",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x359fdb0": {
+    "old": "0x43a1d00",
+    "kind": "vtable",
+    "rtti": "N8NProject14CProgramStatusE",
+    "status": "mapped",
+    "new": "0x43a8e48",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35a0300": {
+    "old": "0x4487c30",
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi18CFacilitiesTabViewE",
+    "status": "mapped",
+    "new": "0x448fbb8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35a1018": {
+    "old": "0x43a2218",
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi12CProgramItemE",
+    "status": "mapped",
+    "new": "0x43a9360",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35a1970": {
+    "old": "0x4488350",
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi14CScientistItemE",
+    "status": "mapped",
+    "new": "0x44902d8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35a1b08": {
+    "old": "0x43a2550",
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi16CScientistRosterE",
+    "status": "mapped",
+    "new": "0x43a9698",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35a1cb8": {
+    "old": "0x43a2620",
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi12CProgramViewE",
+    "status": "mapped",
+    "new": "0x43a9768",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35a2910": {
+    "old": "0x43a2a28",
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi12CProjectItemE",
+    "status": "mapped",
+    "new": "0x43a9b70",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35a3908": {
+    "old": "0x43a32c0",
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi23CRecruitScientistWindowE",
+    "status": "mapped",
+    "new": "0x43aa408",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35a4000": {
+    "old": "0x43a3878",
+    "kind": "vtable",
+    "rtti": "20CCountrySupplySystem",
+    "status": "mapped",
+    "new": "0x43aa9c0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35a4748": {
+    "old": "0x43a4368",
+    "kind": "vtable",
+    "rtti": "20CProvinceRailwayInfo",
+    "status": "mapped",
+    "new": "0x43ab4b0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35a47a8": {
+    "old": "0x43a43c8",
+    "kind": "vtable",
+    "rtti": "15CRailwayManager",
+    "status": "mapped",
+    "new": "0x43ab510",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35a4838": {
+    "old": "0x43a4458",
+    "kind": "vtable",
+    "rtti": "13CSupplySystem",
+    "status": "mapped",
+    "new": "0x43ab5a0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35a8b50": {
+    "old": "0x43a6e18",
+    "kind": "vtable",
+    "rtti": "17CCountryResources",
+    "status": "mapped",
+    "new": "0x43adf60",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35d8db0": {
+    "old": "0x43d5890",
+    "kind": "vtable",
+    "rtti": "11CArmyLeader",
+    "status": "mapped",
+    "new": "0x43dcb40",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35e5c88": {
+    "old": "0x448e538",
+    "kind": "vtable",
+    "rtti": "12CEventWindow",
+    "status": "mapped",
+    "new": "0x44964c0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x35e77d8": {
+    "old": "0x43d7cb0",
+    "kind": "vtable",
+    "rtti": "15CAirBaseMapIcon",
+    "status": "mapped",
+    "new": "0x43def60",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x360b170": {
+    "old": "0x44c0760",
+    "kind": "vtable",
+    "rtti": "24CEquipmentModuleSlotView",
+    "status": "mapped",
+    "new": "0x44c8730",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x360b818": {
+    "old": "0x4496240",
+    "kind": "vtable",
+    "rtti": "22CEquipmentDesignerView",
+    "status": "mapped",
+    "new": "0x449e1d0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x360db18": {
+    "old": "0x44c0bf8",
+    "kind": "vtable",
+    "rtti": "21CEquipmentModuleEntry",
+    "status": "mapped",
+    "new": "0x44c8bc8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36106d8": {
+    "old": "0x4497b30",
+    "kind": "vtable",
+    "rtti": "24CNationalFocusInfoWindow",
+    "status": "mapped",
+    "new": "0x449fac8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3611108": {
+    "old": "0x43df668",
+    "kind": "vtable",
+    "rtti": "22CNationalFocusTreeItem",
+    "status": "mapped",
+    "new": "0x43e6918",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3611298": {
+    "old": "0x43df748",
+    "kind": "vtable",
+    "rtti": "18CNationalFocusView",
+    "status": "mapped",
+    "new": "0x43e69f8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3613100": {
+    "old": "0x44980e0",
+    "kind": "vtable",
+    "rtti": "N20NInternationalMarket31CCountryInternationalMarketViewE",
+    "status": "mapped",
+    "new": "0x44a0078",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3621f70": {
+    "old": "0x449c928",
+    "kind": "vtable",
+    "rtti": "26CAgencyLogoSelectionWindow",
+    "status": "mapped",
+    "new": "0x44a48c0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3622a70": {
+    "old": "0x43e1920",
+    "kind": "vtable",
+    "rtti": "21CAgencyUpgradesWindow",
+    "status": "mapped",
+    "new": "0x43e8bd0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36249c0": {
+    "old": "0x43e2098",
+    "kind": "vtable",
+    "rtti": "30CCountryIntelligenceAgencyView",
+    "status": "mapped",
+    "new": "0x43e9348",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36257e8": {
+    "old": "0x449dc28",
+    "kind": "vtable",
+    "rtti": "19COperativeBottomBar",
+    "status": "mapped",
+    "new": "0x44a5bc0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3626830": {
+    "old": "0x449e600",
+    "kind": "vtable",
+    "rtti": "18COperativeOrderBar",
+    "status": "mapped",
+    "new": "0x44a6598",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x362a5b8": {
+    "old": "0x43e2990",
+    "kind": "vtable",
+    "rtti": "22CPeaceConferenceWindow",
+    "status": "mapped",
+    "new": "0x43e9c40",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x362c958": {
+    "old": "0x44c42b0",
+    "kind": "vtable",
+    "rtti": "N23NIndustrialOrganisation25COrganisationDetailWindowE",
+    "status": "mapped",
+    "new": "0x44cc280",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x362d5b0": {
+    "old": "0x44a06f0",
+    "kind": "vtable",
+    "rtti": "N23NIndustrialOrganisation23COrganisationListWindowE",
+    "status": "mapped",
+    "new": "0x44a8688",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x362de58": {
+    "old": "0x44c4958",
+    "kind": "vtable",
+    "rtti": "N23NIndustrialOrganisation13CPolicyWindowE",
+    "status": "mapped",
+    "new": "0x44cc928",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3632080": {
+    "old": "0x44a17b0",
+    "kind": "vtable",
+    "rtti": "21CTechnologyInfoWindow",
+    "status": "mapped",
+    "new": "0x44a9750",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3633588": {
+    "old": "0x43e4038",
+    "kind": "vtable",
+    "rtti": "23CTechnologyTreeTechItem",
+    "status": "mapped",
+    "new": "0x43eb2e8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3633a80": {
+    "old": "0x43e4530",
+    "kind": "vtable",
+    "rtti": "17CResearchSlotItem",
+    "status": "mapped",
+    "new": "0x43eb7e0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x363b690": {
+    "old": "0x43e4c70",
+    "kind": "vtable",
+    "rtti": "20CAcceptCommandDialog",
+    "status": "mapped",
+    "new": "0x43ebf20",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x363b9d8": {
+    "old": "0x43e4fb8",
+    "kind": "vtable",
+    "rtti": "32CConfirmCancelNavyActivityDialog",
+    "status": "mapped",
+    "new": "0x43ec268",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36424c8": {
+    "old": "0x44a35c8",
+    "kind": "vtable",
+    "rtti": "17CBattlePlansTools",
+    "status": "mapped",
+    "new": "0x44ab568",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3643990": {
+    "old": "0x44a3b58",
+    "kind": "vtable",
+    "rtti": "24CChangeGroupLeaderDialog",
+    "status": "mapped",
+    "new": "0x44abaf8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3643ac0": {
+    "old": "0x44a3c88",
+    "kind": "vtable",
+    "rtti": "23CChangeNavyLeaderDialog",
+    "status": "mapped",
+    "new": "0x44abc28",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3647398": {
+    "old": "0x44a5d40",
+    "kind": "vtable",
+    "rtti": "36CCountryConstructionViewBuildingItem",
+    "status": "mapped",
+    "new": "0x44adce0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x364a878": {
+    "old": "0x44a7ed0",
+    "kind": "vtable",
+    "rtti": "22CCountryDeploymentView",
+    "status": "mapped",
+    "new": "0x44afe70",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x364aa18": {
+    "old": "0x43e7b00",
+    "kind": "vtable",
+    "rtti": "21CCountryDiplomacyView",
+    "status": "mapped",
+    "new": "0x43eedb0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36511f0": {
+    "old": "0x43ea4f8",
+    "kind": "vtable",
+    "rtti": "20CCountryPoliticsView",
+    "status": "mapped",
+    "new": "0x43f17a8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x365b4d0": {
+    "old": "0x44acfc0",
+    "kind": "vtable",
+    "rtti": "25CDiplomacyPopupWindowBase",
+    "status": "mapped",
+    "new": "0x44b4f60",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x365b5f8": {
+    "old": "0x44ad0e8",
+    "kind": "vtable",
+    "rtti": "23CStandardDiplomacyPopup",
+    "status": "mapped",
+    "new": "0x44b5088",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x365b720": {
+    "old": "0x44ad210",
+    "kind": "vtable",
+    "rtti": "26CScriptedGUIDiplomacyPopup",
+    "status": "mapped",
+    "new": "0x44b51b0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x365b848": {
+    "old": "0x44ad338",
+    "kind": "vtable",
+    "rtti": "32CIncomingLendLeaseDiplomacyPopup",
+    "status": "mapped",
+    "new": "0x44b52d8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x365b970": {
+    "old": "0x44ad460",
+    "kind": "vtable",
+    "rtti": "30CForeignManpowerDiplomacyPopup",
+    "status": "mapped",
+    "new": "0x44b5400",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3661350": {
+    "old": "0x43f06b0",
+    "kind": "vtable",
+    "rtti": "23CDismantleFactionDialog",
+    "status": "mapped",
+    "new": "0x43f7960",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36634f0": {
+    "old": "0x44ade50",
+    "kind": "vtable",
+    "rtti": "29CEquipmentUpgradeDesignerView",
+    "status": "mapped",
+    "new": "0x44b5df0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3663518": {
+    "old": "0x44ade78",
+    "kind": "vtable",
+    "rtti": "31CEquipmentUpgradeDesignerWindow",
+    "status": "mapped",
+    "new": "0x44b5e18",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3665308": {
+    "old": "0x44ae730",
+    "kind": "vtable",
+    "rtti": "9CFindView",
+    "status": "mapped",
+    "new": "0x44b66d0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3670a20": {
+    "old": "0x43f3588",
+    "kind": "vtable",
+    "rtti": "16CLeaderGroupView",
+    "status": "mapped",
+    "new": "0x43fa838",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x367efa0": {
+    "old": "0x43f81d8",
+    "kind": "vtable",
+    "rtti": "18CPoliticalIdeaItem",
+    "status": "mapped",
+    "new": "0x43ff488",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x367f050": {
+    "old": "0x43f8288",
+    "kind": "vtable",
+    "rtti": "28CPoliticalSelectableIdeaItem",
+    "status": "mapped",
+    "new": "0x43ff538",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x367f210": {
+    "old": "0x43f8448",
+    "kind": "vtable",
+    "rtti": "26CPoliticsIdeaCategoryEntry",
+    "status": "mapped",
+    "new": "0x43ff6f8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x367fd40": {
+    "old": "0x43f8b48",
+    "kind": "vtable",
+    "rtti": "31CDefaultConfirmationPopUpWindow",
+    "status": "mapped",
+    "new": "0x43ffdf8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3680170": {
+    "old": "0x43f8f78",
+    "kind": "vtable",
+    "rtti": "28CResearchFinishedPopUpWindow",
+    "status": "mapped",
+    "new": "0x4400228",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3680288": {
+    "old": "0x43f9090",
+    "kind": "vtable",
+    "rtti": "31CIntelAgencyFinishedPopUpWindow",
+    "status": "mapped",
+    "new": "0x4400340",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36803a0": {
+    "old": "0x43f91a8",
+    "kind": "vtable",
+    "rtti": "34CSpecialProjectFinishedPopUpWindow",
+    "status": "mapped",
+    "new": "0x4400458",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36804b8": {
+    "old": "0x43f92c0",
+    "kind": "vtable",
+    "rtti": "34CSpecialProjectCapturedPopUpWindow",
+    "status": "mapped",
+    "new": "0x4400570",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36805d0": {
+    "old": "0x43f93d8",
+    "kind": "vtable",
+    "rtti": "24CConfirmationPopUpWindow",
+    "status": "mapped",
+    "new": "0x4400688",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36806e8": {
+    "old": "0x43f94f0",
+    "kind": "vtable",
+    "rtti": "25CFocusFinishedPopUpWindow",
+    "status": "mapped",
+    "new": "0x44007a0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3680800": {
+    "old": "0x43f9608",
+    "kind": "vtable",
+    "rtti": "24CPeaceSummaryPopUpWindow",
+    "status": "mapped",
+    "new": "0x44008b8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3685b58": {
+    "old": "0x44b72c0",
+    "kind": "vtable",
+    "rtti": "26CProductionEquipmentWindow",
+    "status": "mapped",
+    "new": "0x44bf260",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3686b08": {
+    "old": "0x43fb478",
+    "kind": "vtable",
+    "rtti": "27CProductionLineMilitaryItem",
+    "status": "mapped",
+    "new": "0x4402728",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3686c50": {
+    "old": "0x43fb5c0",
+    "kind": "vtable",
+    "rtti": "24CProductionLineNavalItem",
+    "status": "mapped",
+    "new": "0x4402870",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x368b8a8": {
+    "old": "0x43fe2f0",
+    "kind": "vtable",
+    "rtti": "30CReassignFullOrdersGroupDialog",
+    "status": "mapped",
+    "new": "0x44055a0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3695460": {
+    "old": "0x4401f98",
+    "kind": "vtable",
+    "rtti": "23CSurrenderedPopupWindow",
+    "status": "mapped",
+    "new": "0x4409248",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3697918": {
+    "old": "0x4402bc0",
+    "kind": "vtable",
+    "rtti": "7CTopBar",
+    "status": "mapped",
+    "new": "0x4409e70",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3698030": {
+    "old": "0x44b9b70",
+    "kind": "vtable",
+    "rtti": "17CTradeOfferWindow",
+    "status": "mapped",
+    "new": "0x44c1b10",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36998b0": {
+    "old": "0x44030b8",
+    "kind": "vtable",
+    "rtti": "19CConfirmDeleteUnits",
+    "status": "mapped",
+    "new": "0x440a368",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x369bd60": {
+    "old": "0x44048f0",
+    "kind": "vtable",
+    "rtti": "33COperativeLeaderRecruitmentWindow",
+    "status": "mapped",
+    "new": "0x440bba0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36a1f88": {
+    "old": "0x4408768",
+    "kind": "vtable",
+    "rtti": "24CWorldTensionPopUpWindow",
+    "status": "mapped",
+    "new": "0x440fa18",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36a2a78": {
+    "old": "0x4408e78",
+    "kind": "vtable",
+    "rtti": "27CCountryArmyOfficerCorpView",
+    "status": "mapped",
+    "new": "0x4410128",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36a40e8": {
+    "old": "0x4409698",
+    "kind": "vtable",
+    "rtti": "30CCountryCharacterSelectionItem",
+    "status": "mapped",
+    "new": "0x4410948",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36a4d00": {
+    "old": "0x4409ca0",
+    "kind": "vtable",
+    "rtti": "27CCommandStructureLeaderView",
+    "status": "mapped",
+    "new": "0x4410f50",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36b6880": {
+    "old": "0x44dad90",
+    "kind": "vtable",
+    "rtti": "5CIcon",
+    "status": "mapped",
+    "new": "0x44e2d90",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36b9738": {
+    "old": "0x44dd4f0",
+    "kind": "vtable",
+    "rtti": "15CButtonStandard",
+    "status": "mapped",
+    "new": "0x44e54f0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36ba080": {
+    "old": "0x44dde38",
+    "kind": "vtable",
+    "rtti": "9CCheckBox",
+    "status": "mapped",
+    "new": "0x44e5e38",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36ba978": {
+    "old": "0x44de2b0",
+    "kind": "vtable",
+    "rtti": "16CContainerWindow",
+    "status": "mapped",
+    "new": "0x44e62b0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36bc6a0": {
+    "old": "0x44dfdd0",
+    "kind": "vtable",
+    "rtti": "8CEditBox",
+    "status": "mapped",
+    "new": "0x44e7dd0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36be530": {
+    "old": "0x44e15e0",
+    "kind": "vtable",
+    "rtti": "20CFrameAnimatedSprite",
+    "status": "mapped",
+    "new": "0x44e95e0",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36c04b8": {
+    "old": "0x44e2ee8",
+    "kind": "vtable",
+    "rtti": "18CInstantTextObject",
+    "status": "mapped",
+    "new": "0x44eaee8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36cc528": {
+    "old": "0x44ed1d8",
+    "kind": "vtable",
+    "rtti": "7CSprite",
+    "status": "mapped",
+    "new": "0x44f51d8",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36cca80": {
+    "old": "0x44ed730",
+    "kind": "vtable",
+    "rtti": "16CStandardGridBox",
+    "status": "mapped",
+    "new": "0x44f5730",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x36cee08": {
+    "old": "0x44ef818",
+    "kind": "vtable",
+    "rtti": "11CTextSprite",
+    "status": "mapped",
+    "new": "0x44f7818",
+    "confidence": "high",
+    "method": "rtti",
+    "notes": [],
+    "candidates": null
+   },
+   "0x3704b10": {
+    "old": "0x4535060",
+    "kind": "global",
+    "rtti": null,
+    "status": "mapped",
+    "new": "0x453d060",
+    "confidence": "high",
+    "method": "aligned-rip-refs",
+    "notes": [
+     "13 referencing Mach-O functions, 10 matched, 3 unmatched",
+     "0x453d060:10"
+    ],
+    "candidates": null
+   },
+   "0x3705890": {
+    "old": "0x4536e38",
+    "kind": "global",
+    "rtti": null,
+    "status": "mapped",
+    "new": "0x453ee38",
+    "confidence": "high",
+    "method": "aligned-rip-refs",
+    "notes": [
+     "26 referencing Mach-O functions, 19 matched, 7 unmatched",
+     "0x453ee38:19"
+    ],
+    "candidates": null
+   },
+   "0x37058c0": {
+    "old": "0x4535390",
+    "kind": "global",
+    "rtti": null,
+    "status": "mapped",
+    "new": "0x453d390",
+    "confidence": "high",
+    "method": "aligned-rip-refs",
+    "notes": [
+     "147 referencing Mach-O functions, 97 matched, 50 unmatched",
+     "0x453d390:97"
+    ],
+    "candidates": null
+   },
+   "0x3705fe0": {
+    "old": "0x4535a88",
+    "kind": "global",
+    "rtti": null,
+    "status": "mapped",
+    "new": "0x453da88",
+    "confidence": "high",
+    "method": "aligned-rip-refs",
+    "notes": [
+     "46 referencing Mach-O functions, 37 matched, 9 unmatched",
+     "0x453da88:37"
+    ],
+    "candidates": null
+   },
+   "0x372c530": {
+    "old": "0x453b130",
+    "kind": "global",
+    "rtti": null,
+    "status": "mapped",
+    "new": "0x4543130",
+    "confidence": "high",
+    "method": "aligned-rip-refs",
+    "notes": [
+     "68 referencing Mach-O functions, 21 matched, 47 unmatched",
+     "0x4543130:21"
+    ],
+    "candidates": null
+   },
+   "0x384b480": {
+    "old": "0x47d2bd8",
+    "kind": "global",
+    "rtti": null,
+    "status": "mapped",
+    "new": "0x47dabf8",
+    "confidence": "high",
+    "method": "aligned-rip-refs",
+    "notes": [
+     "131 referencing Mach-O functions, 46 matched, 85 unmatched",
+     "0x47dabf8:46"
+    ],
+    "candidates": null
+   }
+  },
+  "fields": {
+   "CAcceptCommandDialog": {
+    "rtti": "20CAcceptCommandDialog",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 25,
+    "mapped": 4,
+    "missing": [],
+    "filled": {
+     "0x328": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CAgencyLogoSelectionWindow": {
+    "rtti": "26CAgencyLogoSelectionWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 9,
+    "mapped": 1,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CAgencyUpgrade": {
+    "rtti": "14CAgencyUpgrade",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 12,
+    "mapped": 7,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CAgencyUpgradeBranch": {
+    "rtti": "20CAgencyUpgradeBranch",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 12,
+    "mapped": 5,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CAgencyUpgradeDatabase": {
+    "rtti": "22CAgencyUpgradeDatabase",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 19,
+    "mapped": 1,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CAgencyUpgradesWindow": {
+    "rtti": "21CAgencyUpgradesWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 10,
+    "mapped": 4,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CAirBase": {
+    "rtti": "8CAirBase",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 20,
+    "missing": [],
+    "filled": {
+     "0xc": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CAirBaseMapIcon": {
+    "rtti": "15CAirBaseMapIcon",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 26,
+    "mapped": 9,
+    "missing": [],
+    "filled": {
+     "0x48": "bracketed",
+     "0x50": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CAirWing": {
+    "rtti": "8CAirWing",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 14,
+    "mapped": 57,
+    "missing": [],
+    "filled": {
+     "0x78": "low-consistent",
+     "0x98": "bracketed",
+     "0xb8": "bracketed",
+     "0x338": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CAirWingPool": {
+    "rtti": "12CAirWingPool",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 8,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CArmiesView": {
+    "rtti": "11CArmiesView",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 7,
+    "mapped": 2,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CArmy": {
+    "rtti": "5CArmy",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 80,
+    "mapped": 57,
+    "missing": [],
+    "filled": {
+     "0x18": "low-consistent",
+     "0x30": "bracketed",
+     "0x50": "bracketed",
+     "0x78": "bracketed",
+     "0x2b4": "bracketed",
+     "0x4f0": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CArmyLeader": {
+    "rtti": "11CArmyLeader",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 37,
+    "mapped": 33,
+    "missing": [
+     "0x18"
+    ],
+    "filled": {
+     "0x20": "low-consistent",
+     "0x40": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CArmyLeaderWindow": {
+    "rtti": "17CArmyLeaderWindow",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 19,
+    "mapped": 17,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CAutonomousState": {
+    "rtti": "16CAutonomousState",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 11,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CBuilding": {
+    "rtti": "9CBuilding",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 12,
+    "mapped": 13,
+    "missing": [],
+    "filled": {
+     "0x1b8": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CBuildingStatus": {
+    "rtti": "15CBuildingStatus",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 7,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CBuildingTemplate": {
+    "rtti": "17CBuildingTemplate",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 3,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CButtonStandard": {
+    "rtti": "15CButtonStandard",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 123,
+    "mapped": 31,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CChangeGroupLeaderDialog": {
+    "rtti": "24CChangeGroupLeaderDialog",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 26,
+    "mapped": 7,
+    "missing": [],
+    "filled": {
+     "0x328": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CChangeNavyLeaderDialog": {
+    "rtti": "23CChangeNavyLeaderDialog",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 27,
+    "mapped": 5,
+    "missing": [],
+    "filled": {
+     "0x328": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CCharacter": {
+    "rtti": "10CCharacter",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 14,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CCheckBox": {
+    "rtti": "9CCheckBox",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 85,
+    "mapped": 1,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CCommandStructureLeaderView": {
+    "rtti": "27CCommandStructureLeaderView",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 26,
+    "mapped": 11,
+    "missing": [],
+    "filled": {
+     "0x28": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CConfirmDeleteUnits": {
+    "rtti": "19CConfirmDeleteUnits",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 30,
+    "mapped": 1,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CConfirmationPopUpWindow": {
+    "rtti": "24CConfirmationPopUpWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 22,
+    "mapped": 2,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CConsumerGoodsConsumer": {
+    "rtti": "22CConsumerGoodsConsumer",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 3,
+    "mapped": 0,
+    "missing": [
+     "0x10"
+    ],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CContainerWindow": {
+    "rtti": "16CContainerWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 109,
+    "mapped": 87,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CConvoys": {
+    "rtti": "8CConvoys",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 11,
+    "mapped": 0,
+    "missing": [
+     "0x88"
+    ],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CCountry": {
+    "rtti": "8CCountry",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 54,
+    "missing": [],
+    "filled": {
+     "0x8": "low-consistent",
+     "0x5a0": "low-consistent",
+     "0xfa8": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CCountryAirContainer": {
+    "rtti": "20CCountryAirContainer",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 17,
+    "mapped": 16,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CCountryArmyOfficerCorpView": {
+    "rtti": "27CCountryArmyOfficerCorpView",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 26,
+    "mapped": 43,
+    "missing": [],
+    "filled": {
+     "0x330": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CCountryCharacterSelectionItem": {
+    "rtti": "30CCountryCharacterSelectionItem",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 24,
+    "mapped": 5,
+    "missing": [],
+    "filled": {
+     "0x28": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CCountryCharacters": {
+    "rtti": "18CCountryCharacters",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 10,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CCountryConstructionViewBuildingItem": {
+    "rtti": "36CCountryConstructionViewBuildingItem",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 24,
+    "mapped": 4,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CCountryDeploymentView": {
+    "rtti": "22CCountryDeploymentView",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 25,
+    "mapped": 11,
+    "missing": [],
+    "filled": {
+     "0x330": "low-consistent",
+     "0x338": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CCountryDiplomacyView": {
+    "rtti": "21CCountryDiplomacyView",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 25,
+    "mapped": 18,
+    "missing": [
+     "0x35e8"
+    ],
+    "filled": {
+     "0x330": "low-consistent",
+     "0xf00": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CCountryExperienceStatus": {
+    "rtti": "24CCountryExperienceStatus",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 11,
+    "mapped": 9,
+    "missing": [],
+    "filled": {
+     "0x28": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CCountryFuelStatus": {
+    "rtti": "18CCountryFuelStatus",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 9,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CCountryIntelligenceAgencyView": {
+    "rtti": "30CCountryIntelligenceAgencyView",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 25,
+    "mapped": 22,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CCountryInternationalMarketView": {
+    "rtti": "N20NInternationalMarket31CCountryInternationalMarketViewE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 25,
+    "mapped": 13,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CCountryNavalRegionView": {
+    "rtti": "23CCountryNavalRegionView",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 25,
+    "mapped": 18,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CCountryPoliticsView": {
+    "rtti": "20CCountryPoliticsView",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 26,
+    "mapped": 58,
+    "missing": [],
+    "filled": {
+     "0x2698": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CCountrySupplySystem": {
+    "rtti": "20CCountrySupplySystem",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 14,
+    "mapped": 15,
+    "missing": [],
+    "filled": {
+     "0x78": "low-consistent",
+     "0xa0": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CCountryTradeView": {
+    "rtti": "17CCountryTradeView",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 25,
+    "mapped": 13,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CCurrentGameState": {
+    "rtti": "17CCurrentGameState",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 3351,
+    "mapped": 110,
+    "missing": [],
+    "filled": {
+     "0x260": "low-consistent",
+     "0x624": "bracketed",
+     "0x888": "bracketed",
+     "0x8a8": "low-consistent",
+     "0x8b4": "low-consistent",
+     "0x948": "low-consistent",
+     "0x968": "low-consistent",
+     "0x9b8": "low-consistent",
+     "0xa20": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CDecision": {
+    "rtti": "9CDecision",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 10,
+    "mapped": 38,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CDecisionViewDecisionItem": {
+    "rtti": "25CDecisionViewDecisionItem",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 31,
+    "mapped": 3,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CDecisionViewTargetedDecisionItem": {
+    "rtti": "33CDecisionViewTargetedDecisionItem",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 31,
+    "mapped": 4,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CDecisionViewTimedDecisionItem": {
+    "rtti": "30CDecisionViewTimedDecisionItem",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 31,
+    "mapped": 2,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CDeploymentStatus": {
+    "rtti": "17CDeploymentStatus",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 5,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CDesignerSubUnitItem": {
+    "rtti": "20CDesignerSubUnitItem",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 24,
+    "mapped": 7,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CDiplomacyStatus": {
+    "rtti": "16CDiplomacyStatus",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 32,
+    "missing": [],
+    "filled": {
+     "0x20": "low-consistent",
+     "0x50": "low-consistent",
+     "0x98": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CDivisionDesignerView": {
+    "rtti": "21CDivisionDesignerView",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 13,
+    "mapped": 100,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CDivisionTemplateData": {
+    "rtti": "21CDivisionTemplateData",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 12,
+    "mapped": 7,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CDropDownBox": {
+    "rtti": "12CDropDownBox",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 83,
+    "mapped": 15,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CEditBox": {
+    "rtti": "8CEditBox",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 89,
+    "mapped": 22,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CEquipmentDesignerView": {
+    "rtti": "22CEquipmentDesignerView",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 10,
+    "mapped": 18,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CEquipmentModule": {
+    "rtti": "16CEquipmentModule",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 3,
+    "missing": [],
+    "filled": {
+     "0x10": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CEquipmentModuleEntry": {
+    "rtti": "21CEquipmentModuleEntry",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 24,
+    "mapped": 9,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CEquipmentModuleSlot": {
+    "rtti": "20CEquipmentModuleSlot",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 4,
+    "missing": [
+     "0x8"
+    ],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CEquipmentModuleSlotView": {
+    "rtti": "24CEquipmentModuleSlotView",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 4,
+    "mapped": 4,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CEquipmentType": {
+    "rtti": "14CEquipmentType",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 12,
+    "mapped": 2,
+    "missing": [],
+    "filled": {
+     "0x68": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CEquipmentType.slot": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 2
+   },
+   "CEquipmentType.slot.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "CEquipmentUpgrade": {
+    "rtti": "17CEquipmentUpgrade",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 12,
+    "mapped": 5,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CEquipmentUpgradeDesignerView": {
+    "rtti": "29CEquipmentUpgradeDesignerView",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 4,
+    "mapped": 8,
+    "missing": [],
+    "filled": {
+     "0x5c8": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CEquipmentUpgradeDesignerWindow": {
+    "rtti": "31CEquipmentUpgradeDesignerWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 7,
+    "mapped": 4,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CEquipmentVariant": {
+    "rtti": "17CEquipmentVariant",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 14,
+    "mapped": 43,
+    "missing": [],
+    "filled": {
+     "0xc": "low-consistent",
+     "0x108": "bracketed",
+     "0x110": "bracketed",
+     "0x118": "bracketed",
+     "0x120": "bracketed",
+     "0x128": "bracketed",
+     "0x198": "bracketed",
+     "0x1a0": "bracketed",
+     "0x1a8": "bracketed",
+     "0x1b0": "bracketed",
+     "0x1c8": "bracketed",
+     "0x1d0": "bracketed",
+     "0x1d8": "bracketed",
+     "0x1e0": "bracketed",
+     "0x1e8": "bracketed",
+     "0x1f0": "bracketed",
+     "0x1f8": "bracketed",
+     "0x208": "bracketed",
+     "0x210": "bracketed",
+     "0x270": "bracketed",
+     "0x278": "bracketed",
+     "0x280": "bracketed",
+     "0x288": "bracketed",
+     "0x290": "bracketed",
+     "0x2a0": "bracketed",
+     "0x2a8": "bracketed",
+     "0x2b0": "bracketed",
+     "0x2e8": "bracketed",
+     "0x2f0": "bracketed",
+     "0x2f8": "bracketed",
+     "0x300": "bracketed",
+     "0x308": "bracketed",
+     "0x328": "bracketed",
+     "0x368": "bracketed",
+     "0x3d0": "low-consistent",
+     "0x424": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CEvent": {
+    "rtti": "6CEvent",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 4,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CEventWindow": {
+    "rtti": "12CEventWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 8,
+    "mapped": 23,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CFleet": {
+    "rtti": "6CFleet",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 17,
+    "mapped": 27,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CFleetsBottomBar": {
+    "rtti": "16CFleetsBottomBar",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 7,
+    "mapped": 1,
+    "missing": [],
+    "filled": {
+     "0x648": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CFocusFinishedPopUpWindow": {
+    "rtti": "25CFocusFinishedPopUpWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 24,
+    "mapped": 8,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CGenericDefaultConfirmationPopUpWindow": {
+    "rtti": "38CGenericDefaultConfirmationPopUpWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 40,
+    "mapped": 2,
+    "missing": [],
+    "filled": {
+     "0x328": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CIcon": {
+    "rtti": "5CIcon",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 126,
+    "mapped": 24,
+    "missing": [
+     "0x184"
+    ],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CIdea": {
+    "rtti": "5CIdea",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 12,
+    "mapped": 27,
+    "missing": [],
+    "filled": {
+     "0x70": "low-consistent",
+     "0x7c": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CIdeaResearchBonus": {
+    "rtti": "18CIdeaResearchBonus",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 12,
+    "mapped": 1,
+    "missing": [
+     "0x30",
+     "0x38"
+    ],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CInGameIdler": {
+    "rtti": "12CInGameIdler",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 1150,
+    "mapped": 105,
+    "missing": [],
+    "filled": {
+     "0x4e8": "low-consistent",
+     "0x578": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CInGameMenu": {
+    "rtti": "11CInGameMenu",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 7,
+    "mapped": 3,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CInstantTextObject": {
+    "rtti": "18CInstantTextObject",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 90,
+    "mapped": 20,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CIntelAgencyFinishedPopUpWindow": {
+    "rtti": "31CIntelAgencyFinishedPopUpWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 24,
+    "mapped": 5,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CIntelligenceAgency": {
+    "rtti": "19CIntelligenceAgency",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 11,
+    "mapped": 12,
+    "missing": [
+     "0x10"
+    ],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CLeaderGroupView": {
+    "rtti": "16CLeaderGroupView",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 7,
+    "mapped": 12,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CLimitedUseTechBonus": {
+    "rtti": "20CLimitedUseTechBonus",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 10,
+    "mapped": 12,
+    "missing": [],
+    "filled": {
+     "0x8": "low-consistent",
+     "0x30": "low-consistent",
+     "0x70": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CLimitedUseTechCostReduction": {
+    "rtti": "28CLimitedUseTechCostReduction",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 10,
+    "mapped": 10,
+    "missing": [],
+    "filled": {
+     "0x8": "low-consistent",
+     "0x28": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CMapIconManagerImpl": {
+    "rtti": "19CMapIconManagerImpl",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 35,
+    "mapped": 13,
+    "missing": [],
+    "filled": {
+     "0x8": "low-consistent",
+     "0x708": "low-consistent",
+     "0x714": "low-consistent",
+     "0x740": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CMapIconManagerImpl.array.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "CMilitaryDeploymentConveyor": {
+    "rtti": "27CMilitaryDeploymentConveyor",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 11,
+    "missing": [],
+    "filled": {
+     "0x78": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CMilitaryProductionLine": {
+    "rtti": "23CMilitaryProductionLine",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 38,
+    "mapped": 13,
+    "missing": [],
+    "filled": {
+     "0xe8": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CModifier": {
+    "rtti": "9CModifier",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 16,
+    "mapped": 4,
+    "missing": [],
+    "filled": {
+     "0x1c": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CNationalFocusInfoWindow": {
+    "rtti": "24CNationalFocusInfoWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 2,
+    "missing": [],
+    "filled": {
+     "0x890": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CNationalFocusTreeItem": {
+    "rtti": "22CNationalFocusTreeItem",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 24,
+    "mapped": 3,
+    "missing": [],
+    "filled": {
+     "0x20": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CNationalFocusView": {
+    "rtti": "18CNationalFocusView",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 28,
+    "mapped": 65,
+    "missing": [],
+    "filled": {
+     "0x213c": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CNavalBase": {
+    "rtti": "10CNavalBase",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 9,
+    "missing": [],
+    "filled": {
+     "0x14": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CNaviesView": {
+    "rtti": "11CNaviesView",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 7,
+    "mapped": 8,
+    "missing": [],
+    "filled": {
+     "0x52d0": "bracketed",
+     "0x52d8": "bracketed",
+     "0x5490": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CNavyLeader": {
+    "rtti": "11CNavyLeader",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 39,
+    "mapped": 23,
+    "missing": [
+     "0x38",
+     "0x8"
+    ],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CNavyLeaderWindow": {
+    "rtti": "17CNavyLeaderWindow",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 19,
+    "mapped": 15,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "COperativeLeaderRecruitmentWindow": {
+    "rtti": "33COperativeLeaderRecruitmentWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 23,
+    "mapped": 6,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "COperativeOrderBar": {
+    "rtti": "18COperativeOrderBar",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 4,
+    "mapped": 14,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "COrderInstance": {
+    "rtti": "14COrderInstance",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 24,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CPeaceConferenceWindow": {
+    "rtti": "22CPeaceConferenceWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 7,
+    "mapped": 2,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CPeaceSummaryPopUpWindow": {
+    "rtti": "24CPeaceSummaryPopUpWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 24,
+    "mapped": 6,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CPoliticalIdeaItem": {
+    "rtti": "18CPoliticalIdeaItem",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 6,
+    "mapped": 4,
+    "missing": [],
+    "filled": {
+     "0x38": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CPoliticalSelectableIdeaItem": {
+    "rtti": "28CPoliticalSelectableIdeaItem",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 24,
+    "mapped": 4,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CPoliticalStatus": {
+    "rtti": "16CPoliticalStatus",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 10,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CPoliticsIdeaCategoryEntry": {
+    "rtti": "26CPoliticsIdeaCategoryEntry",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 22,
+    "mapped": 9,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CProductionEquipmentWindow": {
+    "rtti": "26CProductionEquipmentWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 4,
+    "mapped": 2,
+    "missing": [],
+    "filled": {
+     "0x8c0": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CProductionLine": {
+    "rtti": "15CProductionLine",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 22,
+    "mapped": 5,
+    "missing": [
+     "0x38",
+     "0x58",
+     "0x88"
+    ],
+    "filled": {
+     "0x14": "low-consistent",
+     "0x20": "low-consistent",
+     "0x28": "low-consistent",
+     "0x30": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CProductionLineMilitaryItem": {
+    "rtti": "27CProductionLineMilitaryItem",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 35,
+    "mapped": 17,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CProductionResourceCost": {
+    "rtti": "23CProductionResourceCost",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 2,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CProductionResourceCost.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "CProductionStatus": {
+    "rtti": "17CProductionStatus",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 16,
+    "mapped": 39,
+    "missing": [],
+    "filled": {
+     "0x2c8": "bracketed",
+     "0x328": "bracketed",
+     "0x388": "bracketed",
+     "0x448": "bracketed",
+     "0x460": "bracketed",
+     "0x478": "bracketed",
+     "0x490": "bracketed",
+     "0x4a8": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CProvince": {
+    "rtti": "9CProvince",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 17,
+    "mapped": 5,
+    "missing": [],
+    "filled": {
+     "0xe8": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CProvinceRailwayInfo": {
+    "rtti": "20CProvinceRailwayInfo",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 14,
+    "missing": [],
+    "filled": {
+     "0x10": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CRailwayManager": {
+    "rtti": "15CRailwayManager",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 7,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CReassignFullOrdersGroupDialog": {
+    "rtti": "30CReassignFullOrdersGroupDialog",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 26,
+    "mapped": 1,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CReferencedDivisionTemplate": {
+    "rtti": "27CReferencedDivisionTemplate",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 12,
+    "mapped": 3,
+    "missing": [
+     "0x18",
+     "0x20",
+     "0x58",
+     "0x78"
+    ],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CResearchFinishedPopUpWindow": {
+    "rtti": "28CResearchFinishedPopUpWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 24,
+    "mapped": 6,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CScientist": {
+    "rtti": "10CScientist",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 12,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CScientistTrait": {
+    "rtti": "15CScientistTrait",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 15,
+    "mapped": 10,
+    "missing": [],
+    "filled": {
+     "0x98": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CShip": {
+    "rtti": "5CShip",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 21,
+    "mapped": 16,
+    "missing": [],
+    "filled": {
+     "0x60": "low-consistent",
+     "0x90": "bracketed",
+     "0x6e8": "low-consistent",
+     "0x708": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CSpecialProjectCapturedPopUpWindow": {
+    "rtti": "34CSpecialProjectCapturedPopUpWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 24,
+    "mapped": 9,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CSpecialProjectFinishedPopUpWindow": {
+    "rtti": "34CSpecialProjectFinishedPopUpWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 24,
+    "mapped": 6,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CSprite": {
+    "rtti": "7CSprite",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 91,
+    "mapped": 33,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CStandardGridBox": {
+    "rtti": "16CStandardGridBox",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 85,
+    "mapped": 29,
+    "missing": [
+     "0x334"
+    ],
+    "filled": {
+     "0x80": "low-consistent",
+     "0xe4": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CState": {
+    "rtti": "6CState",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 16,
+    "mapped": 24,
+    "missing": [],
+    "filled": {
+     "0x48": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CStrategicAir": {
+    "rtti": "13CStrategicAir",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 14,
+    "mapped": 26,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CStrategicRegion": {
+    "rtti": "16CStrategicRegion",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 16,
+    "mapped": 5,
+    "missing": [],
+    "filled": {
+     "0x20": "low-consistent",
+     "0x48": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CStrategicResource": {
+    "rtti": "18CStrategicResource",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 12,
+    "mapped": 1,
+    "missing": [],
+    "filled": {
+     "0x8": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CStrategicResourceDatabase": {
+    "rtti": "26CStrategicResourceDatabase",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 111,
+    "mapped": 11,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CSubUnitDefinition": {
+    "rtti": "18CSubUnitDefinition",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 14,
+    "mapped": 24,
+    "missing": [],
+    "filled": {
+     "0x50": "bracketed",
+     "0x98": "bracketed",
+     "0xa0": "bracketed",
+     "0xa8": "bracketed",
+     "0xb8": "bracketed",
+     "0xc0": "bracketed",
+     "0xc8": "bracketed",
+     "0xf0": "bracketed",
+     "0xf8": "bracketed",
+     "0x218": "bracketed",
+     "0x278": "bracketed",
+     "0x280": "bracketed",
+     "0x290": "bracketed",
+     "0x298": "bracketed",
+     "0x2b0": "bracketed",
+     "0x310": "low-consistent",
+     "0x588": "bracketed",
+     "0x58c": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CSubjectRelation": {
+    "rtti": "16CSubjectRelation",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 26,
+    "mapped": 5,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CSupplySystem": {
+    "rtti": "13CSupplySystem",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 8,
+    "mapped": 9,
+    "missing": [],
+    "filled": {
+     "0x130": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CSurrenderedPopupWindow": {
+    "rtti": "23CSurrenderedPopupWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 19,
+    "mapped": 15,
+    "missing": [],
+    "filled": {
+     "0x328": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CTaskForce": {
+    "rtti": "10CTaskForce",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 77,
+    "mapped": 28,
+    "missing": [],
+    "filled": {
+     "0x374": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CTaskForceViewEntry": {
+    "rtti": "19CTaskForceViewEntry",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 4,
+    "mapped": 33,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CTechnology": {
+    "rtti": "11CTechnology",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 13,
+    "mapped": 58,
+    "missing": [],
+    "filled": {
+     "0x160": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CTechnology.template": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "CTechnologyInfoWindow": {
+    "rtti": "21CTechnologyInfoWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 6,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CTechnologyStatus": {
+    "rtti": "17CTechnologyStatus",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 11,
+    "mapped": 11,
+    "missing": [
+     "0x320"
+    ],
+    "filled": {
+     "0xb8": "low-consistent",
+     "0x118": "low-consistent",
+     "0x130": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CTechnologyTreeTechItem": {
+    "rtti": "23CTechnologyTreeTechItem",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 24,
+    "mapped": 13,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CTopBar": {
+    "rtti": "7CTopBar",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 7,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CTradeOfferWindow": {
+    "rtti": "17CTradeOfferWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 8,
+    "mapped": 1,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CUnitLeaderTemplate": {
+    "rtti": "19CUnitLeaderTemplate",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 11,
+    "mapped": 5,
+    "missing": [],
+    "filled": {
+     "0x20": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CWarGoal": {
+    "rtti": "8CWarGoal",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 16,
+    "mapped": 11,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CWarGoalType": {
+    "rtti": "12CWarGoalType",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 12,
+    "mapped": 0,
+    "missing": [
+     "0x10"
+    ],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CWorldTensionPopUpWindow": {
+    "rtti": "24CWorldTensionPopUpWindow",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 18,
+    "mapped": 10,
+    "missing": [],
+    "filled": {
+     "0x328": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "CWorldThreat": {
+    "rtti": "12CWorldThreat",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 9,
+    "missing": [],
+    "filled": {
+     "0x8": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "NDoctrines::CCountryDoctrineStatus": {
+    "rtti": "N10NDoctrines22CCountryDoctrineStatusE",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 10,
+    "mapped": 11,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NDoctrines::CCountryDoctrineStatus.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "NDoctrines::CCountryDoctrineView": {
+    "rtti": "N10NDoctrines20CCountryDoctrineViewE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 28,
+    "mapped": 11,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NDoctrines::CDoctrineSelectionList": {
+    "rtti": "N10NDoctrines22CDoctrineSelectionListE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 4,
+    "mapped": 5,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NDoctrines::CDoctrineSystem": {
+    "rtti": "N10NDoctrines15CDoctrineSystemE",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 11,
+    "mapped": 4,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NDoctrines::CDoctrineTemplate": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 3
+   },
+   "NDoctrines::CFolderStatus": {
+    "rtti": "N10NDoctrines13CFolderStatusE",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 10,
+    "mapped": 10,
+    "missing": [],
+    "filled": {
+     "0x8": "low-consistent",
+     "0x30": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "NDoctrines::CFolderStatus.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "NDoctrines::CTrackStatus": {
+    "rtti": "N10NDoctrines12CTrackStatusE",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 10,
+    "mapped": 7,
+    "missing": [
+     "0x50",
+     "0x58"
+    ],
+    "filled": {
+     "0x8": "low-consistent",
+     "0x10": "low-consistent",
+     "0x18": "low-consistent",
+     "0x20": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "NDoctrines::CTrackStatus.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "NDoctrines::STemporaryCostReduction": {
+    "rtti": "N10NDoctrines23STemporaryCostReductionE",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 10,
+    "mapped": 4,
+    "missing": [],
+    "filled": {
+     "0x8": "low-consistent",
+     "0x30": "low-consistent",
+     "0x38": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "NDoctrines::STemporaryCostReduction.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "NFactions::CFaction": {
+    "rtti": "N9NFactions8CFactionE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 8,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NFactions::CFactionSystem": {
+    "rtti": "N9NFactions14CFactionSystemE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 13,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NFactions::CTechnologySharingFaction": {
+    "rtti": "N9NFactions25CTechnologySharingFactionE",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 21,
+    "mapped": 8,
+    "missing": [
+     "0x48"
+    ],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NIndustrialOrganisation::COrganisationDatabase": {
+    "rtti": "N23NIndustrialOrganisation21COrganisationDatabaseE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 28,
+    "mapped": 4,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NIndustrialOrganisation::COrganisationDetailWindow": {
+    "rtti": "N23NIndustrialOrganisation25COrganisationDetailWindowE",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 7,
+    "mapped": 1,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NIndustrialOrganisation::COrganisationListWindow": {
+    "rtti": "N23NIndustrialOrganisation23COrganisationListWindowE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 7,
+    "mapped": 1,
+    "missing": [],
+    "filled": {
+     "0xb0": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "NProject::CProgram": {
+    "rtti": "N8NProject8CProgramE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 12,
+    "mapped": 15,
+    "missing": [],
+    "filled": {
+     "0x8": "low-consistent",
+     "0x18": "low-consistent",
+     "0x50": "low-consistent",
+     "0x58": "low-consistent",
+     "0x178": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "NProject::CProgramStatus": {
+    "rtti": "N8NProject14CProgramStatusE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 8,
+    "mapped": 4,
+    "missing": [],
+    "filled": {
+     "0x68": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "NProject::CProject": {
+    "rtti": "N8NProject8CProjectE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 8,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NProject::CProject.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "NProject::CProjectPool": {
+    "rtti": "N8NProject12CProjectPoolE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 9,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NProject::CProjectStateMachine": {
+    "rtti": "N8NProject20CProjectStateMachineE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 6,
+    "missing": [],
+    "filled": {
+     "0x74": "low-consistent",
+     "0x78": "bracketed",
+     "0x7c": "bracketed",
+     "0x80": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "NProject::CProjectTemplate": {
+    "rtti": "N8NProject16CProjectTemplateE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 11,
+    "mapped": 3,
+    "missing": [
+     "0xc"
+    ],
+    "filled": {
+     "0x8": "low-consistent",
+     "0x230": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "NProject::CSimpleProjectState": {
+    "rtti": "N8NProject19CSimpleProjectStateE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 2,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NProject::CSpecializationDatabase": {
+    "rtti": "N8NProject23CSpecializationDatabaseE",
+    "rtti_from": "name",
+    "via": null,
+    "functions": 45,
+    "mapped": 1,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NProject::NUi::CFacilitiesTabView": {
+    "rtti": "N8NProject3NUi18CFacilitiesTabViewE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 17,
+    "mapped": 14,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NProject::NUi::CProgramItem": {
+    "rtti": "N8NProject3NUi12CProgramItemE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 40,
+    "mapped": 8,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NProject::NUi::CProgramView": {
+    "rtti": "N8NProject3NUi12CProgramViewE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 8,
+    "mapped": 5,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NProject::NUi::CProjectItem": {
+    "rtti": "N8NProject3NUi12CProjectItemE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 24,
+    "mapped": 4,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "NProject::NUi::CRecruitScientistWindow": {
+    "rtti": "N8NProject3NUi23CRecruitScientistWindowE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 17,
+    "mapped": 3,
+    "missing": [],
+    "filled": {
+     "0x28": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "NProject::NUi::CScientistRoster": {
+    "rtti": "N8NProject3NUi16CScientistRosterE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 17,
+    "mapped": 5,
+    "missing": [],
+    "filled": {
+     "0xa28": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "NProject::SProjectHistory": {
+    "rtti": "N8NProject15SProjectHistoryE",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 13,
+    "mapped": 0,
+    "missing": [
+     "0x10",
+     "0x18",
+     "0x8",
+     "0xc"
+    ],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "air.overview.view": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "air.selection.view": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 2
+   },
+   "air.strategic.view": {
+    "rtti": "17CStrategicAirView",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 22,
+    "mapped": 46,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "breakthrough.map_node": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 4
+   },
+   "characters.recruit_pool": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "civilian.consumer": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 2
+   },
+   "construction.view": {
+    "rtti": "25CCountryConstructionsView",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 28,
+    "mapped": 22,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "decision.instance": {
+    "rtti": "17CDecisionInstance",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 11,
+    "mapped": 1,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "decision.view": {
+    "rtti": "20CCountryDecisionView",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 26,
+    "mapped": 33,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "deployment.template_row": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "deployment.template_window": {
+    "rtti": "25CTemplateDeploymentWindow",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 8,
+    "mapped": 3,
+    "missing": [],
+    "filled": {
+     "0x8e8": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "diplomacy.action_controller": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "diplomacy.relation": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 5
+   },
+   "division.pool": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "division.pool.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "division.variant": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "division.variant.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "division_template": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "find.result_row": {
+    "rtti": "22CSearchableGridBoxItem",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 21,
+    "mapped": 3,
+    "missing": [],
+    "filled": {
+     "0x2e8": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "grid.item": {
+    "rtti": "20CStandardGridBoxItem",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 21,
+    "mapped": 2,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "gs.air_manager": {
+    "rtti": "20CStrategicAirManager",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 7,
+    "mapped": 26,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "gs.navy_manager": {
+    "rtti": "21CStrategicNavyManager",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 5,
+    "mapped": 3,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "gui.button": {
+    "rtti": "15CButtonStandard",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 123,
+    "mapped": 31,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "gui.object": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 2
+   },
+   "gui.popup": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "gui.sprite_type": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 2
+   },
+   "gui.text": {
+    "rtti": "15CInstantTextBox",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 88,
+    "mapped": 14,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "gui.text_sprite": {
+    "rtti": "11CTextSprite",
+    "rtti_from": "vtable",
+    "via": null,
+    "functions": 92,
+    "mapped": 34,
+    "missing": [],
+    "filled": {
+     "0x1b8": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   },
+   "gui.type": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "idea.category": {
+    "rtti": "13CIdeaCategory",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 12,
+    "mapped": 1,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "leader.trait.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "leader_group.portrait": {
+    "rtti": "20CLeaderGroupPortrait",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 5,
+    "mapped": 19,
+    "missing": [],
+    "filled": {
+     "0x28": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "manager.air_region_view": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "manager.diplomacy_view": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "manager.find_view": {
+    "rtti": "9CFindView",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 6,
+    "mapped": 4,
+    "missing": [],
+    "filled": {
+     "0x920": "low-consistent",
+     "0x980": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "manager.state_view": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "manager.tech_view": {
+    "rtti": "22CCountryTechnologyView",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 26,
+    "mapped": 14,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "manager.topbar": {
+    "rtti": "7CTopBar",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 13,
+    "mapped": 7,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "manager.tree_view": {
+    "rtti": "20CCountryTechTreeView",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 26,
+    "mapped": 22,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "modifier.entry.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "orders.group": {
+    "rtti": "12COrdersGroup",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 19,
+    "mapped": 24,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "politics.selection_window": {
+    "rtti": "21CPoliticalIdeasWindow",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 6,
+    "mapped": 2,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "production.selection.row": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 2
+   },
+   "production.selection.window": {
+    "rtti": "26CProductionEquipmentWindow",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 4,
+    "mapped": 1,
+    "missing": [],
+    "filled": {
+     "0x8c0": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "production.selection_row": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 2
+   },
+   "production.view": {
+    "rtti": "26CCountryProductionLineView",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 28,
+    "mapped": 58,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "research.tree_view": {
+    "rtti": "20CCountryTechTreeView",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 26,
+    "mapped": 22,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "research.view": {
+    "rtti": "22CCountryTechnologyView",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 26,
+    "mapped": 14,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "scientist.skill_level": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 2
+   },
+   "scientist.skill_level.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "spec.template": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "state.slot_item": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "state.view": {
+    "rtti": "17CCountryStateView",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 25,
+    "mapped": 44,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "strategic.navy": {
+    "rtti": "14CStrategicNavy",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 10,
+    "mapped": 30,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "subunit.need": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "subunit.need.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "supply_flow.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "supply_province": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 3
+   },
+   "supply_province.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "supply_state.size": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "topbar": {
+    "rtti": "7CTopBar",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 13,
+    "mapped": 7,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "topbar.view": {
+    "rtti": "7CTopBar",
+    "rtti_from": "hint",
+    "via": null,
+    "functions": 13,
+    "mapped": 7,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "unit.leader": {
+    "status": "no-evidence",
+    "reason": "no vtable/RTTI, context, anchor or parent link",
+    "count": 1
+   },
+   "CFolderView": {
+    "rtti": null,
+    "rtti_from": null,
+    "via": {
+     "parent": "NDoctrines::CCountryDoctrineView",
+     "offset": "0x498"
+    },
+    "functions": 28,
+    "mapped": 0,
+    "missing": [
+     "0x4f0"
+    ],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "CStrategicRegion.template": {
+    "rtti": null,
+    "rtti_from": null,
+    "via": {
+     "parent": "CStrategicRegion",
+     "offset": "0x20"
+    },
+    "functions": 16,
+    "mapped": 0,
+    "missing": [
+     "0x20",
+     "0x38"
+    ],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "designer.draft_holder": {
+    "rtti": null,
+    "rtti_from": null,
+    "via": {
+     "parent": "CDivisionDesignerView",
+     "offset": "0x2410"
+    },
+    "functions": 19,
+    "mapped": 2,
+    "missing": [],
+    "filled": {},
+    "dropped_non_monotonic": []
+   },
+   "idler.camera": {
+    "rtti": null,
+    "rtti_from": null,
+    "via": {
+     "parent": "CInGameIdler",
+     "offset": "0x718"
+    },
+    "functions": 1143,
+    "mapped": 8,
+    "missing": [
+     "0x110",
+     "0xd0"
+    ],
+    "filled": {
+     "0x8": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "idler.gui": {
+    "rtti": null,
+    "rtti_from": null,
+    "via": {
+     "parent": "CInGameIdler",
+     "offset": "0x4c0"
+    },
+    "functions": 1159,
+    "mapped": 5,
+    "missing": [
+     "0x140"
+    ],
+    "filled": {
+     "0xe0": "low-consistent",
+     "0xec": "low-consistent",
+     "0x7c0": "low-consistent"
+    },
+    "dropped_non_monotonic": []
+   },
+   "idler.manager": {
+    "rtti": null,
+    "rtti_from": null,
+    "via": {
+     "parent": "CInGameIdler",
+     "offset": "0x670"
+    },
+    "functions": 1161,
+    "mapped": 65,
+    "missing": [],
+    "filled": {
+     "0xd8": "bracketed",
+     "0xe0": "bracketed",
+     "0xf0": "bracketed",
+     "0xf8": "bracketed",
+     "0x108": "bracketed",
+     "0x110": "bracketed",
+     "0x120": "bracketed",
+     "0x128": "bracketed",
+     "0x130": "bracketed",
+     "0x138": "bracketed",
+     "0x140": "bracketed",
+     "0x150": "bracketed",
+     "0x158": "bracketed",
+     "0x3e8": "bracketed",
+     "0x3f0": "bracketed"
+    },
+    "dropped_non_monotonic": []
+   }
+  }
+ },
+ "table_summary": {
+  "image": "182 of 182",
+  "fields": "2998 of 3098"
+ },
+ "summary": {
+  "image": {},
+  "classes": 0,
+  "fields_moved": 0
+ },
+ "offline_fill": {
+  "CProductionLine": {
+   "0x38": {
+    "elf": "0x38",
+    "how": "bracketed (extend, no binary)"
+   }
+  },
+  "NProject::CProjectTemplate": {
+   "0xc": {
+    "elf": "0xc",
+    "how": "bracketed (extend, no binary)"
+   }
+  },
+  "idler.camera": {
+   "0xd0": {
+    "elf": "0xd0",
+    "how": "bracketed (extend, no binary)"
+   },
+   "0x110": {
+    "elf": "0x110",
+    "how": "bracketed (extend, no binary)"
+   }
+  }
+ }
+}

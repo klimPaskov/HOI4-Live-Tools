@@ -22,22 +22,22 @@ fn fixture() -> Fixture {
     let mut f = Fixture::new();
     f.economy();
     f.array(0x40070, 0x70000, 3);
-    f.word(BASE + 0x4535360, DB);
-    f.word(DB, BASE + 0x43484a8);
+    f.word(BASE + 0x453d360, DB);
+    f.word(DB, BASE + 0x434f468);
     f.array(DB + 0x40, LIST, 3);
     for (index, template) in [SENTINEL, TEMPLATE, OTHER].iter().enumerate() {
         f.word(LIST + index as u64 * 8, *template);
     }
     for (template, key) in [(TEMPLATE, "infrastructure"), (OTHER, "arms_factory")] {
-        f.word(template, BASE + 0x4348f98);
+        f.word(template, BASE + 0x434ff58);
         f.put(template + 0x18, &[1]);
         f.string(template + 0x248, key);
         // Neither intern nor localized name is needed for this direct key join.
     }
     for (i, line, table, handle) in [
-        (0, 0x80000, 0x439a290, 0xffff00010000003bu64),
-        (1, 0x81000, 0x4483a10, 0xf234567812345678),
-        (2, 0x82000, 0x439a290, 0x123400020000003b),
+        (0, 0x80000, 0x43a13d8, 0xffff00010000003bu64),
+        (1, 0x81000, 0x448b8e8, 0xf234567812345678),
+        (2, 0x82000, 0x43a13d8, 0x123400020000003b),
     ] {
         f.word(0x70000 + i * 8, line);
         f.word(line, BASE + table);
@@ -57,7 +57,7 @@ fn fixture() -> Fixture {
         f.number(line + 0x80, 1);
         f.put(line + 0x94, &[1]);
         f.put(line + 0xa1, &[1]);
-        f.word(building, BASE + 0x4348430);
+        f.word(building, BASE + 0x434f3f0);
         f.word(building + 0x1c0, template);
         // No location/foreign state or railway payload bytes are readable.
     }
@@ -245,14 +245,14 @@ fn building_nulls_unreviewed_types_and_template_validity_flag_unsets_have_explic
         (0x80078, 0, "no_building", 0xd0000),
         (
             0xd0000,
-            BASE + 0x4348438,
+            BASE + 0x434f3f8,
             "unsupported_building_type",
             0xd01c0,
         ),
-        (0xd01c0, 0, "no_template", BASE + 0x4535360),
+        (0xd01c0, 0, "no_template", BASE + 0x453d360),
         (
             TEMPLATE,
-            BASE + 0x4348fa0,
+            BASE + 0x434ff60,
             "unsupported_template_type",
             TEMPLATE + 0x18,
         ),
@@ -301,8 +301,8 @@ fn fresh_catalog_membership_precedes_template_payload_and_duplicate_keys_refuse(
 #[test]
 fn catalog_type_alignment_capacity_and_unique_pointers_are_mandatory() {
     for (address, value) in [
-        (BASE + 0x4535360, DB + 1),
-        (DB, BASE + 0x43484b0),
+        (BASE + 0x453d360, DB + 1),
+        (DB, BASE + 0x434f470),
         (DB + 0x40, LIST + 1),
         (LIST + 8, SENTINEL),
         (LIST + 8, TEMPLATE + 1),
@@ -339,7 +339,7 @@ fn final_witness_covers_all_new_roots_members_identity_and_published_fields() {
     let baseline = fixture();
     snapshot(&baseline).unwrap();
     for (address, size) in [
-        (BASE + 0x4535360, 8),
+        (BASE + 0x453d360, 8),
         (DB, 8),
         (DB + 0x40, 16),
         (LIST, 24),
@@ -411,7 +411,7 @@ fn empty_queue_never_reads_catalog_and_process_or_campaign_change_refuses() {
     let v = snapshot(&f).unwrap();
     assert_eq!(v["total_count"], 0);
     assert_eq!(v["complete_catalog"], true);
-    production_not_read(&f, &[BASE + 0x4535360, 0x80000]);
+    production_not_read(&f, &[BASE + 0x453d360, 0x80000]);
     let mut f = fixture();
     f.replaced = true;
     assert_eq!(snapshot(&f).unwrap_err().code, "ownership_changed");

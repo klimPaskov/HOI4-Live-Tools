@@ -35,7 +35,7 @@ pub const SUPPORTED: [Build; 3] = [
     Build {
         system: "linux",
         label: "Linux x86_64",
-        game_version: "1.19.4.1",
+        game_version: "1.20.0.0",
         build_id: crate::game::BUILD_ID,
         sha256: crate::game::SHA256,
     },

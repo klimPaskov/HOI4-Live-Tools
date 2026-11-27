@@ -30,14 +30,14 @@ pub(crate) struct Layout {
 }
 /// Linux ELF a4971c9e (libstdc++).
 const LINUX: Layout = Layout {
-    database_vtable: 0x43a5fc0,
-    template_vtable: 0x43a5f30,
+    database_vtable: 0x43ad108,
+    template_vtable: 0x43ad078,
     database_templates: 0x48,
     template_index: 0x30,
     template_threshold: 0x3cc,
-    technology_vtable: 0x43a5650,
-    status_vtable: 0x43a5750,
-    slot_vtable: 0x43a56f0,
+    technology_vtable: 0x43ac798,
+    status_vtable: 0x43ac898,
+    slot_vtable: 0x43ac838,
 };
 /// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026: vtables by
 /// RTTI name, template index/array moved by the 24-byte key string, threshold

@@ -38,7 +38,7 @@ pub(crate) fn observe(
             "Start Standard must belong to own registry",
         ));
     }
-    if r.u64(button + 0x80)? != base + 0x44dd8d0 {
+    if r.u64(button + 0x80)? != base + 0x44e58d0 {
         out["reason"] = json!("observer_layout_unavailable");
         return Ok(out);
     }
@@ -165,7 +165,7 @@ pub(crate) fn observe(
         return Ok(out);
     }
     let primary = r.u64(renderer)?;
-    if ![0x44ed1d8, 0x44e15e0, 0x44e2820, 0x44ef818]
+    if ![0x44f51d8, 0x44e95e0, 0x44ea820, 0x44f7818]
         .iter()
         .any(|p| primary == base + p)
     {
