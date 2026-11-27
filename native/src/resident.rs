@@ -108,7 +108,11 @@ pub const SLOW_STEP: std::time::Duration = std::time::Duration::from_secs(5);
 /// One executor step on the input lane when it is idle (see `hoi4_autopilot`). True when it ran.
 pub fn autopilot_step(server: &Server, commands: &dyn crate::protocol::Commands) -> bool {
     use crate::{autopilot::autopilot, watch::feed};
-    let Some(token) = autopilot().due() else {
+    // a quiet executor looks again on the next game hour (the memory clock, no input)
+    let Some(token) = autopilot().due_at(|| {
+        read_tool(server, commands, "hoi4_overview", serde_json::json!({}))
+            .and_then(|o| o["date"]["raw"].as_i64())
+    }) else {
         return false;
     };
     autopilot().set_in_step(true);
@@ -228,7 +232,12 @@ pub fn autopilot_step(server: &Server, commands: &dyn crate::protocol::Commands)
         }
     }
     let succeeded = actions.iter().filter(|a| !a.contains(": false")).count();
-    autopilot().ran_with(actions.len(), succeeded, actions.last().cloned());
+    autopilot().ran_at(
+        actions.len(),
+        succeeded,
+        actions.last().cloned(),
+        body["game_hour"].as_i64(),
+    );
     true
 }
 
