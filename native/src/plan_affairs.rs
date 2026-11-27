@@ -193,12 +193,12 @@ pub(super) fn digest(state: &State) -> Option<Value> {
     (!state.affairs.notes.is_empty()).then(|| json!(state.affairs.notes))
 }
 
-/// A section's last status line (the alerts rule reads the owning step's reason here).
 /// Every note of these rules (the lane-turn record reads them).
 pub(super) fn notes(state: &State) -> &BTreeMap<String, String> {
     &state.affairs.notes
 }
 
+/// A section's last status line (the alerts rule reads the owning step's reason here).
 pub(super) fn note_of<'a>(state: &'a State, key: &str) -> Option<&'a str> {
     state.affairs.notes.get(key).map(String::as_str)
 }
@@ -967,12 +967,16 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
                 continue;
             }
             let start = ((line_factories(&line) as f64 * 0.1).round() as i64).clamp(1, 5);
+            let kind = if design_type.is_empty() {
+                equipment.to_string()
+            } else {
+                design_type.clone()
+            };
             let (ok, why) = state.act(
                 tools,
                 run.lease,
                 "hoi4_production_add",
-                json!({"equipment": if design_type.is_empty() { equipment.to_string() } else { design_type.clone() },
-                       "design": target, "factories": start}),
+                json!({"equipment": kind, "design": target, "factories": start}),
                 "dn",
             )?;
             if ok {

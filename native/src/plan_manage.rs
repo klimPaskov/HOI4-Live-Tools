@@ -6665,15 +6665,17 @@ fn stockpile_rule(
     // target. Without this owner a stock stayed at 0 for eight months while every factory
     // built what was already plenty (live 15 Nov 2026: artillery 0 from May, the strike army
     // at a sixth of its equipment, the missing-production alert open all year).
-    // Trucks below what the fielded divisions themselves need are a shortage the front feels
-    // too (hub motorisation and refits draw on the same stock): with every factory on a line
+    // At war, trucks below what the fielded divisions themselves need are a shortage the front
+    // feels (hub motorisation and refits draw on the same stock): with every factory on a line
     // they stayed under half the need for months while only idle factories could raise them
-    // (t1939n, 27 Nov 2026: 1535 trucks against 3170 needed; owner: "trains and trucks matter")
+    // (t1939n, 27 Nov 2026: 1535 trucks against 3170 needed; owner: "trains and trucks matter").
+    // In peace the rule above stands: idle factories only (pm2, 17 Nov 2026).
     let trucks_short = archetype.starts_with("motorized_equipment")
         && read["trucks"]["stockpile"]
             .as_f64()
             .zip(read["trucks"]["fielded_need"].as_f64())
-            .is_some_and(|(stock, need)| need > 0.0 && stock < need);
+            .is_some_and(|(stock, need)| need > 0.0 && stock < need)
+        && at_war(state, tools, plan, now);
     let felt = short_of(&read, &archetype) > 0.0 || days < critical || trucks_short;
     if give <= 0 && felt && m["shift_factories"] != json!(false) {
         let recent: HashSet<String> = state

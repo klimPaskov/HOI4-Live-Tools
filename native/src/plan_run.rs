@@ -911,7 +911,7 @@ pub(super) fn lane_reason(state: &State, owner: &str, now: GameHour) -> Option<(
     let lane = OWNER_LANES
         .iter()
         .find(|(o, _)| *o == owner)
-        .map_or(owner, |(_, l)| l);
+        .map_or(owner, |(_, l)| *l);
     let days = |at: GameHour| (now - at).max(0) / DAY;
     Some(match state.sched.said.get(lane) {
         Some(s) if !s.silent => (
@@ -3726,11 +3726,11 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
             // hoi4_trade never called)
             out.push(("trade", |state, tools, plan, lease, now| {
                 if let Some(line) =
-                    lane_of(&plan_affairs::LANES, "trade").1(state, tools, plan, lease, now)?
+                    (lane_of(&plan_affairs::LANES, "trade").1)(state, tools, plan, lease, now)?
                 {
                     return Ok(Some(line));
                 }
-                lane_of(&plan_manage::LANES, "trade").1(state, tools, plan, lease, now)
+                (lane_of(&plan_manage::LANES, "trade").1)(state, tools, plan, lease, now)
             }));
         } else if !["mio_lines", "mio", "mio_traits", "intelligence"].contains(name) {
             out.push((name, *step));
