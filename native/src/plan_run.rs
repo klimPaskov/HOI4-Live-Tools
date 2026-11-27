@@ -2220,6 +2220,13 @@ fn lanes_tick_inner(
     }
     state.round.war_last = false;
     state.round.lanes_turn(now);
+    // The manage reads (the failure ledger's wake, the game's alert row, the omissions the player
+    // and the monitor see) never act and keep their own once-a-day timer: they run on every lanes
+    // tick, not only at the pass's turn. In the pass alone they ran on the paused day-one setup
+    // and then never (cmph1, cmps1, 27 Nov 2026: the omission feed froze at 1939.08.21 in one
+    // leg and stayed empty all war in the other, so 2.7 M idle manpower, 480 political power and
+    // an army group without a field marshal reached no one).
+    plan_manage::daily_reads(state, tools, plan, now);
     // A free research slot and a free focus are checked every tick (cheap reads, each lost day
     // is a day of the slot): a pass of slow GUI orders left the focus idle for 14 game days
     // (g17j 1936.4). They act before the pass resumes.
@@ -2257,11 +2264,18 @@ fn lanes_tick_inner(
     // once a game day (`scheduler.issues_due: false` turns it off). On by default: the monitor's
     // issues are rule findings with a deadline, and the offer costs nothing when the lane has
     // nothing to do (it hands the tick back at once).
-    if plan["scheduler"]["issues_due"] != json!(false) {
+    // At most one lanes tick in a row goes to them: the lanes tick after an issue lane acted
+    // belongs to the pass. With a war lane taking three ticks of four and a game day of about
+    // five real seconds at speed 3, the issue lanes (each once a game day) took every lanes tick
+    // and the routine pass (decisions, training, officer corps, the manage reads) never ran in
+    // two 60-day legs (cmph1, cmps1, 27 Nov 2026: hoi4_decisions_list and hoi4_train never called).
+    if plan["scheduler"]["issues_due"] != json!(false) && !state.round.issue_last {
         if let Some(line) = issue_lanes(state, tools, plan, lease, now, &lanes)? {
+            state.round.issue_last = true;
             return Ok(Tick::Acted(line));
         }
     }
+    state.round.issue_last = false;
     let mut restarted = false;
     loop {
         if state.round.cursor >= lanes.len() {
@@ -3345,6 +3359,9 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
 struct Round {
     /// The next lane to offer.
     cursor: usize,
+    /// A monitor-issue lane acted in the last lanes tick: the next one belongs to the pass (see
+    /// `lanes_tick_inner`).
+    issue_last: bool,
     /// Lanes that acted in this pass, in order.
     acted: Vec<&'static str>,
     /// The war-first block acted in the last tick: this tick belongs to a lane.
@@ -3842,8 +3859,8 @@ const OPENING_HOLD_TAIL: GameHour = 7 * DAY;
 fn opening_window(state: &State, plan: &Value, now: GameHour, lead: GameHour) -> bool {
     !state.war_active
         && plan_speed::dated_declarations(plan, &[], now, lead, OPENING_HOLD_TAIL)
-        .iter()
-        .any(|tag| plan_operation::pending_on(state, plan, tag))
+            .iter()
+            .any(|tag| plan_operation::pending_on(state, plan, tag))
 }
 
 /// The slow lanes wait in the opening, with no cap inside its window: one design-company step by
@@ -6288,9 +6305,8 @@ fn same_order_siblings(
     key_of: &dyn Fn(&Value) -> String,
     pending: impl Fn(&str) -> bool,
 ) -> Vec<String> {
-    let alone = |i: &Value| {
-        i["province"].is_null() && i["path"].is_null() && i["requires"].is_null()
-    };
+    let alone =
+        |i: &Value| i["province"].is_null() && i["path"].is_null() && i["requires"].is_null();
     if !alone(item) || item["state"].as_i64().is_none() {
         return Vec::new();
     }
@@ -22193,6 +22209,20 @@ mod tests {
         let some = power(165.0);
         tick(&mut state, &some, &plan, "l", START + 3 * DAY).unwrap();
         assert_eq!(chosen(&some), vec![json!("small")]);
+        // refused while the power covered it (a law the focus tree replaced): the plan's reserve
+        // holds nothing for it, so the standing policy may spend the power (cmps1, 27 Nov 2026)
+        let mut state = State::default();
+        let key = politics_key(0, &plan["politics"][0]);
+        state.pol_pp_at_fail.insert(key.clone(), 400.0);
+        state.skip(START, "pol", &key, 3 * DAY);
+        let read = power(420.0);
+        let (reserve, lines) = plan_manage::politics_reserve(&mut state, &read, &plan, START + DAY);
+        assert_eq!(reserve, 50.0, "{lines:?}");
+        assert!(lines[0].contains("not for power"), "{lines:?}");
+        // refused below its cost: it keeps its cost
+        state.pol_pp_at_fail.insert(key, 100.0);
+        let (reserve, _) = plan_manage::politics_reserve(&mut state, &read, &plan, START + DAY);
+        assert_eq!(reserve, 200.0);
     }
 
     #[test]
