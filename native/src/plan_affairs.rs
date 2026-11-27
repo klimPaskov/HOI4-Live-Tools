@@ -1120,7 +1120,10 @@ pub fn declaration_near(
     // (ahead 0, false before the day) answered the air's three-day look-ahead for six game hours,
     // so the slow air orders never waited (t1939n, 27 Nov 2026: a 35-second air burst ran from
     // 29 August to 1 September and Poland was declared on the 2nd)
-    let (at_key, v_key) = (format!("declnear:at:{ahead}"), format!("declnear:v:{ahead}"));
+    let (at_key, v_key) = (
+        format!("declnear:at:{ahead}"),
+        format!("declnear:v:{ahead}"),
+    );
     let at = state.done.get(&at_key).copied();
     if at.is_some_and(|t| now >= t && now - t < DAY / 4) {
         return state.done.get(&v_key) == Some(&1);
