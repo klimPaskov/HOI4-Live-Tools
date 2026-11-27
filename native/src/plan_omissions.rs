@@ -312,8 +312,22 @@ pub(super) fn derived(
     // political power: an enabled decision the power pays now that nothing in the plan takes,
     // while the standing politics order has nothing to buy (power saved for a pick is no row)
     if let Some(pp) = super::plan_manage::political_power(tools) {
-        let (reserve, _) = super::plan_manage::politics_reserve(state, tools, plan, now);
-        let pol = super::plan_manage::note_of(state, "politics_auto").map(String::from);
+        let (reserve, held) = super::plan_manage::politics_reserve(state, tools, plan, now);
+        // the lane always says why the power waits: what each plan pick holds and the standing
+        // order's last finding (t1939n, 27 Nov 2026: "no reason given" for 118 days while the
+        // standing order had not run and 975 power sat held for picks)
+        let auto = super::plan_manage::note_of(state, "politics_auto").map(String::from);
+        let picks = if held.is_empty() {
+            String::new()
+        } else {
+            format!("picks: {}", held.join(", "))
+        };
+        let pol = match (auto.as_deref(), picks.is_empty()) {
+            (Some(n), true) => Some(n.to_string()),
+            (Some(n), false) => Some(format!("{n}; {picks}")),
+            (None, false) => Some(format!("standing order not run yet; {picks}")),
+            (None, true) => Some("standing order not run yet; no plan pick pending".to_string()),
+        };
         let saving = pol
             .as_deref()
             .is_some_and(|n| n.contains("saved for") || n.contains("power is saved"));
@@ -360,7 +374,7 @@ pub(super) fn derived(
                         note.chars().take(400).collect::<String>()
                     ),
                     "politics",
-                    None,
+                    pol.clone(),
                 ));
             }
         }

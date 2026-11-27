@@ -2418,8 +2418,11 @@ fn lanes_tick_inner(
     // leg and stayed empty all war in the other, so 2.7 M idle manpower, 480 political power and
     // an army group without a field marshal reached no one).
     plan_manage::daily_reads(state, tools, plan, now);
-    if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
-        return Ok(Tick::Acted(line));
+    // (ran already ahead of the war's turn unless a declaration was due: once a tick)
+    if due {
+        if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(line));
+        }
     }
     // Lanes that own an open issue of the run monitor go before the routine pass, each at most
     // once a game day (`scheduler.issues_due: false` turns it off). On by default: the monitor's
@@ -3401,9 +3404,9 @@ fn construction_fast_lane(
     } else {
         None
     };
-    if out.is_none() {
-        state.skip(now, "confast", "x", 6);
-    }
+    // after an order, two game hours (a quarter second in a pause) so the war and the pass get
+    // their ticks between the orders of a long queue
+    state.skip(now, "confast", "x", if out.is_some() { 2 } else { 6 });
     Ok(out)
 }
 
@@ -4461,7 +4464,7 @@ fn declare_first(
                 // another declaration due now goes out right after the events, before any burst
                 // (w43r1, 23 Nov 2026: Belgium's declaration opened events, the next tick ran a
                 // 30-second war burst and Luxembourg came eleven game days later)
-                state.done.remove("declnear:at");
+                plan_affairs::declaration_near_forget(state);
                 if plan_affairs::declaration_near(state, tools, plan, now, 0) {
                     state.done.insert("declnext".to_string(), now);
                 }
@@ -4472,7 +4475,7 @@ fn declare_first(
             // another declaration due now goes out in the next tick before any burst (w42v,
             // 23 Nov 2026: Belgium was declared, the opening air burst took 34 s = seven game
             // days and Holland, whose war the operation executes on, came nine days later)
-            state.done.remove("declnear:at");
+            plan_affairs::declaration_near_forget(state);
             if plan_affairs::declaration_near(state, tools, plan, now, 0) {
                 // the operations that wait for this war execute now (a short burst: their
                 // execute orders take a few seconds); only the air waits for the last
@@ -8181,6 +8184,15 @@ fn special_projects_step(
     )))
 }
 
+/// Whether the doctrines read shows `id` taken: a folder's grand doctrine or a track's
+/// subdoctrine (an object with its `id`, or the bare key); pure.
+fn doctrine_taken(read: &Value, id: &str) -> bool {
+    let is = |v: &Value| v.as_str() == Some(id) || v["id"].as_str() == Some(id);
+    list(read, "folders").iter().any(|f| {
+        is(&f["grand_doctrine"]) || list(f, "tracks").iter().any(|t| is(&t["subdoctrine"]))
+    })
+}
+
 /// The experience the doctrines read shows for `id` (a grand doctrine or subdoctrine on offer):
 /// the game's price with its reduction, else the read's base cost; pure.
 fn doctrine_price(read: &Value, id: &str) -> Option<f64> {
@@ -8198,15 +8210,6 @@ fn doctrine_price(read: &Value, id: &str) -> Option<f64> {
                     .as_f64()
                     .or_else(|| o["xp_cost"].as_f64())
             })
-    })
-}
-
-/// Whether the doctrines read shows `id` taken: a folder's grand doctrine or a track's
-/// subdoctrine (an object with its `id`, or the bare key); pure.
-fn doctrine_taken(read: &Value, id: &str) -> bool {
-    let is = |v: &Value| v.as_str() == Some(id) || v["id"].as_str() == Some(id);
-    list(read, "folders").iter().any(|f| {
-        is(&f["grand_doctrine"]) || list(f, "tracks").iter().any(|t| is(&t["subdoctrine"]))
     })
 }
 
@@ -16455,16 +16458,6 @@ mod tests {
                 .filter(|(n, _)| n == "hoi4_politics_choose")
                 .count()
         };
-        // the war-first block acts on the first tick
-        assert!(matches!(
-            tick(&mut state, &w, &plan, "l", START).unwrap(),
-            Tick::Acted(_)
-        ));
-        assert_eq!(politics(&w), 0);
-        // the next tick belongs to a lane: politics, in the same game hour
-        tick(&mut state, &w, &plan, "l", START).unwrap();
-        assert_eq!(politics(&w), 1);
-        // and the next one to the war-first block again
         let armies = |w: &War| {
             w.calls
                 .borrow()
@@ -16472,6 +16465,18 @@ mod tests {
                 .filter(|(n, _)| n.starts_with("hoi4_army_"))
                 .count()
         };
+        // a fast lane (the plan's pick) takes the first tick, ahead of the war (t1939n, 27 Nov
+        // 2026: the war block kept the fast lanes waiting on the paused first day)
+        assert!(matches!(
+            tick(&mut state, &w, &plan, "l", START).unwrap(),
+            Tick::Acted(_)
+        ));
+        assert_eq!(politics(&w), 1);
+        // the next tick, in the same game hour, is the war-first block's
+        let before = armies(&w);
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert!(armies(&w) > before);
+        // and the war keeps its turns: the pick is not asked again
         let before = armies(&w);
         tick(&mut state, &w, &plan, "l", START + DAY).unwrap();
         assert!(armies(&w) > before);
@@ -22466,6 +22471,33 @@ mod tests {
     }
 
     #[test]
+    fn a_planned_doctrine_the_game_already_holds_is_done_and_the_next_one_goes() {
+        // t1939n (27 Nov 2026): mobile_infantry was the infantry track's since the start; the
+        // plan entry waited on experience holds and kept every later entry and the fill waiting
+        let tools = fake(vec![(
+            "hoi4_doctrines",
+            json!({"experience": {"army": {"value": 150.0}},
+                "folders": [{"folder": "land", "grand_doctrine": {"id": "new_mobile_warfare"},
+                    "tracks": [{"track": "infantry", "subdoctrine": {"id": "mobile_infantry"}},
+                        {"track": "operations", "subdoctrine": null}]}]}),
+        )]);
+        let plan = json!({"doctrines": [
+            {"id": "inf", "folder": "land", "track": "infantry", "subdoctrine": "mobile_infantry", "xp": 100},
+            {"id": "ops", "folder": "land", "track": "operations", "subdoctrine": "mission_type_tactics", "xp": 100}]});
+        let mut state = State::default();
+        doctrine_pass(&mut state, &tools, &plan, 0);
+        assert!(state.done.contains_key("doc:id:inf"));
+        assert_eq!(
+            adopted(&tools),
+            vec![json!({"doctrine": "mission_type_tactics", "track": "operations"})]
+        );
+        assert!(super::doctrine_taken(
+            &json!({"folders": [{"grand_doctrine": "g"}]}),
+            "g"
+        ));
+    }
+
+    #[test]
     fn a_doctrine_is_judged_by_the_price_the_game_shows_and_a_changed_price_changes_it() {
         // owner, 27 Nov 2026: no cost in code; an entry without `xp` was priced 100
         let with_price = |price: f64| {
@@ -22492,33 +22524,6 @@ mod tests {
             ),
             Some(40.0)
         );
-    }
-
-    #[test]
-    fn a_planned_doctrine_the_game_already_holds_is_done_and_the_next_one_goes() {
-        // t1939n (27 Nov 2026): mobile_infantry was the infantry track's since the start; the
-        // plan entry waited on experience holds and kept every later entry and the fill waiting
-        let tools = fake(vec![(
-            "hoi4_doctrines",
-            json!({"experience": {"army": {"value": 150.0}},
-                "folders": [{"folder": "land", "grand_doctrine": {"id": "new_mobile_warfare"},
-                    "tracks": [{"track": "infantry", "subdoctrine": {"id": "mobile_infantry"}},
-                        {"track": "operations", "subdoctrine": null}]}]}),
-        )]);
-        let plan = json!({"doctrines": [
-            {"id": "inf", "folder": "land", "track": "infantry", "subdoctrine": "mobile_infantry", "xp": 100},
-            {"id": "ops", "folder": "land", "track": "operations", "subdoctrine": "mission_type_tactics", "xp": 100}]});
-        let mut state = State::default();
-        doctrine_pass(&mut state, &tools, &plan, 0);
-        assert!(state.done.contains_key("doc:id:inf"));
-        assert_eq!(
-            adopted(&tools),
-            vec![json!({"doctrine": "mission_type_tactics", "track": "operations"})]
-        );
-        assert!(super::doctrine_taken(
-            &json!({"folders": [{"grand_doctrine": "g"}]}),
-            "g"
-        ));
     }
 
     #[test]
@@ -23297,6 +23302,42 @@ mod tests {
         state.pol_pp_at_fail.insert(key, 100.0);
         let (reserve, _) = plan_manage::politics_reserve(&mut state, &read, &plan, START + DAY);
         assert_eq!(reserve, 200.0);
+    }
+
+    #[test]
+    fn a_pick_the_power_covers_that_no_lane_buys_stops_holding_power_after_the_grace() {
+        // t1939n (27 Nov 2026): 975 of 1123 power held for months for picks no lane bought
+        let plan = json!({"politics": [
+            {"id": "law", "category": "government", "slot": 0, "idea": "X_law", "cost": 150},
+            {"id": "adv", "category": "government", "slot": 3, "idea": "X_adv", "cost": 150}]});
+        let read = fake(vec![(
+            "hoi4_economy",
+            json!({"political_power": {"raw_signed": 100_000_000}}),
+        )]);
+        let mut state = State::default();
+        let (reserve, _) = plan_manage::politics_reserve(&mut state, &read, &plan, START);
+        assert_eq!(reserve, 300.0);
+        // a week later the picks still hold (their lane's turn)
+        let (reserve, _) = plan_manage::politics_reserve(&mut state, &read, &plan, START + 7 * DAY);
+        assert_eq!(reserve, 300.0);
+        // past the grace they hold nothing and say why
+        let (reserve, lines) =
+            plan_manage::politics_reserve(&mut state, &read, &plan, START + 8 * DAY);
+        assert_eq!(reserve, 0.0, "{lines:?}");
+        assert!(
+            lines[0].contains("payable for 8 days and not bought"),
+            "{lines:?}"
+        );
+        // power the picks cannot yet cover is saved for them: no grace runs
+        let poor = fake(vec![(
+            "hoi4_economy",
+            json!({"political_power": {"raw_signed": 10_000_000}}),
+        )]);
+        let mut state = State::default();
+        plan_manage::politics_reserve(&mut state, &poor, &plan, START);
+        let (reserve, _) =
+            plan_manage::politics_reserve(&mut state, &poor, &plan, START + 30 * DAY);
+        assert_eq!(reserve, 300.0);
     }
 
     #[test]
