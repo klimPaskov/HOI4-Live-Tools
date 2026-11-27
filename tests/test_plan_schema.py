@@ -130,6 +130,10 @@ class PlanSchemaCoverage(unittest.TestCase):
     def test_operation_keys_the_executor_reads_are_in_the_schema(self):
         op = _deref(self.schema["properties"]["operations"], self.schema)["items"]["properties"]
         self.assertIn("replace_arrows", op)
+        for k in ("orders_by", "axis_by", "planning_gate", "spear_pockets", "flank_guard", "opening"):
+            self.assertIn(k, op)
+        self.assertEqual(set(op["stacking"]["properties"]) >= {"by_width", "keep", "battle_reserve"}, True)
+        self.assertIn("axis_by", op["formations"]["items"]["properties"]["offensive"]["properties"])
         self.assertEqual(op["offensive"]["properties"]["deep"]["type"], "boolean")
         observed = _deref(self.schema["properties"]["force_design"], self.schema)["properties"]["observed"]
         self.assertEqual(set(observed["properties"]) >= {"date", "divisions", "economy", "army_xp"}, True)

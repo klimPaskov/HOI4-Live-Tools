@@ -2480,6 +2480,12 @@
                       },
                       "minItems": 1,
                       "description": "enemy states the target line runs through, in order from one edge of the enemy's land to the other (one state is allowed for a mobile formation)"
+                    },
+                    "axis_by": {
+                      "enum": [
+                        "terrain"
+                      ],
+                      "description": "terrain: the formation's path is chosen once by the ground model (hoi4_province_graph: movement cost, the assault penalty of terrain, rivers and forts, narrow ground, infrastructure, hostile divisions seen at the border; armour pays most for rough, narrow and fortified ground) from its front's own states to the last state of target_line, through its own and the operation's enemies' states only; axis stays the fallback when no way is found"
                     }
                   },
                   "additionalProperties": false,
@@ -2799,9 +2805,87 @@
               },
               "station": {
                 "type": "integer"
+              },
+              "by_width": {
+                "type": "boolean",
+                "description": "true: each own front province holds no more of the line's divisions than the battles it faces take with profit (terrain width plus support width per extra direction, the divisions' template width, the over-width and stacking penalties of the defines), and the divisions a battle read shows waiting beyond the width are surplus too (attacking or not); the surplus forms the second echelon, fed forward only into room the battles have or to relieve a worn army. Before the war the line's capacity is noted once a game day (no order)"
+              },
+              "keep": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "with by_width: divisions each front province keeps over its battles' fit (default 0)"
+              },
+              "battle_reserve": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "with by_width: divisions a battle's reserve keeps, the freshest (default 0: a reserve joins only by over-filling the width)"
               }
             },
             "additionalProperties": false
+          },
+          "orders_by": {
+            "enum": [
+              "mouse",
+              "command"
+            ],
+            "description": "command: the operation's orders carry exact provinces for the in-process army commands (a front with against + own_states, one order per stretch; a spearhead with target_provinces under its front's id; an arrow that misses its line gets a new path on the same order with replace_order, keeping the order and its planning bonus, never a delete or a clear). Default mouse. Only on a build with the in-process orders families proven live"
+          },
+          "axis_by": {
+            "enum": [
+              "terrain"
+            ],
+            "description": "terrain: every mobile formation with its own front takes its path by the ground model (see formations[].offensive.axis_by)"
+          },
+          "planning_gate": {
+            "type": [
+              "boolean",
+              "object"
+            ],
+            "properties": {
+              "share": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "cap": {
+                "type": "number",
+                "minimum": 0
+              },
+              "max_wait_days": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "description": "the operation reads as ready (its declaration goes out) only once the attacking armies' planning bonus, weighted by divisions, reaches share (0.9) of cap (0.3, PLANNING_MAX) or has stopped growing for two game days; a dated declaration waits for it at most max_wait_days (7) past its date"
+          },
+          "spear_pockets": {
+            "type": "boolean",
+            "description": "true: the pocket order for spearheads: the two spearheads nearest a one-neck pocket (hoi4_encirclement_candidates) are painted to its neck state, the arms of a closed ring keep their orders while the group reduces it, a neck not closed in 6 days is given up. Not with strike formations in the operation. pockets false switches it off"
+          },
+          "flank_guard": {
+            "type": "boolean",
+            "description": "true: a second echelon's station is the deepest state of a spearhead's axis we hold (the corridor behind the armour)"
+          },
+          "opening": {
+            "type": "object",
+            "properties": {
+              "deadline_days": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "description": "{TAG: days}: each small enemy's deadline from the day its war began"
+              },
+              "ratio": {
+                "type": "number",
+                "minimum": 0,
+                "description": "the divisions the armies facing an enemy should have per hostile division seen in its border states (default 2)"
+              }
+            },
+            "additionalProperties": false,
+            "description": "several small enemies in one window: while the armies facing one are under ratio:1 against the hostile divisions seen in its border states, or its deadline has passed with it still in the war, the operation's largest second echelon goes to the army facing it with the most room (merged, else the part that fits); at most two sends per enemy, one a game day"
           },
           "assault_guard": {
             "type": "boolean",
