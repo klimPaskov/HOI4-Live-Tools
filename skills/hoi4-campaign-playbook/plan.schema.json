@@ -983,6 +983,11 @@
           "default": true,
           "description": "true offers the lanes that own an open issue of the run monitor (RUN/issues_open.json, docs/MONITORING.md) ahead of the routine pass, each at most once a game day; false leaves the pass order alone"
         },
+        "construction_fast": {
+          "type": "boolean",
+          "default": true,
+          "description": "true checks idle civilian factories among the fast lanes every tick (at most every 6 game hours while all are busy) and queues the plan's ordered items, then its open jobs; false leaves construction to its turn in the pass"
+        },
         "politics_fast": {
           "type": "boolean",
           "default": true,
