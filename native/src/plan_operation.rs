@@ -3499,6 +3499,7 @@ fn stack_carry(divisions: i64, supply: f64, demand: f64, max: i64) -> i64 {
 /// where they stand, the divisions over its carry (`stack_carry`), the line armies' most worn
 /// divisions there first (lowest organisation); and the room the line's other provinces have.
 /// Pure.
+#[cfg(test)]
 fn stack_read(read: &Value, line: &HashSet<String>, pick: &HashSet<String>, max: i64) -> StackRead {
     stack_read_caps(read, line, pick, max, &HashMap::new(), false)
 }

@@ -202,6 +202,9 @@ pub(super) fn province_caps(
         .collect()
 }
 
+/// Per army the divisions to take out, and the worst battle (province, engaged, reserve).
+pub(super) type BattleSurplus = (Vec<(String, Vec<String>)>, Option<(i64, i64, i64)>);
+
 /// The surplus a battle read shows: in each battle we attack, the divisions waiting in its
 /// reserve beyond `keep` (the freshest are kept), per army of `pick` (division id -> army from
 /// `army_of`). Returns (army, division ids) and the worst battle (province, engaged, reserve). Pure.
@@ -210,7 +213,7 @@ pub(super) fn battle_surplus(
     army_of: &HashMap<String, String>,
     pick: &HashSet<String>,
     keep: i64,
-) -> (Vec<(String, Vec<String>)>, Option<(i64, i64, i64)>) {
+) -> BattleSurplus {
     let mut per: HashMap<String, Vec<String>> = HashMap::new();
     let mut worst: Option<(i64, i64, i64)> = None;
     for b in list(read, "list") {
