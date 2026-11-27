@@ -29,6 +29,7 @@ import time
 from collections import defaultdict, deque
 
 from . import findings as findings_mod
+from . import sinks as sinks_mod
 from . import issue_rules as R
 from .runlogs import date_of_days, game_days
 
@@ -37,6 +38,10 @@ QUIET_DAYS = 14          # a log issue not seen again for two game weeks is take
 DUP_WINDOW = 7           # identical verified orders within a game week are duplicates
 FAIL_STREAK = 2          # failures of one (tool, code) before it is an issue
 LIGHT_ORIGINS = ("omission",)
+
+
+# log issues whose second sighting is the same refusal of the same order again
+REPEAT_CODES = ("refusal_retried_unchanged", "readback_no_change", "tool_failing", "invalid_arguments")
 
 
 def _key_args(args):
@@ -218,7 +223,8 @@ class Detector:
                 it["acts"] += 1
                 if len(it["tried"]) < 8:
                     it["tried"].append(f"{'ok' if ok else 'refused'} {key[:120]}")
-                if it["state"] == "open":
+                # "acted" means an order of the lane passed, not that the lane had a turn
+                if ok and it["state"] == "open":
                     it["state"] = "acted"
                     self._emit("acted", it, action=key[:160])
 
@@ -237,6 +243,12 @@ class Detector:
         fs = snap.get("findings")
         if fs is None:
             fs = findings_mod.findings(snap, list(prev))
+        if not light:
+            # the sinks and slots (sinks.py): computed here too, so a replay of a run recorded
+            # before them shows what they would have caught
+            seen_codes = {(f.get("code"), f.get("subject")) for f in fs}
+            fs = list(fs) + [f for f in sinks_mod.findings(snap, list(prev))
+                             if (f["code"], f.get("subject")) not in seen_codes]
         present = set()
         for f in fs:
             code = str(f.get("code") or "finding")
@@ -250,8 +262,13 @@ class Detector:
                 sev, esc = "low", False
             if code in ("executor_repeated_refusal", "plan_item_blocked"):
                 esc = False  # the executor's ledger: answered by lessons, reported at the gate
-            self.raise_issue(key, code, f.get("text") or code, sev, f.get("numbers"), origin=origin,
-                             subject=f.get("subject"), escalate=esc)
+            lane = R.lane_of(f.get("subject") or "") if code == "lane_wait_outlived" else None
+            it = self.raise_issue(key, code, f.get("text") or code, sev, f.get("numbers"), origin=origin,
+                                  subject=f.get("subject"), escalate=esc, lane=lane)
+            note = (f.get("numbers") or {}).get("owner_note") or (f.get("numbers") or {}).get("note")
+            if note:
+                # the owning rule's own stated reason: what the lane answered when it had its turn
+                it["lane_reason"] = str(note)[:300]
             present.add(key)
         if light:
             for key in self._plan_rules(snap):  # dated checkpoints need no full snapshot
@@ -282,7 +299,12 @@ class Detector:
             low = []
             for a in land.get("armies") or []:
                 pl = (a.get("planning") or {}).get("mean")
-                if a.get("orders") and pl is not None and pl < 0.1 and (a.get("divisions") or 0) > 0:
+                # only an attacking army plans for the war's first blow: a hold (area defence, a
+                # front with no offensive) builds no planning to spend (s7n: the Westwall armies
+                # were counted as attackers with 0 planning)
+                attacking = any(o.get("offensives") or o.get("kind") in ("offensive", "spearhead")
+                                for o in a.get("orders") or [])
+                if attacking and pl is not None and pl < 0.1 and (a.get("divisions") or 0) > 0:
                     low.append((a.get("army"), pl))
             if low:
                 key = "planning_low_at_declaration:" + trig
@@ -431,6 +453,19 @@ class Detector:
             self.counted.add(a.get("id"))
             self._refused("executor", "hoi4_" + kind, key, self.req_code.get(a.get("id"), "not_applied"))
 
+    def outcome(self, rec):
+        """One line of RUN/issue_outcomes.jsonl: what the executor lane did with an issue it was
+        offered (acted / refused / waiting / cannot, with the lane's own reason)."""
+        for it in self.issues.values():
+            if it["id"] == rec.get("id") and it["state"] != "resolved":
+                it["lane_outcome"] = {k: rec.get(k) for k in ("outcome", "reason", "lane", "hour")}
+                if rec.get("reason"):
+                    it["lane_reason"] = str(rec["reason"])[:300]
+                if rec.get("outcome") in ("waiting", "cannot"):
+                    self._emit("lane_answer", it, outcome=rec.get("outcome"), reason=str(rec.get("reason"))[:200])
+                return it
+        return None
+
     def rss(self, r):
         gb = r.get("gb")
         key = "memory_growth"
@@ -474,6 +509,11 @@ class Detector:
                               subject=tool, escalate=actor != "executor")
         it["actor"] = actor
         it["last_days"] = self.days
+        n = (numbers or {}).get("times") or (numbers or {}).get("in_row") or 0
+        if n >= 2 and not it.get("repeat_emitted") and code in REPEAT_CODES:
+            # the same refusal twice: the lesson writer turns it into a rule for the next try
+            it["repeat_emitted"] = True
+            self._emit("repeated", it, times=n)
         return it
 
     def _tool_result(self, actor, tool, key, code, ms, is_act):

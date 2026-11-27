@@ -353,6 +353,11 @@ pub(super) fn digest(state: &State) -> Option<Value> {
     (!state.manage.notes.is_empty()).then(|| json!(state.manage.notes))
 }
 
+/// A copy of every rule's last status line (to see what a step wrote).
+pub(super) fn notes_snapshot(state: &State) -> BTreeMap<String, String> {
+    state.manage.notes.clone()
+}
+
 /// The rule's status line in the run result's `manage` digest (the last one per rule).
 pub(super) fn note(state: &mut State, rule: &str, line: impl Into<String>) {
     state.manage.notes.insert(rule.to_string(), line.into());
@@ -933,6 +938,15 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
     // what the game has no alert for but the executor's reads see open (unassigned field
     // marshals, banked power, open doctrine tracks...), longest open first with the rest
     omissions.extend(super::plan_omissions::derived(state, tools, plan, now));
+    // the run monitor's open issues that no executor lane acts on (a plan decision, a tool fault,
+    // an escalated issue with its packet) go to the player with the rest (docs/MONITORING.md)
+    state.issues.refresh();
+    let names: Vec<&str> = super::lanes(plan, true)
+        .iter()
+        .map(|(n, _)| *n)
+        .chain(["research", "focus", "war"])
+        .collect();
+    omissions.extend(state.issues.wake_rows(&names, Some(now)));
     omissions.sort_by_key(|r| -r["days_open"].as_i64().unwrap_or(0));
     // what the executor could act on now: a row with its owner's written reason to wait is not,
     // nor an alert frame no label names (nothing tells what it asks for)
@@ -3392,6 +3406,16 @@ fn wing_matches(entry: &Value, wing: &Value) -> bool {
             .is_none_or(|v| wing["variant"].as_str().is_none_or(|w| w == v))
 }
 
+/// A wing an air plan entry names by its own name (not by airframe): never taken for another use.
+pub(super) fn air_plan_pinned(plan: &Value, wing: &Value) -> bool {
+    let name = text(&wing["wing"]);
+    list(plan, "air_plan").iter().any(|e| {
+        e["wing"]
+            .as_str()
+            .is_some_and(|n| !n.is_empty() && n == name)
+    })
+}
+
 /// The extras step's default war missions leave the wings the air plan names alone.
 pub(super) fn air_plan_claims(plan: &Value, wing: &Value) -> bool {
     list(plan, "air_plan")
@@ -3705,9 +3729,117 @@ fn wing_owners(entries: &[Value], active: &[bool], wings: &[Value]) -> HashMap<S
     owner
 }
 
-/// Rebases the air plan sends in one call at most (a rebase is one quick order; missions and new
-/// wings stay one per call).
-const AIR_REBASE_BATCH: usize = 6;
+/// Rebases the air plan queues in one step at most (sent one call per base with every wing going
+/// there; missions go one call per entry, new wings one per call).
+const AIR_REBASE_BATCH: usize = 12;
+
+/// The land missions that follow the fighting (`follow_front: false` on an entry keeps its region).
+const FOLLOW_MISSIONS: [&str; 2] = ["cas", "air_superiority"];
+
+/// The fighting region an `air_plan` entry with a land mission flies over once the war has left
+/// its planned region: the planned region (an id) held a state of the contact line earlier in this
+/// run (`airfight:<region>`) and holds none now, while other regions do. The new region is the
+/// one with the contact state nearest the entry's wings' bases (else the one with most contact
+/// states). None: the planned region stands (no war, a region given by name, no region facts).
+#[allow(clippy::too_many_arguments)]
+fn follow_fighting(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    entry: &Value,
+    planned: &Value,
+    mission: Option<&str>,
+    owned: &[&Value],
+    now: GameHour,
+) -> Option<Value> {
+    if entry["follow_front"] == json!(false)
+        || !mission.is_some_and(|m| FOLLOW_MISSIONS.contains(&m))
+    {
+        return None;
+    }
+    let rid = planned
+        .as_i64()
+        .or_else(|| planned.as_str().and_then(|s| s.trim().parse().ok()))?;
+    let wars = tools.call("hoi4_wars", &json!({})).ok()?;
+    let won: Vec<&str> = list(&wars["wars"], "wars_won")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    let enemies: Vec<String> = list(&wars["wars"], "enemies")
+        .iter()
+        .filter_map(|t| t.as_str().or_else(|| t["tag"].as_str()))
+        .filter(|t| !won.contains(t))
+        .map(str::to_string)
+        .collect();
+    if enemies.is_empty() {
+        return None;
+    }
+    let contact: Vec<i64> = list(&wars, "borders")
+        .iter()
+        .filter(|b| enemies.iter().any(|t| t == text(&b["neighbour_tag"])))
+        .flat_map(|b| super::ints(&b["neighbour_states"]))
+        .collect();
+    if contact.is_empty() {
+        return None;
+    }
+    let me = super::plan_operation::player(tools, plan);
+    let mut tags = enemies.clone();
+    tags.push(me);
+    super::plan_operation::learn_centres(state, tools, &tags);
+    let region_of = |s: i64| state.regions.get(&(s as i32)).copied();
+    let fighting: HashSet<i64> = contact.iter().filter_map(|s| region_of(*s)).collect();
+    if fighting.is_empty() {
+        return None;
+    }
+    for r in &fighting {
+        state.done.insert(format!("airfight:{r}"), now);
+    }
+    if fighting.contains(&rid) || !state.done.contains_key(&format!("airfight:{rid}")) {
+        return None;
+    }
+    // the wings' bases' middle; the nearest contact state's region
+    let pts: Vec<(f64, f64)> = owned
+        .iter()
+        .filter_map(|w| w["air_base"]["state_id"].as_i64())
+        .filter_map(|s| state.centers.get(&(s as i32)).copied())
+        .collect();
+    let target = if pts.is_empty() {
+        let mut counts: HashMap<i64, usize> = HashMap::new();
+        for s in &contact {
+            if let Some(r) = region_of(*s) {
+                *counts.entry(r).or_default() += 1;
+            }
+        }
+        counts
+            .into_iter()
+            .max_by_key(|(r, n)| (*n, -*r))
+            .map(|(r, _)| r)
+    } else {
+        let n = pts.len() as f64;
+        let (x, z) = (
+            pts.iter().map(|p| p.0).sum::<f64>() / n,
+            pts.iter().map(|p| p.1).sum::<f64>() / n,
+        );
+        contact
+            .iter()
+            .filter_map(|s| {
+                let p = state.centers.get(&(*s as i32))?;
+                Some((region_of(*s)?, (p.0 - x).powi(2) + (p.1 - z).powi(2)))
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(r, _)| r)
+    }?;
+    note(
+        state,
+        "air_plan",
+        format!(
+            "{}: the fighting left region {rid}: {} over region {target}",
+            text(&entry["id"]),
+            mission.unwrap_or("")
+        ),
+    );
+    Some(json!(target))
+}
 
 pub(super) fn air_plan_step(
     state: &mut State,
@@ -3726,7 +3858,14 @@ pub(super) fn air_plan_step(
         return Ok(None);
     };
     let bases = list(&air, "air_bases");
-    let all_wings = list(&air, "wings");
+    // a wing attached to an army flies for that army's battles and follows it (the air_attach
+    // rule): the air plan neither rebases it nor gives it a region mission
+    let free_wings: Vec<Value> = list(&air, "wings")
+        .iter()
+        .filter(|w| w["attached_army"].as_str().is_none_or(str::is_empty))
+        .cloned()
+        .collect();
+    let all_wings: &[Value] = &free_wings;
     // an entry whose `until` holds is over: it claims no wing, so its wings join the entries of
     // the next war (w42zc, 23 Nov 2026: the seven Polish entries held 2,099 planes over Western
     // Poland eight months after Poland fell; the Low Countries had 199 fighters and 100 CAS)
@@ -3771,10 +3910,28 @@ pub(super) fn air_plan_step(
     let mut flying = 0;
     let mut deploy_notes: Vec<String> = Vec::new();
     let mut moved: Vec<String> = Vec::new();
+    let mut rebases: Vec<(String, i64)> = Vec::new();
     // the bases' free room as the batch fills them: six wings sent to the one roomiest base in
     // one call overfilled it and the game refused the rest (w43a1, 23 Nov 2026: six fighter wings
     // to Westfalen 57 NotApplied, the start wings stayed over Poland on the war day)
     let mut room: Vec<Value> = bases.to_vec();
+    // the planes already flying to a base take its room too: the read counts only the wings
+    // stationed there (t1939j, 24 Nov 2026: seven wings queued to state 97 behind 570 planes in
+    // transit, each refused air_base_full)
+    for b in room.iter_mut() {
+        let Some(id) = b["base_id"].as_i64() else {
+            continue;
+        };
+        let coming: i64 = list(&air, "wings")
+            .iter()
+            .filter(|w| w["transfer_to_base_id"].as_i64() == Some(id))
+            .filter_map(|w| w["aircraft"].as_i64())
+            .sum();
+        if coming > 0 {
+            let free = b["free"].as_i64().unwrap_or(0);
+            b["free"] = json!(free - coming);
+        }
+    }
     for (index, entry) in entries.iter().enumerate() {
         let owned: Vec<&Value> = all_wings
             .iter()
@@ -3783,7 +3940,7 @@ pub(super) fn air_plan_step(
         let switched = active[index]
             && !entry["switch_when"].is_null()
             && when_holds(state, tools, &entry["switch_when"], now) == Truth::True;
-        let region = if switched && !entry["then_region"].is_null() {
+        let planned = if switched && !entry["then_region"].is_null() {
             &entry["then_region"]
         } else {
             &entry["region"]
@@ -3797,6 +3954,15 @@ pub(super) fn air_plan_step(
             .flatten()
             .or(entry["mission"].as_str())
             .filter(|m| !m.is_empty());
+        // a land mission follows the fighting: once the war has left the entry's region, its
+        // wings fly over the fighting region nearest them (t1939j, 24 Nov 2026: 80% of the planes
+        // kept flying over Western Poland for three weeks after the front had moved east)
+        let followed = if active[index] {
+            follow_fighting(state, tools, plan, entry, planned, mission, &owned, now)
+        } else {
+            None
+        };
+        let region = followed.as_ref().unwrap_or(planned);
         let region_arg = match region {
             Value::Number(n) => Some(n.to_string()),
             Value::String(s) if !s.trim().is_empty() => Some(s.trim().to_string()),
@@ -3860,35 +4026,12 @@ pub(super) fn air_plan_step(
                         b["free"] = json!(free - planes);
                     }
                 }
-                let (ok, why) = state.act(
-                    tools,
-                    lease,
-                    "hoi4_air_rebase",
-                    json!({"wing": name, "state_id": base}),
-                    "ab",
-                )?;
-                if why.contains("rebase_refused") {
-                    state.skip(now, "airrebase", &format!("{name}|{base}"), 30 * DAY);
-                    note(
-                        state,
-                        "air_plan",
-                        format!("{name}: the game refused the base in state {base} (full, or out of reach); another base with room is tried"),
-                    );
-                } else if !ok {
-                    // a rebase that did not take (NotApplied: the transfer never started) leaves
-                    // that base out for this wing as a refusal does; the next try picks another
-                    // base with room (w47c1, 23 Nov 2026: 15 rebases of Polish wings to state 57
-                    // came back NotApplied and were sent again unchanged every week, and the old
-                    // wings flew over Poland for 45 days of the western war)
-                    state.skip(now, "airrebase", &format!("{name}|{base}"), 30 * DAY);
-                    state.skip(now, "airplan", &name, DAY);
-                }
-                // rebases go out together (one per call kept the Polish wings over Poland for
-                // months: g17o, 23 Nov 2026, 13 air orders from October to mid-December)
-                moved.push(format!(
-                    "air_plan {name} rebase to state {base}: {ok} {why}"
-                ));
-                if moved.len() >= AIR_REBASE_BATCH {
+                // rebases go out together, one call per base (one per call kept the Polish wings
+                // over Poland for months: g17o, 23 Nov 2026, 13 air orders from October to
+                // mid-December; one call per wing cost 69 calls in the 23 Nov runs)
+                rebases.push((name, base));
+                if rebases.len() >= AIR_REBASE_BATCH {
+                    send_rebases(state, tools, lease, now, &mut rebases, &mut moved)?;
                     return Ok(Some(moved.join("; ")));
                 }
                 continue;
@@ -3901,7 +4044,8 @@ pub(super) fn air_plan_step(
                 flying += 1;
                 continue;
             }
-            if !moved.is_empty() {
+            if !moved.is_empty() || !rebases.is_empty() {
+                send_rebases(state, tools, lease, now, &mut rebases, &mut moved)?;
                 return Ok(Some(moved.join("; ")));
             }
             // refused from this very base before, and no base with room in the region: not sent
@@ -3959,7 +4103,8 @@ pub(super) fn air_plan_step(
                 "air_plan {name} {mission} over region {region_arg}: {ok} {why}"
             )));
         }
-        if !moved.is_empty() {
+        if !moved.is_empty() || !rebases.is_empty() {
+            send_rebases(state, tools, lease, now, &mut rebases, &mut moved)?;
             return Ok(Some(moved.join("; ")));
         }
         if let (false, Some(mission), Some(region_arg)) =
@@ -3999,7 +4144,8 @@ pub(super) fn air_plan_step(
             ));
             continue;
         };
-        if !moved.is_empty() {
+        if !moved.is_empty() || !rebases.is_empty() {
+            send_rebases(state, tools, lease, now, &mut rebases, &mut moved)?;
             return Ok(Some(moved.join("; ")));
         }
         let (ok, why) = state.act(
@@ -4016,7 +4162,8 @@ pub(super) fn air_plan_step(
             "air_plan {key}: new wing of {planes} {aircraft} from reserve at state {base}: {ok} {why}"
         )));
     }
-    if !moved.is_empty() {
+    if !moved.is_empty() || !rebases.is_empty() {
+        send_rebases(state, tools, lease, now, &mut rebases, &mut moved)?;
         return Ok(Some(moved.join("; ")));
     }
     state.skip(now, "mair", "x", 3 * DAY);
@@ -4184,8 +4331,18 @@ fn air_idle_step(
 }
 
 /// Experience a spirit slot costs by its place in the branch (common/idea_tags/00_idea.txt
-/// slot costs 20, 35, 50; the window shows the real cost and an entry's `cost` overrides).
+/// idea_categories: army and navy slots 20, 35, 50; every air slot 50 on 1.20, so an air spirit
+/// priced 20 was tried and refused below 50). An entry's `cost` overrides.
 const SPIRIT_SLOT_COST: [f64; 3] = [20.0, 35.0, 50.0];
+const AIR_SPIRIT_SLOT_COST: f64 = 50.0;
+
+fn spirit_slot_cost(branch: &str, index: &str) -> f64 {
+    if branch == "air" {
+        AIR_SPIRIT_SLOT_COST
+    } else {
+        SPIRIT_SLOT_COST[index.parse::<usize>().unwrap_or(0).min(2)]
+    }
+}
 
 /// The refusals an officer corps pick has had (plan_xp.rs: a dropped pick holds nothing back).
 pub(super) fn ofc_refused(state: &State, key: &str) -> u32 {
@@ -4273,7 +4430,7 @@ fn officer_corps_step(
         let (branch, index) = slot.split_once(':').unwrap_or((slot, "0"));
         let cost = entry["cost"]
             .as_f64()
-            .unwrap_or_else(|| SPIRIT_SLOT_COST[index.parse::<usize>().unwrap_or(0).min(2)]);
+            .unwrap_or_else(|| spirit_slot_cost(branch, index));
         let reserve = plan["manage"]["xp_reserve"][branch].as_f64().unwrap_or(0.0);
         let (before, names) = super::plan_xp::ahead(
             state,
@@ -5911,6 +6068,42 @@ pub(super) fn rebalance_step(
     Ok((!lines.is_empty()).then(|| lines.join("; ")))
 }
 
+/// The fast lane for free military factories (plan_run FAST_LANES): two memory reads a tick;
+/// with factories on no line the balance rule (or, with it off, the priority feed) gives them
+/// all in this turn. Quiet for 6 game hours when none is free or the rules found nothing.
+pub(super) fn free_factories_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if !(plan["production"].is_array() || plan["production_priority"].is_array())
+        || state.skipped(now, "freefac", "x")
+    {
+        return Ok(None);
+    }
+    let Ok(economy) = tools.call("hoi4_economy", &json!({})) else {
+        return Ok(None);
+    };
+    let Ok((_, idle)) = military_lines(tools, &economy) else {
+        return Ok(None);
+    };
+    if idle <= 0 {
+        state.skip(now, "freefac", "x", 6);
+        return Ok(None);
+    }
+    let out = if !off(plan, "balance") && !off(plan, "stockpile") {
+        balance_rule(state, tools, plan, lease, now)?
+    } else {
+        rebalance_step(state, tools, plan, lease, now, &economy)?
+    };
+    if out.is_none() {
+        state.skip(now, "freefac", "x", 6);
+    }
+    Ok(out)
+}
+
 /// Before the first unpause (the game paused at the hour this server first saw, no work done
 /// yet, a plan with `production` or `production_priority`): free military factories go to the
 /// starting lines the plan keeps, first up to a `production[]` entry's factories for an existing
@@ -7302,7 +7495,11 @@ fn floor_decide<'a>(
         let Some(line) = line_of(arche) else {
             continue;
         };
+        // a line whose own equipment the divisions lack gives nothing, whatever its floor (s7n,
+        // 24 Nov 2026: rifles went 15 -> 5 for a medium-tank floor while the divisions lacked
+        // 7,293 rifles and the stockpile was empty)
         let surplus = |l: &ProdLine| match b.floors.get(&l.archetype) {
+            Some(_) if fill_days(b, &l.archetype) > 0.0 => 0,
             Some(f) => l.requested - f,
             None if b.removed.contains(&l.archetype) => l.requested,
             None if fill_days(b, &l.archetype) <= 0.0 && !b.targets.contains_key(&l.archetype) => {
@@ -7759,6 +7956,104 @@ fn balance_once(
     Ok(Some(format!("production balance: {what}: {ok} {why}")))
 }
 
+fn batch_failures(
+    state: &State,
+    names: &[String],
+    ok: bool,
+    why: &str,
+) -> BTreeMap<String, String> {
+    if ok {
+        return BTreeMap::new();
+    }
+    let failed = list(&state.last_result, "failed");
+    if failed.is_empty() {
+        return names.iter().map(|n| (n.clone(), why.to_string())).collect();
+    }
+    failed
+        .iter()
+        .filter_map(|f| {
+            let wing = text(&f["wing"]);
+            (!wing.is_empty()).then(|| {
+                (
+                    wing.to_string(),
+                    format!("{}: {}", text(&f["code"]), text(&f["message"])),
+                )
+            })
+        })
+        .collect()
+}
+
+/// Order the queued rebases: one call per base with every wing going there (`wings`), so the air
+/// mode, the camera and the base are found once. A base the game refused is left out for that
+/// wing for 30 days as before (another base with room is tried next).
+fn send_rebases(
+    state: &mut State,
+    tools: &dyn Tools,
+    lease: &str,
+    now: GameHour,
+    rebases: &mut Vec<(String, i64)>,
+    moved: &mut Vec<String>,
+) -> Result<()> {
+    let mut order: Vec<i64> = Vec::new();
+    for (_, base) in rebases.iter() {
+        if !order.contains(base) {
+            order.push(*base);
+        }
+    }
+    for base in order {
+        let names: Vec<String> = rebases
+            .iter()
+            .filter(|(_, b)| *b == base)
+            .map(|(n, _)| n.clone())
+            .take(24)
+            .collect();
+        let args = if names.len() == 1 {
+            json!({"wing": names[0], "state_id": base})
+        } else {
+            json!({"wings": names, "state_id": base})
+        };
+        let (ok, why) = state.act(tools, lease, "hoi4_air_rebase", args, "ab")?;
+        let failed = batch_failures(state, &names, ok, &why);
+        for name in &names {
+            match failed.get(name) {
+                Some(cause) if cause.contains("rebase_refused") => {
+                    state.skip(now, "airrebase", &format!("{name}|{base}"), 30 * DAY);
+                    note(
+                        state,
+                        "air_plan",
+                        format!("{name}: the game refused the base in state {base} (full, or out of reach); another base with room is tried"),
+                    );
+                }
+                Some(_) => {
+                    // a rebase that did not take (NotApplied: the transfer never started) leaves
+                    // that base out for this wing as a refusal does; the next try picks another
+                    // base with room (w47c1, 23 Nov 2026: 15 rebases of Polish wings to state 57
+                    // came back NotApplied and were sent again unchanged every week)
+                    state.skip(now, "airrebase", &format!("{name}|{base}"), 30 * DAY);
+                    state.skip(now, "airplan", name, DAY);
+                }
+                None => {}
+            }
+            let (wing_ok, wing_why) = match failed.get(name) {
+                Some(c) => (false, c.as_str()),
+                None => (
+                    true,
+                    if ok {
+                        why.as_str()
+                    } else {
+                        "Verified in the batch"
+                    },
+                ),
+            };
+            moved.push(format!(
+                "air_plan {name} rebase to state {base}: {wing_ok} {wing_why}"
+            ));
+        }
+    }
+    rebases.clear();
+    Ok(())
+}
+
 /// Wings of one air plan entry ordered together (one hoi4_air_mission call).
 const AIR_PLAN_BATCH: usize = 12;
 
@@ -7829,6 +8124,13 @@ mod tests {
     use std::cell::RefCell;
 
     const START: GameHour = 1_000_000;
+
+    #[test]
+    fn an_air_spirit_slot_costs_fifty_and_the_others_by_place() {
+        assert_eq!(spirit_slot_cost("air", "0"), 50.0);
+        assert_eq!(spirit_slot_cost("navy", "0"), 20.0);
+        assert_eq!(spirit_slot_cost("army", "2"), 50.0);
+    }
 
     /// Reads answer from `replies`; actions are Verified unless `refuse` names their tool.
     struct Fake {
@@ -9612,6 +9914,86 @@ mod tests {
     }
 
     #[test]
+    fn a_land_mission_follows_the_fighting_once_it_left_the_planned_region() {
+        // t1939j (24 Nov 2026): 80% of the planes kept flying over Western Poland (38) for three
+        // weeks after the front had moved east
+        let read = json!({"air_bases": [
+            {"base_id": 9, "state_id": 66, "free": 1000, "region": {"id": 8}}],
+            "wings": [{"wing": "StG 1", "aircraft_type": "small_plane_cas_airframe_1",
+                       "aircraft": 100, "standing_by": false, "region": {"id": 38},
+                       "air_base": {"base_id": 9, "state_id": 66}, "missions": ["cas"]}]});
+        let states = json!({"states": [
+            {"state_id": 86, "region": 38, "x": 10.0, "z": 0.0},
+            {"state_id": 97, "region": 39, "x": 30.0, "z": 0.0},
+            {"state_id": 28, "region": 19, "x": -90.0, "z": 0.0},
+            {"state_id": 66, "region": 8, "x": 0.0, "z": 0.0}]});
+        let wars = |pol: Value| {
+            json!({"wars": {"enemies": ["POL", "FRA"]}, "borders": [
+                {"neighbour_tag": "POL", "neighbour_states": pol},
+                {"neighbour_tag": "FRA", "neighbour_states": [28]}]})
+        };
+        let tools = fake(vec![
+            ("hoi4_air", read),
+            ("hoi4_states", states),
+            ("hoi4_wars", wars(json!([86]))),
+            ("hoi4_overview", json!({"player": "GER"})),
+        ]);
+        let plan = json!({"air_plan": [{"id": "ap", "airframe": "small_plane_cas_airframe_1",
+            "region": 38, "mission": "cas"}]});
+        let mut state = State::default();
+        // the fighting in the planned region: the wing flies on
+        air_plan_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(actions(&tools).is_empty(), "{:?}", actions(&tools));
+        // the front moved east: the nearest fighting region (39), not the quiet western one
+        tools
+            .replies
+            .borrow_mut()
+            .insert("hoi4_wars".into(), wars(json!([97])));
+        air_plan_step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap();
+        let sent = actions(&tools);
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!(sent[0].0, "hoi4_air_mission");
+        assert_eq!(sent[0].1["region"], json!("39"));
+        // an entry that never saw fighting in its region (a home cover) keeps it
+        let plan = json!({"air_plan": [{"id": "home", "airframe": "small_plane_cas_airframe_1",
+            "region": 8, "mission": "cas"}]});
+        let mut state = State::default();
+        tools.calls.borrow_mut().clear();
+        air_plan_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(actions(&tools)
+            .iter()
+            .all(|(_, a)| a["region"] == json!("8")));
+    }
+
+    #[test]
+    fn planes_flying_to_a_base_take_its_room() {
+        // t1939j: seven wings queued to a base behind 570 planes in transit, all refused
+        let read = json!({"air_bases": [
+            {"base_id": 9, "state_id": 97, "free": 600, "region": {"id": 39}},
+            {"base_id": 8, "state_id": 98, "free": 600, "region": {"id": 39}}],
+            "wings": [
+                {"wing": "JG 9", "aircraft_type": "small_plane_airframe_1", "aircraft": 570,
+                 "standing_by": true, "transfer_to_base_id": 9,
+                 "air_base": {"base_id": 1, "state_id": 66}, "missions": []},
+                {"wing": "JG 1", "aircraft_type": "small_plane_airframe_1", "aircraft": 100,
+                 "standing_by": true, "air_base": {"base_id": 1, "state_id": 66}, "missions": []}]});
+        let tools = fake(vec![("hoi4_air", read)]);
+        let plan = json!({"air_plan": [{"id": "f", "wing": "JG 1", "base_region": 39,
+            "region": 39, "mission": "air_superiority"}]});
+        let mut state = State::default();
+        state.centers.insert(97, (10.0, 0.0));
+        state.centers.insert(98, (20.0, 0.0));
+        state.centers.insert(66, (0.0, 0.0));
+        air_plan_step(&mut state, &tools, &plan, "l", START).unwrap();
+        let sent = actions(&tools);
+        assert!(
+            sent.iter()
+                .any(|(n, a)| n == "hoi4_air_rebase" && a["state_id"] == json!(98)),
+            "the base with room, not the one the planes in transit fill: {sent:?}"
+        );
+    }
+
+    #[test]
     fn the_air_plan_gives_its_wings_their_mission_in_one_order() {
         // one order per wing cost ~5 s each (g17n: 81 air orders for 90 wings); the wings of an
         // entry that need its mission now go in one call
@@ -9659,6 +10041,14 @@ mod tests {
             .unwrap()
             .unwrap_or_default();
         assert_eq!(line.matches("rebase to state 57").count(), 3, "{line}");
+        // one call for the base, every wing in it (69 single-wing calls in the 23 Nov runs)
+        let sent: Vec<(String, Value)> = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_air_rebase")
+            .collect();
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!(sent[0].1["wings"], json!(["JG 1", "JG 2", "JG 3"]));
+        assert_eq!(sent[0].1["state_id"], 57);
     }
 
     #[test]
@@ -10520,6 +10910,29 @@ mod tests {
             out.as_deref(),
             Some("air 1 wing(s) air_superiority over state 550 (3. Stormo): true Verified"),
             "1. Stormo belongs to the air plan"
+        );
+        // left on the ground by its entry for two game days, 1. Stormo takes the default mission
+        // (t1939v1: claimed wings stood by to the war)
+        let mut later = State::default();
+        let mut flying = air_read();
+        flying["wings"][0]["air_base"] = json!({"base_id": 3, "state_id": 550});
+        let tools = fake(vec![
+            ("hoi4_air", flying),
+            (
+                "hoi4_wars",
+                json!({"borders": [{"hostile": true, "own_border_states": [550]}]}),
+            ),
+        ]);
+        let _ = extras_step(&mut later, &tools, &plan, "l", START).unwrap();
+        assert!(later.done.contains_key("airidle:1. Stormo"));
+        later
+            .done
+            .insert("airidle:1. Stormo".into(), START - 3 * DAY);
+        later.bad.clear();
+        let out = extras_step(&mut later, &tools, &plan, "l", START + 1).unwrap();
+        assert!(
+            out.as_deref().is_some_and(|o| o.contains("1. Stormo")),
+            "{out:?}"
         );
     }
 
@@ -11884,8 +12297,6 @@ mod tests {
         ] {
             b.floors.insert(a.into(), f);
         }
-        b.need.insert("motorized_equipment".into(), 900.0);
-        b.per_day.insert("motorized_equipment".into(), 10.0);
         // support is 3 short and the trucks 3 above: the trucks give the support its line
         match balance_decide(&b) {
             Some(BalanceAct::Set {
@@ -11893,6 +12304,11 @@ mod tests {
             }) => assert_eq!((index, factories), (2, 7)),
             other => panic!("{other:?}"),
         }
+        // trucks the divisions lack are no donor, whatever their floor (s7n: rifles 15 -> 5
+        // for a tank floor with 7,293 rifles missing)
+        b.need.insert("motorized_equipment".into(), 900.0);
+        b.per_day.insert("motorized_equipment".into(), 10.0);
+        assert_eq!(balance_decide(&b), None);
         // idle factories go to the floors before the trucks' shortfall
         b.lines[1].requested = 7;
         b.lines[3].requested = 5;

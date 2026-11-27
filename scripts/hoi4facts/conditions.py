@@ -778,7 +778,10 @@ def advisor_conditions(world, tag, idea):
     if world is None or not isinstance(idea, str):
         return out
     chars = world.characters(tag, "advisor")
-    by_token = any(r["role"] == "advisor" and r.get("idea_token") == idea for ch in chars for r in ch["roles"])
+    # a character id names every advisor role of that character (Goering is both a hidden political advisor whose
+    # idea_token equals his character id and an air chief): only a bare token selects roles by token
+    by_token = not any(ch["id"] == idea for ch in chars) and \
+        any(r["role"] == "advisor" and r.get("idea_token") == idea for ch in chars for r in ch["roles"])
     for ch in chars:
         for r in ch["roles"]:
             if r["role"] == "advisor" and (r.get("idea_token") == idea if by_token else ch["id"] == idea):

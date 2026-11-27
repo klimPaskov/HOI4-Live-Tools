@@ -846,6 +846,9 @@ def generate(mac_path, elf_path, src, hints=None, include_low=False, cache=None,
             entry['dropped_non_monotonic'] = dropped
         if filled:
             entry['filled'] = filled
+        # per written entry: the vote's confidence, or "filled" for a bracketed gap fill
+        entry['confidence'] = {k: ('filled' if k in filled else res[int(k, 16)]['confidence'])
+                               for k in out if k in filled or int(k, 16) in res}
         unresolved = {}
         for x in need:
             if hex(x) in out:

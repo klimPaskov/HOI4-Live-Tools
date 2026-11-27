@@ -1900,7 +1900,7 @@ fn relation(
 // W2-12: faction (M5).
 
 /// The country name hoi4_diplomacy_countries gives `tag` (lower case), None when unknown.
-fn country_name(tools: &dyn Tools, tag: &str) -> Option<String> {
+pub(super) fn country_name(tools: &dyn Tools, tag: &str) -> Option<String> {
     tools
         .call(
             "hoi4_diplomacy_countries",

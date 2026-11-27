@@ -1,3 +1,4 @@
+use crate::xlayout::UNMAPPED;
 // Own research semantics derived from Clausewitz-MCP calling/game.py.
 // Copyright (c) 2026 smerss, MIT; ../LICENSE.clausewitz retains full notice.
 // Primary types, canonical joins and raw field widths are independently recovered.
@@ -29,14 +30,14 @@ pub(crate) struct Layout {
 }
 /// Linux ELF a4971c9e (libstdc++).
 const LINUX: Layout = Layout {
-    database_vtable: 0x43a5fc0,
-    template_vtable: 0x43a5f30,
+    database_vtable: 0x43ad108,
+    template_vtable: 0x43ad078,
     database_templates: 0x48,
     template_index: 0x30,
     template_threshold: 0x3cc,
-    technology_vtable: 0x43a5650,
-    status_vtable: 0x43a5750,
-    slot_vtable: 0x43a56f0,
+    technology_vtable: 0x43ac798,
+    status_vtable: 0x43ac898,
+    slot_vtable: 0x43ac838,
 };
 /// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026: vtables by
 /// RTTI name, template index/array moved by the 24-byte key string, threshold
@@ -51,10 +52,23 @@ const MACOS: Layout = Layout {
     status_vtable: 0x35a7258,
     slot_vtable: 0x35a71f8,
 };
+/// Windows: no reviewed layout yet. Every offset and address is past the readable range, so
+/// each read through it fails with `read_bound` instead of reading a guessed place.
+const WINDOWS: Layout = Layout {
+    database_vtable: UNMAPPED,
+    template_vtable: UNMAPPED,
+    database_templates: UNMAPPED,
+    template_index: UNMAPPED,
+    template_threshold: UNMAPPED,
+    technology_vtable: UNMAPPED,
+    status_vtable: UNMAPPED,
+    slot_vtable: UNMAPPED,
+};
 pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {
         crate::memory::StringAbi::LibStdCxx => &LINUX,
         crate::memory::StringAbi::LibCxx => &MACOS,
+        crate::memory::StringAbi::Msvc => &WINDOWS,
     }
 }
 

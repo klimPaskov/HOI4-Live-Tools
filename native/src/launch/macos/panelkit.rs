@@ -1347,6 +1347,98 @@ pub(super) fn popup_roots_named(r: &Reader<'_>, i: u64, names: &[&str]) -> Resul
     }
     Ok(out)
 }
+/// Root-container fields seen on reviewed windows (views +0x490/+0x430, pop-ups +0x20..+0x30,
+/// child windows +0x50/+0x68..., the leader trait window +0x60).
+const SEARCH_ROOT_OFFSETS: [u64; 13] = [
+    0x60, 0x490, 0x430, 0x20, 0x28, 0x30, 0x50, 0x68, 0x70, 0x78, 0x8, 0x10, 0x18,
+];
+/// (window .gui name -> manager slot, field, root field) found by `shown_root_search`.
+static SEARCH_LEARNED: std::sync::Mutex<Vec<(String, u64, u64, u64)>> =
+    std::sync::Mutex::new(Vec::new());
+
+fn shown_named(r: &Reader<'_>, i: u64, p: u64, name: &str) -> Option<u64> {
+    if !plausible(p) {
+        return None;
+    }
+    let root = gui_tree::container(r, p, i).ok()??;
+    (container_name(r, i, root).ok()??.as_str() == name
+        && gui_tree::visible(r, root).unwrap_or(false))
+    .then_some(root)
+}
+
+/// A SHOWN window's root container by its .gui name, for windows no class lookup reaches (a
+/// window drawn as a member of another view, like the design company's policy window): the
+/// pop-up list, then each interface-manager view's root fields, then a remembered two-level
+/// search (manager slot -> a view's field -> its root field), at most `budget` reads.
+pub(super) fn shown_root_search(r: &Reader<'_>, i: u64, name: &str) -> Result<Option<u64>> {
+    if let Some(root) = popup_roots_named(r, i, &[name])?.first() {
+        return Ok(Some(*root));
+    }
+    let idler = r.u64(i + game::layout(r).idler_global)?;
+    let manager = r.u64(idler + fld(r.string_abi(), &IDLER, MANAGER)?)?;
+    if !plausible(manager) {
+        return Ok(None);
+    }
+    let learned = SEARCH_LEARNED
+        .lock()
+        .ok()
+        .and_then(|g| g.iter().find(|e| e.0 == name).map(|e| (e.1, e.2, e.3)));
+    if let Some((slot, field, at)) = learned {
+        let view = r.u64(manager + slot).unwrap_or(0);
+        let w = if plausible(view) {
+            r.u64(view + field).unwrap_or(0)
+        } else {
+            0
+        };
+        if plausible(w) {
+            if let Some(root) = shown_named(r, i, r.u64(w + at).unwrap_or(0), name) {
+                return Ok(Some(root));
+            }
+        }
+    }
+    let slots = r.read(manager, MANAGER_SCAN)?;
+    for c in slots.chunks_exact(8) {
+        let view = u64::from_le_bytes(c.try_into().unwrap());
+        if !plausible(view) {
+            continue;
+        }
+        for off in SEARCH_ROOT_OFFSETS {
+            if let Some(root) = shown_named(r, i, r.u64(view + off).unwrap_or(0), name) {
+                return Ok(Some(root));
+            }
+        }
+    }
+    let mut budget: u32 = 150_000;
+    for (s, c) in slots.chunks_exact(8).enumerate() {
+        let view = u64::from_le_bytes(c.try_into().unwrap());
+        if !plausible(view) {
+            continue;
+        }
+        let Ok(fields) = r.read(view, 0x800) else {
+            continue;
+        };
+        for (f, d) in fields.chunks_exact(8).enumerate() {
+            let w = u64::from_le_bytes(d.try_into().unwrap());
+            if !plausible(w) {
+                continue;
+            }
+            for off in SEARCH_ROOT_OFFSETS {
+                if budget == 0 {
+                    return Ok(None);
+                }
+                budget -= 1;
+                if let Some(root) = shown_named(r, i, r.u64(w + off).unwrap_or(0), name) {
+                    if let Ok(mut g) = SEARCH_LEARNED.lock() {
+                        g.retain(|e| e.0 != name);
+                        g.push((name.to_string(), (s * 8) as u64, (f * 8) as u64, off));
+                    }
+                    return Ok(Some(root));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
 /// Probe-only (`SLOT_HEX:FIELD_HEX`): named GUI containers referenced from the object at
 /// manager slot SLOT + FIELD (offsets 0..0x800).
 pub(super) fn debug_slot_object(process: &dyn Process, spec: &str) -> Result<serde_json::Value> {

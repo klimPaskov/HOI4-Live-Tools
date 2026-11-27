@@ -475,6 +475,7 @@ pub(super) fn table(
     let names: HashMap<i32, String> = states::names(dir)?.into_iter().collect();
     let cat = catalog(dir);
     let centers = mapdata::state_centers(dir).ok();
+    let regions = mapdata::state_regions(dir).ok();
     let victory = mapdata::state_victory_points(dir).ok();
     let infrastructure = mapdata::state_infrastructure(dir).ok();
     let factories = mapdata::state_factories(dir);
@@ -504,6 +505,11 @@ pub(super) fn table(
         if let Some((x, z)) = centers.as_ref().and_then(|c| c.get(&id)) {
             row["x"] = json!(x.round());
             row["z"] = json!(z.round());
+        }
+        // the strategic region holding most of the state's provinces (air missions are flown
+        // over regions: the executor follows the fighting from region to region with it)
+        if let Some((region, _, _)) = regions.as_ref().and_then(|m| m.get(&id)) {
+            row["region"] = json!(region);
         }
         if let Some(level) = infrastructure.as_ref().and_then(|m| m.get(&id)) {
             row["infrastructure_start"] = json!(level);

@@ -172,6 +172,22 @@ class MoreFindings(unittest.TestCase):
         named = snap("1940.06.01.00", alerts=[{"alert": "decisions_available", "frame": 3}])
         self.assertNotIn("game_alert_unknown", codes(F.findings(named, [])))
 
+    def test_armies_and_groups_over_their_commanders_limits(self):
+        # s55a: Armee West Nord held 35 divisions under a general who leads 24
+        now = snap("1940.06.01.00", land={
+            "armies": [{"army": "Armee West Nord", "divisions": 35, "division_limit": 24,
+                        "orders": [{"kind": "front", "divisions": 35}]},
+                       {"army": "Armee Nord", "divisions": 28, "division_limit": 30,
+                        "orders": [{"kind": "front", "divisions": 28}]},
+                       {"army": "Army 9", "divisions": 26, "orders": [{"kind": "front", "divisions": 26}]}],
+            "groups": [{"group": "Army Group 1", "army_limit": 2, "armies": ["A", "B", "C"]},
+                       {"group": "Army Group 2", "armies": ["D", "E"]}]})
+        fs = F.findings(now, [])
+        over = sorted(f["subject"] for f in fs if f["code"] == "army_over_limit")
+        self.assertEqual(over, ["Armee West Nord", "Army 9"])
+        groups = [f["subject"] for f in fs if f["code"] == "group_over_limit"]
+        self.assertEqual(groups, ["Army Group 1"])
+
     def test_losing_exchange_and_flat_victory_points(self):
         prev = [snap("1940.05.18.00", wars={"per_enemy": {"BEL": {"at_war": True, "casualties_own": 10000,
                                                                   "casualties_enemy": 9000,

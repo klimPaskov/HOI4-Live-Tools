@@ -1,0 +1,213 @@
+{
+ "fields": {
+  "CCombatTactic+0x10": [
+   "launch//macos//battles.rs"
+  ],
+  "CConvoys+0x10": [
+   "launch//macos//naval.rs"
+  ],
+  "CConvoys+0x68": [
+   "launch//macos//naval.rs"
+  ],
+  "CConvoys+0x6c": [
+   "launch//macos//naval.rs"
+  ],
+  "CCountry+0x56c": [
+   "launch//macos//armies.rs",
+   "launch//macos//deployment.rs",
+   "launch//macos//diplomacy_state.rs",
+   "launch//macos//doctrines.rs",
+   "launch//macos//economy_detail.rs",
+   "launch//macos//intel_live.rs"
+  ],
+  "CEditBox+0x3c8": [
+   "launch//macos//design_ui.rs",
+   "launch//macos//navalui.rs"
+  ],
+  "CEquipmentDesignerView+0x178": [
+   "launch//macos//design_ui.rs"
+  ],
+  "CEquipmentModuleSlotView+0xb0": [
+   "launch//macos//design_ui.rs"
+  ],
+  "CEquipmentType.slot+0x28": [
+   "launch//macos//fleetmem.rs"
+  ],
+  "CEquipmentType.slot+0x8": [
+   "launch//macos//fleetmem.rs"
+  ],
+  "CEquipmentType.slot.size+0x40": [
+   "launch//macos//fleetmem.rs"
+  ],
+  "CFindView+0xd50": [
+   "launch//macos//construction_place//point.rs"
+  ],
+  "CFindView+0xd58": [
+   "launch//macos//construction_place//point.rs"
+  ],
+  "CLandCombat+0x1c": [
+   "launch//macos//battles.rs"
+  ],
+  "CLandCombat+0x48": [
+   "launch//macos//battles.rs"
+  ],
+  "CMapIconManagerImpl.array.size+0x18": [
+   "launch//macos//airui.rs"
+  ],
+  "COperativeLeader+0x20": [
+   "launch//macos//intel_live.rs"
+  ],
+  "COperativeLeader+0xe48": [
+   "launch//macos//intel_live.rs"
+  ],
+  "CPowerBalance+0x178": [
+   "launch//macos//bop.rs"
+  ],
+  "CProductionLine+0x98": [
+   "launch//macos//resources.rs",
+   "launch//macos//stockpile.rs",
+   "production_lines//output.rs"
+  ],
+  "CProductionLine+0xc0": [
+   "launch//macos//resources.rs",
+   "launch//macos//stockpile.rs",
+   "production_lines//output.rs"
+  ],
+  "CStandardGridBox+0x320": [
+   "launch//macos//air.rs",
+   "launch//macos//armies.rs",
+   "launch//macos//construction.rs",
+   "launch//macos//decisions.rs",
+   "launch//macos//deployment.rs",
+   "launch//macos//design_ui.rs"
+  ],
+  "CTechnology.template+0x8": [
+   "launch//macos//research.rs"
+  ],
+  "CTerrainType+0x10": [
+   "launch//macos//battles.rs"
+  ],
+  "CTerrainType+0x58": [
+   "launch//macos//battles.rs"
+  ],
+  "CWarGoalType+0x10": [
+   "launch//macos//diplomacy_state.rs"
+  ],
+  "NDoctrines::CDoctrineSelectionList+0x20": [
+   "launch//macos//doctrine_act.rs",
+   "launch//macos//panelkit.rs"
+  ],
+  "air.overview.view+0x490": [
+   "launch//macos//air.rs"
+  ],
+  "air.selection.view+0x28": [
+   "launch//macos//air.rs",
+   "launch//macos//airui.rs"
+  ],
+  "air.selection.view+0x60": [
+   "launch//macos//air.rs",
+   "launch//macos//airui.rs"
+  ],
+  "diplomacy.action_controller+0x8d8": [
+   "launch//macos//diplomacy.rs"
+  ],
+  "diplomacy.relation+0x10": [
+   "launch//macos//diplomacy_state.rs"
+  ],
+  "diplomacy.relation+0x20": [
+   "launch//macos//diplomacy_state.rs"
+  ],
+  "diplomacy.relation+0x38": [
+   "launch//macos//diplomacy_state.rs"
+  ],
+  "diplomacy.relation+0xc": [
+   "launch//macos//diplomacy_state.rs"
+  ],
+  "gui.gfx+0x1e0": [
+   "launch//macos//construction_place//point.rs"
+  ],
+  "gui.object+0x50": [
+   "gui_tree.rs"
+  ],
+  "gui.object+0x65": [
+   "gui_tree.rs"
+  ],
+  "gui.popup+0x490": [
+   "launch//macos//airui.rs"
+  ],
+  "gui.sprite_type+0x78": [
+   "gui_tree.rs"
+  ],
+  "gui.sprite_type+0x8c": [
+   "gui_tree.rs"
+  ],
+  "gui.type+0x28": [
+   "gui_tree.rs"
+  ],
+  "leader.trait.size+0x20": [
+   "launch//macos//units.rs"
+  ],
+  "occupation.view+0x490": [
+   "launch//macos//occlaw.rs"
+  ],
+  "production.selection.row+0xd50": [
+   "launch//macos//production.rs"
+  ],
+  "production.selection_row+0x10": [
+   "launch//macos//design_ui.rs"
+  ],
+  "production.selection_row+0xd50": [
+   "launch//macos//design_ui.rs"
+  ],
+  "state.slot_item+0x28": [
+   "launch//macos//stateslots.rs"
+  ],
+  "supply_flow.size+0x10": [
+   "launch//macos//supplymem.rs"
+  ],
+  "supply_node+0x10": [
+   "launch//macos//supplymem.rs"
+  ],
+  "supply_node+0x14": [
+   "launch//macos//supplymem.rs"
+  ],
+  "supply_node+0x18": [
+   "launch//macos//supplymem.rs"
+  ],
+  "supply_node+0x20": [
+   "launch//macos//supplymem.rs"
+  ],
+  "supply_node+0x8": [
+   "launch//macos//supplymem.rs"
+  ],
+  "supply_node+0xc": [
+   "launch//macos//supplymem.rs"
+  ],
+  "supply_node.size+0x60": [
+   "launch//macos//supplymem.rs"
+  ],
+  "supply_province+0x0": [
+   "launch//macos//supplymem.rs"
+  ],
+  "supply_province+0x30": [
+   "launch//macos//supplymem.rs"
+  ],
+  "supply_province+0x8": [
+   "launch//macos//supplymem.rs"
+  ],
+  "supply_province.size+0xd8": [
+   "launch//macos//supplymem.rs"
+  ],
+  "supply_state.size+0x28": [
+   "launch//macos//supplymem.rs"
+  ],
+  "unit.leader+0x38": [
+   "launch//macos//armies.rs"
+  ]
+ },
+ "image": {
+  "0x372bec0": [
+   "production_lines//output.rs"
+  ]
+ }
+}

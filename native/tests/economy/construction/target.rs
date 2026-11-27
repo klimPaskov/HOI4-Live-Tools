@@ -3,7 +3,7 @@ use hoi4_live_native::construction::target_snapshot::snapshot as target;
 
 fn complete() -> Fixture {
     let mut f = locations::located();
-    f.word(SENTINEL, BASE + 0x4348678);
+    f.word(SENTINEL, BASE + 0x434f638);
     f.put(SENTINEL + 0x18, &[0]);
     f
 }
@@ -119,9 +119,9 @@ fn construction_target_duplicate_keys_wrong_ordinal_and_torn_membership_refuse()
 #[test]
 fn construction_target_null_template_requires_exact_type_slot_and_inactive_flag() {
     for (field, bytes) in [
-        (SENTINEL, (BASE + 0x4348680).to_le_bytes().to_vec()),
+        (SENTINEL, (BASE + 0x434f640).to_le_bytes().to_vec()),
         (SENTINEL + 0x18, vec![1]),
-        (OTHER, (BASE + 0x4348678).to_le_bytes().to_vec()),
+        (OTHER, (BASE + 0x434f638).to_le_bytes().to_vec()),
     ] {
         let mut f = complete();
         f.put(field, &bytes);

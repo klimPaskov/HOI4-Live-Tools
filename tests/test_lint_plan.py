@@ -84,6 +84,8 @@ FORCE_RULES |= {"force.bombers", "force.design_cost", "force.decisive", "force.s
                 "force.sea_screens", "force.sea_lift", "force.sea_port", "force.sea_patrol", "force.sea_air_cover",
                 "force.sea_raid", "force.carrier_air", "force.navy_unused", "force.navy_readiness",
                 "force.navy_design", "force.navy_tools", "force.navy_doctrine", "force.navy_admirals"}
+# the full stack against the main terrain's battle width (test_width_stack)
+FORCE_RULES |= {"army.width_stack"}
 THIS_PASS |= FORCE_RULES
 RULE_LINE = re.compile(r"^  ([a-z]+\.[a-z0-9_]+)\s", re.M)  # a rule line of the lint_plan docstring
 EXECUTOR_RULES = {"planning_wait", "supply_floor", "pocket_threshold", "advance_in_bounds",
@@ -1439,6 +1441,19 @@ class TacticsRules(unittest.TestCase):
         f = self.assertHit(self.eth, "army.width_terrain", "warning", "army_layout")
         self.assertIn("Mehal Sefari width 8", f["message"])
         self.assertNotIn("Chitet Sefari", f["message"])  # 12 wide fills 0.98
+
+    def test_width_stack(self):
+        plan = self.plan(templates=[
+            {"id": "w24", "name": "W24", "regiments": [["infantry"] * 3] * 4, "role": "line"},
+            {"id": "garr", "name": "Garr", "regiments": [["infantry"] * 3] * 4, "role": "garrison"}])
+        hits = self.hits(plan, "army.width_stack")
+        self.assertTrue(hits)
+        for f in hits:
+            self.assertIn("full stack", f["message"])
+            self.assertNotIn("garr", f["where"])
+        # a stack cap at the divisions that fit silences it
+        plan["operations"] = [{"id": "op", "stacking": {"max_per_province": 1}}]
+        self.assertNoHit(plan, "army.width_stack")
 
     # -------------------------------------------------------------- war
     def test_supply_floor(self):

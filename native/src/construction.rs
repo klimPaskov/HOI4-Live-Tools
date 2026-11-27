@@ -2,6 +2,7 @@
 //! Semantics consulted: smerss/Clausewitz-MCP calling/game.py (MIT).
 //! Layout/field names independently recovered from constructors, serializers,
 //! keyword initializers and arithmetic; see PROVENANCE.md. No engine calls.
+use crate::xlayout::UNMAPPED;
 mod buildings;
 mod catalog;
 pub mod controls;
@@ -161,25 +162,25 @@ pub(crate) struct Layout {
 }
 /// Linux ELF a4971c9e (libstdc++).
 const LINUX: Layout = Layout {
-    building_line_vtable: 0x439a290,
-    railway_line_vtable: 0x4483a10,
-    building_vtable: 0x4348430,
+    building_line_vtable: 0x43a13d8,
+    railway_line_vtable: 0x448b8e8,
+    building_vtable: 0x434f3f0,
     building_status: 0x1b8,
     building_template: 0x1c0,
-    database_global: 0x4535360,
-    database_vtable: 0x43484a8,
-    template_vtable: 0x4348f98,
-    null_template_vtable: 0x4348678,
+    database_global: 0x453d360,
+    database_vtable: 0x434f468,
+    template_vtable: 0x434ff58,
+    null_template_vtable: 0x434f638,
     template_key: 0x248,
     template_ordinal: 0x2b8,
-    status_vtable: 0x4348d38,
-    state_vtable: 0x43908f8,
+    status_vtable: 0x434fcf8,
+    state_vtable: 0x43979e8,
     state_owner: 0xc8,
     state_controller: 0xcc,
     state_id: 0x48,
     state_status: 0x120,
     state_extra_slots: 0,
-    province_vtable: 0x4390588,
+    province_vtable: 0x4397678,
     province_owner: 0x1a8,
     province_state: 0xe0,
     province_id: 0xa4,
@@ -221,10 +222,41 @@ const MACOS: Layout = Layout {
     gs_states: 0x290,
     line_tail_shift: 8,
 };
+/// Windows: no reviewed layout yet. Every offset and address is past the readable range, so
+/// each read through it fails with `read_bound` instead of reading a guessed place.
+const WINDOWS: Layout = Layout {
+    building_line_vtable: UNMAPPED,
+    railway_line_vtable: UNMAPPED,
+    building_vtable: UNMAPPED,
+    building_status: UNMAPPED,
+    building_template: UNMAPPED,
+    database_global: UNMAPPED,
+    database_vtable: UNMAPPED,
+    template_vtable: UNMAPPED,
+    null_template_vtable: UNMAPPED,
+    template_key: UNMAPPED,
+    template_ordinal: UNMAPPED,
+    status_vtable: UNMAPPED,
+    state_vtable: UNMAPPED,
+    state_owner: UNMAPPED,
+    state_controller: UNMAPPED,
+    state_id: UNMAPPED,
+    state_status: UNMAPPED,
+    state_extra_slots: UNMAPPED,
+    province_vtable: UNMAPPED,
+    province_owner: UNMAPPED,
+    province_state: UNMAPPED,
+    province_id: UNMAPPED,
+    province_status: UNMAPPED,
+    gs_provinces: UNMAPPED,
+    gs_states: UNMAPPED,
+    line_tail_shift: UNMAPPED,
+};
 pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {
         crate::memory::StringAbi::LibStdCxx => &LINUX,
         crate::memory::StringAbi::LibCxx => &MACOS,
+        crate::memory::StringAbi::Msvc => &WINDOWS,
     }
 }
 pub(crate) fn lines_in(

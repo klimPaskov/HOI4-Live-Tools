@@ -65,6 +65,41 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_air_attach": {
+   "description": "Attach own air wings to an army the game's way: each wing is selected alone (its Air Forces Overview row) and the army's card is right-clicked (\"Right-Click to attach Airwings to Army\"). An attached wing flies for that army's battles and follows it. Fighters and close air support attach; naval and strategic bombers and wings in pilot exercises cannot. Read back from memory: the wing's attached-army link must name the army's object after the click (a wing already linked to it is left alone, already:true); the result lists per wing attached and ms. Attaching to another army moves the wing. A wing loaded attached from a save may read unlinked and is then attached again. Refused before input: an unknown army.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "wings": {
+      "items": {
+       "maxLength": 128,
+       "type": "string"
+      },
+      "maxItems": 24,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "wings",
+     "army",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_air_hold": {
    "description": "Stop an own air wing's mission (the toolbar's Hold Air Wings button, shortcut H): the wing keeps its base and stands by (its panel row reads 'Standing by', the Air Forces Overview's Area column empties); its assigned region is cleared, the last mission selection stays in memory. Typed refusals before input: wing_unknown, wing_ambiguous, nothing_to_change (already standing by); hold_unavailable if the game disables the button. Verified from the wing's assigned region pointer in memory.",
    "inputSchema": {
@@ -95,6 +130,10 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "bulk": {
+      "description": "With wings: the bases whose every wing is listed are ordered by one click on the base circle (it selects all its wings), one mission or rebase order for all, read back at the end; the other wings and any the base order missed take the single path in the same call. Off until its live probe passes.",
+      "type": "boolean"
+     },
      "lease_token": {
       "type": "string"
      },
@@ -151,6 +190,10 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "bulk": {
+      "description": "With wings: the bases whose every wing is listed are ordered by one click on the base circle (it selects all its wings), one mission or rebase order for all, read back at the end; the other wings and any the base order missed take the single path in the same call. Off until its live probe passes.",
+      "type": "boolean"
+     },
      "lease_token": {
       "type": "string"
      },
@@ -365,7 +408,7 @@
    "source": "--list-tools"
   },
   "hoi4_armies": {
-   "description": "Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids (unassigned_by_state: per state the ids and shared_with, the armies standing in the same provinces and how many of them each shares). Per army `planning` {mean, min, max} is its divisions' planning bonus (0..1, 0.3 = 30%); it grows while the army holds a front or plan and stops at a cap the game computes from generals, technology and the HQ distance (not stored: a value that has stopped rising has reached it). threat:false skips the threat reads. Per army and per army group `plan` reads every battle-plan order from the game itself (what the battle-plan bar and the map arrows show): kind (front, offensive, fallback, area_defense), id, executing, divisions assigned; for a line its provinces count, its two end provinces, the states along it, the owner's divisions standing on it and the most in one province; per front its offensives with the arrow's states and the target line (provinces, ends, states, i.e. how deep and wide the advance goes); an area defence lists its states. An army inside an army group whose own plan is [] follows the group's orders. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).",
+   "description": "Own armies (name, division ids, division_limit: the divisions its commander leads without penalty, the game's base plus his traits; per army group army_limit: the armies its field marshal leads; threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids (unassigned_by_state: per state the ids and shared_with, the armies standing in the same provinces and how many of them each shares). Per army `planning` {mean, min, max} is its divisions' planning bonus (0..1, 0.3 = 30%); it grows while the army holds a front or plan and stops at a cap the game computes from generals, technology and the HQ distance (not stored: a value that has stopped rising has reached it). threat:false skips the threat reads. Per army and per army group `plan` reads every battle-plan order from the game itself (what the battle-plan bar and the map arrows show): kind (front, offensive, fallback, area_defense), id, executing, divisions assigned; for a line its provinces count, its two end provinces, the states along it, the owner's divisions standing on it and the most in one province; per front its offensives with the arrow's states and the target line (provinces, ends, states, i.e. how deep and wide the advance goes); an area defence lists its states. An army inside an army group whose own plan is [] follows the group's orders. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -387,7 +430,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_area_defense": {
-   "description": "Give an own army an area defence order over own states (the army spreads over them and holds what the order covers): army card, area defence (V), one right-click on each state (Find view first). Verified by new battle-plan orders on the army. `settings` (the order window's toggles: victory_points, ports, coastlines, airbases, borders, forts, rail, facility) is not yet built: refused with not_yet_built; the game's defaults apply.",
+   "description": "Give an own army an area defence order over own states (the army spreads over them and holds what the order covers): army card, area defence (V), one right-click on each state (Find view first). Verified by new battle-plan orders on the army. Refused before input with no_commander when the army has no general (the game takes battle-plan orders only from a led army). `settings` (the order window's toggles: victory_points, ports, coastlines, airbases, borders, forts, rail, facility) is not yet built: refused with not_yet_built; the game's defaults apply.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -1010,7 +1053,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_rename": {
-   "description": "Rename an own army with the game's own control: the army's card selects it, its badge's name box takes a click, the old name is erased and the new one typed key by key (each key verified in the box), then Return. Verified when the army carries the new name. `army` may be the army's name or its plan role (army_layout name_hint). Refused before input with army_unknown, name_taken (another army or army group has it) or name_not_typable (letters, digits, space and - _ . , / ' ( ), at most 24 characters).",
+   "description": "Rename an own army with the game's own control: the army's card selects it, its badge's name box takes a click, the old name is erased and the new one typed key by key (each key verified in the box), then Return. Verified when the army carries the new name. `army` may be the army's name or its plan role (army_layout name_hint). Refused before input with army_unknown, name_taken (another army or army group has it) or name_not_typable (letters, digits, space and - _ . , / ' ( ), at most 20 characters: the game keeps no more).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -1022,7 +1065,7 @@
       "type": "string"
      },
      "name": {
-      "maxLength": 24,
+      "maxLength": 20,
       "minLength": 1,
       "type": "string"
      },
@@ -1184,11 +1227,18 @@
       "maxLength": 64,
       "type": "string"
      },
+     "bulk": {
+      "type": "boolean"
+     },
      "count": {
       "default": 1,
       "maximum": 10,
       "minimum": 1,
       "type": "integer"
+     },
+     "fill": {
+      "description": "With bulk: count is every free slot of the building in the state: the first click is the game's Shift+Click (build the maximum amount), read back from the queue; plain clicks finish the count when the game took it as one.",
+      "type": "boolean"
      },
      "lease_token": {
       "type": "string"
@@ -3272,6 +3322,15 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "auto": {
+      "description": "in the same visit, queue the first open (enabled, visible, not held) traits until this many enabled traits wait in the queue; with trait_indices they come after those",
+      "maximum": 5,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "bulk": {
+      "type": "boolean"
+     },
      "lease_token": {
       "type": "string"
      },
@@ -3294,6 +3353,17 @@
       "maximum": 63,
       "minimum": 0,
       "type": "integer"
+     },
+     "trait_indices": {
+      "description": "several traits queued in order in ONE visit of the tree window (the game's completion queue unlocks them as points come); each read back from its queue number; an already queued trait counts as reached; refused ones are listed in the receipt (unchanged)",
+      "items": {
+       "maximum": 63,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "type": "array"
      }
     },
     "required": [
@@ -3973,6 +4043,10 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "bulk": {
+      "description": "Factories by the game's Ctrl+Click (+5) and Shift+Click (+10) steps, each read back; a chord the game does not take falls back to single clicks. Off until its live probe passes.",
+      "type": "boolean"
+     },
      "design": {
       "anyOf": [
        {
@@ -4106,10 +4180,14 @@
    "source": "--list-tools"
   },
   "hoi4_production_set": {
-   "description": "factories 0 removes the line (its close button). Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons; each click is verified from memory. 0 keeps the line with no factories.",
+   "description": "factories 0 removes the line (its close button). Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons (bulk: Ctrl +5 and Shift +10 clicks); each click is verified from memory. 0 keeps the line with no factories.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "bulk": {
+      "description": "Factories by the game's Ctrl+Click (+5) and Shift+Click (+10) steps, each read back; a chord the game does not take falls back to single clicks. Off until its live probe passes.",
+      "type": "boolean"
+     },
      "equipment": {
       "maxLength": 128,
       "type": "string"
@@ -4397,7 +4475,7 @@
    "source": "--list-tools"
   },
   "hoi4_save": {
-   "description": "Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games. Use it at the end of a campaign segment so the next launch continues exactly from this point (no turns are replayed). The game stays paused if it was paused.",
+   "description": "Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games. Use it at the end of a campaign segment so the next launch continues exactly from this point (no turns are replayed). The game stays paused if it was paused; a game that was running is unpaused again after the save (resumed:true).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {

@@ -1,0 +1,2463 @@
+{
+ "image": {
+  "0x34ac5f8": {
+   "kind": "vtable",
+   "rtti": "8CAirWing",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCAirWing@@"
+   ]
+  },
+  "0x34ac6c0": {
+   "kind": "vtable",
+   "rtti": "12CAirWingPool",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCAirWingPool@@"
+   ]
+  },
+  "0x34ace60": {
+   "kind": "vtable",
+   "rtti": "5CArmy",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCArmy@@"
+   ]
+  },
+  "0x34b0ab0": {
+   "kind": "vtable",
+   "rtti": "14CLandCombatant",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCLandCombatant@@"
+   ]
+  },
+  "0x34b0bd8": {
+   "kind": "vtable",
+   "rtti": "11CLandCombat",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCLandCombat@@"
+   ]
+  },
+  "0x34b1930": {
+   "kind": "vtable",
+   "rtti": "14CCombatManager",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCombatManager@@"
+   ]
+  },
+  "0x34b1b90": {
+   "kind": "vtable",
+   "rtti": "13CCombatTactic",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCombatTactic@@"
+   ]
+  },
+  "0x34b2928": {
+   "kind": "vtable",
+   "rtti": "18CCountryFuelStatus",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryFuelStatus@@"
+   ]
+  },
+  "0x34bd248": {
+   "kind": "vtable",
+   "rtti": "24CCountryOccupationStatus",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryOccupationStatus@@"
+   ]
+  },
+  "0x34fb310": {
+   "kind": "vtable",
+   "rtti": "21CDivisionTemplateData",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCDivisionTemplateData@@"
+   ]
+  },
+  "0x34fb370": {
+   "kind": "vtable",
+   "rtti": "27CReferencedDivisionTemplate",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCReferencedDivisionTemplate@@"
+   ]
+  },
+  "0x34fbb48": {
+   "kind": "vtable",
+   "rtti": "6CEvent",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCEvent@@"
+   ]
+  },
+  "0x34fc2e8": {
+   "kind": "vtable",
+   "rtti": "6CFleet",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCFleet@@"
+   ]
+  },
+  "0x35044e8": {
+   "kind": "vtable",
+   "rtti": "17CCurrentGameState",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCurrentGameState@@"
+   ]
+  },
+  "0x35089d8": {
+   "kind": "vtable",
+   "rtti": "12CInGameIdler",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCInGameIdler@@"
+   ]
+  },
+  "0x350ad90": {
+   "kind": "vtable",
+   "rtti": "16CCountryManpower",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryManpower@@"
+   ]
+  },
+  "0x350cdc0": {
+   "kind": "vtable",
+   "rtti": "9CModifier",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCModifier@@"
+   ]
+  },
+  "0x35105d0": {
+   "kind": "vtable",
+   "rtti": "14COccupationLaw",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCOccupationLaw@@"
+   ]
+  },
+  "0x3512bf0": {
+   "kind": "vtable",
+   "rtti": "14COrderInstance",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCOrderInstance@@"
+   ]
+  },
+  "0x3516b78": {
+   "kind": "vtable",
+   "rtti": "12COrdersGroup",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCOrdersGroup@@"
+   ]
+  },
+  "0x3518868": {
+   "kind": "vtable",
+   "rtti": "11CResistance",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCResistance@@"
+   ]
+  },
+  "0x3519a20": {
+   "kind": "vtable",
+   "rtti": "5CShip",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCShip@@"
+   ]
+  },
+  "0x3519c88": {
+   "kind": "vtable",
+   "rtti": "20CCountryAirContainer",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryAirContainer@@"
+   ]
+  },
+  "0x3519d08": {
+   "kind": "vtable",
+   "rtti": "8CAirBase",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCAirBase@@"
+   ]
+  },
+  "0x3519d70": {
+   "kind": "vtable",
+   "rtti": "13CStrategicAir",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCStrategicAir@@"
+   ]
+  },
+  "0x351cf18": {
+   "kind": "vtable",
+   "rtti": "10CNavalBase",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCNavalBase@@"
+   ]
+  },
+  "0x351e438": {
+   "kind": "vtable",
+   "rtti": "18CStrategicResource",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCStrategicResource@@"
+   ]
+  },
+  "0x351e498": {
+   "kind": "vtable",
+   "rtti": "22CStrategicResourcePool",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCStrategicResourcePool@@"
+   ]
+  },
+  "0x351e5e0": {
+   "kind": "vtable",
+   "rtti": "26CStrategicResourceDatabase",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCStrategicResourceDatabase@@"
+   ]
+  },
+  "0x351e958": {
+   "kind": "vtable",
+   "rtti": "18CSubUnitDefinition",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCSubUnitDefinition@@"
+   ]
+  },
+  "0x351f208": {
+   "kind": "vtable",
+   "rtti": "10CTaskForce",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCTaskForce@@"
+   ]
+  },
+  "0x351fe78": {
+   "kind": "vtable",
+   "rtti": "12CTerrainType",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCTerrainType@@"
+   ]
+  },
+  "0x3525bf8": {
+   "kind": "vtable",
+   "rtti": "8CWarGoal",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCWarGoal@@"
+   ]
+  },
+  "0x352ee30": {
+   "kind": "vtable",
+   "rtti": "9CBuilding",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCBuilding@@"
+   ]
+  },
+  "0x352f828": {
+   "kind": "vtable",
+   "rtti": "15CBuildingStatus",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCBuildingStatus@@"
+   ]
+  },
+  "0x352fa88": {
+   "kind": "vtable",
+   "rtti": "17CBuildingTemplate",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCBuildingTemplate@@"
+   ]
+  },
+  "0x3530150": {
+   "kind": "vtable",
+   "rtti": "10CCharacter",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCharacter@@"
+   ]
+  },
+  "0x3530728": {
+   "kind": "vtable",
+   "rtti": "18CCountryCharacters",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryCharacters@@"
+   ]
+  },
+  "0x3530f20": {
+   "kind": "vtable",
+   "rtti": "10CScientist",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCScientist@@"
+   ]
+  },
+  "0x3531290": {
+   "kind": "vtable",
+   "rtti": "15CScientistTrait",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCScientistTrait@@"
+   ]
+  },
+  "0x353e188": {
+   "kind": "vtable",
+   "rtti": "N9NFactions8CFactionE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCFaction@NFactions@@"
+   ]
+  },
+  "0x3540478": {
+   "kind": "vtable",
+   "rtti": "N9NFactions14CFactionSystemE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCFactionSystem@NFactions@@"
+   ]
+  },
+  "0x3544048": {
+   "kind": "vtable",
+   "rtti": "16CAutonomousState",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCAutonomousState@@"
+   ]
+  },
+  "0x3544268": {
+   "kind": "vtable",
+   "rtti": "16CDiplomacyStatus",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCDiplomacyStatus@@"
+   ]
+  },
+  "0x354a170": {
+   "kind": "vtable",
+   "rtti": "12CWarRelation",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCWarRelation@@"
+   ]
+  },
+  "0x354aa60": {
+   "kind": "vtable",
+   "rtti": "16CSubjectRelation",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCSubjectRelation@@"
+   ]
+  },
+  "0x354b628": {
+   "kind": "vtable",
+   "rtti": "12CWorldThreat",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCWorldThreat@@"
+   ]
+  },
+  "0x354e610": {
+   "kind": "vtable",
+   "rtti": "N10NDoctrines20CCountryDoctrineViewE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryDoctrineView@NDoctrines@@"
+   ]
+  },
+  "0x354e920": {
+   "kind": "vtable",
+   "rtti": "N10NDoctrines22CDoctrineSelectionListE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCDoctrineSelectionList@NDoctrines@@"
+   ]
+  },
+  "0x357bad8": {
+   "kind": "vtable",
+   "rtti": "14CEquipmentType",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCEquipmentType@@"
+   ]
+  },
+  "0x357ccd8": {
+   "kind": "vtable",
+   "rtti": "16CEquipmentModule",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCEquipmentModule@@"
+   ]
+  },
+  "0x357ce80": {
+   "kind": "vtable",
+   "rtti": "20CEquipmentModuleSlot",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCEquipmentModuleSlot@@"
+   ]
+  },
+  "0x357cef8": {
+   "kind": "vtable",
+   "rtti": "21CEquipmentVariantPool",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCEquipmentVariantPool@@"
+   ]
+  },
+  "0x357d1b8": {
+   "kind": "vtable",
+   "rtti": "17CEquipmentVariant",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCEquipmentVariant@@"
+   ]
+  },
+  "0x357e388": {
+   "kind": "vtable",
+   "rtti": "8CCountry",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountry@@"
+   ]
+  },
+  "0x357f020": {
+   "kind": "vtable",
+   "rtti": "9CProvince",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProvince@@"
+   ]
+  },
+  "0x357f410": {
+   "kind": "vtable",
+   "rtti": "6CState",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCState@@"
+   ]
+  },
+  "0x3587fd0": {
+   "kind": "vtable",
+   "rtti": "12CWarGoalType",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCWarGoalType@@"
+   ]
+  },
+  "0x35882b8": {
+   "kind": "vtable",
+   "rtti": "5CIdea",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCIdea@@"
+   ]
+  },
+  "0x3589e48": {
+   "kind": "vtable",
+   "rtti": "16CPoliticalStatus",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCPoliticalStatus@@"
+   ]
+  },
+  "0x358a268": {
+   "kind": "vtable",
+   "rtti": "13CPowerBalance",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCPowerBalance@@"
+   ]
+  },
+  "0x358a2c8": {
+   "kind": "vtable",
+   "rtti": "19CPowerBalanceSystem",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCPowerBalanceSystem@@"
+   ]
+  },
+  "0x358a5b8": {
+   "kind": "vtable",
+   "rtti": "21CPowerBalanceTemplate",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCPowerBalanceTemplate@@"
+   ]
+  },
+  "0x358a6a0": {
+   "kind": "vtable",
+   "rtti": "18CPowerBalanceRange",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCPowerBalanceRange@@"
+   ]
+  },
+  "0x358a750": {
+   "kind": "vtable",
+   "rtti": "17CPowerBalanceSide",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCPowerBalanceSide@@"
+   ]
+  },
+  "0x358c220": {
+   "kind": "vtable",
+   "rtti": "N23NIndustrialOrganisation21COrganisationDatabaseE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCOrganisationDatabase@NIndustrialOrganisation@@"
+   ]
+  },
+  "0x358c418": {
+   "kind": "vtable",
+   "rtti": "N23NIndustrialOrganisation11CTraitBonusE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCTraitBonus@NIndustrialOrganisation@@"
+   ]
+  },
+  "0x358ca80": {
+   "kind": "vtable",
+   "rtti": "23CMilitaryProductionLine",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCMilitaryProductionLine@@"
+   ]
+  },
+  "0x358cc00": {
+   "kind": "vtable",
+   "rtti": "20CNavalProductionLine",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCNavalProductionLine@@"
+   ]
+  },
+  "0x358ce80": {
+   "kind": "vtable",
+   "rtti": "15CProductionLine",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProductionLine@@"
+   ]
+  },
+  "0x358d580": {
+   "kind": "vtable",
+   "rtti": "22CConsumerGoodsConsumer",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCConsumerGoodsConsumer@@"
+   ]
+  },
+  "0x358d850": {
+   "kind": "vtable",
+   "rtti": "17CDeploymentStatus",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCDeploymentStatus@@"
+   ]
+  },
+  "0x358dff8": {
+   "kind": "vtable",
+   "rtti": "27CMilitaryDeploymentConveyor",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCMilitaryDeploymentConveyor@@"
+   ]
+  },
+  "0x358e0c8": {
+   "kind": "vtable",
+   "rtti": "17CProductionStatus",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProductionStatus@@"
+   ]
+  },
+  "0x358e878": {
+   "kind": "vtable",
+   "rtti": "23CProductionResourceCost",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProductionResourceCost@@"
+   ]
+  },
+  "0x358ff80": {
+   "kind": "vtable",
+   "rtti": "38CGenericDefaultConfirmationPopUpWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCGenericDefaultConfirmationPopUpWindow@@"
+   ]
+  },
+  "0x359c918": {
+   "kind": "vtable",
+   "rtti": "N8NProject8CProgramE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProgram@NProject@@"
+   ]
+  },
+  "0x359ca08": {
+   "kind": "vtable",
+   "rtti": "N8NProject8CProjectE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProject@NProject@@"
+   ]
+  },
+  "0x359d7f8": {
+   "kind": "vtable",
+   "rtti": "N8NProject16CProjectTemplateE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProjectTemplate@NProject@@"
+   ]
+  },
+  "0x359f820": {
+   "kind": "vtable",
+   "rtti": "N8NProject15SProjectHistoryE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVSProjectHistory@NProject@@"
+   ]
+  },
+  "0x359f8b0": {
+   "kind": "vtable",
+   "rtti": "N8NProject12CProjectPoolE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProjectPool@NProject@@"
+   ]
+  },
+  "0x359f990": {
+   "kind": "vtable",
+   "rtti": "N8NProject19CSimpleProjectStateE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCSimpleProjectState@NProject@@"
+   ]
+  },
+  "0x359fa60": {
+   "kind": "vtable",
+   "rtti": "N8NProject20CProjectStateMachineE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProjectStateMachine@NProject@@"
+   ]
+  },
+  "0x359fdb0": {
+   "kind": "vtable",
+   "rtti": "N8NProject14CProgramStatusE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProgramStatus@NProject@@"
+   ]
+  },
+  "0x35a0300": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi18CFacilitiesTabViewE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCFacilitiesTabView@NUi@NProject@@"
+   ]
+  },
+  "0x35a1018": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi12CProgramItemE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProgramItem@NUi@NProject@@"
+   ]
+  },
+  "0x35a1970": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi14CScientistItemE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCScientistItem@NUi@NProject@@"
+   ]
+  },
+  "0x35a1b08": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi16CScientistRosterE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCScientistRoster@NUi@NProject@@"
+   ]
+  },
+  "0x35a1cb8": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi12CProgramViewE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProgramView@NUi@NProject@@"
+   ]
+  },
+  "0x35a2910": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi12CProjectItemE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProjectItem@NUi@NProject@@"
+   ]
+  },
+  "0x35a3908": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi23CRecruitScientistWindowE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCRecruitScientistWindow@NUi@NProject@@"
+   ]
+  },
+  "0x35a4000": {
+   "kind": "vtable",
+   "rtti": "20CCountrySupplySystem",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountrySupplySystem@@"
+   ]
+  },
+  "0x35a4748": {
+   "kind": "vtable",
+   "rtti": "20CProvinceRailwayInfo",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProvinceRailwayInfo@@"
+   ]
+  },
+  "0x35a47a8": {
+   "kind": "vtable",
+   "rtti": "15CRailwayManager",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCRailwayManager@@"
+   ]
+  },
+  "0x35a4838": {
+   "kind": "vtable",
+   "rtti": "13CSupplySystem",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCSupplySystem@@"
+   ]
+  },
+  "0x35a8b50": {
+   "kind": "vtable",
+   "rtti": "17CCountryResources",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryResources@@"
+   ]
+  },
+  "0x35d8db0": {
+   "kind": "vtable",
+   "rtti": "11CArmyLeader",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCArmyLeader@@"
+   ]
+  },
+  "0x35e5c88": {
+   "kind": "vtable",
+   "rtti": "12CEventWindow",
+   "status": "unresolved",
+   "notes": [
+    "secondary vtable"
+   ]
+  },
+  "0x35e77d8": {
+   "kind": "vtable",
+   "rtti": "15CAirBaseMapIcon",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCAirBaseMapIcon@@"
+   ]
+  },
+  "0x360b170": {
+   "kind": "vtable",
+   "rtti": "24CEquipmentModuleSlotView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCEquipmentModuleSlotView@@"
+   ]
+  },
+  "0x360b818": {
+   "kind": "vtable",
+   "rtti": "22CEquipmentDesignerView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCEquipmentDesignerView@@"
+   ]
+  },
+  "0x360db18": {
+   "kind": "vtable",
+   "rtti": "21CEquipmentModuleEntry",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCEquipmentModuleEntry@@"
+   ]
+  },
+  "0x36106d8": {
+   "kind": "vtable",
+   "rtti": "24CNationalFocusInfoWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCNationalFocusInfoWindow@@"
+   ]
+  },
+  "0x3611108": {
+   "kind": "vtable",
+   "rtti": "22CNationalFocusTreeItem",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCNationalFocusTreeItem@@"
+   ]
+  },
+  "0x3611298": {
+   "kind": "vtable",
+   "rtti": "18CNationalFocusView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCNationalFocusView@@"
+   ]
+  },
+  "0x3613100": {
+   "kind": "vtable",
+   "rtti": "N20NInternationalMarket31CCountryInternationalMarketViewE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryInternationalMarketView@NInternationalMarket@@"
+   ]
+  },
+  "0x36208e0": {
+   "kind": "vtable",
+   "rtti": "24COperationOverviewWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCOperationOverviewWindow@@"
+   ]
+  },
+  "0x3621f70": {
+   "kind": "vtable",
+   "rtti": "26CAgencyLogoSelectionWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCAgencyLogoSelectionWindow@@"
+   ]
+  },
+  "0x3622a70": {
+   "kind": "vtable",
+   "rtti": "21CAgencyUpgradesWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCAgencyUpgradesWindow@@"
+   ]
+  },
+  "0x36249c0": {
+   "kind": "vtable",
+   "rtti": "30CCountryIntelligenceAgencyView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryIntelligenceAgencyView@@"
+   ]
+  },
+  "0x36257e8": {
+   "kind": "vtable",
+   "rtti": "19COperativeBottomBar",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCOperativeBottomBar@@"
+   ]
+  },
+  "0x3626830": {
+   "kind": "vtable",
+   "rtti": "18COperativeOrderBar",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCOperativeOrderBar@@"
+   ]
+  },
+  "0x362a5b8": {
+   "kind": "vtable",
+   "rtti": "22CPeaceConferenceWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCPeaceConferenceWindow@@"
+   ]
+  },
+  "0x362cd98": {
+   "kind": "vtable",
+   "rtti": "N23NIndustrialOrganisation21COrganisationListItemE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCOrganisationListItem@NIndustrialOrganisation@@"
+   ]
+  },
+  "0x362d5b0": {
+   "kind": "vtable",
+   "rtti": "N23NIndustrialOrganisation23COrganisationListWindowE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCOrganisationListWindow@NIndustrialOrganisation@@"
+   ]
+  },
+  "0x362de58": {
+   "kind": "vtable",
+   "rtti": "N23NIndustrialOrganisation13CPolicyWindowE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCPolicyWindow@NIndustrialOrganisation@@"
+   ]
+  },
+  "0x362e210": {
+   "kind": "vtable",
+   "rtti": "N23NIndustrialOrganisation35COpenRosterButtonForPoliticalScreenE",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCOpenRosterButtonForPoliticalScreen@NIndustrialOrganisation@@"
+   ]
+  },
+  "0x362e238": {
+   "kind": "vtable",
+   "rtti": "N23NIndustrialOrganisation35COpenRosterButtonForPoliticalScreenE",
+   "status": "unresolved",
+   "notes": [
+    "secondary vtable"
+   ]
+  },
+  "0x3632080": {
+   "kind": "vtable",
+   "rtti": "21CTechnologyInfoWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCTechnologyInfoWindow@@"
+   ]
+  },
+  "0x3633588": {
+   "kind": "vtable",
+   "rtti": "23CTechnologyTreeTechItem",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCTechnologyTreeTechItem@@"
+   ]
+  },
+  "0x3633a80": {
+   "kind": "vtable",
+   "rtti": "17CResearchSlotItem",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCResearchSlotItem@@"
+   ]
+  },
+  "0x363b690": {
+   "kind": "vtable",
+   "rtti": "20CAcceptCommandDialog",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCAcceptCommandDialog@@"
+   ]
+  },
+  "0x363d530": {
+   "kind": "vtable",
+   "rtti": "11CArmiesView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCArmiesView@@"
+   ]
+  },
+  "0x363d598": {
+   "kind": "vtable",
+   "rtti": "14CArmyBadgeView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCArmyBadgeView@@"
+   ]
+  },
+  "0x363d5c0": {
+   "kind": "vtable",
+   "rtti": "21CArmyDivisionListView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCArmyDivisionListView@@"
+   ]
+  },
+  "0x363d658": {
+   "kind": "vtable",
+   "rtti": "17CArmyDivisionView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCArmyDivisionView@@"
+   ]
+  },
+  "0x3643990": {
+   "kind": "vtable",
+   "rtti": "24CChangeGroupLeaderDialog",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCChangeGroupLeaderDialog@@"
+   ]
+  },
+  "0x3643ac0": {
+   "kind": "vtable",
+   "rtti": "23CChangeNavyLeaderDialog",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCChangeNavyLeaderDialog@@"
+   ]
+  },
+  "0x3647398": {
+   "kind": "vtable",
+   "rtti": "36CCountryConstructionViewBuildingItem",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryConstructionViewBuildingItem@@"
+   ]
+  },
+  "0x364a878": {
+   "kind": "vtable",
+   "rtti": "22CCountryDeploymentView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryDeploymentView@@"
+   ]
+  },
+  "0x364aa18": {
+   "kind": "vtable",
+   "rtti": "21CCountryDiplomacyView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryDiplomacyView@@"
+   ]
+  },
+  "0x36511f0": {
+   "kind": "vtable",
+   "rtti": "20CCountryPoliticsView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryPoliticsView@@"
+   ]
+  },
+  "0x36634f0": {
+   "kind": "vtable",
+   "rtti": "29CEquipmentUpgradeDesignerView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCEquipmentUpgradeDesignerView@@"
+   ]
+  },
+  "0x3663518": {
+   "kind": "vtable",
+   "rtti": "31CEquipmentUpgradeDesignerWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCEquipmentUpgradeDesignerWindow@@"
+   ]
+  },
+  "0x3665308": {
+   "kind": "vtable",
+   "rtti": "9CFindView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCFindView@@"
+   ]
+  },
+  "0x3670a20": {
+   "kind": "vtable",
+   "rtti": "16CLeaderGroupView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCLeaderGroupView@@"
+   ]
+  },
+  "0x367efa0": {
+   "kind": "vtable",
+   "rtti": "18CPoliticalIdeaItem",
+   "status": "unresolved",
+   "notes": [
+    "secondary vtable"
+   ]
+  },
+  "0x367f050": {
+   "kind": "vtable",
+   "rtti": "28CPoliticalSelectableIdeaItem",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCPoliticalSelectableIdeaItem@@"
+   ]
+  },
+  "0x367f210": {
+   "kind": "vtable",
+   "rtti": "26CPoliticsIdeaCategoryEntry",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCPoliticsIdeaCategoryEntry@@"
+   ]
+  },
+  "0x3680170": {
+   "kind": "vtable",
+   "rtti": "28CResearchFinishedPopUpWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCResearchFinishedPopUpWindow@@"
+   ]
+  },
+  "0x3680288": {
+   "kind": "vtable",
+   "rtti": "31CIntelAgencyFinishedPopUpWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCIntelAgencyFinishedPopUpWindow@@"
+   ]
+  },
+  "0x36803a0": {
+   "kind": "vtable",
+   "rtti": "34CSpecialProjectFinishedPopUpWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCSpecialProjectFinishedPopUpWindow@@"
+   ]
+  },
+  "0x36804b8": {
+   "kind": "vtable",
+   "rtti": "34CSpecialProjectCapturedPopUpWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCSpecialProjectCapturedPopUpWindow@@"
+   ]
+  },
+  "0x36805d0": {
+   "kind": "vtable",
+   "rtti": "24CConfirmationPopUpWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCConfirmationPopUpWindow@@"
+   ]
+  },
+  "0x36806e8": {
+   "kind": "vtable",
+   "rtti": "25CFocusFinishedPopUpWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCFocusFinishedPopUpWindow@@"
+   ]
+  },
+  "0x3680800": {
+   "kind": "vtable",
+   "rtti": "24CPeaceSummaryPopUpWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCPeaceSummaryPopUpWindow@@"
+   ]
+  },
+  "0x3685b58": {
+   "kind": "vtable",
+   "rtti": "26CProductionEquipmentWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProductionEquipmentWindow@@"
+   ]
+  },
+  "0x3686b08": {
+   "kind": "vtable",
+   "rtti": "27CProductionLineMilitaryItem",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProductionLineMilitaryItem@@"
+   ]
+  },
+  "0x3686c50": {
+   "kind": "vtable",
+   "rtti": "24CProductionLineNavalItem",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCProductionLineNavalItem@@"
+   ]
+  },
+  "0x368b8a8": {
+   "kind": "vtable",
+   "rtti": "30CReassignFullOrdersGroupDialog",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCReassignFullOrdersGroupDialog@@"
+   ]
+  },
+  "0x3695460": {
+   "kind": "vtable",
+   "rtti": "23CSurrenderedPopupWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCSurrenderedPopupWindow@@"
+   ]
+  },
+  "0x3697918": {
+   "kind": "vtable",
+   "rtti": "7CTopBar",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCTopBar@@"
+   ]
+  },
+  "0x3698030": {
+   "kind": "vtable",
+   "rtti": "17CTradeOfferWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCTradeOfferWindow@@"
+   ]
+  },
+  "0x369bd60": {
+   "kind": "vtable",
+   "rtti": "33COperativeLeaderRecruitmentWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCOperativeLeaderRecruitmentWindow@@"
+   ]
+  },
+  "0x369beb0": {
+   "kind": "vtable",
+   "rtti": "34COperativeLeaderForOperationWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCOperativeLeaderForOperationWindow@@"
+   ]
+  },
+  "0x36a1f88": {
+   "kind": "vtable",
+   "rtti": "24CWorldTensionPopUpWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCWorldTensionPopUpWindow@@"
+   ]
+  },
+  "0x36a2a78": {
+   "kind": "vtable",
+   "rtti": "27CCountryArmyOfficerCorpView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryArmyOfficerCorpView@@"
+   ]
+  },
+  "0x36a40e8": {
+   "kind": "vtable",
+   "rtti": "30CCountryCharacterSelectionItem",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCountryCharacterSelectionItem@@"
+   ]
+  },
+  "0x36a4d00": {
+   "kind": "vtable",
+   "rtti": "27CCommandStructureLeaderView",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCCommandStructureLeaderView@@"
+   ]
+  },
+  "0x36b6880": {
+   "kind": "vtable",
+   "rtti": "5CIcon",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCIcon@@"
+   ]
+  },
+  "0x36b9738": {
+   "kind": "vtable",
+   "rtti": "15CButtonStandard",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCButtonStandard@@"
+   ]
+  },
+  "0x36ba978": {
+   "kind": "vtable",
+   "rtti": "16CContainerWindow",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCContainerWindow@@"
+   ]
+  },
+  "0x36bc6a0": {
+   "kind": "vtable",
+   "rtti": "8CEditBox",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCEditBox@@"
+   ]
+  },
+  "0x36c04b8": {
+   "kind": "vtable",
+   "rtti": "18CInstantTextObject",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCInstantTextObject@@"
+   ]
+  },
+  "0x36cbb20": {
+   "kind": "vtable",
+   "rtti": "14CSmoothListbox",
+   "status": "unresolved",
+   "notes": [
+    "secondary vtable"
+   ]
+  },
+  "0x36cc528": {
+   "kind": "vtable",
+   "rtti": "7CSprite",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCSprite@@"
+   ]
+  },
+  "0x36cca80": {
+   "kind": "vtable",
+   "rtti": "16CStandardGridBox",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCStandardGridBox@@"
+   ]
+  },
+  "0x36cee08": {
+   "kind": "vtable",
+   "rtti": "11CTextSprite",
+   "status": "mapped",
+   "confidence": "high",
+   "notes": [
+    "MSVC RTTI .?AVCTextSprite@@"
+   ]
+  },
+  "0x3704b10": {
+   "kind": "other",
+   "status": "unresolved",
+   "notes": [
+    "not a vtable: needs PE code matching"
+   ]
+  },
+  "0x3705890": {
+   "kind": "other",
+   "status": "unresolved",
+   "notes": [
+    "not a vtable: needs PE code matching"
+   ]
+  },
+  "0x37058c0": {
+   "kind": "other",
+   "status": "unresolved",
+   "notes": [
+    "not a vtable: needs PE code matching"
+   ]
+  },
+  "0x3705fe0": {
+   "kind": "other",
+   "status": "unresolved",
+   "notes": [
+    "not a vtable: needs PE code matching"
+   ]
+  },
+  "0x371dae8": {
+   "kind": "other",
+   "status": "unresolved",
+   "notes": [
+    "not a vtable: needs PE code matching"
+   ]
+  },
+  "0x371daf8": {
+   "kind": "other",
+   "status": "unresolved",
+   "notes": [
+    "not a vtable: needs PE code matching"
+   ]
+  },
+  "0x372bec0": {
+   "kind": "other",
+   "status": "unresolved",
+   "notes": [
+    "not a vtable: needs PE code matching"
+   ]
+  },
+  "0x372c530": {
+   "kind": "other",
+   "status": "unresolved",
+   "notes": [
+    "not a vtable: needs PE code matching"
+   ]
+  }
+ },
+ "classes": {},
+ "summary": {
+  "image_keys": 176,
+  "image_mapped": 164,
+  "field_keys": 617,
+  "field_keys_mapped": 0,
+  "modules": 53,
+  "modules_enabled": 0
+ },
+ "target": {
+  "file": "hoi4.exe",
+  "sha256": "1beb2a38fe2d747e5b7adb9b9648e350b0b851845dd228ffb87d2d2ac1b63a9f",
+  "size": 56556664,
+  "system": "windows",
+  "format": "pe",
+  "build_id": "3A4878DC2F3A481EA5375E5943C5541C1",
+  "machine": "0x8664",
+  "game_version": "1.20.0.0",
+  "version_label": "Operation Postern v1.20.0.0.8873 (0c4f)",
+  "canonical": false
+ },
+ "modules": {
+  "gui_tree.rs": {
+   "keys": 19,
+   "mapped": 2,
+   "enabled": false,
+   "missing": [
+    "CButtonStandard+0x9c",
+    "CButtonStandard+0xe0",
+    "CContainerWindow+0x1390",
+    "CContainerWindow+0x13d8",
+    "CContainerWindow+0x30",
+    "CContainerWindow+0x88",
+    "CContainerWindow+0x95",
+    "CContainerWindow+0xe50",
+    "CSprite+0x34",
+    "CSprite+0x8",
+    "CSprite+0xb0",
+    "gui.object+0x50"
+   ]
+  },
+  "launch/macos/agency_act.rs": {
+   "keys": 30,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CInGameIdler+0x4c0",
+    "CInGameIdler+0x540",
+    "CInGameIdler+0x670",
+    "CInGameIdler+0x718",
+    "CTopBar+0x68",
+    "idler.manager+0x108",
+    "idler.manager+0x110",
+    "idler.manager+0x120",
+    "idler.manager+0x128",
+    "idler.manager+0x130",
+    "idler.manager+0x138",
+    "idler.manager+0x140"
+   ]
+  },
+  "launch/macos/air.rs": {
+   "keys": 52,
+   "mapped": 1,
+   "enabled": false,
+   "missing": [
+    "CContainerWindow+0x1390",
+    "CContainerWindow+0x13d8",
+    "CContainerWindow+0x30",
+    "CContainerWindow+0x88",
+    "CContainerWindow+0x95",
+    "CContainerWindow+0xe50",
+    "CIcon+0x184",
+    "CIcon+0xd8",
+    "CIcon+0xfc",
+    "CInGameIdler+0x4c0",
+    "CInGameIdler+0x540",
+    "CInGameIdler+0x670"
+   ]
+  },
+  "launch/macos/airread.rs": {
+   "keys": 17,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CAirBase+0x48",
+    "CAirBase+0x68",
+    "CAirBase+0x70",
+    "CAirBase+0x78",
+    "CAirBase+0xc",
+    "CAirWing+0x1e8",
+    "CAirWing+0x320",
+    "CAirWing+0x44",
+    "CAirWing+0x74",
+    "CAirWing+0x78",
+    "CAirWing+0x938",
+    "CAirWing+0x98"
+   ]
+  },
+  "launch/macos/airui.rs": {
+   "keys": 33,
+   "mapped": 2,
+   "enabled": false,
+   "missing": [
+    "0x372c530",
+    "CAirBaseMapIcon+0x10",
+    "CAirBaseMapIcon+0x48",
+    "CAirWing+0x1e8",
+    "CAirWing+0x320",
+    "CAirWing+0x44",
+    "CAirWing+0x74",
+    "CAirWing+0x78",
+    "CAirWing+0x938",
+    "CAirWing+0x98",
+    "CAirWing+0xb8",
+    "CContainerWindow+0x1390"
+   ]
+  },
+  "launch/macos/alerts.rs": {
+   "keys": 35,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CButtonStandard+0x9c",
+    "CButtonStandard+0xe0",
+    "CInGameIdler+0x4c0",
+    "CInGameIdler+0x540",
+    "CInGameIdler+0x670",
+    "CInGameIdler+0x718",
+    "CSprite+0x34",
+    "CSprite+0x8",
+    "CSprite+0xb0",
+    "CTopBar+0x68",
+    "idler.manager+0x108",
+    "idler.manager+0x110"
+   ]
+  },
+  "launch/macos/armies.rs": {
+   "keys": 110,
+   "mapped": 6,
+   "enabled": false,
+   "missing": [
+    "CArmiesView+0x480",
+    "CArmiesView+0x488",
+    "CArmy+0x18",
+    "CArmy+0x1d8",
+    "CArmy+0x1f0",
+    "CArmy+0x2ac",
+    "CArmy+0x30",
+    "CArmy+0x348",
+    "CArmy+0x360",
+    "CArmy+0x3b0",
+    "CArmy+0x40",
+    "CArmy+0x418"
+   ]
+  },
+  "launch/macos/armies/mode.rs": {
+   "keys": 3,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CSprite+0x34",
+    "CSprite+0x8",
+    "CSprite+0xb0"
+   ]
+  },
+  "launch/macos/armies/orders.rs": {
+   "keys": 8,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "COrderInstance+0x1c8",
+    "COrderInstance+0x1e0",
+    "COrderInstance+0x214",
+    "COrderInstance+0x218",
+    "COrderInstance+0x2a0",
+    "COrderInstance+0x30",
+    "COrderInstance+0x70",
+    "COrderInstance+0xe0"
+   ]
+  },
+  "launch/macos/battles.rs": {
+   "keys": 41,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CArmy+0x18",
+    "CArmy+0x1d8",
+    "CArmy+0x1f0",
+    "CArmy+0x2ac",
+    "CArmy+0x30",
+    "CArmy+0x348",
+    "CArmy+0x360",
+    "CArmy+0x3b0",
+    "CArmy+0x40",
+    "CArmy+0x418",
+    "CArmy+0x420",
+    "CArmy+0x468"
+   ]
+  },
+  "launch/macos/bop.rs": {
+   "keys": 19,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CCurrentGameState+0x228",
+    "CCurrentGameState+0x398",
+    "CCurrentGameState+0x3a0",
+    "CCurrentGameState+0x3b8",
+    "CCurrentGameState+0x3c0",
+    "CCurrentGameState+0x410",
+    "CCurrentGameState+0x640",
+    "CCurrentGameState+0x650",
+    "CPowerBalance+0x10",
+    "CPowerBalance+0x178",
+    "CPowerBalance+0x18",
+    "CPowerBalance+0x20"
+   ]
+  },
+  "launch/macos/construction.rs": {
+   "keys": 39,
+   "mapped": 1,
+   "enabled": false,
+   "missing": [
+    "CBuildingTemplate+0x228",
+    "CCountryConstructionViewBuildingItem+0x20",
+    "CInGameIdler+0x4c0",
+    "CInGameIdler+0x540",
+    "CInGameIdler+0x670",
+    "CInGameIdler+0x718",
+    "CStandardGridBox+0x190",
+    "CStandardGridBox+0x320",
+    "CStandardGridBox+0x334",
+    "CStandardGridBox+0x70",
+    "CStandardGridBox+0xd4",
+    "construction.view+0x490"
+   ]
+  },
+  "launch/macos/construction_place/point.rs": {
+   "keys": 38,
+   "mapped": 1,
+   "enabled": false,
+   "missing": [
+    "CContainerWindow+0x1390",
+    "CContainerWindow+0x13d8",
+    "CContainerWindow+0x30",
+    "CContainerWindow+0x88",
+    "CContainerWindow+0x95",
+    "CContainerWindow+0xe50",
+    "CFindView+0xd50",
+    "CFindView+0xd58",
+    "gui.gfx+0x1e0",
+    "idler.gui+0x140",
+    "idler.gui+0x98",
+    "idler.gui+0xa70"
+   ]
+  },
+  "launch/macos/country_status.rs": {
+   "keys": 2,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "gui.text+0x100",
+    "topbar.view+0x68"
+   ]
+  },
+  "launch/macos/decisions.rs": {
+   "keys": 13,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CDecision+0x108",
+    "CDecisionViewDecisionItem+0xd38",
+    "CDecisionViewTargetedDecisionItem+0xd40",
+    "CDecisionViewTimedDecisionItem+0x908",
+    "CStandardGridBox+0x190",
+    "CStandardGridBox+0x320",
+    "CStandardGridBox+0x334",
+    "CStandardGridBox+0x70",
+    "CStandardGridBox+0xd4",
+    "decision.instance+0x10",
+    "decision.view+0x490",
+    "grid.item+0x10"
+   ]
+  },
+  "launch/macos/deployment.rs": {
+   "keys": 39,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CCountry+0x10",
+    "CCountry+0x12e0",
+    "CCountry+0x12e8",
+    "CCountry+0x180",
+    "CCountry+0x238",
+    "CCountry+0x250",
+    "CCountry+0x2e8",
+    "CCountry+0x550",
+    "CCountry+0x560",
+    "CCountry+0x56c",
+    "CCountry+0x8",
+    "CCountry+0xd18"
+   ]
+  },
+  "launch/macos/design_ui.rs": {
+   "keys": 29,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CEditBox+0x190",
+    "CEditBox+0x3c8",
+    "CEquipmentDesignerView+0x178",
+    "CEquipmentDesignerView+0xc730",
+    "CEquipmentDesignerView+0xd478",
+    "CEquipmentModule+0x10",
+    "CEquipmentModuleEntry+0x8d8",
+    "CEquipmentModuleSlot+0x28",
+    "CEquipmentModuleSlot+0x8",
+    "CEquipmentModuleSlotView+0x500",
+    "CEquipmentModuleSlotView+0xb0",
+    "CEquipmentUpgradeDesignerView+0x8a0"
+   ]
+  },
+  "launch/macos/designer.rs": {
+   "keys": 9,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CDesignerSubUnitItem+0x458",
+    "CDivisionDesignerView+0x2410",
+    "CDivisionDesignerView+0x68",
+    "CDropDownBox+0x940",
+    "CDropDownBox+0x948",
+    "designer.draft_holder+0x8",
+    "gui.button+0x160",
+    "gui.button+0x1c0",
+    "gui.text+0x100"
+   ]
+  },
+  "launch/macos/designs.rs": {
+   "keys": 10,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CMilitaryProductionLine+0x8",
+    "CMilitaryProductionLine+0x88",
+    "CMilitaryProductionLine+0xe8",
+    "CProductionStatus+0x200",
+    "CProductionStatus+0x2c8",
+    "CProductionStatus+0x328",
+    "CProductionStatus+0x388",
+    "CProductionStatus+0x448",
+    "CProductionStatus+0x58",
+    "CProductionStatus+0xa0"
+   ]
+  },
+  "launch/macos/diplomacy.rs": {
+   "keys": 14,
+   "mapped": 1,
+   "enabled": false,
+   "missing": [
+    "CContainerWindow+0x1390",
+    "CContainerWindow+0x13d8",
+    "CContainerWindow+0x30",
+    "CContainerWindow+0x88",
+    "CContainerWindow+0x95",
+    "CContainerWindow+0xe50",
+    "CCountryDiplomacyView+0x1608",
+    "CCountryDiplomacyView+0x35e8",
+    "CCountryDiplomacyView+0x490",
+    "CIcon+0x184",
+    "CIcon+0xd8",
+    "CIcon+0xfc"
+   ]
+  },
+  "launch/macos/diplomacy_state.rs": {
+   "keys": 51,
+   "mapped": 8,
+   "enabled": false,
+   "missing": [
+    "CAutonomousState+0x8",
+    "CCountry+0x10",
+    "CCountry+0x12e0",
+    "CCountry+0x12e8",
+    "CCountry+0x180",
+    "CCountry+0x238",
+    "CCountry+0x250",
+    "CCountry+0x2e8",
+    "CCountry+0x550",
+    "CCountry+0x560",
+    "CCountry+0x56c",
+    "CCountry+0x8"
+   ]
+  },
+  "launch/macos/doctrine_act.rs": {
+   "keys": 5,
+   "mapped": 2,
+   "enabled": false,
+   "missing": [
+    "CFolderView+0x4f0",
+    "NDoctrines::CCountryDoctrineView+0x498",
+    "NDoctrines::CDoctrineSelectionList+0x20"
+   ]
+  },
+  "launch/macos/doctrines.rs": {
+   "keys": 54,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CCountry+0x10",
+    "CCountry+0x12e0",
+    "CCountry+0x12e8",
+    "CCountry+0x180",
+    "CCountry+0x238",
+    "CCountry+0x250",
+    "CCountry+0x2e8",
+    "CCountry+0x550",
+    "CCountry+0x560",
+    "CCountry+0x56c",
+    "CCountry+0x8",
+    "CCountry+0xd18"
+   ]
+  },
+  "launch/macos/economy_detail.rs": {
+   "keys": 43,
+   "mapped": 4,
+   "enabled": false,
+   "missing": [
+    "CConsumerGoodsConsumer+0x10",
+    "CCountry+0x10",
+    "CCountry+0x12e0",
+    "CCountry+0x12e8",
+    "CCountry+0x180",
+    "CCountry+0x238",
+    "CCountry+0x250",
+    "CCountry+0x2e8",
+    "CCountry+0x550",
+    "CCountry+0x560",
+    "CCountry+0x56c",
+    "CCountry+0x8"
+   ]
+  },
+  "launch/macos/events.rs": {
+   "keys": 12,
+   "mapped": 1,
+   "enabled": false,
+   "missing": [
+    "0x35e5c88",
+    "CEvent+0x18",
+    "CEventWindow+0x28",
+    "CEventWindow+0x40",
+    "CIcon+0x184",
+    "CIcon+0xd8",
+    "CIcon+0xfc",
+    "CPeaceConferenceWindow+0x43a0",
+    "idler.gui+0x140",
+    "idler.gui+0x98",
+    "idler.gui+0xa70"
+   ]
+  },
+  "launch/macos/fleetmem.rs": {
+   "keys": 35,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CCurrentGameState+0x228",
+    "CCurrentGameState+0x398",
+    "CCurrentGameState+0x3a0",
+    "CCurrentGameState+0x3b8",
+    "CCurrentGameState+0x3c0",
+    "CCurrentGameState+0x410",
+    "CCurrentGameState+0x640",
+    "CCurrentGameState+0x650",
+    "CEquipmentModule+0x10",
+    "CEquipmentType+0x10",
+    "CEquipmentType+0x60",
+    "CEquipmentType.slot+0x28"
+   ]
+  },
+  "launch/macos/focus.rs": {
+   "keys": 12,
+   "mapped": 3,
+   "enabled": false,
+   "missing": [
+    "CNationalFocusInfoWindow+0xcc0",
+    "CNationalFocusInfoWindow+0xcc8",
+    "CNationalFocusTreeItem+0x10",
+    "CNationalFocusTreeItem+0x20",
+    "CNationalFocusView+0x2d70",
+    "CNationalFocusView+0x2db8",
+    "CNationalFocusView+0x2e10",
+    "CNationalFocusView+0x2e34",
+    "CNationalFocusView+0x490"
+   ]
+  },
+  "launch/macos/intel_live.rs": {
+   "keys": 34,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CCountry+0x10",
+    "CCountry+0x12e0",
+    "CCountry+0x12e8",
+    "CCountry+0x180",
+    "CCountry+0x238",
+    "CCountry+0x250",
+    "CCountry+0x2e8",
+    "CCountry+0x550",
+    "CCountry+0x560",
+    "CCountry+0x56c",
+    "CCountry+0x8",
+    "CCountry+0xd18"
+   ]
+  },
+  "launch/macos/intelligence.rs": {
+   "keys": 7,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "0x3704b10",
+    "CAgencyUpgrade+0x10",
+    "CAgencyUpgradeBranch+0x10",
+    "CAgencyUpgradeBranch+0x30",
+    "CAgencyUpgradeDatabase+0x70",
+    "CIntelligenceAgency+0x10",
+    "CIntelligenceAgency+0x80"
+   ]
+  },
+  "launch/macos/kit.rs": {
+   "keys": 4,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "idler.gui+0x140",
+    "idler.gui+0x98",
+    "idler.gui+0xa70",
+    "manager.topbar+0x68"
+   ]
+  },
+  "launch/macos/learn_tools.rs": {
+   "keys": 4,
+   "mapped": 1,
+   "enabled": false,
+   "missing": [
+    "idler.gui+0x140",
+    "idler.gui+0x98",
+    "idler.gui+0xa70"
+   ]
+  },
+  "launch/macos/mio_act.rs": {
+   "keys": 3,
+   "mapped": 2,
+   "enabled": false,
+   "missing": [
+    "0x36cbb20"
+   ]
+  },
+  "launch/macos/mios.rs": {
+   "keys": 6,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "0x3705890",
+    "CIdea+0x18",
+    "CIdea+0x60",
+    "CIdea+0x6c",
+    "CPoliticalStatus+0x50",
+    "NIndustrialOrganisation::COrganisationDatabase+0x58"
+   ]
+  },
+  "launch/macos/naval.rs": {
+   "keys": 30,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CConvoys+0x10",
+    "CConvoys+0x68",
+    "CConvoys+0x6c",
+    "CCountryCharacters+0x70",
+    "CCountryCharacters+0x88",
+    "CCountryCharacters+0xa0",
+    "CCountryCharacters+0xe8",
+    "CFleet+0x40",
+    "CFleet+0xa8",
+    "CFleet+0xb0",
+    "CFleet+0xd0",
+    "CFleet+0xd8"
+   ]
+  },
+  "launch/macos/navalui.rs": {
+   "keys": 21,
+   "mapped": 1,
+   "enabled": false,
+   "missing": [
+    "CCountryNavalRegionView+0x490",
+    "CEditBox+0x190",
+    "CEditBox+0x3c8",
+    "CFleetsBottomBar+0x910",
+    "CInstantTextObject+0x178",
+    "CNaviesView+0x30",
+    "CNaviesView+0x4ca8",
+    "CNaviesView+0x7b00",
+    "CNaviesView+0x7b10",
+    "CNaviesView+0x7b18",
+    "CNaviesView+0x7cb8",
+    "CNaviesView+0x7cd0"
+   ]
+  },
+  "launch/macos/occlaw.rs": {
+   "keys": 1,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "occupation.view+0x490"
+   ]
+  },
+  "launch/macos/occupation.rs": {
+   "keys": 15,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CCountryOccupationStatus+0x108",
+    "COccupationLaw+0x10",
+    "CResistance+0x10",
+    "CResistance+0x18",
+    "CResistance+0x20",
+    "CResistance+0x28",
+    "CResistance+0x30",
+    "CResistance+0x38",
+    "CResistance+0x40",
+    "CResistance+0x48",
+    "CResistance+0x50",
+    "CResistance+0x8"
+   ]
+  },
+  "launch/macos/panelkit.rs": {
+   "keys": 23,
+   "mapped": 16,
+   "enabled": false,
+   "missing": [
+    "CCountryPoliticsView+0x490",
+    "CCountryPoliticsView+0x6630",
+    "NDoctrines::CCountryDoctrineView+0x498",
+    "NDoctrines::CDoctrineSelectionList+0x20",
+    "idler.gui+0x140",
+    "idler.gui+0x98",
+    "idler.gui+0xa70"
+   ]
+  },
+  "launch/macos/politics.rs": {
+   "keys": 28,
+   "mapped": 6,
+   "enabled": false,
+   "missing": [
+    "0x362e238",
+    "0x367efa0",
+    "CCharacter+0x20",
+    "CCharacter+0x38",
+    "CCharacter+0x8",
+    "CCommandStructureLeaderView+0x28",
+    "CCommandStructureLeaderView+0x490",
+    "CCountryCharacterSelectionItem+0x28",
+    "CCountryCharacterSelectionItem+0x490",
+    "CCountryPoliticsView+0x490",
+    "CCountryPoliticsView+0x6630",
+    "CIdea+0x18"
+   ]
+  },
+  "launch/macos/production.rs": {
+   "keys": 19,
+   "mapped": 2,
+   "enabled": false,
+   "missing": [
+    "CEquipmentType+0x10",
+    "CEquipmentType+0x60",
+    "CEquipmentVariant+0x28",
+    "CEquipmentVariant+0x2d8",
+    "CEquipmentVariant+0x3e0",
+    "CEquipmentVariant+0x3e8",
+    "CEquipmentVariant+0x40",
+    "CEquipmentVariant+0x410",
+    "CEquipmentVariant+0x414",
+    "CEquipmentVariant+0x60",
+    "CEquipmentVariant+0xa8",
+    "CEquipmentVariant+0xc"
+   ]
+  },
+  "launch/macos/research.rs": {
+   "keys": 12,
+   "mapped": 4,
+   "enabled": false,
+   "missing": [
+    "CTechnology+0x160",
+    "CTechnology.template+0x8",
+    "CTechnologyInfoWindow+0x1128",
+    "CTechnologyInfoWindow+0x1138",
+    "CTechnologyInfoWindow+0x1150",
+    "CTechnologyTreeTechItem+0xb8",
+    "research.tree_view+0x1e58",
+    "research.view+0x490"
+   ]
+  },
+  "launch/macos/research_extras.rs": {
+   "keys": 23,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CIdea+0x18",
+    "CIdea+0x60",
+    "CIdea+0x6c",
+    "CIdeaResearchBonus+0x10",
+    "CIdeaResearchBonus+0x30",
+    "CIdeaResearchBonus+0x38",
+    "CLimitedUseTechBonus+0x10",
+    "CLimitedUseTechBonus+0x28",
+    "CLimitedUseTechBonus+0x48",
+    "CLimitedUseTechBonus+0x68",
+    "CLimitedUseTechBonus+0x8",
+    "CLimitedUseTechCostReduction+0x28"
+   ]
+  },
+  "launch/macos/resources.rs": {
+   "keys": 45,
+   "mapped": 8,
+   "enabled": false,
+   "missing": [
+    "0x37058c0",
+    "CCountryFuelStatus+0x10",
+    "CCountryFuelStatus+0x8",
+    "CEquipmentType+0x10",
+    "CEquipmentType+0x60",
+    "CEquipmentVariant+0x28",
+    "CEquipmentVariant+0x2d8",
+    "CEquipmentVariant+0x3e0",
+    "CEquipmentVariant+0x3e8",
+    "CEquipmentVariant+0x40",
+    "CEquipmentVariant+0x410",
+    "CEquipmentVariant+0x414"
+   ]
+  },
+  "launch/macos/screenmap.rs": {
+   "keys": 2,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "idler.camera+0x110",
+    "idler.camera+0xd0"
+   ]
+  },
+  "launch/macos/special_projects.rs": {
+   "keys": 70,
+   "mapped": 8,
+   "enabled": false,
+   "missing": [
+    "0x3705fe0",
+    "CCharacter+0x20",
+    "CCharacter+0x38",
+    "CCharacter+0x8",
+    "CCountryCharacters+0x70",
+    "CCountryCharacters+0x88",
+    "CCountryCharacters+0xa0",
+    "CCountryCharacters+0xe8",
+    "CGenericDefaultConfirmationPopUpWindow+0x490",
+    "CScientist+0x28",
+    "CScientist+0x8",
+    "CScientist+0xf0"
+   ]
+  },
+  "launch/macos/stateslots.rs": {
+   "keys": 2,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "state.slot_item+0x28",
+    "state.view+0x490"
+   ]
+  },
+  "launch/macos/stockpile.rs": {
+   "keys": 35,
+   "mapped": 1,
+   "enabled": false,
+   "missing": [
+    "CEquipmentType+0x10",
+    "CEquipmentType+0x60",
+    "CEquipmentVariant+0x28",
+    "CEquipmentVariant+0x2d8",
+    "CEquipmentVariant+0x3e0",
+    "CEquipmentVariant+0x3e8",
+    "CEquipmentVariant+0x40",
+    "CEquipmentVariant+0x410",
+    "CEquipmentVariant+0x414",
+    "CEquipmentVariant+0x60",
+    "CEquipmentVariant+0xa8",
+    "CEquipmentVariant+0xc"
+   ]
+  },
+  "launch/macos/supplymem.rs": {
+   "keys": 44,
+   "mapped": 4,
+   "enabled": false,
+   "missing": [
+    "CArmy+0x18",
+    "CArmy+0x1d8",
+    "CArmy+0x1f0",
+    "CArmy+0x2ac",
+    "CArmy+0x30",
+    "CArmy+0x348",
+    "CArmy+0x360",
+    "CArmy+0x3b0",
+    "CArmy+0x40",
+    "CArmy+0x418",
+    "CArmy+0x420",
+    "CArmy+0x468"
+   ]
+  },
+  "launch/macos/trade.rs": {
+   "keys": 5,
+   "mapped": 2,
+   "enabled": false,
+   "missing": [
+    "CCountryTradeView+0x1ac8",
+    "CCountryTradeView+0x490",
+    "CTradeOfferWindow+0xd60"
+   ]
+  },
+  "launch/macos/ui.rs": {
+   "keys": 9,
+   "mapped": 1,
+   "enabled": false,
+   "missing": [
+    "CInGameMenu+0x2a38",
+    "CInGameMenu+0x2a48",
+    "find.result_row+0x458",
+    "manager.find_view+0xd50",
+    "manager.find_view+0xd58",
+    "manager.find_view+0xd68",
+    "manager.find_view+0xda8",
+    "manager.topbar+0x68"
+   ]
+  },
+  "launch/macos/units.rs": {
+   "keys": 92,
+   "mapped": 7,
+   "enabled": false,
+   "missing": [
+    "CArmy+0x18",
+    "CArmy+0x1d8",
+    "CArmy+0x1f0",
+    "CArmy+0x2ac",
+    "CArmy+0x30",
+    "CArmy+0x348",
+    "CArmy+0x360",
+    "CArmy+0x3b0",
+    "CArmy+0x40",
+    "CArmy+0x418",
+    "CArmy+0x420",
+    "CArmy+0x468"
+   ]
+  },
+  "launch/macos/war_stats.rs": {
+   "keys": 4,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "CWarRelation+0x50",
+    "CWarRelation+0x58",
+    "CWarRelation+0x60",
+    "CWarRelation+0x68"
+   ]
+  },
+  "production_lines/output.rs": {
+   "keys": 15,
+   "mapped": 0,
+   "enabled": false,
+   "missing": [
+    "0x371dae8",
+    "0x371daf8",
+    "0x372bec0",
+    "CProductionLine+0x14",
+    "CProductionLine+0x20",
+    "CProductionLine+0x28",
+    "CProductionLine+0x30",
+    "CProductionLine+0x38",
+    "CProductionLine+0x48",
+    "CProductionLine+0x58",
+    "CProductionLine+0x88",
+    "CProductionLine+0x98"
+   ]
+  }
+ },
+ "static_check": {
+  "passed": true,
+  "problems": [],
+  "checked": {},
+  "note": "PE: not implemented"
+ }
+}

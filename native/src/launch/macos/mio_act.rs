@@ -781,8 +781,13 @@ fn policy_root(r: &Reader<'_>, i: u64) -> Result<u64> {
     if let Ok(root) = pk::open_root(r, i, &pk::MIO_POLICY) {
         return Ok(root);
     }
+    // the window drawn as a member of the design-company views: neither its class lookup nor a
+    // depth-6 walk of the detail window reached it live (v65i, 23 Nov 2026): its shown root by name
+    if let Some(root) = pk::shown_root_search(r, i, pk::MIO_POLICY.root_name)? {
+        return Ok(root);
+    }
     let detail = pk::open_root(r, i, &pk::MIO_DETAIL)?;
-    let w = pk::find(r, i, detail, "industrial_organisation_policy_window", 6)?
+    let w = pk::find(r, i, detail, "industrial_organisation_policy_window", 12)?
         .ok_or_else(|| Error::new("gui_target_unavailable", "Policy window not open"))?;
     let root = gui_tree::container(r, w, i)?
         .ok_or_else(|| Error::new("invalid_gui", "Policy window is not a window"))?;

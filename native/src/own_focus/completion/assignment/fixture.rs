@@ -44,6 +44,9 @@ impl Fixture {
             start_ticks: match abi {
                 StringAbi::LibCxx => "1792677600.000123",
                 StringAbi::LibStdCxx => "123456789",
+                StringAbi::Msvc => {
+                    unreachable!("the fixture models the macOS and Linux builds only")
+                }
             }
             .into(),
             exe: "/generated/hoi4".into(),
@@ -110,7 +113,8 @@ impl Fixture {
         f.int(GS + g.date, DATE);
         let (playthrough, speed, paused, difficulty, historical, slot_table) = match abi {
             StringAbi::LibCxx => (0x6c8, 0x47c, 0x679, 0x5d0, 0x5d8, 0x35a71f8),
-            StringAbi::LibStdCxx => (0x718, 0x4b4, 0x6c1, 0x620, 0x628, 0x43a56f0),
+            StringAbi::LibStdCxx => (0x718, 0x4b4, 0x6c1, 0x620, 0x628, 0x43ac838),
+            StringAbi::Msvc => unreachable!("the fixture models the macOS and Linux builds only"),
         };
         f.int(GS + speed, 0);
         f.put(IDLER + paused, &[1]);
@@ -203,6 +207,7 @@ impl Fixture {
                     self.put(data, value.as_bytes());
                 }
             }
+            StringAbi::Msvc => unreachable!("the fixture models the macOS and Linux builds only"),
         }
     }
     pub(crate) fn array(&mut self, address: u64, values: &[u64]) {
@@ -251,6 +256,7 @@ impl Fixture {
         let name = match self.abi {
             StringAbi::LibCxx => 0x50,
             StringAbi::LibStdCxx => 0x60,
+            StringAbi::Msvc => unreachable!("the fixture models the macOS and Linux builds only"),
         };
         self.string(pointer + name, "Generated Focus");
         self.focuses.push((key.into(), pointer));
@@ -279,6 +285,7 @@ impl Fixture {
         let offset = match self.abi {
             StringAbi::LibCxx => 0x6c8,
             StringAbi::LibStdCxx => 0x718,
+            StringAbi::Msvc => unreachable!("the fixture models the macOS and Linux builds only"),
         };
         self.string(GS + offset, value);
         self.expected.playthrough_id = value.into();

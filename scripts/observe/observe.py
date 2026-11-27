@@ -20,6 +20,10 @@
       print the cost meter / the tool coverage table of a run.
   observe.py lessons STORE {seed [FILE] | list | lint PLAN [--country TAG]}
       the lessons store (learned/lessons): install the seeded lessons, list them, lint a plan.
+  observe.py budget {status | check | sync RUN} [--run NAME] [--role ROLE]
+      the API budget (api-ledger.json beside the key file): status prints the budget line; check exits
+      0 (call allowed), 3 (this run or today is at its cap) or 4 (under the floor: nothing more on the key);
+      sync RUN adds the run's player spend from its stream.
   observe.py report REPORT.md RUN [RUN ...] [--store STORE]
       rewrite the generated blocks (<!-- auto:NAME --> ... <!-- /auto:NAME -->) of a report from runs.
 
@@ -239,6 +243,24 @@ def cmd_lessons(a):
     return 0
 
 
+def cmd_budget(a):
+    from hoi4_live.observe import budget
+    b = budget.Budget()
+    if a.action == "sync":
+        run = os.path.abspath(a.arg or ".")
+        name = os.path.basename(run)
+        if budget.player_billed_to_key(run):
+            b.set_role(name, "player", budget.player_rows(run))
+        print(b.line(name))
+        return 0
+    if a.action == "check":
+        code, why = b.check(a.run, a.role)
+        print(why)
+        return code
+    print(b.line(a.run))
+    return 0
+
+
 def cmd_report(a):
     from hoi4_live.observe.report import fill
     fill(a.report, a.runs, a.store)
@@ -296,6 +318,12 @@ def main(argv=None):
     ls.add_argument("arg", nargs="?")
     ls.add_argument("--country")
     ls.set_defaults(fn=cmd_lessons)
+    bg = sub.add_parser("budget")
+    bg.add_argument("action", choices=["status", "check", "sync"])
+    bg.add_argument("arg", nargs="?")
+    bg.add_argument("--run")
+    bg.add_argument("--role")
+    bg.set_defaults(fn=cmd_budget)
     rpt = sub.add_parser("report")
     rpt.add_argument("report")
     rpt.add_argument("runs", nargs="+")
