@@ -2116,6 +2116,7 @@ fn lanes_tick(
 ) -> Result<Tick> {
     // the management load (plan_speed.rs): the real seconds each action took, by game hour
     let started = std::time::Instant::now();
+    state.round.pace_at(now, started);
     let out = lanes_tick_inner(state, tools, plan, lease, now)?;
     if matches!(out, Tick::Acted(_)) {
         state.round.cost(now, started.elapsed().as_secs_f64());
@@ -3365,6 +3366,10 @@ struct Round {
     last: Option<String>,
     /// Real seconds of each lane's last step that acted (see `opening_holds`).
     secs: HashMap<&'static str, f64>,
+    /// The last tick's (real instant, game hour) and the game hours that pass per real second
+    /// while the game runs (a moving mean; see `pace_at`).
+    pace: Option<(std::time::Instant, GameHour)>,
+    hours_per_sec: f64,
 }
 
 impl Round {
@@ -3390,6 +3395,32 @@ impl Round {
         if acted {
             self.secs.insert(name, started.elapsed().as_secs_f64());
         }
+    }
+
+    /// A tick at game hour `now`: the game's pace in game hours per real second, measured over
+    /// the running stretches only (a paused game moves no hour and leaves the mean alone).
+    fn pace_at(&mut self, now: GameHour, at: std::time::Instant) {
+        if let Some((t, h)) = self.pace {
+            let secs = at.saturating_duration_since(t).as_secs_f64();
+            // a sample over a pause (no tick for 30 s) would read the pause as a slow game
+            if now > h && (1.0..=30.0).contains(&secs) {
+                let rate = (now - h) as f64 / secs;
+                self.hours_per_sec = if self.hours_per_sec > 0.0 {
+                    0.7 * self.hours_per_sec + 0.3 * rate
+                } else {
+                    rate
+                };
+            }
+        }
+        if self.pace.is_none_or(|(_, h)| now != h) {
+            self.pace = Some((at, now));
+        }
+    }
+
+    /// The game hours lane `name`'s last order would let pass at the measured pace; pure.
+    fn step_hours(&self, name: &str) -> GameHour {
+        let secs = self.secs.get(name).copied().unwrap_or(0.0);
+        (secs * self.hours_per_sec).ceil() as GameHour
     }
 
     /// Whether lane `name`'s last order took SLOW_STEP_SECONDS or more; pure.
@@ -3808,15 +3839,9 @@ const OPENING_HOLD_TAIL: GameHour = 7 * DAY;
 
 /// The opening: a dated declaration lies within DECLARE_LEAD ahead (or up to OPENING_HOLD_TAIL
 /// behind) and an operation against its target is preparing or prepared and not yet executed.
-fn opening_window(state: &State, plan: &Value, now: GameHour) -> bool {
+fn opening_window(state: &State, plan: &Value, now: GameHour, lead: GameHour) -> bool {
     !state.war_active
-        && plan_speed::dated_declarations(
-            plan,
-            &[],
-            now,
-            plan_speed::DECLARE_LEAD,
-            OPENING_HOLD_TAIL,
-        )
+        && plan_speed::dated_declarations(plan, &[], now, lead, OPENING_HOLD_TAIL)
         .iter()
         .any(|tag| plan_operation::pending_on(state, plan, tag))
 }
@@ -3839,7 +3864,11 @@ fn opening_holds(
     if name == "hold" || !(WAR_DEFERRED_LANES.contains(&name) || state.round.slow(name)) {
         return false;
     }
-    opening_window(state, plan, now) || air_waits_for_war(state, tools, plan, now)
+    // a slow order must also END before the window: its lead grows by the game time the lane's
+    // last order took at the measured pace (cmph1, 27 Nov 2026: two design-company trait orders
+    // of 62 s and 77 s began on 18 and 20 August at speed 3 and ran to 1 September)
+    let lead = plan_speed::DECLARE_LEAD + 2 * state.round.step_hours(name);
+    opening_window(state, plan, now, lead) || air_waits_for_war(state, tools, plan, now)
 }
 
 /// Wall seconds the operations' burst may take between two declarations due the same day.
@@ -12193,6 +12222,20 @@ mod tests {
         ));
         state.done.insert("op:op_poland:exec".into(), day);
         assert!(!held(&mut state, "designs", day));
+        // a 77 s order at 4.5 game hours a second (speed 3) yields from about 32 days before
+        state.done.remove("op:op_poland:exec");
+        state.round.secs.insert("mio_traits", 77.0);
+        state.round.hours_per_sec = 4.5;
+        assert!(held(&mut state, "mio_traits", day - 20 * DAY));
+        assert!(!held(&mut state, "designs", day - 20 * DAY));
+        // the pace is measured while the game runs only
+        let mut round = super::Round::default();
+        let t = std::time::Instant::now();
+        round.pace_at(100, t);
+        round.pace_at(100, t + std::time::Duration::from_secs(5));
+        assert_eq!(round.hours_per_sec, 0.0);
+        round.pace_at(118, t + std::time::Duration::from_secs(9));
+        assert!((round.hours_per_sec - 18.0 / 9.0).abs() < 1e-9);
         // no operation against the target: no hold
         let mut other = State::default();
         other.round.timed("designs", true, t0);
