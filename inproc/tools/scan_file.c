@@ -85,6 +85,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "orders_vt")) got = t.st2.orders.vt_order;
         else if (!strcmp(argv[a], "orders_lookup")) got = t.st2.orders.lookup_fn;
         else if (!strcmp(argv[a], "order_id_off")) got = t.st2.orders.id_off;
+        else if (!strcmp(argv[a], "order_div_get_slot")) got = t.st2.orders.div_get_slot;
+        else if (!strcmp(argv[a], "order_div_alive")) got = t.st2.orders.div_alive_off;
+        else if (!strcmp(argv[a], "order_div_sub")) got = t.st2.orders.div_sub_off;
         else if (!strcmp(argv[a], "order_provs_off")) got = t.st2.orders.provs_off;
         else if (!strcmp(argv[a], "order_divs_off")) got = t.st2.orders.divs_off;
         else if (!strcmp(argv[a], "order_children_off")) got = t.st2.orders.child_off[0];

@@ -106,6 +106,21 @@ int scan_orders_facts(const scan_image *im, orders_facts *f) {
         if (find_in(im, exec, 0x400, "41 0f b6 46 6d 88 81 D 41 0f b6 46 6e 88 81 D", c, 8, &n) >= 0) { f->blitz_off = c[0]; f->withdraw_off = c[1]; }
         if (find_in(im, exec, 0x400, "48 8b 45 ?? 48 89 81 D", c, 8, &n) >= 0) f->drawer_off = c[0];
     }
+    /* 7. engineer 89: the front tool's loop over the parent order's divisions (list entry -> its getter -> the
+     *    division; the alive byte; then the children's lists compared with division + SUB). One site expected. */
+    {
+        const uint8_t *t = scan_ptr(im, im->text_addr, im->text_size);
+        static const uint8_t key[] = {0x4a, 0x8b, 0x3c, 0xe8, 0x48, 0x8b, 0x07, 0xff, 0x50};
+        unsigned sites = 0; uint32_t cc[8];
+        for (uint64_t i = 8; t && i + 0x50 < im->text_size; i++) {
+            if (t[i] != 0x4a || memcmp(t + i, key, sizeof key)) continue;
+            if (!cmd_pmatch(t + i - 8, 0x50, "49 8b 84 24 D 4a 8b 3c e8 48 8b 07 ff 50 B 48 89 85 D 80 78 B 00 74 ?? "
+                                              "49 63 94 24 D 48 85 d2 74 ?? 49 8b 8c 24 D 48 8d 14 d1 48 8d b0 D", cc, 8)) continue;
+            if (cc[0] != f->divs_off || cc[4] != f->child_cnt[0] || cc[5] != f->child_off[0]) continue;
+            if (!sites++) { f->div_get_slot = cc[1]; f->div_alive_off = cc[3]; f->div_sub_off = cc[6]; f->div_ui_site = im->text_addr + i - 8; }
+        }
+        if (sites != 1) { f->div_get_slot = f->div_alive_off = f->div_sub_off = 0; f->div_ui_site = 0; }
+    }
     f->ok = f->vt_order && f->lookup_fn && in_text(im, f->lookup_fn) && in_text(im, f->subtree_fn) && f->kind_off && f->owner_off &&
             f->id_off && f->exec_off == f->id_off + 4 && f->provs_off && f->provs_cnt == f->provs_off + 0xc && f->divs_off &&
             f->divs_cnt == f->divs_off + 0xc && f->child_cnt[0] == f->child_off[0] + 0xc && f->child_cnt[1] == f->child_off[1] + 0xc &&
@@ -113,11 +128,12 @@ int scan_orders_facts(const scan_image *im, orders_facts *f) {
             f->blitz_off && f->withdraw_off == f->blitz_off + 1 && f->drawer_off && f->lock_off;
     snprintf(ev, evn,
              "vt 0x%llx lookup 0x%llx subtree 0x%llx path 0x%llx; kind +0x%x owner +0x%x id +0x%x exec +0x%x; lists +0x%x/+0x%x/+0x%x; "
-             "children +0x%x/+0x%x; provinces +0x%x; divisions +0x%x; blitz +0x%x withdraw +0x%x drawer +0x%x lock +0x%x",
+             "children +0x%x/+0x%x; provinces +0x%x; divisions +0x%x; blitz +0x%x withdraw +0x%x drawer +0x%x lock +0x%x; "
+             "division entry: getter slot 0x%x, alive +0x%x, base +0x%x (front tool 0x%llx)",
              (unsigned long long)f->vt_order, (unsigned long long)f->lookup_fn, (unsigned long long)f->subtree_fn,
              (unsigned long long)f->path_fn, f->kind_off, f->owner_off, f->id_off, f->exec_off, f->list_off[0], f->list_off[1],
              f->list_off[2], f->child_off[0], f->child_off[1], f->provs_off, f->divs_off, f->blitz_off, f->withdraw_off,
-             f->drawer_off, f->lock_off);
+             f->drawer_off, f->lock_off, f->div_get_slot, f->div_alive_off, f->div_sub_off, (unsigned long long)f->div_ui_site);
     return f->ok;
 }
 
@@ -125,10 +141,11 @@ const char *orders_facts_json(const orders_facts *f, char *buf, size_t n) {
     snprintf(buf, n,
              "{\"ok\":%s,\"vt_order\":\"0x%llx\",\"lookup\":\"0x%llx\",\"kind\":%u,\"owner\":%u,\"id\":%u,\"exec\":%u,"
              "\"lists\":[%u,%u,%u],\"children\":[%u,%u],\"provinces\":%u,\"divisions\":%u,\"blitz\":%u,\"withdraw\":%u,"
-             "\"drawer\":%u,\"lock\":%u}",
+             "\"drawer\":%u,\"lock\":%u,\"div_get_slot\":%u,\"div_alive\":%u,\"div_sub\":%u}",
              f->ok ? "true" : "false", (unsigned long long)f->vt_order, (unsigned long long)f->lookup_fn, f->kind_off,
              f->owner_off, f->id_off, f->exec_off, f->list_off[0], f->list_off[1], f->list_off[2], f->child_off[0],
-             f->child_off[1], f->provs_off, f->divs_off, f->blitz_off, f->withdraw_off, f->drawer_off, f->lock_off);
+             f->child_off[1], f->provs_off, f->divs_off, f->blitz_off, f->withdraw_off, f->drawer_off, f->lock_off,
+             f->div_get_slot, f->div_alive_off, f->div_sub_off);
     return buf;
 }
 

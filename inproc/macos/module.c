@@ -489,6 +489,7 @@ static int roundtrip(const cmd_type *ct, uint64_t obj, uint64_t *handle) {
 /* engineer 73: the order a battle-plan command names, found with the game's OWN lookup (the function every order
  * command's "can do" check calls: a pure read over the group's three lists), on the main thread after the group passed
  * its resolver and owner checks. Returns NULL when ready, else the reason (nothing is posted). */
+typedef void *(*div_get_fn)(void *);
 static const char *orders_prep(job2_t *j) {
     const orders_facts *of = &g_t.st2.orders;
     const char *op = j->ct->spec->op;
@@ -510,7 +511,21 @@ static const char *orders_prep(job2_t *j) {
     if (new_front) {
         int n = orders_free_divisions(of, sread, o, j->divs, J2_DIVS);
         if (n < 0) return "the parent's divisions are unreadable";
-        j->ndiv = n;
+        /* engineer 89 (S4 O3, 27 Nov): the list holds each division's membership base, not the division; the front
+         * tool hands NewFront the divisions, so each entry goes through its own getter (the UI's call), the result
+         * must be the entry less the base offset, and a division whose alive byte is 0 is left out as the UI does */
+        if (!of->div_get_slot || !of->div_sub_off) return "the front tool's division getter was not found on this build";
+        int k = 0;
+        for (int i = 0; i < n; i++) {
+            uint64_t e = j->divs[i], evt = 0, fn = 0, d = 0; uint8_t alive = 0;
+            if (!plausible(e) || !sq(e, &evt) || !sq(evt + of->div_get_slot, &fn) || !code_ptr(fn))
+                { snprintf(why, sizeof why, "division entry %d (0x%llx) has no getter", i, (unsigned long long)e); return why; }
+            d = (uint64_t)(uintptr_t)((div_get_fn)(uintptr_t)fn)((void *)(uintptr_t)e);
+            if (d != e - of->div_sub_off || !sread(d + of->div_alive_off, &alive, 1))
+                { snprintf(why, sizeof why, "division entry %d is not division + 0x%x", i, of->div_sub_off); return why; }
+            if (alive) j->divs[k++] = d;
+        }
+        j->ndiv = k;
         if (!sread(o + of->child_cnt[0], &j->before_children, 4)) return "the parent's children are unreadable";
         j->drawer = grp;
         if (j->obj2) { /* the drawing group (the UI's selected army or army group): a live own COrdersGroup */
