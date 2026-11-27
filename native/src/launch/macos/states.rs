@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 /// Lower-case ASCII folding for the accented letters of European state names.
-fn fold(text: &str) -> String {
+pub(super) fn fold(text: &str) -> String {
     let mut out = String::new();
     for c in text.chars().flat_map(char::to_lowercase) {
         let folded = match c {
