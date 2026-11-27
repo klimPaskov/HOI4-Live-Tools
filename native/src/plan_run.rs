@@ -4026,7 +4026,7 @@ fn declare_first(
                 // another declaration due now goes out right after the events, before any burst
                 // (w43r1, 23 Nov 2026: Belgium's declaration opened events, the next tick ran a
                 // 30-second war burst and Luxembourg came eleven game days later)
-                state.done.remove("declnear:at");
+                plan_affairs::declaration_near_forget(state);
                 if plan_affairs::declaration_near(state, tools, plan, now, 0) {
                     state.done.insert("declnext".to_string(), now);
                 }
@@ -4037,7 +4037,7 @@ fn declare_first(
             // another declaration due now goes out in the next tick before any burst (w42v,
             // 23 Nov 2026: Belgium was declared, the opening air burst took 34 s = seven game
             // days and Holland, whose war the operation executes on, came nine days later)
-            state.done.remove("declnear:at");
+            plan_affairs::declaration_near_forget(state);
             if plan_affairs::declaration_near(state, tools, plan, now, 0) {
                 // the operations that wait for this war execute now (a short burst: their
                 // execute orders take a few seconds); only the air waits for the last
