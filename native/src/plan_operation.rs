@@ -1729,6 +1729,21 @@ pub(super) fn awaiting_war_on(state: &State, plan: &Value, target: &str) -> bool
     })
 }
 
+/// An operation against `target` has started (preparing, primed or ready) and is neither
+/// executed nor ended: its war is still to come.
+pub(super) fn pending_on(state: &State, plan: &Value, target: &str) -> bool {
+    list(plan, "operations").iter().enumerate().any(|(i, op)| {
+        let id = op_id(op, i);
+        let started = ["prep", "primed", "ready"]
+            .iter()
+            .any(|w| state.done.contains_key(&key(&id, w)));
+        started
+            && strings(op, "enemies").iter().any(|e| e == target)
+            && !state.done.contains_key(&key(&id, "exec"))
+            && !state.done.contains_key(&key(&id, "end"))
+    })
+}
+
 /// An operation started and not yet read back as ready (its prepare still has orders to give).
 pub(super) fn preparing(state: &State) -> bool {
     state.done.keys().any(|k| {

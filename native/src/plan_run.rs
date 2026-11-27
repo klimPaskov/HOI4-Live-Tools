@@ -2223,8 +2223,13 @@ fn lanes_tick_inner(
     // is a day of the slot): a pass of slow GUI orders left the focus idle for 14 game days
     // (g17j 1936.4). They act before the pass resumes.
     for (name, step) in FAST_LANES {
+        if opening_holds(state, tools, plan, name, now) {
+            continue;
+        }
         state.last_ok = None;
+        let started = std::time::Instant::now();
         let result = step(state, tools, plan, lease, now)?;
+        state.round.timed(name, result.is_some(), started);
         // the fast lanes answer the issues they own too (s7m, 24 Nov 2026: the focus issues
         // escalated with no lane outcome while the lesson held the refused focus): an order
         // passed or was refused, or the lane's stage says what it waits for
@@ -2292,7 +2297,10 @@ fn lanes_tick_inner(
         }
         state.sched.turns.insert(name, now);
         state.last_ok = None;
-        if let Some(line) = step(state, tools, plan, lease, now)? {
+        let started = std::time::Instant::now();
+        let result = step(state, tools, plan, lease, now)?;
+        state.round.timed(name, result.is_some(), started);
+        if let Some(line) = result {
             state.round.acted.push(name);
             state.round.lane_acted(name, now);
             return Ok(Tick::Acted(line));
@@ -2336,7 +2344,9 @@ fn issue_lanes(
         state.sched.turns.insert(name, now);
         state.last_ok = None;
         let before = plan_manage::notes_snapshot(state);
+        let started = std::time::Instant::now();
         let result = step(state, tools, plan, lease, now)?;
+        state.round.timed(name, result.is_some(), started);
         // the lane's typed answer for the issues it owns (docs/MONITORING.md): an order passed,
         // was refused, or the lane wrote why it waits; a lane that neither acts nor says why has
         // no rule for the issue
@@ -3353,6 +3363,8 @@ struct Round {
     began: GameHour,
     /// The last finished pass that acted: lanes and game hours (the digest's `pass`).
     last: Option<String>,
+    /// Real seconds of each lane's last step that acted (see `opening_holds`).
+    secs: HashMap<&'static str, f64>,
 }
 
 impl Round {
@@ -3371,6 +3383,18 @@ impl Round {
         if !lane_minor(name) {
             self.heavy_day(now);
         }
+    }
+
+    /// Lane `name`'s step returned (`acted`: it gave an order) after it began at `started`.
+    fn timed(&mut self, name: &'static str, acted: bool, started: std::time::Instant) {
+        if acted {
+            self.secs.insert(name, started.elapsed().as_secs_f64());
+        }
+    }
+
+    /// Whether lane `name`'s last order took SLOW_STEP_SECONDS or more; pure.
+    fn slow(&self, name: &str) -> bool {
+        self.secs.get(name).is_some_and(|s| *s >= SLOW_STEP_SECONDS)
     }
 
     /// An action took `secs` real seconds at game hour `now` (the last LOAD_KEEP are kept).
@@ -3775,9 +3799,36 @@ fn air_waits_for_war(state: &mut State, tools: &dyn Tools, plan: &Value, now: Ga
         && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD)
 }
 
-/// The slow GUI lanes (WAR_DEFERRED_LANES) wait while a prepared operation's declaration is due
-/// or near, with no cap: one design-company step by mouse ran 77 s at speed 3 from 25 August and
-/// the Polish declaration due on 1 September went out on the 16th (t1939l, 24 Nov 2026).
+/// A lane step that took this many real seconds or more is slow: an order by mouse takes 3-20 s
+/// (a design 9 s, a design-company trait 6-77 s), one by the game's own command milliseconds.
+const SLOW_STEP_SECONDS: f64 = 2.0;
+/// How long after its date a declaration whose operation is still pending holds the slow lanes
+/// (game hours): the hold ends then, so a prepare that never reads back starves nothing for long.
+const OPENING_HOLD_TAIL: GameHour = 7 * DAY;
+
+/// The opening: a dated declaration lies within DECLARE_LEAD ahead (or up to OPENING_HOLD_TAIL
+/// behind) and an operation against its target is preparing or prepared and not yet executed.
+fn opening_window(state: &State, plan: &Value, now: GameHour) -> bool {
+    !state.war_active
+        && plan_speed::dated_declarations(
+            plan,
+            &[],
+            now,
+            plan_speed::DECLARE_LEAD,
+            OPENING_HOLD_TAIL,
+        )
+        .iter()
+        .any(|tag| plan_operation::pending_on(state, plan, tag))
+}
+
+/// The slow lanes wait in the opening, with no cap inside its window: one design-company step by
+/// mouse ran 77 s at speed 3 from 25 August and the Polish declaration due on 1 September went
+/// out on the 16th (t1939l, 24 Nov 2026); with the slow-lane names held, a 9 s design and two
+/// trait orders (6 s and 15 s, the second refused) still ran from 30 August to 4 September while
+/// the operation re-drew, and the declaration came on the 4th (t1939m). Slow is measured, not
+/// named: any lane whose last order took SLOW_STEP_SECONDS or more yields, the named GUI lanes
+/// (WAR_DEFERRED_LANES) always do, an order by the game's own command never waits. The hold
+/// posts (`hold`) are war work and never wait.
 fn opening_holds(
     state: &mut State,
     tools: &dyn Tools,
@@ -3785,7 +3836,10 @@ fn opening_holds(
     name: &str,
     now: GameHour,
 ) -> bool {
-    WAR_DEFERRED_LANES.contains(&name) && air_waits_for_war(state, tools, plan, now)
+    if name == "hold" || !(WAR_DEFERRED_LANES.contains(&name) || state.round.slow(name)) {
+        return false;
+    }
+    opening_window(state, plan, now) || air_waits_for_war(state, tools, plan, now)
 }
 
 /// Wall seconds the operations' burst may take between two declarations due the same day.
@@ -12035,6 +12089,50 @@ mod tests {
             Some(0),
             DAY
         ));
+    }
+
+    /// t1939m (24 Nov 2026): in the opening a 9 s design and two design-company trait orders
+    /// ran from 30 August to 4 September while the operation re-drew; the declaration came on the
+    /// 4th. Every slow lane yields there; the hold ends OPENING_HOLD_TAIL after the date.
+    #[test]
+    fn slow_lanes_yield_in_the_opening_while_the_operation_prepares() {
+        let plan = json!({
+            "operations": [{"id": "op_poland", "enemies": ["POL"]}],
+            "diplomacy": [{"action": "declare", "target": "POL", "when": "date >= 1939.9.1"}]
+        });
+        let day = super::date_hour("1939.9.1").unwrap();
+        let mut state = State::default();
+        // preparing (re-drawing): not ready, not executed
+        state.done.insert("op:op_poland:prep".into(), day - 20 * DAY);
+        let t0 = std::time::Instant::now() - std::time::Duration::from_secs(9);
+        state.round.timed("designs", true, t0);
+        state.round.timed("politics", true, std::time::Instant::now());
+        state.round.timed("construction", false, t0);
+        assert!(state.round.slow("designs"));
+        assert!(!state.round.slow("politics"));
+        // a step that gave no order is not measured
+        assert!(!state.round.slow("construction"));
+        let tools = fake(vec![]);
+        let held = |state: &mut State, name: &str, now: GameHour| {
+            super::opening_holds(state, &tools, &plan, name, now)
+        };
+        // four days before: nothing waits
+        assert!(!held(&mut state, "designs", day - 4 * DAY));
+        // in the window: the slow lane and the named GUI lanes wait, a fast lane and the holds do not
+        for now in [day - 2 * DAY, day, day + 3 * DAY] {
+            assert!(held(&mut state, "designs", now));
+            assert!(held(&mut state, "mio_traits", now));
+            assert!(!held(&mut state, "politics", now));
+            assert!(!held(&mut state, "hold", now));
+        }
+        // the hold ends after the tail, and once the operation executes
+        assert!(!held(&mut state, "designs", day + super::OPENING_HOLD_TAIL + DAY));
+        state.done.insert("op:op_poland:exec".into(), day);
+        assert!(!held(&mut state, "designs", day));
+        // no operation against the target: no hold
+        let mut other = State::default();
+        other.round.timed("designs", true, t0);
+        assert!(!held(&mut other, "designs", day));
     }
 
     #[test]
