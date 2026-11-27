@@ -406,6 +406,7 @@ module's docstring has the detail:
   focus.condition_unchecked  a planned focus gate the plan cannot decide offline, with no dated checkpoint
   decision.condition       a planned decision closed (or opening late) under the plan's timeline
   politics.visible         an advisor or law the game never shows or allows the plan country
+  politics.held_at_start   a plan pick whose idea the country already holds at the start (its history)
   construction.requires_tech  a construction_plan building no start technology unlocks (lint_support.py)
   projects.facility        a special project of a specialisation with no facility at the start (lint_support.py)
   supply.trains            no train line from the start (lint_support.py)
@@ -622,6 +623,7 @@ NEW_RULES |= {"construction.requires_tech", "projects.facility", "formations.kee
              "supply.trains", "supply.hubs"}  # lint_support.py
 NEW_RULES |= {"force.home_divisions"}  # every start division outside the theatre has a stated use
 # the plan against the game's own conditions, the management inventory, production over all lines
+NEW_RULES |= {"politics.held_at_start"}  # a pick the start already holds holds power for nothing
 NEW_RULES |= {"focus.condition", "focus.condition_unchecked", "decision.condition", "politics.visible",
               "diplomacy.borders_unheld", "plan.stop_date", "manage.owner", "production.start_lines",
               "production.duplicate_line", "production.priority_all", "production.missing_line",

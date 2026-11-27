@@ -1116,9 +1116,17 @@ pub fn declaration_near(
     now: GameHour,
     ahead: GameHour,
 ) -> bool {
-    let at = state.done.get("declnear:at").copied();
+    // one remembered answer PER `ahead`: with one shared answer the declaration's own check
+    // (ahead 0, false before the day) answered the air's three-day look-ahead for six game hours,
+    // so the slow air orders never waited (t1939n, 27 Nov 2026: a 35-second air burst ran from
+    // 29 August to 1 September and Poland was declared on the 2nd)
+    let (at_key, v_key) = (
+        format!("declnear:at:{ahead}"),
+        format!("declnear:v:{ahead}"),
+    );
+    let at = state.done.get(&at_key).copied();
     if at.is_some_and(|t| now >= t && now - t < DAY / 4) {
-        return state.done.get("declnear:v") == Some(&1);
+        return state.done.get(&v_key) == Some(&1);
     }
     let mut near = false;
     for item in list(plan, "diplomacy") {
@@ -1138,9 +1146,14 @@ pub fn declaration_near(
             break;
         }
     }
-    state.done.insert("declnear:at".to_string(), now);
-    state.done.insert("declnear:v".to_string(), i64::from(near));
+    state.done.insert(at_key, now);
+    state.done.insert(v_key, i64::from(near));
     near
+}
+
+/// Forgets every remembered `declaration_near` answer: the next call judges again.
+pub fn declaration_near_forget(state: &mut State) {
+    state.done.retain(|k, _| !k.starts_with("declnear:"));
 }
 
 /// The plan's war declarations whose condition holds, ahead of everything else: a declaration
@@ -3794,6 +3807,25 @@ mod tests {
                 .unwrap_or_else(|| json!({})))
         }
     }
+    #[test]
+    fn declaration_near_remembers_each_look_ahead_apart() {
+        let plan = json!({
+            "diplomacy": [{"action": "declare", "target": "POL", "when": "date >= 1939.9.1"}],
+            "operations": [{"id": "op_poland", "enemies": ["POL"]}]
+        });
+        let tools = fake(vec![]);
+        let mut state = State::default();
+        state.done.insert("op:op_poland:primed".to_string(), 1);
+        let now = date_hour("1939.8.30").unwrap();
+        // the declaration's own check first: not due yet
+        assert!(!declaration_near(&mut state, &tools, &plan, now, 0));
+        // the air's look-ahead in the same hour is its own answer: due within three days
+        assert!(declaration_near(&mut state, &tools, &plan, now, 3 * DAY));
+        assert!(!declaration_near(&mut state, &tools, &plan, now + 1, 0));
+        declaration_near_forget(&mut state);
+        assert!(!state.done.keys().any(|k| k.starts_with("declnear:")));
+    }
+
     fn fake(replies: Vec<(&str, Value)>) -> Fake {
         Fake {
             calls: RefCell::new(Vec::new()),
