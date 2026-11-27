@@ -3,7 +3,7 @@
 xlayout fails a read whose key is missing from the table with `layout_unmapped` (never a guess), so a
 tool added on macOS silently refuses on Linux until its keys are mapped. This test makes every new key
 visible: it must be mapped (scripts/gen_linux_layout.py `extend`, `generate` with the ELF, or a live
-entry) or listed in scripts/data/xlayout-unmapped-1.19.4.1.json, which docs/PORTING_STATUS.md explains.
+entry) or listed in scripts/data/xlayout-unmapped-1.20.0.0.json, which docs/PORTING_STATUS.md explains.
 Static scan only; no game binary is read.
 """
 
@@ -17,8 +17,8 @@ _spec = importlib.util.spec_from_file_location('gen_linux_layout', ROOT / 'scrip
 gen = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(gen)
 
-TABLE = ROOT / 'native' / 'layouts' / 'linux-2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082.json'
-BASELINE = ROOT / 'scripts' / 'data' / 'xlayout-unmapped-1.19.4.1.json'
+TABLE = ROOT / 'native' / 'layouts' / 'linux-71806afa707a46fb72f0738a719c3f1c3f5e2e42.json'
+BASELINE = ROOT / 'scripts' / 'data' / 'xlayout-unmapped-1.20.0.0.json'
 REFRESH = ('python3 scripts/gen_linux_layout.py extend ' + str(TABLE.relative_to(ROOT)) +
            ' --unmapped ' + str(BASELINE.relative_to(ROOT)))
 

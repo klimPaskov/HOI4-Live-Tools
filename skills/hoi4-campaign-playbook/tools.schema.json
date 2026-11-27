@@ -430,7 +430,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_area_defense": {
-   "description": "Give an own army an area defence order over own states (the army spreads over them and holds what the order covers): army card, area defence (V), one right-click on each state (Find view first). Verified by new battle-plan orders on the army. `settings` (the order window's toggles: victory_points, ports, coastlines, airbases, borders, forts, rail, facility) is not yet built: refused with not_yet_built; the game's defaults apply.",
+   "description": "Give an own army an area defence order over own states (the army spreads over them and holds what the order covers): army card, area defence (V), one right-click on each state (Find view first). Verified by new battle-plan orders on the army. Refused before input with no_commander when the army has no general (the game takes battle-plan orders only from a led army). `settings` (the order window's toggles: victory_points, ports, coastlines, airbases, borders, forts, rail, facility) is not yet built: refused with not_yet_built; the game's defaults apply.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -1053,7 +1053,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_rename": {
-   "description": "Rename an own army with the game's own control: the army's card selects it, its badge's name box takes a click, the old name is erased and the new one typed key by key (each key verified in the box), then Return. Verified when the army carries the new name. `army` may be the army's name or its plan role (army_layout name_hint). Refused before input with army_unknown, name_taken (another army or army group has it) or name_not_typable (letters, digits, space and - _ . , / ' ( ), at most 24 characters).",
+   "description": "Rename an own army with the game's own control: the army's card selects it, its badge's name box takes a click, the old name is erased and the new one typed key by key (each key verified in the box), then Return. Verified when the army carries the new name. `army` may be the army's name or its plan role (army_layout name_hint). Refused before input with army_unknown, name_taken (another army or army group has it) or name_not_typable (letters, digits, space and - _ . , / ' ( ), at most 20 characters: the game keeps no more).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -1065,7 +1065,7 @@
       "type": "string"
      },
      "name": {
-      "maxLength": 24,
+      "maxLength": 20,
       "minLength": 1,
       "type": "string"
      },

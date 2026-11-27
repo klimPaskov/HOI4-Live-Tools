@@ -25,7 +25,7 @@ struct Layout {
 /// Linux ELF a4971c9e (libstdc++).
 const LINUX: Layout = Layout {
     country_divisions: 0x290,
-    division_vtable: 0x440e880,
+    division_vtable: 0x4415b30,
     strength: 0x420,
     organisation: 0x428,
     province_id: 0xa4,

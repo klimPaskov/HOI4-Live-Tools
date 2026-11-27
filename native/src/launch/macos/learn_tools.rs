@@ -673,9 +673,7 @@ fn mods_now(process: &dyn Process) -> Vec<(String, String)> {
 pub(super) fn learned_on_now(process: &dyn Process) -> LearnedOn {
     let mods = mods_now(process);
     LearnedOn {
-        game_version: crate::builds::SUPPORTED
-            .iter()
-            .find(|b| b.system == std::env::consts::OS)
+        game_version: crate::builds::current()
             .map(|b| b.game_version.to_string())
             .unwrap_or_default(),
         mod_set: skills::mod_set_id(&mods),

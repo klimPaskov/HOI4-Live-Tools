@@ -76,7 +76,10 @@ def check_build(facts):
     if not native["installed"]:
         return out
     builds = facts.get("builds")
-    entry = next((b for b in (builds or {}).get("builds", []) if b.get("system") == facts["system"]), None)
+    mine = [b for b in (builds or {}).get("builds", []) if b.get("system") == facts["system"]]
+    # A runtime that names the build it reads (one binary per macOS build) is matched on that build.
+    entry = next((b for b in mine if b.get("build_id") == (builds or {}).get("reader_build")), None) or \
+        next(iter(mine), None)
     if not entry:
         out.append(item(NOTE, "this native runtime cannot list the game builds it reads; a newer release can",
                         "hoi4-live update", NATIVE))

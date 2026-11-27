@@ -106,6 +106,21 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(dict((l, s) for l, s, _ in doctor.runtimes(f, items)),
                          {"Python server": 0, "native runtime": 1})
 
+    def test_a_runtime_for_one_of_two_macos_builds_is_matched_on_the_build_it_reads(self):
+        two = copy.deepcopy(BUILDS)
+        two["builds"].insert(1, {"system": "macos", "label": "macOS", "game_version": "1.20.0.0",
+                                 "build_id": "NEW", "sha256": "f" * 64})
+        two["reader_build"] = "NEW"
+        f = facts("macos", builds=two, game={"sha256": "f" * 64, "version": "1.20.0.0"})
+        items = doctor.evaluate(f)
+        self.assertEqual(fixes(items, doctor.NATIVE), [])
+        self.assertTrue([i for i in items if i["status"] == doctor.OK and "HOI4 1.20.0.0" in i["title"]])
+        # The 1.19.4.1 game with this 1.20 runtime is a mismatch that names the build it reads.
+        f = facts("macos", builds=two)
+        found = fixes(doctor.evaluate(f), doctor.NATIVE)
+        self.assertEqual(len(found), 1)
+        self.assertIn("HOI4 1.20.0.0", found[0]["title"])
+
     def test_a_runtime_that_cannot_list_its_builds_asks_for_an_update_without_blocking(self):
         f = facts("macos", builds=None)
         items = doctor.evaluate(f)

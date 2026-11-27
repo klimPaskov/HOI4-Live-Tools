@@ -55,7 +55,7 @@ fn local_window(r: &Reader<'_>, base: u64, window: u64, registry: u64) -> Result
         return Ok(json!({"materialized":false,"visible_predicate":null}));
     }
     pointer(window)?;
-    exact(r, window, at(base, 0x44de2b0)?)?;
+    exact(r, window, at(base, 0x44e62b0)?)?;
     if r.u64(at(window, 0x98)?)? != registry {
         return Err(fail(
             "invalid_gui_owner",
@@ -83,7 +83,7 @@ fn named(
     crate::gui_registry::lookup(r, at(container, names)?, &values, key, NAME_BYTES)
 }
 fn callback(r: &Reader<'_>, base: u64, view: u64, button: u64) -> Result<bool> {
-    if r.u64(at(button, 0x80)?)? != at(base, 0x44dd8d0)? {
+    if r.u64(at(button, 0x80)?)? != at(base, 0x44e58d0)? {
         return Ok(false);
     }
     let count = r.i32(at(button, 0x98)?)?;
@@ -123,7 +123,7 @@ fn callback(r: &Reader<'_>, base: u64, view: u64, button: u64) -> Result<bool> {
     if count != 1 || target != glue {
         return Ok(false);
     }
-    if r.u64(glue)? != at(base, 0x43ea698)?
+    if r.u64(glue)? != at(base, 0x43f1948)?
         || r.u64(at(glue, 0x18)?)? != at(base, 0x1693160)?
         || r.u64(at(glue, 0x20)?)? != at(base, 0x1693130)?
     {
@@ -194,7 +194,7 @@ fn diagnostics(
         Err(error) if error.code == "invalid_gui_type" => Value::Null,
         Err(error) => return Err(error),
     };
-    if r.u64(button)? != at(base, 0x44dd4f0)? {
+    if r.u64(button)? != at(base, 0x44e54f0)? {
         out["reason"] = json!("standard_layout_unavailable");
         return Ok(out);
     }
@@ -221,7 +221,7 @@ fn diagnostics(
         let render = r.u64(at(button, 0xe8)?)?;
         out["renderer_type_encoding"] = reuse.nullable_type(r, render)?;
         let primary = if render == 0 { 0 } else { r.u64(render)? };
-        if [0x44ed1d8, 0x44ef818, 0x44e15e0]
+        if [0x44f51d8, 0x44f7818, 0x44e95e0]
             .iter()
             .any(|p| primary == base + p)
         {
@@ -253,10 +253,10 @@ pub fn owned_snapshot(
     let w = Witnesses::new(process);
     let r = Reader::new(&w);
     let base = process.image_base();
-    let gs = pointer(r.u64(at(base, 0x459e9f0)?)?)?;
-    let idler = pointer(r.u64(at(base, 0x459e908)?)?)?;
-    exact(&r, gs, at(base, 0x445e068)?)?;
-    exact(&r, idler, at(base, 0x4460048)?)?;
+    let gs = pointer(r.u64(at(base, 0x45a6a00)?)?)?;
+    let idler = pointer(r.u64(at(base, 0x45a6918)?)?)?;
+    exact(&r, gs, at(base, 0x4465768)?)?;
+    exact(&r, idler, at(base, 0x4467770)?)?;
     let tag = r.i32(at(gs, 0x518)?)?;
     if !(1..4096).contains(&tag) {
         return Err(fail(
@@ -266,7 +266,7 @@ pub fn owned_snapshot(
     }
     //20811a0 (idler virtualC0) returns GS518 exactly when positive. The active
     //goal updater16886b0 calls it then d77320 before any container payload.
-    if r.u64(at(base, 0x4460048 + 0xc0)?)? != at(base, 0x20811a0)? {
+    if r.u64(at(base, 0x4467770 + 0xc0)?)? != at(base, 0x20811a0)? {
         return Err(fail(
             "invalid_gui_owner",
             "Exact own-country accessor required",
@@ -293,7 +293,7 @@ pub fn owned_snapshot(
         ));
     }
     let registry = pointer(r.u64(at(idler, 0x4f8)?)?)?;
-    exact(&r, registry, at(base, 0x4409f68)?)?;
+    exact(&r, registry, at(base, 0x4411218)?)?;
     let manager = pointer(r.u64(at(idler, 0x6b8)?)?)?;
     if r.u64(at(manager, 0x180)?)? != idler {
         return Err(fail(
@@ -302,7 +302,7 @@ pub fn owned_snapshot(
         ));
     }
     let view = pointer(r.u64(at(manager, 0x128)?)?)?;
-    exact(&r, view, at(base, 0x43ea4f8)?)?;
+    exact(&r, view, at(base, 0x43f17a8)?)?;
     if r.u64(at(view, 0x2f0)?)? != idler || r.u64(at(view, 0x38)?)? != manager {
         return Err(fail(
             "invalid_gui_owner",
@@ -310,7 +310,7 @@ pub fn owned_snapshot(
         ));
     }
     let focus = pointer(r.u64(at(manager, 0x130)?)?)?;
-    exact(&r, focus, at(base, 0x43df748)?)?;
+    exact(&r, focus, at(base, 0x43e69f8)?)?;
     let displayed = r.u64(at(focus, 0x11d8)?)?;
     if r.u64(at(focus, 0x2f0)?)? != idler || (displayed != 0 && displayed != country) {
         return Err(fail(
