@@ -409,10 +409,22 @@ def supply_and_stock(snap):
     out = []
     for e in g(snap, "production", "stockpile", default=[]):
         short = e.get("fielded_short") or 0
-        if short > 0 and (e.get("net_per_day") or 0) <= 0 and not e.get("stockpile"):
-            out.append(F("equipment_short", "high",
-                         f"divisions lack {short:.0f} {e['archetype']} with an empty stockpile and "
-                         f"{e.get('net_per_day') or 0:+.1f}/day: add or raise a line", subject=e["archetype"]))
+        net = e.get("net_per_day")
+        made = e.get("produced_per_day") or 0
+        if short > 0 and (net or 0) <= 0 and not e.get("stockpile"):
+            # what the lines make, not an unread net shown as zero (t1939n, 27 Nov 2026: "+0.0/day"
+            # for support equipment whose line of 3 factories made 4.25 a day)
+            if made > 0:
+                how = (f"its {e.get('production_lines') or 'its'} line(s) make {made:.1f}/day "
+                       f"({short / made:.0f} days to cover the shortfall alone"
+                       + (f", net {net:+.1f}/day after losses" if net is not None else "") + ")")
+                fix = "raise its line if those days are too long for the war"
+            else:
+                how = "no line makes it"
+                fix = "add a line"
+            out.append(F("equipment_short", "high" if made <= 0 else "medium",
+                         f"divisions lack {short:.0f} {e['archetype']} with an empty stockpile; {how}: {fix}",
+                         subject=e["archetype"], short=short, produced_per_day=made))
         elif e.get("depleting") and e.get("days_of_cover") is not None and e["days_of_cover"] < 30:
             out.append(F("equipment_depleting", "medium",
                          f"{e['archetype']} stockpile runs out in {e['days_of_cover']:.0f} days at "

@@ -427,5 +427,23 @@ class Battles(unittest.TestCase):
         self.assertFalse(s["battles"]["readable"])
 
 
+class EquipmentShort(unittest.TestCase):
+    def test_a_short_archetype_names_what_its_lines_make_not_an_unread_net(self):
+        # t1939n (27 Nov 2026): "+0.0/day" for support equipment whose line made 4.25 a day
+        from hoi4_live.observe import findings as Fd
+        row = {"archetype": "support_equipment", "fielded_short": 126.0, "stockpile": 0.0,
+               "net_per_day": None, "produced_per_day": 4.25, "production_lines": 1}
+        got = [f for f in Fd.supply_and_stock({"production": {"stockpile": [row]}})
+               if f["code"] == "equipment_short"]
+        self.assertEqual(got[0]["severity"], "medium")
+        self.assertIn("make 4.2/day", got[0]["text"])
+        self.assertIn("30 days", got[0]["text"])
+        none = dict(row, produced_per_day=0.0, production_lines=0)
+        got = [f for f in Fd.supply_and_stock({"production": {"stockpile": [none]}})
+               if f["code"] == "equipment_short"]
+        self.assertEqual(got[0]["severity"], "high")
+        self.assertIn("add a line", got[0]["text"])
+
+
 if __name__ == "__main__":
     unittest.main()
