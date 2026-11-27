@@ -2116,6 +2116,7 @@ fn lanes_tick(
 ) -> Result<Tick> {
     // the management load (plan_speed.rs): the real seconds each action took, by game hour
     let started = std::time::Instant::now();
+    state.round.pace_at(now, started);
     let out = lanes_tick_inner(state, tools, plan, lease, now)?;
     if matches!(out, Tick::Acted(_)) {
         state.round.cost(now, started.elapsed().as_secs_f64());
@@ -2219,6 +2220,13 @@ fn lanes_tick_inner(
     }
     state.round.war_last = false;
     state.round.lanes_turn(now);
+    // The manage reads (the failure ledger's wake, the game's alert row, the omissions the player
+    // and the monitor see) never act and keep their own once-a-day timer: they run on every lanes
+    // tick, not only at the pass's turn. In the pass alone they ran on the paused day-one setup
+    // and then never (cmph1, cmps1, 27 Nov 2026: the omission feed froze at 1939.08.21 in one
+    // leg and stayed empty all war in the other, so 2.7 M idle manpower, 480 political power and
+    // an army group without a field marshal reached no one).
+    plan_manage::daily_reads(state, tools, plan, now);
     // A free research slot and a free focus are checked every tick (cheap reads, each lost day
     // is a day of the slot): a pass of slow GUI orders left the focus idle for 14 game days
     // (g17j 1936.4). They act before the pass resumes.
@@ -2256,11 +2264,18 @@ fn lanes_tick_inner(
     // once a game day (`scheduler.issues_due: false` turns it off). On by default: the monitor's
     // issues are rule findings with a deadline, and the offer costs nothing when the lane has
     // nothing to do (it hands the tick back at once).
-    if plan["scheduler"]["issues_due"] != json!(false) {
+    // At most one lanes tick in a row goes to them: the lanes tick after an issue lane acted
+    // belongs to the pass. With a war lane taking three ticks of four and a game day of about
+    // five real seconds at speed 3, the issue lanes (each once a game day) took every lanes tick
+    // and the routine pass (decisions, training, officer corps, the manage reads) never ran in
+    // two 60-day legs (cmph1, cmps1, 27 Nov 2026: hoi4_decisions_list and hoi4_train never called).
+    if plan["scheduler"]["issues_due"] != json!(false) && !state.round.issue_last {
         if let Some(line) = issue_lanes(state, tools, plan, lease, now, &lanes)? {
+            state.round.issue_last = true;
             return Ok(Tick::Acted(line));
         }
     }
+    state.round.issue_last = false;
     let mut restarted = false;
     loop {
         if state.round.cursor >= lanes.len() {
@@ -3344,6 +3359,9 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
 struct Round {
     /// The next lane to offer.
     cursor: usize,
+    /// A monitor-issue lane acted in the last lanes tick: the next one belongs to the pass (see
+    /// `lanes_tick_inner`).
+    issue_last: bool,
     /// Lanes that acted in this pass, in order.
     acted: Vec<&'static str>,
     /// The war-first block acted in the last tick: this tick belongs to a lane.
@@ -3365,6 +3383,10 @@ struct Round {
     last: Option<String>,
     /// Real seconds of each lane's last step that acted (see `opening_holds`).
     secs: HashMap<&'static str, f64>,
+    /// The last tick's (real instant, game hour) and the game hours that pass per real second
+    /// while the game runs (a moving mean; see `pace_at`).
+    pace: Option<(std::time::Instant, GameHour)>,
+    hours_per_sec: f64,
 }
 
 impl Round {
@@ -3390,6 +3412,32 @@ impl Round {
         if acted {
             self.secs.insert(name, started.elapsed().as_secs_f64());
         }
+    }
+
+    /// A tick at game hour `now`: the game's pace in game hours per real second, measured over
+    /// the running stretches only (a paused game moves no hour and leaves the mean alone).
+    fn pace_at(&mut self, now: GameHour, at: std::time::Instant) {
+        if let Some((t, h)) = self.pace {
+            let secs = at.saturating_duration_since(t).as_secs_f64();
+            // a sample over a pause (no tick for 30 s) would read the pause as a slow game
+            if now > h && (1.0..=30.0).contains(&secs) {
+                let rate = (now - h) as f64 / secs;
+                self.hours_per_sec = if self.hours_per_sec > 0.0 {
+                    0.7 * self.hours_per_sec + 0.3 * rate
+                } else {
+                    rate
+                };
+            }
+        }
+        if self.pace.is_none_or(|(_, h)| now != h) {
+            self.pace = Some((at, now));
+        }
+    }
+
+    /// The game hours lane `name`'s last order would let pass at the measured pace; pure.
+    fn step_hours(&self, name: &str) -> GameHour {
+        let secs = self.secs.get(name).copied().unwrap_or(0.0);
+        (secs * self.hours_per_sec).ceil() as GameHour
     }
 
     /// Whether lane `name`'s last order took SLOW_STEP_SECONDS or more; pure.
@@ -3808,17 +3856,11 @@ const OPENING_HOLD_TAIL: GameHour = 7 * DAY;
 
 /// The opening: a dated declaration lies within DECLARE_LEAD ahead (or up to OPENING_HOLD_TAIL
 /// behind) and an operation against its target is preparing or prepared and not yet executed.
-fn opening_window(state: &State, plan: &Value, now: GameHour) -> bool {
+fn opening_window(state: &State, plan: &Value, now: GameHour, lead: GameHour) -> bool {
     !state.war_active
-        && plan_speed::dated_declarations(
-            plan,
-            &[],
-            now,
-            plan_speed::DECLARE_LEAD,
-            OPENING_HOLD_TAIL,
-        )
-        .iter()
-        .any(|tag| plan_operation::pending_on(state, plan, tag))
+        && plan_speed::dated_declarations(plan, &[], now, lead, OPENING_HOLD_TAIL)
+            .iter()
+            .any(|tag| plan_operation::pending_on(state, plan, tag))
 }
 
 /// The slow lanes wait in the opening, with no cap inside its window: one design-company step by
@@ -3839,7 +3881,11 @@ fn opening_holds(
     if name == "hold" || !(WAR_DEFERRED_LANES.contains(&name) || state.round.slow(name)) {
         return false;
     }
-    opening_window(state, plan, now) || air_waits_for_war(state, tools, plan, now)
+    // a slow order must also END before the window: its lead grows by the game time the lane's
+    // last order took at the measured pace (cmph1, 27 Nov 2026: two design-company trait orders
+    // of 62 s and 77 s began on 18 and 20 August at speed 3 and ran to 1 September)
+    let lead = plan_speed::DECLARE_LEAD + 2 * state.round.step_hours(name);
+    opening_window(state, plan, now, lead) || air_waits_for_war(state, tools, plan, now)
 }
 
 /// Wall seconds the operations' burst may take between two declarations due the same day.
@@ -6198,7 +6244,33 @@ fn construction_plan_step(
             }
             ("hoi4_construction_add", a)
         };
+        // The plan's other pending items of the same building in the same state (one item per
+        // level: cp_ab_42_1 .. cp_ab_42_5) go in the same order as its count: sent one level at a
+        // time they were the same order to the same state twice within days (t1939l/t1939m,
+        // 24 Nov 2026: 7 of 10 duplicate-action issues were air base levels of one state).
+        let mut args = args;
+        let siblings: Vec<String> = if tool == "hoi4_construction_add" {
+            same_order_siblings(items, item, &key_of, |k| {
+                !state.plan_built.contains_key(k)
+                    && !state.plan_blocked.contains_key(k)
+                    && !state.skipped(now, "cplan", k)
+            })
+        } else {
+            Vec::new()
+        };
+        if !siblings.is_empty() {
+            args["count"] = json!(1 + siblings.len());
+        }
         let (ok, why) = state.act(tools, lease, tool, args, "cp")?;
+        for k in &siblings {
+            if ok {
+                state.plan_built.insert(k.clone(), now);
+                state.plan_tries.remove(k);
+            } else {
+                // they rest with the item that led the order and go again with it
+                state.skip(now, "cplan", k, 2 * DAY);
+            }
+        }
         let legs = item["legs"] == json!(true) && tool == "hoi4_railway_build";
         let leg_wait = item["leg_days"].as_i64().unwrap_or(LEG_DAYS).max(1) * DAY;
         if legs && (ok || why.starts_with("leg_built")) {
@@ -6222,6 +6294,35 @@ fn construction_plan_step(
         plan_manage::note(state, "construction_plan", waits.join("; "));
     }
     Ok(None)
+}
+
+/// The keys of the `construction_plan` items after `item` that one order can carry with it: the
+/// same building in the same state, no province, path or `requires` of their own, the same
+/// `when`, still pending (`pending`). At most 9 (an order queues at most 10 levels).
+fn same_order_siblings(
+    items: &[Value],
+    item: &Value,
+    key_of: &dyn Fn(&Value) -> String,
+    pending: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    let alone =
+        |i: &Value| i["province"].is_null() && i["path"].is_null() && i["requires"].is_null();
+    if !alone(item) || item["state"].as_i64().is_none() {
+        return Vec::new();
+    }
+    let me = key_of(item);
+    items
+        .iter()
+        .filter(|i| {
+            i["building"] == item["building"]
+                && i["state"] == item["state"]
+                && i["when"] == item["when"]
+                && alone(i)
+        })
+        .map(key_of)
+        .filter(|k| *k != me && pending(k))
+        .take(9)
+        .collect()
 }
 
 /// The first technology of a `construction_plan` item's `requires` (one key or a list) that is
@@ -12137,6 +12238,20 @@ mod tests {
         ));
         state.done.insert("op:op_poland:exec".into(), day);
         assert!(!held(&mut state, "designs", day));
+        // a 77 s order at 4.5 game hours a second (speed 3) yields from about 32 days before
+        state.done.remove("op:op_poland:exec");
+        state.round.secs.insert("mio_traits", 77.0);
+        state.round.hours_per_sec = 4.5;
+        assert!(held(&mut state, "mio_traits", day - 20 * DAY));
+        assert!(!held(&mut state, "designs", day - 20 * DAY));
+        // the pace is measured while the game runs only
+        let mut round = super::Round::default();
+        let t = std::time::Instant::now();
+        round.pace_at(100, t);
+        round.pace_at(100, t + std::time::Duration::from_secs(5));
+        assert_eq!(round.hours_per_sec, 0.0);
+        round.pace_at(118, t + std::time::Duration::from_secs(9));
+        assert!((round.hours_per_sec - 18.0 / 9.0).abs() < 1e-9);
         // no operation against the target: no hold
         let mut other = State::default();
         other.round.timed("designs", true, t0);
@@ -17065,6 +17180,30 @@ mod tests {
         );
         assert_eq!(super::date_hour("1936.13.01"), None);
         assert_eq!(super::game_year(60759371), Some(1936));
+    }
+
+    /// t1939l/t1939m: one plan item per air base level in a state went out one level at a time,
+    /// the same order to the same state twice within days; the levels now go in one order.
+    #[test]
+    fn plan_items_of_one_building_in_one_state_go_in_one_order() {
+        let items = vec![
+            json!({"id": "ab_42_1", "building": "air_base", "state": 42, "when": "1938.3.1"}),
+            json!({"id": "ab_42_2", "building": "air_base", "state": 42, "when": "1938.3.1"}),
+            json!({"id": "ab_42_3", "building": "air_base", "state": 42, "when": "1938.3.1"}),
+            json!({"id": "ab_51_1", "building": "air_base", "state": 51, "when": "1938.3.1"}),
+            json!({"id": "ab_42_p", "building": "air_base", "state": 42, "province": 9, "when": "1938.3.1"}),
+            json!({"id": "rd_42", "building": "radar_station", "state": 42, "when": "1938.3.1"}),
+            json!({"id": "ab_42_late", "building": "air_base", "state": 42, "when": "1940.1.1"}),
+        ];
+        let key_of = |i: &Value| format!("id:{}", i["id"].as_str().unwrap());
+        let all = super::same_order_siblings(&items, &items[0], &key_of, |_| true);
+        assert_eq!(all, vec!["id:ab_42_2", "id:ab_42_3"]);
+        // a level already queued is not sent again
+        let rest = super::same_order_siblings(&items, &items[0], &key_of, |k| k != "id:ab_42_2");
+        assert_eq!(rest, vec!["id:ab_42_3"]);
+        // an item with its own province goes alone
+        assert!(super::same_order_siblings(&items, &items[4], &key_of, |_| true).is_empty());
+        assert!(super::same_order_siblings(&items, &items[3], &key_of, |_| true).is_empty());
     }
 
     #[test]
@@ -22070,6 +22209,20 @@ mod tests {
         let some = power(165.0);
         tick(&mut state, &some, &plan, "l", START + 3 * DAY).unwrap();
         assert_eq!(chosen(&some), vec![json!("small")]);
+        // refused while the power covered it (a law the focus tree replaced): the plan's reserve
+        // holds nothing for it, so the standing policy may spend the power (cmps1, 27 Nov 2026)
+        let mut state = State::default();
+        let key = politics_key(0, &plan["politics"][0]);
+        state.pol_pp_at_fail.insert(key.clone(), 400.0);
+        state.skip(START, "pol", &key, 3 * DAY);
+        let read = power(420.0);
+        let (reserve, lines) = plan_manage::politics_reserve(&mut state, &read, &plan, START + DAY);
+        assert_eq!(reserve, 50.0, "{lines:?}");
+        assert!(lines[0].contains("not for power"), "{lines:?}");
+        // refused below its cost: it keeps its cost
+        state.pol_pp_at_fail.insert(key, 100.0);
+        let (reserve, _) = plan_manage::politics_reserve(&mut state, &read, &plan, START + DAY);
+        assert_eq!(reserve, 200.0);
     }
 
     #[test]

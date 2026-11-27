@@ -504,6 +504,18 @@ fn stockpile(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Valu
     Some(read).filter(|r| r["equipment"].is_array())
 }
 
+/// The reads every rule leans on and that never act: the failure ledger's wake and the game's
+/// alert row with the omissions it publishes (once a game day by `alerts`' own timer). Run on
+/// every lanes tick (plan_run.rs `lanes_tick_inner`) and as the pass's first lane.
+pub(super) fn daily_reads(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
+    if state.skipped(now, "mledger", "x") {
+        return;
+    }
+    state.skip(now, "mledger", "x", DAY / 4);
+    ledger_wake(state, plan, now);
+    alerts(state, tools, plan, now);
+}
+
 /// The manage rules as lanes of the pass (plan_run.rs `lanes`), in their old chain order. The
 /// first, `manage`, takes the reads every rule leans on (the failure ledger's wake, the game's
 /// alert row) and never acts.
@@ -511,8 +523,7 @@ pub(super) const LANES: [super::Lane; 20] = [
     ("manage", |state, tools, plan, _, now| {
         // the tick only gets here when no conference is open
         state.manage.peace = None;
-        ledger_wake(state, plan, now);
-        alerts(state, tools, plan, now);
+        daily_reads(state, tools, plan, now);
         Ok(None)
     }),
     ("templates", templates_step),
@@ -5174,6 +5185,17 @@ pub(super) fn politics_reserve(
         // it keeps its cost (live 16 Nov 2026: the stability pick, refused at 76 of 150, let
         // the standing policy spend 81 points the next day and waited two more months).
         let short_of_power = state.pol_pp_at_fail.get(&key).is_some_and(|pp| *pp < cost);
+        // A pick the game refused while the power covered its cost was not refused for power (a
+        // law the focus tree replaced, an adviser no longer offered): it holds nothing. Held, it
+        // kept 375 points (Free Trade after Autarky, War Economy under Total Mobilisation,
+        // Schacht) out of the standing policy for the whole war (cmps1, 27 Nov 2026: 480-800
+        // political power banked, "saved for the next buy").
+        if let Some(pp) = state.pol_pp_at_fail.get(&key).filter(|pp| **pp >= cost) {
+            lines.push(format!(
+                "{idea} not held (refused at {pp:.0} power: not for power)"
+            ));
+            continue;
+        }
         if state.skipped(now, "pol", &key) && !short_of_power {
             let left = state
                 .bad
@@ -5303,6 +5325,9 @@ pub(super) fn politics_auto_step(
     // (live 15 Nov 2026: the stability advisor, first in the order, never reached its 150 while
     // the power went to 50-point staff picks below it, and stability sat at 0.42 all war).
     let mut saving = 0.0;
+    // Whether an entry that is due (its when holds, or it has none) costs more than the power:
+    // only then is unbought power saved for the next buy.
+    let mut due_short = false;
     for entry in order.as_array().map_or(&[][..], Vec::as_slice) {
         let (category, slot) = (text(&entry["category"]).to_string(), &entry["slot"]);
         let slot_key = format!("{category}:{slot}");
@@ -5314,6 +5339,14 @@ pub(super) fn politics_auto_step(
                 150.0
             });
         if budget - saving < cost {
+            // an entry whose `when` does not hold is no reason to call the power saved
+            if !entry["when"].is_null()
+                && !matches!(when_holds(state, tools, &entry["when"], now), Truth::True)
+            {
+                seen.push(format!("{slot_key} waits: its when does not hold"));
+                continue;
+            }
+            due_short = true;
             let urgent = saving == 0.0
                 && !entry["when"].is_null()
                 && !state.skipped(now, "pauto", &slot_key)
@@ -5517,7 +5550,7 @@ pub(super) fn politics_auto_step(
     // nothing bought: no reads again for a game day; power above the threshold with nothing to
     // buy for long wakes the player
     state.skip(now, "pauto", "x", DAY);
-    if !could_buy {
+    if !could_buy && due_short {
         state.manage.pp_idle_since = None;
         note(
             state,

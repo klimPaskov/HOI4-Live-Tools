@@ -338,8 +338,10 @@ pub(super) fn derived(
                 .as_ref()
                 .filter(|(at, _)| now - at <= 31 * DAY)
                 .map(|(_, read)| read.clone());
+            let mut named = false;
             if let Some(read) = seen {
                 let open_now = affordable_decisions(&read, pp - reserve, plan);
+                named = !open_now.is_empty();
                 if !open_now.is_empty() {
                     let names: Vec<String> = open_now
                         .iter()
@@ -353,9 +355,25 @@ pub(super) fn derived(
                             names.join(", ")
                         ),
                         "politics",
-                        pol,
+                        pol.clone(),
                     ));
                 }
+            }
+            // the standing order found nothing to buy while power above the plan's reserve sits
+            // unspent: a judgement for the player (an adviser, a law, a decision, improve
+            // relations or a justification the plan wants), with what the order saw (cmps1,
+            // 27 Nov 2026: 480 power banked for weeks and no row, no monitor issue)
+            let idle = pol.as_deref().filter(|n| n.contains("nothing to buy"));
+            if let (false, Some(note)) = (named, idle) {
+                open.push((
+                    "political_power_unspent".to_string(),
+                    format!(
+                        "political power {pp:.0} ({reserve:.0} held for the plan's picks) buys nothing: the standing order has no entry to buy ({}); choose by value: an adviser, a better law (hoi4_politics_options / hoi4_politics_choose), a decision that pays back (hoi4_decisions_list), improve relations or a war goal the plan wants",
+                        note.chars().take(400).collect::<String>()
+                    ),
+                    "politics",
+                    None,
+                ));
             }
         }
     }
