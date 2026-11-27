@@ -32,6 +32,13 @@ usage:
       when the canonical build moves (the macOS sources are rewritten to a new build), give another
       system's table the new keys: every image key and field key goes through the migration map
       (native/layouts/migrations/<from>-to-<to>.json); a key the map lacks is dropped and listed
+  game_migrate.py same-code MIGRATION.json PREV_EXE NEW_EXE [--out MAP.json] [--table TABLE --table-out T.json]
+      a rebuild that left code and data in place (a hotfix that changed game script files, version
+      strings, a build stamp): when NEW_EXE has PREV_EXE's section layout and size, every changed byte is
+      found and classified (code: the containing function; strings; other data), and every image value of
+      MIGRATION (the map to PREV_EXE) is checked against them. With no value touched it writes the map to
+      NEW_EXE (same values, the new identity) in seconds instead of a full migrate; a touched value or a
+      moved layout is listed and the exit status is 1 (run migrate then)
   game_migrate.py score TABLE TRUTH.json
       compare a table with known answers {"0xkey": {"0xvalue": n}} (e.g. a hand-made migration)
 
@@ -544,6 +551,98 @@ def refcheck(tables, refs, canonical=None):
     return out
 
 
+# ---------------------------------------------------------------------------
+# same-code: a rebuild with every address in place
+# ---------------------------------------------------------------------------
+
+SAME_CODE_CONTEXT = 0x40   # bytes after a data value that a read through it may touch (a vtable's first slots)
+
+
+def changed_runs(a, b, chunk=1 << 16):
+    """(start, end) file-offset runs where two equally long byte strings differ."""
+    runs = []
+    for base in range(0, len(a), chunk):
+        x, y = a[base:base + chunk], b[base:base + chunk]
+        if x == y:
+            continue
+        for i in range(len(x)):
+            if x[i] != y[i]:
+                o = base + i
+                if runs and runs[-1][1] >= o - 8:
+                    runs[-1][1] = o + 1
+                else:
+                    runs.append([o, o + 1])
+    return [tuple(r) for r in runs]
+
+
+def same_code(migration, prev_exe, new_exe):
+    """(map or None, report): the map to NEW_EXE when no image value of `migration` (whose `to` is
+    PREV_EXE) lies in or reads from a changed byte; the report lists what changed, by section."""
+    old, new = xmap.load_image(prev_exe), xmap.load_image(new_exe)
+    report = dict(prev=identify(prev_exe), new=identify(new_exe), problems=[], changed={})
+    prev_id = migration.get('to') or {}
+    if prev_id.get('build_id') and prev_id['build_id'] != old.identity:
+        report['problems'].append(f"the map leads to {prev_id['build_id']}, not to PREV_EXE {old.identity}")
+    layout = lambda img: [(s.seg, s.name, s.addr, s.size, s.off) for s in img.sections]
+    if old.kind != new.kind or len(old.data) != len(new.data) or layout(old) != layout(new):
+        report['problems'].append('the section layout or the file size differs: addresses may have moved (run migrate)')
+        return None, report
+    spans = []   # (lo, hi, kind, where): address ranges a changed byte makes unsafe
+    for lo, hi in changed_runs(old.data, new.data):
+        sec = next((s for s in old.sections if not s.nobits and s.off <= lo < s.off + s.size), None)
+        if sec is None:
+            kind = 'header'   # load commands: LC_UUID, the code signature
+            report['changed'][kind] = report['changed'].get(kind, 0) + hi - lo
+            continue
+        a, b = sec.addr + lo - sec.off, sec.addr + hi - sec.off
+        where = f'{sec.seg},{sec.name}'
+        report['changed'][where] = report['changed'].get(where, 0) + hi - lo
+        if sec.kind == 'text':
+            f = old.containing_function(a)
+            if f is not None:
+                a, b = f, max(b, old.function_end(f))
+        elif sec.kind == 'cstring':
+            while a > sec.addr and old.data[sec.off + a - sec.addr - 1] != 0:
+                a -= 1
+        if spans and spans[-1][:2] == (a, b):
+            continue   # another changed run of the same function or string
+        spans.append((a, b, sec.kind, where))
+    report['changed_spans'] = [dict(lo=hex(x - old.base), hi=hex(y - old.base), kind=k, where=w)
+                               for x, y, k, w in spans]
+    touched = []
+    for key, e in (migration.get('image') or {}).items():
+        v = old.absolute(int(e['new'], 16))
+        for x, y, k, w in spans:
+            if x <= v < y or (k != 'text' and v < x < v + SAME_CODE_CONTEXT):
+                touched.append(dict(key=key, value=e['new'], span=[hex(x - old.base), hex(y - old.base)], where=w))
+                break
+    report['image_values'] = len(migration.get('image') or {})
+    report['touched'] = touched
+    if touched:
+        report['problems'].append(f'{len(touched)} image value(s) lie in or read from changed bytes')
+    if report['problems']:
+        return None, report
+    out = json.loads(json.dumps(migration))
+    nid = report['new']
+    out['to'] = dict(build_id=nid['build_id'], game_version=nid['game_version'], sha256=nid['sha256'])
+    out['status'] = (f"same code as {prev_id.get('game_version')} {prev_id.get('build_id')} (game_migrate.py same-code): "
+                     f"identical section layout; changed bytes " +
+                     ', '.join(f'{k} {n}' for k, n in sorted(report['changed'].items())) +
+                     f"; none of the {report['image_values']} image values lies in or reads from them. "
+                     + str(migration.get('status') or ''))
+    out.setdefault('notes', []).append(
+        f"same-code from {prev_id.get('build_id')}: every image value and field kept; "
+        f"changed spans {len(spans)} ({', '.join(sorted(set(w for _, _, _, w in spans)))})")
+    return out, report
+
+
+def same_code_table(table, ident):
+    """A layout table carried to a same-code build: the values stay, the identity changes."""
+    out = dict(table)
+    out.update(build_id=ident['build_id'], game_version=ident['game_version'], sha256=ident['sha256'])
+    return out
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     sub = p.add_subparsers(dest='cmd', required=True)
@@ -574,6 +673,13 @@ def main(argv=None):
     s.add_argument('--tables', default='native/layouts')
     s.add_argument('--refs', default=str(reference_dir()))
     s.add_argument('--canonical')
+    s = sub.add_parser('same-code')
+    s.add_argument('migration')
+    s.add_argument('prev')
+    s.add_argument('new')
+    s.add_argument('--out')
+    s.add_argument('--table', help="PREV_EXE's layout table, carried to NEW_EXE")
+    s.add_argument('--table-out')
     s = sub.add_parser('score')
     s.add_argument('table')
     s.add_argument('truth')
@@ -598,6 +704,23 @@ def main(argv=None):
         print(json.dumps(dict(image=len(new['image']), fields=sum(len(m) for m in new['fields'].values()),
                               dropped=dropped), indent=1))
         return 0 if not dropped else 1
+    if a.cmd == 'same-code':
+        out, report = same_code(json.loads(pathlib.Path(a.migration).read_text()), a.prev, a.new)
+        if out is not None and a.out:
+            # the map names its base instead of copying it: a literal added to the base later reaches
+            # this build too (scripts/macos_build_variant.py load_map follows same_code_of)
+            ref = {k: out[k] for k in ('system', 'from', 'to', 'status', 'notes') if k in out}
+            ref.update(same_code_of=pathlib.Path(a.migration).name, changed=report['changed'],
+                       changed_spans=report['changed_spans'])
+            pathlib.Path(a.out).write_text(json.dumps(ref, indent=1, sort_keys=True) + '\n')
+        if out is not None and a.table and a.table_out:
+            t = same_code_table(json.loads(pathlib.Path(a.table).read_text()), report['new'])
+            pathlib.Path(a.table_out).write_text(json.dumps(t, indent=1, sort_keys=True) + '\n')
+        summary = {k: report[k] for k in ('changed', 'image_values', 'touched', 'problems') if k in report}
+        summary['spans'] = report.get('changed_spans', [])[:40]
+        summary['new'] = {k: report['new'][k] for k in ('build_id', 'game_version', 'version_label', 'sha256')}
+        print(json.dumps(summary, indent=1))
+        return 0 if out is not None else 1
     if a.cmd == 'refcheck':
         res = refcheck(a.tables, a.refs, a.canonical)
         print(json.dumps(res, indent=1))
