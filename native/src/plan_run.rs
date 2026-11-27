@@ -555,35 +555,132 @@ impl Tools for Timed<'_> {
     }
 }
 
-/// The reads one tick shares: the same read with the same arguments is answered from the first
-/// answer for up to `TICK_READ_FRESH`, and every action (a call with a request_id) forgets them
-/// all, so a read after an order is always fresh. g17i (18 Nov 2026): one tick read hoi4_states
-/// 8 times, hoi4_wars 5 and hoi4_armies 5.
+/// The tick's snapshot of the game: every read without the input lease (a memory read: no panel,
+/// no click) with the same arguments is answered from its first answer for up to
+/// `TICK_READ_FRESH`, whichever lane asks. An order forgets only the reads its family can change
+/// ([`read_survives`]), so the lanes after an order by command still share the rest. g17i (18 Nov
+/// 2026): one tick read hoi4_states 8 times, hoi4_wars 5 and hoi4_armies 5; w92b (27 Nov 2026):
+/// 1341 repeated hoi4_states, 403 hoi4_events and 356 hoi4_armies calls within ticks, because only
+/// twelve tools were shared and every order cleared them all.
 struct TickReads<'a> {
     inner: &'a dyn Tools,
     seen: std::cell::RefCell<HashMap<String, (std::time::Instant, Value)>>,
 }
 const TICK_READ_FRESH: Duration = Duration::from_secs(2);
-const TICK_SHARED_READS: [&str; 12] = [
-    "hoi4_economy",
-    "hoi4_production_lines",
-    "hoi4_stockpile",
+/// Reads that are never shared: the change feed and the date stop's state.
+const TICK_UNSHARED_READS: [&str; 3] = ["hoi4_observe", "hoi4_wait_change", "hoi4_date_stop"];
+/// Memory reads an order cannot move, whatever it is: the map's province graph.
+const STATIC_READS: [&str; 1] = ["hoi4_province_graph"];
+/// What armies, wars and the diplomacy view show: an economy, research or air order leaves them.
+const LAND_READS: [&str; 12] = [
     "hoi4_armies",
-    "hoi4_research",
-    "hoi4_overview",
-    "hoi4_country_status",
-    "hoi4_states",
     "hoi4_wars",
-    "hoi4_template_get",
+    "hoi4_commanders",
     "hoi4_division_templates",
-    "hoi4_doctrines",
+    "hoi4_template_get",
+    "hoi4_diplomacy_state",
+    "hoi4_diplomacy_incoming",
+    "hoi4_occupation",
+    "hoi4_war_stats",
+    "hoi4_war_risk",
+    "hoi4_battles",
+    "hoi4_fleets",
 ];
+/// What production, construction and trade show.
+const ECONOMY_READS: [&str; 16] = [
+    "hoi4_production_lines",
+    "hoi4_economy",
+    "hoi4_stockpile",
+    "hoi4_production_shortages",
+    "hoi4_designs",
+    "hoi4_mios",
+    "hoi4_construction_queue",
+    "hoi4_resources",
+    "hoi4_trade",
+    "hoi4_special_projects",
+    "hoi4_naval_production_options",
+    "hoi4_convoys",
+    "hoi4_country_status",
+    "hoi4_supply",
+    "hoi4_states",
+    "hoi4_alerts",
+];
+/// What the research view shows.
+const RESEARCH_READS: [&str; 5] = [
+    "hoi4_research",
+    "hoi4_research_extras",
+    "hoi4_doctrines",
+    "hoi4_focus_available",
+    "hoi4_focus_completed",
+];
+/// The order families whose reach is known: an order outside them forgets every read.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum OrderFamily {
+    Economy,
+    Research,
+    Air,
+}
+fn order_family(action: &str) -> Option<OrderFamily> {
+    const ECONOMY: [&str; 10] = [
+        "hoi4_production_",
+        "hoi4_design_",
+        "hoi4_mio_",
+        "hoi4_construction_",
+        "hoi4_special_project_",
+        "hoi4_railway_build",
+        "hoi4_trade_set",
+        "hoi4_auto_import",
+        "hoi4_agency_",
+        "hoi4_operative_",
+    ];
+    if ECONOMY.iter().any(|p| action.starts_with(p)) {
+        return Some(OrderFamily::Economy);
+    }
+    if matches!(action, "hoi4_research_start" | "hoi4_doctrine_adopt") {
+        return Some(OrderFamily::Research);
+    }
+    // a wing attached to an army changes the army: not this family
+    if action.starts_with("hoi4_air_") && action != "hoi4_air_attach" {
+        return Some(OrderFamily::Air);
+    }
+    None
+}
+/// Whether the read `read` stays valid in the tick's snapshot after the order `action`; pure. An
+/// order of a known family leaves the reads of the other families (and the open events: no
+/// production, research or air order opens one); any other order forgets everything, so a read
+/// after it is always fresh.
+fn read_survives(action: &str, read: &str) -> bool {
+    if STATIC_READS.contains(&read) {
+        return true;
+    }
+    let Some(family) = order_family(action) else {
+        return false;
+    };
+    let land = LAND_READS.contains(&read) || read == "hoi4_events";
+    let economy = ECONOMY_READS.contains(&read);
+    let research = RESEARCH_READS.contains(&read);
+    let air = matches!(read, "hoi4_air" | "hoi4_air_regions");
+    match family {
+        // a factory, a line or a building moves the economy reads (and the alerts, the supply
+        // and the states a building stands in); experience paid for a doctrine is in the
+        // country status
+        OrderFamily::Economy => land || research || air,
+        OrderFamily::Research => {
+            land || air || (economy && !matches!(read, "hoi4_country_status" | "hoi4_alerts"))
+        }
+        OrderFamily::Air => land || research || (economy && read != "hoi4_alerts"),
+    }
+}
 impl Tools for TickReads<'_> {
     fn call(&self, name: &str, args: &Value) -> Result<Value> {
-        if args.get("request_id").is_some() || !TICK_SHARED_READS.contains(&name) {
-            if args.get("request_id").is_some() {
-                self.seen.borrow_mut().clear();
-            }
+        if args.get("request_id").is_some() {
+            self.seen.borrow_mut().retain(|key, _| {
+                read_survives(name, key.split_once(' ').map_or(key.as_str(), |(n, _)| n))
+            });
+            return self.inner.call(name, args);
+        }
+        // a read through the interface (it takes the lease: a panel, a click) is never shared
+        if args.get("lease_token").is_some() || TICK_UNSHARED_READS.contains(&name) {
             return self.inner.call(name, args);
         }
         let key = format!("{name} {args}");
@@ -597,6 +694,56 @@ impl Tools for TickReads<'_> {
             .borrow_mut()
             .insert(key, (std::time::Instant::now(), out.clone()));
         Ok(out)
+    }
+}
+
+thread_local! {
+    /// The executor's tool calls that needed the game's input (see [`Metered`]).
+    static INPUT_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// The executor's orders that the tool answered as sent in process (see [`reply_in_process`]).
+    static IN_PROCESS_ORDERS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+/// How many tool calls on this thread needed the input so far (see [`Metered`]).
+fn input_calls() -> u64 {
+    INPUT_CALLS.with(|c| c.get())
+}
+/// How many orders on this thread went in process so far.
+fn in_process_orders() -> u64 {
+    IN_PROCESS_ORDERS.with(|c| c.get())
+}
+/// Whether a tool's reply says the change went through the game's own command in process (the
+/// tools add `in_process`, or `backend: "inprocess"` in the result); pure.
+fn reply_in_process(body: &Value) -> bool {
+    body.get("in_process").is_some_and(|v| !v.is_null())
+        || body["backend"] == json!("inprocess")
+        || body["result"]["backend"] == json!("inprocess")
+}
+/// The tick's cost meter: a call needed the input when it sent keys or clicks through the watched
+/// binding, or when it takes the input lease and the reply does not say it went in process (a
+/// mouse order, a read through a panel). A memory read or an order by the game's own command
+/// costs milliseconds; an input call costs seconds and holds the window. The scheduler runs every
+/// lane whose turn needs no input in the same tick and rations the input ones (see `tick`).
+struct Metered<'a> {
+    inner: &'a dyn Tools,
+}
+impl Tools for Metered<'_> {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        let sent = crate::pause_guard::sent_on_this_thread();
+        let out = self.inner.call(name, args);
+        let moved = crate::pause_guard::sent_on_this_thread() != sent;
+        let by_command = match &out {
+            Ok(body) => reply_in_process(body),
+            // the game's own check refused a command: nothing was clicked (only where the binding
+            // is watched can the meter know that no input went out)
+            Err(e) => e.code == "refused_by_game_check" && crate::pause_guard::input_watched(),
+        };
+        if moved || (args.get("lease_token").is_some() && !by_command) {
+            INPUT_CALLS.with(|c| c.set(c.get() + 1));
+        }
+        if args.get("request_id").is_some() && out.as_ref().is_ok_and(reply_in_process) {
+            IN_PROCESS_ORDERS.with(|c| c.set(c.get() + 1));
+        }
+        out
     }
 }
 
@@ -819,6 +966,100 @@ struct Sched {
     tick_no: u64,
     fair_tick: Option<(u64, GameHour)>,
     war_tick: Option<u64>,
+    /// Lanes (and the war, the speed rule, the declaration) that had their turn in this tick:
+    /// each at most one turn a tick (see [`lanes_turns`]).
+    tick_turned: HashSet<&'static str>,
+    /// Lane -> whether its last turn needed the input (see [`Metered`]): a lane whose last turn
+    /// needed none is offered in every tick's sweep.
+    lane_input: HashMap<&'static str, bool>,
+    /// The objects ordered in this tick, each with the lane that ordered it (see `State::act`).
+    claims: HashMap<String, &'static str>,
+    /// The lane whose turn runs now ("" outside a lane turn), and the turn's number.
+    cur_lane: &'static str,
+    turn_seq: u64,
+    /// The orders (tool and arguments) sent in this tick, each with the turn that sent it.
+    sent: HashMap<String, u64>,
+    /// An order of the running turn was deferred by another lane's claim.
+    deferred: bool,
+    /// The tick's lines after the first (the run reports each).
+    more: Vec<String>,
+    /// A dated declaration is due or near in this tick: no sweep (the war's orders go first).
+    hold_sweep: bool,
+    /// Ticks and lane turns since the first tick at `first_hour` (the gate's rates per game day).
+    ticks: u64,
+    lane_turn_count: u64,
+    first_hour: Option<GameHour>,
+    /// Lane -> the game hour of its first turn (its turns per game day).
+    first_turn: HashMap<&'static str, GameHour>,
+    /// The pass's lanes (the ones the fairness promises a turn; see `lane_turns`' `starved`).
+    pass_names: HashSet<&'static str>,
+}
+
+impl Sched {
+    /// A new tick at `now`: no lane has had its turn, no object is claimed.
+    fn begin_tick(&mut self, now: GameHour) {
+        self.tick_turned.clear();
+        self.claims.clear();
+        self.sent.clear();
+        self.more.clear();
+        self.cur_lane = "";
+        self.deferred = false;
+        self.hold_sweep = false;
+        self.ticks += 1;
+        self.first_hour.get_or_insert(now);
+    }
+}
+
+/// The meter's counts when a lane's turn opened (see [`open_turn`]).
+#[derive(Clone, Copy)]
+struct Opened {
+    inputs: u64,
+    orders: u64,
+}
+
+/// A lane's turn opens: it counts as turned in this tick, its orders claim their objects in its
+/// name.
+fn open_turn(state: &mut State, name: &'static str, now: GameHour) -> Opened {
+    state.sched.tick_turned.insert(name);
+    state.sched.cur_lane = name;
+    state.sched.turn_seq += 1;
+    state.sched.deferred = false;
+    state.sched.lane_turn_count += 1;
+    state.sched.first_turn.entry(name).or_insert(now);
+    Opened {
+        inputs: input_calls(),
+        orders: in_process_orders(),
+    }
+}
+
+/// A lane's turn closes: whether it needed the input is its cost for the next tick's sweep. A
+/// lane whose turn sent an order by command that took, and needed no input, may have more of the
+/// same work: it can be offered again in this tick. An order the turn lost to another lane's
+/// claim on the same object (and nothing else sent) makes the turn quiet; the lane is offered
+/// again in the next tick. Returns (result, input used).
+fn close_turn(
+    state: &mut State,
+    name: &'static str,
+    opened: Opened,
+    result: Option<String>,
+) -> (Option<String>, bool) {
+    let input = input_calls() != opened.inputs;
+    state.sched.lane_input.insert(name, input);
+    state.sched.cur_lane = "";
+    let result = if state.sched.deferred && state.last_ok == Some(false) {
+        None
+    } else {
+        result
+    };
+    if result.is_some()
+        && !input
+        && state.last_ok == Some(true)
+        && in_process_orders() != opened.orders
+    {
+        state.sched.tick_turned.remove(name);
+    }
+    state.sched.deferred = false;
+    (result, input)
 }
 
 /// A lane's stated reason: its last line that said something (an order, a refusal, a note it
@@ -916,17 +1157,42 @@ pub(super) fn lane_turns(state: &State, now: GameHour) -> Value {
         .collect();
     names.sort();
     names.dedup();
-    let rows: Vec<Value> = names
+    // a rate over at least one game day (a lane first seen this hour has no rate yet)
+    let per_day = |count: u64, since: Option<GameHour>| {
+        since
+            .map(|at| now.saturating_sub(at))
+            .filter(|span| *span >= DAY)
+            .map(|span| (count as f64 * DAY as f64 / span as f64 * 10.0).round() / 10.0)
+    };
+    let mut rows: Vec<Value> = names
         .iter()
         .map(|n| {
             let said = state.sched.said.get(n);
             let last = state.sched.turns.get(n.as_str()).copied();
+            let first = state.sched.first_turn.get(n.as_str()).copied();
+            let turns = said.map_or(0, |s| s.turns);
+            // a pass lane past the longest wait any rule gives it (the fairness, an attack's
+            // deferral)
+            let waited = last
+                .or_else(|| state.sched.fair_seen.get(n.as_str()).copied())
+                .map(|at| now.saturating_sub(at));
+            let starved = state.sched.pass_names.contains(n.as_str())
+                && waited.is_some_and(|w| w > FAIR_MAX_WAIT.max(DEFERRED_MAX_WAIT));
             json!({"lane": n,
-                "turns": said.map_or(0, |s| s.turns),
+                "turns": turns,
+                "per_day": per_day(u64::from(turns), first),
+                "input": state.sched.lane_input.get(n.as_str()),
                 "days_since": last.map(|at| now.saturating_sub(at) / DAY),
+                "starved": starved,
                 "silent": said.is_none_or(|s| s.silent)})
         })
         .collect();
+    // the executor's pace: ticks and lane turns per game day since its first tick
+    rows.push(json!({"kind": "ticks", "lane": "(ticks)",
+        "ticks": state.sched.ticks,
+        "ticks_per_day": per_day(state.sched.ticks, state.sched.first_hour),
+        "lane_turns": state.sched.lane_turn_count,
+        "lane_turns_per_day": per_day(state.sched.lane_turn_count, state.sched.first_hour)}));
     Value::Array(rows)
 }
 
@@ -1652,6 +1918,46 @@ impl State {
             self.last_ok = Some(false);
             return Ok((false, why));
         }
+        // One lane per object in a tick: an object another lane ordered in this tick waits for
+        // the next tick (it reads that order's effect then), so two lanes never act on the same
+        // army, wing, line or slot in one tick. Not a failure: the ledger does not count it.
+        let lane = self.sched.cur_lane;
+        if !lane.is_empty() {
+            // the same order a turn earlier in this tick already sent is not sent again (a lane
+            // offered again while it sends orders by command, or two lanes deciding alike)
+            let seq = self.sched.turn_seq;
+            if self.sched.sent.get(&signature).is_some_and(|at| *at != seq) {
+                self.sched.deferred = true;
+                self.last_ok = Some(false);
+                return Ok((
+                    false,
+                    "deferred: the same order was sent in this tick already".to_string(),
+                ));
+            }
+            self.sched.sent.insert(signature.clone(), seq);
+            let keys = claim_keys(name, &args);
+            let taken = keys.iter().find_map(|k| {
+                self.sched
+                    .claims
+                    .get(k)
+                    .filter(|owner| **owner != lane)
+                    .map(|owner| (k.clone(), *owner))
+            });
+            if let Some((key, owner)) = taken {
+                self.sched.deferred = true;
+                self.last_ok = Some(false);
+                return Ok((
+                    false,
+                    format!(
+                        "deferred: {key} was ordered by lane {owner} in this tick; offered again \
+                         next tick"
+                    ),
+                ));
+            }
+            for key in keys {
+                self.sched.claims.entry(key).or_insert(lane);
+            }
+        }
         let clock = self.clock;
         if war_order(name) && self.war_bursting {
             if let Some(army) = args["army"].as_str().filter(|a| !a.is_empty()) {
@@ -2055,6 +2361,71 @@ impl State {
     }
 }
 
+/// The objects an order acts on, for the per-tick claim (see `State::act`); pure. An army, a
+/// wing, a fleet, a division, an event, a decision, a focus, a template, a design company or an
+/// operative by its name or id; a production line, an equipment, a slot, a seat or a state
+/// within the order's own family (a research slot is not a law seat).
+fn claim_keys(name: &str, args: &Value) -> Vec<String> {
+    let family = name
+        .strip_prefix("hoi4_")
+        .unwrap_or(name)
+        .split('_')
+        .next()
+        .unwrap_or("");
+    let scalar = |v: &Value| match v {
+        Value::String(s) if !s.is_empty() => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    };
+    let mut out = Vec::new();
+    for (field, kind) in [
+        ("army", "army"),
+        ("wing", "wing"),
+        ("fleet", "fleet"),
+        ("task_force", "fleet"),
+        ("division", "division"),
+        ("event", "event"),
+        ("decision", "decision"),
+        ("focus", "focus"),
+        ("template", "template"),
+        ("organisation", "mio"),
+        ("organization", "mio"),
+        ("operative", "operative"),
+    ] {
+        if let Some(v) = args.get(field).and_then(scalar) {
+            out.push(format!("{kind}:{v}"));
+        }
+    }
+    for (field, kind) in [
+        ("armies", "army"),
+        ("wings", "wing"),
+        ("divisions", "division"),
+        ("task_forces", "fleet"),
+        ("fleets", "fleet"),
+    ] {
+        for v in args
+            .get(field)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(v) = scalar(v) {
+                out.push(format!("{kind}:{v}"));
+            }
+        }
+    }
+    for field in ["line", "equipment", "state_id"] {
+        if let Some(v) = args.get(field).and_then(scalar) {
+            out.push(format!("{family}:{field}:{v}"));
+        }
+    }
+    if let Some(slot) = args.get("slot").and_then(scalar) {
+        let seat = args.get("category").and_then(scalar).unwrap_or_default();
+        out.push(format!("{family}:slot:{seat}:{slot}"));
+    }
+    out
+}
+
 fn text(v: &Value) -> &str {
     v.as_str().unwrap_or("")
 }
@@ -2115,6 +2486,9 @@ pub fn tick(
     lease: &str,
     now: GameHour,
 ) -> Result<Tick> {
+    // every call of the tick through the cost meter (see `Metered`, `lanes_turns`)
+    let metered = Metered { inner: tools };
+    let tools: &dyn Tools = &metered;
     state.clock = now;
     if plan["active"] == json!(false) {
         return Ok(Tick::Idle);
@@ -2319,10 +2693,147 @@ pub fn tick(
     if let Some(step) = plan_manage::day0_step(state, tools, plan, lease, now)? {
         return Ok(Tick::Acted(step));
     }
-    match (lanes_tick(state, tools, plan, lease, now)?, waiting) {
+    match (lanes_turns(state, tools, plan, lease, now)?, waiting) {
         (Tick::Nothing, Some((event, new))) => Ok(Tick::Waiting { event, new }),
         (out, _) => Ok(out),
     }
+}
+
+/// The wall time one tick may spend on turns that need no input (decisions over the snapshot and
+/// orders by command, milliseconds each) before it hands the input lane back.
+const TICK_BUDGET: Duration = Duration::from_secs(2);
+
+/// MANY LANES PER TICK. The scheduler's order (the speed rule, the fast lanes, the fairness, the
+/// setup layout, the declaration, the war, the issue lanes, the pass) is the order of urgency; a
+/// round of it ends at the first lane that acts. While the rounds need no input (their orders
+/// went by the game's own command, or nothing was sent) the next round follows in the same tick,
+/// each lane at most one turn a tick (one more while it keeps sending orders by command). The
+/// first round whose turn needed the input (a mouse order, a read through a panel: seconds, the
+/// window) ends the rounds: one input sequence a tick, the most urgent first. Then the sweep
+/// offers every lane whose last turn needed no input and that has had no turn in this tick, so a
+/// cheap lane never waits behind the mouse lanes' rotation (w92b, t1939o, 27 Nov 2026: one lane
+/// per tick, about two ticks a game day at war; a lane's turn came round every few weeks).
+/// `scheduler.many_lanes: false` keeps one acting lane a tick.
+fn lanes_turns(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Tick> {
+    state.sched.begin_tick(now);
+    trace_lanes(now, "tick");
+    let many = plan["scheduler"]["many_lanes"] != json!(false);
+    let started = std::time::Instant::now();
+    let turns_before = state.sched.lane_turn_count;
+    let inputs_before = input_calls();
+    // a bound on the rounds whatever the lanes do (each round turns at least one lane)
+    let most = lanes(plan, true).len() + lanes(plan, false).len() + FAST_LANES.len() * 2;
+    let mut lines: Vec<String> = Vec::new();
+    for _ in 0..most.max(1) {
+        let before = input_calls();
+        match lanes_tick(state, tools, plan, lease, now)? {
+            Tick::Acted(line) => {
+                lines.push(line);
+                let input = input_calls() != before;
+                if input || !many || started.elapsed() >= TICK_BUDGET {
+                    break;
+                }
+            }
+            _ => break,
+        }
+    }
+    if many && !state.sched.hold_sweep && in_process_orders() > 0 {
+        sweep(state, tools, plan, lease, now, &mut lines, started)?;
+    }
+    trace_lanes(
+        now,
+        &format!(
+            "tick end: {} turns, {} acted, input {}, {} ms",
+            state.sched.lane_turn_count - turns_before,
+            lines.len(),
+            if input_calls() != inputs_before {
+                "used"
+            } else {
+                "none"
+            },
+            started.elapsed().as_millis()
+        ),
+    );
+    if lines.is_empty() {
+        return Ok(Tick::Nothing);
+    }
+    let first = lines.remove(0);
+    state.sched.more = lines;
+    Ok(Tick::Acted(first))
+}
+
+/// The tick's sweep (see [`lanes_turns`]): the fast lanes and the pass's lanes whose last turn
+/// needed no input and that had no turn in this tick, in value order, until the tick's budget is
+/// spent. A swept lane whose turn needed the input after all (its work changed) ends the sweep;
+/// its next turns come through the scheduler's order. The pass's cursor stays where it is.
+fn sweep(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    lines: &mut Vec<String>,
+    started: std::time::Instant,
+) -> Result<()> {
+    let war_first = plan["war"].is_object()
+        && plan["war"]["enabled"] != json!(false)
+        && plan["war"]["first"] != json!(false);
+    let pass = lanes(plan, war_first);
+    let fast_lanes = FAST_LANES;
+    let fast = fast_lanes
+        .iter()
+        .map(|&(name, step)| (name, fast_key(name), step));
+    let rest = pass.iter().map(|&(name, step)| (name, name, step));
+    for (name, key, step) in fast.chain(rest) {
+        if started.elapsed() >= TICK_BUDGET {
+            break;
+        }
+        if state.sched.tick_turned.contains(key) || state.sched.lane_input.get(key) != Some(&false)
+        {
+            continue;
+        }
+        if lane_waits_for_attack(
+            name,
+            plan_operation::executing_any(state),
+            state.sched.turns.get(name).copied(),
+            now,
+        ) || opening_holds(state, tools, plan, name, now)
+            || (name.starts_with("air") && air_waits_for_war(state, tools, plan, now))
+        {
+            continue;
+        }
+        // a pass lane's turn counts when it opens, a fast lane's when it acts (as in their own
+        // turns)
+        if key == name {
+            state.sched.turns.insert(name, now);
+        }
+        state.last_ok = None;
+        let before = all_notes(state);
+        let at = std::time::Instant::now();
+        let opened = open_turn(state, key, now);
+        let result = step(state, tools, plan, lease, now)?;
+        let (result, input) = close_turn(state, key, opened, result);
+        // one turn in the sweep, whatever the turn sent
+        state.sched.tick_turned.insert(key);
+        state.round.timed(name, result.is_some(), at);
+        record_turn(state, name, result.as_ref(), &before, now);
+        if let Some(line) = result {
+            state.sched.turns.insert(name, now);
+            state.round.lane_acted(name, now);
+            trace_lanes(now, &format!("sweep {name} acted"));
+            lines.push(line);
+        }
+        if input {
+            break;
+        }
+    }
+    Ok(())
 }
 
 /// The pass scheduler (EVERY-TICK DESIGN). A pass offers every lane once, in value order; a lane
@@ -2352,13 +2863,46 @@ fn lanes_tick(
 /// done-memory key: the last tick found nothing while a prepared operation's declaration is near.
 const DECLARING_IDLE: &str = "declidle";
 
-/// How long the run sleeps after a tick with nothing to do: twelve real seconds, but one while a
-/// declaration is near (the key `DECLARING_IDLE`, taken once), so the war goes out on its hour.
+/// The longest a run waits after a tick with nothing to do (or an event the model may still
+/// answer) when the game clock does not move: the next tick comes with the next game hour (see
+/// [`wait_next_hour`]).
+const IDLE_WAIT: Duration = Duration::from_secs(12);
+/// How often the run reads the game clock while it waits for the next game hour.
+const CLOCK_POLL: Duration = Duration::from_millis(100);
+
+/// How long the run may wait after a tick with nothing to do: [`IDLE_WAIT`] for the next game
+/// hour, but one second while a declaration is near (the key `DECLARING_IDLE`, taken once), so the
+/// war goes out on its hour even in a paused or slow game.
 fn nothing_pause(state: &mut State) -> Duration {
     if state.done.remove(DECLARING_IDLE).is_some() {
         Duration::from_secs(1)
     } else {
-        Duration::from_secs(12)
+        IDLE_WAIT
+    }
+}
+
+/// Waits until the game clock passes `hour` (read every [`CLOCK_POLL`] through the memory
+/// clock, no input), at most `most`: a tick with nothing to do comes back on the next game hour,
+/// not after a fixed sleep (t1939o, 27 Nov 2026: the twelve-second idle sleep is a game day at
+/// speed 2, and a declaration due at midnight went out at 21:00 the next day). Returns the
+/// clock's hour.
+fn wait_next_hour(
+    state: &mut State,
+    tools: &dyn Tools,
+    hour: GameHour,
+    most: Duration,
+) -> GameHour {
+    let until = std::time::Instant::now() + most;
+    loop {
+        let now = game_hour(state, tools);
+        if now > hour {
+            return now;
+        }
+        let left = until.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            return now;
+        }
+        crate::phase::sleep(left.min(CLOCK_POLL));
     }
 }
 
@@ -2381,22 +2925,25 @@ fn lanes_tick_inner(
     let war_on = plan["war"].is_object() && plan["war"]["enabled"] != json!(false);
     let war_first = war_on && plan["war"]["first"] != json!(false);
     state.sched.war_ran = war_first;
-    trace_lanes(now, "tick");
     let lanes = lanes(plan, war_first);
+    state.sched.pass_names = lanes.iter().map(|(n, _)| *n).collect();
     // the speed rule ahead of the war lane: it reads every 6 game hours and acts only when the
     // phase changes, and behind a war lane that acts every tick it never ran once an operation
     // prepared (w46f1, 23 Nov 2026: its last read on the third day, the whole war at speed 3)
     state.last_ok = None;
-    if let Some(line) = plan_speed::step(state, tools, plan, lease, now)? {
-        state.sched.turns.insert("speed", now);
-        trace_lanes(now, "speed");
-        return Ok(Tick::Acted(line));
+    if state.sched.tick_turned.insert("speed") {
+        if let Some(line) = plan_speed::step(state, tools, plan, lease, now)? {
+            state.sched.turns.insert("speed", now);
+            trace_lanes(now, "speed");
+            return Ok(Tick::Acted(line));
+        }
     }
     // the fast lanes before the setup layout and the war's turn (see `fast_lanes_turn`), unless
     // a dated declaration is due: its orders go out on the date
     let due = war_first
         && plan_operation::awaiting_war(state)
         && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD);
+    state.sched.hold_sweep |= due;
     state.sched.tick_no += 1;
     let op_war = plan_operation::executing_any(state)
         || (state.war_active && plan_operation::active(state))
@@ -2416,9 +2963,11 @@ fn lanes_tick_inner(
     // formed its first role on day 10-20 of the 1939 bookmark and the war began without them).
     if war_first
         && !state.war_active
+        && !state.sched.tick_turned.contains("layoutfirst")
         && !state.skipped(now, "layoutfirst", "all")
         && operation_roles_missing(state, plan)
     {
+        state.sched.tick_turned.insert("layoutfirst");
         if let Some(line) = layout_step(state, tools, plan, lease, now)? {
             state.round.war_acted(now);
             trace_lanes(now, "layoutfirst");
@@ -2440,6 +2989,7 @@ fn lanes_tick_inner(
     // due, ahead of any lane (rs1-rs6, 19 Nov 2026: the prepare read back by 30 August and the
     // declaration came on 7-9 September behind air batches and economy ticks).
     if war_first
+        && state.sched.tick_turned.insert("declare")
         && (plan_operation::awaiting_war(state)
             || state.done.contains_key("declnext")
             || (plan_operation::executing_any(state)
@@ -2479,9 +3029,12 @@ fn lanes_tick_inner(
         }
     }
     if declaring {
+        state.sched.hold_sweep = true;
         // nothing due: the declaration's own read of the target's diplomacy view now, not on
         // its day
-        if plan_affairs::declaration_preread(state, tools, plan, lease, now) {
+        if state.sched.tick_turned.insert("preread")
+            && plan_affairs::declaration_preread(state, tools, plan, lease, now)
+        {
             return Ok(Tick::Acted(
                 "diplomacy view read before the declaration".into(),
             ));
@@ -2550,6 +3103,10 @@ fn lanes_tick_inner(
         }
         let (name, step) = lanes[state.round.cursor];
         state.round.cursor += 1;
+        // a lane the sweep or an earlier round of this tick already offered
+        if state.sched.tick_turned.contains(name) {
+            continue;
+        }
         // slow GUI lanes that do not decide a running war wait while an operation's attack
         // executes (its orders need the input; a design company's monthly trait keeps a few
         // weeks). Value judgement: they do not wait for the whole war. Deferred for every war day
@@ -2576,7 +3133,9 @@ fn lanes_tick_inner(
         state.last_ok = None;
         let before = all_notes(state);
         let started = std::time::Instant::now();
+        let opened = open_turn(state, name, now);
         let result = step(state, tools, plan, lease, now)?;
+        let (result, _) = close_turn(state, name, opened, result);
         state.round.timed(name, result.is_some(), started);
         record_turn(state, name, result.as_ref(), &before, now);
         if let Some(line) = result {
@@ -2634,12 +3193,14 @@ fn overdue_turns(
             break;
         }
         let (name, step) = lanes[i];
-        if lane_waits_for_attack(
-            name,
-            plan_operation::executing_any(state),
-            state.sched.turns.get(name).copied(),
-            now,
-        ) || opening_holds(state, tools, plan, name, now)
+        if state.sched.tick_turned.contains(name)
+            || lane_waits_for_attack(
+                name,
+                plan_operation::executing_any(state),
+                state.sched.turns.get(name).copied(),
+                now,
+            )
+            || opening_holds(state, tools, plan, name, now)
             || (name.starts_with("air") && air_waits_for_war(state, tools, plan, now))
         {
             continue;
@@ -2648,7 +3209,9 @@ fn overdue_turns(
         state.last_ok = None;
         let before = all_notes(state);
         let at = std::time::Instant::now();
+        let opened = open_turn(state, name, now);
         let result = step(state, tools, plan, lease, now)?;
+        let (result, _) = close_turn(state, name, opened, result);
         state.round.timed(name, result.is_some(), at);
         record_turn(state, name, result.as_ref(), &before, now);
         if let Some(line) = result {
@@ -2694,12 +3257,14 @@ fn issue_lanes(
         let Some(&(name, step)) = lanes.iter().find(|(n, _)| *n == lane) else {
             continue;
         };
-        if lane_waits_for_attack(
-            name,
-            plan_operation::executing_any(state),
-            state.sched.turns.get(name).copied(),
-            now,
-        ) || (name.starts_with("air") && air_waits_for_war(state, tools, plan, now))
+        if state.sched.tick_turned.contains(name)
+            || lane_waits_for_attack(
+                name,
+                plan_operation::executing_any(state),
+                state.sched.turns.get(name).copied(),
+                now,
+            )
+            || (name.starts_with("air") && air_waits_for_war(state, tools, plan, now))
             || opening_holds(state, tools, plan, name, now)
             || !state.issues.take_turn(name, now)
         {
@@ -2709,7 +3274,9 @@ fn issue_lanes(
         state.last_ok = None;
         let all_before = all_notes(state);
         let started = std::time::Instant::now();
+        let opened = open_turn(state, name, now);
         let result = step(state, tools, plan, lease, now)?;
+        let (result, _) = close_turn(state, name, opened, result);
         state.round.timed(name, result.is_some(), started);
         record_turn(state, name, result.as_ref(), &all_before, now);
         // the lane's typed answer for the issues it owns (docs/MONITORING.md): an order passed,
@@ -2745,6 +3312,22 @@ fn issue_lanes(
 /// the war step), then the war, operations and their air; a failed hold order does not end the
 /// turn (the war step behind it still acts).
 fn war_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    // one war turn a tick (its burst gives each army one order a tick)
+    if state.sched.tick_turned.contains("war") {
+        return Ok(None);
+    }
+    let opened = open_turn(state, "war", now);
+    let result = war_lane_orders(state, tools, plan, lease, now)?;
+    Ok(close_turn(state, "war", opened, result).0)
+}
+
+fn war_lane_orders(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,
@@ -3532,6 +4115,19 @@ fn lane_of(list: &[Lane], name: &str) -> Lane {
 /// air, navy, intelligence and the rest. Each manage, military and affairs rule is its own lane,
 /// so a rule with work every pass never holds back the rules behind it.
 /// The lanes checked every tick ahead of the pass (see `lanes_tick`).
+/// A fast lane's turn in a tick, apart from the pass lane of the same name (the pass's
+/// `politics` and `construction` run more than their fast checks).
+fn fast_key(name: &'static str) -> &'static str {
+    match name {
+        "factories" => "fast:factories",
+        "research" => "fast:research",
+        "focus" => "fast:focus",
+        "politics" => "fast:politics",
+        "construction" => "fast:construction",
+        _ => name,
+    }
+}
+
 const FAST_LANES: [Lane; 5] = [
     ("factories", factories_lane),
     ("research", research_lane),
@@ -3595,13 +4191,16 @@ fn fast_lanes_turn(
     // is a day of the slot): a pass of slow GUI orders left the focus idle for 14 game days
     // (g17j 1936.4). They act before the pass resumes.
     for (name, step) in FAST_LANES {
-        if opening_holds(state, tools, plan, name, now) {
+        let key = fast_key(name);
+        if state.sched.tick_turned.contains(key) || opening_holds(state, tools, plan, name, now) {
             continue;
         }
         state.last_ok = None;
         let before = all_notes(state);
         let started = std::time::Instant::now();
+        let opened = open_turn(state, key, now);
         let result = step(state, tools, plan, lease, now)?;
+        let (result, _) = close_turn(state, key, opened, result);
         state.round.timed(name, result.is_some(), started);
         record_turn(state, name, result.as_ref(), &before, now);
         // the fast lanes answer the issues they own too (s7m, 24 Nov 2026: the focus issues
@@ -12704,9 +13303,15 @@ pub fn run(
         let pause = match step {
             Tick::Acted(what) => {
                 // A failed action ends the run: retrying it at once only repeats the failure
-                // (live 8 Nov 2026: an event behind a system dialog was clicked 346 times).
-                let failed = what.contains(": false");
+                // (live 8 Nov 2026: an event behind a system dialog was clicked 346 times). A
+                // tick of several lanes ends it only when every one of its orders failed: the
+                // others' orders took and their lanes may have more (the ledger rests the
+                // failed order).
+                let more = std::mem::take(&mut state.sched.more);
+                let failed =
+                    what.contains(": false") && more.iter().all(|line| line.contains(": false"));
                 actions.push(what);
+                actions.extend(more);
                 if failed {
                     // Orders that keep failing in a paused game never leave a tick with nothing
                     // to do, so the opening was never noted as set up and the player waited for
@@ -12737,7 +13342,7 @@ pub fn run(
                 if new {
                     break json!({"event_open": event});
                 }
-                Duration::from_secs(12)
+                IDLE_WAIT
             }
             Tick::DateStop(why) => {
                 stopped_on_date = true;
@@ -12757,7 +13362,12 @@ pub fn run(
         if std::time::Instant::now() + pause >= deadline {
             break json!("deadline");
         }
-        crate::phase::sleep(pause);
+        if pause.is_zero() {
+            continue;
+        }
+        // EVENT-DRIVEN: the next tick comes with the next game hour (the lanes' rests and the
+        // plan's dates are game hours), at the latest after `pause`; a paused game waits `pause`
+        wait_next_hour(state, tools, now, pause);
     };
     let plan = read_plan(plan_path).unwrap_or_else(|_| json!({}));
     // the digest uses the plan as the ticks did: with the active phase's overrides (alarms too)
@@ -13040,6 +13650,10 @@ fn war_mission(kind: &str) -> Option<&'static str> {
         None
     }
 }
+
+#[cfg(test)]
+#[path = "plan_run_throughput_tests.rs"]
+mod throughput_tests;
 
 #[cfg(test)]
 mod tests {

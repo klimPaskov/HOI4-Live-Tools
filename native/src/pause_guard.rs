@@ -312,6 +312,14 @@ pub(crate) fn sent_on_this_thread() -> u64 {
 fn note_sent() {
     SENT.with(|c| c.set(c.get() + 1));
 }
+/// Set once an input binding is watched ([`Watched::new`]): from then on
+/// [`sent_on_this_thread`] counts every input of the binding, so a call that left it unchanged
+/// sent none (the executor's scheduler tells an order by command from one by mouse this way).
+static WATCHED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Whether an input binding is watched in this process (see [`WATCHED`]).
+pub(crate) fn input_watched() -> bool {
+    WATCHED.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 /// The input binding with the pause watch on every key.
 pub(crate) struct Watched<'a> {
@@ -321,6 +329,7 @@ pub(crate) struct Watched<'a> {
 
 impl<'a> Watched<'a> {
     pub(crate) fn new(inner: Box<dyn GameInput + 'a>, watch: Arc<Watch>) -> Self {
+        WATCHED.store(true, std::sync::atomic::Ordering::Relaxed);
         Self { inner, watch }
     }
     fn key<R>(&self, code: u16, send: impl FnOnce() -> R) -> R {

@@ -343,10 +343,14 @@ def silent_lanes(detector):
 
 def lane_turns_line(snap):
     """Turns per lane as the executor reports them (its `lane_turns` in the watcher's brief): the
-    lanes that never had a turn or waited longest first, so a starved lane shows at the gate
-    (t1939o, 27 Nov 2026: decisions, resources and intelligence had no turn in 56 days)."""
-    rows = [r for r in snap.get("lane_turns") or [] if isinstance(r, dict) and r.get("lane")]
-    if not rows:
+    executor's pace first (ticks and lane turns per game day), then the lanes that never had a
+    turn or waited longest, each with its turns per game day, so a starved lane shows at the gate
+    (t1939o, 27 Nov 2026: decisions, resources and intelligence had no turn in 56 days; w92b: one
+    lane per tick, about two ticks a game day)."""
+    all_rows = [r for r in snap.get("lane_turns") or [] if isinstance(r, dict) and r.get("lane")]
+    rows = [r for r in all_rows if r.get("kind") != "ticks"]
+    pace = next((r for r in all_rows if r.get("kind") == "ticks"), None)
+    if not rows and not pace:
         return ""
 
     def wait(r):
@@ -356,8 +360,21 @@ def lane_turns_line(snap):
     for r in sorted(rows, key=wait):
         last = r.get("days_since")
         when = "never" if not r.get("turns") else f"{last}d ago" if last is not None else "?"
-        parts.append(f"{r['lane']} {r.get('turns') or 0} ({when}{', silent' if r.get('silent') else ''})")
-    return "Turns per lane (turns, last): " + "; ".join(parts)
+        rate = f", {r['per_day']}/day" if r.get("per_day") is not None else ""
+        cost = ", input" if r.get("input") else ""
+        parts.append(f"{r['lane']} {r.get('turns') or 0} ({when}{rate}{cost}{', silent' if r.get('silent') else ''})")
+    head = ""
+    if pace:
+        head = (f"Executor pace: {pace.get('ticks_per_day')} ticks and {pace.get('lane_turns_per_day')} lane turns "
+                f"per game day ({pace.get('ticks')} ticks, {pace.get('lane_turns')} turns). ")
+    return head + "Turns per lane (turns, last, per game day): " + "; ".join(parts)
+
+
+def starved_lanes(snap):
+    """Lanes the executor reports past the longest wait any of its rules gives a lane (`starved`):
+    a lane with work that had no turn for that long is a failure of the scheduler."""
+    return [r for r in snap.get("lane_turns") or []
+            if isinstance(r, dict) and r.get("lane") and r.get("kind") != "ticks" and r.get("starved")]
 
 
 def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", budget_line=""):
@@ -391,6 +408,10 @@ def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", 
     lines.append(f"Silent lanes past their deadline (FAIL while any): {len(silent)}")
     for i in silent[:10]:
         lines.append(f"- SILENT {i['id']} lane {i.get('lane')} {i.get('subject') or i['code']}: {i['text'][:150]}")
+    starved = starved_lanes(snap)
+    if snap.get("lane_turns"):
+        lines.append(f"Starved lanes, no turn past the longest wait (FAIL while any): {len(starved)}"
+                     + (": " + ", ".join(f"{r['lane']} ({r.get('days_since')}d)" for r in starved[:12]) if starved else ""))
     turns = lane_turns_line(snap)
     if turns:
         lines.append(turns)
