@@ -2089,15 +2089,27 @@ pub fn tick(
         }
         waiting.get_or_insert((key, new));
     }
-    if let Some((event, new)) = waiting {
-        return Ok(Tick::Waiting { event, new });
+    // A new event waiting for the model ends the run so the model sees it. Once seen, the wait
+    // holds the event only, never the other lanes: the game runs on under an open event, and a
+    // step whose click an event covers is refused as event_covered and rests. Waiting blocked
+    // every lane for its patience and longer (dg86b, 27 Nov 2026: one tick in 14 game days while
+    // an unruled choice and two events covered by it waited; the pass never ran, political power
+    // and experience banked, nothing trained).
+    if let Some((event, true)) = waiting.as_ref() {
+        return Ok(Tick::Waiting {
+            event: event.clone(),
+            new: true,
+        });
     }
     // 1a. day 0, paused before the first unpause: free military factories to the starting lines
     // the plan keeps, before anything else (plan_manage.rs)
     if let Some(step) = plan_manage::day0_step(state, tools, plan, lease, now)? {
         return Ok(Tick::Acted(step));
     }
-    lanes_tick(state, tools, plan, lease, now)
+    match (lanes_tick(state, tools, plan, lease, now)?, waiting) {
+        (Tick::Nothing, Some((event, new))) => Ok(Tick::Waiting { event, new }),
+        (out, _) => Ok(out),
+    }
 }
 
 /// The pass scheduler (EVERY-TICK DESIGN). A pass offers every lane once, in value order; a lane
@@ -12970,6 +12982,60 @@ mod tests {
             tick(&mut state, &tools, &off, "l", START + 30 * DAY).unwrap(),
             Tick::Waiting { .. }
         ));
+    }
+
+    #[test]
+    fn a_seen_event_waiting_for_the_model_holds_itself_and_not_the_lanes() {
+        // dg86b (27 Nov 2026): an unruled choice waited for the model and every lane with it:
+        // one scheduler tick in 14 game days
+        let lab = IdleLab(War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        });
+        struct Open<'a>(&'a IdleLab);
+        impl Tools for Open<'_> {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_events" {
+                    return Ok(json!({"events": [{"event": "denmark_trade_deal.1",
+                        "options": ["This could be beneficial", "We have no need"]}]}));
+                }
+                self.0.call(name, args)
+            }
+        }
+        let tools = Open(&lab);
+        let mut state = State::default();
+        let mut plan = war_plan();
+        plan["research_priority"] = json!(["tech_a"]);
+        plan["wait_events_days"] = json!(3);
+        // the model sees the new event first: nothing else acts on that tick
+        assert_eq!(
+            tick(&mut state, &tools, &plan, "l", START).unwrap(),
+            Tick::Waiting {
+                event: "denmark_trade_deal.1".into(),
+                new: true
+            }
+        );
+        assert!(!lab
+            .0
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, _)| n == "hoi4_research_start"));
+        // then, while it waits for the model, the lanes go on (the idle research slot is filled)
+        for i in 1..=(super::WAR_SHARE as i64 + 2) {
+            let out = tick(&mut state, &tools, &plan, "l", START + i).unwrap();
+            assert!(
+                !matches!(&out, Tick::Acted(s) if s.starts_with("event ")),
+                "{out:?}"
+            );
+        }
+        assert!(lab
+            .0
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, _)| n == "hoi4_research_start"));
     }
 
     #[test]
