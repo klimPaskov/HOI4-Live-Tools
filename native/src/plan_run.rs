@@ -8478,20 +8478,31 @@ fn air_war_missions(
                 // they fly to the new base, and a mission left to a later tick came a war day
                 // or more after the rebase (rd2-rd6, 19 Nov 2026: 6 of 12 fighters flew on
                 // war day 1, the 6 rebased ones only from day 3-5)
-                let went: Vec<String> = names
-                    .iter()
-                    .filter(|n| moved.contains(*n))
-                    .cloned()
-                    .collect();
+                // Each wing takes its own mission: one base's batch holds fighters, close air
+                // support and naval bombers alike, and the batch's first mission sent for all of
+                // them was refused for the others after a 34 s read-back that held the dated
+                // declaration a day (t1939n, 27 Nov 2026: air_superiority for 8 wings, 5 of them
+                // Stukas and naval bombers, Diverged; Poland declared 09.02 instead of 09.01).
                 let mut then = String::new();
-                if !went.is_empty() {
-                    let mut targets: Vec<i64> = operation.clone();
-                    targets.sort_by_key(|t| !contact.contains(t));
-                    let over = air_target(&borders, &targets, Some(to), first);
+                let mut missions: Vec<&str> = Vec::new();
+                for (n, _, m) in &rebases {
+                    if moved.contains(n) && !missions.contains(m) {
+                        missions.push(*m);
+                    }
+                }
+                let mut targets: Vec<i64> = operation.clone();
+                targets.sort_by_key(|t| !contact.contains(t));
+                let over = air_target(&borders, &targets, Some(to), first);
+                for m in missions {
+                    let went: Vec<String> = rebases
+                        .iter()
+                        .filter(|(n, _, wm)| *wm == m && moved.contains(n))
+                        .map(|(n, _, _)| n.clone())
+                        .collect();
                     let args = if went.len() == 1 {
-                        json!({"wing": went[0], "mission": mission, "state_id": over})
+                        json!({"wing": went[0], "mission": m, "state_id": over})
                     } else {
-                        json!({"wings": went, "mission": mission, "state_id": over})
+                        json!({"wings": went, "mission": m, "state_id": over})
                     };
                     let (flew, how) = state.act(tools, lease, "hoi4_air_mission", args, "am")?;
                     if flew {
@@ -8499,7 +8510,7 @@ fn air_war_missions(
                             state.skip(now, "airwing", name, 30 * DAY);
                         }
                     }
-                    then = format!("; then {mission} over state {over}: {flew} {how}");
+                    then.push_str(&format!("; then {m} over state {over}: {flew} {how}"));
                 }
                 return Ok(Some(format!(
                     "air {} wing(s) rebase to front state {to} for {mission} ({}): {ok} {why}{then}",
@@ -15370,6 +15381,63 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn rebased_wings_of_one_batch_each_take_their_own_mission() {
+        // t1939n (27 Nov 2026): fighters, Stukas and naval bombers rebased in one order were
+        // all sent air_superiority; five refused after a 34 s read-back and the declaration
+        // came a day late
+        struct Mixed(std::cell::RefCell<Vec<Value>>, std::cell::Cell<i64>);
+        impl Tools for Mixed {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_air_mission" {
+                    self.0.borrow_mut().push(args.clone());
+                }
+                let wing = |n: &str, t: &str| {
+                    json!({"wing": n, "aircraft_type": t, "aircraft": 50, "standing_by": false,
+                        "missions": ["training"],
+                        "air_base": {"base_id": 3, "state_id": self.1.get()}})
+                };
+                match name {
+                    "hoi4_wars" => Ok(json!({"borders": [
+                        {"neighbour_tag": "POL", "hostile": false, "own_border_states": [66], "neighbour_states": [85]}]})),
+                    "hoi4_armies" => Ok(json!({"army_groups": [{"plan": [{"offensives": [
+                        {"executing": false, "target": {"states": [85]}}]}]}]})),
+                    "hoi4_air" => Ok(json!({"air_bases": [{"state_id": 66, "free": 400}],
+                        "wings": [wing("JG 1", "small_plane_airframe_0"),
+                            wing("StG 2", "small_plane_cas_airframe_0")]})),
+                    "hoi4_air_rebase" => {
+                        self.1.set(args["state_id"].as_i64().unwrap());
+                        Ok(json!({"receipt": {"status": "Verified"}}))
+                    }
+                    _ => Ok(json!({"receipt": {"status": "Verified"}})),
+                }
+            }
+        }
+        let tools = Mixed(Default::default(), std::cell::Cell::new(52));
+        let plan = json!({"air": {"war_missions": true}});
+        let mut state = State::default();
+        state.done.insert("op:op_poland:prep".into(), START);
+        let first = air_war_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(first.contains("rebase to front state 66"), "{first}");
+        let sent = tools.0.borrow();
+        let by: Vec<(String, Value)> = sent
+            .iter()
+            .map(|a| {
+                (
+                    text(&a["mission"]).to_string(),
+                    a.get("wing").cloned().unwrap_or_else(|| a["wings"].clone()),
+                )
+            })
+            .collect();
+        assert!(
+            by.contains(&("air_superiority".into(), json!("JG 1"))),
+            "{by:?}"
+        );
+        assert!(by.contains(&("cas".into(), json!("StG 2"))), "{by:?}");
     }
 
     #[test]
