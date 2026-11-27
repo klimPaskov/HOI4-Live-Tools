@@ -119,6 +119,39 @@ class Sinks(unittest.TestCase):
         s = snapshot(omissions=[{"item": "manpower_idle"}])
         self.assertNotIn("manpower_idle", self.codes(s))
 
+    def test_political_power_is_idle_by_what_the_picks_cost_never_by_a_bare_number(self):
+        # cmps1/cmph1 (27 Nov 2026): 1,077-1,146 and later about 480 political power, no issue at all
+        def pp(v, date):
+            s = snapshot(date)
+            s["politics"]["political_power"] = v
+            return s
+        # 480 pays the dearest law (150) and another at once: idle, whatever the trend
+        got = self.codes(pp(480, "1939.10.20.07"), [pp(530, "1939.10.04.17")])
+        self.assertIn("political_power_unspent", got)
+        self.assertIn("dearest pick (150)", got["political_power_unspent"]["text"])
+        self.assertEqual(got["political_power_unspent"]["severity"], "medium")
+        # 200 that has not fallen in two weeks while it covered a pick: idle (nothing bought)
+        got = self.codes(pp(200, "1939.10.20.07"), [pp(180, "1939.10.04.17")])
+        self.assertIn("has not fallen", got["political_power_unspent"]["text"])
+        # 200 that fell (a pick was bought) and covers only one pick: not idle
+        self.assertNotIn("political_power_unspent",
+                         self.codes(pp(200, "1939.10.20.07"), [pp(320, "1939.10.04.17")]))
+        # growing from below a pick's price: saving, not idle
+        self.assertNotIn("political_power_unspent",
+                         self.codes(pp(140, "1939.10.20.07"), [pp(100, "1939.10.04.17")]))
+        # the executor's own row (with the lane's reason) wins
+        s = pp(480, "1939.10.20.07")
+        s["omissions"] = [{"item": "political_power_unspent"}]
+        self.assertNotIn("political_power_unspent", self.codes(s))
+
+    def test_the_monitor_finds_the_runs_game_folder(self):
+        run = tempfile.mkdtemp()
+        exe = os.path.join(self.g, "hoi4.app", "Contents", "MacOS", "hoi4")
+        with open(os.path.join(run, "launch.json"), "w") as f:
+            json.dump({"arguments": [exe, "-userdir=x"]}, f)
+        self.assertEqual(gamerules.game_dir_of_run(run), self.g)
+        self.assertEqual(gamerules.game_dir_of_run(tempfile.mkdtemp()), "")
+
     def test_a_lower_law_is_named_only_for_a_penalty_it_drops(self):
         s = snapshot()
         s["politics"]["laws"]["conscription"] = "limited_conscription"

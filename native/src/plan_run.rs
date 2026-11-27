@@ -3093,10 +3093,11 @@ fn lane_of(list: &[Lane], name: &str) -> Lane {
 /// air, navy, intelligence and the rest. Each manage, military and affairs rule is its own lane,
 /// so a rule with work every pass never holds back the rules behind it.
 /// The lanes checked every tick ahead of the pass (see `lanes_tick`).
-const FAST_LANES: [Lane; 3] = [
+const FAST_LANES: [Lane; 4] = [
     ("research", research_lane),
     ("focus", focus_lane),
     ("factories", factories_lane),
+    ("politics", politics_fast_lane),
 ];
 
 /// Military factories on no line are checked every tick like a free research slot (two memory
@@ -3536,6 +3537,34 @@ fn politics_key(index: usize, pick: &Value) -> String {
     )
 }
 
+/// A politics refusal that says the pick is already in force (the seat holds it, or the country
+/// has the idea); pure.
+pub(super) fn politics_already_held(why: &str) -> bool {
+    let w = why.to_lowercase();
+    w.contains("already holds") || w.contains("already active") || w.contains("already has")
+}
+
+/// Politics as a fast lane: at most once a game day unless it bought something, so power the
+/// pass's slow lanes would leave banked is spent within a day (cmps1/cmph1, 27 Nov 2026: in the
+/// 1939 opening the pass reached politics only on day 27 while the power stood at 1,077-1,136).
+/// Its reads are the power (a memory read) and, when there is something to buy, one options read.
+fn politics_fast_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if plan["scheduler"]["politics_fast"] == json!(false) || state.skipped(now, "polfast", "x") {
+        return Ok(None);
+    }
+    let out = politics_step(state, tools, plan, lease, now)?;
+    if out.is_none() {
+        state.skip(now, "polfast", "x", DAY);
+    }
+    Ok(out)
+}
+
 /// Politics (tick step 4): the plan's one-shot picks, then the standing political-power policy
 /// (`politics_auto`, plan_manage.rs) for the power the picks leave unspent.
 fn politics_step(
@@ -3597,7 +3626,10 @@ fn politics_step(
             json!({"category": pick["category"], "slot": pick["slot"], "idea": pick["idea"]}),
             "po",
         )?;
-        if ok || why.contains("already holds") {
+        // a pick already in force is done: "already holds" (the seat) and "already active" (an
+        // idea the country has: cmps1, 27 Nov 2026, war_economy refused as already active kept
+        // its 150 in the reserve for the rest of the run)
+        if ok || politics_already_held(&why) {
             state.pol_fails.remove(&key);
             state.pol_pp_at_fail.remove(&key);
             state.done.insert(key, now);
@@ -15559,6 +15591,22 @@ mod tests {
                 _ => self.0.call(name, args),
             }
         }
+    }
+
+    #[test]
+    fn a_pick_the_game_says_is_already_in_place_counts_as_done() {
+        // cmps1 (27 Nov 2026): War Economy under Total Mobilisation was refused as "already
+        // active" and tried again every few days; the backoff kept the plan's later picks waiting
+        assert!(super::politics_already_held(
+            "Germany already holds war_economy"
+        ));
+        assert!(super::politics_already_held(
+            "Law War Economy is Already Active"
+        ));
+        assert!(super::politics_already_held(
+            "the country already has this adviser"
+        ));
+        assert!(!super::politics_already_held("not enough political power"));
     }
 
     #[test]
