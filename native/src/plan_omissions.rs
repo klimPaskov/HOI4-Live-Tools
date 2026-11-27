@@ -118,58 +118,6 @@ pub(super) fn affordable_decisions(read: &Value, budget: f64, plan: &Value) -> V
     out
 }
 
-/// The political power row, or None; pure. Power is unspent when the standing order found
-/// nothing to buy although the power above the plan's reserve covered an entry (its note says
-/// "nothing to buy": a seat, law or advisor the order names is affordable and none is taken), or
-/// when enabled decisions the plan does not decide are affordable above the reserve. Power saved
-/// for a named pick it cannot yet pay ("saved for") is no row: that is the reason, and it is
-/// in the note.
-pub(super) fn power_row(
-    pp: f64,
-    reserve: f64,
-    held: &[String],
-    politics_note: Option<&str>,
-    decisions: &[(String, f64)],
-) -> Option<String> {
-    let note = politics_note.unwrap_or("");
-    if note.contains("saved for") || note.contains("power is saved") {
-        return None;
-    }
-    let mut parts: Vec<String> = Vec::new();
-    if note.contains("nothing to buy") {
-        let why = note
-            .split_once("nothing to buy")
-            .map_or("", |(_, r)| r)
-            .trim();
-        parts.push(format!(
-            "the standing order found nothing to buy {why}: name the advisors, laws or high command picks worth the power in politics_auto.order (the game's options read lists them), or say in politics_auto.threshold_why what it is saved for"
-        ));
-    }
-    if !decisions.is_empty() {
-        let names: Vec<String> = decisions
-            .iter()
-            .take(8)
-            .map(|(k, c)| format!("{k} ({c:.0})"))
-            .collect();
-        parts.push(format!(
-            "enabled decisions it pays now that the plan neither takes nor forbids: {}; take the ones that pay back (hoi4_decision_take) or name them in decision_rules / politics_auto.never with the reason",
-            names.join(", ")
-        ));
-    }
-    if parts.is_empty() {
-        return None;
-    }
-    let holds = if held.is_empty() {
-        String::new()
-    } else {
-        format!(": {}", held.join(", "))
-    };
-    Some(format!(
-        "political power {pp:.0} ({reserve:.0} held for the plan's picks{holds}); {}",
-        parts.join("; ")
-    ))
-}
-
 /// Doctrine picks the banked experience pays now: an empty track of a folder whose grand
 /// doctrine is taken, or a folder with no grand doctrine, where the folder's experience covers
 /// the cost the game shows for that folder's picks; pure.
@@ -376,21 +324,39 @@ pub(super) fn derived(
     // political power: an enabled decision the power pays now that nothing in the plan takes,
     // while the standing politics order has nothing to buy (power saved for a pick is no row)
     if let Some(pp) = super::plan_manage::political_power(tools) {
-        let (reserve, held) = super::plan_manage::politics_reserve(state, tools, plan, now);
+        let (reserve, _) = super::plan_manage::politics_reserve(state, tools, plan, now);
         let pol = super::plan_manage::note_of(state, "politics_auto").map(String::from);
-        // the decisions step's own last read, at most a month old (hoi4_decisions_list
-        // opens the panel: this read never sends input)
-        let seen = state
-            .manage
-            .decisions_seen
-            .as_ref()
-            .filter(|(at, _)| now - at <= 31 * DAY)
-            .map(|(_, read)| read.clone());
-        let decisions = seen
-            .map(|read| affordable_decisions(&read, pp - reserve, plan))
-            .unwrap_or_default();
-        if let Some(todo) = power_row(pp, reserve, &held, pol.as_deref(), &decisions) {
-            open.push(("political_power_unspent".to_string(), todo, "politics", pol));
+        let saving = pol
+            .as_deref()
+            .is_some_and(|n| n.contains("saved for") || n.contains("power is saved"));
+        if !saving {
+            // the decisions step's own last read, at most a month old (hoi4_decisions_list
+            // opens the panel: this read never sends input)
+            let seen = state
+                .manage
+                .decisions_seen
+                .as_ref()
+                .filter(|(at, _)| now - at <= 31 * DAY)
+                .map(|(_, read)| read.clone());
+            if let Some(read) = seen {
+                let open_now = affordable_decisions(&read, pp - reserve, plan);
+                if !open_now.is_empty() {
+                    let names: Vec<String> = open_now
+                        .iter()
+                        .take(8)
+                        .map(|(k, c)| format!("{k} ({c:.0})"))
+                        .collect();
+                    open.push((
+                        "political_power_unspent".to_string(),
+                        format!(
+                            "political power {pp:.0} ({reserve:.0} held for the plan's picks) and enabled decisions it pays now that the plan neither takes nor forbids: {}; take the ones that pay back (hoi4_decision_take) or name them in decision_rules / politics_auto.never with the reason",
+                            names.join(", ")
+                        ),
+                        "politics",
+                        pol,
+                    ));
+                }
+            }
         }
     }
     // doctrine
@@ -596,36 +562,6 @@ mod tests {
             ]
         );
         assert!(affordable_decisions(&read, 40.0, &plan).is_empty());
-    }
-
-    #[test]
-    fn power_the_standing_order_cannot_spend_is_named_and_power_saved_for_a_pick_is_not() {
-        let held = vec!["X_law holds 150".to_string()];
-        let idle = power_row(
-            480.0,
-            150.0,
-            &held,
-            Some("PP 480 (plan reserve 150): nothing to buy [military_staff:0 holds X]"),
-            &[],
-        )
-        .unwrap();
-        assert!(idle.contains("political power 480 (150 held"), "{idle}");
-        assert!(idle.contains("X_law holds 150"), "{idle}");
-        assert!(
-            idle.contains("nothing to buy [military_staff:0 holds X]"),
-            "{idle}"
-        );
-        let saved = Some("PP 90 (plan reserve 0): saved for the next buy [government:1 needs 150]");
-        assert_eq!(
-            power_row(90.0, 0.0, &[], saved, &[("d".into(), 50.0)]),
-            None
-        );
-        assert_eq!(
-            power_row(300.0, 0.0, &[], Some("PP 300: bought"), &[]),
-            None
-        );
-        let dec = power_row(300.0, 0.0, &[], None, &[("GER_x".into(), 50.0)]).unwrap();
-        assert!(dec.contains("GER_x (50)"), "{dec}");
     }
 
     #[test]
