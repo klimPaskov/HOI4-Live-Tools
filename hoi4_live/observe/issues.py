@@ -29,6 +29,7 @@ import time
 from collections import defaultdict, deque
 
 from . import findings as findings_mod
+from . import idle_days as idle_mod
 from . import sinks as sinks_mod
 from . import issue_rules as R
 from .runlogs import date_of_days, game_days
@@ -38,6 +39,10 @@ QUIET_DAYS = 14          # a log issue not seen again for two game weeks is take
 DUP_WINDOW = 7           # identical verified orders within a game week are duplicates
 FAIL_STREAK = 2          # failures of one (tool, code) before it is an issue
 LIGHT_ORIGINS = ("omission",)
+# "acted" is a remedy in flight: an issue still seen this many game days after the lane's last
+# verified order is open again (the order did not fix it), and counts as a remedy that did not
+# hold when it passes its deadline (owner, 27 Nov 2026: issues marked acted sat open for weeks)
+ACT_EFFECT_DAYS = 3
 
 
 # log issues whose second sighting is the same refusal of the same order again
@@ -107,6 +112,7 @@ class Detector:
         self.unpaused_since = None            # (date, utc) the clock was last seen moving
         self.ops_executing = False
         self.overhead_ms = []                 # per snapshot
+        self.idle = idle_mod.IdleDays()       # idle game days per sink (the gate packet's table)
 
     # --- issue lifecycle ---------------------------------------------------------------------
 
@@ -144,6 +150,13 @@ class Detector:
             self._emit("open", it)
             return it
         it["last_seen"], it["text"], it["numbers"] = self.date, text, numbers or it["numbers"]
+        if it["state"] == "acted" and self.days is not None and it.get("acted_days") is not None and \
+                self.days - it["acted_days"] > ACT_EFFECT_DAYS:
+            # the lane's verified order did not make it go: the remedy did not hold
+            it["state"] = "open"
+            it["no_effect"] = it.get("no_effect", 0) + 1
+            self._emit("acted_no_effect", it, days_since_act=round(self.days - it["acted_days"], 1),
+                       tried=it["tried"][-3:])
         it["severity"] = severity if SEV_ORDER.get(severity, 3) < SEV_ORDER.get(it["severity"], 3) else it["severity"]
         it["seen"] += 1
         if it["state"] == "resolved":
@@ -191,6 +204,7 @@ class Detector:
                 if it["state"] != "resolved":
                     self.counts[year][it["class"]]["open_days"] += step
             self.date, self.days = date, d
+            self.idle.step(self.issues.values(), step)
             self._deadlines()
         elif self.days is None:
             self.date, self.days = date, d
@@ -224,6 +238,8 @@ class Detector:
                 if len(it["tried"]) < 8:
                     it["tried"].append(f"{'ok' if ok else 'refused'} {key[:120]}")
                 # "acted" means an order of the lane passed, not that the lane had a turn
+                if ok:
+                    it["acted_days"] = self.days
                 if ok and it["state"] == "open":
                     it["state"] = "acted"
                     self._emit("acted", it, action=key[:160])
@@ -664,7 +680,7 @@ class Detector:
             "date": self.date, "at_war": self.at_war,
             "issues": [dict({k: i.get(k) for k in ("id", "key", "code", "class", "severity", "lane", "tool", "actor",
                                                     "first_seen", "deadline", "deadline_reason", "overdue", "state",
-                                                    "text", "lesson", "packet")},
+                                                    "text", "lesson", "packet", "answer", "no_effect")},
                             cause=(i.get("numbers") or {}).get("code"))
                        for i in rows[:60]]}, ensure_ascii=False, indent=1))
         _atomic(os.path.join(self.out, "issues_counts.json"), json.dumps(self.count_table(), indent=1))
@@ -685,6 +701,8 @@ class Detector:
         for i in rows[:limit]:
             mark = "OVERDUE " if i["overdue"] else ""
             st = "" if i["state"] == "open" else f" [{i['state']}]"
+            if i.get("no_effect") and i["state"] == "open":
+                st = f" [acted {i['no_effect']}x, no effect]"
             lines.append(f"- {mark}{i['id']} {i['class']} {i['severity']} {i['first_seen']} -> {i['deadline']} "
                          f"{i.get('lane') or i.get('tool') or '-'}{st}: {i['text'][:180]}")
         if len(rows) > limit:
