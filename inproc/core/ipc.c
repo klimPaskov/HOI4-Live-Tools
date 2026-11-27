@@ -15,8 +15,8 @@
 #include <time.h>
 #include <unistd.h>
 
-const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics"};
-const int IPC_ALLOWED_COUNT = 15;
+const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics", "construction", "training", "mio", "navy", "doctrine", "projects"};
+const int IPC_ALLOWED_COUNT = 21;
 /* airwing (engineer 71, 24 Nov): split, merge, disband, attach, detach, region by id / hold; OFF in auto until its
  * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
 const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */, 0 /* airwing */,
@@ -33,10 +33,25 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                 1 /* diplomacy (engineer 78): guarantee, ask / offer military access, non-aggression pact,
                                    * improve relations, declare war on an own war goal (S10-DIPLOMACY PASSED live 24 Nov
                                    * 2026, s81b: improve relations 93 ms, declare war on Poland 200 ms, refusals unposted) */,
-                                0 /* holds (engineer 79): an area-defence order, one map click per state (S11-HOLDS) */,
+                                1 /* holds (engineer 79): an area-defence order, one map click per state (S11-HOLDS PASSED
+                                   * live 24 Nov 2026, s81b/s81c: new order, three states, refusals, states into the army's
+                                   * standing order paused and running) */,
                                 1 /* research (engineer 79): a technology into a research slot (S12-RESEARCH PASSED live
                                    * 24 Nov 2026, s81b: start, replace, refusals, running) */,
-                                0 /* politics (engineer 79): a law / an idea slot (S13-POLITICS) */};
+                                1 /* politics (engineer 79): a law / an idea slot (S13-POLITICS PASSED live 24 Nov 2026,
+                                   * s81b/s81c: trade and conscription laws Verified after the settle window, refusals) */,
+                                0 /* construction (engineer 82): add in a state or on a province (supply hubs included),
+                                   * remove a line, move a line (S14-CONSTRUCTION) */,
+                                0 /* training (engineer 82): a training queue of a template, its series, lines, location,
+                                   * deploy, cancel (S15-TRAINING) */,
+                                0 /* mio (engineer 84): an organisation's trait queue / unlock, its policy, a production
+                                   * line's organisation (S16-MIO) */,
+                                0 /* navy (engineer 85): task force missions, merge, a fleet's sea regions, its admiral,
+                                   * task forces into a fleet (S17-NAVY) */,
+                                0 /* doctrine (engineer 85): a grand doctrine, a subdoctrine into a track slot
+                                   * (S18-DOCTRINE) */,
+                                0 /* projects (engineer 85): a facility's project start / stop, its scientist attach /
+                                   * unattach (S19-PROJECTS) */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;
@@ -271,6 +286,7 @@ static void handle(int fd, const ipc_backend *b, ipc_policy *p, rate_state *rs, 
                 if (!g || g->is_num || !g->str[0]) err = "group: the hex address of an own army or army group";
                 else ok = b->fronts(g->str, frag, sizeof frag);
             }
+            else if (!strcmp(op->str, "mios")) ok = b->mios ? b->mios(frag, sizeof frag) : 0; /* engineer 84: a pure read */
             else if (!strcmp(op->str, "post")) {
                 const ipc_member *c = get(m, nm, "cmd"), *sp = get(m, nm, "speed");
                 int allowed = 0, fam = c && !c->is_num ? ipc_family_of(c->str) : -1;

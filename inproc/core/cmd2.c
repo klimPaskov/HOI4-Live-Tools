@@ -250,9 +250,185 @@ const cmd_spec CMD2_SPECS[] = {
     {"politics", "politics.replace", "CReplaceIdeaCommand", 0x38, BUILD_CTOR, CTOR_IDEA_REPLACE, 0, 0x24, "5CIdea", 3,
      {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"old", 0x28, FK_PTR, 0, 0x332e, 0}, {"idea", 0x30, FK_PTR, 0, 0x331a, 0}},
      OBJ2_SAME_PTR, 0, AUTH_TAG_PTR, "5CIdea"},
+    /* ---- construction (engineer 82, 24 Nov): the construction view's three posts, read from 1.20.0.0 and 1.19.4.1
+     * (identical code and field ids).
+     * add: the map click in construction mode (UI 1.20 0x1019d2630; the state view's build-max 0x10225cf90 posts the same
+     * command with the game's own free-slot count): AddConstruction(mode, &own tag, &reference, count) through the
+     * click's own constructor (1.20 0x1001f9ef0, 1.19.4.1 0x1001f97b0). CAddConstructionCommand 12151 (0x48): tag +0x24
+     * (0x289a), a CBuildingReference by value +0x28 (0x284f: vptr; location id +0x30 (0x286d), building id +0x34
+     * (0x4c1a), tag +0x38 (0x289a, 0 for a state or province location)), count +0x40 (0x2f78), mode +0x44 (0x8d: the
+     * queue placement of the new line; the plain click passes 2). The "can do" (1.20 0x1001fa840): the tag is a
+     * country, the reference names a building, its location resolves, the country may build it there now
+     * (0x100dc0770(location, template, &tag, 1): slots, ownership, the building's own conditions), mode < 4. The module
+     * posts one command per click (count 1, mode 2), as a player clicking `count` times. */
+    {"construction", "construction.add", "CAddConstructionCommand", 0x48, BUILD_CTOR, CTOR_CONSTRUCTION, 0, 0x24, "17CBuildingTemplate", 4,
+     {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"reference", 0x28, FK_I32, 0, 0x284f, 0}, {"count", 0x40, FK_I32, 0, 0x2f78, 0},
+      {"mode", 0x44, FK_U8, 0, 0x8d, 0}}, OBJ2_NONE, 0, AUTH_TAG_PTR, "17CBuildingTemplate"},
+    /* remove: CRemoveConstructionCommand 13088 (0x30): the line's handle +0x24 (0x2fb3), levels +0x2c (0x1a1). The row's
+     * close button posts it with 1 level (behind a confirmation when one level is left), the map's removal with the
+     * levels it takes away (ctor 1.20 0x1001faf60 (cmd, line, levels)); a building line loses the levels, a line with
+     * none left leaves the queue. Authorisation: the line resolves as a CGeneralProductionLine owned by the sender's
+     * country; the "can do": the line resolves. The module posts the line's own level count (the whole line). */
+    {"construction", "construction.remove", "CRemoveConstructionCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
+     "22CGeneralProductionLine", 2, {{"line", 0x24, FK_REF, 0, 0x2fb3, 0}, {"levels", 0x2c, FK_I32, 0, 0x1a1, 0}}, OBJ2_NONE, 0},
+    /* move: the construction view's own move (CCountryConstructionsView slot 0xc0 (from, to), behind the rows'
+     * increase/decrease priority buttons; Shift = to the top / bottom): CSetProductionLinePlacementCommand 17412 (0x38;
+     * ctor 1.20 0x1001fe090 (cmd, line, index, grouped)): the line's handle +0x24 (0x2fb3), the new index +0x2c (0x2f72),
+     * the line's "placed by hand" byte +0x30 (0x32ed) the view computes from the neighbours at the new place (1.20
+     * 0x10204cc20: 0 when the line joins a group of the same building, else 1). Its execution moves the line and stores
+     * the byte in the line (+0x70). The MCP computes the byte by the view's rule from the queue it reads. */
+    {"construction", "construction.move", "CSetProductionLinePlacementCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
+     "22CGeneralProductionLine", 3, {{"line", 0x24, FK_REF, 0, 0x2fb3, 0}, {"index", 0x2c, FK_I32, 0, 0x2f72, -1, 1},
+      {"grouped", 0x30, FK_U8, 0, 0x32ed, 0, 2}}, OBJ2_NONE, 0},
+    /* ---- training (engineer 82, 24 Nov): the deployment view's posts, read from 1.20.0.0 and 1.19.4.1 (identical field
+     * ids). Objects: the division template as the view holds it (27CReferencedDivisionTemplate, the country's template
+     * list) and the training queue (27CMilitaryDeploymentConveyor, the country's deployment status).
+     * create: the template row's Train button (UI 1.20 0x1024519e0): can_train(deployment, template body, 1, 0) first
+     * (the module makes the same call: training facts), then CreateConveyor(template, 0) (ctor 1.20 0x100825b00):
+     * CCreateConveyorCommand 13479 (0x30): template handle +0x24 (0x3142), +0x2c (0x37c7) the UI's 0. Its "can do" only
+     * resolves the template. The new queue is read back by the MCP. */
+    {"training", "training.create", "CCreateConveyorCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "27CReferencedDivisionTemplate", 2,
+     {{"template", 0x24, FK_REF, 0, 0x3142, 0}, {"group", 0x2c, FK_I32, 0, 0x37c7, 0, 0, 1}}, OBJ2_NONE, 0},
+    /* series: the queue's + / - (UI 0x1022bd290: SetConveyorSeries(queue, amount +- 1); 0 = trains forever):
+     * CSetConveyorSeriesCommand 13483: queue +0x24 (0x34b4), amount +0x2c (0x1a1) */
+    {"training", "training.series", "CSetConveyorSeriesCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "27CMilitaryDeploymentConveyor", 2,
+     {{"queue", 0x24, FK_REF, 0, 0x34b4, 0}, {"amount", 0x2c, FK_I32, 0, 0x1a1, 0}}, OBJ2_NONE, 0},
+    /* add_lines: the queue's Add Unit (UI 0x1022bd450: 1 line, 5 with Shift, clamped by the game's max): AddConveyorLine
+     * (queue, lines) CAddConveyorLineCommand 13484: queue +0x24 (0x34b4), lines +0x2c (0x1a1); its "can do" is
+     * can_train(deployment, template body, lines, 0). The module posts at most 5 per command, as Shift-clicks. */
+    {"training", "training.add_lines", "CAddConveyorLineCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "27CMilitaryDeploymentConveyor", 2,
+     {{"queue", 0x24, FK_REF, 0, 0x34b4, 0}, {"lines", 0x2c, FK_I32, 0, 0x1a1, 0}}, OBJ2_NONE, 0},
+    /* location: the map click in the queue's location mode (UI 0x1025d4b80: (queue, the clicked province's id)):
+     * CSetConveyorLocationCommand 13481: queue +0x24 (0x34b4), province id +0x2c (0x286d); its "can do": a province id
+     * in range and allowed for the template. Execution stores it in the queue (+0x3c, 1.20 0x1014a42a0). */
+    {"training", "training.location", "CSetConveyorLocationCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "27CMilitaryDeploymentConveyor", 2,
+     {{"queue", 0x24, FK_REF, 0, 0x34b4, 0}, {"province", 0x2c, FK_I32, 0, 0x286d, 0, 1}}, OBJ2_NONE, 0},
+    /* deploy: the queue's deploy button (UI 0x1022bd630), remove: its cancel (UI 0x1022bd6d0): the queue alone.
+     * CDeployConveyorCommand 13600, CRemoveConveyorCommand 13601: queue +0x24 (0x34b4) */
+    {"training", "training.deploy", "CDeployConveyorCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "27CMilitaryDeploymentConveyor", 1,
+     {{"queue", 0x24, FK_REF, 0, 0x34b4, 0}}, OBJ2_NONE, 0},
+    {"training", "training.remove", "CRemoveConveyorCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "27CMilitaryDeploymentConveyor", 1,
+     {{"queue", 0x24, FK_REF, 0, 0x34b4, 0}}, OBJ2_NONE, 0},
     {"holds", "holds.area_defense", "CEditAreaDefenseStateCommand", 0x50, BUILD_CTOR, CTOR_AREA_STATE, 0, 0x24, "12COrdersGroup", 5,
      {{"states", 0x30, FK_I32_ARRAY, 0x3c, 0x1b7, 0}, {"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0},
       {"settings", 0x4c, FK_I32, 0, 0x2b5d, 0}, {"replace", 0x48, FK_U8, 0, 0x29f1, 0}}, OBJ2_NONE, 0},
+    /* ---- mio (engineer 84, 24 Nov): military-industrial organisations, as the organisation views post them. Read from
+     * 1.20.0.0 and 1.19.4.1 (identical code, offsets and field ids). Every command names the organisation by its handle;
+     * authorisation = the sender controls the tag +0x24; the "can do" resolves the organisation through the generic
+     * lookup and casts it to NIndustrialOrganisation::COrganisation. The module adds: the organisation is in the player's
+     * own organisation list and its owner tag is the player's.
+     * queue_trait: the trait tree's queue (UI post helper 1.20 0x101ef1140: make, "can do", Post):
+     * CAddIndustrialOrgTraitToQueueCommand 16412 (0x40): tag +0x24 (0x289a), STraitId +0x28 (0x2e8e: vptr, token +0x30;
+     * the factory's default token 0x4c17 = none), organisation +0x38 (0x2ecb). "Can do": the trait is in the
+     * organisation's tree and not queued yet. */
+    {"mio", "mio.queue_trait", "CAddIndustrialOrgTraitToQueueCommand", 0x40, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
+     "N23NIndustrialOrganisation13COrganisationE", 3,
+     {{"org", 0x38, FK_REF, 0, 0x2ecb, 0}, {"tag", 0x24, FK_TAG, 0, 0x289a, 0},
+      {"trait", 0x30, FK_I32, 0x28 /* the STraitId the serializer writes by address */, 0x2e8e, 0x4c17, 1}},
+     OBJ2_NONE, 0, AUTH_TAG, "N23NIndustrialOrganisation13COrganisationE"},
+    /* unlock_trait: the tree window's unlock (UI 1.20 0x101efe630, a spent trait point): CUnlockIndustrialOrganisationTrait
+     * 14495, the same layout. "Can do": the trait is in the tree and the game's can_unlock(org, trait, &unlocked, 1, NULL)
+     * (prerequisites, exclusivity, a point to spend) */
+    {"mio", "mio.unlock_trait", "CUnlockIndustrialOrganisationTrait", 0x40, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
+     "N23NIndustrialOrganisation13COrganisationE", 3,
+     {{"org", 0x38, FK_REF, 0, 0x2ecb, 0}, {"tag", 0x24, FK_TAG, 0, 0x289a, 0},
+      {"trait", 0x30, FK_I32, 0x28, 0x2e8e, 0x4c17, 1}},
+     OBJ2_NONE, 0, AUTH_TAG, "N23NIndustrialOrganisation13COrganisationE"},
+    /* policy: the policy window's item click (UI 1.20 0x101ed97e0) behind its own gate (0x101ed8bf0: cooldown, political
+     * power against the cost, the policy's allowed check), then its confirmation: CAttachPolicyToIndustrialOrgCommand 16260
+     * (0x38): tag +0x24 (0x289a), policy token +0x28 (0x28fc; the item of the attached policy sends 0x4c17 = detach),
+     * organisation +0x2c (0x2ecb). The command's own "can do" only resolves the organisation: the module calls the
+     * item's gate first (see mio_facts) */
+    {"mio", "mio.policy", "CAttachPolicyToIndustrialOrgCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
+     "N23NIndustrialOrganisation13COrganisationE", 3,
+     {{"org", 0x2c, FK_REF, 0, 0x2ecb, 0}, {"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"policy", 0x28, FK_I32, 0, 0x28fc, 0x4c17, 1}},
+     OBJ2_NONE, 0, AUTH_TAG, "N23NIndustrialOrganisation13COrganisationE"},
+    /* line: the production line's organisation roster click (UI 1.20 0x10239d9c0 / 0x1023c2ff0 through the constructor
+     * 0x101439e00: (cmd, &tag, &line handle, organisation or NULL) then Post): CSetIndustrialManufacturerCommand 14496
+     * (0x38): tag +0x24 (0x289a), line +0x28 (0x2f6f), organisation +0x30 (0x2ecb; empty = produce without one). "Can do":
+     * the line resolves as a CEquipmentProductionLine, the organisation (if any) as a COrganisation, and the organisation
+     * may make the line's design (0x101439450). Authorisation (1.20 0x10143a200): the sender controls the tag AND the line's
+     * owner (the production line resolver and owner getter): AUTH_HANDLE on the line */
+    {"mio", "mio.line", "CSetIndustrialManufacturerCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x28, "24CEquipmentProductionLine", 3,
+     {{"line", 0x28, FK_REF, 0, 0x2f6f, 0}, {"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"org", 0x30, FK_REF, 0, 0x2ecb, 0}},
+     OBJ2_CAST, 0, AUTH_HANDLE, NULL, "N23NIndustrialOrganisation13COrganisationE", 1},
+    /* ---- navy (engineer 85, 24 Nov): task forces and fleets, as the navy view posts them. Read from 1.20.0.0 and
+     * 1.19.4.1 (the same type ids, offsets and field ids; offline expectations in test_offline.sh).
+     * mission: the mission bar's button (UI 1.20 0x101dc9930): the selected task forces (CTaskForce *, count), the
+     * button's mission (the active one again = 0, hold), byte +0x45 = 1, +0x44 = 0 (1 only for training under a game
+     * setting the module does not use: the module keeps the factory's 0), "can do", Post.
+     * CNavalMissionSetTypeCommand 12272 (0x48): task force handles +0x28/+0x34 (0x289e), mission +0x40 (0x2cba),
+     * +0x44 (0x4a84, written when set), +0x45 (0x28e5). "Can do": mission <= 9 and every handle a CTaskForce. Auth:
+     * each task force's owner (the typed resolver 0x100b41520). ONE command for the selection, as the button. */
+    {"navy", "navy.mission", "CNavalMissionSetTypeCommand", 0x48, BUILD_FIELDS, CTOR_NONE, 1, 0x28, "10CTaskForce", 4,
+     {{"task_forces", 0x28, FK_REF_ARRAY, 0x34, 0x289e, 0}, {"mission", 0x40, FK_I32, 0, 0x2cba, 0, 1},
+      {"setting", 0x44, FK_U8, 0, 0x4a84, 0, 0, 1}, {"ui", 0x45, FK_U8, 0, 0x28e5, 1, 0, 1}}, OBJ2_NONE, 1},
+    /* merge: the fleet toolbar's merge (UI 1.20 0x101dca940: (cmd, CTaskForce **, count, 0), then Post):
+     * CMergeNaviesCommand 13176 (0x48): task force handles +0x28/+0x34 (0x289e), byte +0x40 (0x3c73, the UI's 0) */
+    {"navy", "navy.merge", "CMergeNaviesCommand", 0x48, BUILD_FIELDS, CTOR_NONE, 1, 0x28, "10CTaskForce", 2,
+     {{"task_forces", 0x28, FK_REF_ARRAY, 0x34, 0x289e, 0}, {"flag", 0x40, FK_U8, 0, 0x3c73, 0, 0, 1}}, OBJ2_NONE, 1},
+    /* add_region: a right click on a sea region with the fleet selected: CNavalMissionAddRegionCommand 12274 (0x30):
+     * fleet +0x24 (0x289e; the resolver 0x100b415b0 casts to CFleet), strategic region id +0x2c (0x2a4b). "Can do":
+     * the fleet resolves and the fleet's own region check (1.20 0x100615cd0) accepts the id */
+    {"navy", "navy.add_region", "CNavalMissionAddRegionCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "6CFleet", 2,
+     {{"fleet", 0x24, FK_REF, 0, 0x289e, 0}, {"region", 0x2c, FK_I32, 0, 0x2a4b, 0, 1}}, OBJ2_NONE, 0},
+    /* remove_region: the remove-region tool then a right click: CNavalMissionRemoveRegionCommand 12275 (0x48): fleet
+     * +0x24 (0x289e), region ids +0x30/+0x3c (0x2f21; the module sends the one region) */
+    {"navy", "navy.remove_region", "CNavalMissionRemoveRegionCommand", 0x48, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "6CFleet", 2,
+     {{"fleet", 0x24, FK_REF, 0, 0x289e, 0}, {"regions", 0x30, FK_I32_ARRAY, 0x3c, 0x2f21, 0}}, OBJ2_NONE, 0},
+    /* leader: the fleet panel's commander list: CSetFleetLeaderCommand 12370 (0x38): admiral +0x24 (0x28b7; empty =
+     * unassign, written only when set), fleet +0x2c (0x3b34). "Can do": the fleet resolves as a CFleet, the admiral
+     * (when set) as a CNavyLeader. Auth: the fleet's owner AND the admiral's owner */
+    {"navy", "navy.leader", "CSetFleetLeaderCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x2c, "6CFleet", 2,
+     {{"fleet", 0x2c, FK_REF, 0, 0x3b34, 0}, {"admiral", 0x24, FK_REF, 0, 0x28b7, 0}},
+     OBJ2_CAST, 0, AUTH_HANDLE, NULL, "11CNavyLeader", 1},
+    /* assign: task forces into another fleet (a fleet card as the drop target): CSetFleetCommand 15165 (0x48): fleet
+     * +0x24 (0x3b34), task force handles +0x30/+0x3c (0x3b35). "Can do": the fleet a CFleet, each handle a CTaskForce.
+     * Auth: the fleet's owner and each task force's owner. The task forces travel in the request's divisions list and
+     * are checked by the navy.mission type's own task force resolver and owner getter */
+    /* ---- projects (engineer 85, 27 Nov): the experimental facilities tab (special projects), read from 1.20.0.0 and
+     * 1.19.4.1. Every command holds handles: a facility is an NProject::CProgram (handle 0x4008, resolver 1.20
+     * 0x100f322c0, owner 0x100135320), a project an NProject::CProject (0x2726, 0x101699a10, 0x100135340), a scientist
+     * its CCharacter (0x4005, 0x10022c8d0, owner 0x1001351c0). Constructors (1.20): Start 0x101697cf0 (program,
+     * project), Stop 0x101698340 (project), Attach 0x101697350 (program, character, flag: 1 at both UI sites
+     * 0x1016d509a / 0x1016e9999), Unattach 0x101697850 (program, character). Each "can do" is the game's.
+     * start: CStartProjectCommand 16402 (0x38): program +0x24, project +0x2c (auth: both owned) */
+    {"projects", "projects.start", "CStartProjectCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "N8NProject8CProgramE", 2,
+     {{"facility", 0x24, FK_REF, 0, 0x4008, 0}, {"project", 0x2c, FK_REF, 0, 0x2726, 0}},
+     OBJ2_CAST, 0, AUTH_HANDLE, NULL, "N8NProject8CProjectE", 0},
+    /* stop: CStopProjectCommand 16403 (0x30): project +0x24 */
+    {"projects", "projects.stop", "CStopProjectCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "N8NProject8CProjectE", 1,
+     {{"project", 0x24, FK_REF, 0, 0x2726, 0}}, OBJ2_NONE, 0},
+    /* attach: CAttachScientistCommand 16398 (0x38): program +0x24, scientist +0x30, flag +0x2c (0x28f9; the UI's 1) */
+    {"projects", "projects.attach", "CAttachScientistCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "N8NProject8CProgramE", 3,
+     {{"facility", 0x24, FK_REF, 0, 0x4008, 0}, {"scientist", 0x30, FK_REF, 0, 0x4005, 0}, {"flag", 0x2c, FK_U8, 0, 0x28f9, 0}},
+     OBJ2_CAST, 0, AUTH_HANDLE, NULL, "10CCharacter", 0},
+    /* unattach: CUnattachScientistCommand 16399 (0x38): scientist +0x24 (auth), program +0x2c */
+    {"projects", "projects.unattach", "CUnattachScientistCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "10CCharacter", 2,
+     {{"scientist", 0x24, FK_REF, 0, 0x4005, 0}, {"facility", 0x2c, FK_REF, 0, 0x4008, 0}},
+     OBJ2_CAST, 0, AUTH_HANDLE, NULL, "N8NProject8CProgramE", 0},
+    /* ---- doctrine (engineer 85, 24 Nov): the officer corps view's doctrine selection (UI 1.20 0x101051db0), read from
+     * 1.20.0.0 and 1.19.4.1. Both commands are nested classes; the factories leave the payload unwritten (the view's own
+     * constructors fill it): those fields are not default-checked (keep -1) and the module writes them.
+     * grand: CUnlockGrandDoctrineCommand 18800-range (0x38): template +0x28 (0x4187, a CGrandDoctrineTemplate by
+     * pointer), tag +0x30 (0x289a). Auth: the sender controls the tag. "Can do": a template, a country, and the doctrine
+     * status's can-unlock(status, template, 0, 0) (1.20 0x101020940: the folder, the experience and its cost). */
+    {"doctrine", "doctrine.grand", "N10NDoctrines27CUnlockGrandDoctrineCommandE", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x30,
+     "N10NDoctrines22CGrandDoctrineTemplateE", 2,
+     {{"tag", 0x30, FK_TAG, 0, 0x289a, 0}, {"grand", 0x28, FK_PTR, 0, 0x4187, 0, 0, -1}},
+     OBJ2_NONE, 0, AUTH_TAG_PTR, "N10NDoctrines22CGrandDoctrineTemplateE"},
+    /* sub: the view's track slot (constructor 1.20 0x10103a1b0: (cmd, &tag, track index, subdoctrine, folder)):
+     * CUnlockSubDoctrineCommand (0x40): folder template +0x28 (0x2e61), subdoctrine template +0x30 (0x418a), the track's
+     * place in the folder's grand doctrine track list +0x38 (0x8b), tag +0x3c (0x289a). "Can do" (1.20 0x10103a7b0): the
+     * folder's status, the doctrine status's can-unlock-sub (experience, cost), the track at that place fits the
+     * subdoctrine (its own track list), the track slot free. */
+    {"doctrine", "doctrine.sub", "N10NDoctrines25CUnlockSubDoctrineCommandE", 0x40, BUILD_FIELDS, CTOR_NONE, 0, 0x3c,
+     "N10NDoctrines20CSubDoctrineTemplateE", 4,
+     {{"tag", 0x3c, FK_TAG, 0, 0x289a, 0}, {"sub", 0x30, FK_PTR, 0, 0x418a, 0, 0, -1},
+      {"folder", 0x28, FK_PTR2, 0, 0x2e61, 0, 0, -1}, {"track", 0x38, FK_I32, 0, 0x8b, 0, 1, -1}},
+     OBJ2_PTR_EXACT, 0, AUTH_TAG_PTR, "N10NDoctrines20CSubDoctrineTemplateE", "N10NDoctrines15CFolderTemplateE"},
+    {"navy", "navy.assign", "CSetFleetCommand", 0x48, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "6CFleet", 2,
+     {{"fleet", 0x24, FK_REF, 0, 0x3b34, 0}, {"task_forces", 0x30, FK_REF_ARRAY, 0x3c, 0x3b35, 0}}, OBJ2_NONE, 0},
 };
 const int CMD2_NSPECS = (int)(sizeof CMD2_SPECS / sizeof CMD2_SPECS[0]);
 
@@ -472,7 +648,6 @@ static int serial_has2(const scan_image *im, uint64_t fn, uint32_t id, uint16_t 
     }
     return 0;
 }
-static int serial_has(const scan_image *im, uint64_t fn, uint32_t id, uint16_t off) { return serial_has2(im, fn, id, off, 0); }
 
 /* the auth slot's shape: typed resolver, owner getter, "sender controls the country" check */
 static int auth_shape(const scan_image *im, uint64_t fn, const cmd_spec *s, cmd_type *o) {
@@ -480,6 +655,9 @@ static int auth_shape(const scan_image *im, uint64_t fn, const cmd_spec *s, cmd_
     uint64_t resolve = 0, owner = 0, controls = 0;
     if (!s->auth_array) {
         long p = pfind_at(im, fn, 0x40, "48 83 c7 B e8 D 48 89 c7 e8 D 89 45 B 48 8d 75 B 4c 89 f7 48 89 da e8 D", c, 8, &n);
+        /* engineer 84: lea rdi, [r14 + OFF] after the sender's tag check (the organisation line command: the sender
+         * controls the tag +0x24 AND the line's owner) */
+        if (p < 0) p = pfind_at(im, fn, 0x60, "49 8d 7e B e8 D 48 89 c7 e8 D 89 45 B 48 8d 75 B 4c 89 f7 48 89 da e8 D", c, 8, &n);
         if (p < 0 || c[0] != s->auth_off) return 0;
         uint64_t at = fn + (uint64_t)p;
         resolve = at + 9 + (int64_t)(int32_t)c[1];
@@ -497,8 +675,16 @@ static int auth_shape(const scan_image *im, uint64_t fn, const cmd_spec *s, cmd_
     /* the owner getter: a null check returning 0, then a short read-only body (an inline pointer chain or one call
      * plus a load) ending in pop rbp; ret */
     const uint8_t *ob = scan_ptr(im, owner, 0x40);
-    if (!ob || !cmd_pmatch(ob, 0x40, "48 85 ff 74 B 55 48 89 e5", c, 8) || c[0] < 6 || c[0] > 0x30) return 0;
-    if (!cmd_pmatch(ob + 5 + c[0], 3, "31 c0 c3", c + 1, 1) || !cmd_pmatch(ob + 5 + c[0] - 2, 2, "5d c3", c + 1, 1)) return 0;
+    if (ob && cmd_pmatch(ob, 0x40, "55 48 89 e5 53 50 31 db 48 85 ff 74 B e8 D 48 85 c0 74 B 8b 58 B 89 d8 48 83 c4 08 5b 5d c3", c, 8)) {
+        /* engineer 85: a framed getter (the fleet's owner: 0 for NULL, else one getter call (a single load: the fleet's
+         * country) and that object's tag field); the callee must be a one-load leaf */
+        const uint8_t *lb = scan_ptr(im, owner + 18 + (int64_t)(int32_t)c[1], 16);
+        uint32_t d[2];
+        if (!lb || !cmd_pmatch(lb, 13, "55 48 89 e5 48 8b 87 D 5d c3", d, 2)) return 0;
+    } else {
+        if (!ob || !cmd_pmatch(ob, 0x40, "48 85 ff 74 B 55 48 89 e5", c, 8) || c[0] < 6 || c[0] > 0x30) return 0;
+        if (!cmd_pmatch(ob + 5 + c[0], 3, "31 c0 c3", c + 1, 1) || !cmd_pmatch(ob + 5 + c[0] - 2, 2, "5d c3", c + 1, 1)) return 0;
+    }
     if (!in_text(im, resolve) || !in_text(im, controls)) return 0;
     o->resolve_fn = resolve; o->owner_fn = owner; o->controls_fn = controls;
     return 1;
@@ -606,6 +792,9 @@ static int find_ctor(const scan_image *im, const cmd_spec *s, cmd_type *o) {
             /* engineer 79: the idea commands: no frame, the tag by reference, then the pointers (and nothing else); <= 12 bytes */
             {CTOR_IDEA_ADD, "55 48 89 e5 c6 47 08 00", "8b 06 89 47 24 48 89 57 28 5d c3"},
             {CTOR_IDEA_REPLACE, "55 48 89 e5 c6 47 08 00", "89 47 24 48 89 57 28 48 89 4f 30 5d"},
+            /* engineer 82: construction: no frame, the tag by reference into +0x24, the reference's location/building/tag
+             * copied into +0x30..+0x3b, count r8d +0x40, mode sil +0x44 */
+            {CTOR_CONSTRUCTION, "55 48 89 e5 c6 47 08 00", "48 89 47 30 8b 41 10 89 47 38 44 89"},
             /* engineer 76: the event answer: option r9d -> ebx, scope r8 -> r12, country * rcx -> r14, cmd -> r13; the
              * option index stored at +0xe8 (the serializer's offset of field 0x2966) */
             {CTOR_EVENT_OPTION, "55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec 18 44 89 cb 4d 89 c4 49 89 ce 49 89 fd",
@@ -761,6 +950,12 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
         if ((o->conf & C_SLOTS) && auth_shape(im, o->auth_fn, s, o)) o->conf |= C_AUTH;
         if ((o->conf & C_AUTH) && resolver_shape(im, s, o)) o->conf |= C_RESOLVER;
     }
+    /* engineer 85: a second object by raw pointer of an exact class (a doctrine folder template) */
+    if (s->obj2 == OBJ2_PTR_EXACT && (o->conf & C_RESOLVER)) {
+        scan_cap v2;
+        if (s->obj2_cast && scan_class_vtable(im, s->obj2_cast, &v2) && v2.value) o->vt_obj2 = v2.value;
+        else o->conf &= ~(unsigned)C_RESOLVER;
+    }
     /* engineer 75: a second object the "can do" casts (a leader, an army group): its typeinfo and hint from that cast */
     if (s->obj2 == OBJ2_CAST && (o->conf & C_RESOLVER)) {
         const uint8_t *vb = scan_ptr(im, o->valid_fn, 0x400);
@@ -784,7 +979,9 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
         for (int i = 0; i < s->nf; i++) {
             int ok1 = (s->f[i].kind == FK_REF_ARRAY || s->f[i].kind == FK_I32_ARRAY)
                           ? serial_has2(im, o->write_fn, s->f[i].field_id, s->f[i].count_off, s->f[i].off)
-                          : serial_has(im, o->write_fn, s->f[i].field_id, s->f[i].off);
+                          : serial_has2(im, o->write_fn, s->f[i].field_id, s->f[i].off, s->f[i].count_off);
+            /* engineer 84: a scalar with count_off set lives inside an embedded object the serializer writes by that
+             * object's address (an STraitId +0x28 holding its token at +0x30) */
             if (!ok1) all = 0;
         }
         if (all) o->conf |= C_SERIAL;
@@ -992,6 +1189,184 @@ static void scan_holds_facts(const scan_image *im, const cmd_type *ad, holds_fac
              (unsigned long long)ex, o->kind_area, o->area_off, o->area_cnt, o->setting_off);
 }
 
+/* engineer 82: the building reference, from the game's own reference constructors (template rsi, location rdx): the
+ * template's "real" byte and its province count decide which constructor applies; the state one stores the state's id,
+ * the province one the province's id; both store the template's id at +0xc and the location at +8. Every match on the
+ * build must agree. The vptr the command's constructor stores at +0x28 must be CBuildingReference's own vtable. */
+static void scan_construction_facts(const scan_image *im, const cmd_type *add, construction_facts *o) {
+    memset(o, 0, sizeof *o);
+    const uint8_t *tx = scan_ptr(im, im->text_addr, im->text_size);
+    uint32_t c[8]; unsigned ns = 0, np = 0, bad = 0;
+    for (uint64_t i = 0; tx && i + 40 <= im->text_size; i++) {
+        if (tx[i] != 0x80 || tx[i + 1] != 0x7e) continue;
+        int st = cmd_pmatch(tx + i, 27, "80 7e B 00 74 ?? 83 be D 00 7f ?? 8b 46 B 89 47 0c 8b 42 B 89 47 08", c, 8);
+        int pv = !st && cmd_pmatch(tx + i, 30, "80 7e B 00 74 ?? 83 be D 00 7e ?? 8b 46 B 89 47 0c 8b 82 D 89 47 08", c, 8);
+        if (!st && !pv) continue;
+        if (!o->tmpl_real_off) { o->tmpl_real_off = c[0]; o->tmpl_prov_off = c[1]; o->tmpl_id_off = c[2]; }
+        if (c[0] != o->tmpl_real_off || c[1] != o->tmpl_prov_off || c[2] != o->tmpl_id_off) { bad++; continue; }
+        if (st) { if (o->state_id_off && o->state_id_off != c[3]) bad++; o->state_id_off = c[3]; ns++; }
+        else { if (o->prov_id_off && o->prov_id_off != c[3]) bad++; o->prov_id_off = c[3]; np++; }
+    }
+    scan_cap vc;
+    uint64_t cls = scan_class_vtable(im, "18CBuildingReference", &vc) ? vc.value : 0, stored = 0;
+    if (add && add->ctor) {
+        unsigned m = 0;
+        long k = pfind_at(im, add->ctor, 0x60, "48 8d 05 D 48 83 c0 10 48 89 47 28", c, 8, &m);
+        if (k >= 0 && m == 1) stored = add->ctor + (uint64_t)k + 7 + (int64_t)(int32_t)c[0] + 0x10;
+    }
+    o->ref_vt = stored == cls ? cls : 0;
+    o->ok = !bad && ns >= 1 && np >= 1 && o->tmpl_real_off && o->tmpl_prov_off && o->tmpl_id_off && o->ref_vt;
+    snprintf(o->evidence, sizeof o->evidence, "%u state / %u province reference ctors (%u disagree): template real +0x%x, "
+             "province +0x%x, id +0x%x; state id +0x%x, province id +0x%x; reference vtable 0x%llx (ctor stores 0x%llx)",
+             ns, np, bad, o->tmpl_real_off, o->tmpl_prov_off, o->tmpl_id_off, o->state_id_off, o->prov_id_off,
+             (unsigned long long)cls, (unsigned long long)stored);
+}
+
+/* engineer 82: the "can train" call, read from the add-line command's own "can do" (its tail: the queue's owner, the
+ * country from it, the deployment status at +D, the queue's template, its body at +B, then jmp can_train(deployment,
+ * body, lines +0x2c, 0)). The Train button makes the same call with 1 line before posting CreateConveyor. */
+static void scan_training_facts(const scan_image *im, const cmd_type *add, const diplo_facts *dp, training_facts *o) {
+    memset(o, 0, sizeof *o);
+    uint32_t c[8]; unsigned m = 0;
+    long k = add && add->valid_fn ? pfind_at(im, add->valid_fn, 0xe0,
+        "e8 D 48 89 c7 e8 D 48 89 c7 e8 D 4c 8b b8 D 41 83 3e 00 75 ?? 83 7b 28 00 74 ?? 4c 89 f7 e8 D 48 89 c7 e8 D "
+        "48 8d 70 B 8b 53 2c 4c 89 ff 31 c9 48 83 c4 08 5b 41 5e 41 5f 5d e9 D", c, 8, &m) : -1;
+    if (k >= 0 && m == 1) {
+        uint64_t at = add->valid_fn + (uint64_t)k;
+        o->country_of = at + 21 + (int64_t)(int32_t)c[2];
+        o->deploy_off = c[3];
+        o->template_of = at + 56 + (int64_t)(int32_t)c[5];
+        o->tmpl_body_off = c[6];
+        o->can_train = at + 83 + (int64_t)(int32_t)c[7];
+    }
+    int agree = !dp || !dp->country_of || dp->country_of == o->country_of;
+    o->ok = k >= 0 && m == 1 && agree && o->deploy_off && o->deploy_off < 0x4000 && o->tmpl_body_off && o->tmpl_body_off < 0x100;
+    snprintf(o->evidence, sizeof o->evidence, "can_train 0x%llx (deployment +0x%x, template body +0x%x, template_of 0x%llx), "
+             "country_of 0x%llx (%s the diplomacy scan's)", (unsigned long long)o->can_train, o->deploy_off, o->tmpl_body_off,
+             (unsigned long long)o->template_of, (unsigned long long)o->country_of, agree ? "agrees with" : "DISAGREES with");
+}
+
+/* engineer 84: the one match of a pattern in the whole __text (0 = none or more than one); first-byte prefilter */
+static uint64_t text_unique(const scan_image *im, const char *pat, uint32_t *caps, int maxcaps) {
+    const uint8_t *tx = scan_ptr(im, im->text_addr, im->text_size);
+    int h = 0; for (int k = 0; k < 2; k++) { char ch = pat[k]; h = h * 16 + (ch >= 'a' ? ch - 'a' + 10 : ch - '0'); }
+    uint64_t at = 0; unsigned n = 0; uint32_t tmp[8];
+    for (const uint8_t *p = tx; tx && p && (uint64_t)(p - tx) + 64 <= im->text_size;) {
+        p = memchr(p, h, im->text_size - 64 - (uint64_t)(p - tx));
+        if (!p) break;
+        if (cmd_pmatch(p, 64, pat, n ? tmp : caps, maxcaps)) { if (!n) at = im->text_addr + (uint64_t)(p - tx); n++; }
+        p++;
+    }
+    return n == 1 ? at : 0;
+}
+
+/* engineer 84: the organisation facts (see mio_facts in cmd2.h). Each read from the code that uses the field, anchored on
+ * the MIO command types where one is (their "can do" checks and executions) and otherwise on a pattern that must occur
+ * exactly once in the image; the country lookup must be the one the diplomacy scan found. */
+static void scan_mio_facts(const scan_image *im, const stage2_table *t, mio_facts *o) {
+    memset(o, 0, sizeof *o);
+    const cmd_type *qt = stage2_find(t, "mio.queue_trait"), *ut = stage2_find(t, "mio.unlock_trait"), *pt = stage2_find(t, "mio.policy");
+    uint32_t c[8]; unsigned m = 0; int bad = 0;
+    char miss[160] = "";
+#define MISS(w) do { bad++; size_t l_ = strlen(miss); snprintf(miss + l_, sizeof miss - l_, "%s ", w); } while (0)
+    /* (1) the "any organisation" trigger's collector: call country_of; mov rdi,[rbp-X]; mov rax,[rax+MGR];
+     *     movsxd rcx,[rax+CNT]; test rcx,rcx; je; mov rax,[rax+ARR] */
+    uint64_t a = text_unique(im, "e8 D 48 8b 7d ?? 48 8b 80 D 48 63 88 D 48 85 c9 0f 84 D 48 8b 80 D", c, 8);
+    if (a) { o->country_of = a + 5 + (int64_t)(int32_t)c[0]; o->mgr_off = c[1]; o->orgs_cnt = c[2]; o->orgs_off = c[4]; } else MISS("collector");
+    /* (2) the attach execution (the policy command's execution calls it: mov esi,[rbx+0x28]; call ATTACH): the old
+     *     policy token, the owner tag, country_of, the manager, then the policy lookup */
+    uint64_t ex = 0, attach = 0, lookup = 0;
+    if (pt && (pt->conf & C_FACTORY) && scan_q(im, pt->vtable + 0x58, &ex) && in_text(im, ex)) {
+        long k = pfind_at(im, ex, 0x60, "48 89 c7 8b 73 28 e8 D", c, 8, &m);
+        if (k >= 0 && m == 1) attach = ex + (uint64_t)k + 11 + (int64_t)(int32_t)c[0];
+    }
+    if (attach && pfind_at(im, attach, 0x80, "44 8b a7 D 4c 8d bf D 4c 89 ff e8 D 48 8b b8 D 44 89 e6 49 89 dc e8 D", c, 8, &m) >= 0 && m == 1) {
+        long k = pfind_at(im, attach, 0x80, "44 8b a7 D 4c 8d bf D 4c 89 ff e8 D 48 8b b8 D 44 89 e6 49 89 dc e8 D", c, 8, &m);
+        uint64_t at = attach + (uint64_t)k;
+        o->policy_off = c[0]; o->tag_off = c[1];
+        if (at + 22 + (int64_t)(int32_t)c[2] != o->country_of) MISS("attach-country");
+        if (c[3] != o->mgr_off) MISS("attach-manager");
+        lookup = at + 40 + (int64_t)(int32_t)c[4];
+    } else MISS("attach");
+    if (lookup && pfind_at(im, lookup, 0x40, "55 48 89 e5 48 8b 8f D 48 63 97 D 48 89 cf 48 85 d2 74", c, 8, &m) == 0 &&
+        pfind_at(im, lookup, 0x40, "4c 8b 0f 41 39 71 08", c + 2, 6, &m) >= 0) { o->pol_off = c[0]; o->pol_cnt = c[1]; }
+    else MISS("policies");
+    /* (3) the queue check: find_in_tree(org, &trait) then the queue count, the walk over the queue's STraitId (stride 0x10)
+     *     compared by token +8 */
+    uint64_t intree = 0;
+    if (qt && qt->valid_fn) {
+        long k = pfind_at(im, qt->valid_fn, 0x140, "4c 89 ff 48 89 de e8 D 48 85 c0 74 ?? 41 b6 01 41 83 bf D 00 7e ??", c, 8, &m);
+        if (k >= 0 && m == 1) { intree = qt->valid_fn + (uint64_t)k + 11 + (int64_t)(int32_t)c[0]; o->queue_cnt = c[1]; }
+        long q = pfind_at(im, qt->valid_fn, 0x140, "49 8b bf D 4c 01 e7 48 89 de e8 D 84 c0 75 ?? 49 ff c5 49 63 87 D 49 83 c4 10", c, 8, &m);
+        uint64_t eq = q >= 0 ? qt->valid_fn + (uint64_t)q + 18 + (int64_t)(int32_t)c[1] : 0;
+        const uint8_t *eb = eq && in_text(im, eq) ? scan_ptr(im, eq, 15) : NULL;
+        if (q >= 0 && m == 1 && c[2] == o->queue_cnt && eb && cmd_pmatch(eb, 15, "55 48 89 e5 8b 47 08 3b 46 08 0f 94 c0 5d c3", c + 3, 4))
+            o->queue_off = c[0];
+    }
+    if (!intree || !o->queue_off) MISS("queue");
+    /* (4) the tree: find_in_tree = mov rdi,[rdi+TREE]; add rsi,8; jmp FIND; FIND walks the tree's templates (count +B,
+     *     data +B) comparing token +8, stride from its add */
+    const uint8_t *ib = intree && in_text(im, intree) ? scan_ptr(im, intree, 21) : NULL;
+    if (ib && cmd_pmatch(ib, 21, "55 48 89 e5 48 8b bf D 48 83 c6 08 5d e9 D", c, 8)) {
+        uint64_t find = intree + 21 + (int64_t)(int32_t)c[1];
+        o->tree_off = c[0];
+        const uint8_t *fb = in_text(im, find) ? scan_ptr(im, find, 0x40) : NULL;
+        uint32_t d[4];
+        if (fb && cmd_pmatch(fb, 19, "55 48 89 e5 8b 4f B 85 c9 7e ?? 48 8b 47 B 8b 16 31 f6", d, 4)) {
+            o->tree_cnt = d[0]; o->tree_arr = d[1];
+            if (pfind_at(im, find, 0x40, "39 50 08 74 ?? 48 ff c6 48 05 D 48 39 f1", d, 4, &m) >= 0 && m == 1) o->trait_stride = d[0];
+        }
+    }
+    if (!o->tree_arr || !o->trait_stride) MISS("tree");
+    /* (5) the unlock check: lea rdx,[r15+UNLOCKED]; can_unlock(org, trait, &unlocked, 1, NULL); then the organisation's key
+     *     token (mov edi,[r15+KEY]) through tok2str */
+    if (ut && ut->valid_fn) {
+        long k = pfind_at(im, ut->valid_fn, 0x140, "49 8d 97 D 4c 89 ff 48 89 c6 b9 01 00 00 00 45 31 c0 e8 D 89 c1 b0 01 84 c9 0f 85 D 41 8b 7f B e8 D", c, 8, &m);
+        if (k >= 0 && m == 1) {
+            uint64_t at = ut->valid_fn + (uint64_t)k;
+            o->unlocked_off = c[0]; o->can_unlock = at + 26 + (int64_t)(int32_t)c[1]; o->key_off = c[3];
+            o->tok2str = at + 47 + (int64_t)(int32_t)c[4];
+        }
+    }
+    if (!o->can_unlock || !o->tok2str) MISS("unlock");
+    /* (6) the scalars: unspent points (the unlock routine decrements them), size (the size-up adds to size and points as one
+     *     pair: points = size + 4), funds (the add-funds routine) */
+    if (text_unique(im, "41 ff 8c 24 D 49 8d be D be 6c 02 00 00", c, 8)) o->points_off = c[0]; else MISS("points");
+    if (text_unique(im, "f3 0f 7e 83 D 66 41 0f 6e ce 66 0f 70 c9 50 66 0f fe c8 66 0f d6 8b D", c, 8) && c[0] == c[1]) o->size_off = c[0]; else MISS("size");
+    if (o->size_off && o->points_off != o->size_off + 4) MISS("size-points");
+    if (text_unique(im, "48 03 b7 D e8 D 48 89 df e8 D 48 83 c3 18", c, 8)) o->funds_off = c[0]; else MISS("funds");
+    /* (7) the policy item's click: call GATE(item); test al,al; je; lea r14,[rbx+ORG]; ... and inside the gate:
+     *     mov esi,[rbx+POLICY]; cmp [rax+ORG_POLICY],esi */
+    uint64_t g = text_unique(im, "48 89 df e8 D 84 c0 0f 84 D 4c 8d 73 B 83 7b B 00 75 ?? 83 7b B 00", c, 8);
+    if (g && c[2] == c[3] && c[4] == c[2] + 4) {
+        o->policy_gate = g + 8 + (int64_t)(int32_t)c[0]; o->gate_org_off = c[2];
+        uint32_t d[4];
+        if (pfind_at(im, o->policy_gate, 0x80, "8b 73 B 39 b0 D 75", d, 4, &m) >= 0 && m == 1 && d[1] == o->policy_off) o->gate_policy_off = d[0];
+    }
+    if (!o->gate_policy_off) MISS("gate");
+    /* (8) a production line's organisation handle, from its setter: mov byte [rdi+X],1; lea r13,[rdi+ORG]; cmp [rdi+ORG],0 */
+    if (text_unique(im, "c6 87 D 01 4c 8d af D 83 bf D 00 75", c, 8) && c[1] == c[2]) o->line_org_off = c[1]; else MISS("line");
+    scan_cap vc;
+    if (scan_class_vtable(im, "N23NIndustrialOrganisation13COrganisationE", &vc) && vc.value) o->vt_org = vc.value; else MISS("vtable");
+    /* (9) the empty token: the queue factory's default trait (mov dword [rax+0x30], TOKEN) = the specs' default */
+    if (qt && (qt->conf & C_FACTORY) && pfind_at(im, qt->factory, 0x80, "c7 40 30 D", c, 8, &m) >= 0 && m == 1) o->empty_tok = (int32_t)c[0];
+    if (o->empty_tok != 0x4c17) MISS("empty-token");
+    int agree = !t->diplo.country_of || t->diplo.country_of == o->country_of;
+    if (!agree) MISS("country_of-disagrees");
+#undef MISS
+    o->ok = !bad && o->country_of && o->orgs_off && o->tag_off && o->tag_off < 0x1000 && o->key_off && o->unlocked_off &&
+            o->tree_off && o->trait_stride >= 0x10 && o->trait_stride < 0x2000 && o->policy_off && o->pol_off;
+    snprintf(o->evidence, sizeof o->evidence,
+             "country_of 0x%llx manager +0x%x orgs +0x%x/+0x%x policies +0x%x/+0x%x; org tag +0x%x key +0x%x funds +0x%x size +0x%x "
+             "points +0x%x unlocked +0x%x queue +0x%x/+0x%x tree +0x%x (+0x%x/+0x%x stride 0x%x) policy +0x%x; tok2str 0x%llx "
+             "can_unlock 0x%llx gate 0x%llx (+0x%x/+0x%x); line org +0x%x; vt 0x%llx; empty 0x%x; missing: %s",
+             (unsigned long long)o->country_of, o->mgr_off, o->orgs_off, o->orgs_cnt, o->pol_off, o->pol_cnt, o->tag_off, o->key_off,
+             o->funds_off, o->size_off, o->points_off, o->unlocked_off, o->queue_off, o->queue_cnt, o->tree_off, o->tree_arr,
+             o->tree_cnt, o->trait_stride, o->policy_off, (unsigned long long)o->tok2str, (unsigned long long)o->can_unlock,
+             (unsigned long long)o->policy_gate, o->gate_policy_off, o->gate_org_off, o->line_org_off,
+             (unsigned long long)o->vt_org, (unsigned)o->empty_tok, miss[0] ? miss : "none");
+}
+
 int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global, stage2_table *t) {
     memset(t, 0, sizeof *t);
     scan_stage2_common(im, pl, gs_global, &t->common);
@@ -1013,6 +1388,9 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
     }
     scan_diplo_facts(im, t, &t->diplo); /* engineer 78 */
     scan_holds_facts(im, stage2_find(t, "holds.area_defense"), &t->holds); /* engineer 79 */
+    scan_construction_facts(im, stage2_find(t, "construction.add"), &t->build); /* engineer 82 */
+    scan_training_facts(im, stage2_find(t, "training.add_lines"), &t->diplo, &t->train); /* engineer 82 */
+    scan_mio_facts(im, t, &t->mio); /* engineer 84 */
     /* every type must agree on the "sender controls" check and the generic lookup (one game, one rule) */
     for (int i = 1; i < t->n; i++)
         if (t->t[i].ok && t->t[0].ok &&
@@ -1083,6 +1461,13 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
         if (!strcmp(fam, "events") && !t->events.ok && t->t[i].ok) { t->t[i].ok = 0; on--; }
         /* holds: the area order's facts, the order tree (the order named by id), the array allocator is the ctor's own */
         if (!strcmp(fam, "holds") && t->t[i].ok && (!t->holds.ok || !t->orders.ok)) { t->t[i].ok = 0; on--; }
+        /* construction: the building reference (add) */
+        if (!strcmp(t->t[i].spec->op, "construction.add") && t->t[i].ok && !t->build.ok) { t->t[i].ok = 0; on--; }
+        /* training: create needs the Train button's own "can train" call */
+        if (!strcmp(t->t[i].spec->op, "training.create") && t->t[i].ok && !t->train.ok) { t->t[i].ok = 0; on--; }
+        /* mio: the organisation facts (the module checks the own list, the owner, the tree, the policy item's gate) */
+        if (!strcmp(fam, "mio") && t->t[i].ok && !t->mio.ok) { t->t[i].ok = 0; on--; }
+        if (!strcmp(t->t[i].spec->op, "mio.line") && t->t[i].ok && !t->mio.line_org_off) { t->t[i].ok = 0; on--; }
         /* diplomacy: the command maker and the date; declare war also the war-goal list */
         if (t->t[i].spec->auth_kind == AUTH_DIPLO && t->t[i].ok &&
             (!t->diplo.ok || (t->t[i].spec->ctor == CTOR_DIPLO_WAR && !t->diplo.war_ok))) { t->t[i].ok = 0; on--; }

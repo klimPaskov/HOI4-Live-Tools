@@ -44,6 +44,10 @@ static int fronts(const char *group, char *o, size_t n) {
     snprintf(o, n, "\"theatre\":\"0x9\",\"fronts\":[{\"front\":\"0x10\",\"sections\":[{\"id\":1,\"provinces\":[11,12]}]}],\"truncated\":false");
     (void)group; return 1;
 }
+static int mios(char *o, size_t n) {
+    snprintf(o, n, "\"policies\":[],\"empty_token\":19479,\"organisations\":[{\"org\":\"0x10\",\"key\":\"ita_ansaldo\",\"traits\":[[7,\"t\",\"a\"]]}],\"organisations_read\":1,\"truncated\":false");
+    return 1;
+}
 static int orders(const char *group, char *o, size_t n) {
     snprintf(o, n, "\"group\":\"%s\",\"lists\":[{\"list\":\"top\",\"orders\":[]}],\"orders_read\":0,\"truncated\":false", group);
     return 1;
@@ -56,7 +60,7 @@ int main(int argc, char **argv) {
            ipc_optin_valid("set_game_speed", why, sizeof why),
            ipc_optin_valid("set_game_speed,set_research", why, sizeof why), ipc_optin_valid("", why, sizeof why),
            ipc_optin_valid("set_game_speed,production,air", why, sizeof why), ipc_family_of("production.add_factories"),
-           ipc_family_of("air.transfer"), ipc_family_of("navy.move"), ipc_family_of("set_game_speed"));
+           ipc_family_of("air.transfer"), ipc_family_of("console.move"), ipc_family_of("set_game_speed"));
     static ipc_member m[8];
     printf("{\"parse_ok\":%d,\"parse_nested\":%d,\"parse_escape\":%d,\"parse_dup\":%d,\"parse_float\":%d}\n",
            ipc_parse("{\"v\":1,\"op\":\"post\",\"speed\":-2}", m, 8), ipc_parse("{\"v\":{\"a\":1}}", m, 8),
@@ -69,6 +73,6 @@ int main(int argc, char **argv) {
     p.fam_on[0] = 1; p.fam_on[1] = !getenv("IPC_SELFTEST_SPEED_ONLY"); p.fam_on[2] = 0; /* production on, air off (not resolved in the mock) */
     snprintf(p.fam_reason[1], sizeof p.fam_reason[1], "on"); snprintf(p.fam_reason[2], sizeof p.fam_reason[2], "not opted in"); snprintf(p.fam_reason[3], sizeof p.fam_reason[3], "not opted in"); snprintf(p.fam_reason[4], sizeof p.fam_reason[4], "not opted in"); snprintf(p.fam_reason[5], sizeof p.fam_reason[5], "not opted in");
     p.stage2_jobs_per_minute = 600; p.stage2_cmds_per_minute = 2400;
-    ipc_backend b = {hello, rd, probe, post, post2, orders, fronts, killed, lg};
+    ipc_backend b = {hello, rd, probe, post, post2, orders, fronts, mios, killed, lg};
     return ipc_serve(g_sock, &b, &p) ? 0 : 1;
 }

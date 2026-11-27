@@ -423,6 +423,25 @@ pub(super) fn mios(process: &dyn Process, tag: Option<&str>, include_all: bool) 
     object.insert("catalog_loaded".into(), json!(!cat.orgs.is_empty()));
     object.insert("observation_paused_game".into(), json!(false));
     object.insert("input_authorized".into(), json!(false));
+    // engineer 84: the runtime state, when the in-process module serves its organisations read (a pure read of the own
+    // organisation list: key, size, funds, unspent trait points, attached policy, queue, the trait tree with each
+    // trait's state, the policies the policy window allows); the catalogue above stays as it was
+    if let Some(mut state) = super::inproc_mio::read_only() {
+        if let Some(o) = state.as_object_mut() {
+            for k in ["ok", "id", "v", "op"] {
+                o.remove(k);
+            }
+        }
+        object.insert(
+            "mio_system".into(),
+            json!({"state_read": true, "source": "in-process module: the own organisation list",
+                "organisations_read": state["organisations_read"].clone(),
+                "unspent_trait_points": state["organisations"].as_array().map(|a| a.iter()
+                    .filter(|o| o["trait_points"].as_i64().unwrap_or(0) > 0)
+                    .map(|o| json!({"organization": o["key"], "points": o["trait_points"]})).collect::<Vec<_>>())}),
+        );
+        object.insert("state".into(), state);
+    }
     Ok(body)
 }
 

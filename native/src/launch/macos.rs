@@ -22,13 +22,19 @@ mod construction;
 mod construction_find;
 mod fair_facts;
 mod inproc;
+mod inproc_construction;
 mod inproc_diplomacy;
+mod inproc_doctrine;
 mod inproc_events;
 mod inproc_holds;
+mod inproc_mio;
+mod inproc_navy;
 mod inproc_orders;
 mod inproc_picks;
 mod inproc_politics;
+mod inproc_projects;
 mod inproc_research;
+mod inproc_training;
 mod inproc_units;
 mod operation_act;
 mod railway;
@@ -2413,10 +2419,29 @@ impl MacClock {
                 // A retry only settles or replays its receipt; it never refuses on new state.
                 special_projects::plan(&before, facility, scientist, project).ok()
             } else {
-                let plan = special_projects::plan(&before, facility, scientist, project)?;
-                bounded_keys.preflight()?;
-                Some(plan)
+                Some(special_projects::plan(
+                    &before, facility, scientist, project,
+                )?)
             };
+            // engineer 85: in process (family `projects`): the tab's own commands for the objects of the game's lists
+            let mut sp_route = if retry {
+                None
+            } else {
+                inproc::route("projects")
+            };
+            let sp_posts = match (sp_route.as_ref(), plan.as_ref()) {
+                (Some(_), Some(p)) => special_projects::objects(process)
+                    .ok()
+                    .and_then(|o| inproc_projects::assign_posts(&o, p).ok().flatten()),
+                _ => None,
+            };
+            if sp_posts.is_none() {
+                sp_route = None;
+            }
+            if !retry && sp_route.is_none() {
+                bounded_keys.preflight()?;
+            }
+            let sp_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
             let action = json!({
                 "kind": "special_project_assign",
                 "facility_id": facility,
@@ -2427,6 +2452,7 @@ impl MacClock {
             let (want_scientist, want_project) =
                 special_projects::wanted(&before, scientist, project);
             let keys = &bounded_keys;
+            let mut sp_reply: Option<Value> = None;
             let mut settle = || {
                 let now = special_projects::slots(process, facility)?;
                 let detail = json!({
@@ -2440,7 +2466,12 @@ impl MacClock {
                     want_scientist,
                     want_project,
                 );
-                Ok(if retry && verdict == settle::Verdict::Unchanged {
+                let early = sp_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                Ok(if early && verdict != settle::Verdict::Reached {
+                    journal::Outcome::Unknown
+                } else if retry && verdict == settle::Verdict::Unchanged {
                     // A retry's own before-snapshot proves nothing about the first attempt.
                     journal::Outcome::Diverged(detail)
                 } else {
@@ -2455,10 +2486,18 @@ impl MacClock {
                         "A retried request is never dispatched again",
                     )
                 })?;
+                if let (Some(ch), Some(posts)) = (sp_route.as_mut(), sp_posts.as_ref()) {
+                    if let Some(r) = inproc_projects::post_all(ch, posts)? {
+                        sp_posted.set(Some(Instant::now()));
+                        sp_reply = Some(json!(r));
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 special_projects::assign(process, keys, plan)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, sp_reply));
         }
         if name == "hoi4_special_project_stop" || name == "hoi4_special_project_unassign" {
             let stopping = name == "hoi4_special_project_stop";
@@ -2490,8 +2529,38 @@ impl MacClock {
                 } else {
                     special_projects::plan_unassign(&before, facility)?;
                 }
+            }
+            // engineer 85: in process (family `projects`)
+            let mut sp_route = if retry {
+                None
+            } else {
+                inproc::route("projects")
+            };
+            let sp_post = match sp_route.as_ref() {
+                Some(_) => special_projects::objects(process).ok().and_then(|o| {
+                    if stopping {
+                        inproc_projects::stop_post(&before, &o, facility)
+                    } else {
+                        inproc_projects::unassign_post(&before, &o, facility)
+                    }
+                    .ok()
+                    .flatten()
+                }),
+                None => None,
+            };
+            if sp_post.is_none() {
+                sp_route = None;
+            }
+            if !retry && sp_route.is_none() {
                 bounded_keys.preflight()?;
             }
+            let sp_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
+            let mut sp_reply: Option<Value> = None;
+            let sp_early = || {
+                sp_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE)
+            };
             let slots_before = special_projects::Slots::of(&before, facility);
             let action = json!({
                 "kind": if stopping { "special_project_stop" } else { "special_project_unassign" },
@@ -2507,7 +2576,9 @@ impl MacClock {
                         "stopping": now.map(|n| n.1),
                     });
                     let verdict = settle::special_stop(slots_before.and_then(|s| s.project), now);
-                    Ok(if retry && verdict == settle::Verdict::Unchanged {
+                    Ok(if sp_early() && verdict != settle::Verdict::Reached {
+                        journal::Outcome::Unknown
+                    } else if retry && verdict == settle::Verdict::Unchanged {
                         journal::Outcome::Diverged(detail)
                     } else {
                         verdict.outcome(detail)
@@ -2520,7 +2591,9 @@ impl MacClock {
                     });
                     let verdict =
                         settle::special_unassign(slots_before.and_then(|s| s.scientist), now);
-                    Ok(if retry && verdict == settle::Verdict::Unchanged {
+                    Ok(if sp_early() && verdict != settle::Verdict::Reached {
+                        journal::Outcome::Unknown
+                    } else if retry && verdict == settle::Verdict::Unchanged {
                         journal::Outcome::Diverged(detail)
                     } else {
                         verdict.outcome(detail)
@@ -2535,6 +2608,14 @@ impl MacClock {
                         "A retried request is never dispatched again",
                     ));
                 }
+                if let (Some(ch), Some(post)) = (sp_route.as_mut(), sp_post.as_ref()) {
+                    if let Some(r) = inproc_projects::post_all(ch, std::slice::from_ref(post))? {
+                        sp_posted.set(Some(Instant::now()));
+                        sp_reply = Some(json!(r));
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 if stopping {
                     special_projects::stop(process, keys, facility)
                 } else {
@@ -2542,7 +2623,7 @@ impl MacClock {
                 }
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, sp_reply));
         }
         if name == "hoi4_design_options" {
             allowed(
@@ -3500,7 +3581,8 @@ impl MacClock {
             // millisecond still shows the old line (s7n, 24 Nov 2026: a line closed in process read
             // back unchanged 4 ms later, NotApplied, and the balance rested two game days with 27
             // factories idle). Unchanged counts only after IPC_SETTLE.
-            let ipc_posted: std::cell::Cell<Option<std::time::Instant>> = std::cell::Cell::new(None);
+            let ipc_posted: std::cell::Cell<Option<std::time::Instant>> =
+                std::cell::Cell::new(None);
             let ipc_early = || {
                 ipc_posted
                     .get()
@@ -3957,7 +4039,26 @@ impl MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            self.keys.preflight()?;
+            // engineer 82: in process (family `construction`): the view's own move / the line's removal, no panel
+            let order_retry = args
+                .get("request_id")
+                .and_then(Value::as_str)
+                .is_some_and(|id| actions.receipt_exists(id));
+            let mut order_route = if order_retry {
+                None
+            } else {
+                inproc::route("construction")
+            };
+            let order_queue = match order_route {
+                Some(_) => ui::read(process, crate::construction::inproc_queue).ok(),
+                None => None,
+            };
+            if order_queue.is_none() {
+                order_route = None;
+            }
+            if order_route.is_none() {
+                self.keys.preflight()?;
+            }
             let line = args
                 .get("line")
                 .and_then(Value::as_u64)
@@ -3982,8 +4083,29 @@ impl MacClock {
                 })
             };
             let keys = &self.keys;
+            let mut order_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(queue) = order_queue.as_ref() {
+                    match construction_order_in_process(
+                        process,
+                        &mut order_route,
+                        queue,
+                        line as usize,
+                        order,
+                    ) {
+                        Ok(Some((body, reply))) => {
+                            order_reply = Some(reply);
+                            *done.borrow_mut() = Some(body);
+                            return Ok(());
+                        }
+                        Ok(None) => keys.preflight()?,
+                        Err(e) => {
+                            refused.set(matches!(e.code, "invalid_arguments" | "invalid_target"));
+                            return Err(e);
+                        }
+                    }
+                }
                 match construction::reorder(process, keys, line as usize, order) {
                     Ok(body) => {
                         *done.borrow_mut() = Some(body);
@@ -4000,7 +4122,7 @@ impl MacClock {
                 }
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, order_reply));
         }
         if name == "hoi4_railway_build" {
             allowed(
@@ -4617,9 +4739,40 @@ impl MacClock {
             } else {
                 None
             };
-            if !retry {
+            // engineer 85: in process (family `navy`): the mission bar's command for the task force, or the fleet's
+            // region by strategic region id, after the module's checks and the game's own "can do"; the mouse path
+            // serves the call when the module refuses for its own reasons
+            let mut navy_route = if retry { None } else { inproc::route("navy") };
+            let navy_target: Option<(u64, i32)> = if navy_route.is_some() {
+                inproc_navy::objects(process).ok().and_then(|objs| {
+                    if let Some(plan) = &mission_plan {
+                        let (_, _, tf) =
+                            navalact::find_task_force(&fleets, &plan.task_force).ok()?;
+                        Some((
+                            inproc_navy::task_force_object(&fleets, &objs, tf)?,
+                            plan.code,
+                        ))
+                    } else {
+                        let plan = region_plan.as_ref()?;
+                        let f = fleets.iter().find(|f| f.name == plan.fleet)?;
+                        Some((
+                            inproc_navy::fleet_object(&fleets, &objs, f)?,
+                            inproc_navy::region_id(process, &plan.region)?,
+                        ))
+                    }
+                })
+            } else {
+                None
+            };
+            if navy_target.is_none() {
+                navy_route = None;
+            }
+            let had_navy_route = navy_route.is_some();
+            if !retry && !had_navy_route {
                 bounded_keys.preflight()?;
             }
+            let navy_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
+            let navy_reply: std::cell::RefCell<Option<Value>> = std::cell::RefCell::new(None);
             let action = if by_mission {
                 json!({"kind":"fleet_mission","task_force":subject,"mission":detail})
             } else {
@@ -4641,6 +4794,12 @@ impl MacClock {
                         (true, Some(_)) => settle::Verdict::Unchanged,
                         _ => navalact::settle_mission(before_code.unwrap_or(-1), now, target_code),
                     };
+                    let early = navy_posted
+                        .get()
+                        .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                    if early && verdict == settle::Verdict::Unchanged {
+                        return Ok(journal::Outcome::Unknown);
+                    }
                     Ok(verdict.outcome(json!({"task_force":subject,"mission_code":now})))
                 } else {
                     let now = navalact::region_present_now(process, &subject, &detail)?;
@@ -4652,6 +4811,12 @@ impl MacClock {
                             navalact::settle_region(had_region.unwrap_or(false), now, want_present)
                         }
                     };
+                    let early = navy_posted
+                        .get()
+                        .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                    if early && verdict == settle::Verdict::Unchanged {
+                        return Ok(journal::Outcome::Unknown);
+                    }
                     Ok(verdict.outcome(json!({"fleet":subject,"region":detail,"present":now})))
                 }
             };
@@ -4663,6 +4828,23 @@ impl MacClock {
                         "A retried request is never dispatched again",
                     ));
                 }
+                if let Some((object, value)) = navy_target {
+                    let reply = module_in_process(&mut navy_route, |ch| {
+                        Ok(if by_mission {
+                            inproc_navy::mission(ch, &[object], value)
+                        } else {
+                            inproc_navy::region(ch, object, value, remove)
+                        })
+                    })?;
+                    if let Some(r) = reply {
+                        navy_posted.set(Some(Instant::now()));
+                        *navy_reply.borrow_mut() = Some(r);
+                        return Ok(());
+                    }
+                }
+                if had_navy_route {
+                    keys.preflight()?;
+                }
                 *info.borrow_mut() = match (&mission_plan, &region_plan) {
                     (Some(plan), _) => navalact::set_mission(process, keys, plan)?,
                     (_, Some(plan)) => navalact::region_op(process, keys, plan)?,
@@ -4673,10 +4855,12 @@ impl MacClock {
             let receipt =
                 actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
             let after = navalact::own_fleets(process).ok();
-            return Ok(json!({"receipt":receipt,"result":*info.borrow(),
+            return Ok(
+                json!({"receipt":receipt,"result":*info.borrow(),"in_process":navy_reply.into_inner(),
                 "fleets_after":after.map(|f| f.iter().map(|f| json!({"fleet":f.name.trim(),
                     "regions":f.regions.iter().map(|r| &r.1).collect::<Vec<_>>(),
-                    "task_forces":f.task_forces.iter().map(|t| json!({"task_force":t.name,"mission":naval::mission_name(t.mission_code)})).collect::<Vec<_>>()})).collect::<Vec<_>>())}));
+                    "task_forces":f.task_forces.iter().map(|t| json!({"task_force":t.name,"mission":naval::mission_name(t.mission_code)})).collect::<Vec<_>>()})).collect::<Vec<_>>())}),
+            );
         }
         if name == "hoi4_fleet_admiral" {
             allowed(
@@ -4754,7 +4938,26 @@ impl MacClock {
             } else {
                 Some(navalact::plan_admiral(&fleets, &fleet, admiral.as_deref())?)
             };
-            if !retry {
+            // engineer 85: in process (family `navy`): the commander list's command (the fleet, the admiral or none)
+            let mut navy_route = if retry { None } else { inproc::route("navy") };
+            let navy_target: Option<(u64, Option<u64>)> = match (&plan, navy_route.is_some()) {
+                (Some(p), true) => inproc_navy::objects(process).ok().and_then(|objs| {
+                    let f = fleets.iter().find(|f| f.name == p.fleet)?;
+                    let fo = inproc_navy::fleet_object(&fleets, &objs, f)?;
+                    match &p.admiral {
+                        Some(a) => Some((fo, Some(inproc_navy::admiral_object(&objs, a)?))),
+                        None => Some((fo, None)),
+                    }
+                }),
+                _ => None,
+            };
+            if navy_target.is_none() {
+                navy_route = None;
+            }
+            let had_navy_route = navy_route.is_some();
+            let navy_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
+            let navy_reply: std::cell::RefCell<Option<Value>> = std::cell::RefCell::new(None);
+            if !retry && !had_navy_route {
                 bounded_keys.preflight()?;
             }
             let before = fleets
@@ -4781,6 +4984,12 @@ impl MacClock {
                 } else {
                     navalact::settle_admiral(&before, now.as_ref(), &want)
                 };
+                let early = navy_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                if early && verdict == settle::Verdict::Unchanged {
+                    return Ok(journal::Outcome::Unknown);
+                }
                 Ok(verdict.outcome(json!({"fleet":fleet,"admiral":now})))
             };
             let mut dispatch = || {
@@ -4791,12 +5000,27 @@ impl MacClock {
                         "A retried request is never dispatched again",
                     ));
                 };
+                if let Some((fo, admiral)) = navy_target {
+                    let reply = module_in_process(&mut navy_route, |ch| {
+                        Ok(inproc_navy::leader(ch, fo, admiral))
+                    })?;
+                    if let Some(r) = reply {
+                        navy_posted.set(Some(Instant::now()));
+                        *navy_reply.borrow_mut() = Some(r);
+                        return Ok(());
+                    }
+                }
+                if had_navy_route {
+                    keys.preflight()?;
+                }
                 *info.borrow_mut() = navalact::assign_admiral(process, keys, plan)?;
                 Ok(())
             };
             let receipt =
                 actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
-            return Ok(json!({"receipt":receipt,"result":*info.borrow()}));
+            return Ok(
+                json!({"receipt":receipt,"result":*info.borrow(),"in_process":navy_reply.into_inner()}),
+            );
         }
         if name == "hoi4_fleet_create" {
             allowed(args, &["task_force", "request_id", "lease_token"])?;
@@ -6708,7 +6932,9 @@ impl MacClock {
                     let view = armies::armies(process)?;
                     if let Some((_, held)) = inproc_holds::standing_area(&view, army) {
                         if states.iter().all(|s| held.contains(s)) {
-                            return Ok(journal::Outcome::Reached(json!({"army":army,"area_states":held})));
+                            return Ok(journal::Outcome::Reached(
+                                json!({"army":army,"area_states":held}),
+                            ));
                         }
                     }
                 }
@@ -6753,8 +6979,11 @@ impl MacClock {
                     let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
                     let routed = match &area_existing {
                         Some((oid, held)) => {
-                            let add: Vec<i32> =
-                                states.iter().copied().filter(|s| !held.contains(s)).collect();
+                            let add: Vec<i32> = states
+                                .iter()
+                                .copied()
+                                .filter(|s| !held.contains(s))
+                                .collect();
                             inproc_holds::area_into(ch, group, *oid, &add)
                         }
                         None => inproc_holds::area(ch, group, &states),
@@ -7768,7 +7997,24 @@ impl MacClock {
                 ids
             };
             let retry = actions.receipt_exists(id);
-            if !retry {
+            // engineer 82: in process (family `training`): the Train button's command, then the new queue's series,
+            // lines and location, no panel; the deploy state's first own province as the location click
+            let mut train_route = if retry {
+                None
+            } else {
+                inproc::route("training")
+            };
+            let train_province = match train_route {
+                Some(_) => mapdata::game_dir(&epoch.game.exe)
+                    .and_then(|d| mapdata::state_provinces(&d, deploy_state))
+                    .ok()
+                    .and_then(|p| p.first().copied()),
+                None => None,
+            };
+            if train_province.is_none() {
+                train_route = None;
+            }
+            if !retry && train_route.is_none() {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"train","template":template,"count":count});
@@ -7786,13 +8032,22 @@ impl MacClock {
                     settle::queue_growth(0, added as i64, count as i64).outcome(detail)
                 })
             };
+            let mut train_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(p) = train_province {
+                    train_reply =
+                        inproc_training::train(process, &mut train_route, template, count, p)?;
+                    if train_reply.is_some() {
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 deployment::train(process, keys, template, count)?;
                 deployment::set_locations(process, keys, deploy_state).map(|_| ())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, train_reply));
         }
         if name == "hoi4_deploy_locations" {
             allowed(args, &["state_id", "request_id", "lease_token"])?;
@@ -7806,10 +8061,34 @@ impl MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            let unlocated = || ui::read(process, deployment::unlocated);
-            let start = unlocated()?;
             let retry = actions.receipt_exists(id);
-            if !retry {
+            // engineer 82: in process (family `training`): the location command for every queue without one, the
+            // state's first own province as the click; the queues' own province field is the read-back (no panel)
+            let mut locate_route = if retry {
+                None
+            } else {
+                inproc::route("training")
+            };
+            let locate_province = match locate_route {
+                Some(_) => mapdata::game_dir(&epoch.game.exe)
+                    .and_then(|d| mapdata::state_provinces(&d, state))
+                    .ok()
+                    .and_then(|p| p.first().copied()),
+                None => None,
+            };
+            if locate_province.is_none() {
+                locate_route = None;
+            }
+            let in_memory = locate_route.is_some();
+            let unlocated = || {
+                if in_memory {
+                    inproc_training::unlocated(process)
+                } else {
+                    ui::read(process, deployment::unlocated)
+                }
+            };
+            let start = unlocated()?;
+            if !retry && !in_memory {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"deploy_locations","state_id":state});
@@ -7823,12 +8102,20 @@ impl MacClock {
                     settle::locations(start, now).outcome(detail)
                 })
             };
+            let mut locate_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(p) = locate_province {
+                    locate_reply = inproc_training::locate(process, &mut locate_route, p)?;
+                    if locate_reply.is_some() {
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 deployment::set_locations(process, keys, state).map(|_| ())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, locate_reply));
         }
         if name == "hoi4_decisions_list" {
             allowed(args, &["lease_token"])?;
@@ -7989,7 +8276,8 @@ impl MacClock {
             // showed the old law (s81b, 24 Nov 2026: limited_exports and service_by_requirement read
             // back NotApplied, PP spent and both active a moment later). Unchanged counts only after
             // IPC_SETTLE, as for production.
-            let ipc_posted: std::cell::Cell<Option<std::time::Instant>> = std::cell::Cell::new(None);
+            let ipc_posted: std::cell::Cell<Option<std::time::Instant>> =
+                std::cell::Cell::new(None);
             let mut settle = || {
                 if in_process {
                     // the own active ideas: the law active = Reached; the replaced one still active = Unchanged
@@ -8090,19 +8378,72 @@ impl MacClock {
             let action = json!({"kind":"construction_add","building":key,"state_id":state,"province_id":province,"count":count});
             let start = construction::queued(process, key, state)?;
             let retry = actions.receipt_exists(id);
-            if !retry {
+            // engineer 82: in process (family `construction`): the map click's own command, one per click, the building
+            // reference as the game builds it (a province building on the named province, a state building in the
+            // state); Shift's fill and a province building without a province stay on the mouse
+            let mut build_route = if retry || fill {
+                None
+            } else {
+                inproc::route("construction")
+            };
+            let placement = match build_route {
+                Some(_) => ui::read(process, |r, i| {
+                    crate::construction::template_placement(r, i, key)
+                })
+                .ok(),
+                None => None,
+            };
+            let on_province = placement.is_some_and(|(_, p)| p);
+            let template = placement
+                .filter(|(_, p)| !*p || province.is_some())
+                .map(|(t, _)| t);
+            if template.is_none() {
+                build_route = None;
+            }
+            let in_process = build_route.is_some();
+            let location = if on_province {
+                province.unwrap_or(0)
+            } else {
+                state
+            };
+            if !retry && !in_process {
                 self.keys.preflight()?;
             }
             let keys = &self.keys;
+            // a command posted in process runs on the game's next frame: an unchanged queue counts only after IPC_SETTLE
+            let ipc_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
             // The pre-input amount is stored in the intent, so a retry settles against it.
             let mut settle = |baseline: &Value| {
                 let original = baseline.as_i64().unwrap_or(start);
                 let now = construction::queued(process, key, state)?;
                 let detail = json!({"building":key,"state_id":state,"queued_in_state":now,"queued_before":original});
+                let early = ipc_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                if early && now < original + count {
+                    return Ok(journal::Outcome::Unknown);
+                }
                 Ok(settle::queue_growth(original, now, count).outcome(detail))
             };
+            let mut build_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(t) = template {
+                    build_reply = module_in_process(&mut build_route, |ch| {
+                        Ok(inproc_construction::add(
+                            ch,
+                            t,
+                            location,
+                            on_province,
+                            count,
+                        ))
+                    })?;
+                    if build_reply.is_some() {
+                        ipc_posted.set(Some(Instant::now()));
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 construction::add(process, keys, key, state, count, province, fill)
             };
             let receipt = actions.execute_baselined(
@@ -8113,7 +8454,7 @@ impl MacClock {
                 &mut settle,
                 &mut dispatch,
             )?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, build_reply));
         }
         if name == "hoi4_focus_start" {
             allowed(args, &["focus", "request_id", "lease_token"])?;
@@ -8685,6 +9026,70 @@ fn with_inproc<R: serde::Serialize>(receipt: R, reply: Option<Value>) -> Value {
     match reply {
         Some(r) => json!({"receipt":receipt,"in_process":r}),
         None => json!({"receipt":receipt}),
+    }
+}
+
+/// engineer 82: one construction-queue order in process: the line's removal or the view's move, then the queue read
+/// back until the game ran it (it runs on the next frame; a paused game runs commands too). Ok(None): the mouse path
+/// runs (no channel, or the module could not explain its answer); a game refusal is the typed error.
+fn construction_order_in_process(
+    process: &dyn Process,
+    route: &mut Option<inproc::Channel>,
+    queue: &[crate::construction::InprocLine],
+    line: usize,
+    action: &str,
+) -> Result<Option<(Value, Value)>> {
+    let n = queue.len();
+    let Some(target) = queue.get(line) else {
+        return Err(Error::new(
+            "invalid_target",
+            format!("No construction line {line}: the queue has {n} (hoi4_construction_queue lists them in order)"),
+        ));
+    };
+    let address = target.address;
+    let to = inproc_construction::target_index(action, line, n);
+    if action != "remove" && to.is_none() {
+        return Err(Error::new(
+            "invalid_arguments",
+            "action must be top, up, down, bottom or remove",
+        ));
+    }
+    if to == Some(line) {
+        return Ok(Some((
+            json!({"position": line, "unchanged": "already there"}),
+            json!({"backend":"inprocess","posted":0}),
+        )));
+    }
+    let reply = module_in_process(route, |ch| {
+        Ok(match to {
+            None => inproc_construction::remove(ch, target),
+            Some(to) => inproc_construction::move_line(ch, queue, line, to),
+        })
+    })?;
+    let Some(reply) = reply else {
+        return Ok(None);
+    };
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        let now = ui::read(process, crate::construction::inproc_queue)?;
+        let at = now.iter().position(|l| l.address == address);
+        let body = match (to, at) {
+            (None, None) => {
+                Some(json!({"removed": true, "lines_before": n, "lines_after": now.len()}))
+            }
+            (Some(want), Some(at)) if at == want => Some(json!({"from": line, "to": want})),
+            _ => None,
+        };
+        if let Some(body) = body {
+            return Ok(Some((body, reply)));
+        }
+        if Instant::now() >= deadline {
+            return Err(Error::new(
+                "input_readback_failed",
+                format!("The module posted the order, but the line is at {at:?} after 3 s (wanted {to:?}; None = removed)"),
+            ));
+        }
+        crate::phase::sleep(Duration::from_millis(30));
     }
 }
 

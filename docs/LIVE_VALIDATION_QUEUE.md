@@ -808,3 +808,181 @@ spent); too little PP -> `game_refused`; an active law -> `invalid_target` befor
 P5 an advisor key -> the mouse path serves it in the same call (no in-process post). P6 save + reload; a plain load.
 Stop at once on: a crash, any `unexplained`, PP spent without the law, two laws of one category active.
 Pass -> IPC_LIVE_PASSED entry 15 (politics) = 1.
+
+## Session S14-CONSTRUCTION: the in-process module, the construction queue (family `construction`; about 25 minutes) -- after S13-POLITICS
+
+Built by engineer 82 (24 Nov 2026), offline-proven only: stage 2 49/49 on 1.20.0.0 and 1.19.4.1 macOS; Linux/Windows 1.20
+CAddConstructionCommand 12151 / CRemoveConstructionCommand 13088 / CSetProductionLinePlacementCommand 17412 by RTTI (3/3
+each). OFF under `auto` until this session passes.
+- add: the map click's own command through its own constructor (1.20 0x1001f9e80, 1.19.4.1 0x1001f9740): (mode 2 = after
+  the last active line, as a plain click; own tag; the building reference {location id, the template's id}; count 1), one
+  command per click. The module reads the template (exact CBuildingTemplate from the game's building database by key):
+  real (+0x18) and province count (+0x26c > 0 = a province building) as the game's reference constructors do, so a
+  supply hub / naval base / bunker names the province, a factory / dockyard / refinery / infrastructure the state. The
+  game's "can do" (free slots, own state, the building's own conditions) decides; refused -> nothing posted.
+- remove: RemoveConstruction(line, its own level count) = the whole line leaves (no confirmation popup in process).
+- move: SetProductionLinePlacement(line, index, placed-by-hand byte); the MCP computes the byte by the view's rule (1.20
+  0x10204cc20: 0 when the line lands next to an active, not-hand-placed line of the same building, else 1).
+- MCP: hoi4_construction_add (Verified = the state's queued amount grew by `count`; `fill` and a province building without
+  a province_id stay on the mouse) and hoi4_construction_order (Verified = the line at its new index / gone); reply
+  `in_process.module`. Railways (CBuildRailwayCommand carries the UI route finder's province path) stay on the mouse.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,construction ./inproc_stage2.sh PREV-1936 s14c` (Germany 1936).
+C1 paused, `HOI4_BACKEND=inprocess`: `hoi4_construction_add {"building":"industrial_complex","state_id":64,"count":2}`
+(Brandenburg): Verified; `per_object` two "posted"; hoi4_construction_queue shows the line(s) with 2 levels in state 64.
+C2 a province building: `{"building":"supply_node","state_id":<state>,"province_id":<a province with a free slot>}`:
+Verified; the queue's line has that province as location. `{"building":"naval_base","state_id":64,"province_id":<inland>}`
+-> `game_refused`, nothing posted.
+C3 refusals: a state with no free slot (count 10 of `arms_factory` in a small state) -> the game refuses the first click
+that does not fit (per_object shows posted then refused); a foreign state id -> `game_refused`; a province building without
+a province_id -> the mouse path serves it.
+C4 order: queue three lines A, B, A' (two of one building): `hoi4_construction_order {"line":2,"action":"top"}` ->
+Verified `{from:2,to:0}`; the in-game row shows A' at the top grouped with A (no "placed by hand" mark); `up`/`down`/
+`bottom` on B: Verified at the right index each time; compare the game's own drag of a row once (same result).
+C5 `{"line":<i>,"action":"remove"}` on a 3-level line: Verified removed; the queue length drops by one; no other line changed.
+C6 running at speed 3: C1 and C4 again: Verified within 3 s. C7 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, a line placed in another state / province than named, a line changed that the
+request did not name, civilian factories assigned wrongly (queue rows' factories differ from the game's own after C4).
+Pass -> IPC_LIVE_PASSED entry 16 (construction) = 1.
+
+## Session S15-TRAINING: the in-process module, training queues (family `training`; about 25 minutes) -- after S14-CONSTRUCTION
+
+Built by engineer 82 (24 Nov 2026), offline-proven only: stage 2 55/55 on 1.20.0.0 and 1.19.4.1 macOS; Linux/Windows 1.20
+CCreateConveyor 13479 / CSetConveyorSeries 13483 / CAddConveyorLine 13484 / CSetConveyorLocation 13481 / CDeployConveyor
+13600 / CRemoveConveyor 13601 by RTTI (6/6 each). OFF under `auto` until this session passes.
+- create: the template row's Train button: the module first calls the game's own can_train(deployment, template body, 1,
+  0) (1.20 0x1014876a0, read from the add-line command's own check) and refuses without posting when it says no; then
+  CreateConveyor(template, 0). series: SetConveyorSeries(queue, 1) (a new queue trains forever). add_lines: AddConveyorLine
+  (queue, n) at most 5 per command (Shift-click); its "can do" is can_train with n. location: SetConveyorLocation(queue,
+  province id) as the map click; read back from the queue's +0x3c (UNVERIFIED live: the panel's "No location set" label
+  should match +0x3c == 0). deploy / remove: the queue's deploy / cancel buttons (module ops; no MCP tool names them).
+- MCP: hoi4_train (Verified = the new queue's lines; the in-process reply lists the four posts) and hoi4_deploy_locations
+  (in process: the queues' province field is the read-back; mouse: the panel's labels). The location is the deploy
+  state's first province from the game files' state definition.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,training ./inproc_stage2.sh PREV-1936 s15t` (Germany 1936).
+T1 paused, `HOI4_BACKEND=inprocess`: `hoi4_train {"template":"Infanterie-Division","count":3,"deploy_state_id":64}`:
+Verified; `in_process.posts` = create, series, add_lines, location; open the panel by hand AFTER: one queue, 3 lines,
+1 division each, location Brandenburg (not "No location set").
+T2 count 7 (6 extra lines: the module posts AddConveyorLine 5 then 1): Verified, 7 lines.
+T3 a template the game cannot train now (e.g. one needing equipment the country cannot produce, or no manpower) ->
+`game_refused`, nothing posted, no queue added. A template name that does not exist -> the mouse path's own error.
+T4 hoi4_deploy_locations: create a queue by hand without a location; `{"state_id":64}`: Verified, the label set.
+T5 running at speed 3: T1 again, Verified within 3 s per step. T6 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, two queues for one request, a queue at "No location set" while +0x3c > 0
+(then the read-back offset is wrong: fix before passing), manpower or equipment changed by anything but the queue.
+Pass -> IPC_LIVE_PASSED entry 17 (training) = 1.
+
+## Session S16-MIO: the in-process module, military-industrial organisations (family `mio`; about 25 minutes) -- after S15-TRAINING
+
+Built by engineer 84 (24 Nov 2026), offline-proven only: stage 2 59/59 on 1.20.0.0 and 1.19.4.1 macOS (identical offsets);
+Linux/Windows 1.20 CAddIndustrialOrgTraitToQueueCommand 16412 / CUnlockIndustrialOrganisationTrait 14495 /
+CAttachPolicyToIndustrialOrgCommand 16260 / CSetIndustrialManufacturerCommand 14496 and COrganisation by RTTI (5/5 each).
+OFF under `auto` until this session passes.
+- the read (`{"op":"mios"}`, no opt-in): the player's own organisation list (country_of(tag) +0xd10 -> +0x130/+0x13c),
+  each organisation's key, funds_raw (+0x108, scale UNVERIFIED), size (+0x110), unspent trait points (+0x114), attached
+  policy (+0x170), queue (+0x138/+0x144), the trait tree in the game's order (+0xf0 -> +0x28/+0x34, stride 0x380) with
+  states u (the unlocked std::set +0x120) / q / a (the game's can_unlock, as the unlock command's check calls it) / l,
+  and per organisation the policies the policy window's own gate (1.20 0x101ed8bf0) allows.
+- unlock_trait / queue_trait: the tree's click; the MCP unlocks when a point is free and the trait is `a`, else queues.
+  policy: the policy item's token; the module calls the item's gate first (cooldown, political power, allowed) and posts
+  nothing when it says no; the attached policy's item detaches (the empty token). line: a production line's roster row
+  (the line's resolver + owner, the organisation in the own list; "can do" checks the organisation makes the design).
+- MCP: hoi4_mio_trait (trait_index, trait_indices, auto, list), hoi4_mio_policy, hoi4_mio_line (organization given as its
+  KEY; the first offered organisation, a localised name, list:true and naval lines stay on the mouse path); hoi4_mios adds
+  `state` and `mio_system.unspent_trait_points`.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,mio ./inproc_stage2.sh PREV-1936 s16m` (Germany 1936).
+T0 hoi4_mios (any backend): `mio_system.state_read` true; Germany's organisations listed with keys; compare ONE organisation
+by hand in the politics view: size, trait points, attached policy, the queued traits; the trait tree's ORDER against the
+window (index 0 = which icon?). If the order differs: record it, list:true and trait_index still agree with each other.
+T1 paused, `HOI4_BACKEND=inprocess`: `hoi4_mio_trait {"organization":"<an org with trait_points>0>","trait_index":<an a
+trait>}`: Verified; the window shows the trait unlocked, the points one less. Then an `l` trait: Verified as queued.
+T2 `trait_indices` of 3 (one already queued): Verified, the queued one counted as reached, the others queued/unlocked.
+T3 `hoi4_mio_policy` with a policy in `policies_allowed`: Verified, political power down by its cost; again at once ->
+nothing posted, Verified (attached). A policy NOT in `policies_allowed` (cooldown) -> `refused_by_game_check`, nothing posted.
+T4 `hoi4_mio_line {"line":<an infantry_equipment line>,"equipment":"infantry_equipment","organization":"<a small-arms org
+key>"}`: Verified; the line's row shows the organisation. A tank organisation on that line -> `refused_by_game_check`.
+T5 running at speed 3: T1 again, Verified within 3 s. T6 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, a trait unlocked with no point (points negative), political power spent on a
+refused policy, an organisation of another country in the read, a read whose sizes or points differ from the window.
+Pass -> IPC_LIVE_PASSED entry 18 (mio) = 1.
+
+## Session S17-NAVY: the in-process module, task forces and fleets (family `navy`; about 25 minutes) -- after S16-MIO
+
+Built by engineer 85 (24 Nov 2026), offline-proven only: stage 2 65/65 on 1.20.0.0 and 1.19.4.1 macOS (identical type ids,
+offsets and field ids); Linux/Windows 1.20 CNavalMissionSetTypeCommand 12272 / CMergeNaviesCommand 13176 /
+CNavalMissionAddRegionCommand 12274 / CNavalMissionRemoveRegionCommand 12275 / CSetFleetLeaderCommand 12370 /
+CSetFleetCommand 15165 by RTTI and type id (6/6 each). OFF under `auto` until this session passes.
+- mission: the mission bar's command (one command for the selection; task force handles, the button's mission code,
+  +0x45 = 1 as the button; +0x44 kept 0; codes 0-4 and 9 only). add_region / remove_region: the fleet and the strategic region id (the right
+  click; the remove tool). leader: the fleet and the admiral (or none). assign: the receiving fleet and the task forces
+  (each checked by the task force type's own resolver and owner getter). merge: the selection's task forces.
+- MCP: hoi4_fleet_mission, hoi4_fleet_region (the region by its display name -> id from the game files; `state_id` is
+  still required by the schema and only used by the mouse path), hoi4_fleet_admiral (assign/unassign; list:true stays on the
+  mouse path), hoi4_fleet_assign, hoi4_fleet_merge route in process; split, balance, reserve, delete, create stay on the mouse.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,navy ./inproc_stage2.sh PREV-1939 s17n` (Germany 1939 bookmark:
+several fleets, submarines, an idle task force), calls with `HOI4_BACKEND=inprocess`.
+N1 paused: `hoi4_fleet_region {"fleet":"<a U-boat fleet>","region":"<a sea region not assigned>","state_id":<any coastal>}`:
+Verified (hoi4_fleets assigned_regions lists it; the fleet panel's Active in Regions too). The same again ->
+already_assigned before posting. Then `remove:true`: Verified, gone from both.
+N2 `hoi4_fleet_mission {"task_force":"<a submarine task force>","mission":"convoy_raiding"}`: Verified (code 3; the panel
+shows the raiding icon). Then `patrol`, then `hold` (code 0): each Verified. `mine_laying` and `training` go by mouse by
+design (the module never posts 5/6/7: the buttons' technology rule and training's setting byte are the UI's): the reply has no `in_process`.
+N3 `hoi4_fleet_admiral {"fleet":"<fleet with no admiral>","admiral":"<free admiral>"}`: Verified; then `unassign:true`:
+Verified; an admiral who leads another fleet -> Verified and the other fleet shows none (the UI asks first; record).
+N4 `hoi4_fleet_assign {"task_force":"<tf>","to_fleet":"<other fleet>"}`: Verified (hoi4_fleets). `hoi4_fleet_merge
+{"fleet":"<fleet with 2+ task forces in one port>"}`: Verified (one task force with all ships).
+N5 running at speed 3: N2 again, Verified within 2 s. N6 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, a task force of another country moved, a mission code outside the buttons'
+set read back, a fleet left with no task force and not deleted by the game, an admiral who appears in two fleets.
+Pass -> IPC_LIVE_PASSED entry 19 (navy) = 1.
+
+## Session S18-DOCTRINE: the in-process module, grand doctrines and subdoctrines (family `doctrine`; about 15 minutes) -- after S17-NAVY
+
+Built by engineer 85 (24-27 Nov 2026), offline-proven only: stage 2 67/67 on 1.20.0.0 and 1.19.4.1 macOS (identical type
+ids, offsets and field ids); Linux/Windows 1.20 NDoctrines::CUnlockGrandDoctrineCommand 16777 /
+NDoctrines::CUnlockSubDoctrineCommand 16779 by RTTI and type id (2/2 each). OFF under `auto` until this session passes.
+- grand: the officer corps view's doctrine selection (1.20 0x101051db0): own tag, the grand doctrine template (from the
+  game's grand doctrine database by name key, exact class). The game's own "can do" (the folder, the experience, its cost).
+- sub: own tag, the track's place in the folder's grand doctrine, the subdoctrine template (the subdoctrine database), the
+  folder template (the own doctrine status). The game's check: the subdoctrine fits the track at that place, the cost.
+- MCP: hoi4_doctrine_adopt routes in process after its own typed refusals (already_adopted, grand_doctrine_set,
+  track_occupied, insufficient_experience, ...); a module refusal of its own runs the mouse path in the same call.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,doctrine ./inproc_stage2.sh PREV-1939 s18d` (Germany 1939: the
+three folders have grand doctrines, special forces empty, experience held), calls with `HOI4_BACKEND=inprocess`.
+D1 paused: `hoi4_doctrines {"include_catalog":true}`; pick a subdoctrine the land grand doctrine offers on an EMPTY track
+whose cost the army experience covers. `hoi4_doctrine_adopt {"doctrine":"<it>"}` (with `track` when it fits several):
+Verified (hoi4_doctrines shows it on THAT track; the officer corps view too; experience spent by the cost). RECORD the
+track: it proves the track place (the doctrine read's script order) is the game's order. Wrong track = stop.
+D2 a grand doctrine for special forces (if the DLC folder is present and the experience covers it): Verified.
+D3 one the experience does not cover: insufficient_experience before posting, or the game's refusal (`refused_by_game_check`)
+with nothing changed.
+D4 running at speed 3: a second subdoctrine (navy or air folder): Verified within 2 s. D5 save + reload; a plain load
+without the module.
+Stop at once on: a crash, any `unexplained`, a doctrine set on another country, a subdoctrine on a track it does not
+fit, experience spent with no doctrine set, two subdoctrines on one track.
+Pass -> IPC_LIVE_PASSED entry 20 (doctrine) = 1.
+
+## Session S19-PROJECTS: the in-process module, special projects (family `projects`; about 15 minutes) -- after S18-DOCTRINE
+
+Built by engineer 85 (27 Nov 2026), offline-proven only: stage 2 71/71 on 1.20.0.0 and 1.19.4.1 macOS (identical type ids,
+offsets and field ids); Linux/Windows 1.20 CStartProjectCommand 16402 / CStopProjectCommand 16403 / CAttachScientistCommand
+16398 / CUnattachScientistCommand 16399 by RTTI and type id (4/4 each). OFF under `auto` until this session passes.
+- attach: the facility (NProject::CProgram handle) and the scientist (CCharacter handle), flag 1 as both UI sites send it.
+  start: the facility and the project (NProject::CProject of the own pool). stop: the project. unattach: the scientist and
+  the facility. Each object through the game's own resolver; the facility / project / scientist owned by the player.
+- MCP: hoi4_special_project_assign (attach, then start, as the panel does), hoi4_special_project_stop,
+  hoi4_special_project_unassign route in process after their own typed refusals; hoi4_special_project_recruit stays on
+  the mouse path (its command's authorisation also reads the candidate pool).
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,projects ./inproc_stage2.sh PREV-1939 s19p` (Germany 1939 with
+La Resistance / By Blood Alone facilities; or a save with a built facility and a free scientist), `HOI4_BACKEND=inprocess`.
+P1 paused: `hoi4_special_projects {}`: pick an empty facility and a free scientist of its specialization.
+`hoi4_special_project_assign {"facility_id":<id>,"scientist":"<name>"}`: Verified (hoi4_special_projects shows the
+scientist in it; the tab's card too).
+P2 `hoi4_special_project_assign {"facility_id":<id>,"project":"<an offered project of that specialization>"}`: Verified
+(the facility runs it; the facility window shows it).
+P3 running at speed 3: `hoi4_special_project_stop {"facility_id":<id>}`: Verified (stopping); then, once stopped,
+`hoi4_special_project_unassign {"facility_id":<id>}`: Verified (no scientist).
+P4 a project of another specialization: the typed refusal before posting, or `refused_by_game_check` with nothing
+changed. P5 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, a scientist in two facilities, a project running in a facility of another
+specialization, another country's facility changed.
+Pass -> IPC_LIVE_PASSED entry 21 (projects) = 1.

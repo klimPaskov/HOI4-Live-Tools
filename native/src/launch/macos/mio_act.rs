@@ -1795,6 +1795,100 @@ fn key_arg<'a>(args: &'a serde_json::Map<String, Value>, name: &str) -> Result<&
     Ok(v)
 }
 
+/// engineer 84: one organisation change in process (family `mio`). The posts run in the journal's dispatch, one module
+/// request each (the module checks the own organisation, the tree, the policy window's gate and the type's own "can
+/// do" before each post); `held` judges the module's fresh organisations read (and the replies) after the settle
+/// window. A game refusal of the first post is the typed error (the mouse would send the same refused click); a
+/// module refusal of its own (nothing posted) runs the mouse path `gui` in the same call.
+#[allow(clippy::too_many_arguments)]
+fn run_in_process(
+    kind: &'static str,
+    action: Value,
+    id: &str,
+    token: &str,
+    process: &(dyn Process + Send + Sync),
+    keys: &dyn GameInput,
+    guard: &mut Guard,
+    authority: &InputAuthority,
+    actions: &mut super::journal::GameJournal,
+    ch: super::inproc::Channel,
+    posts: Vec<(Value, String)>,
+    held: &dyn Fn(&super::inproc_mio::Mios, &[Value]) -> Option<bool>,
+    gui: &dyn Fn(&dyn Process, &dyn GameInput) -> Driven,
+) -> Result<Value> {
+    use super::journal::Outcome;
+    guard.observe_context(process)?;
+    let epoch = guard.epoch.clone();
+    authority.authorize(token, &epoch)?;
+    let ch = RefCell::new(ch);
+    let replies: RefCell<Vec<Value>> = RefCell::new(Vec::new());
+    let gui_seen: RefCell<Option<Value>> = RefCell::new(None);
+    let posted_at: std::cell::Cell<Option<std::time::Instant>> = std::cell::Cell::new(None);
+    let mut settle = || -> Result<Outcome> {
+        let (m, _) = super::inproc_mio::read(&mut ch.borrow_mut())?;
+        let rs = replies.borrow();
+        let detail = json!({"tool":kind,"backend":"inprocess","replies":rs.len()});
+        let early = posted_at
+            .get()
+            .is_some_and(|t| t.elapsed() < super::inproc::IPC_SETTLE);
+        Ok(match held(&m, &rs) {
+            Some(true) => Outcome::Reached(detail),
+            _ if early => Outcome::Unknown,
+            Some(false) => Outcome::Unchanged(detail),
+            None => Outcome::Diverged(detail),
+        })
+    };
+    let mut dispatch = || -> Result<()> {
+        authority.authorize(token, &epoch)?;
+        for (k, (req, what)) in posts.iter().enumerate() {
+            let reply = ch.borrow_mut().post_raw(req.clone())?;
+            match super::inproc_units::routed(reply, what) {
+                super::inproc::Routed::Done(v) => {
+                    replies.borrow_mut().push(v);
+                    posted_at.set(Some(std::time::Instant::now()));
+                }
+                super::inproc::Routed::Refused(w) if k == 0 => {
+                    return Err(super::inproc::refused_error(&w))
+                }
+                super::inproc::Routed::Refused(w) => {
+                    replies.borrow_mut().push(json!({"refused_by_game_check":w}))
+                }
+                super::inproc::Routed::Gui if k == 0 => {
+                    keys.preflight()?;
+                    return match gui(process, keys) {
+                        Ok(seen) => {
+                            *gui_seen.borrow_mut() = Some(seen);
+                            Ok(())
+                        }
+                        Err(Fail::Refused(e)) | Err(Fail::Failed(e)) => Err(e),
+                    };
+                }
+                super::inproc::Routed::Gui => {
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "The module refused a later command of this call (nothing of it posted); the earlier ones were posted",
+                    ))
+                }
+            }
+        }
+        Ok(())
+    };
+    let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+    Ok(
+        json!({"receipt":receipt,"tool":kind,"validated":false,"observed":gui_seen.into_inner(),
+        "in_process":replies.into_inner()}),
+    )
+}
+
+/// The `mio` route and the organisation `key` of the module's read: None = the mouse path (no channel, the family not
+/// usable in this mode, the read failed, or `key` is no own organisation: the mouse path also takes localised names).
+fn mio_route(key: &str) -> Option<(super::inproc::Channel, super::inproc_mio::Mios)> {
+    let mut ch = super::inproc::route("mio")?;
+    let (m, _) = super::inproc_mio::read(&mut ch).ok()?;
+    m.org(key)?;
+    Some((ch, m))
+}
+
 pub(super) fn call(
     name: &str,
     args: &serde_json::Map<String, Value>,
@@ -1853,6 +1947,45 @@ pub(super) fn call(
             let organization = key_arg(args, "organization")?;
             let policy_key = key_arg(args, "policy")?;
             let slot = slot_arg(args)?;
+            let action = json!({"kind":"mio_policy","organization":organization,"policy":policy_key,"slot":slot});
+            // engineer 84: in process, the policy window's item by its token (the attached one: nothing to post)
+            if !actions.receipt_exists(id) {
+                if let Some((ch, m)) = mio_route(organization) {
+                    if let (Some(org), Some(tok)) = (m.org(organization), m.policy(policy_key)) {
+                        let posts = if org.policy == tok {
+                            Vec::new()
+                        } else {
+                            vec![(
+                                super::inproc_mio::policy_request(org, tok)?,
+                                "this policy now (its cooldown, political power, the policy's own conditions)".to_string(),
+                            )]
+                        };
+                        let held = |m: &super::inproc_mio::Mios, _: &[Value]| {
+                            super::inproc_mio::policy_held(m, organization, tok, false)
+                        };
+                        let gui = |p: &dyn Process, k: &dyn GameInput| -> Driven {
+                            let n = names(p, organization, Some(policy_key))?;
+                            let shown = n.policy.as_ref().map(|x| x.1.clone()).unwrap_or_default();
+                            policy(p, k, &n.org_display, slot, &shown)
+                        };
+                        return run_in_process(
+                            "mio_policy",
+                            action,
+                            id,
+                            token,
+                            process,
+                            keys,
+                            guard,
+                            authority,
+                            actions,
+                            ch,
+                            posts,
+                            &held,
+                            &gui,
+                        );
+                    }
+                }
+            }
             let job = Job {
                 kind: "mio_policy",
                 action: json!({"kind":"mio_policy","organization":organization,"policy":policy_key,"slot":slot}),
@@ -1929,6 +2062,69 @@ pub(super) fn call(
                         "trait_indices/auto queue several traits; leave out trait_index and list",
                     ));
                 }
+                // engineer 84: in process, each trait by the tree's click (unlock with a free point, else queue)
+                if !actions.receipt_exists(id) {
+                    if let Some((ch, m)) = mio_route(organization) {
+                        let org = m
+                            .org(organization)
+                            .expect("mio_route checked the organisation");
+                        let mut points = org.points;
+                        let mut tokens = Vec::new();
+                        let mut posts = Vec::new();
+                        let mut picks = many.clone();
+                        if let Some(a) = auto {
+                            picks.extend(super::inproc_mio::auto_picks(org, a, &many));
+                        }
+                        for i in picks {
+                            match super::inproc_mio::step(org, i, points) {
+                                Ok(st) => {
+                                    if matches!(st, super::inproc_mio::Step::Unlock(_)) {
+                                        points -= 1;
+                                    }
+                                    let t = match st {
+                                        super::inproc_mio::Step::Unlock(t)
+                                        | super::inproc_mio::Step::Queue(t) => t,
+                                    };
+                                    tokens.push(t);
+                                    posts.push((
+                                        super::inproc_mio::trait_request(org, st)?,
+                                        format!("trait {i} now"),
+                                    ));
+                                }
+                                // held already: counts as reached, as on the mouse path
+                                Err(("trait_already_queued" | "trait_unavailable", _)) => {}
+                                Err((code, msg)) => return Err(Error::new(code, msg)),
+                            }
+                        }
+                        let action = json!({"kind":"mio_trait","organization":organization,"trait_indices":many,"auto":auto,"slot":slot});
+                        let held = |m: &super::inproc_mio::Mios, _: &[Value]| {
+                            let mut all = true;
+                            for t in &tokens {
+                                all &= super::inproc_mio::trait_held(m, organization, *t)?;
+                            }
+                            Some(all)
+                        };
+                        let gui = |p: &dyn Process, k: &dyn GameInput| -> Driven {
+                            let n = names(p, organization, None)?;
+                            mio_traits_many(p, k, &n.org_display, slot, &many, auto)
+                        };
+                        return run_in_process(
+                            "mio_trait",
+                            action,
+                            id,
+                            token,
+                            process,
+                            keys,
+                            guard,
+                            authority,
+                            actions,
+                            ch,
+                            posts,
+                            &held,
+                            &gui,
+                        );
+                    }
+                }
                 let job = Job {
                     kind: "mio_trait",
                     action: json!({"kind":"mio_trait","organization":organization,"trait_indices":many,"auto":auto,"slot":slot}),
@@ -1975,6 +2171,53 @@ pub(super) fn call(
                     "invalid_arguments",
                     "Pass exactly one of trait_index (queue that trait) or list:true (return the trait tree)",
                 ));
+            }
+            // engineer 84: in process, the tree in the game's order (list) or the trait's click
+            if !actions.receipt_exists(id) {
+                if let Some((ch, m)) = mio_route(organization) {
+                    let org = m
+                        .org(organization)
+                        .expect("mio_route checked the organisation");
+                    let Some(i) = index else {
+                        return Ok(ui_action::result(
+                            "mio_trait",
+                            Value::Null,
+                            Some(super::inproc_mio::listing(org)),
+                        ));
+                    };
+                    let st = super::inproc_mio::step(org, i, org.points)
+                        .map_err(|(c, msg)| Error::new(c, msg))?;
+                    let t = match st {
+                        super::inproc_mio::Step::Unlock(t) | super::inproc_mio::Step::Queue(t) => t,
+                    };
+                    let posts = vec![(
+                        super::inproc_mio::trait_request(org, st)?,
+                        format!("trait {i} now"),
+                    )];
+                    let action = json!({"kind":"mio_trait","organization":organization,"trait_index":index,"slot":slot});
+                    let held = |m: &super::inproc_mio::Mios, _: &[Value]| {
+                        super::inproc_mio::trait_held(m, organization, t)
+                    };
+                    let gui = |p: &dyn Process, k: &dyn GameInput| -> Driven {
+                        let n = names(p, organization, None)?;
+                        mio_trait(p, k, &n.org_display, slot, index)
+                    };
+                    return run_in_process(
+                        "mio_trait",
+                        action,
+                        id,
+                        token,
+                        process,
+                        keys,
+                        guard,
+                        authority,
+                        actions,
+                        ch,
+                        posts,
+                        &held,
+                        &gui,
+                    );
+                }
             }
             let job = Job {
                 kind: "mio_trait",
@@ -2032,16 +2275,48 @@ pub(super) fn call(
                 .filter(|v| *v < 2048)
                 .ok_or_else(|| Error::new("invalid_arguments", "line must be 0..2047"))?
                 as usize;
-            let handle = super::production::lines(process)?
+            let (handle, address, naval) = super::production::lines(process)?
                 .get(index)
                 .filter(|l| l.key.as_deref() == Some(equipment))
-                .map(|l| l.handle)
+                .map(|l| (l.handle, l.address, l.naval))
                 .ok_or_else(|| {
                     Error::new(
                         "invalid_target",
                         "No own line with this index and equipment",
                     )
                 })?;
+            // engineer 84: in process, the roster row of a named own organisation (its key from the module's read); the
+            // module reads the line's organisation back itself. The first offered organisation, a localised name, a
+            // naval line and list:true stay on the mouse path (the roster decides what is offered)
+            if let (false, false, Some(org_key)) =
+                (list_only || actions.receipt_exists(id), naval, organization)
+            {
+                if let Some((ch, m)) = mio_route(org_key) {
+                    let org = m.org(org_key).expect("mio_route checked the organisation");
+                    let posts = vec![(
+                        super::inproc_mio::line_request(address, Some(org.address))?,
+                        "this organisation on this line (it must make the line's equipment)"
+                            .to_string(),
+                    )];
+                    let action = json!({"kind":"mio_line","line":index,"equipment":equipment,
+                        "organization":organization,"list":list_only});
+                    let held = |_: &super::inproc_mio::Mios, rs: &[Value]| {
+                        let r = rs.first()?;
+                        Some(
+                            r["module"]["executed"].as_i64()? >= 1
+                                && r["module"]["executed"] == r["module"]["posted"],
+                        )
+                    };
+                    let gui = |p: &dyn Process, k: &dyn GameInput| -> Driven {
+                        let n = names(p, org_key, None)?;
+                        line_assign(p, k, Some(&n.org_display), handle, false)
+                    };
+                    return run_in_process(
+                        "mio_line", action, id, token, process, keys, guard, authority, actions,
+                        ch, posts, &held, &gui,
+                    );
+                }
+            }
             let display: RefCell<Option<String>> = RefCell::new(None);
             let job = Job {
                 kind: "mio_line",

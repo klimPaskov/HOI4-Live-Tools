@@ -119,6 +119,24 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[a], "act_type:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_type : 0; }
         else if (!strncmp(argv[a], "act_goal_off:", 13)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 13); got = x ? x->act_goal_off : 0; }
         /* engineer 79: the area-defence order */
+        /* engineer 82: the building reference */
+        else if (!strcmp(argv[a], "build_ok")) { got = (uint64_t)t.st2.build.ok; fprintf(stderr, "construction: %s\n", t.st2.build.evidence); }
+        else if (!strcmp(argv[a], "build_tmpl")) got = ((uint64_t)t.st2.build.tmpl_real_off << 32) | ((uint64_t)t.st2.build.tmpl_prov_off << 8) | t.st2.build.tmpl_id_off;
+        else if (!strcmp(argv[a], "build_loc")) got = ((uint64_t)t.st2.build.state_id_off << 16) | t.st2.build.prov_id_off;
+        else if (!strcmp(argv[a], "build_ref_vt")) got = t.st2.build.ref_vt;
+        else if (!strcmp(argv[a], "train_ok")) { got = (uint64_t)t.st2.train.ok; fprintf(stderr, "training: %s\n", t.st2.train.evidence); }
+        else if (!strcmp(argv[a], "train_can")) got = t.st2.train.can_train;
+        else if (!strcmp(argv[a], "train_offs")) got = ((uint64_t)t.st2.train.deploy_off << 16) | t.st2.train.tmpl_body_off;
+        /* engineer 84: the organisation facts */
+        else if (!strcmp(argv[a], "mio_ok")) { got = (uint64_t)t.st2.mio.ok; fprintf(stderr, "mio: %s\n", t.st2.mio.evidence); }
+        else if (!strcmp(argv[a], "mio_list")) got = ((uint64_t)t.st2.mio.mgr_off << 32) | ((uint64_t)t.st2.mio.orgs_off << 16) | t.st2.mio.orgs_cnt;
+        else if (!strcmp(argv[a], "mio_pol")) got = ((uint64_t)t.st2.mio.pol_off << 16) | t.st2.mio.pol_cnt;
+        else if (!strcmp(argv[a], "mio_org")) got = ((uint64_t)t.st2.mio.tag_off << 32) | ((uint64_t)t.st2.mio.key_off << 16) | t.st2.mio.policy_off;
+        else if (!strcmp(argv[a], "mio_scalars")) got = ((uint64_t)t.st2.mio.funds_off << 32) | ((uint64_t)t.st2.mio.size_off << 16) | t.st2.mio.points_off;
+        else if (!strcmp(argv[a], "mio_traits")) got = ((uint64_t)t.st2.mio.unlocked_off << 48) | ((uint64_t)t.st2.mio.queue_off << 32) | ((uint64_t)t.st2.mio.queue_cnt << 16) | t.st2.mio.tree_off;
+        else if (!strcmp(argv[a], "mio_tree")) got = ((uint64_t)t.st2.mio.tree_arr << 32) | ((uint64_t)t.st2.mio.tree_cnt << 16) | t.st2.mio.trait_stride;
+        else if (!strcmp(argv[a], "mio_gate")) got = ((uint64_t)t.st2.mio.gate_policy_off << 32) | ((uint64_t)t.st2.mio.gate_org_off << 16) | t.st2.mio.line_org_off;
+        else if (!strcmp(argv[a], "mio_fns")) got = t.st2.mio.policy_gate;
         else if (!strcmp(argv[a], "holds_ok")) { got = (uint64_t)t.st2.holds.ok; fprintf(stderr, "holds: %s\n", t.st2.holds.evidence); }
         else if (!strcmp(argv[a], "holds_kind")) got = t.st2.holds.kind_area;
         else if (!strcmp(argv[a], "holds_area_off")) got = t.st2.holds.area_off;
@@ -134,12 +152,13 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "ev_opts_off")) got = t.st2.events.ev_opts_off;
         else if (!strcmp(argv[a], "opt_index_off")) got = t.st2.events.opt_index_off;
         else if (!strcmp(argv[a], "pend_arr_off")) got = t.st2.events.pend_arr_off;
-        else if (!strncmp(argv[a], "ctor:", 5) || !strncmp(argv[a], "on:", 3) || !strncmp(argv[a], "type:", 5)) {
+        else if (!strncmp(argv[a], "ctor:", 5) || !strncmp(argv[a], "on:", 3) || !strncmp(argv[a], "type:", 5) ||
+                 !strncmp(argv[a], "conf:", 5)) {
             /* per stage-2 op (engineer 71): ctor:OP = the UI constructor found, on:OP = 1 when every check resolved,
-             * type:OP = the protocol type id */
+             * type:OP = the protocol type id; conf:OP (engineer 85) = the confidence bits (C_* in cmd2.h) */
             const cmd_type *x = stage2_find(&t.st2, strchr(argv[a], ':') + 1);
             found = x != NULL;
-            if (x) got = argv[a][0] == 'c' ? x->ctor : argv[a][0] == 'o' ? (uint64_t)x->ok : x->type_id;
+            if (x) got = !strncmp(argv[a], "conf:", 5) ? x->conf : argv[a][0] == 'c' ? x->ctor : argv[a][0] == 'o' ? (uint64_t)x->ok : x->type_id;
         }
         else {
             found = 0;

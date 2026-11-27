@@ -35,7 +35,9 @@ enum { FK_I32 = 1, FK_U8, FK_REF, FK_REF_ARRAY, FK_I32_ARRAY /* a CPdxArray<int>
        /* engineer 75 (24 Nov): a libc++ std::string held inline (the UI constructor copies a short string; names <= 22 bytes) */
        FK_STR,
        /* engineer 75 (picks): the player's own country tag; a raw object pointer (a focus: no handle, an exact vtable) */
-       FK_TAG, FK_PTR };
+       FK_TAG, FK_PTR,
+       /* engineer 85: the second object as a raw pointer (OBJ2_PTR_EXACT: a doctrine folder template) */
+       FK_PTR2 };
 /* How the module builds the command:
  *   BUILD_FIELDS: the game's factory makes the default object; the module writes the spec's scalar and handle fields
  *                 into that fresh object (each field's default and serializer entry checked first).
@@ -78,7 +80,11 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
        CTOR_RESEARCH = 20,
        /* engineer 79: laws (ideas): the politics view's own constructors (cmd, const tag *, idea) and
         * (cmd, const tag *, the slot's current idea, the new idea) */
-       CTOR_IDEA_ADD = 21, CTOR_IDEA_REPLACE = 22 };
+       CTOR_IDEA_ADD = 21, CTOR_IDEA_REPLACE = 22,
+       /* engineer 82: construction: the map click's own constructor (cmd, mode byte, const tag *, const CBuildingReference *,
+        * count); the reference {vptr, location id, building id, tag} is built by the module the way the game's reference
+        * constructors build it (a state id for a state building, a province id for a province building) */
+       CTOR_CONSTRUCTION = 23 };
 /* engineer 74: BUILD_FIELDS also fills CPdxArray fields (a division handle list, a province list): the fresh object's
  * array is empty ({data 0, capacity 0, size 0} and its allocator set by the factory); the module allocates the
  * elements through THAT allocator's own allocate slot (read from the game's array growth code), so the command's
@@ -104,12 +110,14 @@ enum { OBJ2_NONE = 0, OBJ2_AIR_BASE, OBJ2_REGION, OBJ2_ORDERS_GROUP,
        OBJ2_REGION_ID, /* a strategic region given by id in vals (0 = none: hold), looked up as the game's check does */
        OBJ2_FRONT,       /* engineer 74: a CFront of the group's own theatre (exact vtable, its handle resolves to it) */
        OBJ2_CAST,
-       OBJ2_SAME_PTR };  /* engineer 79: a raw pointer of exactly the class of the first object (the idea a law replaces) */      /* engineer 75: an object the type's own "can do" casts to spec->obj2_cast (its handle resolves to it,
+       OBJ2_SAME_PTR,
+       OBJ2_PTR_EXACT }; /* engineer 85: a raw pointer of exactly the class obj2_cast names (its RTTI vtable), written by FK_PTR2 */  /* engineer 79: a raw pointer of exactly the class of the first object (the idea a law replaces) */      /* engineer 75: an object the type's own "can do" casts to spec->obj2_cast (its handle resolves to it,
                           * the C++ cast with the check's own typeinfo accepts it); optional where the spec says so */
 
 /* def: the factory's default for an FK_I32 / FK_U8 / FK_I64 field (checked before the module writes the field; 0 unless
  * given). vi (engineer 74): 1-based index of the request's vals that fills this scalar; 0 = the older rule (the value of
- * the object's own row). keep: 1 = the field keeps the factory's default (checked, not written). */
+ * the object's own row). keep: 1 = the field keeps the factory's default (checked, not written); -1 (engineer 85) = the
+ * factory leaves the field unwritten (the UI's constructor fills it): not checked, written by the module. */
 typedef struct { const char *name; uint16_t off; uint8_t kind; uint16_t count_off; uint32_t field_id; int32_t def; int8_t vi; int8_t keep; } cmd_field;
 
 typedef struct {
@@ -144,6 +152,7 @@ typedef struct {
     uint64_t ti_src, ti_dst;                                      /* AUTH_TAG: CReferenceObject -> obj_cast typeinfos */
     uint64_t vt_obj;                                              /* AUTH_TAG_PTR: the object's exact vtable */
     uint64_t ti2; uint32_t hint2;                                 /* OBJ2_CAST: the check's typeinfo and hint */
+    uint64_t vt_obj2;                                             /* OBJ2_PTR_EXACT: the second object's exact vtable */
     /* engineer 78, AUTH_DIPLO: the action class's constructor, object size (from its own Clone), type id (its SetType),
      * the base constructor it calls, the sender field (from the command's auth slot); WAR: the war goal handle field and
      * the flag byte the constructor writes */
@@ -233,6 +242,53 @@ typedef struct {
     char evidence[200];
 } holds_facts;
 
+/* engineer 82: a building reference as the game's own reference constructors build it from (template, state) and
+ * (template, province), read from both (identical on 1.19.4.1 and 1.20.0.0): the template must be a real one (its byte
+ * +tmpl_real_off set), its province-level count +tmpl_prov_off decides the location kind (> 0: a province id, else a
+ * state id), its id +tmpl_id_off goes into the reference. The reference's own class vtable (18CBuildingReference) is the
+ * one the command's constructor stores */
+/* engineer 82: training: the "can train" check the deployment view makes before its Train click (the add-line command's
+ * own "can do" calls it with the line count): can_train(country deployment, template body, count, 0); the country from
+ * the tag (country_of), its deployment status at +deploy_off, the template's body at +tmpl_body_off */
+typedef struct {
+    int ok;
+    uint64_t can_train, country_of, template_of;
+    uint32_t deploy_off, tmpl_body_off;
+    char evidence[200];
+} training_facts;
+
+typedef struct {
+    int ok;
+    uint32_t tmpl_real_off, tmpl_prov_off, tmpl_id_off, state_id_off, prov_id_off;
+    uint64_t ref_vt;            /* CBuildingReference primary vtable (unslid; the address the ctor stores) */
+    char evidence[200];
+} construction_facts;
+
+/* engineer 84: military-industrial organisations, each fact read from the code that uses it (identical on 1.20.0.0 and
+ * 1.19.4.1):
+ *   - the country's organisation list as the "any/every organisation" trigger collects it: country_of(tag) -> country
+ *     +mgr_off (the organisation manager) -> organisations +orgs_off (COrganisation *), count +orgs_cnt;
+ *   - the country's policies as the attach command's execution finds one: manager +pol_off (CPolicy *), count +pol_cnt,
+ *     a policy's token +8;
+ *   - COrganisation (exact class): owner tag +tag_off and attached policy token +policy_off (the attach execution), the
+ *     key token +key_off (the unlock check names it), funds +funds_off (int64, the add-funds routine), size +size_off and
+ *     unspent trait points +points_off (the size-up and unlock routines), the unlocked-trait set +unlocked_off (a libc++
+ *     std::set of STraitId: begin, end node, size), the unlock queue +queue_off / +queue_cnt (STraitId 0x10: token +8),
+ *     the trait tree +tree_off (array +tree_arr / +tree_cnt of trait templates of stride trait_stride, token +8);
+ *   - the game's own functions: tok2str(token) -> const std::string * (the unlock check's name), can_unlock(org, trait,
+ *     &unlocked, 1, NULL) (the unlock command's "can do"), the policy list item's click gate (the UI's legality of attaching
+ *     or detaching: item +gate_policy_off policy token, +gate_org_off organisation handle);
+ *   - a production line's organisation handle +line_org_off (the line's organisation setter) */
+typedef struct {
+    int ok;
+    uint64_t country_of, tok2str, can_unlock, policy_gate, vt_org;
+    uint32_t mgr_off, orgs_off, orgs_cnt, pol_off, pol_cnt;
+    uint32_t tag_off, policy_off, key_off, funds_off, size_off, points_off, unlocked_off, queue_off, queue_cnt;
+    uint32_t tree_off, tree_arr, tree_cnt, trait_stride, gate_policy_off, gate_org_off, line_org_off;
+    int32_t empty_tok; /* the factory's "no trait / no policy" token (the command fields' default; detach sends it) */
+    char evidence[400];
+} mio_facts;
+
 #define CMD2_MAX 96
 typedef struct {
     stage2_common common;
@@ -241,6 +297,9 @@ typedef struct {
     events_facts events;      /* engineer 76: the event window and the pending-event records */
     diplo_facts diplo;        /* engineer 78: the command maker, the date, the war goals */
     holds_facts holds;        /* engineer 79: the area-defence order */
+    construction_facts build; /* engineer 82: the building reference */
+    training_facts train;     /* engineer 82: the Train click's "can train" */
+    mio_facts mio;            /* engineer 84: the organisations */
     int n;
     cmd_type t[CMD2_MAX];
 } stage2_table;

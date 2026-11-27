@@ -22,6 +22,7 @@
  * the channel closes) within about 2 s. */
 #include "../core/caps.h"
 #include "../core/ipc.h"
+#include "../core/mio.h"
 #include <dispatch/dispatch.h>
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -391,6 +392,7 @@ typedef void (*ctor_area_state)(void *, void *, int32_t, int32_t, int32_t); /* e
 typedef void (*ctor_research)(void *, const int32_t *, void *, int32_t, int, int, int); /* engineer 79: (cmd, &tag, template, slot, b34, b35, b36) */
 typedef void (*ctor_idea)(void *, const int32_t *, void *);           /* engineer 79: AddIdea (cmd, &tag, idea) */
 typedef void (*ctor_idea2)(void *, const int32_t *, void *, void *);  /* engineer 79: ReplaceIdea (cmd, &tag, old, new) */
+typedef void (*ctor_construction)(void *, int, const int32_t *, const void *, int32_t); /* engineer 82: (cmd, mode, &tag, &reference, count) */
 typedef unsigned char (*option_test_fn)(void *, const void *, unsigned char);
 typedef void (*ctor_groups_obj)(void *, const pdx_array *, void *);
 typedef void (*ctor_groups_obj_i32)(void *, const pdx_array *, void *, int32_t);
@@ -431,6 +433,13 @@ typedef struct {
     /* holds (engineer 79): the area order's settings mask the click carries, the group's area-order ids before a new
      * order is created (the read-back finds the one new id), the new order's id */
     int32_t hold_setting, hold_before[64], new_order_id; int hold_nbefore;
+    /* construction (engineer 82): the building reference the click builds (location id, building id) and the kind of
+     * location the request names (0 a state, 1 a province) */
+    int32_t bld_loc, bld_id, bld_kind;
+    uint64_t deploy; /* training (engineer 82): the player's deployment status the Train check reads */
+    /* mio (engineer 84): the player's organisation manager, the token the command carries (a trait, a policy or the
+     * empty token = detach), the before-state the read-back compares, the organisation's handle (line) */
+    uint64_t mio_mgr, mio_h2; int32_t mio_tok, mio_before;
     long long ran_us, post_us;
     char reason[200], queue_type[64], server_type[64];
     dispatch_semaphore_t done;
@@ -852,6 +861,96 @@ static int hold_has_state(uint64_t order, int32_t state) {
  * before (the read-back finds the new one). An existing order: the game's own order lookup finds it in THIS group, it is
  * of the area kind, and the state is not in it yet (the click toggles: a state already there would be REMOVED); the
  * click carries the order's own settings mask, as the tool does. NULL when ready. */
+/* engineer 84: the organisations. The game's own functions, called on the main thread: tok2str (the name of a token),
+ * can_unlock (the unlock command's own check), the policy item's click gate (cooldown, political power, allowed) */
+typedef const void *(*tok2str_fn)(int32_t);
+typedef unsigned char (*can_unlock_fn)(void *, const void *, const void *, int32_t, void *);
+typedef unsigned char (*policy_gate_fn)(void *);
+static int mio_rd_cb(uint64_t a, void *b, size_t n) { return sread(a, b, n); }
+static uint64_t mio_name_cb(void *ctx, int32_t tok) {
+    (void)ctx;
+    uint64_t f = g_t.st2.mio.tok2str + (uint64_t)g_slide;
+    return code_ptr(f) ? (uint64_t)(uintptr_t)((tok2str_fn)(uintptr_t)f)(tok) : 0;
+}
+static int mio_can_cb(void *ctx, uint64_t org, uint64_t trait) {
+    (void)ctx;
+    uint64_t f = g_t.st2.mio.can_unlock + (uint64_t)g_slide;
+    return code_ptr(f) && ((can_unlock_fn)(uintptr_t)f)((void *)(uintptr_t)org, (const void *)(uintptr_t)trait,
+                                                        (const void *)(uintptr_t)(org + g_t.st2.mio.unlocked_off), 1, NULL) != 0;
+}
+/* the policy window's item as its click reads it: the policy token and the organisation's handle; the gate reads
+ * nothing else of the item (1.20 0x101ed8bf0: +0x70 and +0x74 only) */
+static int mio_policy_cb(void *ctx, uint64_t org, uint64_t handle, int32_t policy) {
+    (void)ctx; (void)org;
+    const mio_facts *f = &g_t.st2.mio;
+    uint64_t g = f->policy_gate + (uint64_t)g_slide;
+    _Alignas(16) uint8_t item[0x200];
+    if (!code_ptr(g) || f->gate_policy_off + 4 > sizeof item || f->gate_org_off + 8 > sizeof item) return 0;
+    memset(item, 0, sizeof item);
+    memcpy(item + f->gate_policy_off, &policy, 4);
+    memcpy(item + f->gate_org_off, &handle, 8);
+    return ((policy_gate_fn)(uintptr_t)g)(item) != 0;
+}
+/* the player's organisation manager: country_of(tag) -> +mgr_off */
+static uint64_t mio_manager(int32_t tag) {
+    const mio_facts *f = &g_t.st2.mio;
+    uint64_t cf = f->country_of + (uint64_t)g_slide, mgr = 0;
+    if (!f->ok || !code_ptr(cf)) return 0;
+    void *pc = ((country_of_fn)(uintptr_t)cf)(&tag);
+    if (!pc || !sq((uint64_t)(uintptr_t)pc + f->mgr_off, &mgr) || !plausible(mgr)) return 0;
+    return mgr;
+}
+/* an organisation of the player's own list, of its exact class, its owner tag the player's */
+static int mio_own_org(uint64_t mgr, uint64_t org, int32_t tag) {
+    const mio_facts *f = &g_t.st2.mio;
+    uint64_t vt = 0; int32_t t = 0;
+    return plausible(org) && sq(org, &vt) && vt == f->vt_org + (uint64_t)g_slide && sread(org + f->tag_off, &t, 4) && t == tag &&
+           mio_in_list(f, mio_rd_cb, mgr, org);
+}
+/* per object, after its round trip: what the organisation views allow before the click (the type's own "can do" runs
+ * again before the post) */
+static const char *mio_prep(job2_t *j, int i, int *invalid) {
+    const mio_facts *f = &g_t.st2.mio;
+    const char *op = j->ct->spec->op;
+    static char why[200];
+    *invalid = 0;
+    if (!j->mio_mgr && !(j->mio_mgr = mio_manager(j->player_tag))) return "the player's organisation manager is unreadable";
+    if (!strcmp(op, "mio.line")) { /* the line passed its resolver and owner; the organisation (if named) is own */
+        if (j->obj2 && !mio_own_org(j->mio_mgr, j->obj2, j->player_tag)) return "obj2 is not one of the player's own organisations";
+        if (j->obj2 && !sq(j->obj2 + g_t.st2.common.cref_handle_off, &j->mio_h2)) return "the organisation's handle is unreadable";
+        if (!j->obj2 && !sq(g_t.st2.common.null_ref_global + (uint64_t)g_slide, &j->mio_h2)) return "the empty handle is unreadable";
+        return NULL;
+    }
+    uint64_t org = j->obj[i], h = 0;
+    if (!mio_own_org(j->mio_mgr, org, j->player_tag)) return "not one of the player's own organisations";
+    if (!sq(org + g_t.st2.common.cref_handle_off, &h)) return "the organisation's handle is unreadable";
+    int32_t tok = (int32_t)j->val[0];
+    if (!strcmp(op, "mio.policy")) {
+        int32_t cur = 0;
+        if (!sread(org + f->policy_off, &cur, 4)) return "the attached policy is unreadable";
+        /* the gate's cost routine reads the policy object unchecked: only a policy of the country's own list */
+        if (!mio_policy(f, mio_rd_cb, j->mio_mgr, tok)) { snprintf(why, sizeof why, "policy %d is not one of the country's policies", tok); *invalid = 1; return why; }
+        if (!mio_policy_cb(NULL, org, h, tok)) {
+            *invalid = 1;
+            return cur == tok ? "the policy window refuses to detach (its cooldown)" : "the policy window refuses (cooldown, political power or not allowed)";
+        }
+        j->mio_tok = cur == tok ? f->empty_tok : tok; /* the attached policy's item detaches (the UI sends the empty token) */
+        j->val[0] = j->mio_tok;
+        j->mio_before = cur;
+        return NULL;
+    }
+    if (!mio_trait(f, mio_rd_cb, org, tok)) { snprintf(why, sizeof why, "trait %d is not in this organisation's tree", tok); *invalid = 1; return why; }
+    j->mio_tok = tok;
+    if (!strcmp(op, "mio.queue_trait")) {
+        if (mio_queued(f, mio_rd_cb, org, tok) == 1) { *invalid = 1; return "the trait is queued already"; }
+    } else {
+        int u = mio_unlocked(f, mio_rd_cb, org, tok);
+        if (u == 1) { *invalid = 1; return "the trait is unlocked already"; }
+        if (u < 0) return "the unlocked traits are unreadable";
+    }
+    return NULL;
+}
+
 static const char *holds_prep(job2_t *j, int i) {
     const orders_facts *of = &g_t.st2.orders;
     const holds_facts *hf = &g_t.st2.holds;
@@ -874,6 +973,24 @@ static const char *holds_prep(job2_t *j, int i) {
     int has = hold_has_state(j->order, j->provs[i]);
     if (has < 0) return "the order's states are unreadable";
     if (has) { snprintf(why, sizeof why, "state %d is already in area order %d (a click would remove it)", j->provs[i], j->order_id); return why; }
+    return NULL;
+}
+
+/* engineer 85: the task forces a navy.assign names (request divs): each must be a live CTaskForce (the navy.mission type's
+ * typed resolver gives it back from its handle) owned by the player (that type's owner getter), as the command's own
+ * authorisation asks for every task force. Their handles become the command's list. */
+static const char *navy_task_forces(job2_t *j) {
+    const cmd_type *tt = stage2_find(&g_t.st2, "navy.mission");
+    if (!tt || !tt->ok) return "the task force resolver is not resolved on this build";
+    uint64_t of = tt->owner_fn + (uint64_t)g_slide;
+    if (!code_ptr(of)) return "the task force owner getter is not game code";
+    for (int k = 0; k < j->ndiv; k++) {
+        uint64_t h = 0;
+        if (!roundtrip(tt, j->divs[k], &h)) return "a task force is not a live CTaskForce";
+        if (((owner_fn2)(uintptr_t)of)((void *)(uintptr_t)j->divs[k]) != j->player_tag) return "a task force is not the player's";
+        j->divh[k] = h;
+    }
+    j->ndivh = j->ndiv;
     return NULL;
 }
 
@@ -963,6 +1080,12 @@ static void run_job2(void *ctx) {
             for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
             snprintf(j->reason, sizeof j->reason, "obj2 is not another live %s", ct->spec->obj_cast); finish2(j); return;
         }
+    } else if (k2 == OBJ2_PTR_EXACT) { /* engineer 85: a raw pointer of exactly the named class (a doctrine folder template) */
+        uint64_t v2 = 0;
+        if (!ct->vt_obj2 || !plausible(j->obj2) || !sq(j->obj2, &v2) || v2 != ct->vt_obj2 + (uint64_t)g_slide) {
+            for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2;
+            snprintf(j->reason, sizeof j->reason, "obj2 is not a live %s", ct->spec->obj2_cast); finish2(j); return;
+        }
     } else if (k2 == OBJ2_CAST) { /* engineer 75: a leader / an army group, as the type's own check casts it */
         uint64_t nr = 0, ref = j->obj2 + ct->hint2, lk = ct->lookup_fn + (uint64_t)g_slide;
         if (!g_dyncast) g_dyncast = (dyncast_fn)dlsym(RTLD_DEFAULT, "__dynamic_cast");
@@ -990,6 +1113,33 @@ static void run_job2(void *ctx) {
         const char *w = units_theatre(j);
         if (w) { for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2; snprintf(j->reason, sizeof j->reason, "%s", w); finish2(j); return; }
     }
+    if (!strcmp(op, "training.create")) { /* engineer 82: the Train button's own check, can_train(deployment, body, 1, 0) */
+        const training_facts *tf = &g_t.st2.train;
+        uint64_t sl = (uint64_t)g_slide;
+        if (!tf->ok || !code_ptr(tf->can_train + sl) || !code_ptr(tf->country_of + sl)) {
+            j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "training facts are not game code"); finish2(j); return;
+        }
+        void *pc = ((country_of_fn)(uintptr_t)(tf->country_of + sl))(&j->player_tag);
+        uint64_t dep = 0;
+        if (!pc || !sq((uint64_t)(uintptr_t)pc + tf->deploy_off, &dep) || !plausible(dep)) {
+            j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the player's deployment status is unreadable"); finish2(j); return;
+        }
+        j->deploy = dep; /* the check itself runs per template after its round trip */
+    }
+    if (!strcmp(op, "construction.add")) { /* engineer 82: the template as the game's reference constructors read it */
+        const construction_facts *bf = &g_t.st2.build;
+        uint8_t real = 0; int32_t prov = 0, bid = 0; uint64_t vt = 0;
+        const char *w = NULL;
+        if (!bf->ok || !plausible(j->obj[0]) || !sq(j->obj[0], &vt) || vt != ct->vt_obj + (uint64_t)g_slide ||
+            !sread(j->obj[0] + bf->tmpl_real_off, &real, 1) || !sread(j->obj[0] + bf->tmpl_prov_off, &prov, 4) ||
+            !sread(j->obj[0] + bf->tmpl_id_off, &bid, 4))
+            w = "the building template is not a live CBuildingTemplate";
+        else if (!real) w = "the building template is not a real one (the game's reference constructors refuse it)";
+        else if ((prov > 0) != (j->bld_kind == 1))
+            w = prov > 0 ? "this building is placed on a province: name a province id" : "this building is placed in a state: name a state id";
+        if (w) { for (int i = 0; i < j->n; i++) j->res[i] = R_BAD_OBJ2; snprintf(j->reason, sizeof j->reason, "%s", w); finish2(j); return; }
+        j->bld_id = bid;
+    }
     uint64_t fac = ct->factory + (uint64_t)g_slide, post = g_t.post.post + (uint64_t)g_slide, nullref = 0;
     if (!code_ptr(fac) || !code_ptr(post) || !sq(c->null_ref_global + (uint64_t)g_slide, &nullref)) { snprintf(j->reason, sizeof j->reason, "factory/post not game code"); j->unexplained = 1; finish2(j); return; }
     long long tp = 0;
@@ -1003,6 +1153,14 @@ static void run_job2(void *ctx) {
         /* AUTH_TAG: the command names the player's own tag; whether the country may use the object is the game's check */
         if (ct->spec->auth_kind == AUTH_HANDLE &&
             (!code_ptr(owner_f) || ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)j->obj[i]) != j->player_tag)) { j->res[i] = R_NOT_OWN; j->refused++; continue; }
+        if (!strcmp(op, "training.create")) { /* engineer 82: a live own template: the Train button's can_train(deployment, body, 1, 0) */
+            typedef unsigned char (*can_train_fn2)(void *, const void *, int32_t, int32_t);
+            const training_facts *tf = &g_t.st2.train;
+            if (!((can_train_fn2)(uintptr_t)(tf->can_train + (uint64_t)g_slide))((void *)(uintptr_t)j->deploy,
+                                                                               (const void *)(uintptr_t)(j->obj[i] + tf->tmpl_body_off), 1, 0)) {
+                j->res[i] = R_INVALID; j->refused++; continue;
+            }
+        }
         if (!strcmp(op, "units.transfer")) { /* the divisions (in an army or in none), then the order the UI would name */
             j->allow_free = 1;
             const char *why = orders2_divisions(j);
@@ -1019,6 +1177,15 @@ static void run_job2(void *ctx) {
                 if (why != j->reason) snprintf(j->reason, sizeof j->reason, "%s", why);
                 continue;
             }
+        }
+        if (!strcmp(op, "navy.assign")) { /* engineer 85: the task forces, by the task force type's own resolver and owner */
+            const char *why = navy_task_forces(j);
+            if (why) { j->res[i] = R_BAD_OBJ2; j->refused++; snprintf(j->reason, sizeof j->reason, "%s", why); continue; }
+        }
+        if (!strcmp(ct->spec->family, "mio")) { /* engineer 84: the player's own organisation, the tree, the policy gate */
+            int inv = 0;
+            const char *why = mio_prep(j, i, &inv);
+            if (why) { j->res[i] = inv ? R_INVALID : R_BAD_OBJ2; j->refused++; snprintf(j->reason, sizeof j->reason, "%s", why); continue; }
         }
         if (!strcmp(ct->spec->family, "holds")) { /* engineer 79: the area order and the state's place in it */
             const char *why = holds_prep(j, i);
@@ -1042,6 +1209,11 @@ static void run_job2(void *ctx) {
         snprintf(j->reason, sizeof j->reason, "a group command is posted whole or not at all");
         j->post_us = 0; finish2(j); return;
     }
+    if (!strcmp(ct->spec->family, "navy") && ct->spec->one_cmd && ct->spec->build == BUILD_FIELDS) {
+        /* engineer 85: the selection's handles (each passed its resolver and owner above) are the command's list */
+        for (int i = 0; i < j->n; i++) j->divh[i] = hs[i];
+        j->ndivh = j->n;
+    }
     int ncmd = ct->spec->one_cmd ? 1 : j->n;
     for (int ci = 0; ci < ncmd; ci++) {
         int i = ci; /* the object this command is for (the first of the group for one_cmd) */
@@ -1058,6 +1230,7 @@ static void run_job2(void *ctx) {
             for (int k = 0; k < ct->spec->nf && ok; k++) { /* every field still holds the factory's default */
                 const cmd_field *f = &ct->spec->f[k];
                 uint64_t cur = 0;
+                if (f->keep < 0) continue; /* engineer 85: the factory leaves it unwritten (the UI's constructor fills it) */
                 if (f->kind == FK_REF || f->kind == FK_HANDLE) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == nullref;
                 else if (f->kind == FK_I32 || f->kind == FK_TAG) { int32_t v = 1; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 4) && v == f->def; }
                 else if (f->kind == FK_PTR) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == 0;
@@ -1070,11 +1243,12 @@ static void run_job2(void *ctx) {
                 for (int k = 0; k < ct->spec->nf && ok; k++) {
                     const cmd_field *f = &ct->spec->f[k];
                     int64_t val = f->vi > 0 ? j->val[f->vi - 1] : j->val[i];
-                    if (f->keep) continue;
+                    if (f->keep > 0) continue;
                     if (f->kind == FK_REF) *(uint64_t *)(cmd + f->off) = k == 0 ? h : h2;
                     else if (f->kind == FK_HANDLE) *(uint64_t *)(cmd + f->off) = j->hx;
                     else if (f->kind == FK_TAG) *(int32_t *)(cmd + f->off) = j->player_tag; /* picks: the player's own tag */
                     else if (f->kind == FK_PTR) *(uint64_t *)(cmd + f->off) = j->obj[i];    /* picks: the checked object */
+                    else if (f->kind == FK_PTR2) *(uint64_t *)(cmd + f->off) = j->obj2;     /* engineer 85: the checked second object */
                     else if (f->kind == FK_I64) *(int64_t *)(cmd + f->off) = val;
                     else if (f->kind == FK_REF_ARRAY) ok = fill_array(cmd, f, j->divh, j->ndivh, 8);
                     else if (f->kind == FK_I32_ARRAY) ok = fill_array(cmd, f, j->provs, j->nprov, 4);
@@ -1092,7 +1266,8 @@ static void run_job2(void *ctx) {
             if (ct->spec->ctor == CTOR_ADDLINE) /* no list: the variant's handle field still holds the empty handle */
                 ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &data) && data == nullref;
             else if (ct->spec->ctor == CTOR_LEADER || ct->spec->ctor == CTOR_GROUP_NAME || ct->spec->ctor == CTOR_EVENT_OPTION ||
-                     ct->spec->ctor == CTOR_RESEARCH || ct->spec->ctor == CTOR_IDEA_ADD || ct->spec->ctor == CTOR_IDEA_REPLACE) {
+                     ct->spec->ctor == CTOR_RESEARCH || ct->spec->ctor == CTOR_IDEA_ADD || ct->spec->ctor == CTOR_IDEA_REPLACE ||
+                     ct->spec->ctor == CTOR_CONSTRUCTION) {
                 /* no list: every handle still empty */
                 for (int k = 0; k < ct->spec->nf && ok; k++)
                     if (ct->spec->f[k].kind == FK_REF) ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[k].off, &data) && data == nullref;
@@ -1128,6 +1303,12 @@ static void run_job2(void *ctx) {
                 case CTOR_IDEA_REPLACE: ((ctor_idea2)(uintptr_t)ctor)(cmd, &j->player_tag, (void *)(uintptr_t)j->obj2, obj); break;
                 case CTOR_RESEARCH: /* engineer 79: the research view's call: own tag, the template, the slot, (0, 1, 0) */
                     ((ctor_research)(uintptr_t)ctor)(cmd, &j->player_tag, obj, (int32_t)j->val[0], 0, 1, 0); break;
+                case CTOR_CONSTRUCTION: { /* engineer 82: the click's call: mode 2, own tag, the reference, count 1 */
+                    uint8_t ref[24] = {0};
+                    uint64_t rv = g_t.st2.build.ref_vt + (uint64_t)g_slide;
+                    memcpy(ref, &rv, 8); memcpy(ref + 8, &j->bld_loc, 4); memcpy(ref + 12, &j->bld_id, 4); /* tag +0x10 stays 0 */
+                    ((ctor_construction)(uintptr_t)ctor)(cmd, 2, &j->player_tag, ref, 1); break;
+                }
                 case CTOR_AREA_STATE: /* engineer 79: the map tool's click: group, order id (0 = new), the state, settings */
                     ((ctor_area_state)(uintptr_t)ctor)(cmd, obj, j->order_id, j->provs[i], j->hold_setting); break;
                 case CTOR_EVENT_OPTION: /* the window's own fields, as its option click passes them */
@@ -1198,6 +1379,17 @@ static void run_job2(void *ctx) {
                      sread((uint64_t)(uintptr_t)cmd + 0x24, &tg, 4) && tg == j->player_tag &&
                      sq((uint64_t)(uintptr_t)cmd + 0x28, &a) && a == (rep ? j->obj2 : j->obj[i]) &&
                      (!rep || (sq((uint64_t)(uintptr_t)cmd + 0x30, &b) && b == j->obj[i]));
+                if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+            } else if (ok && ct->spec->ctor == CTOR_CONSTRUCTION) { /* engineer 82: tag, the reference, count 1, mode 2 */
+                int32_t tg = 0, loc = 0, bid = 0, rt = -1, cnt = 0; uint64_t rv = 0; uint8_t md = 9;
+                ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x24, &tg, 4) && tg == j->player_tag &&
+                     sq((uint64_t)(uintptr_t)cmd + 0x28, &rv) && rv == g_t.st2.build.ref_vt + (uint64_t)g_slide &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x30, &loc, 4) && loc == j->bld_loc &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x34, &bid, 4) && bid == j->bld_id &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x38, &rt, 4) && rt == 0 &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x40, &cnt, 4) && cnt == 1 &&
+                     sread((uint64_t)(uintptr_t)cmd + 0x44, &md, 1) && md == 2;
                 if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
             } else if (ok && ct->spec->ctor == CTOR_RESEARCH) { /* engineer 79: tag, template, slot, bytes 0/1/0 */
                 int32_t tg = 0, sl = -1; uint64_t tp = 0; uint8_t b[3] = {9, 9, 9};
@@ -1455,6 +1647,58 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         if (j->n != 1) why = "research.start: exactly one technology";
         else if (nv != 1 || j->val[0] < 0 || j->val[0] > 31) why = "vals: one research slot index (0..31)";
         else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "research.start takes no flag, obj2, provs or divs";
+    } else if (!strncmp(op, "training.", 9)) {
+        /* engineer 82: training (the deployment view).
+         *   create:    objs = own division templates (1..8, exact CReferencedDivisionTemplate); no vals
+         *   series:    objs = own training queues; vals = the series amount each (0 = forever .. 1000)
+         *   add_lines: objs = ONE own training queue; vals = the lines to add (1..24: Shift-clicks of at most 5 each)
+         *   location:  objs = own training queues (1..32); vals = ONE province id (1..65535) for all
+         *   deploy, remove: objs = own training queues (1..32); no vals */
+        if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "training ops take no flag, obj2, provs or divs";
+        else if (!strcmp(op, "training.create")) { if (j->n > 8) why = "training.create: 1..8 templates"; else if (nv) why = "training.create takes no vals"; }
+        else if (!strcmp(op, "training.series")) {
+            if (nv != j->n) why = "vals: the series amount for each queue";
+            else for (int k = 0; k < j->n; k++) if (j->val[k] < 0 || j->val[k] > 1000) why = "series amount outside 0..1000";
+        } else if (!strcmp(op, "training.add_lines")) {
+            if (j->n != 1) why = "training.add_lines: exactly one queue";
+            else if (nv != 1 || j->val[0] < 1 || j->val[0] > 24) why = "vals: the lines to add (1..24)";
+            else {
+                uint64_t q = j->obj[0]; int64_t left = j->val[0]; int k = 0;
+                for (; left > 0 && k < 5; k++) { j->obj[k] = q; j->val[k] = left > 5 ? 5 : left; left -= j->val[k]; }
+                j->n = k;
+            }
+        } else if (!strcmp(op, "training.location")) {
+            if (nv != 1 || j->val[0] < 1 || j->val[0] > 65535) why = "vals: one province id (1..65535)";
+        } else if (!strcmp(op, "training.deploy") || !strcmp(op, "training.remove")) { if (nv) why = "this op takes no vals"; }
+        else why = "unknown training op";
+        nv = 0;
+    } else if (!strncmp(op, "construction.", 13)) {
+        /* engineer 82: construction.
+         *   add:    objs = ONE building template (exact CBuildingTemplate); vals = the location id, its kind (0 a state id, 1 a
+         *           province id: the module checks it against the template as the game's reference constructors decide),
+         *           the clicks (1..10: one command each, count 1)
+         *   remove: objs = own construction lines (1..32); vals = the levels each loses (1..1000: the line's own amount
+         *           takes the whole line)
+         *   move:   objs = ONE own construction line; vals = the new index (0..2047), the "placed by hand" byte (0/1) */
+        if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "construction ops take no flag, obj2, provs or divs";
+        else if (!strcmp(op, "construction.add")) {
+            if (j->n != 1) why = "construction.add: exactly one building template";
+            else if (nv != 3 || j->val[0] < 1 || j->val[0] > 1000000 || (j->val[1] != 0 && j->val[1] != 1) || j->val[2] < 1 || j->val[2] > 10)
+                why = "vals: the location id, its kind (0 state, 1 province), the clicks (1..10)";
+            else {
+                uint64_t t0 = j->obj[0];
+                j->bld_loc = (int32_t)j->val[0]; j->bld_kind = (int32_t)j->val[1];
+                j->n = (int)j->val[2];
+                for (int k = 0; k < j->n; k++) j->obj[k] = t0; /* one click each, the same building */
+            }
+        } else if (!strcmp(op, "construction.remove")) {
+            if (nv != j->n) why = "vals: the levels each line loses";
+            else for (int k = 0; k < j->n; k++) if (j->val[k] < 1 || j->val[k] > 1000) why = "levels outside 1..1000";
+        } else if (!strcmp(op, "construction.move")) {
+            if (j->n != 1) why = "construction.move: exactly one line";
+            else if (nv != 2 || j->val[0] < 0 || j->val[0] > 2047 || (j->val[1] != 0 && j->val[1] != 1)) why = "vals: the new index (0..2047), the placed-by-hand byte (0/1)";
+        } else why = "unknown construction op";
+        nv = 0;
     } else if (!strncmp(op, "holds.", 6)) {
         /* engineer 79: an area-defence order, one map click per state. objs = ONE army (or army group); vals = the area
          * order's id (0 = a new area-defence order: exactly one state, its first click) then the state ids (one command
@@ -1477,6 +1721,87 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             j->n = j->nprov; /* one command per state, each for the same army */
             for (int k = 0; k < j->n; k++) j->obj[k] = g;
         }
+    } else if (!strncmp(op, "mio.", 4)) {
+        /* engineer 84: the organisations.
+         *   queue_trait / unlock_trait: objs = ONE own organisation; vals = the trait's token (from the mios read)
+         *   policy:      objs = ONE own organisation; vals = the policy item's token (the attached policy's own item detaches)
+         *   line:        objs = own equipment production lines (1..32); obj2 = ONE own organisation, or none (produce without) */
+        if (flag || (provs && *provs) || (divs && *divs)) why = "mio ops take no flag, provs or divs";
+        else if (!strcmp(op, "mio.line")) {
+            uint64_t o2[1];
+            if (nv) why = "mio.line takes no vals";
+            else if (obj2 && *obj2 && parse_list_u64(obj2, o2, 1) != 1) why = "obj2: one hex address (an own organisation) or none";
+            else j->obj2 = obj2 && *obj2 ? o2[0] : 0;
+        } else if (!strcmp(op, "mio.queue_trait") || !strcmp(op, "mio.unlock_trait") || !strcmp(op, "mio.policy")) {
+            if (j->n != 1) why = "exactly one organisation";
+            else if (obj2 && *obj2) why = "this op takes no obj2";
+            else if (nv != 1 || j->val[0] <= 0 || j->val[0] > 0x7fffffff) why = "vals: one token from the organisations read";
+        } else why = "unknown mio op";
+        nv = 0;
+    } else if (!strncmp(op, "navy.", 5)) {
+        /* engineer 85: task forces and fleets, as the navy view posts them.
+         *   mission:       objs = own task forces (1..32, ONE command, the mission bar's selection); vals = the mission
+         *                  code of a mission button (0 hold, 1 patrol, 2 strike force, 3 convoy raiding, 4 convoy escort,
+         *                  9 invasion support; 8 = the reserve: no button; 5/6 mines and 7 training: refused, see below)
+         *   merge:         objs = own task forces (2..32, ONE command: the toolbar's merge of the selection)
+         *   add_region / remove_region: objs = ONE own fleet; vals = the strategic region id
+         *   leader:        objs = ONE own fleet; obj2 = the admiral (CNavyLeader) or none (unassign)
+         *   assign:        objs = ONE own fleet (the receiving card); divs = own task forces (1..32) */
+        uint64_t o2[1];
+        if (flag || (provs && *provs)) why = "navy ops take no flag or provs";
+        else if (divs && *divs && strcmp(op, "navy.assign")) why = "only navy.assign takes divs (the task forces)";
+        else if (obj2 && *obj2 && strcmp(op, "navy.leader")) why = "only navy.leader takes obj2 (the admiral)";
+        else if (!strcmp(op, "navy.mission")) {
+            if (nv != 1 || j->val[0] < 0 || j->val[0] > 9 || j->val[0] == 8) why = "vals: one mission code of a mission button (0..7, 9)";
+            /* the mine buttons are enabled by technology, a UI rule the command's own "can do" (code <= 9) does not
+             * repeat: the module never posts them (FAIR: only what the UI offers); the mouse path serves them */
+            else if (j->val[0] == 5 || j->val[0] == 6) why = "mine missions stay on the mouse path (their button's technology rule is the UI's)";
+            /* training: the button sets +0x44 under a game-state setting (1.20 0x101dc9a48: gamestate +0x4d0, its slot
+             * 0x30) the module does not read: the mouse path serves it */
+            else if (j->val[0] == 7) why = "training stays on the mouse path (the button's +0x44 depends on a game setting)";
+            else for (int i = 1; i < j->n; i++) j->val[i] = j->val[0];
+        } else if (!strcmp(op, "navy.merge")) {
+            if (nv) why = "navy.merge takes no vals";
+            else if (j->n < 2) why = "a merge takes at least two task forces";
+        } else if (!strcmp(op, "navy.add_region") || !strcmp(op, "navy.remove_region")) {
+            if (j->n != 1) why = "exactly one fleet";
+            else if (nv != 1 || j->val[0] < 1 || j->val[0] > 100000) why = "vals: one strategic region id";
+            else if (!strcmp(op, "navy.remove_region")) { j->provs[0] = (int32_t)j->val[0]; j->nprov = 1; }
+        } else if (!strcmp(op, "navy.leader")) {
+            if (j->n != 1) why = "exactly one fleet";
+            else if (nv) why = "navy.leader takes no vals";
+            else if (obj2 && *obj2 && parse_list_u64(obj2, o2, 1) != 1) why = "obj2: one hex address (an own admiral) or none";
+            else j->obj2 = obj2 && *obj2 ? o2[0] : 0;
+        } else if (!strcmp(op, "navy.assign")) {
+            if (j->n != 1) why = "exactly one receiving fleet";
+            else if (nv) why = "navy.assign takes no vals";
+            else if ((j->ndiv = parse_list_u64(divs ? divs : "", j->divs, J2_MAX)) < 1) why = "divs: 1..32 comma-separated hex task force addresses";
+            else for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a task force is listed twice";
+        } else why = "unknown navy op";
+        nv = 0;
+    } else if (!strncmp(op, "projects.", 9)) {
+        /* engineer 85: the experimental facilities tab.
+         *   start:    objs = ONE own facility (NProject::CProgram); obj2 = the project (NProject::CProject)
+         *   stop:     objs = ONE own project
+         *   attach:   objs = ONE own facility; obj2 = the scientist (CCharacter); the flag is the UI's 1
+         *   unattach: objs = ONE own scientist (CCharacter); obj2 = the facility */
+        int stop = !strcmp(op, "projects.stop");
+        if (j->n != 1) why = "projects: exactly one object";
+        else if (nv || flag || (provs && *provs) || (divs && *divs)) why = "projects ops take no vals, flag, provs or divs";
+        else if (stop && obj2 && *obj2) why = "projects.stop takes no obj2";
+        else if (!stop) { uint64_t o2[1]; if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0]; }
+        if (!why && !strcmp(op, "projects.attach")) j->flag = 1;
+    } else if (!strncmp(op, "doctrine.", 9)) {
+        /* engineer 85: the officer corps view's doctrine picks.
+         *   grand: objs = ONE grand doctrine template (exact class); no vals, no obj2
+         *   sub:   objs = ONE subdoctrine template (exact class); obj2 = the folder template (exact class); vals = the
+         *          track's place in the folder's grand doctrine (0..31: the game's own check reads the track count) */
+        int sub = !strcmp(op, "doctrine.sub");
+        if (j->n != 1) why = "doctrine: exactly one doctrine";
+        else if (flag || (provs && *provs) || (divs && *divs)) why = "doctrine ops take no flag, provs or divs";
+        else if (!sub && (nv || (obj2 && *obj2))) why = "doctrine.grand takes no vals or obj2";
+        else if (sub && (nv != 1 || j->val[0] < 0 || j->val[0] > 31)) why = "vals: the track's place (0..31)";
+        else if (sub) { uint64_t o2[1]; if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: the folder template's hex address"; else j->obj2 = o2[0]; }
     } else if (!strncmp(op, "picks.", 6)) {
         /* engineer 75: the player's own picks. focus: objs = ONE CNationalFocus of the own tree (exact vtable; the game's
          * own "can start" with the player's country decides) */
@@ -1496,13 +1821,13 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             why = "vals: the option's shown place (0..7) and the shown option count (1..8)";
         else if (flag || (obj2 && *obj2) || (provs && *provs)) why = "events.answer takes no flag, obj2 or provs";
     } else if (nv) why = "this op takes no vals";
-    if (!why && divs && *divs && strncmp(op, "orders2.", 8) && strncmp(op, "units.", 6)) why = "only orders2 and units ops take divs";
+    if (!why && divs && *divs && strncmp(op, "orders2.", 8) && strncmp(op, "units.", 6) && strcmp(op, "navy.assign")) why = "only orders2, units and navy.assign take divs";
     if (!why && !strcmp(op, "airwing.merge") && j->n < 2) why = "a merge takes at least two wings";
     if (!why && (!strcmp(op, "air.transfer") || !strcmp(op, "air.enable_mission") || !strcmp(op, "airwing.attach"))) {
         uint64_t o2[1];
         if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: one hex address"; else j->obj2 = o2[0];
     }
-    for (int a = 0; !why && strncmp(op, "holds.", 6) && a < j->n; a++) for (int b = a + 1; b < j->n; b++) if (j->obj[a] == j->obj[b]) why = "an object is listed twice (no duplicate orders)";
+    for (int a = 0; !why && strncmp(op, "holds.", 6) && strcmp(op, "construction.add") && strcmp(op, "training.add_lines") && a < j->n; a++) for (int b = a + 1; b < j->n; b++) if (j->obj[a] == j->obj[b]) why = "an object is listed twice (no duplicate orders)";
     if (why) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused_by_policy\",\"reason\":\"%s\"", op, why); free(j); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
     long long t0 = mono_us();
     j->done = dispatch_semaphore_create(0);
@@ -1713,6 +2038,39 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             else snprintf(j->reason, sizeof j->reason, "posted; not executed yet (game paused)");
         }
     }
+    /* mio (engineer 84): the organisation's own fields: the queue holds the trait, the unlocked set holds it, the attached
+     * policy is the token sent, each line's organisation handle is the one sent. 3 s, paused-aware */
+    if (!strncmp(op, "mio.", 4) && j->posted) {
+        const mio_facts *f = &g_t.st2.mio;
+        long long start = mono_us();
+        pending = 1;
+        while (pending && mono_us() - start < 3000000) {
+            if (!strcmp(op, "mio.queue_trait")) pending = mio_queued(f, mio_rd_cb, j->obj[0], j->mio_tok) != 1;
+            else if (!strcmp(op, "mio.unlock_trait")) pending = mio_unlocked(f, mio_rd_cb, j->obj[0], j->mio_tok) != 1;
+            else if (!strcmp(op, "mio.policy")) { int32_t cur = 0; pending = !(sread(j->obj[0] + f->policy_off, &cur, 4) && cur == j->mio_tok); }
+            else {
+                int all = 1;
+                for (int i = 0; i < j->n && all; i++) {
+                    uint64_t hh = 0;
+                    if (j->res[i] == R_POSTED && !(sq(j->obj[i] + f->line_org_off, &hh) && hh == j->mio_h2)) all = 0;
+                }
+                pending = !all;
+            }
+            if (pending) usleep(2000);
+        }
+        if (!pending) {
+            executed = j->posted; rb_us = mono_us() - t0;
+            if (!strcmp(op, "mio.policy"))
+                snprintf(rbx, sizeof rbx, ",\"policy\":%d,\"policy_before\":%d,\"detached\":%s", j->mio_tok, j->mio_before,
+                         j->mio_tok == f->empty_tok ? "true" : "false");
+            else if (strcmp(op, "mio.line")) snprintf(rbx, sizeof rbx, ",\"trait\":%d", j->mio_tok);
+            else snprintf(rbx, sizeof rbx, ",\"organisation\":\"0x%llx\"", (unsigned long long)j->obj2);
+        } else {
+            reads_t r; do_reads(&r);
+            if (!(r.ok && r.has_date && r.paused)) snprintf(j->reason, sizeof j->reason, "posted; the organisation does not show it after 3 s in a running game");
+            else snprintf(j->reason, sizeof j->reason, "posted; not executed yet (game paused)");
+        }
+    }
     *unexplained = j->unexplained;
     size_t at = (size_t)snprintf(out, n, "\"op\":\"%s\",\"type_id\":%u,\"objects\":%d,\"posted\":%d,\"refused\":%d,\"executed\":%d,"
                                  "\"result\":\"%s\",\"reason\":\"%s\",\"main_wait_ms\":%.2f,\"requeues\":%d,\"forbid\":%d,"
@@ -1794,13 +2152,57 @@ static int be_tree(const char *group, char *out, size_t n, int fronts) {
     return ok;
 }
 
+/* engineer 84: the organisations read. A main-thread job (a consistent snapshot between frames) over the player's OWN
+ * organisation list only; the game's own functions name the tokens and decide "can be unlocked now" and "the policy
+ * window allows this item" (core/mio.c). Served whenever the organisation facts resolved, no opt-in: it reads only the
+ * player's own country and posts nothing. */
+typedef struct { int refs, ok, n; char reason[160]; char *out; size_t cap; dispatch_semaphore_t done; } jobm_t;
+static void jobm_release(jobm_t *j) {
+    if (__atomic_sub_fetch(&j->refs, 1, __ATOMIC_ACQ_REL) == 0) { dispatch_release(j->done); free(j->out); free(j); }
+}
+static void run_jobm(void *ctx) {
+    jobm_t *j = (jobm_t *)ctx;
+    uint64_t gs = 0, vp = 0, mgr = 0; int32_t tag = 0;
+    if (killed()) snprintf(j->reason, sizeof j->reason, "kill switch");
+    else if (!g_t.st2.mio.ok) snprintf(j->reason, sizeof j->reason, "organisation facts unresolved on this build");
+    else if (!g_gs_glob || !sq(g_gs_glob + (uint64_t)g_slide, &gs) || !sq(gs, &vp) || vp != g_vt_gs ||
+             !sread(gs + g_t.st2.common.player_tag_off, &tag, 4) || tag <= 0)
+        snprintf(j->reason, sizeof j->reason, "no loaded game with a player country");
+    else if (!(mgr = mio_manager(tag))) snprintf(j->reason, sizeof j->reason, "the player's organisation manager is unreadable");
+    else {
+        mio_env e = {mio_rd_cb, mio_name_cb, mio_can_cb, mio_policy_cb, NULL, g_t.st2.mio.vt_org + (uint64_t)g_slide};
+        j->n = mio_json(&g_t.st2.mio, &e, mgr, tag, j->out, j->cap);
+        j->ok = j->n >= 0;
+        if (!j->ok) snprintf(j->reason, sizeof j->reason, "an organisation is not what the facts say (nothing guessed)");
+    }
+    dispatch_semaphore_signal(j->done);
+    jobm_release(j);
+}
+static int be_mios(char *out, size_t n) {
+    jobm_t *j = (jobm_t *)calloc(1, sizeof *j);
+    if (!j || !(j->out = (char *)malloc(n))) { free(j); return 0; }
+    j->refs = 2; j->cap = n - 64; j->done = dispatch_semaphore_create(0);
+    long long t0 = mono_us();
+    dispatch_async_f(dispatch_get_main_queue(), j, run_jobm);
+    if (dispatch_semaphore_wait(j->done, dispatch_time(DISPATCH_TIME_NOW, 1500 * NSEC_PER_MSEC))) {
+        snprintf(out, n, "\"reason\":\"the main thread did not run the read within 1.5 s\"");
+        jobm_release(j); return 0;
+    }
+    int ok = j->ok;
+    if (ok) snprintf(out, n, "%s,\"read_ms\":%.2f", j->out, (mono_us() - t0) / 1000.0);
+    else snprintf(out, n, "\"reason\":\"%s\"", j->reason);
+    logj("\"event\":\"mios_read\",\"ok\":%s,\"n\":%d,\"ms\":%.2f", ok ? "true" : "false", j->n, (mono_us() - t0) / 1000.0);
+    jobm_release(j);
+    return ok;
+}
+
 static int be_orders(const char *group, char *out, size_t n) { return be_tree(group, out, n, 0); }
 static int be_fronts(const char *group, char *out, size_t n) { return be_tree(group, out, n, 1); }
 static void be_log(const char *members) { logj("%s", members); }
 
 static void *ipc_thread(void *arg) {
     pthread_setname_np("hoi4-live-inproc-ipc");
-    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, be_post2, be_orders, be_fronts, killed, be_log};
+    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, be_post2, be_orders, be_fronts, be_mios, killed, be_log};
     ipc_serve((const char *)arg, &be, &g_policy);
     return NULL;
 }

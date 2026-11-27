@@ -231,7 +231,11 @@ int scan_command_factory(const scan_image *im, const char *cls, scan_cap *factor
                          scan_cap *type_id) {
     char sym[256], mangled[160];
     cap_init(factory, "factory", "export"); cap_init(vtable, "vtable", "rtti"); cap_init(type_id, "type_id", "scan");
-    snprintf(mangled, sizeof mangled, "%zu%s", strlen(cls), cls);
+    /* engineer 85: a class inside a namespace comes already mangled (N10NDoctrines27CUnlockGrandDoctrineCommandE): no
+     * length prefix */
+    size_t cl = strlen(cls);
+    if (cl > 2 && cls[0] == 'N' && cls[cl - 1] == 'E' && cls[1] >= '1' && cls[1] <= '9') snprintf(mangled, sizeof mangled, "%s", cls);
+    else snprintf(mangled, sizeof mangled, "%zu%s", cl, cls);
     snprintf(sym, sizeof sym, "__ZN14CCommandHelperI%sE18CommandRegistrator6CreateEv", mangled);
     const uint8_t *syms = linkedit(im, im->symoff, (size_t)im->nsyms * 16);
     const uint8_t *strs = linkedit(im, im->stroff, im->strsize);
@@ -252,9 +256,10 @@ int scan_command_factory(const scan_image *im, const char *cls, scan_cap *factor
         if (riprel(f, i, 0xa0, factory->value, 1, &tg) && tg >= im->dconst_addr &&
             tg < im->dconst_addr + im->dconst_size && rtti_name_is(im, tg, mangled)) { vtable->value = tg; break; }
         /* engineer 76: lea rax, [vtable object]; add rax, 0x10; mov [rbx], rax (CSelectEventOptionCommand's factory
-         * addresses the vtable object, then steps over offset-to-top and the typeinfo to its address point) */
+         * addresses the vtable object, then steps over offset-to-top and the typeinfo to its address point; engineer 84:
+         * in any register, e.g. add rcx, 0x10 in the organisation commands' factories) */
         if (riprel(f, i, 0xa0, factory->value, 1, &tg) && i + 11 <= 0xa0 && f[i + 7] == 0x48 && f[i + 8] == 0x83 &&
-            f[i + 9] == 0xc0 && f[i + 10] == 0x10 && tg + 0x10 >= im->dconst_addr && tg + 0x10 < im->dconst_addr + im->dconst_size &&
+            (f[i + 9] & 0xf8) == 0xc0 && f[i + 10] == 0x10 && tg + 0x10 >= im->dconst_addr && tg + 0x10 < im->dconst_addr + im->dconst_size &&
             rtti_name_is(im, tg + 0x10, mangled)) { vtable->value = tg + 0x10; break; }
     }
     /* engineer 75: a factory that calls a separate default constructor (CArmyGroupCommand: operator new, then call
