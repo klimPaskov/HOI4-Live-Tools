@@ -7823,6 +7823,15 @@ fn doctrine_price(read: &Value, id: &str) -> Option<f64> {
     })
 }
 
+/// Whether the doctrines read shows `id` taken: a folder's grand doctrine or a track's
+/// subdoctrine (an object with its `id`, or the bare key); pure.
+fn doctrine_taken(read: &Value, id: &str) -> bool {
+    let is = |v: &Value| v.as_str() == Some(id) || v["id"].as_str() == Some(id);
+    list(read, "folders").iter().any(|f| {
+        is(&f["grand_doctrine"]) || list(f, "tracks").iter().any(|t| is(&t["subdoctrine"]))
+    })
+}
+
 /// Experience never idles on an empty doctrine track. Every 14 days: for each folder that holds
 /// a grand doctrine, an empty track takes a subdoctrine once the folder's experience covers its
 /// price above the reserve. The plan's own `doctrines` entries for a folder go first (a pending
@@ -8021,6 +8030,16 @@ fn extras_step(
                 // nothing to adopt: the entry is not this step's to fix
                 (None, None) => continue,
             };
+            // already the game's (the start doctrine, a focus, an earlier run): done, so it
+            // neither holds the folder's experience nor keeps the fill off the folder's empty
+            // tracks (t1939n, 27 Nov 2026: the plan's first land entry, mobile_infantry, was
+            // the infantry track's since the start; it waited on experience holds all war and
+            // the armour track stayed empty with 105-117 army experience banked)
+            if doctrine_taken(&read, doctrine) {
+                state.doc_xp.remove(&part_key);
+                state.done.insert(part_key, now);
+                continue;
+            }
             if state.skipped(now, "doc", &part_key) {
                 break;
             }
@@ -21781,6 +21800,33 @@ mod tests {
             ),
             Some(40.0)
         );
+    }
+
+    #[test]
+    fn a_planned_doctrine_the_game_already_holds_is_done_and_the_next_one_goes() {
+        // t1939n (27 Nov 2026): mobile_infantry was the infantry track's since the start; the
+        // plan entry waited on experience holds and kept every later entry and the fill waiting
+        let tools = fake(vec![(
+            "hoi4_doctrines",
+            json!({"experience": {"army": {"value": 150.0}},
+                "folders": [{"folder": "land", "grand_doctrine": {"id": "new_mobile_warfare"},
+                    "tracks": [{"track": "infantry", "subdoctrine": {"id": "mobile_infantry"}},
+                        {"track": "operations", "subdoctrine": null}]}]}),
+        )]);
+        let plan = json!({"doctrines": [
+            {"id": "inf", "folder": "land", "track": "infantry", "subdoctrine": "mobile_infantry", "xp": 100},
+            {"id": "ops", "folder": "land", "track": "operations", "subdoctrine": "mission_type_tactics", "xp": 100}]});
+        let mut state = State::default();
+        doctrine_pass(&mut state, &tools, &plan, 0);
+        assert!(state.done.contains_key("doc:id:inf"));
+        assert_eq!(
+            adopted(&tools),
+            vec![json!({"doctrine": "mission_type_tactics", "track": "operations"})]
+        );
+        assert!(super::doctrine_taken(
+            &json!({"folders": [{"grand_doctrine": "g"}]}),
+            "g"
+        ));
     }
 
     #[test]
