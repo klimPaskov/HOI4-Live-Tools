@@ -341,6 +341,25 @@ def silent_lanes(detector):
     return out
 
 
+def lane_turns_line(snap):
+    """Turns per lane as the executor reports them (its `lane_turns` in the watcher's brief): the
+    lanes that never had a turn or waited longest first, so a starved lane shows at the gate
+    (t1939o, 27 Nov 2026: decisions, resources and intelligence had no turn in 56 days)."""
+    rows = [r for r in snap.get("lane_turns") or [] if isinstance(r, dict) and r.get("lane")]
+    if not rows:
+        return ""
+
+    def wait(r):
+        return (r.get("turns") or 0) > 0, -(r.get("days_since") if r.get("days_since") is not None else 10 ** 6)
+
+    parts = []
+    for r in sorted(rows, key=wait):
+        last = r.get("days_since")
+        when = "never" if not r.get("turns") else f"{last}d ago" if last is not None else "?"
+        parts.append(f"{r['lane']} {r.get('turns') or 0} ({when}{', silent' if r.get('silent') else ''})")
+    return "Turns per lane (turns, last): " + "; ".join(parts)
+
+
 def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", budget_line=""):
     """One page: what happened, issues opened and closed since the last gate, overdue, counters, costs."""
     w = snap.get("wars") or {}
@@ -372,6 +391,9 @@ def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", 
     lines.append(f"Silent lanes past their deadline (FAIL while any): {len(silent)}")
     for i in silent[:10]:
         lines.append(f"- SILENT {i['id']} lane {i.get('lane')} {i.get('subject') or i['code']}: {i['text'][:150]}")
+    turns = lane_turns_line(snap)
+    if turns:
+        lines.append(turns)
     counts = detector.count_table()
     year = (snap.get("date") or "?")[:4]
     if year in counts:

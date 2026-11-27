@@ -812,6 +812,8 @@ struct Sched {
     /// What each lane said at its turns (see [`record_turn`]): the reason an omission row quotes
     /// when the owning rule wrote no note of its own.
     said: HashMap<String, LaneSaid>,
+    /// Lane -> the game hour the fairness turn first saw it waiting (see [`overdue_turns`]).
+    fair_seen: HashMap<&'static str, GameHour>,
 }
 
 /// A lane's stated reason: its last line that said something (an order, a refusal, a note it
@@ -894,6 +896,33 @@ fn record_turn(
     } else if entry.silent {
         entry.at = now;
     }
+}
+
+/// Turns per lane for the gate packet: every lane the scheduler offered (or first saw waiting),
+/// its turns, the game days since its last one, and whether it ever said anything; pure.
+pub(super) fn lane_turns(state: &State, now: GameHour) -> Value {
+    let mut names: Vec<String> = state
+        .sched
+        .turns
+        .keys()
+        .chain(state.sched.fair_seen.keys())
+        .map(|n| n.to_string())
+        .chain(state.sched.said.keys().cloned())
+        .collect();
+    names.sort();
+    names.dedup();
+    let rows: Vec<Value> = names
+        .iter()
+        .map(|n| {
+            let said = state.sched.said.get(n);
+            let last = state.sched.turns.get(n.as_str()).copied();
+            json!({"lane": n,
+                "turns": said.map_or(0, |s| s.turns),
+                "days_since": last.map(|at| now.saturating_sub(at) / DAY),
+                "silent": said.is_none_or(|s| s.silent)})
+        })
+        .collect();
+    Value::Array(rows)
 }
 
 /// The owner names omission rows carry that are not lane names (the rule writes under one name,
@@ -2329,6 +2358,9 @@ fn lanes_tick_inner(
         if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(line));
         }
+        if let Some(line) = overdue_turns(state, tools, plan, lease, now, &lanes)? {
+            return Ok(Tick::Acted(line));
+        }
     }
     // Before the war, a role an operation names that has no army takes the tick ahead of every
     // lane, the paused first day included (t1939e-g, 24 Nov 2026: the layout behind the lanes
@@ -2511,6 +2543,69 @@ fn lanes_tick_inner(
         }
     }
     Ok(Tick::Nothing)
+}
+
+/// Every pass lane gets a turn within [`FAIR_MAX_WAIT`] game days: one whose last turn (or, never
+/// offered, the hour this check first saw it) is older is offered ahead of the setup layout, the
+/// war's turn, the issue lanes and the pass (t1939o, 27 Nov 2026: about two ticks a game day, the
+/// war block three of four, and decisions, resources and intelligence had no turn in 56 days
+/// while their alerts stayed open). The oldest wait goes first; the first that acts takes the
+/// tick; quiet ones are offered on until [`FAIR_BUDGET`] of wall time is spent. Not while a
+/// dated declaration is due, and a lane the opening or the air's declaration wait holds stays
+/// held. The turn counts as the lane's turn (`turns`, the gate's turns per lane).
+fn overdue_turns(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    lanes: &[Lane],
+) -> Result<Option<String>> {
+    if plan["scheduler"]["fair_turns"] == json!(false) {
+        return Ok(None);
+    }
+    let mut due: Vec<(GameHour, usize)> = Vec::new();
+    for (i, (name, _)) in lanes.iter().enumerate() {
+        let since = match state.sched.turns.get(name) {
+            Some(at) => *at,
+            None => *state.sched.fair_seen.entry(name).or_insert(now),
+        };
+        if now.saturating_sub(since) > FAIR_MAX_WAIT {
+            due.push((since, i));
+        }
+    }
+    due.sort();
+    let started = std::time::Instant::now();
+    for (_, i) in due {
+        if started.elapsed() > FAIR_BUDGET {
+            break;
+        }
+        let (name, step) = lanes[i];
+        if lane_waits_for_attack(
+            name,
+            plan_operation::executing_any(state),
+            state.sched.turns.get(name).copied(),
+            now,
+        ) || opening_holds(state, tools, plan, name, now)
+            || (name.starts_with("air") && air_waits_for_war(state, tools, plan, now))
+        {
+            continue;
+        }
+        state.sched.turns.insert(name, now);
+        state.last_ok = None;
+        let before = all_notes(state);
+        let at = std::time::Instant::now();
+        let result = step(state, tools, plan, lease, now)?;
+        state.round.timed(name, result.is_some(), at);
+        record_turn(state, name, result.as_ref(), &before, now);
+        if let Some(line) = result {
+            state.round.lane_acted(name, now);
+            trace_lanes(now, &format!("fair {name} acted"));
+            return Ok(Some(line));
+        }
+        trace_lanes(now, &format!("fair {name} quiet"));
+    }
+    Ok(None)
 }
 
 /// The lanes the run monitor's open issues name, offered ahead of the pass (see `plan_issues`).
@@ -3487,6 +3582,16 @@ const WAR_SHARE: u32 = 3;
 /// The lanes get a tick at the latest this many game hours after their last one, whatever the war
 /// has to do.
 const LANE_MAX_WAIT: GameHour = DAY;
+
+/// The longest a pass lane waits for a turn, whatever takes the ticks (setup, the fast lanes, the
+/// war's share, the issue lanes): past it the lane is offered ahead of them (see
+/// [`overdue_turns`]).
+const FAIR_MAX_WAIT: GameHour = 3 * DAY;
+
+/// The wall time one tick may spend offering overdue lanes that find nothing to do: a quiet
+/// lane by command answers in milliseconds, a read through the game's interface in about a
+/// second, so a backlog clears over a few ticks without holding the war.
+const FAIR_BUDGET: std::time::Duration = std::time::Duration::from_millis(1500);
 
 /// How heavy a lane's action is for the speed rule (plan_speed.rs). MINOR: one to three clicks,
 /// none decides a battle within hours, so speed 4 loses nothing (owner, 23 Nov 2026: "4 speed is
@@ -16434,6 +16539,74 @@ mod tests {
         assert_eq!(name, "hoi4_army_move", "{:?}", w.calls.borrow());
         assert!(args["state_id"] == 28 || args["state_id"] == 18, "{args}");
         assert!(!w.calls.borrow().iter().any(|(n, _)| n == "hoi4_army_front"));
+    }
+
+    #[test]
+    fn every_pending_lane_gets_a_turn_within_the_fair_wait_whatever_takes_the_ticks() {
+        // t1939o (27 Nov 2026): decisions, resources and intelligence had no turn in 56 days
+        fn acts(
+            _: &mut State,
+            _: &dyn Tools,
+            _: &Value,
+            _: &str,
+            _: GameHour,
+        ) -> Result<Option<String>> {
+            Ok(Some("acted".into()))
+        }
+        fn quiet(
+            _: &mut State,
+            _: &dyn Tools,
+            _: &Value,
+            _: &str,
+            _: GameHour,
+        ) -> Result<Option<String>> {
+            Ok(None)
+        }
+        let lanes: Vec<Lane> = vec![("a", acts), ("b", acts), ("c", quiet), ("d", acts)];
+        let tools = fake(vec![]);
+        let plan = json!({});
+        let mut state = State::default();
+        // every lane pending; "d" never offered: the check starts its clock
+        state.sched.turns.insert("a", START);
+        state.sched.turns.insert("b", START - DAY);
+        state.sched.turns.insert("c", START - 2 * DAY);
+        let none = overdue_turns(&mut state, &tools, &plan, "l", START, &lanes).unwrap();
+        assert!(none.is_none(), "nothing waits longer than the bound yet");
+        // four days on: the oldest waits first; the quiet one is offered and passed, the next
+        // acting one takes the tick
+        let now = START + 4 * DAY;
+        assert!(overdue_turns(&mut state, &tools, &plan, "l", now, &lanes)
+            .unwrap()
+            .is_some());
+        assert_eq!(state.sched.turns["c"], now);
+        assert_eq!(state.sched.turns["b"], now);
+        assert_eq!(state.sched.turns["a"], START);
+        // the next tick: the next overdue lanes, one acting lane a tick
+        assert!(overdue_turns(&mut state, &tools, &plan, "l", now, &lanes)
+            .unwrap()
+            .is_some());
+        assert_eq!(state.sched.turns["a"], now);
+        assert!(overdue_turns(&mut state, &tools, &plan, "l", now, &lanes)
+            .unwrap()
+            .is_some());
+        assert_eq!(state.sched.turns["d"], now);
+        // every lane has had its turn: nothing is overdue
+        assert!(overdue_turns(&mut state, &tools, &plan, "l", now, &lanes)
+            .unwrap()
+            .is_none());
+        // each turn is counted for the gate's turns per lane
+        assert!(["a", "b", "c", "d"].iter().all(|l| state
+            .sched
+            .said
+            .get(*l)
+            .is_some_and(|s| s.turns == 1)));
+        // `scheduler.fair_turns: false` turns it off
+        let off = json!({"scheduler": {"fair_turns": false}});
+        assert!(
+            overdue_turns(&mut state, &tools, &off, "l", now + 9 * DAY, &lanes)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
