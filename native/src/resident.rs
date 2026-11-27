@@ -162,6 +162,24 @@ pub fn autopilot_step(server: &Server, commands: &dyn crate::protocol::Commands)
             }
         }
     }
+    // The operations' notes (width, planning, axis, opening) likewise, once a game day at most:
+    // what the live reader checks on days 1, 5, 10 and 20 of a war
+    if body["operations"]["notes"].is_object() {
+        static LAST_OPS: std::sync::Mutex<(i64, String)> =
+            std::sync::Mutex::new((i64::MIN, String::new()));
+        let now = body["operations"]["notes"].to_string();
+        let day = body["game_hour"].as_i64().unwrap_or(0) / 24;
+        if let Ok(mut last) = LAST_OPS.lock() {
+            if last.1 != now && last.0 != day {
+                eprintln!(
+                    "[ops] {}",
+                    serde_json::json!({"game_hour": body["game_hour"],
+                        "notes": body["operations"]["notes"]})
+                );
+                *last = (day, now);
+            }
+        }
+    }
     if result["isError"] == serde_json::json!(true) {
         let code = body["error"]["code"].as_str().unwrap_or("");
         if autopilot_stops_on(code) {
