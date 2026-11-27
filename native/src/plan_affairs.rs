@@ -941,6 +941,54 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
                 }
             }
         }
+        // A switch the game did not take SWITCH_TRIES times in a row (t1939n, 27 Nov 2026: the
+        // read-back showed the old design four times, NotApplied, tried every 3 days for 259
+        // days): the new design starts on a separate line and the old line keeps building; the
+        // balance moves factories between them by need.
+        let fail_prefix = format!("pdesfail:{key}#");
+        let fails = state
+            .done
+            .keys()
+            .filter(|k| k.starts_with(&fail_prefix))
+            .count();
+        if fails >= SWITCH_TRIES {
+            let separate = rows.iter().any(|l| {
+                text(&l["equipment_id"]) == design_type
+                    && l["design_id"].as_i64().zip(target.as_i64()).is_none_or(|(a, b)| a == b)
+                    && l["entry_index"] != line["entry_index"]
+            });
+            if separate {
+                state.done.insert(key, now);
+                note(
+                    state,
+                    "production_designs",
+                    format!("{equipment} -> {label}: the switch failed {fails} times; the design runs on its own line, the old line keeps building"),
+                );
+                continue;
+            }
+            let start = ((line_factories(&line) as f64 * 0.1).round() as i64).clamp(1, 5);
+            let (ok, why) = state.act(
+                tools,
+                run.lease,
+                "hoi4_production_add",
+                json!({"equipment": if design_type.is_empty() { equipment.to_string() } else { design_type.clone() },
+                       "design": target, "factories": start}),
+                "dn",
+            )?;
+            if ok {
+                state.done.insert(key, now);
+            } else {
+                state.skip(now, "pdes", &key, 30 * DAY);
+            }
+            note(
+                state,
+                "production_designs",
+                format!("{equipment} -> {label}: the line switch did not hold {fails} times in a row; the design starts on a separate line with {start} factories: {ok} {why}"),
+            );
+            return Ok(Some(format!(
+                "production {label} on a separate line ({start} factories) after {fails} failed switches of {equipment}: {ok} {why}"
+            )));
+        }
         let (ok, why) = state.act(
             tools,
             run.lease,
@@ -950,6 +998,7 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
         )?;
         let c = code(&why);
         if ok || c == "already_building" {
+            state.done.retain(|k, _| !k.starts_with(&fail_prefix));
             state.done.insert(key, now);
         } else if c == "design_wrong_type" && sw.by_type.is_some() {
             // `replace` across families: the factories move instead (next ticks)
@@ -966,7 +1015,18 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
                 }
                 "design_unknown" => 7,
                 "line_unknown" => 1,
-                _ => 3,
+                _ => {
+                    // not taken although the order went in (NotApplied, a read-back that shows
+                    // the old design): rests 3, 6, ... days and says so; at SWITCH_TRIES the
+                    // separate line above takes over
+                    state.done.insert(format!("{fail_prefix}{}", fails + 1), now);
+                    note(
+                        state,
+                        "production_designs",
+                        format!("{equipment} -> {label}: the switch did not hold ({} of {SWITCH_TRIES}): {}", fails + 1, why.chars().take(160).collect::<String>()),
+                    );
+                    3 << fails.min(3)
+                }
             };
             state.skip(now, "pdes", &key, days * DAY);
         }
@@ -983,6 +1043,9 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
     }
     Ok(None)
 }
+
+/// Failed line switches in a row before the design starts on a separate line instead.
+const SWITCH_TRIES: usize = 3;
 
 /// `designs[].decommission`: once the item's design is made and a production line builds it,
 /// each listed older design (a name or a design id) is decommissioned once through
@@ -3965,6 +4028,57 @@ mod tests {
         assert_eq!(actions(&tools).len(), 1);
         assert!(state.affairs.notes["designs"].contains("s2: when unknown"));
         assert!(state.strategy.unknown.contains_key("bop:ITA_x > 0.5"));
+    }
+
+    /// t1939n (27 Nov 2026): the switch came back NotApplied four times, tried every 3 days for
+    /// 259 days while the line kept making the older model.
+    #[test]
+    fn a_line_switch_that_does_not_hold_rests_longer_then_starts_a_separate_line() {
+        let tools = fake(vec![
+            (
+                "hoi4_production_lines",
+                json!({"lines": [
+                {"entry_index": 2, "line_kind": "military", "equipment_id": "medium_tank_chassis",
+                    "line_handle": "0x10", "factory_counters": {"requested_factories_raw_signed": 30}}]}),
+            ),
+            (
+                "hoi4_designs",
+                json!({"designs": [{"design_id": 5194, "name": "Panzer III S",
+                    "hull_or_chassis": "medium_tank_chassis", "production_lines": []}]}),
+            ),
+        ]);
+        tools.refuse("hoi4_design_set_production", "not_applied");
+        let plan = json!({"manage": {"off": ["mio_lines"]},
+            "designs": [{"id": "t1", "kind": "tank", "base": "Panzer III", "name": "Panzer III S", "xp": 0}],
+            "production": [{"equipment": "medium_tank_chassis", "factories": 5, "design": "t1"}]});
+        let mut state = State::default();
+        state.done.insert("design:id:t1".into(), START);
+        let mut at = START;
+        for rest in [3, 6, 12] {
+            step(&mut state, &tools, &plan, "l", at).unwrap();
+            let note = &state.affairs.notes["production_designs"];
+            assert!(note.contains("the switch did not hold"), "{note}");
+            // not again before the rest is over
+            let sent = actions(&tools).len();
+            step(&mut state, &tools, &plan, "l", at + (rest - 1) * DAY).unwrap();
+            assert_eq!(actions(&tools).len(), sent);
+            at += rest * DAY;
+        }
+        assert_eq!(
+            actions(&tools)
+                .iter()
+                .filter(|(n, _)| n == "hoi4_design_set_production")
+                .count(),
+            3
+        );
+        // the fourth time the design starts on its own line, 10% of the old line's factories
+        let out = step(&mut state, &tools, &plan, "l", at).unwrap().unwrap();
+        assert!(out.contains("separate line (3 factories) after 3 failed switches"), "{out}");
+        let sent = actions(&tools);
+        let last = sent.last().unwrap();
+        assert_eq!(last.0, "hoi4_production_add");
+        assert_eq!(last.1["design"], 5194);
+        assert!(state.done.contains_key("pdes:medium_tank_chassis:Panzer III S"));
     }
 
     #[test]
