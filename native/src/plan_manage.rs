@@ -235,6 +235,9 @@ pub(super) struct Memory {
     pub(super) decisions_seen: Option<(GameHour, Value)>,
     /// The next priority line in turn for idle factories when no shortage is known.
     feed_turn: usize,
+    /// `xp_budget` entries the pool could already pay, by id -> since when (plan_xp.rs: a hold
+    /// for a spend its lane does not make stops holding the other spends back).
+    pub(super) xp_payable_since: HashMap<String, GameHour>,
     /// Since when political power above the threshold found nothing to buy (`politics_auto`).
     pp_idle_since: Option<GameHour>,
     /// `politics_auto`: what the last options read of each order slot found.
@@ -10497,6 +10500,53 @@ mod tests {
         let out = officer_corps_step(&mut state, &tools, &plan, "l", START).unwrap();
         assert!(out.is_some_and(|l| l.contains("Motorization Drive (army:1): true")));
         assert!(state.done.contains_key("ofc:army:1:Motorization Drive"));
+    }
+
+    #[test]
+    fn a_spend_its_lane_never_makes_stops_holding_the_experience_after_a_few_days() {
+        // cmps1/cmph1 (27 Nov 2026): the garrison template (15) held the doctrine back for weeks
+        // with 96-119 army experience banked
+        let tools = fake(vec![
+            ("hoi4_country_status", json!({"fields": {}})),
+            (
+                "hoi4_doctrines",
+                json!({"experience": {"army": {"value": 60.0}}}),
+            ),
+            (
+                "hoi4_officer_corps",
+                json!({"receipt": {"status": "Verified"}}),
+            ),
+        ]);
+        let plan = json!({
+            "officer_corps": [{"slot": "army:1", "spirit": "Motorization Drive", "cost": 35}],
+            "xp_budget": {"army": [
+                {"id": "x_tpl", "cost": 40, "purpose": "template", "ref": "template:t_art"},
+                {"id": "x_oc", "cost": 35, "purpose": "officer_corps_spirit", "ref": "spirit:motorization_drive"}]}});
+        let mut state = State::default();
+        let who = super::super::plan_xp::Spender::Unlisted;
+        let (held, _) =
+            super::super::plan_xp::ahead(&mut state, &tools, &plan, "army", &who, START);
+        assert_eq!(held, 75.0);
+        // within the grace the template still holds; after it, it holds nothing and the spirit goes
+        let (held, _) =
+            super::super::plan_xp::ahead(&mut state, &tools, &plan, "army", &who, START + 7 * DAY);
+        assert_eq!(held, 75.0);
+        let (held, names) =
+            super::super::plan_xp::ahead(&mut state, &tools, &plan, "army", &who, START + 8 * DAY);
+        assert_eq!((held, names), (35.0, vec!["x_oc".to_string()]));
+        let out = officer_corps_step(&mut state, &tools, &plan, "l", START + 8 * DAY).unwrap();
+        assert!(out.is_some_and(|l| l.contains("Motorization Drive (army:1): true")));
+        // a spend the pool cannot pay yet keeps holding however long it waits (saving)
+        let poor = fake(vec![(
+            "hoi4_doctrines",
+            json!({"experience": {"army": {"value": 30.0}}}),
+        )]);
+        let mut state = State::default();
+        let (held, _) = super::super::plan_xp::ahead(&mut state, &poor, &plan, "army", &who, START);
+        assert_eq!(held, 75.0);
+        let (held, _) =
+            super::super::plan_xp::ahead(&mut state, &poor, &plan, "army", &who, START + 30 * DAY);
+        assert_eq!(held, 75.0);
     }
 
     #[test]
