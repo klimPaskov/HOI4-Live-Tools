@@ -217,6 +217,7 @@ pub(super) fn request2(
 /// The front section a new plan root binds to: of the group's theatre fronts (the module's `fronts` read), the section
 /// holding the most of `provinces` (ties: the lower section id). None when no section shares a province: the game
 /// binds a root to a front the map already has, it does not make one.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn root_section(fronts: &Value, provinces: &[i32]) -> Option<(u64, i32)> {
     let want: BTreeSet<i32> = provinces.iter().copied().collect();
     let mut best: Option<(usize, i32, u64)> = None;
@@ -562,7 +563,7 @@ pub(super) fn split_by_place(
         })
     };
     // 1. each target keeps its own that stand nearer it than any other target (or have no place read), nearest first
-    for t in 0..targets.len() {
+    for (t, kept) in out.iter_mut().enumerate() {
         let mut mine: Vec<usize> = (0..divs.len())
             .filter(|d| current.get(*d).copied().flatten() == Some(t))
             .filter(|d| nearest(*d).is_none_or(|n| n == t))
@@ -574,7 +575,7 @@ pub(super) fn split_by_place(
                 .then(a.cmp(b))
         });
         for d in mine.into_iter().take(quota.get(t).copied().unwrap_or(0)) {
-            out[t].push(divs[d].0);
+            kept.push(divs[d].0);
             taken[d] = true;
         }
     }
@@ -615,15 +616,15 @@ pub(super) fn split_by_place(
     out
 }
 
+/// One piece of a line: (theatre front, section, the line's provinces in it).
+pub(super) type Piece = (u64, i32, Vec<i32>);
+
 /// The pieces of `line` by the theatre front sections that hold them (engineer 95): a plan root binds to ONE section,
 /// and a section is the border against one enemy (ctl92a, 28 Nov 2026: 12 own provinces over the Dutch, Belgian and
 /// Luxembourg borders read back as the 8 on the Dutch one), so a line over several borders needs one root per
 /// section. Returns (front, section, the line's provinces in it) in the line's order of first appearance, and the
 /// provinces no section holds. A province two sections hold goes to the lower section id.
-pub(super) fn section_pieces(
-    fronts: &Value,
-    line: &[i32],
-) -> (Vec<(u64, i32, Vec<i32>)>, Vec<i32>) {
+pub(super) fn section_pieces(fronts: &Value, line: &[i32]) -> (Vec<Piece>, Vec<i32>) {
     let mut holder: BTreeMap<i32, (i32, u64)> = BTreeMap::new();
     for f in fronts["fronts"].as_array().into_iter().flatten() {
         let Some(addr) = f["front"]
