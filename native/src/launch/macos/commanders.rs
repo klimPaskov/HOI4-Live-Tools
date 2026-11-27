@@ -236,6 +236,96 @@ pub(super) fn check_assignment(
     Ok(())
 }
 
+/// One script trigger block as a plan predicate (plan_predicate.rs): `has_completed_focus`
+/// becomes `focus_completed:<key>`, `OR`/`AND` become any/all, `NOT` (a NOR in the game's
+/// scripts) becomes not-any, `always` a constant; every other trigger becomes an atom the server
+/// cannot read (`unread_trigger:<key>`, always unknown), so a trigger is never guessed true.
+fn trigger_when(block: &[crate::script::Entry]) -> Value {
+    use crate::script::Val;
+    let parts: Vec<Value> = block
+        .iter()
+        .filter(|e| !e.key.is_empty())
+        .map(|e| match (e.key.as_str(), &e.val) {
+            ("has_completed_focus", Val::Scalar(k)) => json!(format!("focus_completed:{k}")),
+            ("OR", Val::Block(b)) => json!({"any": trigger_list(b)}),
+            ("AND", Val::Block(b)) => json!({"all": trigger_list(b)}),
+            ("NOT", Val::Block(b)) => json!({"not": {"any": trigger_list(b)}}),
+            ("always", Val::Scalar(v)) if v == "yes" => json!(true),
+            ("always", Val::Scalar(v)) if v == "no" => json!(false),
+            (key, _) => json!(format!("unread_trigger:{key}")),
+        })
+        .collect();
+    match parts.len() {
+        1 => parts.into_iter().next().unwrap_or(Value::Null),
+        _ => json!({ "all": parts }),
+    }
+}
+
+fn trigger_list(block: &[crate::script::Entry]) -> Vec<Value> {
+    block
+        .iter()
+        .filter(|e| !e.key.is_empty())
+        .map(|e| trigger_when(std::slice::from_ref(e)))
+        .collect()
+}
+
+/// The game's `visible` trigger of each character's army-leader role, as a plan predicate, by
+/// character id (common/characters of the running game, mods included). A leader whose role is
+/// not visible stays in the country's leader list, and an assignment by command reads back
+/// verified, but the game takes him off the army again: Armee Pommern was given Hoth, Rommel,
+/// Manteuffel, Hausser and Dietrich in turn (g92b, 27 Nov 2026), each hidden until a focus. A
+/// character with a role that has no `visible` trigger is absent (always visible). Pure.
+pub(super) fn visible_whens(entries: &[crate::script::Entry]) -> BTreeMap<String, Value> {
+    use crate::script::{Block, Val};
+    let mut out = BTreeMap::new();
+    for top in entries.iter().filter(|e| e.key == "characters") {
+        for character in top.val.block() {
+            let roles: Vec<&[crate::script::Entry]> = ["corps_commander", "field_marshal"]
+                .iter()
+                .filter_map(|r| character.val.block().find_val(r))
+                .map(Val::block)
+                .collect();
+            if roles.is_empty() {
+                continue;
+            }
+            // a role with no trigger makes the leader visible whatever the other says
+            if roles.iter().any(|r| r.find_val("visible").is_none()) {
+                continue;
+            }
+            let whens: Vec<Value> = roles
+                .iter()
+                .filter_map(|r| r.find_val("visible"))
+                .map(|v| trigger_when(v.block()))
+                .collect();
+            let when = if whens.len() == 1 {
+                whens.into_iter().next().unwrap_or(Value::Null)
+            } else {
+                json!({ "any": whens })
+            };
+            out.insert(character.key.clone(), when);
+        }
+    }
+    out
+}
+
+/// [`visible_whens`] of the running game, read once per install.
+fn visible_catalog(process: &dyn Process) -> Option<std::sync::Arc<BTreeMap<String, Value>>> {
+    let dir = super::mgmt::game_dir(process).ok()?;
+    Some(crate::script::cached(&dir, "leader_visible", |d| {
+        visible_whens(&crate::script::parse_dir(&d.join("common/characters")))
+    }))
+}
+
+/// Adds `visible_when` (the role's visibility trigger as a plan predicate) to every roster row
+/// whose character has one; pure over the catalog.
+pub(super) fn mark_visibility(rows: &mut [Value], catalog: &BTreeMap<String, Value>) {
+    for row in rows {
+        if let Some(when) = row["id"].as_str().and_then(|id| catalog.get(id)) {
+            row["visible_when"] = when.clone();
+        }
+    }
+}
+
 /// Merged roster entries (JSON) from a snapshot.
 pub(super) fn entries(snap: &Snapshot) -> Vec<Value> {
     struct Acc {
@@ -496,7 +586,11 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
     // While the panel list is fresh, leaders it does not list (not recruited, foreign,
     // retired) cannot be assigned: name them apart so a player does not pick them (Ethiopia
     // run 10 tried an unlisted general and Ethiopian leaders).
-    let (commanders, not_assignable): (Vec<Value>, Vec<Value>) = entries(&snap)
+    let mut rows = entries(&snap);
+    if let Some(catalog) = visible_catalog(process) {
+        mark_visibility(&mut rows, &catalog);
+    }
+    let (commanders, not_assignable): (Vec<Value>, Vec<Value>) = rows
         .into_iter()
         .partition(|c| !list_open || c["listed_in_panel_or_assigned"] == json!(true));
     let not_assignable: Vec<Value> = not_assignable
@@ -541,7 +635,7 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
 }
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_commanders","description":"Own army commanders: every commander who leads an own army or army group (name, rank, assigned_to) plus, while the army panel's commander list is open, every listed general with available true/false. Every army leader of the country is listed with id, skill, attack, defense, planning, logistics and traits (base values, matched against common/characters for five leaders); while the list is open, leaders it does not show (not recruited, foreign, retired) are only named in not_assignable; with the list closed they appear with listed_in_panel_or_assigned false and available null. Pure memory read: no lease, no input, no cursor. Use the names with hoi4_army_commander; it refuses unknown_commander, commander_unavailable and army_unknown before any click.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
+    json!({"name":"hoi4_commanders","description":"Own army commanders: every commander who leads an own army or army group (name, rank, assigned_to) plus, while the army panel's commander list is open, every listed general with available true/false. Every army leader of the country is listed with id, skill, attack, defense, planning, logistics and traits (base values, matched against common/characters for five leaders); while the list is open, leaders it does not show (not recruited, foreign, retired) are only named in not_assignable; with the list closed they appear with listed_in_panel_or_assigned false and available null. Pure memory read: no lease, no input, no cursor. A leader whose army role the game keeps hidden until a trigger (common/characters `visible`, e.g. a focus) carries visible_when, that trigger as a plan predicate (unreadable triggers as unread_trigger atoms): such a leader is not assignable until it holds (an assignment reads back and the game removes him again). Use the names with hoi4_army_commander; it refuses unknown_commander, commander_unavailable and army_unknown before any click.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
 }
 
 #[cfg(test)]
@@ -731,6 +825,38 @@ mod tests {
         let e = entries(&s);
         assert!(e.iter().all(|v| v["available"] != true));
         assert_eq!(e.len(), 2);
+    }
+    #[test]
+    fn hidden_army_roles_carry_their_visible_trigger_as_a_predicate() {
+        let text = r#"characters = {
+            GER_hermann_hoth = { name = GER_hermann_hoth
+                corps_commander = { skill = 3 visible = { OR = { has_global_flag = GER_civil_war_has_started has_completed_focus = GER_bribe_senior_officers } } } }
+            GER_erwin_rommel = { corps_commander = { visible = { has_completed_focus = GER_adopt_new_panzer_doctrine } } }
+            GER_kurt_x = { corps_commander = { visible = { NOT = { has_government = fascism has_completed_focus = GER_a } } } }
+            GER_erich_von_manstein = { corps_commander = { skill = 4 } }
+            GER_both = { field_marshal = { skill = 4 } corps_commander = { visible = { always = no } } }
+            GER_adviser = { advisor = { slot = political_advisor } }
+        }"#;
+        let cat = visible_whens(&crate::script::parse(text));
+        assert_eq!(
+            cat["GER_hermann_hoth"],
+            json!({"any": ["unread_trigger:has_global_flag", "focus_completed:GER_bribe_senior_officers"]})
+        );
+        assert_eq!(cat["GER_erwin_rommel"], json!("focus_completed:GER_adopt_new_panzer_doctrine"));
+        assert_eq!(
+            cat["GER_kurt_x"],
+            json!({"not": {"any": ["unread_trigger:has_government", "focus_completed:GER_a"]}})
+        );
+        assert!(!cat.contains_key("GER_erich_von_manstein"));
+        assert!(!cat.contains_key("GER_both"), "a role without a trigger is always visible");
+        assert!(!cat.contains_key("GER_adviser"));
+        let mut rows = vec![
+            json!({"name": "Hermann Hoth", "id": "GER_hermann_hoth"}),
+            json!({"name": "Erich von Manstein", "id": "GER_erich_von_manstein"}),
+        ];
+        mark_visibility(&mut rows, &cat);
+        assert!(rows[0]["visible_when"].is_object());
+        assert!(rows[1].get("visible_when").is_none());
     }
     #[test]
     fn stale_rows_are_marked_and_not_available() {

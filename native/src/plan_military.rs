@@ -2598,9 +2598,13 @@ pub(super) fn group_marshal_step(
     };
     let tag = super::plan_formations::country_tag(state, tools, plan);
     let rows = list(&read, "commanders");
+    // leaders the game hides now (their role's visible trigger) cannot lead a group
+    let hidden = super::plan_formations::hidden_now(state, tools, rows, now);
     for (group, divisions) in vacant {
         let named = planned_marshals(state, plan, &roster, &group);
-        let skip = |n: &str| state.skipped(now, "gfmc", &format!("{group}|{n}"));
+        let skip = |n: &str| {
+            hidden.contains(n) || state.skipped(now, "gfmc", &format!("{group}|{n}"))
+        };
         // the commander list closed: the read knows only the leaders who lead something, so a
         // free field marshal is invisible (w46a1, 23 Nov 2026: leader_roster_read false, Army
         // Group 2 leaderless all war). The plan's named marshals who lead no group are tried by
