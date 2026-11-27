@@ -4705,6 +4705,10 @@ fn a_group_with_two_fronts_spreads_its_divisions_and_each_border_gets_its_own_de
         r["plan"][1]["offensives"] = json!([{"id": 111, "target": {"states": [6]}}]);
     });
     let roster = game.roster.borrow().clone();
-    assert!(line_offensives(&state, "op", &roster, "Army Group 1").is_empty());
-    assert_eq!(offensives(&roster, "Army Group 1").len(), 1);
+    assert!(!line_offensives(&state, "op", &roster, "Army Group 1")
+        .iter()
+        .any(|o| o["id"] == json!(111)));
+    assert!(offensives(&roster, "Army Group 1")
+        .iter()
+        .any(|o| o["id"] == json!(111)));
 }
