@@ -316,6 +316,11 @@ fn note(state: &mut State, rule: &str, line: impl Into<String>) {
     state.military.notes.insert(rule.to_string(), line.into());
 }
 
+/// [`note`] for the command rules kept in plan_formations.rs (their lane is `command`).
+pub(super) fn set_note(state: &mut State, rule: &str, line: impl Into<String>) {
+    note(state, rule, line);
+}
+
 fn off(plan: &Value, rule: &str) -> bool {
     strings(&plan["manage"], "off").iter().any(|r| r == rule)
 }
@@ -3224,10 +3229,16 @@ fn navy_step(
         });
         let mut line = admirals.join("; ");
         if all_led {
+            // The game's alert is the naval headquarters' own ("An admiral can be assigned to
+            // the naval headquarters: <province>"): a headquarters building takes an admiral of
+            // its own, and a led fleet never closes it. No tool reads or fills a headquarters
+            // yet (gap navy.hq_admiral), so the lane names that, not the reserve fleet (g92a,
+            // 27 Nov 2026: open 150.8 days, the escalation answered "the finding is wrong").
             line.push_str(
-                "; every fleet that takes an admiral has one: the alert rests on the reserve \
-                 fleet (no admiral slot) or on admirals with no fleet to lead (no fleet is \
-                 founded for an admiral alone)",
+                "; every fleet that takes an admiral has one: the alert is a naval headquarters \
+                 without an admiral (the game's text: an admiral can be assigned to the naval \
+                 headquarters), which no tool fills yet (gap navy.hq_admiral: no headquarters \
+                 read, no assignment); leave it open, it is a tool gap, not a lane choice",
             );
         }
         note(state, "admiral_assignable", line);

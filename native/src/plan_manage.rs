@@ -8162,7 +8162,18 @@ fn balance_once(
                 .get(&template)
                 .is_some_and(|(at, _, _)| now - *at < 30 * DAY);
             if !fresh {
-                if let Ok(read) = tools.call("hoi4_template_get", &json!({"template": template})) {
+                // A template the game does not have yet (a row waiting for the design a focus or
+                // the designer makes) adds no need: the refusal is kept like a read for the same
+                // 30 days instead of asked again every turn (g92a, 27 Nov 2026: "Panzer-Division
+                // (M)" refused template_unknown 93 times in a row, a tool-use issue all run).
+                let read = tools.call("hoi4_template_get", &json!({"template": template}));
+                if read.is_err() {
+                    state
+                        .manage
+                        .tpl_need
+                        .insert(template.clone(), (now, HashMap::new(), HashMap::new()));
+                }
+                if let Ok(read) = read {
                     let t = &list(&read, "templates")
                         .first()
                         .cloned()

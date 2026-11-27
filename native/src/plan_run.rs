@@ -977,6 +977,19 @@ pub(super) fn lane_reason(state: &State, owner: &str, now: GameHour) -> Option<(
                 ),
                 true,
             ),
+            // The lanes have run for less than the fair wait (every lane is offered within it):
+            // not a silence yet. The day-0 alert read runs before any lane's first turn, and its
+            // "no turn in this run" stayed on the issue for the whole run (g92a, 27 Nov 2026:
+            // decisions offered 143 times, the issue still read SILENT).
+            None if scheduler_age(state, now).is_none_or(|age| age <= FAIR_MAX_WAIT) => (
+                format!(
+                    "lane {lane} not offered a turn yet: the lanes have run {} day(s), and every \
+                     lane is offered within {} days",
+                    scheduler_age(state, now).map_or(0, |a| a / DAY),
+                    FAIR_MAX_WAIT / DAY
+                ),
+                false,
+            ),
             None => (
                 format!(
                     "SILENT: lane {lane} has had no turn in this run (the scheduler never offered \
@@ -986,6 +999,18 @@ pub(super) fn lane_reason(state: &State, owner: &str, now: GameHour) -> Option<(
             ),
         },
     })
+}
+
+/// How long the lanes have been offered turns in this run: from the earliest turn (or the first
+/// hour the fairness saw a lane waiting) to `now`; None before any; pure.
+fn scheduler_age(state: &State, now: GameHour) -> Option<GameHour> {
+    state
+        .sched
+        .turns
+        .values()
+        .chain(state.sched.fair_seen.values())
+        .min()
+        .map(|first| now.saturating_sub(*first))
 }
 
 /// What the research and focus stages saw this tick (the digest lines).
@@ -13081,7 +13106,15 @@ mod tests {
     fn a_lane_turn_records_its_reason_and_a_lane_that_never_says_one_is_silent() {
         let mut state = State::default();
         let now = 1000 * DAY;
-        // never offered
+        // before the lanes have run the fair wait, a lane not yet offered is no silence (g92a:
+        // the day-0 alert read's "no turn in this run" stayed on the issue for the whole run)
+        let (why, silent) = super::lane_reason(&state, "training", now).unwrap();
+        assert!(!silent && why.contains("not offered a turn yet"), "{why}");
+        state.sched.turns.insert("research", now - DAY);
+        let (why, silent) = super::lane_reason(&state, "training", now).unwrap();
+        assert!(!silent && why.contains("run 1 day(s)"), "{why}");
+        // never offered while the others have run past the fair wait
+        state.sched.turns.insert("research", now - 10 * DAY);
         let (why, silent) = super::lane_reason(&state, "training", now).unwrap();
         assert!(silent && why.contains("no turn in this run"), "{why}");
         // a turn that says nothing
