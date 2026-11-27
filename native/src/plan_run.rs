@@ -3650,8 +3650,9 @@ fn politics_step(
                 .and_then(|e| e["political_power"]["raw_signed"].as_f64())
                 .map(|raw| raw / 100_000.0);
         }
-        // Not before the country has gained 15 points since the last refusal, or the
-        // pick's own "cost" when the plan names it (above what earlier picks wait for). A
+        // Not before the power has grown since the last refusal (the backoff sets how often),
+        // nor below the pick's own "cost" when the plan names it (above what earlier picks wait
+        // for); no amount is kept in code (it was 15 points). A
         // power that cannot be read is no reason to try: the game refused such a blind try
         // and the refusal let the standing policy spend the power the pick was waiting for.
         let need = pick["cost"].as_f64().unwrap_or(0.0);
@@ -3660,12 +3661,12 @@ fn politics_step(
                 let since = state
                     .pol_pp_at_fail
                     .get(&key)
-                    .map_or(f64::MIN, |p| p + 15.0);
+                    .map_or(f64::MIN, |p| p.next_up());
                 if pp < need + held_back {
                     held_back += need;
                     continue;
                 }
-                // Waiting only for 15 points since its last refusal (a refusal that was not the
+                // Waiting only for the power to grow since its last refusal (a refusal that was not the
                 // price: a focus or a law first): it holds no power back for later picks.
                 if pp < since {
                     continue;
@@ -7734,12 +7735,33 @@ fn special_projects_step(
     )))
 }
 
+/// The experience the doctrines read shows for `id` (a grand doctrine or subdoctrine on offer):
+/// the game's price with its reduction, else the read's base cost; pure.
+fn doctrine_price(read: &Value, id: &str) -> Option<f64> {
+    list(read, "folders").iter().find_map(|f| {
+        list(f, "available_grand_doctrines")
+            .iter()
+            .chain(
+                list(f, "tracks")
+                    .iter()
+                    .flat_map(|t| list(t, "available_subdoctrines").iter()),
+            )
+            .find(|o| text(&o["id"]) == id)
+            .and_then(|o| {
+                o["estimated_cost_after_reduction"]
+                    .as_f64()
+                    .or_else(|| o["xp_cost"].as_f64())
+            })
+    })
+}
+
 /// Experience never idles on an empty doctrine track. Every 14 days: for each folder that holds
 /// a grand doctrine, an empty track takes a subdoctrine once the folder's experience covers its
 /// price above the reserve. The plan's own `doctrines` entries for a folder go first (a pending
 /// one holds that folder's experience); then `doctrine_defaults.<folder>` (subdoctrine ids in
 /// preference order), else the first subdoctrine the game offers on the track. Experience kept
-/// back: `manage.xp_reserve.<army|navy|air>` (army 30 by default, for templates and designs).
+/// back: `manage.xp_reserve.<army|navy|air>` (none by default: the plan's `xp_budget` holds what
+/// templates and designs need, and no amount is kept in code).
 /// Grand doctrines are the plan's decision and never chosen here. `manage.off` "doctrines" stops it.
 fn doctrine_fill(
     state: &mut State,
@@ -7782,9 +7804,7 @@ fn doctrine_fill(
             _ => "army",
         };
         // every spend the plan's xp_budget lists comes before a default fill (plan_xp.rs)
-        let reserve = plan["manage"]["xp_reserve"][kind]
-            .as_f64()
-            .unwrap_or(if kind == "army" { 30.0 } else { 0.0 })
+        let reserve = plan["manage"]["xp_reserve"][kind].as_f64().unwrap_or(0.0)
             + plan_xp::ahead(state, tools, plan, kind, &plan_xp::Spender::Unlisted, now).0;
         let xp = folder["experience"]
             .as_f64()
@@ -7943,7 +7963,11 @@ fn extras_step(
                 _ => "army",
             };
             let xp = read["experience"][kind]["value"].as_f64().unwrap_or(0.0);
-            let cost = entry["xp"].as_f64().unwrap_or(100.0);
+            // the price the game's read shows for this doctrine (its cost reduction applied),
+            // else the plan's estimate, else none: then the game's Unlock decides alone (owner,
+            // 27 Nov 2026: no cost in code; it was 100 for every entry without `xp`)
+            let price = doctrine_price(&read, doctrine).or_else(|| entry["xp"].as_f64());
+            let cost = price.unwrap_or(0.0);
             // the spends the plan's xp_budget lists before this doctrine (templates, officer
             // corps, designs) are paid first (plan_xp.rs)
             let who = item_id(entry).map_or(plan_xp::Spender::Unlisted, |id| {
@@ -7965,15 +7989,13 @@ fn extras_step(
             }
             // the game disabled Unlock at this experience (the plan's cost is an estimate; the
             // game's own cost modifiers are not read): wait until it has grown
-            if let Some(failed) = state.doc_xp.get(&part_key) {
-                let more = (cost * 0.2).max(10.0);
-                if xp < failed + more {
+            if let Some(failed) = state.doc_xp.get(&part_key).copied() {
+                if xp < failed {
                     plan_manage::note(
                         state,
                         "doctrines",
                         format!(
-                            "{doctrine}: Unlock was disabled at {failed:.0} experience; waits for {:.0}",
-                            failed + more
+                            "{doctrine}: Unlock was disabled; waits for {failed:.0} experience"
                         ),
                     );
                     break;
@@ -8015,10 +8037,7 @@ fn extras_step(
                     .and_then(|t| t.split_whitespace().next())
                     .and_then(|n| n.parse::<f64>().ok());
                 if let Some(n) = needed {
-                    let more = (cost * 0.2).max(10.0);
-                    state
-                        .doc_xp
-                        .insert(part_key.clone(), (n * 0.75 - more).max(xp));
+                    state.doc_xp.insert(part_key.clone(), (n * 0.75).max(xp));
                     plan_manage::note(
                         state,
                         "doctrines",
@@ -8027,16 +8046,13 @@ fn extras_step(
                         ),
                     );
                 } else if let Some(price) = priced {
-                    let more = (cost * 0.2).max(10.0);
-                    state
-                        .doc_xp
-                        .insert(part_key.clone(), (price - more).max(xp));
+                    state.doc_xp.insert(part_key.clone(), price.max(xp));
                     plan_manage::note(
                         state,
                         "doctrines",
                         format!(
                             "{doctrine}: the game prices it at {price:.0} experience ({xp:.0} held); \
-                             waits for it (the plan's xp {cost:.0} is below the game's price)"
+                             waits for it"
                         ),
                     );
                 } else if why.contains("doctrine_unavailable") || why.contains("Unlock") {
@@ -8046,7 +8062,7 @@ fn extras_step(
                     // (live 15 Nov 2026: the same refusal four times in 285 days).
                     let n = state.doc_refused.entry(part_key.clone()).or_insert(0);
                     *n += 1;
-                    if *n >= 3 || xp >= 2.0 * cost {
+                    if *n >= 3 || price.is_some_and(|c| xp >= 2.0 * c) {
                         let n = *n;
                         state.done.insert(part_key.clone(), now);
                         plan_manage::note(
@@ -8059,7 +8075,8 @@ fn extras_step(
                             ),
                         );
                     } else {
-                        state.doc_xp.insert(part_key.clone(), xp);
+                        // tried again only once the experience has grown past this refusal
+                        state.doc_xp.insert(part_key.clone(), xp.next_up());
                     }
                 }
                 state.skip(now, "doc", &part_key, 15 * DAY);
@@ -21572,7 +21589,7 @@ mod tests {
             doctrine_fill(&mut state, &tools, &plan, "l", START).unwrap(),
             None
         );
-        // no plan entry: the plan's default for the track (inf_b, 60 <= 120 - 30), not the first
+        // no plan entry: the plan's default for the track (inf_b, 60 <= 120), not the first
         let plan = json!({"doctrine_defaults": {"land": ["inf_b"]}});
         let mut state = State::default();
         let step = doctrine_fill(&mut state, &tools, &plan, "l", START)
@@ -21582,15 +21599,16 @@ mod tests {
             step.starts_with("doctrine fill land/infantry: inf_b"),
             "{step}"
         );
-        // without a default: the first offered (100 > 120 - 30 reserve: waits); naval too poor;
-        // air has no grand doctrine (the plan's decision): nothing
-        let plan = json!({});
+        // without a default: the first offered, 100 > 120 - the plan's reserve of 30: waits;
+        // naval too poor; air has no grand doctrine (the plan's decision): nothing
+        let plan = json!({"manage": {"xp_reserve": {"army": 30}}});
         let mut state = State::default();
         assert_eq!(
             doctrine_fill(&mut state, &tools, &plan, "l", START).unwrap(),
             None
         );
-        let plan = json!({"manage": {"xp_reserve": {"army": 0}}});
+        // no reserve is kept in code: without the plan's, the first offered is adopted
+        let plan = json!({});
         let mut state = State::default();
         let step = doctrine_fill(&mut state, &tools, &plan, "l", START)
             .unwrap()
@@ -21663,6 +21681,35 @@ mod tests {
     }
 
     #[test]
+    fn a_doctrine_is_judged_by_the_price_the_game_shows_and_a_changed_price_changes_it() {
+        // owner, 27 Nov 2026: no cost in code; an entry without `xp` was priced 100
+        let with_price = |price: f64| {
+            let tools = fake(vec![(
+                "hoi4_doctrines",
+                json!({"experience": {"army": {"value": 60.0}},
+                    "folders": [{"folder": "land", "tracks": [{"track": "infantry",
+                        "available_subdoctrines": [{"id": "great_war_infantry", "xp_cost": 100.0,
+                            "estimated_cost_after_reduction": price}]}]}]}),
+            )]);
+            let plan = json!({"doctrines": [{"id": "inf", "folder": "land", "track": "infantry",
+                "subdoctrine": "great_war_infantry"}]});
+            let mut state = State::default();
+            doctrine_pass(&mut state, &tools, &plan, 0);
+            adopted(&tools).len()
+        };
+        // 60 experience: the game's reduced price 50 is paid, 75 waits
+        assert_eq!(with_price(50.0), 1);
+        assert_eq!(with_price(75.0), 0);
+        assert_eq!(
+            super::doctrine_price(
+                &json!({"folders": [{"available_grand_doctrines": [{"id": "g", "xp_cost": 40.0}]}]}),
+                "g"
+            ),
+            Some(40.0)
+        );
+    }
+
+    #[test]
     fn a_doctrine_short_of_experience_waits_and_is_never_dropped() {
         let plan = json!({"doctrines": [
             {"id": "inf", "folder": "land", "track": "infantry", "subdoctrine": "great_war_infantry", "xp": 55}]});
@@ -21680,7 +21727,7 @@ mod tests {
         assert_eq!(adopted(&tools).len(), 1);
         assert!(!state.done.contains_key("doc:id:inf"));
         assert!(!state.doc_refused.contains_key("doc:id:inf"));
-        assert_eq!(state.doc_xp.get("doc:id:inf").copied(), Some(289.0)); // retried at 289 + 11 = 300
+        assert_eq!(state.doc_xp.get("doc:id:inf").copied(), Some(300.0)); // 75% of 400
     }
 
     #[test]
@@ -22415,13 +22462,13 @@ mod tests {
         let enough = power(160.0);
         tick(&mut state, &enough, &plan, "l", START + 2 * DAY).unwrap();
         assert_eq!(chosen(&enough).first(), Some(&json!("big")));
-        // a pick waiting only for 15 points after a refusal that was not its price (paid for,
-        // refused for a missing focus) holds no power back: the cheap pick goes
+        // a pick waiting only for the power to grow after a refusal that was not its price (paid
+        // for, refused for a missing focus) holds no power back: the cheap pick goes
         let mut state = State::default();
         state
             .pol_pp_at_fail
             .insert(politics_key(0, &plan["politics"][0]), 160.0);
-        let some = power(165.0);
+        let some = power(160.0);
         tick(&mut state, &some, &plan, "l", START + 3 * DAY).unwrap();
         assert_eq!(chosen(&some), vec![json!("small")]);
         // refused while the power covered it (a law the focus tree replaced): the plan's reserve

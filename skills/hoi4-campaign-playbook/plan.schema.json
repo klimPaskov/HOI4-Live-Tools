@@ -1348,7 +1348,7 @@
           "when_strict": {"type": "boolean", "description": "true: the dates in `when` are kept as the first day; by default a date is the latest day and an affordable spirit is bought at once"},
           "slot": {"type": "string", "pattern": "^(army|navy|air):[0-5]$", "description": "VIEW:INDEX as hoi4_officer_corps list reads it"},
           "spirit": {"type": "string", "description": "the spirit's name as its window shows it"},
-          "cost": {"type": "number", "description": "experience; default by slot place 20, 35, 50"},
+          "cost": {"type": "number", "description": "the plan's experience estimate (optional): with it the pick is tried once the experience covers it; without it the game's own check (its modify_officer_corps alert) decides; no price is kept in code"},
           "when": {"description": "plan predicate"},
           "why": {"type": "string"}
         }
@@ -4923,7 +4923,7 @@
         "xp_reserve": {
           "type": "object",
           "x-owner": "executor",
-          "description": "experience the doctrine fill keeps back per kind (templates, designs): {army, navy, air}; default army 30, others 0",
+          "description": "experience the doctrine fill keeps back per kind (templates, designs): {army, navy, air}; none by default (no amount is kept in code)",
           "properties": {
             "army": {
               "type": "number",
