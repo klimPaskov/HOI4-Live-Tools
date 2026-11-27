@@ -36,9 +36,17 @@ use crate::error::Result;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Trucks a hub needs for full motorisation (game define SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST).
-const HUB_FULL_TRUCKS: f64 = 60.0;
+/// The levels of the motorisation setting (none, partial, full: hoi4_army_motorization's range).
 const FULL: u64 = 2;
+
+/// The trucks a hub takes for full motorisation, as the running game loads its defines
+/// (hoi4_supply `defines`, SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST); None when unread: the
+/// executor carries no number of its own for it (a mod may change it).
+fn hub_full_trucks(supply: &Value) -> Option<f64> {
+    supply["defines"]["SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST"]
+        .as_f64()
+        .filter(|v| *v >= 0.0)
+}
 
 /// What one army is wanted at and why.
 #[derive(Debug, PartialEq)]
@@ -46,7 +54,8 @@ pub(super) struct Want {
     pub army: String,
     pub level: u64,
     pub wanted: u64,
-    pub trucks: f64,
+    /// the trucks the raise takes (None: the game's cost per hub is unread)
+    pub trucks: Option<f64>,
     pub why: String,
 }
 
@@ -128,6 +137,7 @@ pub(super) fn hub_wants(
         .unwrap_or(50.0);
     let standing = plan["war"]["motorization"].as_u64().unwrap_or(0).min(FULL);
     let supplies = army_supply(supply);
+    let per_hub = hub_full_trucks(supply);
     let mut out = Vec::new();
     for a in list(roster, "armies") {
         let army = text(&a["army"]).to_string();
@@ -152,9 +162,9 @@ pub(super) fn hub_wants(
         }
         let hubs = states.len().max(1) as f64;
         let trucks = if wanted > level {
-            HUB_FULL_TRUCKS / FULL as f64 * (wanted - level) as f64 * hubs
+            per_hub.map(|full| full / FULL as f64 * (wanted - level) as f64 * hubs)
         } else {
-            0.0
+            Some(0.0)
         };
         out.push(Want {
             army,
@@ -166,9 +176,11 @@ pub(super) fn hub_wants(
     }
     // raises first, the hungriest (most trucks) last among them so a short stock serves more
     out.sort_by(|a, b| {
-        (b.wanted > b.level)
-            .cmp(&(a.wanted > a.level))
-            .then(a.trucks.total_cmp(&b.trucks))
+        (b.wanted > b.level).cmp(&(a.wanted > a.level)).then(
+            a.trucks
+                .unwrap_or(f64::MAX)
+                .total_cmp(&b.trucks.unwrap_or(f64::MAX)),
+        )
     });
     out
 }
@@ -249,12 +261,25 @@ fn hubs_step(
         if state.skipped(now, "logi-army", &w.army) {
             continue;
         }
-        if w.trucks > stock {
-            short.push(format!(
-                "{} {} -> {} ({}) needs about {:.0} trucks, {:.0} in stock",
-                w.army, w.level, w.wanted, w.why, w.trucks, stock
-            ));
-            continue;
+        match w.trucks {
+            Some(need) if need > stock => {
+                short.push(format!(
+                    "{} {} -> {} ({}) needs about {need:.0} trucks, {stock:.0} in stock",
+                    w.army, w.level, w.wanted, w.why
+                ));
+                continue;
+            }
+            Some(_) => {}
+            // the cost is the game's: unread, the raise goes out and the game takes what the
+            // stock holds (the note says so: the read, not the rule, is missing)
+            None => super::plan_manage::note(
+                state,
+                "logistics",
+                format!(
+                    "{} {} -> {}: the hub's truck cost is unread (hoi4_supply defines): raised without a stock check ({stock:.0} trucks in stock)",
+                    w.army, w.level, w.wanted
+                ),
+            ),
         }
         let (ok, why) = state.act(
             tools,
@@ -349,7 +374,8 @@ mod tests {
             {"army": "Ost", "supply_percent": 70.0, "state_id": 11},
             {"army": "West", "supply_percent": 90.0, "state_id": 42},
             {"army": "Sud", "supply_percent": 30.0, "state_id": 7},
-            {"army": "Nord", "supply_percent": 95.0, "state_id": 5}]})
+            {"army": "Nord", "supply_percent": 95.0, "state_id": 5}],
+            "defines": {"SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST": 60.0}})
     }
 
     #[test]
@@ -369,8 +395,21 @@ mod tests {
         // goes back to the standing level; Nord attacks and keeps its trucks
         // (raises before lowerings; equal truck needs keep the roster order)
         assert_eq!(got, vec![("Ost", 1, 2), ("Sud", 0, 2), ("West", 2, 1)]);
-        assert_eq!(wants[0].trucks, 60.0, "two states, half a hub's cost each");
-        assert_eq!(wants[1].trucks, 60.0, "one state, two levels");
+        assert_eq!(
+            wants[0].trucks,
+            Some(60.0),
+            "two states, half a hub's cost each"
+        );
+        assert_eq!(wants[1].trucks, Some(60.0), "one state, two levels");
+        // the cost is the game's as loaded (a mod's 40 a hub), and unread it is no number
+        let mut modded = supply();
+        modded["defines"]["SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST"] = json!(40.0);
+        let wants = hub_wants(&plan, &roster(), &modded, &ops);
+        assert_eq!(wants[0].trucks, Some(40.0));
+        let mut unread = supply();
+        unread.as_object_mut().unwrap().remove("defines");
+        let wants = hub_wants(&plan, &roster(), &unread, &ops);
+        assert_eq!(wants[0].trucks, None);
         // an ended operation asks nothing
         state.done.insert("op:op_east:end".into(), START);
         let ops = operation_armies(&state, &plan);

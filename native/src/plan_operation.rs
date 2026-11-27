@@ -233,6 +233,16 @@ pub(super) fn refresh(state: &mut State, tools: &dyn Tools, plan: &Value, now: G
         let from = !op["prepare_from"].is_null() && holds(state, tools, &op["prepare_from"], now);
         let on = !op["execute_on"].is_null() && holds(state, tools, &op["execute_on"], now);
         if !(from || on) {
+            // THE WAR STARTS WHERE IT CAN: an operation whose enemy is already at war with us
+            // starts with the force it has free and a border it can reach, whatever its plan
+            // trigger names (t1939n, 27 Nov 2026: France at war since 1939, op_france waited on
+            // Belgium's capitulation while the Belgian war stalled: a trigger that cannot fire
+            // while the war stalls is the fault this reports)
+            if let Some(why) = free_start(state, tools, ops, op, &id) {
+                state.done.insert(key(&id, "prep"), now);
+                state.done.insert(key(&id, "freestart"), now);
+                state.op_notes.insert(id.clone(), why);
+            }
             continue;
         }
         // OPERATIONS NEVER STEAL: an operation whose armies a running operation holds waits
@@ -246,6 +256,15 @@ pub(super) fn refresh(state: &mut State, tools: &dyn Tools, plan: &Value, now: G
         });
         if let Some((j, other)) = busy {
             let oid = op_id(other, j);
+            // its war already on: it starts with the force no running operation holds
+            if on {
+                if let Some(why) = free_start(state, tools, ops, op, &id) {
+                    state.done.insert(key(&id, "prep"), now);
+                    state.done.insert(key(&id, "freestart"), now);
+                    state.op_notes.insert(id.clone(), why);
+                    continue;
+                }
+            }
             state.op_notes.insert(
                 id.clone(),
                 format!("operation {id}: waits for operation {oid} (it holds the same armies) to finish"),
@@ -254,12 +273,15 @@ pub(super) fn refresh(state: &mut State, tools: &dyn Tools, plan: &Value, now: G
         }
         state.done.insert(key(&id, "prep"), now);
     }
-    let active: Vec<(String, &Value)> = ops
+    // the operation that started first keeps an army both name (a free start takes only what no
+    // running operation holds)
+    let mut active: Vec<(String, &Value)> = ops
         .iter()
         .enumerate()
         .map(|(i, op)| (op_id(op, i), op))
         .filter(|(id, _)| started(state, id))
         .collect();
+    active.sort_by_key(|(id, _)| state.done.get(&key(id, "prep")).copied().unwrap_or(0));
     let mut owned: HashMap<String, String> = HashMap::new();
     if active.is_empty() {
         publish(&owned);
@@ -293,6 +315,92 @@ fn army_hints(op: &Value) -> Vec<String> {
         .collect()
 }
 
+/// Whether an operation handed an army on to the next operation (`release_to_next`).
+fn released(state: &State, id: &str, name: &str) -> bool {
+    state
+        .done
+        .contains_key(&key(id, &format!("released:{name}")))
+}
+
+/// THE WAR STARTS WHERE IT CAN (`start: "trigger"` keeps an operation to its plan trigger): an
+/// operation not started whose plan trigger has not held starts when (1) one of its enemies is
+/// at war with us, (2) a border with that enemy can be reached (hoi4_wars: own border states
+/// facing it) and (3) a force is free: one of its armies no running operation holds (or one a
+/// running operation handed on). Some(the note) when it starts; reads only.
+fn free_start(
+    state: &State,
+    tools: &dyn Tools,
+    ops: &[Value],
+    op: &Value,
+    id: &str,
+) -> Option<String> {
+    if op["start"] == json!("trigger") {
+        return None;
+    }
+    let enemies = strings(op, "enemies");
+    if enemies.is_empty() {
+        return None;
+    }
+    let wars = tools.call("hoi4_wars", &json!({})).ok()?;
+    let fighting = war_tags(&wars);
+    let reach: Vec<(String, Vec<i64>)> = enemies
+        .iter()
+        .filter(|e| fighting.contains(e))
+        .filter_map(|e| {
+            let own: Vec<i64> = list(&wars, "borders")
+                .iter()
+                .filter(|b| text(&b["neighbour_tag"]) == e.as_str())
+                .flat_map(|b| ints(&b["own_border_states"]))
+                .collect();
+            (!own.is_empty()).then(|| (e.clone(), own))
+        })
+        .collect();
+    let (enemy, own) = reach.first()?;
+    let roster = tools.call("hoi4_armies", &json!({"threat": false})).ok()?;
+    let holder = |name: &str| -> Option<String> {
+        ops.iter().enumerate().find_map(|(j, other)| {
+            let oid = op_id(other, j);
+            (oid != id
+                && started(state, &oid)
+                && !released(state, &oid, name)
+                && army_hints(other)
+                    .iter()
+                    .any(|h| name_of(state, &roster, h) == name))
+            .then_some(oid)
+        })
+    };
+    let mut free = Vec::new();
+    let mut held = Vec::new();
+    for hint in army_hints(op) {
+        let name = name_of(state, &roster, &hint);
+        if army_row(&roster, &name).is_none_or(|r| r["division_count"].as_i64() == Some(0)) {
+            continue;
+        }
+        match holder(&name) {
+            None => free.push(name),
+            Some(o) => held.push(format!("{name} ({o})")),
+        }
+    }
+    if free.is_empty() {
+        return None;
+    }
+    let trigger = if op["prepare_from"].is_null() {
+        &op["execute_on"]
+    } else {
+        &op["prepare_from"]
+    };
+    Some(format!(
+        "operation {id}: started at war with {enemy} by the force it has free ({}) on the border \
+         of own states {own:?}; its plan trigger {trigger} had not held{}",
+        free.join(", "),
+        if held.is_empty() {
+            String::new()
+        } else {
+            format!("; the rest joins as it is handed on: {}", held.join(", "))
+        }
+    ))
+}
+
 /// The game names an operation owns: its formation and hold armies and their army groups.
 fn owned_names(state: &State, plan: &Value, op: &Value, roster: &Value) -> Vec<String> {
     let mut armies: Vec<String> = list(op, "formations")
@@ -311,7 +419,8 @@ fn owned_names(state: &State, plan: &Value, op: &Value, roster: &Value) -> Vec<S
     armies.extend(echelons(state, text(&op["id"])).into_iter().map(|(_, e)| e));
     // the other armies of the operation's group (THE GROUP COMMITS WHOLE)
     armies.extend(group_extras(state, text(&op["id"]), op, roster));
-    armies.retain(|a| !a.is_empty());
+    // an army handed on to the next operation is that operation's
+    armies.retain(|a| !a.is_empty() && !released(state, text(&op["id"]), a));
     let mut names = armies.clone();
     for a in &armies {
         if let Some(g) = army_row(roster, a).and_then(|r| r["army_group"].as_str()) {
@@ -1276,6 +1385,182 @@ fn drawn_out(state: &State, id: &str, u: &Unit) -> bool {
         .any(|(k, n)| k.starts_with(&prefix) && *n >= 2 * REDRAWS)
 }
 
+/// What the supply pace did for an attacker.
+#[derive(Debug, PartialEq)]
+enum Paced {
+    /// supplied (or no supply read): the advance goes on
+    Go,
+    /// waiting for its supply: no execute this call
+    Held,
+    /// an order went out (the stop, or a relief lever)
+    Acted(String),
+}
+
+/// The divisions-weighted supply percent of a unit (an army, or every army of a group) from a
+/// full hoi4_supply read; None when no division of it reads a supply figure.
+fn unit_supply(read: &Value, roster: &Value, u: &Unit) -> Option<f64> {
+    let members: HashSet<String> = if u.role == Role::Group {
+        list(roster, "armies")
+            .iter()
+            .filter(|r| r["army_group"].as_str() == Some(u.name.as_str()))
+            .map(|r| text(&r["army"]).to_string())
+            .collect()
+    } else {
+        HashSet::from([u.name.clone()])
+    };
+    let pcts: Vec<f64> = list(read, "divisions")
+        .iter()
+        .filter(|d| members.contains(text(&d["army"])))
+        .filter_map(|d| d["supply_percent"].as_f64())
+        .collect();
+    (!pcts.is_empty()).then(|| pcts.iter().sum::<f64>() / pcts.len() as f64)
+}
+
+/// The war step's supply limits with the operation's own `supply.floor` over `war.supply_floor`
+/// (the same keys and the same meaning: floor, hard hold, resume; rest_max_days).
+fn op_limits(plan: &Value, op: &Value) -> (super::plan_war::Limits, GameHour) {
+    let mut war = if plan["war"].is_object() {
+        plan["war"].clone()
+    } else {
+        json!({})
+    };
+    if let Some(f) = op["supply"]["floor"].as_f64() {
+        war["supply_floor"] = json!(f);
+    }
+    let rest_max = war["rest_max_days"].as_i64().unwrap_or(20) * DAY;
+    (
+        super::plan_war::Limits::of(&json!({ "war": war })),
+        rest_max,
+    )
+}
+
+/// THE ADVANCE WAITS FOR ITS SUPPLY (`supply.pace`, on unless false): an attacker at war whose
+/// divisions' supply has fallen below the floor (`supply.floor`, else `war.supply_floor`) stops
+/// its arrow and keeps its front and its line: starving divisions pressed on lose more than the
+/// ground is worth, and an advance that outruns its railways only adds divisions to the starving
+/// stack. While it waits the war step's relief levers act for each of its armies (a railway to
+/// the node nearest the worst-fed province, toward the axis as the land is taken; one more level
+/// of trucks; the out-of-supply report). It executes again at the resume level, or after
+/// `rest_max_days` above the hard hold (the supply where it stands may never come back). t1939n
+/// (27 Nov 2026): 45 divisions stood in Dutch Brabant on local supply of 1-2 against a demand of
+/// 8-9, every arrow pressed on and the group took nothing for ten days.
+#[allow(clippy::too_many_arguments)]
+fn supply_pace(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    id: &str,
+    op: &Value,
+    u: &Unit,
+    roster: &Value,
+    at_war: &[String],
+    lease: &str,
+    now: GameHour,
+) -> Result<Paced> {
+    if op["supply"]["pace"] == json!(false) || !at_war.contains(&u.enemy) {
+        return Ok(Paced::Go);
+    }
+    let hk = key(id, &format!("supplyheld:{}", u.name));
+    let held_since = state.done.get(&hk).copied();
+    // a quarter day between reads (held or not); a held one stays held meanwhile
+    if state.skipped(now, "opsupply", &u.name) {
+        return Ok(if held_since.is_some() {
+            Paced::Held
+        } else {
+            Paced::Go
+        });
+    }
+    let Ok(read) = tools.call("hoi4_supply", &json!({})) else {
+        return Ok(Paced::Go);
+    };
+    let Some(mean) = unit_supply(&read, roster, u) else {
+        return Ok(Paced::Go);
+    };
+    let (limits, rest_max) = op_limits(plan, op);
+    let nk = format!("{id}:supply:{}", u.name);
+    let Some(since) = held_since else {
+        if !limits.starving(mean) {
+            // a supplied attacker is looked at again in a quarter day
+            state.skip(now, "opsupply", &u.name, DAY / 4);
+            return Ok(Paced::Go);
+        }
+        state.done.insert(hk, now);
+        let why = format!(
+            "{}: supply {mean:.0}% below the floor {:.0}%: the advance waits for its supply \
+             (its front and line stay; railway and trucks first), it executes again at {:.0}%",
+            u.name,
+            limits.floor(),
+            limits.resume()
+        );
+        state.op_notes.insert(nk, why.clone());
+        if executing(roster, &u.name) {
+            return Ok(Paced::Acted(order(
+                state,
+                tools,
+                lease,
+                id,
+                &why,
+                "hoi4_army_plan",
+                json!({"army": u.name, "execute": false}),
+            )?));
+        }
+        return Ok(Paced::Held);
+    };
+    let waited = now.saturating_sub(since);
+    if limits.supplied(mean) || (waited >= rest_max && !limits.held(mean)) {
+        state.done.remove(&hk);
+        state.op_notes.insert(
+            nk,
+            format!(
+                "{}: supply {mean:.0}% after {:.1} days of waiting: the advance goes on",
+                u.name,
+                waited as f64 / DAY as f64
+            ),
+        );
+        return Ok(Paced::Go);
+    }
+    // the relief levers, one per call, for the armies of the unit that starve
+    let members: Vec<Value> = list(roster, "armies")
+        .iter()
+        .filter(|r| text(&r["army"]) == u.name || r["army_group"].as_str() == Some(u.name.as_str()))
+        .cloned()
+        .collect();
+    for army in &members {
+        let one = Unit {
+            name: text(&army["army"]).to_string(),
+            role: Role::Line,
+            ..u.clone()
+        };
+        let Some(supply) = unit_supply(&read, roster, &one) else {
+            continue;
+        };
+        if let Some(line) = super::plan_war::supply_relief(
+            state,
+            tools,
+            lease,
+            plan,
+            army,
+            Some(&read),
+            supply,
+            &limits,
+            now,
+        )? {
+            return Ok(Paced::Acted(format!("operation {id}: {line}")));
+        }
+    }
+    state.op_notes.insert(
+        nk,
+        format!(
+            "{}: waits for its supply {:.1} days ({mean:.0}% of {:.0}% to resume)",
+            u.name,
+            waited as f64 / DAY as f64,
+            limits.resume()
+        ),
+    );
+    state.skip(now, "opsupply", &u.name, DAY / 4);
+    Ok(Paced::Held)
+}
+
 /// Whether a unit has an offensive arrow that holds divisions (or reads no count) and does not
 /// execute.
 fn idle_arrows(roster: &Value, name: &str) -> bool {
@@ -1431,6 +1716,87 @@ fn line_tag(line: &[i64]) -> String {
         .map(i64::to_string)
         .collect::<Vec<_>>()
         .join("-")
+}
+
+/// FORCE BY NEED, ON TO THE NEXT WAR: when an enemy of the operation is out, the formations that
+/// fought it on fronts of their own (wings, armour; never the group or its line armies, which
+/// follow the operation's next enemy) are handed to the operation's `on_capitulation.next` when
+/// that operation names them, one of its enemies is at war with us and a border with it can be
+/// reached (hoi4_wars own border states). The armour still joins the operation's main weight
+/// while that fights (THE ARMOUR JOINS THE MAIN WEIGHT). The hand-over is kept
+/// (`op:<id>:released:<army>`): the next operation starts with it (free start) and owns it.
+#[allow(clippy::too_many_arguments)]
+fn release_to_next(
+    state: &mut State,
+    plan: &Value,
+    id: &str,
+    op: &Value,
+    units: &mut Vec<Unit>,
+    roster: &Value,
+    wars: &Value,
+    out: &[String],
+    at_war: &[String],
+    now: GameHour,
+) {
+    if out.is_empty() {
+        return;
+    }
+    let next_id = text(&op["on_capitulation"]["next"]);
+    let Some(next) = list(plan, "operations")
+        .iter()
+        .find(|o| text(&o["id"]) == next_id && !next_id.is_empty())
+    else {
+        return;
+    };
+    if next["start"] == json!("trigger") {
+        return;
+    }
+    let fighting = war_tags(wars);
+    let reachable = strings(next, "enemies").into_iter().find(|e| {
+        fighting.contains(e)
+            && list(wars, "borders").iter().any(|b| {
+                text(&b["neighbour_tag"]) == e.as_str() && !ints(&b["own_border_states"]).is_empty()
+            })
+    });
+    let Some(enemy) = reachable else {
+        return;
+    };
+    let main_fights = units
+        .iter()
+        .find(|u| u.role == Role::Group)
+        .is_some_and(|g| at_war.contains(&g.enemy) && !out.contains(&g.enemy));
+    let theirs: HashSet<String> = army_hints(next)
+        .iter()
+        .map(|h| name_of(state, roster, h))
+        .collect();
+    let mut gone = Vec::new();
+    for u in units.iter() {
+        let armour = u.role == Role::Strike || u.spear || u.role == Role::Mobile;
+        if !out.contains(&u.enemy)
+            || matches!(u.role, Role::Group | Role::Line | Role::Hold)
+            || (armour && main_fights)
+            || !theirs.contains(&u.name)
+        {
+            continue;
+        }
+        state
+            .done
+            .insert(key(id, &format!("released:{}", u.name)), now);
+        gone.push(u.name.clone());
+    }
+    if gone.is_empty() {
+        return;
+    }
+    units.retain(|u| !gone.contains(&u.name));
+    state.op_notes.insert(
+        format!("{id}:handover"),
+        format!(
+            "operation {id}: {} handed on to {next_id} (at war with {enemy}, its border reached): \
+             the enemy {} is out",
+            gone.join(", "),
+            out.join(", ")
+        ),
+    );
 }
 
 /// An enemy out of the operation hands its units to `next` (the first enemy at war, in list
@@ -1898,6 +2264,9 @@ fn one(
     // or on its first war day when the operation began at war) before its lines are drawn
     plan_axes(state, tools, plan, id, op, wars, now);
     let (mut units, group) = units(state, id, op, roster);
+    // ONE OWNER: an army or group another operation holds (it started first), or one this
+    // operation handed on, takes no order from this one (a free start fights with what it has)
+    units.retain(|u| !owned_elsewhere(state, id, &u.name) && !released(state, id, &u.name));
     // an enemy of the operation that was fought and is no longer at war (it capitulated) hands
     // its units to the operation's next enemy at war: their fronts are clicked at that enemy's
     // contact line (the Dutch side's group goes on into Belgium over Brabant)
@@ -1986,6 +2355,11 @@ fn one(
             }
         }
     }
+    // the force of an enemy that is out goes on to the next operation when that one's war is on
+    // and its border can be reached (FORCE BY NEED: France is fought while Belgium still is)
+    release_to_next(
+        state, plan, id, op, &mut units, roster, wars, &out, &at_war, now,
+    );
     if let Some(next) = next {
         hand_over_out(&mut units, &out, &beaten, &at_war, &next);
     }
@@ -2114,7 +2488,11 @@ fn one(
     // and the attack began on the 4th). Planning decays 0.01 a day while executing: the few
     // game hours before the war cost nothing.
     let pre = pre_executing(state, now) && !strings(op, "enemies").is_empty();
-    if !pre && (op["execute_on"].is_null() || !holds(state, tools, &op["execute_on"], now)) {
+    // a free start executes once its war is on (its plan trigger is what did not hold)
+    let free = state.done.contains_key(&key(id, "freestart"))
+        && strings(op, "enemies").iter().any(|e| at_war.contains(e));
+    if !pre && !free && (op["execute_on"].is_null() || !holds(state, tools, &op["execute_on"], now))
+    {
         state.op_notes.insert(
             id.to_string(),
             format!("operation {id}: prepared, waits for execute_on"),
@@ -6255,6 +6633,16 @@ fn advance(
                 )?));
             }
             continue;
+        }
+        // THE ADVANCE WAITS FOR ITS SUPPLY: an attacker below the supply floor stops its arrow,
+        // keeps its line and gets the relief levers until its supply is back (supply_pace)
+        match supply_pace(state, tools, plan, id, op, u, roster, at_war, lease, now)? {
+            Paced::Go => {}
+            Paced::Held => {
+                note_not_executing(state, id, u, false, at_war, now);
+                continue;
+            }
+            Paced::Acted(line) => return Ok(Some(line)),
         }
         // REPAIR: the offensive on the wanted line executes (a new arrow on an executing front
         // starts unexecuted: the plan is stopped and executed again)
