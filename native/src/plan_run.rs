@@ -15351,9 +15351,15 @@ mod tests {
     fn a_pick_the_game_says_is_already_in_place_counts_as_done() {
         // cmps1 (27 Nov 2026): War Economy under Total Mobilisation was refused as "already
         // active" and tried again every few days; the backoff kept the plan's later picks waiting
-        assert!(super::politics_already_held("Germany already holds war_economy"));
-        assert!(super::politics_already_held("Law War Economy is Already Active"));
-        assert!(super::politics_already_held("the country already has this adviser"));
+        assert!(super::politics_already_held(
+            "Germany already holds war_economy"
+        ));
+        assert!(super::politics_already_held(
+            "Law War Economy is Already Active"
+        ));
+        assert!(super::politics_already_held(
+            "the country already has this adviser"
+        ));
         assert!(!super::politics_already_held("not enough political power"));
     }
 
