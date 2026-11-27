@@ -356,6 +356,11 @@ pub(super) fn digest(state: &State) -> Option<Value> {
     (!state.manage.notes.is_empty()).then(|| json!(state.manage.notes))
 }
 
+/// Every rule's last status line (the lane-turn record reads them).
+pub(super) fn notes(state: &State) -> &BTreeMap<String, String> {
+    &state.manage.notes
+}
+
 /// The rule's status line in the run result's `manage` digest (the last one per rule).
 pub(super) fn note(state: &mut State, rule: &str, line: impl Into<String>) {
     state.manage.notes.insert(rule.to_string(), line.into());
@@ -1052,13 +1057,19 @@ pub(super) fn training_step(
         };
         let queue = tr["queue"].as_u64().unwrap_or(6);
         if when_holds(state, tools, &tr["when"], now) != Truth::True {
-            tell(&mut quiet, format!("{template}@{}: its when does not hold", tr["deploy_state"]));
+            tell(
+                &mut quiet,
+                format!("{template}@{}: its when does not hold", tr["deploy_state"]),
+            );
             continue;
         }
         // an entry whose deploy state the game refused rests (and adds no queue meanwhile)
         let place = format!("{template}@{}", tr["deploy_state"]);
         if state.skipped(now, "traindeploy", &place) {
-            tell(&mut quiet, format!("{place}: the game refused the deploy state; rests"));
+            tell(
+                &mut quiet,
+                format!("{place}: the game refused the deploy state; rests"),
+            );
             continue;
         }
         if state.skipped(now, "traincap", &place) {
@@ -1069,7 +1080,10 @@ pub(super) fn training_step(
         let target = *prior + queue;
         *prior = target;
         if have >= target {
-            tell(&mut quiet, format!("{template}: {have} lines queued, its queue is full"));
+            tell(
+                &mut quiet,
+                format!("{template}: {have} lines queued, its queue is full"),
+            );
             continue;
         }
         let mut count = tr["batch"].as_u64().unwrap_or(2).min(target - have);
@@ -1103,7 +1117,10 @@ pub(super) fn training_step(
                         "training",
                         format!("{template}: waits, cap {cap} but hoi4_supply is unreadable"),
                     );
-                    tell(&mut quiet, format!("{template}: waits, cap {cap} but hoi4_supply is unreadable"));
+                    tell(
+                        &mut quiet,
+                        format!("{template}: waits, cap {cap} but hoi4_supply is unreadable"),
+                    );
                     state.skip(now, "train", &template, DAY);
                     continue;
                 };
@@ -1118,7 +1135,9 @@ pub(super) fn training_step(
                     );
                     tell(
                         &mut quiet,
-                        format!("{template}: at its cap ({fielded} fielded + {have} queued >= {cap})"),
+                        format!(
+                            "{template}: at its cap ({fielded} fielded + {have} queued >= {cap})"
+                        ),
                     );
                     // the entry rests, not the template: the template's later entries with a
                     // higher cap still train (g17m, 19 Nov 2026: two cap-24 rows first in the
@@ -1149,7 +1168,10 @@ pub(super) fn training_step(
                             "training",
                             format!("{template}: waits, {archetype} stockpile {held:.0} below {n}"),
                         );
-                        tell(&mut quiet, format!("{template}: waits, {archetype} stockpile {held:.0} below {n}"));
+                        tell(
+                            &mut quiet,
+                            format!("{template}: waits, {archetype} stockpile {held:.0} below {n}"),
+                        );
                         state.skip(now, "train", &template, DAY);
                         continue 'entries;
                     }
@@ -1235,7 +1257,11 @@ pub(super) fn training_step(
             "training",
             format!(
                 "nothing queued this turn: {}{}",
-                shown.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("; "),
+                shown
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; "),
                 if quiet.len() > 6 {
                     format!(" (+{} more)", quiet.len() - 6)
                 } else {
@@ -2750,7 +2776,11 @@ fn resources_step(
         let judged = note_of(state, "trade")
             .unwrap_or("it has not judged the deficits yet")
             .to_string();
-        note(state, "resources", format!("trade.judge owns the deficits: {judged}"));
+        note(
+            state,
+            "resources",
+            format!("trade.judge owns the deficits: {judged}"),
+        );
         return Ok(None);
     }
     if (plan["auto_import"].is_null() && !plan["manage"].is_object())
@@ -9125,16 +9155,25 @@ mod tests {
     /// whose `when` did not hold, a template the game lacks and a full queue passed silently.
     #[test]
     fn a_training_turn_that_queues_nothing_says_why_for_every_entry() {
-        let tools = fake(vec![("hoi4_division_templates", templates_read(&[("Inf", 4)]))]);
+        let tools = fake(vec![(
+            "hoi4_division_templates",
+            templates_read(&[("Inf", 4)]),
+        )]);
         let plan = json!({"training": [
             {"template": "Inf", "queue": 4, "deploy_state": 5},
             {"template": "Gone", "queue": 2, "deploy_state": 5},
             {"template": "Inf", "queue": 2, "deploy_state": 6, "when": "date >= 1999.1.1"}]});
         let mut state = State::default();
-        assert_eq!(training_step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert_eq!(
+            training_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
         let note = &state.manage.notes["training"];
         assert!(note.starts_with("nothing queued this turn"), "{note}");
-        assert!(note.contains("Inf: 4 lines queued, its queue is full"), "{note}");
+        assert!(
+            note.contains("Inf: 4 lines queued, its queue is full"),
+            "{note}"
+        );
         assert!(note.contains("Gone: no such template"), "{note}");
         assert!(note.contains("Inf@6: its when does not hold"), "{note}");
         let mut state = State::default();
@@ -10274,8 +10313,10 @@ mod tests {
     fn leftover_wings_fill_entries_with_room_and_then_the_main_front_not_a_small_entry() {
         // t1939n (27 Nov 2026): ap_weser_fighters (count 100, no version) took ten newer fighter
         // wings, 912 planes over Jutland, while the western entries named Bf 109 D
-        let wing = |n: &str, v: &str| json!({"wing": n, "aircraft_type": "small_plane_airframe_1",
-            "variant": v, "aircraft": 100, "air_base": {"base_id": 1, "state_id": 56}, "missions": []});
+        let wing = |n: &str, v: &str| {
+            json!({"wing": n, "aircraft_type": "small_plane_airframe_1",
+            "variant": v, "aircraft": 100, "air_base": {"base_id": 1, "state_id": 56}, "missions": []})
+        };
         let wings = vec![
             wing("JG 1", "Bf 109 D"),
             wing("JG 2", "Bf 109 E"),

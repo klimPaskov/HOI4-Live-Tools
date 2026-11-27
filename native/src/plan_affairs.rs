@@ -954,7 +954,10 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
         if fails >= SWITCH_TRIES {
             let separate = rows.iter().any(|l| {
                 text(&l["equipment_id"]) == design_type
-                    && l["design_id"].as_i64().zip(target.as_i64()).is_none_or(|(a, b)| a == b)
+                    && l["design_id"]
+                        .as_i64()
+                        .zip(target.as_i64())
+                        .is_none_or(|(a, b)| a == b)
                     && l["entry_index"] != line["entry_index"]
             });
             if separate {
@@ -1023,7 +1026,9 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
                     // not taken although the order went in (NotApplied, a read-back that shows
                     // the old design): rests 3, 6, ... days and says so; at SWITCH_TRIES the
                     // separate line above takes over
-                    state.done.insert(format!("{fail_prefix}{}", fails + 1), now);
+                    state
+                        .done
+                        .insert(format!("{fail_prefix}{}", fails + 1), now);
                     note(
                         state,
                         "production_designs",
@@ -3199,7 +3204,10 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
     // name operatives by index, and those are recruited too (t1939n, 27 Nov 2026: the plan's
     // networks named operatives 0 and 1, the plan had no `operatives` key, nothing was recruited
     // and the alert stayed open 118 days with no reason).
-    let offered = state.manage.alert_since.contains_key("operative_recruitable")
+    let offered = state
+        .manage
+        .alert_since
+        .contains_key("operative_recruitable")
         && cfg["operatives"] != json!(0);
     if !(plan["intelligence"].is_object() || offered) || state.skipped(now, "mintel", "x") {
         return Ok(None);
@@ -4077,12 +4085,17 @@ mod tests {
         );
         // the fourth time the design starts on its own line, 10% of the old line's factories
         let out = step(&mut state, &tools, &plan, "l", at).unwrap().unwrap();
-        assert!(out.contains("separate line (3 factories) after 3 failed switches"), "{out}");
+        assert!(
+            out.contains("separate line (3 factories) after 3 failed switches"),
+            "{out}"
+        );
         let sent = actions(&tools);
         let last = sent.last().unwrap();
         assert_eq!(last.0, "hoi4_production_add");
         assert_eq!(last.1["design"], 5194);
-        assert!(state.done.contains_key("pdes:medium_tank_chassis:Panzer III S"));
+        assert!(state
+            .done
+            .contains_key("pdes:medium_tank_chassis:Panzer III S"));
     }
 
     #[test]
@@ -5501,9 +5514,15 @@ mod tests {
         let mut state = State::default();
         state.done.insert("intel:agency".into(), START);
         let out = intelligence_step(&mut state, &Run::new(&tools, &plan, "l", START)).unwrap();
-        assert_eq!(out.as_deref(), Some("intelligence operative 0 recruit: true Verified"));
+        assert_eq!(
+            out.as_deref(),
+            Some("intelligence operative 0 recruit: true Verified")
+        );
         let out = intelligence_step(&mut state, &Run::new(&tools, &plan, "l", START)).unwrap();
-        assert_eq!(out.as_deref(), Some("intelligence operative 1 recruit: true Verified"));
+        assert_eq!(
+            out.as_deref(),
+            Some("intelligence operative 1 recruit: true Verified")
+        );
         // no plan key at all: the game's offer alone recruits; `operatives: 0` declines it
         let mut state = State::default();
         state
@@ -5511,7 +5530,10 @@ mod tests {
             .alert_since
             .insert("operative_recruitable".into(), START);
         let out = intelligence_step(&mut state, &Run::new(&tools, &json!({}), "l", START)).unwrap();
-        assert_eq!(out.as_deref(), Some("intelligence operative 0 recruit: true Verified"));
+        assert_eq!(
+            out.as_deref(),
+            Some("intelligence operative 0 recruit: true Verified")
+        );
         let mut state = State::default();
         state
             .manage

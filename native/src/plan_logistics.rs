@@ -185,7 +185,11 @@ fn train_line_step(
         .iter()
         .find(|r| text(&r["archetype"]).starts_with("train_equipment"))
     else {
-        super::plan_manage::note(state, "logistics", "trains: the stockpile read has no train row");
+        super::plan_manage::note(
+            state,
+            "logistics",
+            "trains: the stockpile read has no train row",
+        );
         return Ok(None);
     };
     let stock = row["stockpile"].as_f64().unwrap_or(0.0);
@@ -501,8 +505,13 @@ mod tests {
         // every factory on a line: one leaves the largest line, then the train line opens
         let f = fake(20, 0);
         let mut state = State::default();
-        let line = logistics_step(&mut state, &f, &json!({}), "l", START).unwrap().unwrap();
-        assert!(line.contains("1 from infantry_equipment_2, 18 -> 17"), "{line}");
+        let line = logistics_step(&mut state, &f, &json!({}), "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            line.contains("1 from infantry_equipment_2, 18 -> 17"),
+            "{line}"
+        );
         let sent = f.sent.borrow();
         assert_eq!(sent[0].0, "hoi4_production_set");
         assert_eq!(sent[0].1["factories"], 17);
@@ -512,18 +521,26 @@ mod tests {
         // an idle factory: no line gives one
         let f = fake(21, 0);
         let mut state = State::default();
-        logistics_step(&mut state, &f, &json!({}), "l", START).unwrap().unwrap();
+        logistics_step(&mut state, &f, &json!({}), "l", START)
+            .unwrap()
+            .unwrap();
         assert_eq!(f.sent.borrow().len(), 1);
         // a line already makes trains, or the plan declines it: nothing sent, a reason noted
         let f = fake(20, 1);
         let mut state = State::default();
-        assert_eq!(logistics_step(&mut state, &f, &json!({}), "l", START).unwrap(), None);
+        assert_eq!(
+            logistics_step(&mut state, &f, &json!({}), "l", START).unwrap(),
+            None
+        );
         assert!(f.sent.borrow().is_empty());
         let note = super::super::plan_manage::digest(&state).unwrap()["logistics"].to_string();
         assert!(note.contains("a line makes them"), "{note}");
         let f = fake(20, 0);
         let off = json!({"logistics": {"trains": false}});
-        assert_eq!(logistics_step(&mut State::default(), &f, &off, "l", START).unwrap(), None);
+        assert_eq!(
+            logistics_step(&mut State::default(), &f, &off, "l", START).unwrap(),
+            None
+        );
         assert!(f.sent.borrow().is_empty());
     }
 }

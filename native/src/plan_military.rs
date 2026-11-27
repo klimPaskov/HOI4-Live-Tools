@@ -2888,7 +2888,10 @@ fn subs_of(tf: &Value) -> (u64, u64) {
     tf["ships_by_type"].as_object().map_or((0, 0), |m| {
         m.iter().fold((0, 0), |(subs, all), (kind, n)| {
             let n = n.as_u64().unwrap_or(0);
-            (subs + if kind.contains("submarine") { n } else { 0 }, all + n)
+            (
+                subs + if kind.contains("submarine") { n } else { 0 },
+                all + n,
+            )
         })
     })
 }
@@ -2930,7 +2933,9 @@ fn reserve_out(
             })
             .sum()
     };
-    let row = fleets.iter().find(|f| same_name(text(&f["fleet"]), reserve))?;
+    let row = fleets
+        .iter()
+        .find(|f| same_name(text(&f["fleet"]), reserve))?;
     for tf in list(row, "task_forces") {
         let name = text(&tf["task_force"]).to_string();
         if name.is_empty()
@@ -4797,14 +4802,19 @@ mod tests {
                  "ships_by_type": {"destroyer": 2}}]}]);
         let rows = fleets.as_array().unwrap();
         let state = State::default();
-        let (tool, args, _, what) =
-            reserve_out(&state, &json!({}), rows, None, START).unwrap();
+        let (tool, args, _, what) = reserve_out(&state, &json!({}), rows, None, START).unwrap();
         assert_eq!(tool, "hoi4_fleet_assign");
-        assert_eq!(args, json!({"task_force": "New subs", "to_fleet": "U-Boote"}));
+        assert_eq!(
+            args,
+            json!({"task_force": "New subs", "to_fleet": "U-Boote"})
+        );
         assert!(what.contains("4 ships, submarines"), "{what}");
         let keep = json!({"reserve": ["New subs"]});
         let (_, args, _, _) = reserve_out(&state, &keep, rows, None, START).unwrap();
-        assert_eq!(args, json!({"task_force": "New screens", "to_fleet": "Kriegsmarine"}));
+        assert_eq!(
+            args,
+            json!({"task_force": "New screens", "to_fleet": "Kriegsmarine"})
+        );
         // the move goes out once a week, not every tick
         let tools = fake(vec![("hoi4_fleets", json!({"fleets": fleets}))]);
         let plan = json!({"navy": {"posture": "coastal", "reserve": ["New screens"]}});

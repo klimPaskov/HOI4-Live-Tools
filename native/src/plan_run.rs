@@ -828,7 +828,7 @@ pub(super) struct LaneSaid {
 /// research stages), flattened under one key each; pure.
 fn all_notes(state: &State) -> BTreeMap<String, String> {
     let mut out: BTreeMap<String, String> = BTreeMap::new();
-    for (k, v) in &state.manage.notes {
+    for (k, v) in plan_manage::notes(state) {
         out.insert(format!("manage:{k}"), v.clone());
     }
     for (k, v) in plan_affairs::notes(state) {
@@ -878,10 +878,14 @@ fn record_turn(
         (None, _) if !changed.is_empty() => Some(changed.join("; ")),
         (None, _) => own,
     };
-    let entry = state.sched.said.entry(name.to_string()).or_insert(LaneSaid {
-        silent: true,
-        ..Default::default()
-    });
+    let entry = state
+        .sched
+        .said
+        .entry(name.to_string())
+        .or_insert(LaneSaid {
+            silent: true,
+            ..Default::default()
+        });
     entry.turns += 1;
     if let Some(line) = line {
         entry.line = line.chars().take(400).collect();
@@ -3049,10 +3053,7 @@ fn focus_lane_inner(
         state.stages.focus = Some((format!("focus: active {active}"), false));
     } else {
         let completed = strings(&focus, "completed");
-        state
-            .stages
-            .focus_urgent
-            .retain(|k| !completed.contains(k));
+        state.stages.focus_urgent.retain(|k| !completed.contains(k));
         let path = focus_order(
             &state.stages.focus_urgent,
             &strings(plan, "focus_path"),
@@ -6974,7 +6975,11 @@ fn disband_step(
         .collect();
     let Some(home) = plan_war::home_land(state, tools) else {
         state.skip(now, "disband", "all", 7 * DAY);
-        plan_manage::note(state, "disband", "the home land is unreadable: tried again in 7 days");
+        plan_manage::note(
+            state,
+            "disband",
+            "the home land is unreadable: tried again in 7 days",
+        );
         return Ok(None);
     };
     let supply = tools.call("hoi4_supply", &json!({}))?;
@@ -11259,7 +11264,10 @@ fn revise_missed(state: &mut State, checkpoint: &Value, rows: &[Truth]) {
         if *truth == Truth::True {
             continue;
         }
-        if let Some(key) = must.as_str().and_then(|m| m.strip_prefix("focus_completed:")) {
+        if let Some(key) = must
+            .as_str()
+            .and_then(|m| m.strip_prefix("focus_completed:"))
+        {
             let key = key.trim().to_string();
             if !key.is_empty() && !state.stages.focus_urgent.contains(&key) {
                 state.stages.focus_urgent.push(key);
@@ -12909,18 +12917,31 @@ mod tests {
         assert!(silent && why.contains("never stated a reason"), "{why}");
         // a turn that writes a note: the reason, and it outlives a later silent rest
         let before = super::all_notes(&state);
-        plan_manage::note(&mut state, "training", "Infanterie-Division: waits, infantry_equipment 0 below 950");
+        plan_manage::note(
+            &mut state,
+            "training",
+            "Infanterie-Division: waits, infantry_equipment 0 below 950",
+        );
         super::record_turn(&mut state, "training", None, &before, now + DAY);
         let before = super::all_notes(&state);
         super::record_turn(&mut state, "training", None, &before, now + 3 * DAY);
         let (why, silent) = super::lane_reason(&state, "training", now + 4 * DAY).unwrap();
-        assert!(!silent && why.contains("infantry_equipment 0 below 950"), "{why}");
+        assert!(
+            !silent && why.contains("infantry_equipment 0 below 950"),
+            "{why}"
+        );
         // the lane's own standing note is said again at each turn
         assert!(why.contains("1 day(s) ago"), "{why}");
         // an order is said; an owner under another name finds its lane; the player has no lane
         let before = super::all_notes(&state);
         state.last_ok = Some(false);
-        super::record_turn(&mut state, "extras", Some(&"doctrine x: false refused".to_string()), &before, now);
+        super::record_turn(
+            &mut state,
+            "extras",
+            Some(&"doctrine x: false refused".to_string()),
+            &before,
+            now,
+        );
         let (why, silent) = super::lane_reason(&state, "doctrines", now).unwrap();
         assert!(!silent && why.contains("refused: doctrine x"), "{why}");
         assert!(super::lane_reason(&state, "player (manage.alerts_ignore)", now).is_none());
@@ -12938,12 +12959,30 @@ mod tests {
             rests,
             vec![3 * DAY, 6 * DAY, 12 * DAY, 24 * DAY, 48 * DAY, 48 * DAY]
         );
-        super::decision_refused_note(&mut state, "d", " on FRA", "d@FRA", "input_readback_failed: x", 48 * DAY);
-        let n = plan_manage::note_of(&state, "decisions").unwrap().to_string();
-        assert!(n.contains("not taken: d on FRA 6 time(s) in a row") && n.contains("rests 48"), "{n}");
+        super::decision_refused_note(
+            &mut state,
+            "d",
+            " on FRA",
+            "d@FRA",
+            "input_readback_failed: x",
+            48 * DAY,
+        );
+        let n = plan_manage::note_of(&state, "decisions")
+            .unwrap()
+            .to_string();
+        assert!(
+            n.contains("not taken: d on FRA 6 time(s) in a row") && n.contains("rests 48"),
+            "{n}"
+        );
         assert!(n.contains("keeps showing no change"), "{n}");
-        assert_eq!(super::decision_rest(&mut state, "d@FRA", true, 7 * DAY), 30 * DAY);
-        assert_eq!(super::decision_rest(&mut state, "d@FRA", false, 8 * DAY), 3 * DAY);
+        assert_eq!(
+            super::decision_rest(&mut state, "d@FRA", true, 7 * DAY),
+            30 * DAY
+        );
+        assert_eq!(
+            super::decision_rest(&mut state, "d@FRA", false, 8 * DAY),
+            3 * DAY
+        );
     }
 
     /// t1939n (27 Nov 2026): GER_autonomy_in_the_kriegsschulen failed six starts on the GUI path
@@ -12959,7 +12998,10 @@ mod tests {
         fails.insert("a".into(), 1);
         assert_eq!(super::focus_order(&[], &path, &[], &fails), path);
         fails.insert("a".into(), super::FOCUS_GUI_FAILS);
-        assert_eq!(super::focus_order(&[], &path, &[], &fails), keys(&["b", "c", "a"]));
+        assert_eq!(
+            super::focus_order(&[], &path, &[], &fails),
+            keys(&["b", "c", "a"])
+        );
         assert_eq!(
             super::focus_order(&keys(&["c", "z"]), &path, &keys(&["z"]), &fails),
             keys(&["c", "b", "a"])
@@ -13276,7 +13318,11 @@ mod tests {
         )]);
         let mut state = State::default();
         assert_eq!(trade(&mut state, &tools, &plan, "l", 1_000).unwrap(), None);
-        assert!(tools.calls.borrow().iter().any(|(n, _)| n == "hoi4_resources"));
+        assert!(tools
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, _)| n == "hoi4_resources"));
         assert_eq!(plan_manage::note_of(&state, "trade"), Some("no deficit"));
         let resources = pass.iter().find(|l| l.0 == "resources").unwrap().1;
         resources(&mut state, &tools, &plan, "l", 1_000).unwrap();

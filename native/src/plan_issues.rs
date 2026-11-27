@@ -510,8 +510,8 @@ mod tests {
             json!({"id": "I1", "lane": "navy", "state": "overdue"}),
             json!({"id": "I2", "lane": "politics", "state": "open"}),
         ];
-        is.record_outcome("ship", "waiting", "navy: region North Sea not found", 24);
-        is.record_outcome("ship", "waiting", "navy: region North Sea not found", 48);
+        is.record_outcome("navy", "waiting", "navy: region North Sea not found", 24);
+        is.record_outcome("navy", "waiting", "navy: region North Sea not found", 48);
         let text = std::fs::read_to_string(dir.join("issue_outcomes.jsonl")).unwrap();
         assert_eq!(text.lines().count(), 1);
         assert!(text.contains("\"I1\"") && text.contains("waiting"));
@@ -548,7 +548,7 @@ mod tests {
             ..Default::default()
         };
         let lanes: Vec<String> = is.due_lanes().into_iter().map(|(l, _)| l).collect();
-        assert_eq!(lanes, ["dockyards", "ship", "politics"]);
+        assert_eq!(lanes, ["dockyards", "navy", "politics"]);
         assert!(is.take_turn("dockyards", 100));
         assert!(!is.take_turn("dockyards", 110));
         assert!(is.take_turn("dockyards", 130));
