@@ -2514,6 +2514,28 @@ pub(super) fn group_division_ptrs(r: &Reader<'_>, image: u64, group: u64) -> Res
     Ok(out)
 }
 
+/// engineer 95: the divisions an orders group commands (as `group_division_ptrs`) with the province each stands in
+/// (None while it moves between provinces or the read has none): the place a front's share is chosen by.
+pub(super) fn group_divisions_placed(
+    r: &Reader<'_>,
+    image: u64,
+    group: u64,
+) -> Result<Vec<(u64, Option<i32>)>> {
+    let u = ui(r)?;
+    let l = crate::construction::layout(r);
+    let mut out = Vec::new();
+    for division in group_division_ptrs(r, image, group)? {
+        let location = r.u64(division + u.division_location)?;
+        let province = if location != 0 && r.u64(location)? == image + l.province_vtable {
+            Some(r.i32(location + u.province_id)?)
+        } else {
+            None
+        };
+        out.push((division, province));
+    }
+    Ok(out)
+}
+
 /// engineer 75: the mouse detach's own refusals (a division not in the army, the army emptied), then the divisions'
 /// addresses for the in-process path, so both paths refuse the same calls.
 pub(super) fn detach_targets(
@@ -3848,6 +3870,26 @@ pub(super) fn order_ids(r: &Reader<'_>, image: u64, army: &str) -> Result<Vec<i3
         .collect();
     while let Some(n) = stack.pop() {
         out.push(n.id);
+        stack.extend(n.children);
+    }
+    Ok(out)
+}
+
+/// engineer 95: the divisions each order of `army` holds (every order id: fronts, their arrows and targets, the
+/// defensive lists), the read-back of an assignment.
+pub(super) fn order_divisions(
+    r: &Reader<'_>,
+    image: u64,
+    army: &str,
+) -> Result<BTreeMap<i32, usize>> {
+    let group = group_named(r, image, army)?;
+    let mut out = BTreeMap::new();
+    let mut stack: Vec<orders::OrderNode> = orders::group_orders(r, image, group)?
+        .into_iter()
+        .map(|(_, n)| n)
+        .collect();
+    while let Some(n) = stack.pop() {
+        out.insert(n.id, n.divisions);
         stack.extend(n.children);
     }
     Ok(out)

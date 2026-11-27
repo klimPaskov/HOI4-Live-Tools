@@ -751,6 +751,12 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "against": {
+      "description": "in-process only: the front along the whole own border against this tag (own_states narrows it), one front order per connected stretch",
+      "maxLength": 3,
+      "minLength": 3,
+      "type": "string"
+     },
      "army": {
       "type": "string"
      },
@@ -771,6 +777,37 @@
      },
      "lease_token": {
       "type": "string"
+     },
+     "own_states": {
+      "items": {
+       "maximum": 4095,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
+     },
+     "parent_order": {
+      "description": "in-process only: the plan order the new front hangs under (default: the army's one top order)",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "provinces": {
+      "description": "in-process only (family orders): the front's own provinces in drawing order; no drag. Each piece of the line on one theatre front section (the border against one enemy) becomes its own plan root (family orders2: one line per border for the whole group, the Shift+click form), all created in this call, each with its share of the group's divisions by length and place (the fronts the group already has included). Provinces no section holds are reported in in_process.coverage.uncovered and the receipt is Diverged (front_cut), never Verified",
+      "items": {
+       "maximum": 99999,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 1024,
+      "minItems": 1,
+      "type": "array"
+     },
+     "replace_order": {
+      "description": "in-process only: give this existing front order the new province path instead of adding a front (keeps its id)",
+      "minimum": 1,
+      "type": "integer"
      },
      "request_id": {
       "type": "string"
@@ -1014,6 +1051,33 @@
      "army": {
       "type": "string"
      },
+     "assign": {
+      "additionalProperties": false,
+      "description": "in-process only (family orders2: the plan bar's assign): divisions onto ONE order of the plan by its id (a front, or an offensive to put them in the attack): the listed division ids, or the count of the army's divisions standing nearest the order's line that it does not hold yet. Goes alone; verified by the order's division count read back",
+      "properties": {
+       "count": {
+        "maximum": 512,
+        "minimum": 1,
+        "type": "integer"
+       },
+       "divisions": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 512,
+        "minItems": 1,
+        "type": "array"
+       },
+       "order": {
+        "minimum": 1,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "order"
+      ],
+      "type": "object"
+     },
      "clear_orders": {
       "description": "true deletes every battle-plan order of the army or army group (the bar's delete button, right click, confirmed); goes alone; verified by no order left",
       "type": "boolean"
@@ -1022,6 +1086,30 @@
       "description": "deletes ONE battle-plan order by its id from the plan read-back (hoi4_armies plan: a front's offensives[].id): the bar's delete tool (left click), then a click on the order's arrow on the map; the front and every other order stay, so the front's divisions keep their planning bonus. Goes alone; verified by the id gone",
       "minimum": 1,
       "type": "integer"
+     },
+     "distribute": {
+      "description": "in-process only (family orders2): the army group's (or army's) divisions over its fronts (plan roots) by each front's weight (weights by front order id, default the front's length in provinces) and by place: each front keeps the divisions standing by it, the rest go to the nearest front with room, at least one per front while there are as many divisions as fronts; a front's new divisions go to its one offensive when it has one. The game puts every division of a new front on that front, so a group with two fronts drawn one after the other holds them all on the newest: distribute right after drawing fronts and whenever a front reads 0 divisions. Goes alone; verified by the division counts read back per order",
+      "oneOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "additionalProperties": false,
+        "properties": {
+         "weights": {
+          "additionalProperties": {
+           "minimum": 0,
+           "type": "number"
+          },
+          "type": "object"
+         }
+        },
+        "required": [
+         "weights"
+        ],
+        "type": "object"
+       }
+      ]
      },
      "execute": {
       "description": "true executes the plan, false stops it; may be left out only when mode is given",

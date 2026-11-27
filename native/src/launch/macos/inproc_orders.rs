@@ -368,6 +368,299 @@ pub(super) fn border_chains(
     chains
 }
 
+/// A plan root of an orders group as the module reads it (engineer 95): a front line in the group's top list, its
+/// provinces, the divisions it holds and its offensive arrows (kind 1) with theirs.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct RootRow {
+    pub id: i32,
+    pub provinces: Vec<i32>,
+    pub divisions: Vec<u64>,
+    pub arrows: Vec<(i32, Vec<u64>)>,
+}
+
+impl RootRow {
+    /// Every division the root carries: its own and its arrows'.
+    pub(super) fn all_divisions(&self) -> BTreeSet<u64> {
+        self.divisions
+            .iter()
+            .chain(self.arrows.iter().flat_map(|(_, d)| d.iter()))
+            .copied()
+            .collect()
+    }
+    /// The order an assignment to this front goes to: its one offensive arrow when it has exactly one (the attack
+    /// carries the division), else the root itself.
+    pub(super) fn assign_order(&self) -> i32 {
+        match self.arrows.as_slice() {
+            [(id, _)] => *id,
+            _ => self.id,
+        }
+    }
+}
+
+fn hex_list(v: &Value) -> Vec<u64> {
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|x| x.as_str())
+        .filter_map(|x| u64::from_str_radix(x.trim_start_matches("0x"), 16).ok())
+        .collect()
+}
+
+/// The group's plan roots from the module's order tree (top list, kind 2), in the tree's order.
+pub(super) fn root_rows(tree: &Value) -> Vec<RootRow> {
+    let mut out = Vec::new();
+    for list in tree["lists"].as_array().into_iter().flatten() {
+        if list["list"] != "top" {
+            continue;
+        }
+        for o in list["orders"].as_array().into_iter().flatten() {
+            if o["kind"].as_i64() != Some(2) {
+                continue;
+            }
+            let arrows = o["children"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|c| c["kind"].as_i64() == Some(1))
+                .map(|c| {
+                    (
+                        c["id"].as_i64().unwrap_or(0) as i32,
+                        hex_list(&c["division_ptrs"]),
+                    )
+                })
+                .collect();
+            out.push(RootRow {
+                id: o["id"].as_i64().unwrap_or(0) as i32,
+                provinces: o["provinces"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_i64)
+                    .map(|p| p as i32)
+                    .collect(),
+                divisions: hex_list(&o["division_ptrs"]),
+                arrows,
+            });
+        }
+    }
+    out
+}
+
+/// One order of the module's tree by id (any depth): its provinces and the divisions it holds.
+pub(super) fn order_row(tree: &Value, id: i32) -> Option<(Vec<i32>, Vec<u64>)> {
+    fn walk(o: &Value, id: i32) -> Option<(Vec<i32>, Vec<u64>)> {
+        if o["id"].as_i64() == Some(i64::from(id)) {
+            let provinces = o["provinces"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_i64)
+                .map(|p| p as i32)
+                .collect();
+            return Some((provinces, hex_list(&o["division_ptrs"])));
+        }
+        o["children"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find_map(|c| walk(c, id))
+    }
+    tree["lists"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|l| l["orders"].as_array().cloned().unwrap_or_default())
+        .find_map(|o| walk(&o, id))
+}
+
+/// The order a new path goes to (engineer 95, 28 Nov, from 1.20 0x100936950): SetPath writes the order's provinces
+/// (0x1008f91f0, no filter) and then re-derives every offensive arrow touched (0x1008f9290: an arrow, kind 1, gets
+/// its path computed again from its source front to its target line, 0x100b0f660 -> 0x1008ff270), so a path given to
+/// an ARROW is overwritten by the game's own and never reads back (w92c: set_path posted 9 times, executed 0). A new
+/// target line for an offensive goes to the arrow's target line (its kind-2 child); the arrow follows it. Any other
+/// order (a front, a fallback line) takes the path itself.
+pub(super) fn path_target(nodes: &[(List, OrderNode)], id: i32) -> i32 {
+    fn find(n: &OrderNode, id: i32) -> Option<&OrderNode> {
+        if n.id == id {
+            return Some(n);
+        }
+        n.children.iter().find_map(|c| find(c, id))
+    }
+    nodes
+        .iter()
+        .find_map(|(_, n)| find(n, id))
+        .filter(|n| n.kind == 1)
+        .and_then(|n| n.children.iter().find(|c| c.kind == 2))
+        .map_or(id, |line| line.id)
+}
+
+/// Shares of `n` divisions by `weights` (largest remainder; ties to the earlier target), every target at least one
+/// while there are as many divisions as targets: no front that faces an enemy is left with none.
+pub(super) fn quotas(n: usize, weights: &[f64]) -> Vec<usize> {
+    let k = weights.len();
+    if k == 0 {
+        return Vec::new();
+    }
+    let w: Vec<f64> = weights.iter().map(|x| x.max(0.0)).collect();
+    let total: f64 = w.iter().sum();
+    let floor = usize::from(n >= k);
+    let rest = n - floor * k;
+    let raw: Vec<f64> = if total > 0.0 {
+        w.iter().map(|x| x / total * rest as f64).collect()
+    } else {
+        vec![rest as f64 / k as f64; k]
+    };
+    let mut q: Vec<usize> = raw.iter().map(|x| x.floor() as usize).collect();
+    let mut left = rest - q.iter().sum::<usize>();
+    let mut order: Vec<usize> = (0..k).collect();
+    order.sort_by(|a, b| {
+        let fa = raw[*a] - raw[*a].floor();
+        let fb = raw[*b] - raw[*b].floor();
+        fb.partial_cmp(&fa)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.cmp(b))
+    });
+    for i in order {
+        if left == 0 {
+            break;
+        }
+        q[i] += 1;
+        left -= 1;
+    }
+    q.iter().map(|x| x + floor).collect()
+}
+
+/// The divisions split over the targets by place (engineer 95): each target keeps the divisions it holds already that
+/// stand nearer it than any other target, the nearest first, up to its quota; the rest go to the nearest target with room; a division with no
+/// place read fills what room is left. `divs` = (division, its map position), `current` = the target holding it (if
+/// any), `targets` = each target's line as map positions. The fewest divisions move: each move costs its planning.
+pub(super) fn split_by_place(
+    divs: &[(u64, Option<(f64, f64)>)],
+    current: &[Option<usize>],
+    targets: &[Vec<(f64, f64)>],
+    quota: &[usize],
+) -> Vec<Vec<u64>> {
+    let dist = |d: usize, t: usize| -> f64 {
+        match divs[d].1 {
+            Some((x, z)) => targets[t]
+                .iter()
+                .map(|(a, b)| (a - x).powi(2) + (b - z).powi(2))
+                .fold(f64::INFINITY, f64::min),
+            None => f64::INFINITY,
+        }
+    };
+    let mut out: Vec<Vec<u64>> = vec![Vec::new(); targets.len()];
+    let mut taken = vec![false; divs.len()];
+    // the target nearest a division (None without a place read)
+    let nearest = |d: usize| -> Option<usize> {
+        divs[d].1?;
+        (0..targets.len()).min_by(|a, b| {
+            dist(d, *a)
+                .partial_cmp(&dist(d, *b))
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.cmp(b))
+        })
+    };
+    // 1. each target keeps its own that stand nearer it than any other target (or have no place read), nearest first
+    for t in 0..targets.len() {
+        let mut mine: Vec<usize> = (0..divs.len())
+            .filter(|d| current.get(*d).copied().flatten() == Some(t))
+            .filter(|d| nearest(*d).is_none_or(|n| n == t))
+            .collect();
+        mine.sort_by(|a, b| {
+            dist(*a, t)
+                .partial_cmp(&dist(*b, t))
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.cmp(b))
+        });
+        for d in mine.into_iter().take(quota.get(t).copied().unwrap_or(0)) {
+            out[t].push(divs[d].0);
+            taken[d] = true;
+        }
+    }
+    // 2. the rest to the nearest target with room
+    let mut pairs: Vec<(f64, usize, usize)> = Vec::new();
+    for d in 0..divs.len() {
+        if taken[d] || divs[d].1.is_none() {
+            continue;
+        }
+        for t in 0..targets.len() {
+            pairs.push((dist(d, t), d, t));
+        }
+    }
+    pairs.sort_by(|a, b| {
+        a.0.partial_cmp(&b.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.1.cmp(&b.1))
+            .then(a.2.cmp(&b.2))
+    });
+    for (_, d, t) in pairs {
+        if !taken[d] && out[t].len() < quota.get(t).copied().unwrap_or(0) {
+            out[t].push(divs[d].0);
+            taken[d] = true;
+        }
+    }
+    // 3. what is left fills the room left, in target order
+    for d in 0..divs.len() {
+        if taken[d] {
+            continue;
+        }
+        if let Some(t) =
+            (0..targets.len()).find(|t| out[*t].len() < quota.get(*t).copied().unwrap_or(0))
+        {
+            out[t].push(divs[d].0);
+            taken[d] = true;
+        }
+    }
+    out
+}
+
+/// The pieces of `line` by the theatre front sections that hold them (engineer 95): a plan root binds to ONE section,
+/// and a section is the border against one enemy (ctl92a, 28 Nov 2026: 12 own provinces over the Dutch, Belgian and
+/// Luxembourg borders read back as the 8 on the Dutch one), so a line over several borders needs one root per
+/// section. Returns (front, section, the line's provinces in it) in the line's order of first appearance, and the
+/// provinces no section holds. A province two sections hold goes to the lower section id.
+pub(super) fn section_pieces(
+    fronts: &Value,
+    line: &[i32],
+) -> (Vec<(u64, i32, Vec<i32>)>, Vec<i32>) {
+    let mut holder: BTreeMap<i32, (i32, u64)> = BTreeMap::new();
+    for f in fronts["fronts"].as_array().into_iter().flatten() {
+        let Some(addr) = f["front"]
+            .as_str()
+            .and_then(|a| u64::from_str_radix(a.trim_start_matches("0x"), 16).ok())
+        else {
+            continue;
+        };
+        for s in f["sections"].as_array().into_iter().flatten() {
+            let Some(id) = s["id"].as_i64() else { continue };
+            for p in s["provinces"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_i64)
+            {
+                let e = holder.entry(p as i32).or_insert((id as i32, addr));
+                if (id as i32) < e.0 {
+                    *e = (id as i32, addr);
+                }
+            }
+        }
+    }
+    let mut pieces: Vec<(u64, i32, Vec<i32>)> = Vec::new();
+    let mut uncovered = Vec::new();
+    for p in line {
+        match holder.get(p) {
+            Some((sec, addr)) => match pieces.iter_mut().find(|(a, s, _)| a == addr && s == sec) {
+                Some(piece) => piece.2.push(*p),
+                None => pieces.push((*addr, *sec, vec![*p])),
+            },
+            None => uncovered.push(*p),
+        }
+    }
+    (pieces, uncovered)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -551,5 +844,107 @@ mod tests {
         let e = request("orders.execute", 0xabc, 0, &[], None, Some(1)).unwrap();
         assert_eq!(e["flag"], 1);
         assert!(request("orders.move", 0xabc, 1, &[], None, None).is_err());
+    }
+
+    #[test]
+    fn a_new_path_for_an_offensive_goes_to_its_target_line() {
+        let line = OrderNode {
+            kind: 2,
+            id: 26,
+            provinces: vec![9503, 1346],
+            ..Default::default()
+        };
+        let arrow = OrderNode {
+            kind: 1,
+            id: 27,
+            children: vec![line],
+            ..Default::default()
+        };
+        let root = OrderNode {
+            kind: 2,
+            id: 19,
+            children: vec![arrow],
+            ..Default::default()
+        };
+        let nodes = vec![(List::Top, root)];
+        assert_eq!(
+            path_target(&nodes, 27),
+            26,
+            "the arrow's path is the game's own"
+        );
+        assert_eq!(path_target(&nodes, 26), 26);
+        assert_eq!(path_target(&nodes, 19), 19, "a front takes its own path");
+        assert_eq!(path_target(&nodes, 99), 99);
+    }
+
+    #[test]
+    fn shares_follow_the_weights_and_leave_no_front_empty() {
+        assert_eq!(quotas(68, &[8.0, 4.0]), vec![45, 23]);
+        // a short front still gets one
+        assert_eq!(quotas(10, &[30.0, 0.5]), vec![9, 1]);
+        assert_eq!(quotas(1, &[1.0, 1.0]), vec![1, 0]);
+        assert_eq!(quotas(7, &[0.0, 0.0, 0.0]).iter().sum::<usize>(), 7);
+        assert!(quotas(5, &[]).is_empty());
+    }
+
+    #[test]
+    fn the_split_keeps_divisions_where_they_stand_and_moves_the_nearest() {
+        // two fronts: Holland at x 0, Belgium at x 100; six divisions all on the Belgian front (ctl92a), three of
+        // them standing by Holland
+        let divs = vec![
+            (1, Some((1.0, 0.0))),
+            (2, Some((2.0, 0.0))),
+            (3, Some((3.0, 0.0))),
+            (4, Some((99.0, 0.0))),
+            (5, Some((98.0, 0.0))),
+            (6, None),
+        ];
+        let current = vec![Some(1); 6];
+        let targets = vec![vec![(0.0, 0.0)], vec![(100.0, 0.0)]];
+        let split = split_by_place(&divs, &current, &targets, &[3, 3]);
+        // Belgium keeps those standing by it (4, 5) and the one with no place read (6); the three by Holland go there
+        assert_eq!(split[1], vec![4, 5, 6]);
+        assert_eq!(split[0], vec![1, 2, 3]);
+        // nothing moves when every front holds its share where it stands
+        let current = vec![Some(0), Some(0), Some(0), Some(1), Some(1), Some(1)];
+        let again = split_by_place(&divs, &current, &targets, &[3, 3]);
+        assert_eq!(again, vec![vec![1, 2, 3], vec![4, 5, 6]]);
+    }
+
+    #[test]
+    fn a_line_over_three_borders_is_one_piece_per_section() {
+        let fronts = json!({"theatre":"0x9","fronts":[
+            {"front":"0x100","sections":[{"id":4,"provinces":[1,2,3]},{"id":7,"provinces":[4,5]}]},
+            {"front":"0x200","sections":[{"id":2,"provinces":[6,7]}]}]});
+        let (pieces, uncovered) = section_pieces(&fronts, &[1, 2, 3, 4, 5, 6, 9]);
+        assert_eq!(
+            pieces,
+            vec![
+                (0x100, 4, vec![1, 2, 3]),
+                (0x100, 7, vec![4, 5]),
+                (0x200, 2, vec![6])
+            ]
+        );
+        assert_eq!(uncovered, vec![9]);
+    }
+
+    #[test]
+    fn roots_read_with_their_divisions_and_arrows() {
+        let tree = json!({"lists":[{"list":"top","orders":[
+            {"kind":2,"id":109,"provinces":[1,2],"division_ptrs":[],"children":[]},
+            {"kind":2,"id":110,"provinces":[3],"division_ptrs":["0xa","0xb"],"children":[
+                {"kind":1,"id":111,"division_ptrs":["0xa"],"children":[]}]}]},
+            {"list":"fallback","orders":[{"kind":2,"id":5,"provinces":[9],"division_ptrs":[]}]}]});
+        let roots = root_rows(&tree);
+        assert_eq!(roots.len(), 2);
+        assert_eq!(roots[0].id, 109);
+        assert!(roots[0].divisions.is_empty());
+        assert_eq!(roots[1].all_divisions(), BTreeSet::from([0xa, 0xb]));
+        assert_eq!(roots[1].assign_order(), 111);
+        assert_eq!(roots[0].assign_order(), 109);
+        assert_eq!(order_row(&tree, 111), Some((vec![], vec![0xa])));
+        assert_eq!(order_row(&tree, 110).map(|r| r.0), Some(vec![3]));
+        assert_eq!(order_row(&tree, 5).map(|r| r.0), Some(vec![9]));
+        assert!(order_row(&tree, 77).is_none());
     }
 }
