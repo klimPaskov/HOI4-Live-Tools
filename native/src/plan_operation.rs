@@ -4879,6 +4879,7 @@ fn reconcile(
         )?;
         if state.last_ok == Some(false) && stand.is_some() {
             state.done.insert(segfail, now);
+            let args = command_front(state, id, u, front_args(u, click, peace));
             let plain = order(
                 state,
                 tools,
@@ -4886,7 +4887,21 @@ fn reconcile(
                 id,
                 &format!("front of {} near state {click}", u.name),
                 "hoi4_army_front",
-                command_front(state, id, u, front_args(u, click, peace)),
+                args,
+            )?;
+            line = format!("{line}; {plain}");
+        }
+        // a front by command that did not read back is drawn by the mouse in the same call (an
+        // army without a front fights nowhere)
+        if state.last_ok == Some(false) && by_cmd(state, id) {
+            let plain = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("front of {} near state {click} (by the mouse)", u.name),
+                "hoi4_army_front",
+                front_args(u, click, peace),
             )?;
             line = format!("{line}; {plain}");
         }
