@@ -10,6 +10,8 @@ static const caps_fields FIELDS[] = {
     {"DFA875A5-25BA-35E0-9736-627F8A5C4396", "1.19.4.1 f584 macOS", 0x428, 0x47c, 0x4d8, 0x679, 0x103717d50, 24},
     /* 1.20.0.0 0c4f: every field unchanged, the tag array root moved (build migration map, matcher:global, high) */
     {"ED135FE5-CDA8-38E8-8835-3F7381B79974", "1.20.0.0 0c4f macOS", 0x428, 0x47c, 0x4d8, 0x679, 0x10371ced0, 24},
+    /* 1.20.1.0 724a: the code of 1.20.0.0 in place (scripts/game_migrate.py same-code: no image value touched) */
+    {"B8BF4554-DC8D-3381-B277-9F4E6230CBA5", "1.20.1.0 724a macOS", 0x428, 0x47c, 0x4d8, 0x679, 0x10371ced0, 24},
 };
 
 int caps_resolve(const scan_image *im, caps_table *t) {
