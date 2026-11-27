@@ -3120,19 +3120,47 @@ fn branch_of(state: &mut State, tools: &dyn Tools, now: GameHour, upgrade: &str)
 
 fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     let (tools, plan, now) = (run.tools, run.plan, run.now);
-    let cfg = &plan["intelligence"];
-    if !cfg.is_object() || state.skipped(now, "mintel", "x") {
+    let empty = json!({});
+    let cfg = if plan["intelligence"].is_object() {
+        &plan["intelligence"]
+    } else {
+        &empty
+    };
+    // A free operative slot the game offers (its operative_recruitable alert) is filled: an
+    // operative costs nothing to recruit and every network, operation and counter-intelligence
+    // needs one. `intelligence.operatives: 0` (with its why) declines. The networks and operations
+    // name operatives by index, and those are recruited too (t1939n, 27 Nov 2026: the plan's
+    // networks named operatives 0 and 1, the plan had no `operatives` key, nothing was recruited
+    // and the alert stayed open 118 days with no reason).
+    let offered = state.manage.alert_since.contains_key("operative_recruitable")
+        && cfg["operatives"] != json!(0);
+    if !(plan["intelligence"].is_object() || offered) || state.skipped(now, "mintel", "x") {
         return Ok(None);
     }
     let upgrades = list(cfg, "upgrades");
-    let operatives: Vec<Value> = match &cfg["operatives"] {
+    let mut operatives: Vec<Value> = match &cfg["operatives"] {
         Value::Number(n) => vec![Value::Null; n.as_u64().unwrap_or(0).min(16) as usize],
         Value::Array(entries) => entries.clone(),
         _ => Vec::new(),
     };
+    let named = list(cfg, "networks")
+        .iter()
+        .chain(list(cfg, "operations").iter())
+        .filter_map(|e| e["operative"].as_u64())
+        .map(|i| i as usize + 1)
+        .max()
+        .unwrap_or(0);
+    let recruited = (0..16)
+        .take_while(|i| state.done.contains_key(&format!("intel:op:{i}")))
+        .count();
+    let wanted = named.max(if offered { recruited + 1 } else { 0 }).min(16);
+    while operatives.len() < wanted {
+        operatives.push(Value::Null);
+    }
     let want_agency = cfg["agency"] == json!(true) && !state.done.contains_key("intel:agency");
     let has_ops = !list(cfg, "networks").is_empty() || !list(cfg, "operations").is_empty();
     if !want_agency && upgrades.is_empty() && operatives.is_empty() && !has_ops {
+        note(state, "intelligence", "the plan names no agency, upgrade, operative, network or operation, and the game offers no operative");
         return Ok(None);
     }
     let mut waits: Vec<String> = Vec::new();
@@ -5343,6 +5371,37 @@ mod tests {
         let sent = actions(&tools).len();
         step(&mut state, &tools, &plan, "l", at + 9 * DAY).unwrap();
         assert_eq!(actions(&tools).len(), sent);
+    }
+
+    /// t1939n (27 Nov 2026): the networks named operatives 0 and 1, the plan had no
+    /// `operatives` key and the game's operative_recruitable alert stayed open 118 days.
+    #[test]
+    fn operatives_the_networks_name_or_the_game_offers_are_recruited() {
+        let tools = fake(vec![]);
+        let plan = json!({"intelligence": {"networks": [
+            {"operative": 1, "state_id": 10, "target": "POL"}]}});
+        let mut state = State::default();
+        state.done.insert("intel:agency".into(), START);
+        let out = intelligence_step(&mut state, &Run::new(&tools, &plan, "l", START)).unwrap();
+        assert_eq!(out.as_deref(), Some("intelligence operative 0 recruit: true Verified"));
+        let out = intelligence_step(&mut state, &Run::new(&tools, &plan, "l", START)).unwrap();
+        assert_eq!(out.as_deref(), Some("intelligence operative 1 recruit: true Verified"));
+        // no plan key at all: the game's offer alone recruits; `operatives: 0` declines it
+        let mut state = State::default();
+        state
+            .manage
+            .alert_since
+            .insert("operative_recruitable".into(), START);
+        let out = intelligence_step(&mut state, &Run::new(&tools, &json!({}), "l", START)).unwrap();
+        assert_eq!(out.as_deref(), Some("intelligence operative 0 recruit: true Verified"));
+        let mut state = State::default();
+        state
+            .manage
+            .alert_since
+            .insert("operative_recruitable".into(), START);
+        let no = json!({"intelligence": {"operatives": 0}});
+        let out = intelligence_step(&mut state, &Run::new(&tools, &no, "l", START)).unwrap();
+        assert_eq!(out, None);
     }
 
     #[test]
