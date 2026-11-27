@@ -460,7 +460,9 @@ class CoverageKeys(unittest.TestCase):
                 # plan_military.rs: wings to the attacking armies (air_attach_rule)
                 "air_attach": {},
                 # plan_run.rs: the game's bulk paths, each off until its live probe passes
-                "bulk": []}
+                "bulk": [],
+                # plan_manage.rs: equipment the missing-equipment response leaves without a line
+                "unproduced_ok": [], "unproduced_ok_why": {}}
         for k, v in want.items():
             self.assertEqual(m[k]["default"], v, k)
         for k in ("casualty_ratio_max", "casualty_window_days", "casualty_min_losses", "casualty_rest_days"):

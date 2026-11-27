@@ -596,7 +596,24 @@ pub(super) fn missing_line_step(
     let lines = tools
         .call("hoi4_production_lines", &json!({"limit": 128}))
         .ok();
-    let needs: Vec<String> = unproduced_needs(stock.as_ref(), air.as_ref(), lines.as_ref())
+    let all = unproduced_needs(stock.as_ref(), air.as_ref(), lines.as_ref());
+    // the plan's reasons for the ones it leaves without a line
+    let left_ok: Vec<String> = all
+        .iter()
+        .filter_map(|e| ok_list.iter().find(|o| family(o) == family(e)))
+        .map(|o| {
+            let why = text(&plan["manage"]["unproduced_ok_why"][o.as_str()]);
+            format!(
+                "{o} left by the plan ({})",
+                if why.is_empty() {
+                    "no reason given"
+                } else {
+                    why
+                }
+            )
+        })
+        .collect();
+    let needs: Vec<String> = all
         .into_iter()
         .filter(|e| !ok_list.iter().any(|o| family(o) == family(e)))
         .collect();
@@ -608,7 +625,9 @@ pub(super) fn missing_line_step(
         note(
             state,
             key,
-            if needs.is_empty() {
+            if needs.is_empty() && !left_ok.is_empty() {
+                format!("missing equipment: {}", left_ok.join("; "))
+            } else if needs.is_empty() {
                 "missing equipment: every equipment the divisions lack and every plane the wings \
                  fly has a line (the alert's request comes from a garrison or a queued division, \
                  which the server does not read)"
@@ -1471,7 +1490,7 @@ fn stock_wait(stock: Option<&Value>, archetype: &str, held: f64, want: f64) -> S
     let row = stock.and_then(|s| {
         let name = archetype_row(s, archetype)?;
         list(s, "equipment")
-            .into_iter()
+            .iter()
             .find(|r| text(&r["archetype"]) == name)
     });
     let made = row
