@@ -912,6 +912,19 @@ fn step_reason(state: &State, alert: &str, step: &str) -> String {
         .unwrap_or_default()
 }
 
+/// Whether a lane's note is a wait with a horizon: every waiting part names the days or the date
+/// it ends (`waiting: ... about N days`, `waiting until 1939.10.1`). Lower-case text.
+pub(super) fn waits_with_horizon(lower: &str) -> bool {
+    let parts: Vec<&str> = lower.split("waiting").skip(1).collect();
+    !parts.is_empty()
+        && parts.iter().all(|p| {
+            let head: String = p.split(';').next().unwrap_or("").to_string();
+            head.contains(" days")
+                || head.contains(" day ")
+                || head.trim_start().starts_with("until ")
+        })
+}
+
 /// The game's open actionable alerts as omissions for the player's wake (`hoi4_wait_change`
 /// `now.omissions`): the item, how many game days it has been open, the game's own todo, the
 /// executor rule that owns it, that rule's dated note, and whether the note says there is
@@ -940,9 +953,12 @@ fn omission_rows(state: &State, read: &Value, ignore: &[String], now: GameHour) 
         let reason = step_reason(state, &name, owner);
         let note = reason.trim_start_matches("; ").to_string();
         let lower = note.to_lowercase();
+        // a wait with its horizon ("waiting: X ... about N days") is a reason, not a
+        // contradiction: the lane says when the work becomes possible
         let contradicts = ["no free", "none ", "nothing", "no idle", "no factory"]
             .iter()
-            .any(|w| lower.contains(w));
+            .any(|w| lower.contains(w))
+            && !waits_with_horizon(&lower);
         rows.push(json!({"item": name, "days_open": (now - since) / DAY,
             "todo": alert["todo"], "owner": owner,
             "owner_note": if note.is_empty() { Value::Null } else { json!(note) },
@@ -1340,15 +1356,9 @@ pub(super) fn training_step(
                 });
                 if let Some(held) = held {
                     if held < *n as f64 {
-                        note(
-                            state,
-                            "training",
-                            format!("{template}: waits, {archetype} stockpile {held:.0} below {n}"),
-                        );
-                        tell(
-                            &mut quiet,
-                            format!("{template}: waits, {archetype} stockpile {held:.0} below {n}"),
-                        );
+                        let wait = stock_wait(stock.as_ref(), archetype, held, *n as f64);
+                        note(state, "training", format!("{template}: {wait}"));
+                        tell(&mut quiet, format!("{template}: {wait}"));
                         state.skip(now, "train", &template, DAY);
                         continue 'entries;
                     }
@@ -1373,16 +1383,14 @@ pub(super) fn training_step(
         if let Some((archetype, held, need)) =
             batch_short(state, tools, now, &template, count, &guards)
         {
-            tell(
-                &mut quiet,
-                format!("{template}: waits, {archetype} stockpile {held:.0} below one batch's need {need:.0}"),
-            );
+            let stock = stockpile(state, tools, now);
+            let wait = stock_wait(stock.as_ref(), &archetype, held, need);
+            tell(&mut quiet, format!("{template}: {wait} (one batch's need)"));
             note(
                 state,
                 "training",
                 format!(
-                    "{template}: waits, {archetype} stockpile {held:.0} below one batch's need \
-                     {need:.0} (training is paced by what production can equip)"
+                    "{template}: {wait} (one batch's need: training is paced by what production can equip)"
                 ),
             );
             state.skip(now, "train", &template, DAY);
@@ -1453,6 +1461,43 @@ pub(super) fn training_step(
 /// The first archetype a fielded division of `template` needs, the plan's `guards` do not name,
 /// and the stockpile holds less of than `count` divisions need: (archetype, held, need). None
 /// when nothing is short, or when the template has no fielded division or the reads fail.
+/// The horizon of a training wait on `archetype` (hoi4_stockpile row): the days until the stock
+/// reaches `want` at the lines' daily output, the divisions' own shortfall filled first (the
+/// game reinforces before it equips a new batch). A wait with a horizon is a reason the monitor
+/// accepts (`waiting: ... about N days`); with nothing made it says so and stays an open issue
+/// for the production lane (w92b, 27 Nov 2026: "support_equipment stockpile 0 below 40" for 65
+/// days, flagged as a contradiction because it named no horizon).
+fn stock_wait(stock: Option<&Value>, archetype: &str, held: f64, want: f64) -> String {
+    let row = stock.and_then(|s| {
+        let name = archetype_row(s, archetype)?;
+        list(s, "equipment")
+            .into_iter()
+            .find(|r| text(&r["archetype"]) == name)
+    });
+    let made = row
+        .and_then(|r| r["produced_per_day"].as_f64())
+        .unwrap_or(0.0);
+    let front = row
+        .and_then(|r| r["fielded_short"].as_f64())
+        .unwrap_or(0.0)
+        .max(0.0);
+    if made > 0.0 {
+        let days = (((want - held).max(0.0) + front) / made).ceil();
+        let first = if front > 0.0 {
+            format!(", the divisions' shortfall of {front:.0} filled first")
+        } else {
+            String::new()
+        };
+        format!(
+            "waiting: {archetype} stockpile {held:.0} below {want:.0}, about {days:.0} days at +{made:.1}/day{first}"
+        )
+    } else {
+        format!(
+            "{archetype} stockpile {held:.0} below {want:.0} and no line makes it now (the production lane's lines answer)"
+        )
+    }
+}
+
 fn batch_short(
     state: &mut State,
     tools: &dyn Tools,
@@ -9417,11 +9462,31 @@ mod tests {
         );
         assert!(
             state.manage.notes["training"]
-                .contains("support_equipment stockpile 10 below one batch's need 60"),
+                .contains("support_equipment stockpile 10 below 60 and no line makes it now"),
             "{}",
             state.manage.notes["training"]
         );
+        assert!(!waits_with_horizon(
+            &state.manage.notes["training"].to_lowercase()
+        ));
         assert!(actions(&tools).is_empty());
+        // a line makes it: the wait names its horizon, the front's shortfall first, and the
+        // monitor reads it as a reason, not a contradiction (w92b: 65 days flagged)
+        let made = json!({"equipment": [
+            {"archetype": "infantry_equipment", "stockpile": 2000.0, "variants": []},
+            {"archetype": "support_equipment", "stockpile": 10.0, "variants": [],
+             "produced_per_day": 5.0, "fielded_short": 2.0}]});
+        let wait = stock_wait(Some(&made), "support_equipment", 10.0, 60.0);
+        assert_eq!(
+            wait,
+            "waiting: support_equipment stockpile 10 below 60, about 11 days at +5.0/day, the divisions' shortfall of 2 filled first"
+        );
+        let quiet = format!("training: nothing queued this turn: Inf: {wait}");
+        assert!(waits_with_horizon(&quiet.to_lowercase()));
+        assert!(!waits_with_horizon("nothing queued this turn: inf: rests"));
+        assert!(!waits_with_horizon(
+            "a: waiting: x about 3 days; b: waiting: y and no line makes it"
+        ));
         tools
             .replies
             .borrow_mut()
