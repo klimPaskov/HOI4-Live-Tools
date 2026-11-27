@@ -2286,7 +2286,14 @@ fn lanes_tick_inner(
     // and the routine pass (decisions, training, officer corps, the manage reads) never ran in
     // two 60-day legs (cmph1, cmps1, 27 Nov 2026: hoi4_decisions_list and hoi4_train never called).
     if plan["scheduler"]["issues_due"] != json!(false) && !state.round.issue_last {
-        if let Some(line) = issue_lanes(state, tools, plan, lease, now, &lanes)? {
+        if let Some(line) = issue_lanes(
+            state,
+            tools,
+            plan,
+            lease,
+            now,
+            &issue_owners(plan, war_first),
+        )? {
             trace_lanes(
                 now,
                 &format!("issue: {}", line.chars().take(60).collect::<String>()),
@@ -3377,6 +3384,42 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
             out.push(("disband", disband_step));
         }
     }
+    out
+}
+
+/// Steps of the war-first block that answer a monitor issue on their own: their lanes are not in
+/// a war-first plan's pass, so before them an issue of theirs found no lane and went to the player
+/// (cmph1, cmps1, 27 Nov 2026: eight armies without a general and an army group without a field
+/// marshal stayed open for a month as "no executor lane acts on it (command)" while free leaders
+/// waited; the command step sat sixth in the war block, behind steps that took every turn).
+const WAR_BLOCK_ISSUE_LANES: [Lane; 2] = [
+    ("command", plan_formations::command_step),
+    ("ship", plan_ship::step),
+];
+
+/// The lanes that can be offered for a monitor issue: the pass's lanes, and in a war-first plan
+/// the war block's own steps that answer an issue alone (WAR_BLOCK_ISSUE_LANES).
+fn issue_owners(plan: &Value, war_first: bool) -> Vec<Lane> {
+    let mut out = lanes(plan, war_first);
+    for lane in WAR_BLOCK_ISSUE_LANES {
+        if !out.iter().any(|(n, _)| *n == lane.0) {
+            out.push(lane);
+        }
+    }
+    out
+}
+
+/// The names of every lane that owns monitor issues (any plan): an issue of another lane goes to
+/// the player in the omissions feed.
+pub(super) fn issue_owner_names(plan: &Value) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = issue_owners(plan, true)
+        .iter()
+        .chain(issue_owners(plan, false).iter())
+        .map(|(n, _)| *n)
+        .chain(["research", "focus", "war"])
+        .collect();
+    out.sort_unstable();
+    out.dedup();
     out
 }
 
@@ -15607,6 +15650,39 @@ mod tests {
             "the country already has this adviser"
         ));
         assert!(!super::politics_already_held("not enough political power"));
+    }
+
+    #[test]
+    fn a_war_first_plan_offers_its_command_and_navy_steps_for_their_issues() {
+        // cmph1 (27 Nov 2026): army_without_general and army_group_without_field_marshal went to
+        // the player for a month: the command lane is not in a war-first pass
+        let plan = war_plan();
+        let pass: Vec<&str> = super::lanes(&plan, true).iter().map(|(n, _)| *n).collect();
+        assert!(!pass.contains(&"command"));
+        let owners: Vec<&str> = super::issue_owners(&plan, true)
+            .iter()
+            .map(|(n, _)| *n)
+            .collect();
+        for lane in ["command", "ship", "politics", "officer_corps"] {
+            assert!(owners.contains(&lane), "{lane}: {owners:?}");
+        }
+        assert_eq!(
+            owners.iter().filter(|n| **n == "command").count(),
+            1,
+            "{owners:?}"
+        );
+        // without the war first the pass has them already, once each
+        let calm: Vec<&str> = super::issue_owners(&plan, false)
+            .iter()
+            .map(|(n, _)| *n)
+            .collect();
+        assert_eq!(calm.iter().filter(|n| **n == "command").count(), 1);
+        assert_eq!(calm.iter().filter(|n| **n == "ship").count(), 1);
+        // and neither goes to the player as a lane no one owns
+        let names = super::issue_owner_names(&plan);
+        for lane in ["command", "ship", "hold", "research", "war"] {
+            assert!(names.contains(&lane), "{lane}: {names:?}");
+        }
     }
 
     #[test]

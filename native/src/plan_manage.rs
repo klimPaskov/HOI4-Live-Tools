@@ -955,11 +955,7 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
     // the run monitor's open issues that no executor lane acts on (a plan decision, a tool fault,
     // an escalated issue with its packet) go to the player with the rest (docs/MONITORING.md)
     state.issues.refresh();
-    let names: Vec<&str> = super::lanes(plan, true)
-        .iter()
-        .map(|(n, _)| *n)
-        .chain(["research", "focus", "war"])
-        .collect();
+    let names = super::issue_owner_names(plan);
     omissions.extend(state.issues.wake_rows(&names, Some(now)));
     omissions.sort_by_key(|r| -r["days_open"].as_i64().unwrap_or(0));
     // what the executor could act on now: a row with its owner's written reason to wait is not,
