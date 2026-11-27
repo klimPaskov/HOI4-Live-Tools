@@ -2319,6 +2319,19 @@ fn lanes_tick(
     Ok(out)
 }
 
+/// done-memory key: the last tick found nothing while a prepared operation's declaration is near.
+const DECLARING_IDLE: &str = "declidle";
+
+/// How long the run sleeps after a tick with nothing to do: twelve real seconds, but one while a
+/// declaration is near (the key `DECLARING_IDLE`, taken once), so the war goes out on its hour.
+fn nothing_pause(state: &mut State) -> Duration {
+    if state.done.remove(DECLARING_IDLE).is_some() {
+        Duration::from_secs(1)
+    } else {
+        Duration::from_secs(12)
+    }
+}
+
 /// `HOI4_TRACE_LANES=1`: one stderr line per scheduler decision (`[lanes] HOUR WHAT`), to see
 /// which branch takes the ticks in a live run; off by default.
 fn trace_lanes(now: GameHour, what: &str) {
@@ -2439,6 +2452,10 @@ fn lanes_tick_inner(
             ));
         }
         trace_lanes(now, "declaring: nothing");
+        // the run looks again soon, not after the idle sleep: twelve real seconds are a game day
+        // at speed 2, and the declaration due at midnight went out at 21:00 the next day
+        // (t1939o, 27 Nov 2026: "declaring: nothing" at 31 Aug 21:00, the next tick 1 Sep 21:00)
+        state.done.insert(DECLARING_IDLE.to_string(), now);
         return Ok(Tick::Nothing);
     }
     state.round.war_last = false;
@@ -12679,7 +12696,7 @@ pub fn run(
                 if !state.setup_noted {
                     note_setup(state, tools, actions.len(), None);
                 }
-                Duration::from_secs(12)
+                nothing_pause(state)
             }
         };
         if std::time::Instant::now() + pause >= deadline {
@@ -12983,6 +13000,25 @@ mod tests {
             Some("operation op: execute Army Group 1: true Verified")
         ));
         assert!(!super::burst_refused(false, None));
+    }
+
+    #[test]
+    fn a_tick_with_nothing_to_do_sleeps_short_while_a_declaration_is_near() {
+        let mut state = super::State::default();
+        assert_eq!(
+            super::nothing_pause(&mut state),
+            std::time::Duration::from_secs(12)
+        );
+        state.done.insert(super::DECLARING_IDLE.to_string(), 1);
+        assert_eq!(
+            super::nothing_pause(&mut state),
+            std::time::Duration::from_secs(1)
+        );
+        // taken once: the next idle tick sleeps the usual time unless the window says so again
+        assert_eq!(
+            super::nothing_pause(&mut state),
+            std::time::Duration::from_secs(12)
+        );
     }
 
     #[test]

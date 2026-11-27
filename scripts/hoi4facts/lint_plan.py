@@ -407,6 +407,11 @@ module's docstring has the detail:
   decision.condition       a planned decision closed (or opening late) under the plan's timeline
   politics.visible         an advisor or law the game never shows or allows the plan country
   politics.held_at_start   a plan pick whose idea the country already holds at the start (its history)
+  construction.requires_tech  a construction_plan building no start technology unlocks (lint_support.py)
+  projects.facility        a special project of a specialisation with no facility at the start (lint_support.py)
+  supply.trains            no train line from the start (lint_support.py)
+  supply.hubs              an operation's motorization without logistics.hubs (lint_support.py)
+  formations.keep          a formations.keep name that is neither a start nor a plan template (lint_support.py)
   diplomacy.borders_unheld  a declaration whose border states (gained ones included) no army covers
   plan.stop_date           stop_on_date before the run's end in a no-pause run
   manage.owner             an inventory item or alert with neither owner nor written reason
