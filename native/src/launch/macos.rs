@@ -7150,15 +7150,14 @@ impl MacClock {
             // the states the new arrow must reach: the line's states, or the one target state
             let want: Vec<i32> = across.clone().unwrap_or_else(|| vec![state]);
             let retry = actions.receipt_exists(id);
-            let family = if replace_order.is_some() {
+            // engineer 89: a plain new offensive is orders.new_front (family orders): COrderNewFrontCommand makes the
+            // arrow and its target line under the parent front, exactly as the X stroke does (s89a: the same tree)
+            let family = if replace_order.is_some() || !spearhead {
                 "orders"
             } else {
                 "orders2"
             };
-            let mut inproc_route = target
-                .as_ref()
-                .filter(|_| spearhead || replace_order.is_some())
-                .and_then(|_| inproc::route(family));
+            let mut inproc_route = target.as_ref().and_then(|_| inproc::route(family));
             if !retry && inproc_route.is_none() {
                 self.keys.preflight()?;
             }
@@ -7197,8 +7196,15 @@ impl MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 if let (Some(ch), Some(line)) = (inproc_route.as_mut(), target.as_ref()) {
-                    inproc_reply =
-                        offensive_in_process(process, ch, army, line, parent_order, replace_order)?;
+                    inproc_reply = offensive_in_process(
+                        process,
+                        ch,
+                        army,
+                        line,
+                        parent_order,
+                        replace_order,
+                        spearhead,
+                    )?;
                     return Ok(());
                 }
                 match &across {
@@ -8955,6 +8961,7 @@ fn offensive_in_process(
     line: &[i32],
     parent: Option<i32>,
     replace: Option<i32>,
+    spearhead: bool,
 ) -> Result<Value> {
     let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
     let nodes = inproc_orders::tree_nodes(&ch.orders_tree(group)?)?;
@@ -8982,7 +8989,13 @@ fn offensive_in_process(
                     format!("order {p} is not in {army}'s plan"),
                 ));
             }
-            inproc_orders::request2("orders2.spearhead", group, &[p as i64], line, &[], None)?
+            if spearhead {
+                inproc_orders::request2("orders2.spearhead", group, &[p as i64], line, &[], None)?
+            } else {
+                // engineer 89: the plain offensive: NewFront under the front (the arrow + its target line), the
+                // front's free divisions handed over as the X stroke hands them
+                inproc_orders::request("orders.new_front", group, p, line, None, None)?
+            }
         }
     };
     let reply = ch.orders_post(req)?;
@@ -9144,8 +9157,9 @@ fn new_root_in_process(
     Ok((root, reply))
 }
 
-/// The stated front through the module: read the army's plan, resolve the province chains, then one
-/// orders.new_front per chain under the parent (or one orders.set_path on `replace_order`, the first chain).
+/// The stated front through the module: read the army's plan, resolve the province chains, then one plan root
+/// (orders2.new_root, bound to the theatre front section holding the chain) per chain (or one orders.set_path on
+/// `replace_order`, the first chain).
 /// The journal's settle (one more battle-plan order on the army, from the external read) stays the authority.
 fn front_in_process(
     process: &dyn Process,
@@ -9188,40 +9202,21 @@ fn front_in_process(
         let req = inproc_orders::request("orders.set_path", group, order, &chains[0], None, None)?;
         replies.push(ch.orders_post(req)?);
     } else {
-        let no_top = !nodes.iter().any(|(l, _)| *l == armies::orders::List::Top);
-        let mut ids = ids;
-        let parent = match st.parent.or_else(|| inproc_orders::default_parent(&nodes)) {
-            Some(p) => p,
-            // engineer 74: an empty plan gets its root first (orders2.new_root, the plan bar's front button), bound
-            // to the theatre front section that holds the stated line; split 0 = one line for the whole group (the
-            // Shift+click form for an army group, the only form for an army)
-            None if st.parent.is_none()
-                && no_top
-                && inproc::family_usable(&ch.hello, "orders2", inproc::mode()) =>
-            {
-                let (root, reply) = new_root_in_process(process, ch, group, &chains[0])?;
-                replies.push(reply);
-                ids.insert(root);
-                root
-            }
-            None => {
-                return Err(Error::new(
-                    "plan_parent_unknown",
-                    format!(
-                        "{army}'s plan has no single top order: name parent_order (one of {ids:?})"
-                    ),
-                ))
-            }
-        };
-        if !ids.contains(&parent) {
+        // engineer 89 (s89a/s89b, 27 Nov): COrderNewFrontCommand is the OFFENSIVE (an arrow and its target line in
+        // enemy land under the parent front; the game drops every own province), so a front line by command is a plan
+        // root bound to the theatre front section holding the chain, one per chain (an army or army group may hold
+        // several fronts). A root needs no parent: parent_order is ignored here. s89b: the root equals the Z click's
+        // order field by field (kind, flags, provinces, divisions) in 0.48 s against 2.72 s
+        let _ = (st.parent, ids);
+        if !inproc::family_usable(&ch.hello, "orders2", inproc::mode()) {
             return Err(Error::new(
-                "invalid_arguments",
-                format!("order {parent} is not in {army}'s plan"),
+                "inproc_refused",
+                "a front line by command is a plan root (family orders2), which is not usable here",
             ));
         }
         for chain in &chains {
-            let req = inproc_orders::request("orders.new_front", group, parent, chain, None, None)?;
-            replies.push(ch.orders_post(req)?);
+            let (_, reply) = new_root_in_process(process, ch, group, chain)?;
+            replies.push(reply);
         }
     }
     for r in &replies {
