@@ -3456,3 +3456,31 @@ fn a_front_the_game_keeps_removing_is_drawn_again_every_time() {
         );
     }
 }
+
+/// t1939k (24 Nov 2026): the handover draws the fronts of the next operation's orderless
+/// holds, mobile and wing armies first (holds ahead), never one that has an order or is not on
+/// the map, and never a group or line army (the group's front carries those).
+#[test]
+fn handover_draws_orderless_own_front_armies_first() {
+    let f = json!({"enemy": "HOL", "own_states": [57], "click_state": 36});
+    let o = json!({"target_line": [35, 7]});
+    let units = vec![
+        unit("Panzer".into(), Role::Mobile, &f, &o),
+        unit("Nord".into(), Role::Wing, &f, &o),
+        unit("WestA".into(), Role::Hold, &f, &o),
+        unit("Mitte".into(), Role::Line, &f, &o),
+        unit("Army Group 1".into(), Role::Group, &f, &o),
+        unit("Gone".into(), Role::Wing, &f, &o),
+    ];
+    let roster = json!({"armies": [
+        {"army": "Panzer", "plan": []},
+        {"army": "Nord", "plan": [{"kind": "front"}]},
+        {"army": "WestA", "plan": []},
+        {"army": "Mitte", "plan": []}],
+        "army_groups": [{"army_group": "Army Group 1", "plan": []}]});
+    let names: Vec<&str> = orderless_first(&units, &roster)
+        .iter()
+        .map(|u| u.name.as_str())
+        .collect();
+    assert_eq!(names, vec!["WestA", "Panzer"]);
+}

@@ -3230,6 +3230,27 @@ fn front_point_province(process: &dyn Process, army: &str, state: i32) -> Result
 }
 /// Arrow-key taps the front's border point may take to reach the middle of the map area.
 const FRONT_PAN_TAPS: usize = 8;
+/// Wheel steps in at most, and the screen span (pixels between a segment's farthest projected
+/// points) a segment front needs before its ends can be dragged between.
+const SEGMENT_ZOOM_STEPS: usize = 3;
+const SEGMENT_MIN_SPAN: f64 = 60.0;
+
+/// The largest distance between two projected points; None when a point is off the view.
+fn screen_span(points: &[Option<(f64, f64)>]) -> Option<f64> {
+    let pts: Vec<(f64, f64)> = points.iter().copied().collect::<Option<Vec<_>>>()?;
+    let mut best: f64 = 0.0;
+    for (n, a) in pts.iter().enumerate() {
+        for b in &pts[n + 1..] {
+            best = best.max((a.0 - b.0).hypot(a.1 - b.1));
+        }
+    }
+    Some(best)
+}
+
+/// The map area a segment drag's points must lie in (the one the drag itself checks).
+fn segment_point_fits(p: (f64, f64)) -> bool {
+    (300.0..1700.0).contains(&p.0) && (120.0..860.0).contains(&p.1)
+}
 
 pub(super) fn front(
     process: &dyn Process,
@@ -3355,6 +3376,50 @@ pub(super) fn front(
             ))?
         ));
     }
+    // A short segment (Luxembourg's border with one German state at the map zoom) projects to
+    // points a few pixels apart: both snap to the same highlighted pixel and no drag can be
+    // made (t1939m, 24 Nov 2026: "not highlighted at two points or more at this zoom" for a
+    // wing's front toward Luxembourg, three times). Wheel in at the segment's middle until its
+    // ends lie far enough apart to drag between, and back out a step if an end leaves the map
+    // area.
+    if let (Some(path), Some((x, y, z))) = (ends.as_deref(), near) {
+        let span = |process: &dyn Process| -> Result<(Option<f64>, bool)> {
+            read(process, |r, i| {
+                let pts = path
+                    .iter()
+                    .map(|p| super::screenmap::to_screen_at(r, i, p.0, p.1, p.2))
+                    .collect::<Result<Vec<_>>>()?;
+                Ok((
+                    screen_span(&pts),
+                    pts.iter().all(|p| p.is_some_and(segment_point_fits)),
+                ))
+            })
+        };
+        for _ in 0..SEGMENT_ZOOM_STEPS {
+            let (Some(len), true) = span(process)? else {
+                break;
+            };
+            if len >= SEGMENT_MIN_SPAN {
+                break;
+            }
+            let Some(at) = read(process, |r, i| {
+                super::screenmap::to_screen_at(r, i, x, y, z)
+            })?
+            else {
+                break;
+            };
+            keys.scroll_burst(GAME, at, 240, 1)?;
+            crate::phase::sleep(std::time::Duration::from_millis(80));
+            super::screenmap::wait_camera_still(process, 600);
+            if !span(process)?.1 {
+                keys.scroll_burst(GAME, at, -240, 1)?;
+                crate::phase::sleep(std::time::Duration::from_millis(80));
+                super::screenmap::wait_camera_still(process, 600);
+                break;
+            }
+        }
+        super::ui::trace("front: segment zoom", t0);
+    }
     // The fronts this army can take are highlighted only in front-line
     // drawing, in a colour that varies by army and lighting; compare one
     // capture before Z with one after it, at the same camera position.
@@ -3438,8 +3503,7 @@ pub(super) fn front(
                 .map(|p| super::screenmap::to_screen_at(r, i, p.0, p.1, p.2))
                 .collect::<Result<Vec<_>>>()
         })?;
-        let inside =
-            |p: &(f64, f64)| (300.0..1700.0).contains(&p.0) && (120.0..860.0).contains(&p.1);
+        let inside = |p: &(f64, f64)| segment_point_fits(*p);
         let mut pts: Vec<(f64, f64)> = Vec::new();
         for p in screen {
             let Some(p) = p.filter(inside) else {
@@ -5409,6 +5473,18 @@ pub(super) fn split(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_segment_span_is_its_farthest_points_and_unknown_off_the_view() {
+        assert_eq!(
+            super::screen_span(&[Some((0.0, 0.0)), Some((3.0, 4.0)), Some((1.0, 1.0))]),
+            Some(5.0)
+        );
+        assert_eq!(super::screen_span(&[Some((10.0, 10.0))]), Some(0.0));
+        assert_eq!(super::screen_span(&[Some((0.0, 0.0)), None]), None);
+        assert!(super::segment_point_fits((960.0, 540.0)));
+        assert!(!super::segment_point_fits((200.0, 540.0)));
+    }
     #[test]
     fn several_own_states_face_every_state_beside_them_the_target_first() {
         let mut adj: BTreeMap<i32, BTreeSet<i32>> = BTreeMap::new();

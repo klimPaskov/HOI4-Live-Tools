@@ -32,11 +32,18 @@ from . import issue_rules as R
 from . import answer
 from .runlogs import game_days
 
-ESCALATIONS_PER_YEAR = 24
+# A model is asked for every acted-but-open issue past its deadline (Tier 1) and every overdue high-severity
+# issue (Tier 2); the money caps (budget.py: per run, per day, the floor) bound the spend, this count only
+# stops a runaway (owner, 27 Nov 2026: use the API where it buys reliability; 24 a game year left most
+# acted-but-open issues unanswered in t1939l/t1939m).
+ESCALATIONS_PER_YEAR = 400
 MAX_PACKET_CHARS = 5000          # about 1,300 tokens
 ANSWER_KINDS = ("action", "plan_edit", "leave")
 TIER1_CLASSES = ("idling", "gameplay", "tool_use")
 COOLDOWN_DAYS = 14       # one escalation of a kind per two game weeks: the answer covers its siblings
+ACTED = "the owning lane acted and it stayed"
+HIGH = "high severity and past its deadline"
+EVERY = (ACTED, HIGH)    # asked per issue: no sibling cooldown, no lane bundle
 
 
 def allowed_responses(issue):
@@ -122,6 +129,7 @@ class Escalator:
         self.log = []
         self.recent = []         # recent refusals and actions for packets
         self.lane_packets = {}   # lane -> (game days, first issue id, packet path) of its open review
+        self.asked = set()       # issue ids asked per issue (EVERY): one answer each
 
     def note(self, line):
         self.recent.append(line)
@@ -139,6 +147,9 @@ class Escalator:
             return "recurring after resolution"
         if event == "overdue" and issue.get("code") in R.ALTERNATIVES and issue.get("severity") == "high":
             return "a judgement between named alternatives"
+        if event == "overdue" and issue.get("acts"):
+            # the lane acted and the issue outlived its deadline: the remedy did not hold
+            return ACTED
         if event == "overdue" and issue["class"] in ("idling", "gameplay") and (
                 issue.get("lane_outcome") or issue.get("lane_reason") or issue.get("acts")
                 or any(R.LANE_KINDS.get(issue.get("lane") or "", ()))):
@@ -151,11 +162,9 @@ class Escalator:
         if event == "overdue":
             if issue.get("code") in R.ALTERNATIVES:
                 return "a judgement between named alternatives"
-            if issue.get("acts"):
-                return "the owning lane acted and it stayed"
             if not any(R.LANE_KINDS.get(issue.get("lane") or "", ())):
                 return "no executor lane owns it"
-            return None
+            return HIGH
         if event == "stale" and issue.get("severity") in ("high", "medium") and not issue.get("acts"):
             return "the owning lane did not act by twice its deadline"
         return None
@@ -169,7 +178,10 @@ class Escalator:
         last = self.last_by_code.get(code)
         days = game_days(date) if date else None
         lane = issue.get("lane") or ""
-        if why.startswith("offered to its lane") and lane in self.lane_packets and days is not None and \
+        every = why in EVERY
+        if every and issue["id"] in self.asked:
+            return None   # this issue was asked once already: its answer stands
+        if not every and why.startswith("offered to its lane") and lane in self.lane_packets and days is not None and \
                 days - self.lane_packets[lane][0] < COOLDOWN_DAYS:
             # the lane's open packet takes this issue too: one model answer per lane review, so a
             # backlog of a lane's overdue issues is weighed together inside the yearly budget
@@ -182,13 +194,17 @@ class Escalator:
                    "bundled_into": first}
             self._write(rec)
             return rec
-        if last is not None and days is not None and days - last < COOLDOWN_DAYS:
+        if not every and last is not None and days is not None and days - last < COOLDOWN_DAYS:
             return None  # the same kind was escalated lately: its answer covers this one too
         if self.used.get(year, 0) >= self.per_year:
             self._write({"date": date, "id": issue["id"], "key": issue["key"], "tier": 1, "why": why,
                          "skipped": "budget for the game year used"})
             return None
         self.used[year] = self.used.get(year, 0) + 1
+        if every:
+            self.asked.add(issue["id"])
+        # Tier 2 (the strong model) for a high-severity issue past its deadline, Tier 1 for the rest
+        tier = 2 if issue.get("severity") == "high" and event == "overdue" else 1
         if days is not None:
             self.last_by_code[code] = days
         lessons = []
@@ -205,21 +221,22 @@ class Escalator:
             f.write(packet + "\n")
         if why.startswith("offered to its lane") and days is not None:
             self.lane_packets[issue.get("lane") or ""] = (days, issue["id"], path)
-        rec = {"date": date, "id": issue["id"], "key": issue["key"], "tier": 1, "why": why,
+        rec = {"date": date, "id": issue["id"], "key": issue["key"], "tier": tier, "why": why,
                "packet_chars": len(packet), "packet_tokens_est": len(packet) // 4, "lessons": [x["id"] for x in lessons],
                "delivered": "player wake (issues_open.json packet)"}
         if self.live and self.answer_cmd:
             rec.update(self._ask(packet, issue))
         elif self.live and answer.available() is None:
-            rec.update(self._ask_api(packet, issue))
+            rec.update(self._ask_api(packet, issue, tier))
         self._write(rec)
         if rec.get("tokens") and rec.get("delivered") != "api":
             self._cost_row(rec)  # the run's own cost file (the API path wrote its row already)
         return rec
 
-    def _ask_api(self, packet, issue):
-        """Tier 1 on the API key (answer.py: budget checked first, usage written to the ledger)."""
-        out = answer.ask(packet, tier=1, run=self.run_name)
+    def _ask_api(self, packet, issue, tier=1):
+        """An escalation on the API key (answer.py: budget checked first, usage written to the ledger):
+        Tier 1 the small model, Tier 2 the strong one, both answering in the escalation format."""
+        out = answer.ask(packet, tier=tier, run=self.run_name, role="escalation", system=answer.SYSTEM[1])
         if "error" in out:
             return {"answered": False, "error": out["error"], "seconds": out.get("seconds")}
         ans, why = validate_answer(out["result"], issue)
@@ -272,11 +289,12 @@ class Escalator:
 
 # --- gate packets (Tier 2) ------------------------------------------------------------------------
 
-GATE_TRIGGERS = ("war_declared", "capitulated", "war_ended", "new_year", "run_end", "failure")
+GATE_TRIGGERS = ("war_declared", "capitulated", "war_ended", "new_year", "run_end", "failure", "days_60")
+GATE_EVERY_DAYS = 60     # a gate every 60 game days between the event gates
 
 
-def gate_kind(prev_date, snap, failure=None):
-    """The gate this snapshot opens, if any."""
+def gate_kind(prev_date, snap, failure=None, last_gate=None):
+    """The gate this snapshot opens, if any (`last_gate`: the game date of the last gate written)."""
     if failure:
         return "failure"
     trig = str(snap.get("trigger") or "")
@@ -287,6 +305,9 @@ def gate_kind(prev_date, snap, failure=None):
         return "new_year"
     if trig == "end":
         return "run_end"
+    now, last = game_days(snap.get("date")), game_days(last_gate) if last_gate else None
+    if now is not None and last is not None and now - last >= GATE_EVERY_DAYS:
+        return "days_60"
     return None
 
 

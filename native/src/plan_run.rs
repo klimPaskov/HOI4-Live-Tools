@@ -345,6 +345,7 @@ mod plan_issues;
 // Game speed by the war the country manages (peace 3, a war to manage 2; a human's choice kept).
 #[path = "plan_speed.rs"]
 mod plan_speed;
+pub use plan_speed::note_agent_speed;
 // One spending order per experience pool (plan key `xp_budget`).
 #[path = "plan_xp.rs"]
 mod plan_xp;
@@ -2280,7 +2281,8 @@ fn lanes_tick_inner(
             plan_operation::executing_any(state),
             state.sched.turns.get(name).copied(),
             now,
-        ) {
+        ) || opening_holds(state, tools, plan, name, now)
+        {
             continue;
         }
         // the air lanes wait while a prepared operation's declaration is near (see
@@ -2326,6 +2328,7 @@ fn issue_lanes(
             state.sched.turns.get(name).copied(),
             now,
         ) || (name.starts_with("air") && air_waits_for_war(state, tools, plan, now))
+            || opening_holds(state, tools, plan, name, now)
             || !state.issues.take_turn(name, now)
         {
             continue;
@@ -3682,7 +3685,32 @@ fn production_step(
                 );
             }
         }
-        let (ok, why) = state.act(tools, lease, "hoi4_production_add", args, "pr")?;
+        let (mut ok, mut why) =
+            state.act(tools, lease, "hoi4_production_add", args.clone(), "pr")?;
+        // the named model is not offered while a newer one of its kind is (a 1939 start offers
+        // the Submarine II hull and no Submarine I): the next newer offered of its kind, at once
+        // (t1939k, 24 Nov 2026: the U-boat line was given up after one refusal and the dockyards
+        // stood idle through the Polish war)
+        if !ok && why.contains("No producible design") {
+            // the refusal's list of offered models is cut short in the receipt: the offered
+            // newer model named there, else the next two model numbers, one call each
+            let tries: Vec<String> = match newer_offered(&equipment, &why) {
+                Some(newer) => vec![newer],
+                None => successors(&equipment, 2),
+            };
+            for newer in tries {
+                args["equipment"] = json!(newer);
+                let (ok2, why2) =
+                    state.act(tools, lease, "hoi4_production_add", args.clone(), "pr")?;
+                (ok, why) = (
+                    ok2,
+                    format!("{why2} ({equipment} not offered: {newer} tried)"),
+                );
+                if ok || !why2.contains("No producible design") {
+                    break;
+                }
+            }
+        }
         if ok {
             state.done.insert(format!("prod:{equipment}"), now);
             // the line's age for the mature-line guard (plan_affairs.rs): only lines the
@@ -3694,6 +3722,35 @@ fn production_step(
         return Ok(Some(format!("production {equipment}: {ok} {why}{held}")));
     }
     Ok(None)
+}
+
+/// The next newer model of `equipment`'s kind (its name without the trailing `_<n>`) that a
+/// production refusal lists as offered (the nearest to what the plan asked). Pure.
+fn newer_offered(equipment: &str, why: &str) -> Option<String> {
+    let (_, offered) = why.split_once("offered: ")?;
+    let split = |name: &str| -> Option<(String, u32)> {
+        let (base, n) = name.rsplit_once('_')?;
+        Some((base.to_string(), n.parse().ok()?))
+    };
+    let (base, asked) = split(equipment)?;
+    offered
+        .split(',')
+        .map(|t| t.trim().trim_end_matches(['.', ')', ';']))
+        .filter_map(|t| split(t).map(|(b, n)| (b, n, t.to_string())))
+        .filter(|(b, n, _)| *b == base && *n > asked)
+        .min_by_key(|(_, n, _)| *n)
+        .map(|(_, _, t)| t)
+}
+
+/// The next `n` model names after `equipment` (`ship_hull_submarine_1` -> `_2`, `_3`). Pure.
+fn successors(equipment: &str, n: u32) -> Vec<String> {
+    let Some((base, num)) = equipment.rsplit_once('_') else {
+        return Vec::new();
+    };
+    let Ok(num) = num.parse::<u32>() else {
+        return Vec::new();
+    };
+    (1..=n).map(|i| format!("{base}_{}", num + i)).collect()
 }
 
 /// The organisation a `production` entry names for its line (`organization`, or `organisation`).
@@ -3716,6 +3773,19 @@ fn air_waits_for_war(state: &mut State, tools: &dyn Tools, plan: &Value, now: Ga
     !state.war_active
         && plan_operation::awaiting_war(state)
         && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD)
+}
+
+/// The slow GUI lanes (WAR_DEFERRED_LANES) wait while a prepared operation's declaration is due
+/// or near, with no cap: one design-company step by mouse ran 77 s at speed 3 from 25 August and
+/// the Polish declaration due on 1 September went out on the 16th (t1939l, 24 Nov 2026).
+fn opening_holds(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    name: &str,
+    now: GameHour,
+) -> bool {
+    WAR_DEFERRED_LANES.contains(&name) && air_waits_for_war(state, tools, plan, now)
 }
 
 /// Wall seconds the operations' burst may take between two declarations due the same day.
@@ -6160,6 +6230,11 @@ fn item_failed(state: &mut State, item: &Value, key: &str, label: &str, why: &st
         entry.0
     };
     if !hopeless && tries < PLAN_ITEM_TRIES {
+        // a refused item rests a week per failure before the next try: sent again on the next
+        // tick it met the same refusal (t1939l/t1939m, 24 Nov 2026: an anti-air building in a
+        // state with no free slot, 14 s of mouse input each, retried unchanged in the last days
+        // before the declaration)
+        state.skip(now, "cplan", key, 7 * DAY * GameHour::from(tries));
         return;
     }
     state.plan_tries.remove(key);
@@ -6849,6 +6924,16 @@ fn construction_step(
                 std::cmp::Reverse(state.con.free.get(id).map_or(1, |(f, _)| (*f).min(99)))
             });
         }
+        // a state that took this building in the last week goes after the others: the same
+        // count-1 order to the same state twice in a week read as a duplicate action (t1939k,
+        // 24 Nov 2026: 8 of 13 duplicate issues were air bases added one level at a time to one
+        // state while other listed states took none); the order is stable otherwise
+        eligible.sort_by_key(|id| {
+            state
+                .done
+                .get(&format!("conlast:{building}:{id}"))
+                .is_some_and(|at| now - *at < 7 * DAY)
+        });
         let Some(&id) = eligible.first() else {
             continue;
         };
@@ -6879,6 +6964,7 @@ fn construction_step(
             continue;
         }
         if ok {
+            state.done.insert(format!("conlast:{building}:{id}"), now);
             state.con.full_streak.remove(&full_key(&building, id));
             state.con.fails.remove(&id);
             state.con.queued_total += count as u64;
@@ -13402,6 +13488,45 @@ mod tests {
         assert!(state.con.digest.clone().unwrap().contains("55:full"));
     }
 
+    /// t1939k (24 Nov 2026): a state that took this building in the last week goes after the
+    /// other listed states, so the same order does not go to one state twice in a week.
+    #[test]
+    fn construction_spreads_a_building_over_the_listed_states_within_a_week() {
+        let b = Builder::new();
+        let plan =
+            json!({"construction": [{"building": "air_base", "states": [67, 42], "count": 1}]});
+        let mut state = State::default();
+        state.done.insert("conlast:air_base:67".into(), START - DAY);
+        state
+            .done
+            .insert("conlast:air_base:42".into(), START - 10 * DAY);
+        let first = acted(tick(&mut state, &b, &plan, "l", START).unwrap());
+        assert!(first.starts_with("construct air_base 42"), "{first}");
+        assert_eq!(state.done.get("conlast:air_base:42"), Some(&START));
+    }
+
+    #[test]
+    fn a_model_not_offered_takes_the_next_newer_offered_of_its_kind() {
+        let why = "invalid_target: No producible design of this equipment is offered; offered: \
+                   convoy_1, ship_hull_carrier_1, ship_hull_submarine_2, ship_hull_submarine_3, \
+                   ship_hull_light_2";
+        assert_eq!(
+            newer_offered("ship_hull_submarine_1", why).as_deref(),
+            Some("ship_hull_submarine_2")
+        );
+        assert_eq!(newer_offered("ship_hull_light_2", why), None);
+        assert_eq!(newer_offered("ship_hull_heavy_1", why), None);
+        assert_eq!(
+            newer_offered("ship_hull_submarine_1", "invalid_target: busy"),
+            None
+        );
+        assert_eq!(
+            successors("ship_hull_submarine_1", 2),
+            vec!["ship_hull_submarine_2", "ship_hull_submarine_3"]
+        );
+        assert!(successors("ship_hull_cruiser_panzerschiff", 2).is_empty());
+    }
+
     #[test]
     fn construction_names_and_numeric_strings_are_resolved_not_dropped() {
         let mut b = Builder::new();
@@ -17108,10 +17233,18 @@ mod tests {
         let mut now = START;
         for _ in 0..PLAN_ITEM_TRIES {
             construction_plan_step(&mut state, &tools, &plan, "l", now).unwrap();
-            now += 3 * DAY;
+            // a refused item rests a week per failure
+            now += 7 * DAY * GameHour::from(PLAN_ITEM_TRIES);
             state.failures.clear(); // the ledger's own back-off is not under test here
         }
         assert_eq!(*tools.0.borrow(), PLAN_ITEM_TRIES);
+        // and not sooner: a fresh failure rests the item for a week
+        let fresh = Fail(RefCell::new(0));
+        let mut rested = State::default();
+        construction_plan_step(&mut rested, &fresh, &plan, "l", START).unwrap();
+        rested.failures.clear();
+        construction_plan_step(&mut rested, &fresh, &plan, "l", START + 3 * DAY).unwrap();
+        assert_eq!(*fresh.0.borrow(), 1);
         assert!(state.plan_blocked.contains_key("id:r1"));
         let news = news_of(&state, crate::watch::CONSTRUCTION_BLOCKED);
         assert_eq!(news.len(), 1);

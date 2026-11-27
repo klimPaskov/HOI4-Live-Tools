@@ -1156,6 +1156,8 @@ impl MacClock {
         // no-pause campaign) refuses a player's speed change to another value: pr1 (17 Nov 2026)
         // the player set speed 2 for a stretch of 1937 against a brief that says speed 3.
         if name == "hoi4_time" && !crate::autopilot::autopilot().in_step() {
+            // the run's player is an agent: its speed change is not a human's (plan_speed)
+            crate::plan_run::note_agent_speed();
             if let Some(Err(e)) = arguments
                 .get("speed")
                 .and_then(Value::as_i64)
