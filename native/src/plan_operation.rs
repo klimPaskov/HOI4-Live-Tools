@@ -6806,7 +6806,7 @@ fn planning_held(
     let milli = (mean * 1000.0).round() as i64;
     if state.done.get(&mk).is_none_or(|l| milli > *l + 4) {
         state.done.insert(mk, milli);
-        state.done.insert(rk, now);
+        state.done.insert(rk.clone(), now);
     }
     let since = state.done.get(&rk).copied().unwrap_or(now);
     let flat = mean > 0.0 && now - since >= 2 * DAY;
