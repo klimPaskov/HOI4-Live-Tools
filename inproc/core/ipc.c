@@ -21,9 +21,15 @@ const int IPC_ALLOWED_COUNT = 21;
  * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
 const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */, 0 /* airwing */,
                                 0 /* production2: add line, priority (S3-PROD2) */,
-                                0 /* orders (engineer 73): delete, execute, set_path, new_front (S4-ORDERS) */,
-                                0 /* orders2 (engineer 74): new_root, assign, unassign, fallback, edit_root, invasion/paradrop
-                                   * target, spearhead (S5-PLAN) */,
+                                1 /* orders (engineer 73): delete, execute, set_path, new_front (S4-ORDERS PASSED live 27 Nov
+                                   * 2026, s45a/s89a/s89b: tree read = external read, execute/delete, new_front = the X
+                                   * stroke's arrow and line with the same 24 divisions, 20 set_path 17 ms median,
+                                   * refusals unposted; the 20-day war comparison O7 is read in the runs) */,
+                                1 /* orders2 (engineer 74): new_root, assign, unassign, fallback, edit_root, invasion/paradrop
+                                   * target, spearhead (S5-PLAN PASSED live 27 Nov 2026, s89b: a root = the Z click's order
+                                   * field by field, fallback = the C stroke's fallback + area pair, spearhead, unassign;
+                                   * assign of a division in no army is refused by the module; invasion/paradrop target not
+                                   * exercised live) */,
                                 1 /* units (engineer 75): new army, transfer, leader, rename, army group new / into / out of,
                                    * delete a shell (S6-UNITS PASSED live 24 Nov 2026) */,
                                 0 /* picks (engineer 75): a national focus (S7-PICKS) */,

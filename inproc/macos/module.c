@@ -512,8 +512,8 @@ static const char *orders_prep(job2_t *j) {
         int n = orders_free_divisions(of, sread, o, j->divs, J2_DIVS);
         if (n < 0) return "the parent's divisions are unreadable";
         /* engineer 89 (S4 O3, 27 Nov): the list holds each division's membership base, not the division; the front
-         * tool hands NewFront the divisions, so each entry goes through its own getter (the UI's call), the result
-         * must be the entry less the base offset, and a division whose alive byte is 0 is left out as the UI does */
+         * tool hands NewFront the divisions, so each entry goes through its own getter (the UI's call) and the result
+         * must be the entry less the base offset */
         if (!of->div_get_slot || !of->div_sub_off) return "the front tool's division getter was not found on this build";
         int k = 0;
         for (int i = 0; i < n; i++) {
@@ -523,7 +523,10 @@ static const char *orders_prep(job2_t *j) {
             d = (uint64_t)(uintptr_t)((div_get_fn)(uintptr_t)fn)((void *)(uintptr_t)e);
             if (d != e - of->div_sub_off || !sread(d + of->div_alive_off, &alive, 1))
                 { snprintf(why, sizeof why, "division entry %d is not division + 0x%x", i, of->div_sub_off); return why; }
-            if (alive) j->divs[k++] = d;
+            /* s89a (27 Nov): the byte the front tool tests read 0 for all 24 divisions of a plan root while the mouse's
+             * offensive took all 24: it is the tool's selection subset, not life. With no selection the UI hands the
+             * parent's free divisions; so does the module */
+            (void)alive; j->divs[k++] = d;
         }
         j->ndiv = k;
         if (!sread(o + of->child_cnt[0], &j->before_children, 4)) return "the parent's children are unreadable";
