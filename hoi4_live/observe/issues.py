@@ -383,7 +383,7 @@ class Detector:
                 self.raise_issue(key, "checkpoint_missed",
                                  f"checkpoint {cp['id']} (by {cp['by']}: {', '.join(map(str, cp.get('must') or []))[:120]}) "
                                  f"is past and not met; the plan says: {cp.get('else') or 'nothing'}", "high",
-                                 subject=cp["id"])
+                                 subject=cp["id"], lane=R.checkpoint_lane(cp.get("must")))
                 out.append(key)
         fielded = (snap.get("land") or {}).get("division_count")
         rows = (self.plan.get("force_design") or {}).get("land") if isinstance(self.plan.get("force_design"), dict) else None

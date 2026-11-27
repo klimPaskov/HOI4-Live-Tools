@@ -360,3 +360,26 @@ def error_kind(code):
     if any(c.startswith(p) for p in PRECONDITION_CODES):
         return "precondition"
     return "technical"
+
+
+# the executor lane that acts on a checkpoint's first must, by its predicate's kind: a missed
+# checkpoint whose must is a focus goes to the focus lane (the executor puts that focus first,
+# plan_run revise_missed), not to the gate alone (t1939n, 27 Nov 2026: missed checkpoints sat in
+# lane "gate" with "no reason given" while their focuses waited behind others)
+CHECKPOINT_LANES = (
+    ("focus_completed", "focus"), ("focus", "focus"), ("has_tech", "research"), ("research", "research"),
+    ("decision", "decisions"), ("controls_state", "war"), ("capitulated", "war"), ("at_war_with", "war"),
+    ("owns_state", "war"), ("divisions", "training"), ("fielded", "training"), ("factories", "construction"),
+    ("building", "construction"), ("idea", "politics"), ("law", "politics"), ("advisor", "politics"),
+)
+
+
+def checkpoint_lane(musts):
+    """The executor lane owning a missed checkpoint: the first must whose predicate kind is known,
+    else "gate" (the plan itself must change)."""
+    for m in musts or []:
+        head = str(m).split(":", 1)[0].strip().lower()
+        for kind, lane in CHECKPOINT_LANES:
+            if head.startswith(kind):
+                return lane
+    return "gate"

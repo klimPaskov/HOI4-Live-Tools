@@ -11,6 +11,7 @@ from pathlib import Path
 from hoi4_live.observe import issue_rules as R
 from hoi4_live.observe.escalation import ACTED, MAX_PACKET_CHARS, Escalator, build_packet, gate_kind, validate_answer
 from hoi4_live.observe.issues import Detector
+from hoi4_live.observe.runlogs import game_days
 from hoi4_live.observe.lessons import LessonStore, lessons_from_issue, walk
 from hoi4_live.observe.monitor import Monitor
 from hoi4_live.observe.runlogs import date_of_days, game_days
@@ -330,6 +331,20 @@ class MonitorTest(unittest.TestCase):
         assert esc.trigger("stale", it) is None
         it2 = det.raise_issue("checkpoint_missed:cp", "checkpoint_missed", "cp missed", "high")
         assert it2["lane"] == "gate" and esc.trigger("overdue", it2) is None
+
+
+    def test_a_missed_checkpoint_goes_to_the_lane_of_its_first_must(self):
+        # t1939n (27 Nov 2026): missed focus checkpoints sat in lane "gate" with no reason given
+        assert R.checkpoint_lane(["focus_completed:GER_danzig_or_war"]) == "focus"
+        assert R.checkpoint_lane(["capitulated:POL", "focus_completed:x"]) == "war"
+        assert R.checkpoint_lane(["something_new:1"]) == "gate"
+        assert R.checkpoint_lane(None) == "gate"
+        plan = {"checkpoints": [{"id": "cp_f", "by": "1939.9.1", "must": ["focus_completed:GER_x"]}]}
+        det = Detector(str(self.tmp), plan=plan)
+        det.date = "1939.10.01.00"
+        det.days = game_days(det.date)
+        det._plan_rules({})
+        assert det.issues["checkpoint_missed:cp_f"]["lane"] == "focus"
 
 
     def test_answers_are_constrained_to_allowed_actions(self):
