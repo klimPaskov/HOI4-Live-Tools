@@ -604,5 +604,19 @@ class MonitorTest(unittest.TestCase):
             Monitor(run, str(base / "out"), replay=True, store=str(base / "s")).replay()
 
 
+class LaneTurnsAtTheGate(unittest.TestCase):
+    def test_a_starved_lane_is_listed_first_with_its_turns(self):
+        # t1939o (27 Nov 2026): decisions, resources and intelligence had no turn in 56 days
+        from hoi4_live.observe import escalation as E
+        line = E.lane_turns_line({"lane_turns": [
+            {"lane": "production", "turns": 9, "days_since": 0, "silent": False},
+            {"lane": "decisions", "turns": 0, "days_since": None, "silent": True},
+            {"lane": "dockyards", "turns": 1, "days_since": 29, "silent": True}]})
+        self.assertTrue(line.startswith("Turns per lane"))
+        self.assertLess(line.index("decisions 0 (never"), line.index("dockyards 1 (29d ago"))
+        self.assertLess(line.index("dockyards"), line.index("production 9"))
+        self.assertEqual(E.lane_turns_line({}), "")
+
+
 if __name__ == "__main__":
     unittest.main()

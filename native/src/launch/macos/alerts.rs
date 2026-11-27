@@ -122,6 +122,24 @@ pub(super) fn label(frame: u32) -> Option<(&'static str, &'static str)> {
             "special_project_available",
             "a special project can start: hoi4_special_projects, hoi4_special_project_assign",
         ),
+        // Named from the sprite strip of 1.20.1 (gfx/interface/alerts/global_alert_icons.dds):
+        // frame 3 a division with a down arrow (the game's alert_deployment_ready), frames
+        // 60-62 the raid crosshairs of the 1.20 raids (alert_raid_available, _launchable,
+        // _detected in the executable's alert table). t1939o (27 Nov 2026): frame 60 stood
+        // unlabelled 56 days. Hover to confirm.
+        3 => (
+            "deployment_ready",
+            "divisions finished training wait to deploy: the training lane (hoi4_train with deploy_state_id)",
+        ),
+        60 => (
+            "raid_available",
+            "a raid can be planned (1.20 raids): no typed raid tool yet; the player decides",
+        ),
+        61 => (
+            "raid_launchable",
+            "a planned raid can be launched: no typed raid tool yet; the player decides",
+        ),
+        62 => ("raid_detected", "an enemy raid on us is detected"),
         63 => (
             "scientist_unassigned",
             "a facility has no scientist: hoi4_special_project_recruit / hoi4_special_project_assign",
