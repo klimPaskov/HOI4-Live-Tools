@@ -86,7 +86,7 @@ pub(super) fn label(frame: u32) -> Option<(&'static str, &'static str)> {
         ),
         67 => (
             "admiral_assignable",
-            "an admiral can be assigned to a naval headquarters: hoi4_fleet_admiral {fleet, list:true} lists the admirals offered, then hoi4_fleet_admiral {fleet, admiral}",
+            "an admiral can be assigned to a naval headquarters (the building, not a fleet): no tool fills a headquarters yet (gap navy.hq_admiral); hoi4_fleet_admiral {fleet, list:true} / {fleet, admiral} leads fleets only",
         ),
         // Named from the game's tooltips on 6 Nov 2026 (1.19.4.1).
         68 => (

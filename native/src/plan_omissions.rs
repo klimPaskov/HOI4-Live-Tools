@@ -289,8 +289,17 @@ pub(super) fn derived(
         if let Ok(read) = tools.call("hoi4_commanders", &json!({})) {
             let tag = super::plan_formations::country_tag(state, tools, plan);
             for (item, todo) in command_rows(&roster, list(&read, "commanders"), &tag) {
-                let note = super::plan_military::note_of(state, "group_marshals")
-                    .or_else(|| super::plan_military::note_of(state, "army_group"))
+                // an army's vacancy is the generals' rule (note `command`), a group's the field
+                // marshals' rule: g92a's army row quoted "every army group with divisions has a
+                // field marshal" for 147 days, the wrong rule's word
+                let keys: &[&str] = if item == "army_without_general" {
+                    &["command"]
+                } else {
+                    &["group_marshals", "army_group"]
+                };
+                let note = keys
+                    .iter()
+                    .find_map(|k| super::plan_military::note_of(state, k))
                     .map(String::from);
                 open.push((item, todo, "command", note));
             }

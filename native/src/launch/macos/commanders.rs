@@ -373,6 +373,113 @@ pub(super) fn snapshot(process: &dyn Process) -> Result<Snapshot> {
     })
 }
 
+/// Words of a name for matching: accents folded, lower case, punctuation as spaces.
+fn name_words(name: &str) -> Vec<String> {
+    super::states::fold(name)
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// The listed commander a request names, from every name the roster knows (`names`) and the
+/// leaders' character ids (`ids`, id -> name). The asked text resolves when exactly one name
+/// matches at the first step that matches any: the name itself (any case), the same words with
+/// accents folded ("Gunther von Kluge"), the character id ("GER_albert_kesselring"), every asked
+/// word among the name's words ("Kesselring", "von Rundstedt"), the asked words inside the name.
+/// Two or more at one step refuse as ambiguous; none refuses with the closest names. A roster
+/// with no names passes the asked text on unchanged (the mouse path reads the list itself).
+/// The player's "Kesselring" was refused unknown_commander although "Albert Kesselring" was
+/// listed free (g92a, 27 Nov 2026); pure.
+pub(super) fn resolve_name(
+    asked: &str,
+    names: &[String],
+    ids: &[(String, String)],
+) -> Result<String> {
+    if names.is_empty() {
+        return Ok(asked.to_string());
+    }
+    let mut uniq: Vec<String> = Vec::new();
+    for n in names {
+        if !uniq.iter().any(|u| u == n) {
+            uniq.push(n.clone());
+        }
+    }
+    let want = name_words(asked);
+    let joined = want.join(" ");
+    let steps: [&dyn Fn(&String) -> bool; 5] = [
+        &|n: &String| n.eq_ignore_ascii_case(asked),
+        &|n: &String| !want.is_empty() && name_words(n) == want,
+        &|n: &String| {
+            ids.iter()
+                .any(|(id, name)| name == n && id.eq_ignore_ascii_case(asked.trim()))
+        },
+        &|n: &String| {
+            let words = name_words(n);
+            !want.is_empty() && want.iter().all(|w| words.contains(w))
+        },
+        &|n: &String| !joined.is_empty() && name_words(n).join(" ").contains(&joined),
+    ];
+    for step in steps {
+        let hits: Vec<&String> = uniq.iter().filter(|n| step(n)).collect();
+        match hits.as_slice() {
+            [one] => return Ok((*one).clone()),
+            [] => continue,
+            many => {
+                return Err(Error::new(
+                    "ambiguous_commander",
+                    format!(
+                        "\"{asked}\" names more than one commander: {}. Nothing was clicked; \
+                         pass the full name.",
+                        many.iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                ))
+            }
+        }
+    }
+    Err(Error::new(
+        "unknown_commander",
+        format!(
+            "No commander named \"{asked}\". Closest: {}. Nothing was clicked. Call \
+             hoi4_commanders for the roster.",
+            closest_names(asked, &uniq, 5).join(", ")
+        ),
+    ))
+}
+
+/// The full listed name of the commander `asked` names (see [`resolve_name`]): the country's
+/// army leaders, the leaders of its armies and groups and the commander list's rows.
+pub(super) fn canonical_name(process: &dyn Process, asked: &str) -> Result<String> {
+    let snap = snapshot(process)?;
+    let mut names: Vec<String> = snap
+        .leaders
+        .iter()
+        .flatten()
+        .map(|l| l.name.clone())
+        .collect();
+    names.extend(snap.known_names());
+    names.extend(snap.stale_rows.iter().flatten().map(|r| r.name.clone()));
+    let ids: Vec<(String, String)> = snap
+        .leaders
+        .iter()
+        .flatten()
+        .map(|l| (l.id.clone(), l.name.clone()))
+        .collect();
+    match resolve_name(asked, &names, &ids) {
+        // only a complete roster (the country's leaders read, or the open list) refuses a
+        // name; otherwise the commander list itself decides, as before
+        Err(e)
+            if e.code == "unknown_commander" && snap.leaders.is_none() && snap.rows.is_none() =>
+        {
+            Ok(asked.to_string())
+        }
+        other => other,
+    }
+}
+
 pub(super) fn precheck(
     process: &dyn Process,
     army: &str,
@@ -440,6 +547,39 @@ pub(super) fn tool() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// g92a (27 Nov 2026): the player's "Kesselring" was refused unknown_commander while "Albert
+    /// Kesselring" was listed free. A listed commander's surname, folded name or id resolves.
+    #[test]
+    fn a_listed_commanders_surname_folded_name_or_id_resolves_to_his_full_name() {
+        let names: Vec<String> = [
+            "Albert Kesselring",
+            "Günther von Kluge",
+            "Gerd von Rundstedt",
+            "Erich von Manstein",
+            "Hans von Kluge",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let ids = vec![(
+            "GER_albert_kesselring".to_string(),
+            "Albert Kesselring".to_string(),
+        )];
+        let r = |a: &str| resolve_name(a, &names, &ids);
+        assert_eq!(r("Kesselring").unwrap(), "Albert Kesselring");
+        assert_eq!(r("albert kesselring").unwrap(), "Albert Kesselring");
+        assert_eq!(r("GER_albert_kesselring").unwrap(), "Albert Kesselring");
+        assert_eq!(r("Gunther von Kluge").unwrap(), "Günther von Kluge");
+        assert_eq!(r("von Rundstedt").unwrap(), "Gerd von Rundstedt");
+        assert_eq!(r("Manst").unwrap(), "Erich von Manstein");
+        // two Kluges: the surname alone is ambiguous, nothing is guessed
+        assert_eq!(r("Kluge").unwrap_err().code, "ambiguous_commander");
+        let e = r("Rommel").unwrap_err();
+        assert_eq!(e.code, "unknown_commander");
+        // an empty roster passes the name on (the mouse path reads the list itself)
+        assert_eq!(resolve_name("Rommel", &[], &[]).unwrap(), "Rommel");
+    }
 
     fn t(name: &str, is_group: bool, c: Option<&str>) -> Target {
         Target {

@@ -17,6 +17,9 @@ struct On {
     last: Option<String>,
     /// Consecutive steps whose actions all failed: the wait doubles (up to 30 s).
     failing: u32,
+    /// The game hour of the last quiet step: the next step is due as soon as the game clock has
+    /// passed it (see [`Autopilot::due_at`]), the interval being only the longest wait.
+    quiet_hour: Option<i64>,
 }
 
 #[derive(Default)]
@@ -47,6 +50,7 @@ impl Autopilot {
                 actions: 0,
                 last: None,
                 failing: 0,
+                quiet_hour: None,
             });
         }
     }
@@ -57,9 +61,39 @@ impl Autopilot {
     }
     /// The lease to run a step with, when one is due.
     pub fn due(&self) -> Option<String> {
-        let on = self.on.lock().ok()?;
-        let on = on.as_ref()?;
-        (Instant::now() >= on.next).then(|| on.token.clone())
+        self.due_at(|| None)
+    }
+    /// The lease to run a step with, when one is due: its wait is over, or the last step was quiet
+    /// and the game clock (`clock`, read only then) has moved past that step's hour. EVENT-DRIVEN:
+    /// the lanes' rests and the plan's dates are game hours, so a quiet executor looks again on the
+    /// next game hour, not after a fixed wait (at speed 3 a game hour is about a quarter second;
+    /// a second's wait let four of them pass).
+    pub fn due_at(&self, clock: impl FnOnce() -> Option<i64>) -> Option<String> {
+        let (token, quiet) = {
+            let on = self.on.lock().ok()?;
+            let on = on.as_ref()?;
+            if Instant::now() >= on.next {
+                return Some(on.token.clone());
+            }
+            (on.token.clone(), on.quiet_hour?)
+        };
+        // the clock is read outside the lock
+        clock().is_some_and(|hour| hour > quiet).then_some(token)
+    }
+    /// After a step at game hour `hour` (see [`Autopilot::ran_with`]).
+    pub fn ran_at(
+        &self,
+        actions: usize,
+        succeeded: usize,
+        last: Option<String>,
+        hour: Option<i64>,
+    ) {
+        self.ran_with(actions, succeeded, last);
+        if let Ok(mut on) = self.on.lock() {
+            if let Some(on) = on.as_mut() {
+                on.quiet_hour = hour.filter(|_| actions == 0);
+            }
+        }
     }
     /// After a step: one with a successful action runs again at once (more may be waiting),
     /// a quiet one waits the interval, one whose actions all failed waits twice the interval.
@@ -80,6 +114,7 @@ impl Autopilot {
                 if last.is_some() {
                     on.last = last;
                 }
+                on.quiet_hour = None;
                 let wait = if succeeded > 0 {
                     on.failing = 0;
                     Duration::ZERO
@@ -184,6 +219,39 @@ mod tests {
         assert!(around(2), "the wait does not grow");
         a.ran_with(1, 1, None);
         assert!(a.due().is_some(), "a success reruns at once");
+    }
+    #[test]
+    fn a_quiet_step_runs_again_on_the_next_game_hour_not_after_the_interval() {
+        let a = Autopilot::default();
+        a.enable("t", Duration::from_secs(10));
+        a.ran_at(0, 0, None, Some(100));
+        assert!(a.due().is_none(), "no clock: the interval");
+        assert!(a.due_at(|| Some(100)).is_none(), "the same game hour waits");
+        assert_eq!(
+            a.due_at(|| Some(101)).as_deref(),
+            Some("t"),
+            "the next hour is due"
+        );
+        // a step that acted has no quiet hour: it runs again at once anyway
+        a.ran_at(1, 1, Some("x".into()), Some(101));
+        assert!(a.due_at(|| None).is_some());
+        // a failed step waits its back-off whatever the clock does
+        a.ran_at(1, 0, Some("x: false".into()), Some(102));
+        assert!(a.due_at(|| Some(500)).is_none());
+        // the clock is read only while a quiet step waits
+        a.ran_at(0, 0, None, Some(102));
+        let read = std::cell::Cell::new(0);
+        let _ = a.due_at(|| {
+            read.set(read.get() + 1);
+            Some(102)
+        });
+        assert_eq!(read.get(), 1);
+        a.ran_at(1, 1, None, Some(103));
+        let _ = a.due_at(|| {
+            read.set(read.get() + 1);
+            None
+        });
+        assert_eq!(read.get(), 1, "due at once: no clock read");
     }
     #[test]
     fn claimed_armies_expire_and_can_be_released() {

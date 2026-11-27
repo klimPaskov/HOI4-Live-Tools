@@ -617,6 +617,23 @@ class LaneTurnsAtTheGate(unittest.TestCase):
         self.assertLess(line.index("dockyards"), line.index("production 9"))
         self.assertEqual(E.lane_turns_line({}), "")
 
+    def test_the_pace_and_the_starved_lanes_show(self):
+        # e93 (28 Nov 2026): ticks and lane turns per game day, each lane's rate, starved lanes fail
+        from hoi4_live.observe import escalation as E
+        snap = {"lane_turns": [
+            {"lane": "production", "turns": 30, "per_day": 2.5, "input": False, "days_since": 0,
+             "starved": False, "silent": False},
+            {"lane": "decisions", "turns": 2, "per_day": 0.1, "input": True, "days_since": 9,
+             "starved": True, "silent": False},
+            {"kind": "ticks", "lane": "(ticks)", "ticks": 120, "ticks_per_day": 10.0,
+             "lane_turns": 900, "lane_turns_per_day": 75.0}]}
+        line = E.lane_turns_line(snap)
+        self.assertTrue(line.startswith("Executor pace: 10.0 ticks and 75.0 lane turns per game day"), line)
+        self.assertIn("production 30 (0d ago, 2.5/day)", line)
+        self.assertIn("decisions 2 (9d ago, 0.1/day, input)", line)
+        self.assertNotIn("(ticks) 120", line)
+        self.assertEqual([r["lane"] for r in E.starved_lanes(snap)], ["decisions"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -993,6 +993,11 @@
           "default": true,
           "description": "true checks idle civilian factories among the fast lanes every tick (at most every 6 game hours while all are busy) and queues the plan's ordered items, then its open jobs; false leaves construction to its turn in the pass"
         },
+        "many_lanes": {
+          "type": "boolean",
+          "default": true,
+          "description": "true runs every lane whose turn needs no input (a decision over the tick's snapshot, an order by the game's own command) in the same tick, one input sequence (a mouse order, a read through a panel) a tick in the scheduler's order, then a sweep of the lanes whose last turn needed no input; false keeps one acting lane a tick"
+        },
         "politics_fast": {
           "type": "boolean",
           "default": true,

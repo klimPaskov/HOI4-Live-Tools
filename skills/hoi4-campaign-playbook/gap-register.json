@@ -5942,6 +5942,24 @@
    "owner": "nothing open"
   },
   {
+   "id": "navy.hq_admiral",
+   "domain": "navy",
+   "capability": "Put a free admiral on each naval headquarters the game offers one (the admiral_assignable alert)",
+   "playbook": [
+    "war-air-naval-peace.md#17 NA50"
+   ],
+   "plan": [],
+   "tools": [
+    "hoi4_fleets",
+    "hoi4_fleet_admiral"
+   ],
+   "blocked": "hoi4_fleet_admiral assigns fleet admirals only; no tool reads naval headquarters or assigns an admiral to one (the game command is CAssignAdmiralToNavyHeadquarter, the GUI path the headquarters map icon's roster)",
+   "payoff": "medium",
+   "why": "The admiral_assignable alert stays open all run while every fleet is led (g92a 1936 study: 150.8 idle days on the task forces row); the headquarters bonus and admiral experience are lost",
+   "closing": "both",
+   "owner": "live: read own naval headquarters (province, admiral) from memory and assign by the headquarters roster or the in-process module's command; offline: the navy lane then fills each headquarters with the best free admiral within the game's cap"
+  },
+  {
    "id": "navy.repair",
    "domain": "navy",
    "capability": "Send damaged task forces to the biggest port and raise the dockyard repair share at war",
