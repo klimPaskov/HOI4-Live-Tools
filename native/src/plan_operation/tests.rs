@@ -4594,3 +4594,117 @@ fn by_default_a_wing_attacks_with_the_joint_attack_and_never_alone() {
         START + DAY
     ));
 }
+
+// THE ORDER STRUCTURE (engineer 95, after ctl92a): one root per enemy border, divisions spread
+
+#[test]
+fn by_command_a_group_front_takes_every_border_it_names_in_one_call() {
+    let game = Game::new();
+    let mut plan = plan();
+    plan["operations"][0]["orders_by"] = json!("command");
+    plan["operations"][0]["front"]["enemies"] = json!(["POL", "LIT"]);
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let front = game
+        .orders()
+        .into_iter()
+        .find(|(n, a)| n == "hoi4_army_front" && a["army"] == json!("Army Group 1"))
+        .expect("the group's front");
+    assert_eq!(front.1["against"], json!(["POL", "LIT"]));
+    assert_eq!(front.1["own_states"], json!([66, 67]));
+}
+
+fn two_fronts(game: &Game, holland: i64, belgium: i64) {
+    game.unit("Army Group 1", |r| {
+        r["plan"] = json!([
+            {"kind": "front", "id": 109, "executing": false, "divisions": holland,
+             "line": {"states": [57, 56]}, "offensives": []},
+            {"kind": "front", "id": 110, "executing": false, "divisions": belgium,
+             "line": {"states": [42]}, "offensives": []}]);
+    });
+}
+
+#[test]
+fn a_group_with_two_fronts_spreads_its_divisions_and_each_border_gets_its_own_deep_attack() {
+    // ctl92a (28 Nov 2026): Holland's front 0 divisions, Belgium's 68
+    let game = Game::new();
+    two_fronts(&game, 0, 68);
+    let wars = json!({"wars": {"enemies": []}, "borders": [
+        {"neighbour_tag": "HOL", "neighbour_states": [7], "own_border_states": [57, 56]},
+        {"neighbour_tag": "BEL", "neighbour_states": [6], "own_border_states": [42]}]});
+    let mut grp = unit(
+        "Army Group 1".into(),
+        Role::Group,
+        &json!({"enemy": "HOL", "enemies": ["HOL", "BEL"], "own_states": [57, 56, 42]}),
+        &json!({"target_line": [7]}),
+    );
+    grp.members = vec!["Mitte".into()];
+    assert_eq!(grp.enemies, vec!["BEL".to_string()]);
+    let units = vec![grp];
+    let mut state = State::default();
+    state.done.insert(key("op", "by_command"), 1);
+    state.done.insert(key("op", "deep_line"), 1);
+    let roster = game.roster.borrow().clone();
+    let line = border_fronts(&mut state, &game, "op", &units, &roster, &wars, "l", START)
+        .unwrap()
+        .expect("a spread");
+    assert!(
+        line.contains("spread over its 2 fronts") && line.contains("stands empty"),
+        "{line}"
+    );
+    assert!(game.orders().iter().any(|(n, a)| n == "hoi4_army_plan"
+        && a["army"] == json!("Army Group 1")
+        && a["distribute"] == json!(true)));
+    // the Belgian root is a border front, the Dutch one the group's own line
+    assert!(border_front(
+        &state,
+        "op",
+        "Army Group 1",
+        &json!({"id": 110})
+    ));
+    assert!(!border_front(
+        &state,
+        "op",
+        "Army Group 1",
+        &json!({"id": 109})
+    ));
+    // spread: no second spread the same day, and none while both fronts hold divisions
+    two_fronts(&game, 30, 38);
+    game.calls.borrow_mut().clear();
+    *game.graph.borrow_mut() = Some(json!({"provinces": [
+        graph_row(420, 42, "plains", &[(60, 0.0)]),
+        graph_row(60, 6, "forest", &[(420, 0.0), (61, 0.0)]),
+        graph_row(61, 6, "plains", &[(60, 0.0), (900, 0.0)])]}));
+    let roster = game.roster.borrow().clone();
+    let line = border_fronts(
+        &mut state,
+        &game,
+        "op",
+        &units,
+        &roster,
+        &wars,
+        "l",
+        START + DAY,
+    )
+    .unwrap()
+    .expect("the Belgian front's attack");
+    assert!(line.contains("against BEL from its front 110"), "{line}");
+    let off = game
+        .orders()
+        .into_iter()
+        .find(|(n, _)| n == "hoi4_army_offensive")
+        .unwrap();
+    assert_eq!(off.1["parent_order"], json!(110));
+    assert_eq!(ints(&off.1["target_provinces"]), vec![61]);
+    assert!(!game
+        .orders()
+        .iter()
+        .any(|(_, a)| a["distribute"].is_boolean()));
+    // the group's own line offensive never counts the border front's arrow
+    game.unit("Army Group 1", |r| {
+        r["plan"][1]["offensives"] = json!([{"id": 111, "target": {"states": [6]}}]);
+    });
+    let roster = game.roster.borrow().clone();
+    assert!(line_offensives(&state, "op", &roster, "Army Group 1").is_empty());
+    assert_eq!(offensives(&roster, "Army Group 1").len(), 1);
+}

@@ -2305,6 +2305,12 @@
                 "minItems": 1,
                 "description": "own states whose border with `enemy` the front runs along, in order"
               },
+              "enemies": {
+                "type": "array",
+                "items": {"type": "string", "pattern": "^[A-Z0-9]{3}$"},
+                "minItems": 1,
+                "description": "orders by command: the other enemies whose border pieces this front takes too, in one call: one plan root per enemy border, each with its share of the divisions and its own deep offensive toward that enemy's far edge; a unit with two or more fronts has its divisions spread over them"
+              },
               "click_state": {
                 "$ref": "#/definitions/state_id",
                 "description": "the state the front order clicks near (the nearest highlighted border to it); without it the enemy's border state nearest the middle of own_states"

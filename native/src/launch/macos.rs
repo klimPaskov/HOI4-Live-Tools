@@ -833,7 +833,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_train","description":"Queue `count` divisions of an own template in ONE training queue with ordinary input: the template's Train button creates the queue, its + sets each line to train one division (the game's default is infinite: a line that trains forever), then Add Unit adds the other lines in parallel; the queue gets the own state deploy_state_id as location (a queue without a location never deploys). Each step is verified on the queue in memory (amount, line count).","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"count":{"type":"integer","minimum":1,"maximum":24},"deploy_state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","count","deploy_state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_deploy_locations","description":"Give every training line without a deployment location the own state state_id (Find view, the line's location button, one click on the state). Lines without a location never deploy. Verified by the lines' deployment provinces.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_armies","description":"Own armies (name, division ids, division_limit: the divisions its commander leads without penalty, the game's base plus his traits; per army group army_limit: the armies its field marshal leads; threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids (unassigned_by_state: per state the ids and shared_with, the armies standing in the same provinces and how many of them each shares). Per army `planning` {mean, min, max} is its divisions' planning bonus (0..1, 0.3 = 30%); it grows while the army holds a front or plan and stops at a cap the game computes from generals, technology and the HQ distance (not stored: a value that has stopped rising has reached it). threat:false skips the threat reads. Per army and per army group `plan` reads every battle-plan order from the game itself (what the battle-plan bar and the map arrows show): kind (front, offensive, fallback, area_defense), id, executing, divisions assigned; for a line its provinces count, its two end provinces, the states along it, the owner's divisions standing on it and the most in one province; per front its offensives with the arrow's states and the target line (provinces, ends, states, i.e. how deep and wide the advance goes); an area defence lists its states. An army inside an army group whose own plan is [] follows the group's orders. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).","inputSchema":{"type":"object","properties":{"threat":{"type":"boolean"}},"additionalProperties":false}}),
-        json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border; with from_state (an own state touching state_id) a drag along that stretch of border only, a narrow front for a mobile army; with from_states (2-12 own states side by side) a drag along the border between those states and the land of state_id's controller only: one army group's own piece of a border that two groups share. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"from_state":{"type":"integer","minimum":1,"maximum":4095},"from_states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":2,"maxItems":12},"provinces":{"type":"array","items":{"type":"integer","minimum":1,"maximum":99999},"minItems":1,"maxItems":1024,"description":"in-process only (family orders): the front's own provinces in drawing order; no drag. Each piece of the line on one theatre front section (the border against one enemy) becomes its own plan root (family orders2: one line per border for the whole group, the Shift+click form), all created in this call, each with its share of the group's divisions by length and place (the fronts the group already has included). Provinces no section holds are reported in in_process.coverage.uncovered and the receipt is Diverged (front_cut), never Verified"},"against":{"type":"string","minLength":3,"maxLength":3,"description":"in-process only: the front along the whole own border against this tag (own_states narrows it), one front order per connected stretch"},"own_states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":64},"parent_order":{"type":"integer","minimum":1,"description":"in-process only: the plan order the new front hangs under (default: the army's one top order)"},"replace_order":{"type":"integer","minimum":1,"description":"in-process only: give this existing front order the new province path instead of adding a front (keeps its id)"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border; with from_state (an own state touching state_id) a drag along that stretch of border only, a narrow front for a mobile army; with from_states (2-12 own states side by side) a drag along the border between those states and the land of state_id's controller only: one army group's own piece of a border that two groups share. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"from_state":{"type":"integer","minimum":1,"maximum":4095},"from_states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":2,"maxItems":12},"provinces":{"type":"array","items":{"type":"integer","minimum":1,"maximum":99999},"minItems":1,"maxItems":1024,"description":"in-process only (family orders): the front's own provinces in drawing order; no drag. Each piece of the line on one theatre front section (the border against one enemy) becomes its own plan root (family orders2: one line per border for the whole group, the Shift+click form), all created in this call, each with its share of the group's divisions by length and place (the fronts the group already has included). Provinces no section holds are reported in in_process.coverage.uncovered and the receipt is Diverged (front_cut), never Verified"},"against":{"description":"in-process only: the front along the whole own border against this tag, or against each of several tags in one call (own_states narrows it): one plan root per border section, each with its share of the divisions; a tag with no border in the states is named in coverage.no_border","oneOf":[{"type":"string","minLength":3,"maxLength":3},{"type":"array","items":{"type":"string","minLength":3,"maxLength":3},"minItems":1,"maxItems":16}]},"own_states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":64},"parent_order":{"type":"integer","minimum":1,"description":"in-process only: the plan order the new front hangs under (default: the army's one top order)"},"replace_order":{"type":"integer","minimum":1,"description":"in-process only: give this existing front order the new province path instead of adding a front (keeps its id)"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_move","description":"Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool. With province_id the order goes to that one province (the whole army gathers on it: a strike on one objective); it is sent again while any division neither marches on it nor stands in it. halt:true (no state_id) cancels every march and attack order of the army with the unit panel's halt control (H): the divisions stay where they stand and recover; verified by the divisions no longer marching (hoi4_supply shows each division's heading_province). divisions (with province_id) orders only those divisions of the army, one at a time (each selected from the army's division list, then one right click); the rest keep their orders: a strike sized to what the province feeds, a garrison left behind.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"halt":{"type":"boolean"},"divisions":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":48,"description":"Division ids as hoi4_armies or hoi4_supply list them; needs province_id"},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"One province of the state to move to (an enemy-held province inside an own state, a port); hoi4_states with the state ID lists each province and its controller"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button (execute), and set how its battle plans are carried out (mode). Execute is verified by the card's executing state. mode sets the execution mode on the battle plan bar: careful (no attack on heavily fortified provinces, none that lengthens the front), balanced (the game's default) or rush (every province of the plan is attacked: it lengthens the front and can gather an army in one unsupplied province; it suits a weak or broken enemy line and is a plan decision). The army is selected, the bar's execution button opens the three choices, the wanted one is clicked and verified by the three buttons' frames (detail: frames_before, frames_after); the selection is cleared afterwards. Give execute, mode or both: with both the mode is set first (journalled as <request_id>:mode, returned as mode_receipt) and the execute or stop order follows only when the mode is verified. A failure of the mode step names the bar, the window, the rectangles and the frames it found.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean","description":"true executes the plan, false stops it; may be left out only when mode is given"},"mode":{"type":"string","enum":["careful","balanced","rush"],"description":"execution mode of the army's battle plans; alone it only sets the mode"},"clear_orders":{"type":"boolean","description":"true deletes every battle-plan order of the army or army group (the bar's delete button, right click, confirmed); goes alone; verified by no order left"},"delete_order":{"type":"integer","minimum":1,"description":"deletes ONE battle-plan order by its id from the plan read-back (hoi4_armies plan: a front's offensives[].id): the bar's delete tool (left click), then a click on the order's arrow on the map; the front and every other order stay, so the front's divisions keep their planning bonus. Goes alone; verified by the id gone"},"assign":{"type":"object","description":"in-process only (family orders2: the plan bar's assign): divisions onto ONE order of the plan by its id (a front, or an offensive to put them in the attack): the listed division ids, or the count of the army's divisions standing nearest the order's line that it does not hold yet. Goes alone; verified by the order's division count read back","properties":{"order":{"type":"integer","minimum":1},"divisions":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":512},"count":{"type":"integer","minimum":1,"maximum":512}},"required":["order"],"additionalProperties":false},"distribute":{"description":"in-process only (family orders2): the army group's (or army's) divisions over its fronts (plan roots) by each front's weight (weights by front order id, default the front's length in provinces) and by place: each front keeps the divisions standing by it, the rest go to the nearest front with room, at least one per front while there are as many divisions as fronts; a front's new divisions go to its one offensive when it has one. The game puts every division of a new front on that front, so a group with two fronts drawn one after the other holds them all on the newest: distribute right after drawing fronts and whenever a front reads 0 divisions. Goes alone; verified by the division counts read back per order","oneOf":[{"type":"boolean"},{"type":"object","properties":{"weights":{"type":"object","additionalProperties":{"type":"number","minimum":0}}},"required":["weights"],"additionalProperties":false}]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_offensive","description":"Draw an offensive line for an own army that already holds a front line, into a target state: army card, offensive-line drawing (X), one right-button drag across the state, parallel to the army's front, so the whole front advances to it. With province_id (a province of the state, e.g. its victory point) the line runs through that province's depth; without it through the middle of the state. Verified by new battle-plan orders on the army; the receipt's detail.plan reads the army's orders back from the game (the target line's provinces, ends and states). With states the line runs across several states at once, the way the game's AI draws its offensive (its 1939 Poland line: 22 provinces through eight states, one arrow, the whole army group on it). Execute the plan afterwards.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"The objective inside the state: the line is drawn at its depth from the army"},"spearhead":{"type":"boolean","description":"Draw the game's spearhead order (battle-plan bar, Shift+X) instead of an offensive line: it takes the provinces as painted without adjusting, for encirclements and narrow thrusts (armour)"},"target_provinces":{"type":"array","items":{"type":"integer","minimum":1,"maximum":99999},"minItems":1,"maxItems":1024,"description":"in-process only: the exact target line in drawing order; with spearhead:true a new spearhead under parent_order (family orders2), with replace_order the new path of that existing order (family orders); a plain new offensive is still drawn by the stroke"},"parent_order":{"type":"integer","minimum":1},"replace_order":{"type":"integer","minimum":1},"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":2,"maxItems":12,"description":"A deep line across these target states side by side (the phase line: e.g. every state along a river across the enemy country): one bending stroke through the states' centres in the order given (list them side by side from one end of the line to the other, e.g. along a river); state_id is then only the state the camera finds first. No province_id."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
@@ -9063,7 +9063,8 @@ fn plan_assign_args(assign: Option<&Value>, distribute: Option<&Value>) -> Resul
 /// order or an existing front order to re-path. None when the call states none of these (the drag decides).
 struct FrontStated {
     provinces: Option<Vec<i32>>,
-    against: Option<(String, Option<Vec<i32>>)>,
+    /// engineer 95: one tag or several (every border of the group in one call, each piece its own root)
+    against: Option<(Vec<String>, Option<Vec<i32>>)>,
     parent: Option<i32>,
     replace: Option<i32>,
 }
@@ -9107,17 +9108,34 @@ fn front_stated(args: &serde_json::Map<String, Value>) -> Result<Option<FrontSta
     };
     let provinces = ints("provinces", 1, 99_999, 1024)?;
     let own_states = ints("own_states", 1, 4095, 64)?;
+    let tag = |v: &Value| -> Option<String> {
+        v.as_str()
+            .filter(|t| t.len() == 3 && t.chars().all(|c| c.is_ascii_alphanumeric()))
+            .map(str::to_ascii_uppercase)
+    };
     let against = match args.get("against") {
         None | Some(Value::Null) => None,
-        Some(Value::String(t)) if t.len() == 3 && t.chars().all(|c| c.is_ascii_alphanumeric()) => {
-            Some(t.to_ascii_uppercase())
+        Some(Value::Array(l)) if !l.is_empty() && l.len() <= 16 => {
+            let mut tags = Vec::new();
+            for v in l {
+                let t = tag(v).ok_or_else(|| {
+                    Error::new(
+                        "invalid_arguments",
+                        "against: a three-letter country tag or a list of them",
+                    )
+                })?;
+                if !tags.contains(&t) {
+                    tags.push(t);
+                }
+            }
+            Some(tags)
         }
-        _ => {
-            return Err(Error::new(
+        Some(v) => Some(vec![tag(v).ok_or_else(|| {
+            Error::new(
                 "invalid_arguments",
-                "against: a three-letter country tag",
-            ))
-        }
+                "against: a three-letter country tag or a list of them",
+            )
+        })?]),
     };
     let parent = one("parent_order")?;
     let replace = one("replace_order")?;
@@ -9579,6 +9597,7 @@ fn front_in_process(
         .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
         .exe;
     let dir = mapdata::game_dir(exe)?;
+    let mut no_border: Vec<String> = Vec::new();
     let chains: Vec<Vec<i32>> = match (&st.provinces, &st.against) {
         (Some(p), _) => {
             if let Some(bad) = front_plan::foreign_province(process, &dir, p)? {
@@ -9589,8 +9608,25 @@ fn front_in_process(
             }
             vec![p.clone()]
         }
-        (None, Some((tag, own))) => {
-            front_plan::border_front_provinces(process, &dir, tag, own.as_deref())?
+        (None, Some((tags, own))) => {
+            // every border asked: a tag without a border in the given states is named, the others go on
+            let mut all = Vec::new();
+            let mut none = Vec::new();
+            for tag in tags {
+                match front_plan::border_front_provinces(process, &dir, tag, own.as_deref()) {
+                    Ok(c) => all.extend(c),
+                    Err(e) if e.code == "no_border" && tags.len() > 1 => none.push(tag.clone()),
+                    Err(e) => return Err(e),
+                }
+            }
+            if all.is_empty() {
+                return Err(Error::new(
+                    "no_border",
+                    format!("No own border against any of {tags:?} in the given states"),
+                ));
+            }
+            no_border = none;
+            all
         }
         _ => return Err(Error::new("invalid_arguments", "no front stated")),
     };
@@ -9679,7 +9715,7 @@ fn front_in_process(
         }
         let asked: usize = chains.iter().map(Vec::len).sum();
         coverage = json!({"asked":asked,"on_roots":asked - uncovered.len(),"uncovered":uncovered,
-            "roots":made,"standing_fronts":roots.len(),"assigned":assigned});
+            "roots":made,"standing_fronts":roots.len(),"assigned":assigned,"no_border":no_border});
     }
     for r in &replies {
         if inproc::game_refused(r) {

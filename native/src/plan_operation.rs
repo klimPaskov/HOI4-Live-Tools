@@ -185,6 +185,9 @@ struct Unit {
     /// the ground model's axis (`axis_by: "terrain"`): (province, its state) from the start, for
     /// the in-process spearhead and set-path commands
     path: Vec<(i64, i64)>,
+    /// BORDER FRONTS (`front.enemies`): the other enemies whose border pieces the unit's front
+    /// takes by command, one plan root each, each with its own deep offensive
+    enemies: Vec<String>,
 }
 
 fn key(id: &str, what: &str) -> String {
@@ -778,6 +781,7 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
                 own_enemy: false,
                 ring: false,
                 path: Vec::new(),
+                enemies: Vec::new(),
             });
             continue;
         }
@@ -807,6 +811,7 @@ fn units(state: &State, id: &str, op: &Value, roster: &Value) -> (Vec<Unit>, Opt
                 own_enemy: false,
                 ring: false,
                 path: Vec::new(),
+                enemies: Vec::new(),
             });
             continue;
         }
@@ -1234,6 +1239,10 @@ fn unit(name: String, role: Role, front: &Value, offensive: &Value) -> Unit {
         own_enemy: false,
         ring: false,
         path: Vec::new(),
+        enemies: strings(front, "enemies")
+            .into_iter()
+            .filter(|t| *t != text(&front["enemy"]))
+            .collect(),
     }
 }
 
@@ -1274,6 +1283,25 @@ fn has_front(roster: &Value, name: &str) -> bool {
     orders(roster, name)
         .iter()
         .any(|o| text(&o["kind"]) == "front")
+}
+
+/// Whether the front order `front` of `name` is one of its other borders' fronts (BORDER FRONTS):
+/// its offensive is its own, never repathed or deleted for the unit's line.
+fn border_front(state: &State, id: &str, name: &str, front: &Value) -> bool {
+    front["id"].as_i64().is_some_and(|f| {
+        state
+            .done
+            .contains_key(&key(id, &format!("bfront:{name}:{f}")))
+    })
+}
+
+/// The offensives of the unit's own line: those of its fronts that are not border fronts.
+fn line_offensives<'a>(state: &State, id: &str, roster: &'a Value, name: &str) -> Vec<&'a Value> {
+    orders(roster, name)
+        .iter()
+        .filter(|o| !border_front(state, id, name, o))
+        .flat_map(|o| list(o, "offensives").iter())
+        .collect()
 }
 
 /// The offensives of a unit's fronts.
@@ -2457,9 +2485,17 @@ fn one(
         {
             return Ok(Some(line));
         }
+        if let Some(line) = border_fronts(state, tools, id, &units, roster, wars, lease, now)? {
+            return Ok(Some(line));
+        }
         return advance(
             state, tools, plan, id, op, &units, roster, wars, &enemies, &at_war, lease, now,
         );
+    }
+    // BORDER FRONTS: marked before the prepare's own reconcile, so the unit's line offensive goes
+    // under its own front and each border front gets its own
+    if let Some(line) = border_fronts(state, tools, id, &units, roster, wars, lease, now)? {
+        return Ok(Some(line));
     }
     if let Some(line) = prepare(
         state,
@@ -5711,7 +5747,7 @@ fn reconcile(
         .map(i64::to_string)
         .collect::<Vec<_>>()
         .join("-");
-    let stale = !offensives(roster, &u.name).is_empty();
+    let stale = !line_offensives(state, id, roster, &u.name).is_empty();
     let k = key(id, &format!("redraw:{}:{tag}", u.name));
     let redraws = state.done.get(&k).copied().unwrap_or(0);
     // REPLACE, NEVER ADD (`replace_arrows`): an arrow that misses the line goes on its own (the
@@ -5726,7 +5762,7 @@ fn reconcile(
     if stale && by_cmd(state, id) {
         let rk = key(id, &format!("repath:{}:{tag}", u.name));
         let tries = state.done.get(&rk).copied().unwrap_or(0);
-        let miss: Option<i64> = offensives(roster, &u.name)
+        let miss: Option<i64> = line_offensives(state, id, roster, &u.name)
             .into_iter()
             .find(|off| !aims(u, off, line))
             .and_then(|off| off["id"].as_i64());
@@ -5760,7 +5796,7 @@ fn reconcile(
         }
     }
     if stale && !u.spear && op_replaces(state, id) && redraws < REDRAWS {
-        let miss: Option<i64> = offensives(roster, &u.name)
+        let miss: Option<i64> = line_offensives(state, id, roster, &u.name)
             .into_iter()
             .find(|off| !aims(u, off, line))
             .and_then(|off| off["id"].as_i64());
@@ -5820,13 +5856,15 @@ fn reconcile(
     if stale
         && u.spear
         && !peace
-        && offensives(roster, &u.name).iter().any(|off| {
-            !aims(u, off, line)
-                && off["executing"] == json!(true)
-                && ints(&off["target"]["states"])
-                    .iter()
-                    .any(|s| line.contains(s))
-        })
+        && line_offensives(state, id, roster, &u.name)
+            .iter()
+            .any(|off| {
+                !aims(u, off, line)
+                    && off["executing"] == json!(true)
+                    && ints(&off["target"]["states"])
+                        .iter()
+                        .any(|s| line.contains(s))
+            })
     {
         state.op_notes.insert(
             format!("{id}:{}", u.name),
@@ -5840,7 +5878,7 @@ fn reconcile(
     if stale && u.spear && !peace && redraws == 0 {
         state.done.insert(k.clone(), 1);
         let nodelete = key(id, &format!("nodelete:{}", u.name));
-        let miss: Option<i64> = offensives(roster, &u.name)
+        let miss: Option<i64> = line_offensives(state, id, roster, &u.name)
             .into_iter()
             .find(|off| !aims(u, off, line))
             .and_then(|off| off["id"].as_i64());
@@ -5998,7 +6036,7 @@ fn reconcile(
             // under the front that holds the most divisions (a plan of several roots names one)
             let front = orders(roster, &u.name)
                 .iter()
-                .filter(|o| text(&o["kind"]) == "front")
+                .filter(|o| text(&o["kind"]) == "front" && !border_front(state, id, &u.name, o))
                 .max_by_key(|o| o["divisions"].as_i64().unwrap_or(0))
                 .and_then(|o| o["id"].as_i64());
             if let Some(f) = front {
@@ -7103,10 +7141,194 @@ fn deep_target(
     far
 }
 
+/// The enemy a front order faces: of the unit's enemy and its border enemies, the one whose border
+/// (hoi4_wars own border states) shares most states with the front's line; the unit's enemy on a
+/// tie or when the line reads no states.
+fn front_enemy(wars: &Value, u: &Unit, front: &Value) -> String {
+    let mine = ints(&front["line"]["states"]);
+    let shared = |tag: &str| {
+        list(wars, "borders")
+            .iter()
+            .filter(|b| text(&b["neighbour_tag"]) == tag)
+            .flat_map(|b| ints(&b["own_border_states"]))
+            .filter(|s| mine.contains(s))
+            .count()
+    };
+    let mut best = (shared(&u.enemy), u.enemy.clone());
+    for t in &u.enemies {
+        let n = shared(t);
+        if n > best.0 {
+            best = (n, t.clone());
+        }
+    }
+    best.1
+}
+
+/// The states of `tag` our country sees: its controlled states (hoi4_states by tag), else its
+/// border states (hoi4_wars).
+fn enemy_states(tools: &dyn Tools, wars: &Value, tag: &str) -> Vec<i64> {
+    let mut out: Vec<i64> = tools
+        .call("hoi4_states", &json!({"query": tag}))
+        .map(|r| {
+            list(&r, "states")
+                .iter()
+                .filter(|s| s["controller"].as_str().is_none_or(|c| c == tag))
+                .filter_map(|s| s["state_id"].as_i64())
+                .collect()
+        })
+        .unwrap_or_default();
+    if out.is_empty() {
+        out = list(wars, "borders")
+            .iter()
+            .filter(|b| text(&b["neighbour_tag"]) == tag)
+            .flat_map(|b| ints(&b["neighbour_states"]))
+            .collect();
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+/// BORDER FRONTS AND THEIR DIVISIONS (by command). A unit whose front takes several enemies'
+/// borders (`front.enemies`) holds one plan root per border section (the front tool posts them
+/// together, each with its share); the roots facing another enemy than the unit's are marked as
+/// border fronts (`bfront:<unit>:<front id>`, never repathed or deleted for the unit's line) and
+/// each gets its own deep offensive toward that enemy's far edge, under that root. Any unit by
+/// command with two or more fronts has its divisions spread over them (`hoi4_army_plan
+/// distribute`) once per front count, and again whenever a front reads none while another holds
+/// some (at most once a game day). ctl92a (28 Nov 2026): one group, two fronts drawn one after the
+/// other: Holland's 0 divisions, Belgium's 68; Holland retook two of our states.
+#[allow(clippy::too_many_arguments)]
+fn border_fronts(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    units: &[Unit],
+    roster: &Value,
+    wars: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if !by_cmd(state, id) {
+        return Ok(None);
+    }
+    for u in units.iter().filter(|u| u.role != Role::Hold) {
+        let fronts: Vec<Value> = orders(roster, &u.name)
+            .iter()
+            .filter(|o| text(&o["kind"]) == "front")
+            .cloned()
+            .collect();
+        if fronts.is_empty() {
+            continue;
+        }
+        // the roots facing another enemy are the border fronts
+        if !u.enemies.is_empty() {
+            for f in &fronts {
+                if let Some(fid) = f["id"].as_i64() {
+                    if front_enemy(wars, u, f) != u.enemy {
+                        state
+                            .done
+                            .entry(key(id, &format!("bfront:{}:{fid}", u.name)))
+                            .or_insert(now);
+                    }
+                }
+            }
+        }
+        // 1. SPREAD: two or more fronts, once per count and whenever one stands empty
+        if fronts.len() >= 2 && !state.skipped(now, "opspread", &u.name) {
+            let count = |f: &Value| f["divisions"].as_i64().unwrap_or(0);
+            let empty = fronts.iter().any(|f| f["divisions"].as_i64() == Some(0))
+                && fronts.iter().any(|f| count(f) > 0);
+            let sk = key(id, &format!("spread:{}:{}", u.name, fronts.len()));
+            if empty || !state.done.contains_key(&sk) {
+                state.skip(now, "opspread", &u.name, DAY);
+                let counts: Vec<i64> = fronts.iter().map(count).collect();
+                let line = order(
+                    state,
+                    tools,
+                    lease,
+                    id,
+                    &format!(
+                        "{}: its divisions spread over its {} fronts (now {counts:?}{})",
+                        u.name,
+                        fronts.len(),
+                        if empty { ": a front stands empty" } else { "" }
+                    ),
+                    "hoi4_army_plan",
+                    json!({"army": u.name, "distribute": true}),
+                )?;
+                if state.last_ok == Some(true) {
+                    state.done.insert(sk, now);
+                }
+                return Ok(Some(line));
+            }
+        }
+        // 2. each border front's own deep offensive
+        if u.enemies.is_empty() {
+            continue;
+        }
+        for f in &fronts {
+            let Some(fid) = f["id"].as_i64() else {
+                continue;
+            };
+            if !border_front(state, id, &u.name, f)
+                || !list(f, "offensives").is_empty()
+                || state.skipped(now, "opbdraw", &format!("{}:{fid}", u.name))
+            {
+                continue;
+            }
+            state.skip(now, "opbdraw", &format!("{}:{fid}", u.name), DAY);
+            let tag = front_enemy(wars, u, f);
+            let line = enemy_states(tools, wars, &tag);
+            let side = Unit {
+                enemy: tag.clone(),
+                own_states: ints(&f["line"]["states"]),
+                ..u.clone()
+            };
+            let deep = deep_target(state, tools, id, &side, &line, wars);
+            if deep.is_empty() || line.is_empty() {
+                state.op_notes.insert(
+                    format!("{id}:bfront:{}:{fid}", u.name),
+                    format!(
+                        "{}: its front {fid} against {tag} has no deep line (no graph read): no offensive by command",
+                        u.name
+                    ),
+                );
+                continue;
+            }
+            let mut args = offensive_order(&u.name, &line, None, false);
+            args["target_provinces"] = json!(deep);
+            args["parent_order"] = json!(fid);
+            let out = order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!(
+                    "offensive of {} against {tag} from its front {fid} on {tag}'s far edge ({} provinces by command)",
+                    u.name,
+                    deep.len()
+                ),
+                "hoi4_army_offensive",
+                args,
+            )?;
+            return Ok(Some(out));
+        }
+    }
+    Ok(None)
+}
+
 /// A front's arguments with the in-process `against` and `own_states` when orders go by command.
 fn command_front(state: &State, id: &str, u: &Unit, mut args: Value) -> Value {
     if by_cmd(state, id) && !u.enemy.is_empty() {
-        args["against"] = json!(u.enemy);
+        // BORDER FRONTS: every enemy border piece in one call, one root each with its share
+        args["against"] = if u.enemies.is_empty() {
+            json!(u.enemy)
+        } else {
+            json!(std::iter::once(u.enemy.clone())
+                .chain(u.enemies.iter().cloned())
+                .collect::<Vec<_>>())
+        };
         if !u.own_states.is_empty() {
             args["own_states"] = json!(u.own_states);
         }

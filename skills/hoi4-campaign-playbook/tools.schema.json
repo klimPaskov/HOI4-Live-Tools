@@ -752,10 +752,24 @@
     "additionalProperties": false,
     "properties": {
      "against": {
-      "description": "in-process only: the front along the whole own border against this tag (own_states narrows it), one front order per connected stretch",
-      "maxLength": 3,
-      "minLength": 3,
-      "type": "string"
+      "description": "in-process only: the front along the whole own border against this tag, or against each of several tags in one call (own_states narrows it): one plan root per border section, each with its share of the divisions; a tag with no border in the states is named in coverage.no_border",
+      "oneOf": [
+       {
+        "maxLength": 3,
+        "minLength": 3,
+        "type": "string"
+       },
+       {
+        "items": {
+         "maxLength": 3,
+         "minLength": 3,
+         "type": "string"
+        },
+        "maxItems": 16,
+        "minItems": 1,
+        "type": "array"
+       }
+      ]
      },
      "army": {
       "type": "string"
