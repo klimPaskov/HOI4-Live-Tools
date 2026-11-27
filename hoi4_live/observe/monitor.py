@@ -13,7 +13,7 @@ import time
 from collections import deque
 
 from . import answer, budget, cleanliness, costs
-from .escalation import Escalator, gate_kind, gate_packet
+from .escalation import ESCALATIONS_PER_YEAR, Escalator, gate_kind, gate_packet
 from .issues import Detector, _atomic
 from .lessons import LessonStore, lessons_from_issue, store_dir
 from .runlogs import RunLogs, body_date, now_snapshot
@@ -42,7 +42,10 @@ class Monitor:
         hist = history if history is not None else _load(os.path.join(self.store_path, "tool_stats.json"), {})
         self.lessons = LessonStore(self.store_path, game_version or os.environ.get("HOI4_GAME_VERSION", ""))
         self.det = Detector(self.out, plan=self.plan, plan_state=self._plan_state(), history=hist)
-        self.esc = Escalator(self.out, per_year=per_year or 24, lessons=self.lessons, run_name=self.name,
+        # the yearly count only stops a runaway; the money caps (budget.py) bound the spend (24 here
+        # skipped 86 of 117 escalations in cmps1 and 102 of 127 in cmph1, 27 Nov 2026)
+        self.esc = Escalator(self.out, per_year=per_year or ESCALATIONS_PER_YEAR, lessons=self.lessons,
+                             run_name=self.name,
                              live=not replay)
         self.budget = budget.Budget()
         self.reviews = {}            # game year -> gate reviews asked

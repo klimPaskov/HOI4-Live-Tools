@@ -60,7 +60,10 @@ flow. The executor reads `issues_open.json` at its tick and offers the lanes tha
 before its routine work, at most once per game day per lane. When an order of that lane passes,
 the issue becomes "acted"; when the snapshot no longer shows it, "resolved".
 
-"Acted" means an order of the lane passed, not that the lane had a turn. When the executor offers
+"Acted" means a verified order of the lane passed, not that the lane had a turn, and it is a remedy
+in flight: an issue still seen more than three game days after the lane's last verified order is
+open again (`acted_no_effect` in `issues.jsonl`, `[acted Nx, no effect]` in `ISSUES.md`), and past
+its deadline it is escalated as a remedy that did not hold. When the executor offers
 a lane an issue it writes the lane's typed answer to `RUN/issue_outcomes.jsonl` (`acted`, `refused`,
 `waiting` or `cannot`, with the lane's own note as the reason); the monitor keeps it on the issue
 (`lane_outcome`, `lane_reason`; for an executor omission row the rule's own note is the reason).
@@ -118,8 +121,17 @@ A model is asked only when a rule cannot answer:
 - an issue that keeps coming back after it was resolved.
 
 The executor's own refusals are never escalated (its ledger and the lessons answer them), and one
-escalation covers its kind for two game weeks. The budget is 24 escalations per game year
-(`Monitor(per_year=...)`); the escalation log records the ones skipped for the budget.
+escalation covers its kind for two game weeks. The yearly count (400, `Monitor(per_year=...)`) only
+stops a runaway; the money caps below bound the spend, and the escalation log records any skipped.
+
+A checked answer goes with its issue: `issues_open.json` carries it as `answer` and it heads the
+packet the executor puts in the player's wake; a "leave" answer becomes the issue's written reason.
+
+Every gate packet ends with the idle days per sink (political power, each experience pool, the
+officer corps, research slots, military and civilian factories, dockyards, air wings, task forces,
+manpower, leaders, MIO points, special projects, intelligence, focus, armies without orders, and
+any game alert): the game days a sink had an open issue, its longest unbroken spell and the issues
+open now, so a run's idleness is one table.
 
 The packet is built by code: what, since when, the deadline and why, the numbers, what was tried,
 recent related calls, matching lessons, and the allowed answers, which are limited to one
@@ -147,7 +159,7 @@ environment of other processes. Without the file no model is called and everythi
 same. Calls need the `anthropic` Python package (`pip install anthropic`).
 
 - Tier 1: `MONITOR_TIER1_MODEL` (default `claude-haiku-5-5`), low effort, at most 2,000 output
-  tokens, 24 a game year.
+  tokens; the yearly count only stops a runaway, the money caps bound it.
 - Tier 2: `MONITOR_TIER2_MODEL` (default `claude-opus-5-5`), medium effort, at most 6,000 output
   tokens, at a declaration of war, a capitulation, a new year, a failure or the run's end, at most 8
   a game year. The review is written beside the gate packet (`gates/<date>-<kind>-review.md`).

@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 from hoi4_live.observe import issue_rules as R
-from hoi4_live.observe.escalation import MAX_PACKET_CHARS, Escalator, build_packet, gate_kind, validate_answer
+from hoi4_live.observe.escalation import ACTED, MAX_PACKET_CHARS, Escalator, build_packet, gate_kind, validate_answer
 from hoi4_live.observe.issues import Detector
 from hoi4_live.observe.lessons import LessonStore, lessons_from_issue, walk
 from hoi4_live.observe.monitor import Monitor
@@ -356,13 +356,56 @@ class MonitorTest(unittest.TestCase):
         assert rec["tokens"]["input"] == 900 and rec["seconds"] >= 0
 
 
+    def test_an_answer_reaches_the_issue_and_a_leave_is_its_written_reason(self):
+        # cmps1/cmph1 (27 Nov 2026): 24 answers were logged in escalations.jsonl and reached no one
+        tmp_path = self.tmp
+        _, it = overdue_issue(tmp_path)
+        env = {"result": '{"kind":"leave","why":"the attack ends tomorrow"}',
+               "usage": {"input_tokens": 900, "output_tokens": 30}, "total_cost_usd": 0.0002}
+        script = tmp_path / "answer.py"
+        script.write_text("import sys\nsys.stdin.read()\nprint(%r)\n" % json.dumps(env))
+        esc = Escalator(str(tmp_path), answer_cmd=f'"{sys.executable}" "{script}"')
+        esc.consider("overdue", it, "1940.05.20.00", True)
+        assert it["answer"]["kind"] == "leave"
+        assert it["packet"].startswith("MODEL ANSWER: ")
+        assert it["lane_reason"] == "model: the attack ends tomorrow"
+
+    def test_acted_is_a_remedy_in_flight_and_reopens_when_the_issue_stays(self):
+        det = Detector(str(self.tmp), write=False)
+        det._set_date("1939.08.14.12")
+        it = det.raise_issue("doctrine_affordable", "doctrine_affordable", "x", "medium")
+        det.action({"id": "a1", "action": {"kind": "doctrine_adopt", "folder": "land"}, "status": "Verified"})
+        assert it["state"] == "acted"
+        det._set_date("1939.08.16.12")
+        det.raise_issue("doctrine_affordable", "doctrine_affordable", "x", "medium")
+        assert it["state"] == "acted"           # within the effect window
+        det._set_date("1939.08.20.12")
+        det.raise_issue("doctrine_affordable", "doctrine_affordable", "x", "medium")
+        assert it["state"] == "open" and it["no_effect"] == 1
+        assert "[acted 1x, no effect]" in det.render()
+        packet = build_packet(dict(it, acts=1), date="1939.08.20.12")
+        assert "did not fix it" in packet and "is no reason to leave it" in packet
+
+    def test_the_gate_packet_carries_idle_days_per_sink(self):
+        from hoi4_live.observe.escalation import gate_packet
+        det = Detector(str(self.tmp), write=False)
+        det._set_date("1939.08.14.12")
+        det.raise_issue("experience_unspent:army", "experience_unspent", "army xp", "medium", subject="army")
+        det.raise_issue("game_alert:mio_traits:mio_traits", "game_alert:mio_traits", "mio", "low")
+        det._set_date("1939.08.24.12")
+        rows = {r[0]: r for r in det.idle.rows()}
+        assert rows["army experience"][1] == 10 and rows["navy experience"][1] == 0
+        assert rows["MIO points"][1] == 10 and rows["game alerts (any)"][1] == 10
+        text = gate_packet("run_end", {"date": "1939.08.24.12"}, det, 0)
+        assert "| army experience | 10 | 10 |" in text
+
     def test_every_acted_but_open_issue_and_every_overdue_high_one_is_asked_once(self):
         tmp_path = self.tmp
         esc = Escalator(str(tmp_path), live=False)
         base = {"class": "tool_use", "severity": "low", "lane": "construction", "state": "open", "text": "x"}
         acted = [dict(base, id=f"I{i}", key=f"k{i}", code="construction_refused", acts=2) for i in range(3)]
         recs = [esc.consider("overdue", it, "1940.05.20.00") for it in acted]
-        assert all(r and r["why"] == "the owning lane acted and it stayed" and r["tier"] == 1 for r in recs)
+        assert all(r and r["why"] == ACTED and r["tier"] == 1 for r in recs)
         assert esc.consider("overdue", acted[0], "1940.05.21.00") is None   # one answer per issue
         high = dict(base, id="I9", key="k9", code="supply_short", severity="high", lane="construction")
         rec = esc.consider("overdue", high, "1940.05.20.00")
