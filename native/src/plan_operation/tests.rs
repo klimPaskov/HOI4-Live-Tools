@@ -4231,3 +4231,193 @@ fn a_second_echelon_without_a_general_gets_a_free_one_before_its_order() {
         )
     );
 }
+
+#[test]
+fn an_advance_that_outruns_its_supply_waits_for_it_and_goes_on_when_it_is_back() {
+    // t1939n (27 Nov 2026): 45 divisions in Dutch Brabant on local supply 1-2 of a demand of 8-9
+    // pressed on and took nothing for ten days
+    let game = Game::new();
+    game.unit("Mitte", |r| {
+        r["plan_executing"] = json!(true);
+        r["motorization"] = json!(2);
+    });
+    let read = |pct: f64| {
+        json!({"divisions": [
+            {"id": "m1", "army": "Mitte", "province_id": 6496, "state_id": 35, "supply_percent": pct},
+            {"id": "m2", "army": "Mitte", "province_id": 6496, "state_id": 35, "supply_percent": pct}]})
+    };
+    *game.supply.borrow_mut() = Some(read(20.0));
+    let roster = game.roster.borrow().clone();
+    let plan = json!({"war": {"relief_after_days": 2}});
+    let op = json!({"id": "op_x", "supply": {"floor": 35}});
+    let mut u = unit("Mitte".into(), Role::Line, &Value::Null, &Value::Null);
+    u.enemy = "HOL".into();
+    let at_war = vec!["HOL".to_string()];
+    let mut state = State::default();
+    // below the plan's floor: the arrow stops, the front stays
+    let got = supply_pace(
+        &mut state, &game, &plan, "op_x", &op, &u, &roster, &at_war, "l", START,
+    )
+    .unwrap();
+    assert!(
+        matches!(&got, Paced::Acted(l) if l.contains("waits for its supply")),
+        "{got:?}"
+    );
+    assert!(game
+        .orders()
+        .iter()
+        .any(|(n, a)| n == "hoi4_army_plan" && a["execute"] == json!(false)));
+    // while it waits: held (the relief spell starts), and after the relief delay a railway goes
+    // toward the starving province from the nearest own node
+    assert_eq!(
+        supply_pace(
+            &mut state,
+            &game,
+            &plan,
+            "op_x",
+            &op,
+            &u,
+            &roster,
+            &at_war,
+            "l",
+            START + DAY / 2
+        )
+        .unwrap(),
+        Paced::Held
+    );
+    let later = START + 3 * DAY;
+    let got = supply_pace(
+        &mut state, &game, &plan, "op_x", &op, &u, &roster, &at_war, "l", later,
+    )
+    .unwrap();
+    assert!(
+        matches!(&got, Paced::Acted(l) if l.contains("railway")),
+        "{got:?}"
+    );
+    assert!(game.orders().iter().any(|(n, a)| n == "hoi4_railway_build"
+        && a["to_province"] == json!(6496)
+        && a["from_nearest_node"] == json!(true)));
+    assert_eq!(
+        supply_pace(&mut state, &game, &plan, "op_x", &op, &u, &roster, &at_war, "l", later)
+            .unwrap(),
+        Paced::Held
+    );
+    // the supply back at the resume level: it goes on (the REPAIR executes it again)
+    *game.supply.borrow_mut() = Some(read(80.0));
+    let back = later + DAY;
+    assert_eq!(
+        supply_pace(&mut state, &game, &plan, "op_x", &op, &u, &roster, &at_war, "l", back)
+            .unwrap(),
+        Paced::Go
+    );
+    assert!(!state.done.contains_key("op:op_x:supplyheld:Mitte"));
+    // `supply.pace: false` keeps the rule off
+    *game.supply.borrow_mut() = Some(read(10.0));
+    let off = json!({"id": "op_x", "supply": {"floor": 35, "pace": false}});
+    assert_eq!(
+        supply_pace(
+            &mut State::default(),
+            &game,
+            &plan,
+            "op_x",
+            &off,
+            &u,
+            &roster,
+            &at_war,
+            "l",
+            back
+        )
+        .unwrap(),
+        Paced::Go
+    );
+}
+
+/// A plain read-only theatre for the start and hand-over rules: hoi4_wars and hoi4_armies as given.
+struct Reads {
+    wars: Value,
+    armies: Value,
+}
+impl Tools for Reads {
+    fn call(&self, name: &str, _args: &Value) -> Result<Value> {
+        Ok(match name {
+            "hoi4_wars" => self.wars.clone(),
+            "hoi4_armies" => self.armies.clone(),
+            _ => json!({}),
+        })
+    }
+}
+
+fn west() -> (Value, Reads) {
+    let plan = json!({"operations": [
+        {"id": "op_low", "enemies": ["HOL", "BEL"], "prepare_from": "", "group": "ag",
+         "on_capitulation": {"next": "op_fra"},
+         "formations": [{"army": "Mitte", "role": "line"},
+                        {"army": "PzN", "role": "mobile", "front": {"enemy": "HOL", "own_states": [56]}},
+                        {"army": "Wing", "role": "wing", "front": {"enemy": "BEL", "own_states": [51]}}]},
+        {"id": "op_fra", "enemies": ["FRA"], "prepare_from": "capitulated:BEL",
+         "execute_on": {"all": ["at_war_with:FRA", "capitulated:BEL"]},
+         "formations": [{"army": "Mitte", "role": "line"},
+                        {"army": "PzN", "role": "mobile", "front": {"enemy": "FRA", "own_states": [42]}}]}]});
+    let reads = Reads {
+        wars: json!({"wars": {"enemies": ["HOL", "BEL", "FRA"]},
+            "borders": [{"neighbour_tag": "FRA", "neighbour_states": [28], "own_border_states": [42, 978]},
+                        {"neighbour_tag": "BEL", "neighbour_states": [980], "own_border_states": [51]}]}),
+        armies: json!({"armies": [
+            {"army": "Mitte", "army_group": "AG", "division_count": 30, "plan": []},
+            {"army": "PzN", "army_group": null, "division_count": 8, "plan": []},
+            {"army": "Wing", "army_group": null, "division_count": 12, "plan": []}],
+            "army_groups": [{"army_group": "AG", "plan": []}]}),
+    };
+    (plan, reads)
+}
+
+#[test]
+fn france_at_war_starts_with_the_force_holland_frees_not_on_belgiums_capitulation() {
+    // t1939n (27 Nov 2026): op_france waited on capitulated:BEL while the Belgian war stalled;
+    // France had been at war since 1939 and its border stood open at 42 and 978
+    let (plan, reads) = west();
+    let ops = list(&plan, "operations").to_vec();
+    let mut state = State::default();
+    state.done.insert("op:op_low:prep".into(), START);
+    // every army of op_fra is held by op_low: nothing to start with
+    assert_eq!(free_start(&state, &reads, &ops, &ops[1], "op_fra"), None);
+    // Holland is out: the armour that fought it goes on to op_fra (the group's enemy is out, so
+    // the main weight no longer holds it); the Belgian wing and the line army stay
+    let roster = reads.armies.clone();
+    let (mut units, _) = units(&state, "op_low", &ops[0], &roster);
+    for u in units.iter_mut() {
+        if u.role == Role::Group || u.name == "PzN" || u.name == "Mitte" {
+            u.enemy = "HOL".into();
+        }
+    }
+    let at_war = vec!["BEL".to_string(), "FRA".to_string()];
+    release_to_next(
+        &mut state,
+        &plan,
+        "op_low",
+        &ops[0],
+        &mut units,
+        &roster,
+        &reads.wars,
+        &["HOL".to_string()],
+        &at_war,
+        START + DAY,
+    );
+    assert!(released(&state, "op_low", "PzN"));
+    assert!(!released(&state, "op_low", "Wing"));
+    assert!(!released(&state, "op_low", "Mitte"));
+    assert!(units.iter().all(|u| u.name != "PzN"));
+    // op_low no longer owns it; op_fra starts with it, on its open border, and says its plan
+    // trigger had not held
+    assert!(!owned_names(&state, &plan, &ops[0], &roster).contains(&"PzN".to_string()));
+    let why = free_start(&state, &reads, &ops, &ops[1], "op_fra").unwrap();
+    assert!(
+        why.contains("PzN") && why.contains("[42, 978]") && why.contains("had not held"),
+        "{why}"
+    );
+    assert!(why.contains("Mitte (op_low)"), "{why}");
+    // a plan that keeps the operation to its trigger
+    let mut keep = ops[1].clone();
+    keep["start"] = json!("trigger");
+    assert_eq!(free_start(&state, &reads, &ops, &keep, "op_fra"), None);
+}

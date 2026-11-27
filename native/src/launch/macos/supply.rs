@@ -140,6 +140,57 @@ fn lowest(values: impl Iterator<Item = f64>) -> Option<f64> {
     values.fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.min(v))))
 }
 
+/// The supply defines the executor sizes trucks and hubs by, read as the running game loads
+/// them: `common/defines/*.lua` in name order (00_defines.lua first, a mod's later
+/// `NDefines.NSupply.X = v` wins; the folder is the mod-layered content folder). A define the
+/// files do not carry is left out, never guessed.
+pub(super) const SUPPLY_DEFINES: [&str; 3] = [
+    "SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST",
+    "SUPPLY_HUB_FULL_MOTORIZATION_BONUS",
+    "SUPPLY_HUB_MOTORIZATION_MARGINAL_EFFECT_DECAY",
+];
+
+/// `SUPPLY_DEFINES` from a content folder (see there).
+pub(super) fn defines_in(dir: &std::path::Path) -> Value {
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(dir.join("common/defines"))
+        .map(|r| {
+            r.filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| p.extension().is_some_and(|e| e == "lua"))
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort();
+    let mut out = serde_json::Map::new();
+    for f in files {
+        let Ok(text) = std::fs::read_to_string(&f) else {
+            continue;
+        };
+        for name in SUPPLY_DEFINES {
+            if let Some(v) = define_value(&text, name) {
+                out.insert(name.to_string(), json!(v));
+            }
+        }
+    }
+    Value::Object(out)
+}
+
+/// The last assignment of `name` in a defines file (`NAME = 60.0,` inside its block, or
+/// `NDefines.NSupply.NAME = 50`), comments cut.
+fn define_value(text: &str, name: &str) -> Option<f64> {
+    let dotted = format!(".{name}");
+    text.lines()
+        .filter_map(|l| {
+            let l = l.split("--").next()?.trim();
+            let (lhs, rhs) = l.split_once('=')?;
+            let lhs = lhs.trim();
+            if lhs != name && !lhs.ends_with(&dotted) {
+                return None;
+            }
+            rhs.trim().trim_end_matches([',', ';']).trim().parse().ok()
+        })
+        .next_back()
+}
+
 pub(super) fn report(process: &dyn Process, strength_below: f64) -> Result<Value> {
     units::snapshot(process, |r, image| {
         let templates = units::templates(r, image)?;
@@ -399,6 +450,33 @@ pub(super) fn report(process: &dyn Process, strength_below: f64) -> Result<Value
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_supply_defines_are_read_as_the_game_loads_them_a_later_file_wins() {
+        let dir = std::env::temp_dir().join(format!("supply_defines_{}", std::process::id()));
+        let defines = dir.join("common/defines");
+        std::fs::create_dir_all(&defines).unwrap();
+        std::fs::write(
+            defines.join("00_defines.lua"),
+            "NDefines = { NSupply = {\n\t-- How many trucks\n\tSUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST = 60.0,\n\tSUPPLY_HUB_FULL_MOTORIZATION_BONUS = 2.2, -- range\n} }",
+        )
+        .unwrap();
+        let read = defines_in(&dir);
+        assert_eq!(read["SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST"], json!(60.0));
+        assert_eq!(read["SUPPLY_HUB_FULL_MOTORIZATION_BONUS"], json!(2.2));
+        assert!(read
+            .get("SUPPLY_HUB_MOTORIZATION_MARGINAL_EFFECT_DECAY")
+            .is_none());
+        // a mod's file, loaded after the game's, sets its own cost
+        std::fs::write(
+            defines.join("zz_mod.lua"),
+            "NDefines.NSupply.SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST = 45 -- cheaper\n",
+        )
+        .unwrap();
+        let read = defines_in(&dir);
+        assert_eq!(read["SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST"], json!(45.0));
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     fn map(v: &[(&str, f64)]) -> BTreeMap<String, f64> {
         v.iter().map(|(k, a)| (k.to_string(), *a)).collect()

@@ -1772,6 +1772,14 @@ impl MacClock {
                     })?,
             };
             let mut full = supply::report(process, below)?;
+            // the hub defines as the running game (and its mods) load them: the executor sizes
+            // trucks by these, never by a number of its own
+            if let Ok(dir) = mgmt::game_dir(process) {
+                let defines = crate::script::cached(&dir, "supply_defines", supply::defines_in);
+                if let Some(o) = full.as_object_mut() {
+                    o.insert("defines".into(), (*defines).clone());
+                }
+            }
             // summary:true keeps the per-army rows, totals and short lists (a few KB instead of
             // 40-60 KB of division rows); army:"X" keeps one army's divisions.
             if let Some(army) = args.get("army").and_then(Value::as_str) {
