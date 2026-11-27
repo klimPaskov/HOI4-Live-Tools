@@ -1714,3 +1714,56 @@ fn input_calls_are_counted_while_served() {
     }
     assert_eq!(count.load(Ordering::Acquire), 0);
 }
+
+#[test]
+fn the_game_inherits_the_session_bus_and_path_unless_launched_without_the_steam_client() {
+    let get = |name: &str| match name {
+        "HOME" => Some("/home/u".into()),
+        "PATH" => Some("/usr/bin:/bin".into()),
+        "DBUS_SESSION_BUS_ADDRESS" => Some("unix:path=/run/user/1000/bus".into()),
+        "SteamAppId" => Some("394360".into()),
+        _ => None,
+    };
+    let plain = inherited_environment(get, None);
+    assert!(plain.contains(&("PATH", "/usr/bin:/bin".into())));
+    assert!(plain.iter().any(|(n, _)| *n == "DBUS_SESSION_BUS_ADDRESS"));
+    assert!(!plain.iter().any(|(n, _)| n.starts_with("Steam")));
+
+    let bin = Path::new("/run/r/no-steam-bin");
+    let without = inherited_environment(get, Some(bin));
+    assert!(without.contains(&("PATH", "/run/r/no-steam-bin:/usr/bin:/bin".into())));
+    assert!(without.contains(&("HOME", "/home/u".into())));
+    assert!(!without
+        .iter()
+        .any(|(n, _)| *n == "DBUS_SESSION_BUS_ADDRESS"));
+    assert!(!without.iter().any(|(n, _)| n.starts_with("Steam")));
+    // No inherited PATH: the private folder alone.
+    let empty = inherited_environment(|_| None, Some(bin));
+    assert_eq!(empty, vec![("PATH", "/run/r/no-steam-bin".into())]);
+}
+
+#[test]
+fn the_private_xdg_open_opens_nothing_and_logs_each_call() {
+    let directory = std::env::temp_dir().join(format!("hoi4-no-steam-{}", nonce().unwrap()));
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&directory)
+        .unwrap();
+    let bin = write_no_steam_bin(&directory).unwrap();
+    for name in ["xdg-open", "unset LD_LIBRARY_PATH && xdg-open"] {
+        let meta = fs::metadata(bin.join(name)).unwrap();
+        assert_eq!(meta.mode() & 0o777, 0o700, "{name}");
+    }
+    // As the game runs it: through the shell, by PATH lookup.
+    let status = Command::new("/bin/sh")
+        .arg("-c")
+        .arg("unset LD_LIBRARY_PATH && xdg-open steam://rungameid/394360")
+        .env_clear()
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let log = fs::read_to_string(directory.join("xdg-open.log")).unwrap();
+    assert_eq!(log, "steam://rungameid/394360\n");
+    fs::remove_dir_all(&directory).unwrap();
+}

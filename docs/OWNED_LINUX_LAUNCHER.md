@@ -51,10 +51,19 @@ Save a private JSON configuration with these fields:
 | `renderer` | Optional `default`, `llvm_pipe` or `virpipe` |
 | `gpu_transport` | Optional private owned Unix socket; required for `virpipe` |
 | `fex` | Optional explicit ARM64 translator configuration described below; omitted for native launch |
+| `without_steam_client` | Optional `true`: start the game without the Steam client (below) |
 
 The settings seed and the DLC signature seed are copied into new isolated userdata. The only game launch
 argument is `-userdir=...`; the fresh playset enables no mods. Default user
 settings and playsets are never modified. Game output goes to a private file.
+
+The game gets a cleared environment: only `HOME` (the run's private home), `USER`, `LOGNAME`, `PATH`,
+`LANG`, `LC_ALL`, `LC_CTYPE`, `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` are passed on, never a
+Steam variable. Without a running Steam client the game may still try to start one by opening a
+`steam://` URL with `xdg-open`. With `without_steam_client` the launcher writes a private
+`no-steam-bin` folder into the run directory whose `xdg-open` opens nothing and only appends its
+arguments to the run's `xdg-open.log`, puts that folder first on the game's `PATH`, and leaves the
+desktop session bus out, so nothing the game asks for starts a Steam client.
 
 ### ARM64 Linux with FEX
 

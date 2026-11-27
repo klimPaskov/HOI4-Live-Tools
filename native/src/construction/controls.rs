@@ -66,7 +66,7 @@ fn opener(
     if topbar == 0 {
         return Ok(unavailable("topbar_unmaterialized"));
     }
-    exact(r, topbar, base + 0x4402bc0)?;
+    exact(r, topbar, base + 0x4409e70)?;
     if r.u64(topbar + 0x68)? != idler || r.u64(topbar + 0x70)? != manager {
         return Err(invalid("Topbar must belong to own idler and manager"));
     }
@@ -147,8 +147,8 @@ fn choice(
         return Ok(unavailable("choice_panel_not_settled_shown"));
     }
     let items = members(r, panel + 0x320, 256)?;
-    let db = r.u64(base + 0x4535360)?;
-    exact(r, db, base + 0x43484a8)?;
+    let db = r.u64(base + 0x453d360)?;
+    exact(r, db, base + 0x434f468)?;
     let ordered_catalog = members(r, db + 0x40, 4096)?;
     let catalog: BTreeMap<_, _> = ordered_catalog
         .iter()
@@ -162,7 +162,7 @@ fn choice(
     let mut unknown = 0;
     let mut joins = Vec::new();
     for item in &items {
-        if r.u64(*item)? != base + 0x44a5d40 {
+        if r.u64(*item)? != base + 0x44adce0 {
             unknown += 1;
             continue;
         }
@@ -175,7 +175,7 @@ fn choice(
         if !seen_templates.insert(template) {
             return Err(invalid("Unique construction choice templates required"));
         }
-        exact(r, template, base + 0x4348f98)?;
+        exact(r, template, base + 0x434ff58)?;
         if !super::boolean(r, template + 0x18)? {
             unknown += 1;
             continue;
@@ -259,7 +259,7 @@ pub(crate) fn blockers(
     if focus == 0 || politics == 0 {
         return Ok(unavailable("own_blocker_roots_unmaterialized"));
     }
-    exact(r, focus, base + 0x43df748)?;
+    exact(r, focus, base + 0x43e69f8)?;
     if r.u64(focus + 0x2f0)? != idler {
         return Err(invalid("Focus blocker view must belong to own idler"));
     }
@@ -267,7 +267,7 @@ pub(crate) fn blockers(
     if displayed != 0 && displayed != country {
         return Ok(unavailable("focus_country_binding_unavailable"));
     }
-    exact(r, politics, base + 0x43ea4f8)?;
+    exact(r, politics, base + 0x43f17a8)?;
     if r.u64(politics + 0x2f0)? != idler || r.u64(politics + 0x38)? != manager {
         return Err(invalid("Politics blocker view must belong to own manager"));
     }
@@ -331,8 +331,8 @@ pub(crate) fn observe(
     let [gs, idler, _] = campaign.anchors;
     witnesses.section("interface");
     let registry = r.u64(idler + 0x4f8)?;
-    exact(&r, registry, base + 0x4409f68)?;
-    if r.u64(base + 0x470e6d8)? != registry {
+    exact(&r, registry, base + 0x4411218)?;
+    if r.u64(base + 0x47166f8)? != registry {
         return Err(invalid("Current input GUI must equal own registry"));
     }
     let manager = r.u64(idler + 0x6b8)?;
@@ -349,7 +349,7 @@ pub(crate) fn observe(
     let panel_state = if panel == 0 {
         json!({"materialized":false,"settled_visible":null})
     } else {
-        exact(&r, panel, base + 0x44a5e20)?;
+        exact(&r, panel, base + 0x44addc0)?;
         if r.u64(panel + 0x2f0)? != idler {
             return Err(invalid("Construction panel must belong to own idler"));
         }

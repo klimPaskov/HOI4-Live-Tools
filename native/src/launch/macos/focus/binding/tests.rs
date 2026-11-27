@@ -415,7 +415,7 @@ fn canonical_target_and_real_node_geometry_share_one_complete_witness() {
     );
     assert_eq!(tree.obstacles.len(), 2);
     assert_eq!(f.checks.get(), 2);
-    assert!(f.untouched(0x44086a8, 8));
+    assert!(f.untouched(0x440f958, 8));
     assert!(f.untouched(FOREIGN, 0x1000));
 }
 

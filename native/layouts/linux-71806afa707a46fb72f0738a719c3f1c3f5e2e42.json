@@ -3,6 +3,7 @@
  "confidence": {
   "fields": {
    "CAcceptCommandDialog": {
+    "0x488": "migrated",
     "0x490": "high",
     "0xda8": "high",
     "0xdb4": "high"
@@ -25,6 +26,9 @@
     "0x38": "medium",
     "0x3c": "high",
     "0x40": "high"
+   },
+   "CAgencyUpgradeDatabase": {
+    "0x70": "migrated"
    },
    "CAgencyUpgradesWindow": {
     "0x28": "medium",
@@ -60,6 +64,7 @@
     "0x4c0": "high",
     "0x4c8": "medium",
     "0x4f0": "medium",
+    "0x50": "migrated",
     "0x80": "high",
     "0x90": "high",
     "0xa0": "medium"
@@ -346,6 +351,7 @@
    },
    "CBuilding": {
     "0x10": "medium",
+    "0x1a8": "migrated",
     "0x1b0": "live",
     "0x1c": "medium",
     "0x20": "medium",
@@ -409,6 +415,7 @@
     "0x10": "medium",
     "0x20": "medium",
     "0x30": "medium",
+    "0x488": "migrated",
     "0x490": "high",
     "0xd68": "high",
     "0xd70": "medium"
@@ -417,6 +424,7 @@
     "0x10": "medium",
     "0x20": "medium",
     "0x30": "medium",
+    "0x488": "migrated",
     "0x490": "high"
    },
    "CCharacter": {
@@ -425,6 +433,7 @@
     "0x18": "medium",
     "0x20": "live",
     "0x38": "live",
+    "0x48": "migrated",
     "0x50": "medium",
     "0x58": "medium",
     "0x60": "medium",
@@ -433,6 +442,9 @@
     "0xb8": "medium",
     "0xc8": "medium",
     "0xd0": "medium"
+   },
+   "CCheckBox": {
+    "0xa8": "migrated"
    },
    "CCombatManager": {
     "0x14": "high",
@@ -457,8 +469,15 @@
     "0x4f0": "medium",
     "0x4f8": "medium"
    },
+   "CConfirmDeleteUnits": {
+    "0x490": "migrated"
+   },
    "CConfirmationPopUpWindow": {
+    "0x488": "migrated",
     "0x490": "high"
+   },
+   "CConsumerGoodsConsumer": {
+    "0x10": "live"
    },
    "CContainerWindow": {
     "0x1000": "medium",
@@ -652,6 +671,7 @@
     "0x20f8": "high",
     "0x28": "medium",
     "0x30": "medium",
+    "0x488": "migrated",
     "0x490": "medium",
     "0x498": "high",
     "0x4a4": "high",
@@ -697,6 +717,7 @@
     "0x20": "medium",
     "0x28": "medium",
     "0x30": "medium",
+    "0x488": "migrated",
     "0x490": "live",
     "0x498": "high",
     "0x4a0": "high",
@@ -712,10 +733,24 @@
     "0x20": "medium",
     "0x3560": "medium",
     "0x35e8": "live",
+    "0x3e20": "migrated",
+    "0x3e2c": "migrated",
+    "0x3e38": "migrated",
+    "0x3e40": "migrated",
+    "0x3e48": "migrated",
+    "0x3e50": "migrated",
+    "0x3e60": "migrated",
+    "0x3e98": "migrated",
+    "0x3ea0": "migrated",
+    "0x3ea8": "migrated",
+    "0x488": "migrated",
     "0x490": "medium",
     "0x4a0": "high"
    },
    "CCountryExperienceStatus": {
+    "0x10": "migrated",
+    "0x28": "migrated",
+    "0x40": "migrated",
     "0x58": "medium",
     "0x64": "medium",
     "0x70": "medium",
@@ -857,6 +892,7 @@
     "0x37bc": "medium",
     "0x37c0": "medium",
     "0x37d0": "medium",
+    "0x3958": "migrated",
     "0x488": "high",
     "0x490": "medium",
     "0x4a0": "high",
@@ -1005,6 +1041,7 @@
     "0x710": "medium",
     "0x8": "medium",
     "0x810": "high",
+    "0x828": "migrated",
     "0x840": "high",
     "0x848": "medium",
     "0x854": "medium",
@@ -1034,6 +1071,7 @@
    },
    "CDecision": {
     "0x108": "live",
+    "0x118": "migrated",
     "0x150": "medium",
     "0x18": "medium",
     "0x1a0": "medium",
@@ -1122,12 +1160,15 @@
     "0x3c4": "medium",
     "0x430": "medium",
     "0x43c": "medium",
+    "0x50": "migrated",
     "0x68": "high",
     "0x70": "medium",
     "0x74": "high",
     "0x78": "medium",
     "0x8": "medium",
+    "0x80": "migrated",
     "0x8c": "medium",
+    "0x98": "migrated",
     "0xc8": "medium",
     "0xd4": "medium",
     "0xe0": "medium",
@@ -1240,6 +1281,7 @@
     "0x1d8": "medium",
     "0x1e0": "medium",
     "0x40": "live",
+    "0x58": "migrated",
     "0x60": "live",
     "0x8": "live"
    },
@@ -1333,6 +1375,10 @@
     "0x500": "medium",
     "0xc0": "medium"
    },
+   "CEquipmentType": {
+    "0x10": "migrated",
+    "0x60": "migrated"
+   },
    "CEquipmentUpgrade": {
     "0x10": "live",
     "0x100": "medium",
@@ -1356,6 +1402,51 @@
     "0x1730": "medium",
     "0x4580": "medium"
    },
+   "CEquipmentVariant": {
+    "0x100": "migrated",
+    "0x108": "migrated",
+    "0x110": "migrated",
+    "0x118": "migrated",
+    "0x188": "migrated",
+    "0x190": "migrated",
+    "0x198": "migrated",
+    "0x1a0": "migrated",
+    "0x1b8": "migrated",
+    "0x1c0": "migrated",
+    "0x1c8": "migrated",
+    "0x1d0": "migrated",
+    "0x1d8": "migrated",
+    "0x1e0": "migrated",
+    "0x1e8": "migrated",
+    "0x1f8": "migrated",
+    "0x200": "migrated",
+    "0x260": "migrated",
+    "0x268": "migrated",
+    "0x270": "migrated",
+    "0x278": "migrated",
+    "0x28": "migrated",
+    "0x280": "migrated",
+    "0x290": "migrated",
+    "0x298": "migrated",
+    "0x2a0": "migrated",
+    "0x2d8": "migrated",
+    "0x2e0": "migrated",
+    "0x2e8": "migrated",
+    "0x2f0": "migrated",
+    "0x2f8": "migrated",
+    "0x318": "migrated",
+    "0x358": "migrated",
+    "0x3c0": "migrated",
+    "0x3e0": "migrated",
+    "0x3e8": "migrated",
+    "0x40": "migrated",
+    "0x410": "migrated",
+    "0x414": "migrated",
+    "0x60": "migrated",
+    "0xa8": "migrated",
+    "0xc": "migrated",
+    "0xf8": "migrated"
+   },
    "CEquipmentVariantPool": {
     "0x10": "filled",
     "0x14": "medium",
@@ -1377,11 +1468,13 @@
     "0x1000": "medium",
     "0x120": "medium",
     "0x1d0": "medium",
+    "0x20": "migrated",
     "0x28": "live",
     "0x280": "medium",
     "0x30": "medium",
     "0x330": "high",
     "0x340": "medium",
+    "0x38": "migrated",
     "0x40": "live",
     "0x48": "high",
     "0x50": "medium",
@@ -1425,6 +1518,9 @@
     "0xf0": "medium",
     "0xf4": "medium"
    },
+   "CFleetsBottomBar": {
+    "0x910": "migrated"
+   },
    "CFocusFinishedPopUpWindow": {
     "0x488": "medium",
     "0x490": "high",
@@ -1439,6 +1535,7 @@
     "0x4f0": "high"
    },
    "CGenericDefaultConfirmationPopUpWindow": {
+    "0x488": "migrated",
     "0x490": "high"
    },
    "CIcon": {
@@ -1496,6 +1593,11 @@
     "0x9e8": "medium",
     "0xa38": "medium",
     "0xb28": "medium"
+   },
+   "CIdeaResearchBonus": {
+    "0x10": "migrated",
+    "0x30": "live",
+    "0x38": "live"
    },
    "CInGameIdler": {
     "0x18": "high",
@@ -2043,6 +2145,7 @@
     "0x43a0": "filled"
    },
    "CPeaceSummaryPopUpWindow": {
+    "0x488": "migrated",
     "0x490": "high",
     "0x499": "medium",
     "0x4b8": "medium",
@@ -2140,6 +2243,20 @@
     "0x98": "medium",
     "0xe8": "medium"
    },
+   "CProductionEquipmentWindow": {
+    "0xcf8": "migrated",
+    "0xd00": "migrated"
+   },
+   "CProductionLine": {
+    "0x14": "migrated",
+    "0x20": "migrated",
+    "0x28": "migrated",
+    "0x30": "migrated",
+    "0x38": "migrated",
+    "0x48": "migrated",
+    "0x58": "live",
+    "0x88": "live"
+   },
    "CProductionLineMilitaryItem": {
     "0x10": "high",
     "0x1a50": "medium",
@@ -2163,6 +2280,9 @@
     "0x10": "medium",
     "0x8": "medium"
    },
+   "CProductionResourceCost.size": {
+    "0x20": "live"
+   },
    "CProductionStatus": {
     "0x10": "medium",
     "0x130": "high",
@@ -2184,6 +2304,10 @@
     "0x328": "filled",
     "0x388": "filled",
     "0x448": "live",
+    "0x460": "migrated",
+    "0x478": "migrated",
+    "0x490": "migrated",
+    "0x4a8": "migrated",
     "0x4c0": "high",
     "0x4e8": "medium",
     "0x560": "medium",
@@ -2232,6 +2356,9 @@
     "0x30": "medium",
     "0x8": "high"
    },
+   "CReassignFullOrdersGroupDialog": {
+    "0x490": "migrated"
+   },
    "CReferencedDivisionTemplate": {
     "0x10": "medium",
     "0x18": "live",
@@ -2242,6 +2369,7 @@
     "0xc": "medium"
    },
    "CResearchFinishedPopUpWindow": {
+    "0x488": "migrated",
     "0x490": "high",
     "0x499": "medium",
     "0x4b8": "medium",
@@ -2332,6 +2460,7 @@
    },
    "CSpecialProjectCapturedPopUpWindow": {
     "0x30": "medium",
+    "0x488": "migrated",
     "0x490": "high",
     "0x4d0": "medium",
     "0x4d8": "medium",
@@ -2341,6 +2470,7 @@
     "0x4f8": "high"
    },
    "CSpecialProjectFinishedPopUpWindow": {
+    "0x488": "migrated",
     "0x490": "high",
     "0x4d8": "medium",
     "0x4e0": "medium",
@@ -2475,6 +2605,13 @@
     "0x8": "high",
     "0xe0": "medium"
    },
+   "CStrategicRegion.template": {
+    "0x20": "live",
+    "0x38": "live"
+   },
+   "CStrategicResource": {
+    "0x8": "migrated"
+   },
    "CStrategicResourceDatabase": {
     "0x14": "medium",
     "0x18": "medium",
@@ -2552,6 +2689,7 @@
    "CSurrenderedPopupWindow": {
     "0x10": "high",
     "0x30": "high",
+    "0x488": "migrated",
     "0x490": "high",
     "0x4c0": "medium",
     "0x4d0": "medium",
@@ -2748,6 +2886,9 @@
     "0x8c88": "high",
     "0x8c90": "medium"
    },
+   "CTradeOfferWindow": {
+    "0xd60": "migrated"
+   },
    "CUnitLeaderTemplate": {
     "0x14": "medium",
     "0x18": "high",
@@ -2790,6 +2931,7 @@
     "0x10": "medium",
     "0x11c0": "medium",
     "0x30": "medium",
+    "0x488": "migrated",
     "0x490": "high",
     "0x4c8": "medium",
     "0x4f8": "high",
@@ -2821,6 +2963,9 @@
     "0x7c": "medium",
     "0x8": "filled"
    },
+   "NDoctrines::CCountryDoctrineStatus.size": {
+    "0xa0": "live"
+   },
    "NDoctrines::CCountryDoctrineView": {
     "0x20": "medium",
     "0x28": "high",
@@ -2847,6 +2992,11 @@
     "0x18": "high",
     "0x8": "high"
    },
+   "NDoctrines::CDoctrineTemplate": {
+    "0x18": "live",
+    "0x1c": "live",
+    "0x20": "live"
+   },
    "NDoctrines::CFolderStatus": {
     "0x10": "medium",
     "0x18": "high",
@@ -2859,6 +3009,9 @@
     "0x48": "medium",
     "0x8": "filled"
    },
+   "NDoctrines::CFolderStatus.size": {
+    "0x50": "live"
+   },
    "NDoctrines::CTrackStatus": {
     "0x10": "filled",
     "0x18": "filled",
@@ -2869,6 +3022,18 @@
     "0x50": "live",
     "0x58": "live",
     "0x8": "filled"
+   },
+   "NDoctrines::CTrackStatus.size": {
+    "0x60": "live"
+   },
+   "NDoctrines::STemporaryCostReduction": {
+    "0x10": "migrated",
+    "0x28": "migrated",
+    "0x30": "migrated",
+    "0x8": "migrated"
+   },
+   "NDoctrines::STemporaryCostReduction.size": {
+    "0x38": "live"
    },
    "NFactions::CFaction": {
     "0x18": "live",
@@ -2915,7 +3080,7 @@
    "NIndustrialOrganisation::COrganisationDetailWindow": {
     "0x28": "medium",
     "0x29": "high",
-    "0x30": "medium",
+    "0x30": "migrated",
     "0x3010": "medium",
     "0x3480": "medium",
     "0x38": "high",
@@ -2932,6 +3097,9 @@
     "0x8": "high",
     "0x84": "high",
     "0x90": "medium"
+   },
+   "NIndustrialOrganisation::COrganisationListWindow": {
+    "0xf0": "migrated"
    },
    "NIndustrialOrganisation::CTraitBonus": {
     "0x14": "high",
@@ -2971,6 +3139,9 @@
     "0x68": "medium",
     "0x74": "medium"
    },
+   "NProject::CProject.size": {
+    "0x1b8": "live"
+   },
    "NProject::CProjectPool": {
     "0x10": "live",
     "0x1c": "high",
@@ -2983,7 +3154,12 @@
     "0x58": "medium"
    },
    "NProject::CProjectStateMachine": {
-    "0x20": "medium"
+    "0x20": "medium",
+    "0x8": "migrated",
+    "0x8c": "migrated",
+    "0x90": "migrated",
+    "0x94": "migrated",
+    "0x98": "migrated"
    },
    "NProject::CProjectTemplate": {
     "0x10": "high",
@@ -2994,6 +3170,9 @@
    "NProject::CSimpleProjectState": {
     "0x40": "medium",
     "0x48": "filled"
+   },
+   "NProject::CSpecializationDatabase": {
+    "0x58": "migrated"
    },
    "NProject::NUi::CFacilitiesTabView": {
     "0x500": "medium",
@@ -3100,6 +3279,19 @@
     "0xe30": "medium",
     "0xe50": "medium"
    },
+   "breakthrough.map_node": {
+    "0x0": "live",
+    "0x18": "live",
+    "0x20": "live",
+    "0x8": "live"
+   },
+   "characters.recruit_pool": {
+    "0x8": "live"
+   },
+   "civilian.consumer": {
+    "0x8": "live",
+    "0xc": "live"
+   },
    "construction.view": {
     "0x1210": "medium",
     "0x1218": "medium",
@@ -3162,12 +3354,32 @@
     "0x5c0": "medium",
     "0x5c4": "high"
    },
+   "deployment.template_row": {
+    "0x10": "live"
+   },
    "deployment.template_window": {
-    "0xd18": "high"
+    "0xcb0": "migrated",
+    "0xd18": "high",
+    "0xd20": "migrated"
    },
    "designer.draft_holder": {
     "0x240": "medium",
     "0x8": "high"
+   },
+   "division.pool": {
+    "0x10": "live"
+   },
+   "division.pool.size": {
+    "0x18": "live"
+   },
+   "division.variant": {
+    "0x8": "live"
+   },
+   "division.variant.size": {
+    "0x10": "live"
+   },
+   "division_template": {
+    "0x20": "live"
    },
    "find.result_row": {
     "0x10": "high",
@@ -3208,6 +3420,7 @@
    },
    "gs.navy_manager": {
     "0x18": "medium",
+    "0x20": "migrated",
     "0x8": "high"
    },
    "gui.button": {
@@ -3294,6 +3507,9 @@
     "0x40": "medium",
     "0x70": "medium",
     "0xb0": "medium"
+   },
+   "idea.category": {
+    "0x10": "migrated"
    },
    "idler.camera": {
     "0x110": "filled",
@@ -3403,6 +3619,12 @@
     "0x8b0": "medium",
     "0xce0": "medium"
    },
+   "manager.find_view": {
+    "0xd50": "migrated",
+    "0xd58": "migrated",
+    "0xd68": "migrated",
+    "0xda8": "migrated"
+   },
    "manager.tech_view": {
     "0x20": "medium",
     "0x28": "medium",
@@ -3452,6 +3674,9 @@
     "0x4bc": "medium",
     "0x4e8": "medium"
    },
+   "modifier.entry.size": {
+    "0x10": "live"
+   },
    "orders.group": {
     "0x130": "medium",
     "0x138": "medium",
@@ -3469,6 +3694,7 @@
     "0x50": "medium",
     "0x5c": "medium",
     "0x68": "medium",
+    "0x8": "migrated",
     "0x88": "high",
     "0x98": "medium",
     "0xa4": "high",
@@ -3480,6 +3706,9 @@
    "politics.selection_window": {
     "0x4a8": "medium",
     "0x8": "medium"
+   },
+   "production.selection.window": {
+    "0xcf8": "migrated"
    },
    "production.view": {
     "0x1130": "high",
@@ -3581,6 +3810,16 @@
     "0xe18": "medium",
     "0xe28": "medium"
    },
+   "scientist.skill_level": {
+    "0x0": "live",
+    "0x18": "live"
+   },
+   "scientist.skill_level.size": {
+    "0x20": "live"
+   },
+   "spec.template": {
+    "0x8": "live"
+   },
    "state.view": {
     "0x20": "high",
     "0x28": "high",
@@ -3658,6 +3897,12 @@
     "0xec": "high",
     "0xf0": "medium",
     "0xf8": "medium"
+   },
+   "subunit.need": {
+    "0x8": "live"
+   },
+   "subunit.need.size": {
+    "0x10": "live"
    },
    "topbar": {
     "0x58": "medium",
@@ -3813,6 +4058,7 @@
    "0x36257e8": "high",
    "0x3626830": "high",
    "0x362a5b8": "high",
+   "0x362c958": "migrated",
    "0x362cd98": "high",
    "0x362d5b0": "high",
    "0x362de58": "high",
@@ -3828,6 +4074,7 @@
    "0x363d5c0": "high",
    "0x363d658": "high",
    "0x3640050": "high",
+   "0x36424c8": "migrated",
    "0x3643990": "high",
    "0x3643ac0": "high",
    "0x3647398": "high",
@@ -3895,6 +4142,7 @@
  },
  "fields": {
   "CAcceptCommandDialog": {
+   "0x488": "0x328",
    "0x490": "0x330",
    "0xda8": "0x998",
    "0xdb4": "0x9a4"
@@ -3917,6 +4165,9 @@
    "0x38": "0x40",
    "0x3c": "0x44",
    "0x40": "0x48"
+  },
+  "CAgencyUpgradeDatabase": {
+   "0x70": "0x70"
   },
   "CAgencyUpgradesWindow": {
    "0x28": "0x30",
@@ -3952,6 +4203,7 @@
    "0x4c0": "0x350",
    "0x4c8": "0x358",
    "0x4f0": "0x380",
+   "0x50": "0x50",
    "0x80": "0x80",
    "0x90": "0x88",
    "0xa0": "0x90"
@@ -4238,6 +4490,7 @@
   },
   "CBuilding": {
    "0x10": "0x10",
+   "0x1a8": "0x1b8",
    "0x1b0": "0x1c0",
    "0x1c": "0x1c",
    "0x20": "0x20",
@@ -4301,6 +4554,7 @@
    "0x10": "0x10",
    "0x20": "0x28",
    "0x30": "0x38",
+   "0x488": "0x328",
    "0x490": "0x330",
    "0xd68": "0x948",
    "0xd70": "0x950"
@@ -4309,6 +4563,7 @@
    "0x10": "0x10",
    "0x20": "0x28",
    "0x30": "0x38",
+   "0x488": "0x328",
    "0x490": "0x330"
   },
   "CCharacter": {
@@ -4317,6 +4572,7 @@
    "0x18": "0x18",
    "0x20": "0x20",
    "0x38": "0x40",
+   "0x48": "0x40",
    "0x50": "0x60",
    "0x58": "0x68",
    "0x60": "0x70",
@@ -4325,6 +4581,9 @@
    "0xb8": "0xf8",
    "0xc8": "0x108",
    "0xd0": "0x110"
+  },
+  "CCheckBox": {
+   "0xa8": "0xb8"
   },
   "CCombatManager": {
    "0x14": "0x14",
@@ -4349,8 +4608,15 @@
    "0x4f0": "0x368",
    "0x4f8": "0x370"
   },
-  "CConfirmationPopUpWindow": {
+  "CConfirmDeleteUnits": {
    "0x490": "0x330"
+  },
+  "CConfirmationPopUpWindow": {
+   "0x488": "0x328",
+   "0x490": "0x330"
+  },
+  "CConsumerGoodsConsumer": {
+   "0x10": "0x10"
   },
   "CContainerWindow": {
    "0x1000": "0xbe0",
@@ -4544,6 +4810,7 @@
    "0x20f8": "0x16f8",
    "0x28": "0x30",
    "0x30": "0x38",
+   "0x488": "0x330",
    "0x490": "0x338",
    "0x498": "0x340",
    "0x4a4": "0x34c",
@@ -4589,6 +4856,7 @@
    "0x20": "0x28",
    "0x28": "0x30",
    "0x30": "0x38",
+   "0x488": "0x330",
    "0x490": "0x338",
    "0x498": "0x340",
    "0x4a0": "0x348",
@@ -4604,10 +4872,24 @@
    "0x20": "0x28",
    "0x3560": "0x2460",
    "0x35e8": "0x2ce0",
+   "0x3e20": "0x2a48",
+   "0x3e2c": "0x2a54",
+   "0x3e38": "0x2a60",
+   "0x3e40": "0x2a68",
+   "0x3e48": "0x2a70",
+   "0x3e50": "0x2a78",
+   "0x3e60": "0x2a88",
+   "0x3e98": "0x2ac8",
+   "0x3ea0": "0x2ad0",
+   "0x3ea8": "0x2ad8",
+   "0x488": "0x330",
    "0x490": "0x338",
    "0x4a0": "0x340"
   },
   "CCountryExperienceStatus": {
+   "0x10": "0x10",
+   "0x28": "0x28",
+   "0x40": "0x40",
    "0x58": "0x58",
    "0x64": "0x64",
    "0x70": "0x70",
@@ -4749,6 +5031,7 @@
    "0x37bc": "0x255c",
    "0x37c0": "0x2560",
    "0x37d0": "0x2568",
+   "0x3958": "0x2698",
    "0x488": "0x330",
    "0x490": "0x338",
    "0x4a0": "0x340",
@@ -4897,6 +5180,7 @@
    "0x710": "0x768",
    "0x8": "0x8",
    "0x810": "0x870",
+   "0x828": "0x888",
    "0x840": "0x8a0",
    "0x848": "0x8a8",
    "0x854": "0x8b4",
@@ -4926,6 +5210,7 @@
   },
   "CDecision": {
    "0x108": "0x118",
+   "0x118": "0x118",
    "0x150": "0x170",
    "0x18": "0x18",
    "0x1a0": "0x1c8",
@@ -5014,12 +5299,15 @@
    "0x3c4": "0x3cc",
    "0x430": "0x438",
    "0x43c": "0x444",
+   "0x50": "0x50",
    "0x68": "0x68",
    "0x70": "0x70",
    "0x74": "0x74",
    "0x78": "0x78",
    "0x8": "0x8",
+   "0x80": "0x80",
    "0x8c": "0x8c",
+   "0x98": "0x98",
    "0xc8": "0xc8",
    "0xd4": "0xd4",
    "0xe0": "0xe0",
@@ -5132,6 +5420,7 @@
    "0x1d8": "0x1e8",
    "0x1e0": "0x1f0",
    "0x40": "0x50",
+   "0x58": "0x68",
    "0x60": "0x70",
    "0x8": "0x8"
   },
@@ -5225,6 +5514,10 @@
    "0x500": "0x358",
    "0xc0": "0x80"
   },
+  "CEquipmentType": {
+   "0x10": "0x10",
+   "0x60": "0x68"
+  },
   "CEquipmentUpgrade": {
    "0x10": "0x10",
    "0x100": "0x108",
@@ -5248,6 +5541,51 @@
    "0x1730": "0xfd8",
    "0x4580": "0x2f30"
   },
+  "CEquipmentVariant": {
+   "0x100": "0x110",
+   "0x108": "0x118",
+   "0x110": "0x120",
+   "0x118": "0x128",
+   "0x188": "0x198",
+   "0x190": "0x1a0",
+   "0x198": "0x1a8",
+   "0x1a0": "0x1b0",
+   "0x1b8": "0x1c8",
+   "0x1c0": "0x1d0",
+   "0x1c8": "0x1d8",
+   "0x1d0": "0x1e0",
+   "0x1d8": "0x1e8",
+   "0x1e0": "0x1f0",
+   "0x1e8": "0x1f8",
+   "0x1f8": "0x208",
+   "0x200": "0x210",
+   "0x260": "0x270",
+   "0x268": "0x278",
+   "0x270": "0x280",
+   "0x278": "0x288",
+   "0x28": "0x28",
+   "0x280": "0x290",
+   "0x290": "0x2a0",
+   "0x298": "0x2a8",
+   "0x2a0": "0x2b0",
+   "0x2d8": "0x2e8",
+   "0x2e0": "0x2f0",
+   "0x2e8": "0x2f8",
+   "0x2f0": "0x300",
+   "0x2f8": "0x308",
+   "0x318": "0x328",
+   "0x358": "0x368",
+   "0x3c0": "0x3d0",
+   "0x3e0": "0x3f0",
+   "0x3e8": "0x3f8",
+   "0x40": "0x48",
+   "0x410": "0x420",
+   "0x414": "0x424",
+   "0x60": "0x70",
+   "0xa8": "0xb8",
+   "0xc": "0xc",
+   "0xf8": "0x108"
+  },
   "CEquipmentVariantPool": {
    "0x10": "0x10",
    "0x14": "0x14",
@@ -5269,11 +5607,13 @@
    "0x1000": "0xbc8",
    "0x120": "0x128",
    "0x1d0": "0x1d8",
+   "0x20": "0x28",
    "0x28": "0x28",
    "0x280": "0x288",
    "0x30": "0x38",
    "0x330": "0x338",
    "0x340": "0x340",
+   "0x38": "0x40",
    "0x40": "0x40",
    "0x48": "0x50",
    "0x50": "0x58",
@@ -5317,6 +5657,9 @@
    "0xf0": "0xf8",
    "0xf4": "0xfc"
   },
+  "CFleetsBottomBar": {
+   "0x910": "0x648"
+  },
   "CFocusFinishedPopUpWindow": {
    "0x488": "0x328",
    "0x490": "0x330",
@@ -5331,6 +5674,7 @@
    "0x4f0": "0x370"
   },
   "CGenericDefaultConfirmationPopUpWindow": {
+   "0x488": "0x328",
    "0x490": "0x330"
   },
   "CIcon": {
@@ -5388,6 +5732,11 @@
    "0x9e8": "0xb60",
    "0xa38": "0xbb8",
    "0xb28": "0xcd0"
+  },
+  "CIdeaResearchBonus": {
+   "0x10": "0x10",
+   "0x30": "0x38",
+   "0x38": "0x40"
   },
   "CInGameIdler": {
    "0x18": "0x18",
@@ -5935,6 +6284,7 @@
    "0x43a0": "0x2d20"
   },
   "CPeaceSummaryPopUpWindow": {
+   "0x488": "0x328",
    "0x490": "0x330",
    "0x499": "0x339",
    "0x4b8": "0x358",
@@ -6032,6 +6382,20 @@
    "0x98": "0xb8",
    "0xe8": "0x110"
   },
+  "CProductionEquipmentWindow": {
+   "0xcf8": "0x8c0",
+   "0xd00": "0x8c8"
+  },
+  "CProductionLine": {
+   "0x14": "0x14",
+   "0x20": "0x20",
+   "0x28": "0x28",
+   "0x30": "0x30",
+   "0x38": "0x38",
+   "0x48": "0x48",
+   "0x58": "0x58",
+   "0x88": "0x88"
+  },
   "CProductionLineMilitaryItem": {
    "0x10": "0x10",
    "0x1a50": "0x11d8",
@@ -6055,6 +6419,9 @@
    "0x10": "0x10",
    "0x8": "0x8"
   },
+  "CProductionResourceCost.size": {
+   "0x20": "0x20"
+  },
   "CProductionStatus": {
    "0x10": "0x10",
    "0x130": "0x130",
@@ -6076,6 +6443,10 @@
    "0x328": "0x328",
    "0x388": "0x388",
    "0x448": "0x448",
+   "0x460": "0x460",
+   "0x478": "0x478",
+   "0x490": "0x490",
+   "0x4a8": "0x4a8",
    "0x4c0": "0x4c0",
    "0x4e8": "0x4e8",
    "0x560": "0x560",
@@ -6124,6 +6495,9 @@
    "0x30": "0x30",
    "0x8": "0x8"
   },
+  "CReassignFullOrdersGroupDialog": {
+   "0x490": "0x330"
+  },
   "CReferencedDivisionTemplate": {
    "0x10": "0x10",
    "0x18": "0x18",
@@ -6134,6 +6508,7 @@
    "0xc": "0xc"
   },
   "CResearchFinishedPopUpWindow": {
+   "0x488": "0x328",
    "0x490": "0x330",
    "0x499": "0x339",
    "0x4b8": "0x358",
@@ -6224,6 +6599,7 @@
   },
   "CSpecialProjectCapturedPopUpWindow": {
    "0x30": "0x38",
+   "0x488": "0x328",
    "0x490": "0x330",
    "0x4d0": "0x370",
    "0x4d8": "0x378",
@@ -6233,6 +6609,7 @@
    "0x4f8": "0x398"
   },
   "CSpecialProjectFinishedPopUpWindow": {
+   "0x488": "0x328",
    "0x490": "0x330",
    "0x4d8": "0x378",
    "0x4e0": "0x380",
@@ -6367,6 +6744,13 @@
    "0x8": "0x8",
    "0xe0": "0xe8"
   },
+  "CStrategicRegion.template": {
+   "0x20": "0x20",
+   "0x38": "0x40"
+  },
+  "CStrategicResource": {
+   "0x8": "0x8"
+  },
   "CStrategicResourceDatabase": {
    "0x14": "0x14",
    "0x18": "0x18",
@@ -6444,6 +6828,7 @@
   "CSurrenderedPopupWindow": {
    "0x10": "0x10",
    "0x30": "0x38",
+   "0x488": "0x328",
    "0x490": "0x330",
    "0x4c0": "0x360",
    "0x4d0": "0x368",
@@ -6640,6 +7025,9 @@
    "0x8c88": "0x5e10",
    "0x8c90": "0x5e18"
   },
+  "CTradeOfferWindow": {
+   "0xd60": "0x928"
+  },
   "CUnitLeaderTemplate": {
    "0x14": "0x14",
    "0x18": "0x18",
@@ -6682,6 +7070,7 @@
    "0x10": "0x10",
    "0x11c0": "0xc20",
    "0x30": "0x38",
+   "0x488": "0x328",
    "0x490": "0x330",
    "0x4c8": "0x368",
    "0x4f8": "0x398",
@@ -6713,6 +7102,9 @@
    "0x7c": "0x7c",
    "0x8": "0x8"
   },
+  "NDoctrines::CCountryDoctrineStatus.size": {
+   "0xa0": "0xa0"
+  },
   "NDoctrines::CCountryDoctrineView": {
    "0x20": "0x28",
    "0x28": "0x30",
@@ -6739,6 +7131,11 @@
    "0x18": "0x18",
    "0x8": "0x8"
   },
+  "NDoctrines::CDoctrineTemplate": {
+   "0x18": "0x18",
+   "0x1c": "0x1c",
+   "0x20": "0x20"
+  },
   "NDoctrines::CFolderStatus": {
    "0x10": "0x10",
    "0x18": "0x18",
@@ -6751,6 +7148,9 @@
    "0x48": "0x48",
    "0x8": "0x8"
   },
+  "NDoctrines::CFolderStatus.size": {
+   "0x50": "0x50"
+  },
   "NDoctrines::CTrackStatus": {
    "0x10": "0x10",
    "0x18": "0x18",
@@ -6761,6 +7161,18 @@
    "0x50": "0x50",
    "0x58": "0x58",
    "0x8": "0x8"
+  },
+  "NDoctrines::CTrackStatus.size": {
+   "0x60": "0x60"
+  },
+  "NDoctrines::STemporaryCostReduction": {
+   "0x10": "0x10",
+   "0x28": "0x30",
+   "0x30": "0x38",
+   "0x8": "0x8"
+  },
+  "NDoctrines::STemporaryCostReduction.size": {
+   "0x38": "0x40"
   },
   "NFactions::CFaction": {
    "0x18": "0x38",
@@ -6807,7 +7219,7 @@
   "NIndustrialOrganisation::COrganisationDetailWindow": {
    "0x28": "0x28",
    "0x29": "0x29",
-   "0x30": "0x30",
+   "0x30": "0x38",
    "0x3010": "0x2150",
    "0x3480": "0x2448",
    "0x38": "0x38",
@@ -6824,6 +7236,9 @@
    "0x8": "0x8",
    "0x84": "0x84",
    "0x90": "0x88"
+  },
+  "NIndustrialOrganisation::COrganisationListWindow": {
+   "0xf0": "0xb0"
   },
   "NIndustrialOrganisation::CTraitBonus": {
    "0x14": "0x14",
@@ -6863,6 +7278,9 @@
    "0x68": "0x68",
    "0x74": "0x74"
   },
+  "NProject::CProject.size": {
+   "0x1b8": "0x1b8"
+  },
   "NProject::CProjectPool": {
    "0x10": "0x10",
    "0x1c": "0x1c",
@@ -6875,7 +7293,12 @@
    "0x58": "0x58"
   },
   "NProject::CProjectStateMachine": {
-   "0x20": "0x18"
+   "0x20": "0x18",
+   "0x8": "0x8",
+   "0x8c": "0x74",
+   "0x90": "0x78",
+   "0x94": "0x7c",
+   "0x98": "0x80"
   },
   "NProject::CProjectTemplate": {
    "0x10": "0x10",
@@ -6886,6 +7309,9 @@
   "NProject::CSimpleProjectState": {
    "0x40": "0x28",
    "0x48": "0x30"
+  },
+  "NProject::CSpecializationDatabase": {
+   "0x58": "0x58"
   },
   "NProject::NUi::CFacilitiesTabView": {
    "0x500": "0x398",
@@ -6992,6 +7418,19 @@
    "0xe30": "0x9f8",
    "0xe50": "0xa10"
   },
+  "breakthrough.map_node": {
+   "0x0": "0x10",
+   "0x18": "0x1c",
+   "0x20": "0x24",
+   "0x8": "0x18"
+  },
+  "characters.recruit_pool": {
+   "0x8": "0x8"
+  },
+  "civilian.consumer": {
+   "0x8": "0x8",
+   "0xc": "0xc"
+  },
   "construction.view": {
    "0x1210": "0xc78",
    "0x1218": "0xc80",
@@ -7054,12 +7493,32 @@
    "0x5c0": "0x468",
    "0x5c4": "0x46c"
   },
+  "deployment.template_row": {
+   "0x10": "0x10"
+  },
   "deployment.template_window": {
-   "0xd18": "0x8e0"
+   "0xcb0": "0x870",
+   "0xd18": "0x8e0",
+   "0xd20": "0x8e8"
   },
   "designer.draft_holder": {
    "0x240": "0x258",
    "0x8": "0x8"
+  },
+  "division.pool": {
+   "0x10": "0x10"
+  },
+  "division.pool.size": {
+   "0x18": "0x18"
+  },
+  "division.variant": {
+   "0x8": "0x8"
+  },
+  "division.variant.size": {
+   "0x10": "0x10"
+  },
+  "division_template": {
+   "0x20": "0x20"
   },
   "find.result_row": {
    "0x10": "0x10",
@@ -7100,6 +7559,7 @@
   },
   "gs.navy_manager": {
    "0x18": "0x18",
+   "0x20": "0x20",
    "0x8": "0x8"
   },
   "gui.button": {
@@ -7186,6 +7646,9 @@
    "0x40": "0x40",
    "0x70": "0x70",
    "0xb0": "0xb0"
+  },
+  "idea.category": {
+   "0x10": "0x10"
   },
   "idler.camera": {
    "0x110": "0x110",
@@ -7295,6 +7758,12 @@
    "0x8b0": "0x5e0",
    "0xce0": "0x8a8"
   },
+  "manager.find_view": {
+   "0xd50": "0x920",
+   "0xd58": "0x928",
+   "0xd68": "0x938",
+   "0xda8": "0x980"
+  },
   "manager.tech_view": {
    "0x20": "0x28",
    "0x28": "0x30",
@@ -7344,6 +7813,9 @@
    "0x4bc": "0x364",
    "0x4e8": "0x390"
   },
+  "modifier.entry.size": {
+   "0x10": "0x10"
+  },
   "orders.group": {
    "0x130": "0x130",
    "0x138": "0x138",
@@ -7361,6 +7833,7 @@
    "0x50": "0x50",
    "0x5c": "0x5c",
    "0x68": "0x68",
+   "0x8": "0x8",
    "0x88": "0x88",
    "0x98": "0x98",
    "0xa4": "0xa4",
@@ -7372,6 +7845,9 @@
   "politics.selection_window": {
    "0x4a8": "0x348",
    "0x8": "0x8"
+  },
+  "production.selection.window": {
+   "0xcf8": "0x8c0"
   },
   "production.view": {
    "0x1130": "0xba0",
@@ -7473,6 +7949,16 @@
    "0xe18": "0x9c8",
    "0xe28": "0x9d8"
   },
+  "scientist.skill_level": {
+   "0x0": "0x0",
+   "0x18": "0x18"
+  },
+  "scientist.skill_level.size": {
+   "0x20": "0x20"
+  },
+  "spec.template": {
+   "0x8": "0x8"
+  },
   "state.view": {
    "0x20": "0x28",
    "0x28": "0x30",
@@ -7550,6 +8036,12 @@
    "0xec": "0xec",
    "0xf0": "0xf0",
    "0xf8": "0xf8"
+  },
+  "subunit.need": {
+   "0x8": "0x8"
+  },
+  "subunit.need.size": {
+   "0x10": "0x10"
   },
   "topbar": {
    "0x58": "0x68",
@@ -7706,6 +8198,7 @@
   "0x36257e8": "0x44a5bc0",
   "0x3626830": "0x44a6598",
   "0x362a5b8": "0x43e9c40",
+  "0x362c958": "0x44cc280",
   "0x362cd98": "0x44cc3b0",
   "0x362d5b0": "0x44a8688",
   "0x362de58": "0x44cc928",
@@ -7721,6 +8214,7 @@
   "0x363d5c0": "0x43ec798",
   "0x363d658": "0x43ec830",
   "0x3640050": "0x43ee068",
+  "0x36424c8": "0x44ab568",
   "0x3643990": "0x44abaf8",
   "0x3643ac0": "0x44abc28",
   "0x3647398": "0x44adce0",

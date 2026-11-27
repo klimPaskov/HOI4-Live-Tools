@@ -42,11 +42,11 @@ pub(crate) struct Layout {
 }
 /// Linux ELF a4971c9e (libstdc++).
 const LINUX: Layout = Layout {
-    progress_vtable: 0x4397508,
-    tree_vtable: 0x43972e0,
-    database_global: 0x4535a30,
-    database_vtable: 0x4397460,
-    focus_vtable: 0x43973a0,
+    progress_vtable: 0x439e600,
+    tree_vtable: 0x439e3d8,
+    database_global: 0x453da30,
+    database_vtable: 0x439e558,
+    focus_vtable: 0x439e498,
     tree_focuses: 0x30,
     focus_tree: 0x160,
 };
@@ -229,7 +229,7 @@ fn named_start(
                     "Duplicate start control",
                 ));
             }
-            exact(r, *child, base + 0x44dd4f0)?;
+            exact(r, *child, base + 0x44e54f0)?;
             witnesses.region(*child, 0xb0, "start_control");
             if r.u64(child + 0x68)? != registry {
                 return Err(Error::new(
@@ -316,10 +316,10 @@ fn snapshot_model(
     };
     let r = Reader::new(&w);
     let base = process.image_base();
-    let gs = r.u64(base + 0x459e9f0)?;
-    let idler = r.u64(base + 0x459e908)?;
-    exact(&r, gs, base + 0x445e068)?;
-    exact(&r, idler, base + 0x4460048)?;
+    let gs = r.u64(base + 0x45a6a00)?;
+    let idler = r.u64(base + 0x45a6918)?;
+    exact(&r, gs, base + 0x4465768)?;
+    exact(&r, idler, base + 0x4467770)?;
     w.region(gs, 0x520, "game_state");
     w.region(idler, 0x6c0, "idler");
     let tag = r.i32(gs + 0x518)?;
@@ -352,7 +352,7 @@ fn snapshot_model(
     }
     let registry = r.u64(idler + 0x4f8)?;
     // Match current native research reader's exact current-game GUI primary.
-    exact(&r, registry, base + 0x4409f68)?;
+    exact(&r, registry, base + 0x4411218)?;
     let manager = r.u64(idler + 0x6b8)?;
     w.region(manager, 0x188, "manager");
     if r.u64(manager + 0x180)? != idler {
@@ -362,7 +362,7 @@ fn snapshot_model(
         ));
     }
     let view = r.u64(manager + 0x130)?;
-    exact(&r, view, base + 0x43df748)?;
+    exact(&r, view, base + 0x43e69f8)?;
     w.region(view, 0x11e0, "focus_view");
     let displayed = r.u64(view + 0x11d8)?;
     if r.u64(view + 0x2f0)? != idler || (displayed != 0 && displayed != country) {
@@ -372,10 +372,10 @@ fn snapshot_model(
         ));
     }
     let tree = r.u64(country + 0x1338)?;
-    exact(&r, tree, base + 0x43972e0)?;
+    exact(&r, tree, base + 0x439e3d8)?;
     w.region(tree, 0x40, "own_tree");
-    let db = r.u64(base + 0x4535a30)?;
-    exact(&r, db, base + 0x4397460)?;
+    let db = r.u64(base + 0x453da30)?;
+    exact(&r, db, base + 0x439e558)?;
     w.region(db, 0x68, "catalog");
     w.section.set("catalog");
     let db_ptrs = pointers(&r, db + 0x58, 20000)?;
@@ -394,7 +394,7 @@ fn snapshot_model(
                 "Own focus absent from canonical database",
             ));
         }
-        exact(&r, focus, base + 0x43973a0)?;
+        exact(&r, focus, base + 0x439e498)?;
         if r.u64(focus + 0x160)? != tree {
             return Err(Error::new(
                 "invalid_focus_owner",
@@ -459,7 +459,7 @@ fn snapshot_model(
     let mut context = if command_context {
         w.section.set("own_context");
         let progress = r.u64(country + 0x1348)?;
-        exact(&r, progress, base + 0x4397508)?;
+        exact(&r, progress, base + 0x439e600)?;
         w.region(progress, 0x18, "own_progress");
         if r.u64(progress + 8)? != country {
             return Err(Error::new(
@@ -479,7 +479,7 @@ fn snapshot_model(
             })?)
         };
         let status = r.u64(country + 0xf38)?;
-        exact(&r, status, base + 0x43a5750)?;
+        exact(&r, status, base + 0x43ac898)?;
         w.region(status, 0x13c, "own_status");
         if r.u64(status + 0x130)? != country || r.i32(status + 0x138)? != tag {
             return Err(Error::new(
@@ -497,7 +497,7 @@ fn snapshot_model(
             ));
         }
         for slot in &slots {
-            exact(&r, *slot, base + 0x43a56f0)?;
+            exact(&r, *slot, base + 0x43ac838)?;
             if r.u64(slot + 0x10)? != status {
                 return Err(Error::new(
                     "invalid_focus_owner",
@@ -576,7 +576,7 @@ fn snapshot_model(
         let observed = if window == 0 {
             json!({"materialized":false,"detail_visibility_flag":null,"conservative_container_visibility":null,"start":{"materialized":false}})
         } else {
-            exact(&r, window, base + 0x44de2b0)?;
+            exact(&r, window, base + 0x44e62b0)?;
             w.region(window, 0xefc, "detail_window");
             if r.u64(window + 0x98)? != registry {
                 return Err(Error::new(

@@ -14,7 +14,7 @@ fn routing(
 ) -> Result<Value> {
     // GUI+158 is keyboard focus, GUI+230 is the separate text receiver.
     // Never dereference another control or infer either identity from flags.
-    let gui = r.u64(base + 0x470e6d8)?;
+    let gui = r.u64(base + 0x47166f8)?;
     if gui != registry {
         return Ok(
             json!({"available":false,"reason":"owned_gui_global_join_unavailable",
@@ -22,8 +22,8 @@ fn routing(
             "input_authorized":false}),
         );
     }
-    exact_search_type(r, base, gui, 0x4409f68, "input_gui")?;
-    exact_search_type(r, base, edit + 0x1a0, 0x44e0110, "text_receiver")?;
+    exact_search_type(r, base, gui, 0x4411218, "input_gui")?;
+    exact_search_type(r, base, edit + 0x1a0, 0x44e8110, "text_receiver")?;
     let keyboard = r.u64(gui + 0x158)? == edit;
     let text = r.u64(gui + 0x230)? == edit + 0x1a0;
     let enabled = flags & 0x800 != 0 && edit_flags & 2 == 0;
@@ -75,7 +75,7 @@ fn wide_query(r: &Reader<'_>, edit: u64, witnesses: &Witnesses<'_>) -> Result<St
 }
 
 fn listener(r: &Reader<'_>, base: u64, edit: u64, view: u64) -> Result<()> {
-    exact_search_type(r, base, edit + 0x80, 0x44e00a0, "embedded_editor")?;
+    exact_search_type(r, base, edit + 0x80, 0x44e80a0, "embedded_editor")?;
     // This edit-box observer is a list rooted in the embedded editor. Require
     // the one constructor-bound Focus listener; never chase an unknown target.
     if r.i32(edit + 0x98)? != 1 || r.u64(edit + 0xa0)? != 0 {
@@ -93,7 +93,7 @@ fn listener(r: &Reader<'_>, base: u64, edit: u64, view: u64) -> Result<()> {
     {
         return Err(invalid("Search listener must capture exact own Focus view"));
     }
-    exact_search_type(r, base, target, 0x43e0560, "own_view_listener")?;
+    exact_search_type(r, base, target, 0x43e7810, "own_view_listener")?;
     if r.u64(target + 8)? != view {
         return Err(invalid("Search listener own-view receiver differs"));
     }
@@ -157,7 +157,7 @@ pub(in crate::own_focus) fn observe(
             None,
         ));
     }
-    exact_search_type(r, base, edit, 0x44dfdd0, "query_control")?;
+    exact_search_type(r, base, edit, 0x44e7dd0, "query_control")?;
     witnesses.region(edit, 0x272, "search_edit");
     if r.u64(edit + 0x68)? != registry {
         return Err(Error::new(
@@ -168,7 +168,7 @@ pub(in crate::own_focus) fn observe(
     // edit+60 is CEditBoxType, not the parent window (live Run059 confirmed
     // primary 4349f00). Follow the owned view root and its named window list.
     let root = r.u64(view + 0x2f8)?;
-    exact_search_type(r, base, root, 0x44de2b0, "query_root")?;
+    exact_search_type(r, base, root, 0x44e62b0, "query_root")?;
     witnesses.region(root, 0xefc, "search_root");
     if r.u64(root + 0x98)? != registry {
         return Err(Error::new(
@@ -180,7 +180,7 @@ pub(in crate::own_focus) fn observe(
     if container == root {
         return Err(invalid("Search container cannot alias its root"));
     }
-    exact_search_type(r, base, container, 0x44de2b0, "query_container")?;
+    exact_search_type(r, base, container, 0x44e62b0, "query_container")?;
     witnesses.region(container, 0xefc, "search_container");
     if r.u64(container + 0x98)? != registry {
         return Err(Error::new(
