@@ -509,6 +509,8 @@ class SeededBadPlans(unittest.TestCase):
         plan = copy.deepcopy(self.base)
         plan["research_path"][0]["techs"].append(late)
         self.assertRule(plan, "research.start_year", late)
+        plan["research_path"][0]["ahead"] = True  # a planned ahead-of-time start is reported, not an error
+        self.assertFalse([f for f in self.new_errors(plan) if f["rule"] == "research.start_year" and late in f["message"]])
 
     def test_vp_targets_below_the_threshold(self):
         plan = copy.deepcopy(self.base)
