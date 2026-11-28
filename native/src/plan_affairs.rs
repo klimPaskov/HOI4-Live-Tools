@@ -313,10 +313,11 @@ type Section = fn(&mut State, &Run<'_>) -> Result<Option<String>>;
 /// The affairs sections as lanes of the pass (plan_run.rs `lanes`), in their old chain order;
 /// the design companies are three lanes: lines first, the plan's organisations, then the traits
 /// of every organisation on a line.
-pub(super) const LANES: [super::Lane; 12] = [
+pub(super) const LANES: [super::Lane; 13] = [
     ("diplomacy", |s, t, p, l, n| {
         diplomacy_step(s, &Run::new(t, p, l, n))
     }),
+    ("volunteers", super::plan_volunteers::volunteers_step),
     ("faction", |s, t, p, l, n| {
         faction_step(s, &Run::new(t, p, l, n))
     }),
