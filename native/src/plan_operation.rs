@@ -6667,8 +6667,8 @@ fn reconcile(
         && !line.contains("Diverged")
     {
         let wk = key(id, &format!("warroot:{}:{}", u.name, u.enemy));
-        if !state.done.contains_key(&wk) {
-            state.done.insert(wk, now);
+        if let std::collections::hash_map::Entry::Vacant(e) = state.done.entry(wk) {
+            e.insert(now);
             let mut args = json!({"army": u.name, "state_id": line_states[0], "against": u.enemy});
             if !u.own_states.is_empty() {
                 args["own_states"] = json!(u.own_states);
