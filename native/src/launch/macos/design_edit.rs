@@ -1480,7 +1480,7 @@ pub(super) fn set_production_apply(
                 .map(|x| (x.id, x.shown))
                 .collect::<Vec<_>>())
         });
-        let mut glided = false;
+        let mut last: Option<super::glide::Glided> = None;
         loop {
             let list = read(process, dui::rows)?;
             let Some(row) = list.iter().find(|x| x.id == change.design && x.shown) else {
@@ -1517,7 +1517,8 @@ pub(super) fn set_production_apply(
                 } else {
                     "tank_button"
                 },
-            ) {
+            ) || last.is_some_and(|g| dui::at_list_end(&button, &g))
+            {
                 let b = settled(process, "design row", |r, i| {
                     dui::row_equipment_button(r, i, change.design)?
                         .ok_or_else(|| Error::new("gui_target_unavailable", "Design row not found"))
@@ -1541,16 +1542,19 @@ pub(super) fn set_production_apply(
                     "route":"Y (Production) -> the line's equipment picture -> the design's row in the list that opens"}),
                 );
             }
-            if glided {
+            if last.is_some() {
                 return Err(Error::new(
                     "gui_target_unavailable",
-                    "The design row cannot be scrolled into view",
+                    format!(
+                        "The design row cannot be scrolled into view (glide {last:?}, button y {}..{})",
+                        button.y,
+                        button.y + button.h
+                    ),
                 ));
             }
-            glided = true;
             // One glide brings the row into the list (only while the list is open).
             let design = change.design;
-            dui::glide_button(
+            last = Some(dui::glide_button(
                 process,
                 keys,
                 if change.naval {
@@ -1564,7 +1568,7 @@ pub(super) fn set_production_apply(
                         .find(|x| x.id == design && x.shown)
                         .and_then(|x| x.equipment_button))
                 },
-            )?;
+            )?);
         }
     })();
     dui::leave(process, keys);

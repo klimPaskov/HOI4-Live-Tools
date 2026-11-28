@@ -294,7 +294,7 @@ mod tests {
         assert!(licence_request(42, &[]).is_err());
         assert!(licence_request(42, &[1, 1]).is_err());
         assert!(licence_request(0, &[1]).is_err());
-        assert!(licence_request(42, &vec![7u64; LICENCE_MAX + 1]).is_err());
+        assert!(licence_request(42, &[7u64; LICENCE_MAX + 1]).is_err());
         assert_eq!(tag_list_op("call_to_arms"), Some("diplomacy2.call_ally"));
         assert_eq!(tag_list_op("join_allies"), Some("diplomacy2.join_ally"));
         assert_eq!(tag_list_op("guarantee"), None);

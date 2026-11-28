@@ -1369,6 +1369,16 @@ C3 for the failing bases also run `{kind, base, slot:<one slot name from designs
 C4 record the build (master sha of the server and module), the game version, and whether each base's designer is the
 module designer (slots) or the upgrade designer (rows) on screen.
 Hand the folder to the air engineer: the trace's address and the screenshot tell which reader followed a wrong pointer.
+RETEST after engineer 132's fix (28 Nov, written): s126b's 'row cannot be scrolled into view' for ship 1348 (a late row)
+and plane 1318 (a row the outdated filter shows) came from the selection list's band, whose bottom stopped at 1040 while
+the list runs to the screen's edge (the Production list's own band was moved to the edge for the same reason in #197), and
+from rows read right after the filter before they were laid out again. Now: the band runs to the screen's bottom, a glide
+that meets the list's end accepts a row wholly on screen, the rows' positions settle after the filter, the click goes out
+only while the button is where it was read, and the designer must open on the asked row's type (else it is closed with
+input_readback_failed). R1 on the same 1936 save as s126b (or any 1936 Germany): `hoi4_design_options {kind:"ship",
+base:1348}` and `{kind:"plane", base:1318}` and `{kind:"tank", base:1333}` three times each: all open the designer of that
+base (reply's base.design_id); record ms. R2 a design created from 1348 (`hoi4_design_create`, any legal module change):
+saved and listed. On a failure keep the message: it now names the glide's outcome and the button's y range.
 
 ## Session S25-MIOKEY: organisation traits by key (in process, family `mio`; about 5 minutes) -- any time
 What it proves: hoi4_mio_trait `trait` / `traits` resolve the scripts' trait keys to the tree through the module's

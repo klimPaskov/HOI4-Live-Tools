@@ -208,7 +208,9 @@ pub(super) fn designs_of_country(process: &dyn Process, tag_index: i32) -> Resul
 pub(super) fn pick_for_licence(all: &[Variant], wanted: &[String]) -> Result<Vec<u64>> {
     let mut out = Vec::new();
     for w in wanted {
-        let by_name = all.iter().find(|v| display(v) == *w);
+        // a design's own name; an unnamed (default) design shows its type key and is reached by
+        // the type below, newest first
+        let by_name = all.iter().find(|v| !v.name.is_empty() && v.name == *w);
         let by_type = || {
             all.iter()
                 .filter(|v| v.type_key == *w && !v.obsolete)
