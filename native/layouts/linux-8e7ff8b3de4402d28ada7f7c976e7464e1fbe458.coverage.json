@@ -1,11 +1,11 @@
 {
  "macho": {
-  "file": "hoi4.bin",
+  "file": "hoi4-macos-1.19.4.1-DFA875A5",
   "uuid": "DFA875A5-25BA-35E0-9736-627F8A5C4396"
  },
  "elf": {
   "file": "hoi4",
-  "build_id": "71806afa707a46fb72f0738a719c3f1c3f5e2e42"
+  "build_id": "8e7ff8b3de4402d28ada7f7c976e7464e1fbe458"
  },
  "accepted_confidence": [
   "high",
@@ -1048,7 +1048,7 @@
     "class CIdea",
     "launch/macos/economy_detail.rs:280",
     "launch/macos/economy_detail.rs:48",
-    "launch/macos/mios.rs:57"
+    "launch/macos/inproc_politics.rs:31"
    ]
   },
   "0x3589e48": {
@@ -1061,6 +1061,7 @@
    "used": [
     "class CPoliticalStatus",
     "launch/macos/economy_detail.rs:64",
+    "launch/macos/inproc_politics.rs:30",
     "launch/macos/mios.rs:56"
    ]
   },
@@ -1309,7 +1310,7 @@
     "class CGenericDefaultConfirmationPopUpWindow",
     "launch/macos/kit.rs:347",
     "launch/macos/kit.rs:359",
-    "launch/macos/special_projects.rs:1645"
+    "launch/macos/special_projects.rs:1729"
    ]
   },
   "0x359c918": {
@@ -1357,7 +1358,7 @@
    "notes": [],
    "used": [
     "class NProject::SProjectHistory",
-    "launch/macos/special_projects.rs:330",
+    "launch/macos/special_projects.rs:414",
     "launch/macos/special_projects.rs:65"
    ]
   },
@@ -1382,7 +1383,7 @@
    "notes": [],
    "used": [
     "class NProject::CSimpleProjectState",
-    "launch/macos/special_projects.rs:411",
+    "launch/macos/special_projects.rs:495",
     "launch/macos/special_projects.rs:68"
    ]
   },
@@ -1431,8 +1432,8 @@
    "notes": [],
    "used": [
     "class NProject::NUi::CProgramItem",
-    "launch/macos/special_projects.rs:86",
-    "launch/macos/special_projects.rs:940"
+    "launch/macos/special_projects.rs:1024",
+    "launch/macos/special_projects.rs:86"
    ]
   },
   "0x35a1970": {
@@ -1443,8 +1444,8 @@
    "confidence": "high",
    "notes": [],
    "used": [
-    "launch/macos/special_projects.rs:1070",
-    "launch/macos/special_projects.rs:1990",
+    "launch/macos/special_projects.rs:1154",
+    "launch/macos/special_projects.rs:2074",
     "launch/macos/special_projects.rs:87"
    ]
   },
@@ -1469,7 +1470,7 @@
    "notes": [],
    "used": [
     "class NProject::NUi::CProgramView",
-    "launch/macos/special_projects.rs:1036",
+    "launch/macos/special_projects.rs:1120",
     "launch/macos/special_projects.rs:55"
    ]
   },
@@ -1482,7 +1483,7 @@
    "notes": [],
    "used": [
     "class NProject::NUi::CProjectItem",
-    "launch/macos/special_projects.rs:1125",
+    "launch/macos/special_projects.rs:1209",
     "launch/macos/special_projects.rs:88"
    ]
   },
@@ -1495,8 +1496,8 @@
    "notes": [],
    "used": [
     "class NProject::NUi::CRecruitScientistWindow",
-    "launch/macos/special_projects.rs:1699",
-    "launch/macos/special_projects.rs:1963",
+    "launch/macos/special_projects.rs:1783",
+    "launch/macos/special_projects.rs:2047",
     "launch/macos/special_projects.rs:52"
    ]
   },
@@ -1816,7 +1817,7 @@
    "notes": [],
    "used": [
     "class NIndustrialOrganisation::COrganisationListWindow",
-    "launch/macos/mio_act.rs:1034",
+    "launch/macos/mio_act.rs:1039",
     "launch/macos/panelkit.rs:135",
     "launch/macos/panelkit.rs:213"
    ]
@@ -1908,7 +1909,7 @@
     "class CAcceptCommandDialog",
     "launch/macos/kit.rs:347",
     "launch/macos/kit.rs:356",
-    "launch/macos/ui.rs:706"
+    "launch/macos/ui.rs:1021"
    ]
   },
   "0x363b9d8": {
@@ -1944,9 +1945,9 @@
    "notes": [],
    "used": [
     "class CArmyBadgeView",
-    "launch/macos/armies.rs:1700",
-    "launch/macos/armies.rs:1701",
-    "launch/macos/armies.rs:1723"
+    "launch/macos/armies.rs:1722",
+    "launch/macos/armies.rs:1723",
+    "launch/macos/armies.rs:1745"
    ]
   },
   "0x363d5c0": {
@@ -1958,7 +1959,7 @@
    "notes": [],
    "used": [
     "class CArmyDivisionListView",
-    "launch/macos/armies.rs:1935"
+    "launch/macos/armies.rs:1958"
    ]
   },
   "0x363d658": {
@@ -1970,9 +1971,9 @@
    "notes": [],
    "used": [
     "class CArmyDivisionView",
-    "launch/macos/armies.rs:1934",
-    "launch/macos/armies.rs:1936",
-    "launch/macos/armies.rs:1954"
+    "launch/macos/armies.rs:1957",
+    "launch/macos/armies.rs:1959",
+    "launch/macos/armies.rs:1977"
    ]
   },
   "0x3640050": {
@@ -1995,7 +1996,7 @@
    "notes": [],
    "used": [
     "class CChangeGroupLeaderDialog",
-    "launch/macos/ui.rs:709"
+    "launch/macos/ui.rs:1024"
    ]
   },
   "0x3643ac0": {
@@ -2007,7 +2008,7 @@
    "notes": [],
    "used": [
     "class CChangeNavyLeaderDialog",
-    "launch/macos/ui.rs:712"
+    "launch/macos/ui.rs:1027"
    ]
   },
   "0x3647398": {
@@ -2256,7 +2257,7 @@
    "notes": [],
    "used": [
     "class CResearchFinishedPopUpWindow",
-    "launch/macos/ui.rs:119"
+    "launch/macos/ui.rs:129"
    ]
   },
   "0x3680288": {
@@ -2268,8 +2269,8 @@
    "notes": [],
    "used": [
     "class CIntelAgencyFinishedPopUpWindow",
-    "launch/macos/ui.rs:127",
-    "launch/macos/ui.rs:196"
+    "launch/macos/ui.rs:137",
+    "launch/macos/ui.rs:206"
    ]
   },
   "0x36803a0": {
@@ -2281,8 +2282,8 @@
    "notes": [],
    "used": [
     "class CSpecialProjectFinishedPopUpWindow",
-    "launch/macos/ui.rs:125",
-    "launch/macos/ui.rs:195"
+    "launch/macos/ui.rs:135",
+    "launch/macos/ui.rs:205"
    ]
   },
   "0x36804b8": {
@@ -2294,8 +2295,8 @@
    "notes": [],
    "used": [
     "class CSpecialProjectCapturedPopUpWindow",
-    "launch/macos/ui.rs:126",
-    "launch/macos/ui.rs:197"
+    "launch/macos/ui.rs:136",
+    "launch/macos/ui.rs:207"
    ]
   },
   "0x36805d0": {
@@ -2307,8 +2308,8 @@
    "notes": [],
    "used": [
     "class CConfirmationPopUpWindow",
-    "launch/macos/ui.rs:123",
-    "launch/macos/ui.rs:193"
+    "launch/macos/ui.rs:133",
+    "launch/macos/ui.rs:203"
    ]
   },
   "0x36806e8": {
@@ -2320,7 +2321,7 @@
    "notes": [],
    "used": [
     "class CFocusFinishedPopUpWindow",
-    "launch/macos/ui.rs:120"
+    "launch/macos/ui.rs:130"
    ]
   },
   "0x3680800": {
@@ -2332,7 +2333,7 @@
    "notes": [],
    "used": [
     "class CPeaceSummaryPopUpWindow",
-    "launch/macos/ui.rs:121"
+    "launch/macos/ui.rs:131"
    ]
   },
   "0x3685b58": {
@@ -2381,8 +2382,8 @@
    "confidence": "high",
    "notes": [],
    "used": [
-    "launch/macos/ui.rs:715",
-    "launch/macos/ui.rs:770"
+    "launch/macos/ui.rs:1030",
+    "launch/macos/ui.rs:1085"
    ]
   },
   "0x3695460": {
@@ -2394,8 +2395,8 @@
    "notes": [],
    "used": [
     "class CSurrenderedPopupWindow",
-    "launch/macos/ui.rs:124",
-    "launch/macos/ui.rs:194"
+    "launch/macos/ui.rs:134",
+    "launch/macos/ui.rs:204"
    ]
   },
   "0x3697918": {
@@ -2473,7 +2474,7 @@
    "notes": [],
    "used": [
     "class CWorldTensionPopUpWindow",
-    "launch/macos/ui.rs:122"
+    "launch/macos/ui.rs:132"
    ]
   },
   "0x36a2a78": {
@@ -2528,7 +2529,7 @@
    "used": [
     "class CIcon",
     "gui_tree.rs:55",
-    "gui_tree.rs:94",
+    "gui_tree.rs:98",
     "launch/macos/air.rs:66"
    ]
   },
@@ -2542,8 +2543,8 @@
    "used": [
     "class CButtonStandard",
     "gui_tree.rs:55",
-    "gui_tree.rs:85",
-    "gui_tree.rs:95"
+    "gui_tree.rs:89",
+    "gui_tree.rs:99"
    ]
   },
   "0x36ba080": {
@@ -2566,9 +2567,9 @@
    "notes": [],
    "used": [
     "class CContainerWindow",
-    "gui_tree.rs:107",
+    "gui_tree.rs:111",
     "gui_tree.rs:47",
-    "gui_tree.rs:79"
+    "gui_tree.rs:83"
    ]
   },
   "0x36bc6a0": {
@@ -2616,8 +2617,8 @@
    "confidence": "high",
    "notes": [],
    "used": [
-    "launch/macos/mio_act.rs:1009",
-    "launch/macos/mio_act.rs:1075"
+    "launch/macos/mio_act.rs:1014",
+    "launch/macos/mio_act.rs:1080"
    ]
   },
   "0x36cc528": {
@@ -2630,7 +2631,7 @@
    "used": [
     "class CSprite",
     "gui_tree.rs:57",
-    "gui_tree.rs:82",
+    "gui_tree.rs:86",
     "launch/macos/air.rs:67"
    ]
   },
@@ -2657,9 +2658,54 @@
    "notes": [],
    "used": [
     "class gui.text_sprite",
-    "gui_tree.rs:116",
+    "gui_tree.rs:120",
     "gui_tree.rs:58",
-    "gui_tree.rs:84"
+    "gui_tree.rs:88"
+   ]
+  },
+  "0x3703950": {
+   "kind": "global",
+   "rtti": null,
+   "status": "mapped",
+   "elf": "0x453d3c0",
+   "confidence": "high",
+   "notes": [
+    "48 referencing Mach-O functions, 40 matched, 8 unmatched",
+    "0x453d3c0:36"
+   ],
+   "used": [
+    "launch/macos/inproc_politics.rs:21",
+    "launch/macos/inproc_politics.rs:45"
+   ]
+  },
+  "0x3703a00": {
+   "kind": "global",
+   "rtti": null,
+   "status": "mapped",
+   "elf": "0x453e970",
+   "confidence": "high",
+   "notes": [
+    "12 referencing Mach-O functions, 9 matched, 3 unmatched",
+    "0x453e970:6"
+   ],
+   "used": [
+    "launch/macos/inproc_doctrine.rs:108",
+    "launch/macos/inproc_doctrine.rs:25"
+   ]
+  },
+  "0x3703a90": {
+   "kind": "global",
+   "rtti": null,
+   "status": "mapped",
+   "elf": "0x453e960",
+   "confidence": "high",
+   "notes": [
+    "17 referencing Mach-O functions, 15 matched, 2 unmatched",
+    "0x453e960:10"
+   ],
+   "used": [
+    "launch/macos/inproc_doctrine.rs:112",
+    "launch/macos/inproc_doctrine.rs:27"
    ]
   },
   "0x3704b10": {
@@ -2718,7 +2764,7 @@
     "0x453da88:41"
    ],
    "used": [
-    "launch/macos/special_projects.rs:259",
+    "launch/macos/special_projects.rs:343",
     "launch/macos/special_projects.rs:74"
    ]
   },
@@ -2962,7 +3008,7 @@
    "vtable": "0x34ac5f8",
    "rtti": "8CAirWing",
    "rtti_from": "vtable",
-   "keys_needed": 8,
+   "keys_needed": 9,
    "filled": {
     "0x44": "bracketed",
     "0x78": "low-consistent",
@@ -3026,8 +3072,8 @@
    },
    "status": "mapped",
    "functions": 15,
-   "mapped": 5,
-   "extra_offsets": 49,
+   "mapped": 6,
+   "extra_offsets": 48,
    "unresolved": {
     "0x98": "no matched class/anchor/context function uses this offset on the object register",
     "0xb8": "no matched class/anchor/context function uses this offset on the object register",
@@ -5357,9 +5403,10 @@
    "vtable": "0x35882b8",
    "rtti": "5CIdea",
    "rtti_from": "vtable",
-   "keys_needed": 3,
+   "keys_needed": 4,
    "filled": {
-    "0x60": "low-consistent"
+    "0x60": "low-consistent",
+    "0x908": "low-consistent"
    },
    "confidence": {
     "0x10": "medium",
@@ -5386,11 +5433,12 @@
     "0x9e8": "medium",
     "0xa38": "medium",
     "0xb28": "medium",
-    "0x60": "filled"
+    "0x60": "filled",
+    "0x908": "filled"
    },
    "status": "mapped",
    "functions": 13,
-   "mapped": 1,
+   "mapped": 2,
    "extra_offsets": 24,
    "unresolved": {
     "0x18": "2 matched pairs use it on the object register; no evidence",
@@ -5829,8 +5877,9 @@
    "vtable": "0x358dff8",
    "rtti": "27CMilitaryDeploymentConveyor",
    "rtti_from": "vtable",
-   "keys_needed": 3,
+   "keys_needed": 4,
    "filled": {
+    "0x3c": "low-consistent",
     "0x70": "low-consistent"
    },
    "confidence": {
@@ -5844,11 +5893,12 @@
     "0x80": "medium",
     "0x84": "medium",
     "0x88": "medium",
+    "0x3c": "filled",
     "0x70": "filled"
    },
    "status": "mapped",
    "functions": 15,
-   "mapped": 3,
+   "mapped": 4,
    "extra_offsets": 8,
    "unresolved": {}
   },
@@ -10146,20 +10196,20 @@
  "unresolved_static_keys": [
   {
    "kind": "image",
-   "where": "gui_tree.rs:98",
+   "where": "gui_tree.rs:102",
    "expr": "*vt",
    "reason": "runtime value"
   },
   {
    "kind": "field",
-   "where": "gui_tree.rs:98",
+   "where": "gui_tree.rs:102",
    "cls": "&Class::new(name, *vt)",
    "expr": "*off",
    "reason": "Class::new(name, *vt) not constant"
   },
   {
    "kind": "image",
-   "where": "gui_tree.rs:104",
+   "where": "gui_tree.rs:108",
    "expr": "*vt",
    "reason": "runtime value"
   },
@@ -10172,41 +10222,41 @@
   },
   {
    "kind": "image",
-   "where": "launch/macos/armies.rs:1717",
+   "where": "launch/macos/armies.rs:1739",
    "expr": "ARMIES_VIEW.vtable",
    "reason": "runtime value"
   },
   {
    "kind": "field",
-   "where": "launch/macos/armies.rs:1916",
+   "where": "launch/macos/armies.rs:1939",
    "cls": "&ARMIES_VIEW",
    "expr": "list_at",
    "reason": "runtime value"
   },
   {
    "kind": "field",
-   "where": "launch/macos/armies.rs:1957",
+   "where": "launch/macos/armies.rs:1980",
    "cls": "&ARMIES_VIEW",
    "expr": "list_at",
    "reason": "runtime value"
   },
   {
    "kind": "field",
-   "where": "launch/macos/armies.rs:1971",
+   "where": "launch/macos/armies.rs:1994",
    "cls": "&DIVISION_ROW",
    "expr": "at",
    "reason": "runtime value"
   },
   {
    "kind": "field",
-   "where": "launch/macos/armies.rs:1997",
+   "where": "launch/macos/armies.rs:2020",
    "cls": "&DIVISION_ROW",
    "expr": "at",
    "reason": "runtime value"
   },
   {
    "kind": "field",
-   "where": "launch/macos/armies.rs:2046",
+   "where": "launch/macos/armies.rs:2069",
    "cls": "&ARMIES_VIEW",
    "expr": "list_at",
    "reason": "runtime value"
@@ -10479,40 +10529,40 @@
   },
   {
    "kind": "image",
-   "where": "launch/macos/ui.rs:162",
+   "where": "launch/macos/ui.rs:172",
    "expr": "class.vtable",
    "reason": "no struct-literal table in this file has field `vtable`"
   },
   {
    "kind": "field",
-   "where": "launch/macos/ui.rs:171",
+   "where": "launch/macos/ui.rs:181",
    "cls": "class",
    "expr": "POPUP_ROOT",
    "reason": "runtime class"
   },
   {
    "kind": "field",
-   "where": "launch/macos/ui.rs:676",
+   "where": "launch/macos/ui.rs:991",
    "cls": "&IFACE_MANAGER",
    "expr": "slot",
    "reason": "runtime value"
   },
   {
    "kind": "field",
-   "where": "launch/macos/ui.rs:677",
+   "where": "launch/macos/ui.rs:992",
    "cls": "class",
    "expr": "0x490",
    "reason": "runtime class"
   },
   {
    "kind": "image",
-   "where": "launch/macos/ui.rs:739",
+   "where": "launch/macos/ui.rs:1054",
    "expr": "class.vtable",
    "reason": "no struct-literal table in this file has field `vtable`"
   },
   {
    "kind": "field",
-   "where": "launch/macos/ui.rs:747",
+   "where": "launch/macos/ui.rs:1062",
    "cls": "class",
    "expr": "POPUP_ROOT",
    "reason": "runtime class"
@@ -10526,8 +10576,8 @@
   }
  ],
  "summary": {
-  "image_keys": 216,
-  "image_mapped": 212,
+  "image_keys": 219,
+  "image_mapped": 215,
   "classes": 282,
   "classes_with_vtable": 157,
   "classes_needing_owner": [
@@ -10583,291 +10633,492 @@
    "supply_state.size",
    "unit.leader"
   ],
-  "field_keys": 617,
-  "field_keys_mapped": 389,
-  "field_entries_written": 3185,
+  "field_keys": 620,
+  "field_keys_mapped": 392,
+  "field_entries_written": 3187,
   "static_keys_unresolved": 57,
-  "field_keys_mapped_with_previous": 476,
-  "modules_enabled": 17,
-  "modules": 53
+  "field_keys_mapped_with_previous": 519,
+  "modules_enabled": 20,
+  "modules": 55
  },
+ "live": [
+  [
+   "CArmyLeader+0x18",
+   null,
+   "0x18"
+  ],
+  [
+   "CConsumerGoodsConsumer+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CIdeaResearchBonus+0x30",
+   null,
+   "0x38"
+  ],
+  [
+   "CIdeaResearchBonus+0x38",
+   null,
+   "0x40"
+  ],
+  [
+   "CIntelligenceAgency+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CProductionLine+0x58",
+   null,
+   "0x58"
+  ],
+  [
+   "CProductionLine+0x88",
+   null,
+   "0x88"
+  ],
+  [
+   "CProductionResourceCost.size+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "CReferencedDivisionTemplate+0x18",
+   null,
+   "0x18"
+  ],
+  [
+   "CReferencedDivisionTemplate+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "CReferencedDivisionTemplate+0x58",
+   null,
+   "0x68"
+  ],
+  [
+   "CReferencedDivisionTemplate+0x78",
+   null,
+   "0x88"
+  ],
+  [
+   "CStrategicRegion.template+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "CStrategicRegion.template+0x38",
+   null,
+   "0x40"
+  ],
+  [
+   "CTechnologyStatus+0x320",
+   null,
+   "0x8c0"
+  ],
+  [
+   "NDoctrines::CCountryDoctrineStatus.size+0xa0",
+   null,
+   "0xa0"
+  ],
+  [
+   "NDoctrines::CDoctrineTemplate+0x18",
+   null,
+   "0x18"
+  ],
+  [
+   "NDoctrines::CDoctrineTemplate+0x1c",
+   null,
+   "0x1c"
+  ],
+  [
+   "NDoctrines::CDoctrineTemplate+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "NDoctrines::CFolderStatus.size+0x50",
+   null,
+   "0x50"
+  ],
+  [
+   "NDoctrines::CTrackStatus+0x50",
+   null,
+   "0x50"
+  ],
+  [
+   "NDoctrines::CTrackStatus+0x58",
+   null,
+   "0x58"
+  ],
+  [
+   "NDoctrines::CTrackStatus.size+0x60",
+   null,
+   "0x60"
+  ],
+  [
+   "NDoctrines::STemporaryCostReduction.size+0x38",
+   null,
+   "0x40"
+  ],
+  [
+   "NFactions::CTechnologySharingFaction+0x48",
+   null,
+   "0x48"
+  ],
+  [
+   "NProject::CProject.size+0x1b8",
+   null,
+   "0x1b8"
+  ],
+  [
+   "breakthrough.map_node+0x0",
+   null,
+   "0x10"
+  ],
+  [
+   "breakthrough.map_node+0x18",
+   null,
+   "0x1c"
+  ],
+  [
+   "breakthrough.map_node+0x20",
+   null,
+   "0x24"
+  ],
+  [
+   "breakthrough.map_node+0x8",
+   null,
+   "0x18"
+  ],
+  [
+   "characters.recruit_pool+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "civilian.consumer+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "civilian.consumer+0xc",
+   null,
+   "0xc"
+  ],
+  [
+   "deployment.template_row+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "division.pool+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "division.pool.size+0x18",
+   null,
+   "0x18"
+  ],
+  [
+   "division.variant+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "division.variant.size+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "division_template+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "modifier.entry.size+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "scientist.skill_level+0x0",
+   null,
+   "0x0"
+  ],
+  [
+   "scientist.skill_level+0x18",
+   null,
+   "0x18"
+  ],
+  [
+   "scientist.skill_level.size+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "spec.template+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "subunit.need+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "subunit.need.size+0x10",
+   null,
+   "0x10"
+  ]
+ ],
  "carried": {
-  "previous": "linux-2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082.json",
+  "previous": "linux-71806afa707a46fb72f0738a719c3f1c3f5e2e42.json",
   "classes": {
    "CAgencyUpgrade": {
     "agree": 6,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x10"
-    ]
+    ],
+    "live": []
    },
    "CAgencyUpgradeBranch": {
     "agree": 4,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x10"
-    ]
+    ],
+    "live": []
    },
    "CAirBaseMapIcon": {
     "agree": 6,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x10",
      "0x48"
-    ]
+    ],
+    "live": []
    },
    "CAirWing": {
-    "agree": 51,
-    "carried": [],
-    "live": [
+    "agree": 54,
+    "carried": [
      "0x320",
      "0x98",
      "0xb8"
-    ]
+    ],
+    "live": []
    },
    "CArmyLeader": {
-    "agree": 31,
-    "carried": [],
-    "live": [
-     "0x18",
+    "agree": 32,
+    "carried": [
      "0x20",
      "0x38"
-    ]
+    ],
+    "live": []
    },
    "CAutonomousState": {
     "agree": 10,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x8"
-    ]
+    ],
+    "live": []
    },
    "CBuilding": {
     "agree": 11,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x1b0"
-    ]
-   },
-   "CBuildingTemplate": {
-    "agree": 2,
-    "carried": [],
-    "live": [
-     "0x228"
-    ]
+    ],
+    "live": []
    },
    "CCharacter": {
     "agree": 12,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x20",
      "0x38"
-    ]
+    ],
+    "live": []
    },
    "CCommandStructureLeaderView": {
     "agree": 10,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x28"
-    ]
+    ],
+    "live": []
    },
    "CCountry": {
-    "agree": 51,
-    "carried": [],
-    "live": [
+    "agree": 52,
+    "carried": [
      "0x10",
      "0x550",
      "0x8"
-    ]
+    ],
+    "live": []
    },
    "CCountryCharacterSelectionItem": {
     "agree": 4,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x28"
-    ]
+    ],
+    "live": []
    },
    "CCountryDeploymentView": {
     "agree": 9,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x490"
-    ]
+    ],
+    "live": []
    },
    "CCountryDiplomacyView": {
     "agree": 16,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x1608",
      "0x35e8"
-    ]
-   },
-   "CDecision": {
-    "agree": 37,
-    "carried": [],
-    "live": [
-     "0x108"
-    ]
-   },
-   "CDivisionTemplateData": {
-    "agree": 3,
-    "carried": [],
-    "live": [
-     "0x40",
-     "0x60",
-     "0x8"
-    ]
+    ],
+    "live": []
    },
    "CEquipmentModule": {
     "agree": 2,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x10"
-    ]
+    ],
+    "live": []
    },
    "CEquipmentUpgrade": {
     "agree": 4,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x10"
-    ]
+    ],
+    "live": []
    },
    "CEvent": {
     "agree": 3,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x18"
-    ]
-   },
-   "CEventWindow": {
-    "agree": 21,
-    "carried": [],
-    "live": [
-     "0x28",
-     "0x40"
-    ]
+    ],
+    "live": []
    },
    "CIcon": {
     "agree": 24,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x184"
-    ]
+    ],
+    "live": []
    },
    "CIdea": {
-    "agree": 25,
-    "carried": [],
-    "live": [
+    "agree": 26,
+    "carried": [
      "0x18",
      "0x6c"
-    ]
+    ],
+    "live": []
    },
-   "CIntelligenceAgency": {
-    "agree": 12,
-    "carried": [],
-    "live": [
+   "CIdeaResearchBonus": {
+    "agree": 2,
+    "carried": [
      "0x10"
-    ]
+    ],
+    "live": []
    },
    "CLimitedUseTechBonus": {
     "agree": 10,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x10",
      "0x8"
-    ]
+    ],
+    "live": []
    },
    "CNationalFocusTreeItem": {
     "agree": 2,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x20"
-    ]
+    ],
+    "live": []
    },
    "CNaviesView": {
     "agree": 2,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x4ca8",
      "0x7b00",
      "0x7b10",
      "0x7b18",
      "0x7cb8",
      "0x7cd0"
-    ]
+    ],
+    "live": []
    },
    "CNavyLeader": {
     "agree": 23,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x38",
      "0x8"
-    ]
+    ],
+    "live": []
    },
    "CPoliticalIdeaItem": {
-    "agree": 2,
-    "carried": [],
-    "live": [
+    "agree": 3,
+    "carried": [
      "0x40"
-    ]
+    ],
+    "live": []
+   },
+   "CProductionLine": {
+    "agree": 2,
+    "carried": [
+     "0x14",
+     "0x20",
+     "0x28",
+     "0x30",
+     "0x38",
+     "0x48"
+    ],
+    "live": []
    },
    "CProvince": {
     "agree": 4,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x9c"
-    ]
-   },
-   "CReferencedDivisionTemplate": {
-    "agree": 3,
-    "carried": [],
-    "live": [
-     "0x18",
-     "0x20",
-     "0x58",
-     "0x78"
-    ]
+    ],
+    "live": []
    },
    "CScientistTrait": {
     "agree": 9,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x90"
-    ]
+    ],
+    "live": []
    },
    "CShip": {
     "agree": 14,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x7d0",
      "0x90"
-    ]
+    ],
+    "live": []
    },
    "CStandardGridBox": {
-    "agree": 28,
-    "carried": [],
-    "live": [
+    "agree": 29,
+    "carried": [
      "0x334"
-    ]
+    ],
+    "live": []
    },
    "CState": {
     "agree": 23,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x40"
-    ]
+    ],
+    "live": []
    },
    "CStrategicRegion": {
     "agree": 3,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x20",
      "0x40"
-    ]
+    ],
+    "live": []
    },
    "CSubUnitDefinition": {
-    "agree": 4,
-    "carried": [],
-    "live": [
+    "agree": 6,
+    "carried": [
      "0x10",
      "0x208",
      "0x268",
@@ -10886,86 +11137,65 @@
      "0xb8",
      "0xe0",
      "0xe8"
-    ]
-   },
-   "CTechnologyStatus": {
-    "agree": 11,
-    "carried": [],
-    "live": [
-     "0x320"
-    ]
-   },
-   "NDoctrines::CTrackStatus": {
-    "agree": 7,
-    "carried": [],
-    "live": [
-     "0x50",
-     "0x58"
-    ]
+    ],
+    "live": []
    },
    "NFactions::CFaction": {
     "agree": 7,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x18"
-    ]
-   },
-   "NFactions::CTechnologySharingFaction": {
-    "agree": 8,
-    "carried": [],
-    "live": [
-     "0x48"
-    ]
+    ],
+    "live": []
    },
    "NProject::CProgramStatus": {
     "agree": 3,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x60"
-    ]
+    ],
+    "live": []
    },
    "NProject::CProject": {
     "agree": 7,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x20"
-    ]
+    ],
+    "live": []
    },
    "NProject::CProjectTemplate": {
     "agree": 3,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x208"
-    ]
+    ],
+    "live": []
    },
    "NProject::NUi::CRecruitScientistWindow": {
     "agree": 2,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x20"
-    ]
+    ],
+    "live": []
    },
    "NProject::NUi::CScientistRoster": {
     "agree": 4,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x20"
-    ]
+    ],
+    "live": []
    },
    "find.result_row": {
     "agree": 2,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x458"
-    ]
+    ],
+    "live": []
    },
    "idler.gui": {
     "agree": 4,
-    "carried": [],
-    "live": [
+    "carried": [
      "0x140",
      "0xa70"
-    ]
+    ],
+    "live": []
    }
   }
  },
@@ -10980,28 +11210,24 @@
   "CCountryDiplomacyView+0x3e60",
   "CCountryDiplomacyView+0x3e98",
   "CCountryDiplomacyView+0x3ea0",
-  "CCountryDiplomacyView+0x3ea8",
-  "CDecision+0x118",
-  "CDivisionTemplateData+0x58",
-  "CEventWindow+0x20",
-  "CEventWindow+0x38"
+  "CCountryDiplomacyView+0x3ea8"
  ],
  "target": {
   "file": "hoi4",
-  "sha256": "f8fe17fb1047cc94a64e7cc8f13780494e8eb111b9c3a3468256bfbc4f499874",
+  "sha256": "0ad0c8cad5c8f65d86750454afd79c3f26ba5ca9e0f205a3abfaa8dff96c57a9",
   "size": 72597688,
   "system": "linux",
   "format": "elf",
-  "build_id": "71806afa707a46fb72f0738a719c3f1c3f5e2e42",
-  "game_version": "1.20.0.0",
-  "version_label": "Operation Postern v1.20.0.0.8873 (0c4f)",
+  "build_id": "8e7ff8b3de4402d28ada7f7c976e7464e1fbe458",
+  "game_version": "1.20.1.0",
+  "version_label": "Operation Postern v1.20.1.0.0fd1 (724a)",
   "canonical": false
  },
  "static_check": {
   "problems": [],
   "checked": {
-   "image": 212,
-   "fields": 3257
+   "image": 215,
+   "fields": 3303
   },
   "passed": true
  },
@@ -11036,14 +11262,14 @@
    ]
   },
   "launch/macos/airread.rs": {
-   "keys": 17,
-   "mapped": 17,
+   "keys": 18,
+   "mapped": 18,
    "enabled": true,
    "missing": []
   },
   "launch/macos/airui.rs": {
-   "keys": 33,
-   "mapped": 29,
+   "keys": 34,
+   "mapped": 30,
    "enabled": false,
    "missing": [
     "CMapIconManagerImpl.array.size+0x18",
@@ -11133,16 +11359,14 @@
    ]
   },
   "launch/macos/deployment.rs": {
-   "keys": 39,
-   "mapped": 33,
+   "keys": 40,
+   "mapped": 36,
    "enabled": false,
    "missing": [
     "CCountry+0x56c",
     "CStandardGridBox+0x320",
-    "deployment.template_row+0x10",
     "deployment.template_window+0xcb0",
-    "deployment.template_window+0xd20",
-    "division_template+0x20"
+    "deployment.template_window+0xd20"
    ]
   },
   "launch/macos/design_ui.rs": {
@@ -11203,33 +11427,22 @@
   },
   "launch/macos/doctrines.rs": {
    "keys": 54,
-   "mapped": 42,
+   "mapped": 49,
    "enabled": false,
    "missing": [
     "CCountry+0x56c",
-    "NDoctrines::CCountryDoctrineStatus.size+0xa0",
-    "NDoctrines::CDoctrineTemplate+0x18",
-    "NDoctrines::CDoctrineTemplate+0x1c",
-    "NDoctrines::CDoctrineTemplate+0x20",
-    "NDoctrines::CFolderStatus.size+0x50",
-    "NDoctrines::CTrackStatus.size+0x60",
     "NDoctrines::STemporaryCostReduction+0x10",
     "NDoctrines::STemporaryCostReduction+0x28",
     "NDoctrines::STemporaryCostReduction+0x30",
-    "NDoctrines::STemporaryCostReduction+0x8",
-    "NDoctrines::STemporaryCostReduction.size+0x38"
+    "NDoctrines::STemporaryCostReduction+0x8"
    ]
   },
   "launch/macos/economy_detail.rs": {
-   "keys": 43,
-   "mapped": 38,
+   "keys": 44,
+   "mapped": 43,
    "enabled": false,
    "missing": [
-    "CConsumerGoodsConsumer+0x10",
-    "CCountry+0x56c",
-    "civilian.consumer+0x8",
-    "civilian.consumer+0xc",
-    "modifier.entry.size+0x10"
+    "CCountry+0x56c"
    ]
   },
   "launch/macos/events.rs": {
@@ -11240,7 +11453,7 @@
   },
   "launch/macos/fleetmem.rs": {
    "keys": 35,
-   "mapped": 18,
+   "mapped": 20,
    "enabled": false,
    "missing": [
     "CEquipmentType+0x10",
@@ -11260,6 +11473,18 @@
   "launch/macos/focus.rs": {
    "keys": 12,
    "mapped": 12,
+   "enabled": true,
+   "missing": []
+  },
+  "launch/macos/inproc_doctrine.rs": {
+   "keys": 2,
+   "mapped": 2,
+   "enabled": true,
+   "missing": []
+  },
+  "launch/macos/inproc_politics.rs": {
+   "keys": 6,
+   "mapped": 6,
    "enabled": true,
    "missing": []
   },
@@ -11300,8 +11525,8 @@
    "missing": []
   },
   "launch/macos/mios.rs": {
-   "keys": 6,
-   "mapped": 6,
+   "keys": 7,
+   "mapped": 7,
    "enabled": true,
    "missing": []
   },
@@ -11347,8 +11572,8 @@
    ]
   },
   "launch/macos/politics.rs": {
-   "keys": 28,
-   "mapped": 27,
+   "keys": 29,
+   "mapped": 28,
    "enabled": false,
    "missing": [
     "idea.category+0x10"
@@ -11382,18 +11607,14 @@
    ]
   },
   "launch/macos/research_extras.rs": {
-   "keys": 23,
-   "mapped": 20,
-   "enabled": false,
-   "missing": [
-    "CIdeaResearchBonus+0x10",
-    "CIdeaResearchBonus+0x30",
-    "CIdeaResearchBonus+0x38"
-   ]
+   "keys": 24,
+   "mapped": 24,
+   "enabled": true,
+   "missing": []
   },
   "launch/macos/resources.rs": {
    "keys": 45,
-   "mapped": 21,
+   "mapped": 30,
    "enabled": false,
    "missing": [
     "CEquipmentType+0x10",
@@ -11418,21 +11639,15 @@
   },
   "launch/macos/special_projects.rs": {
    "keys": 70,
-   "mapped": 54,
+   "mapped": 64,
    "enabled": false,
    "missing": [
-    "NProject::CProject.size+0x1b8",
     "NProject::CProjectStateMachine+0x8",
     "NProject::CProjectStateMachine+0x8c",
     "NProject::CProjectStateMachine+0x90",
     "NProject::CProjectStateMachine+0x94",
     "NProject::CProjectStateMachine+0x98",
-    "NProject::CSpecializationDatabase+0x58",
-    "breakthrough.map_node+0x0",
-    "breakthrough.map_node+0x18",
-    "breakthrough.map_node+0x20",
-    "breakthrough.map_node+0x8",
-    "characters.recruit_pool+0x8"
+    "NProject::CSpecializationDatabase+0x58"
    ]
   },
   "launch/macos/stateslots.rs": {
@@ -11445,7 +11660,7 @@
   },
   "launch/macos/stockpile.rs": {
    "keys": 35,
-   "mapped": 13,
+   "mapped": 21,
    "enabled": false,
    "missing": [
     "CEquipmentType+0x10",
@@ -11502,9 +11717,12 @@
   },
   "launch/macos/units.rs": {
    "keys": 92,
-   "mapped": 73,
+   "mapped": 76,
    "enabled": false,
    "missing": [
+    "CDivisionTemplateData+0x40",
+    "CDivisionTemplateData+0x60",
+    "CDivisionTemplateData+0x8",
     "CEquipmentType+0x10",
     "CEquipmentType+0x60",
     "CEquipmentVariant+0x28",
@@ -11513,10 +11731,7 @@
     "CEquipmentVariant+0x3e8",
     "CEquipmentVariant+0x40",
     "CEquipmentVariant+0x410",
-    "CEquipmentVariant+0x414",
-    "CEquipmentVariant+0x60",
-    "CEquipmentVariant+0xa8",
-    "CEquipmentVariant+0xc"
+    "CEquipmentVariant+0x414"
    ]
   },
   "launch/macos/war_stats.rs": {
@@ -11527,35 +11742,13 @@
   },
   "production_lines/output.rs": {
    "keys": 15,
-   "mapped": 4,
+   "mapped": 12,
    "enabled": false,
    "missing": [
     "0x372bec0",
-    "CProductionLine+0x14",
-    "CProductionLine+0x20",
-    "CProductionLine+0x28",
-    "CProductionLine+0x30",
-    "CProductionLine+0x38",
-    "CProductionLine+0x48",
-    "CProductionLine+0x58",
-    "CProductionLine+0x88",
     "CProductionLine+0x98",
     "CProductionLine+0xc0"
    ]
-  }
- },
- "offline_fill": {
-  "CIdea": {
-   "0x908": {
-    "elf": "0xa78",
-    "how": "bracketed (extend, no binary)"
-   }
-  },
-  "CMilitaryDeploymentConveyor": {
-   "0x3c": {
-    "elf": "0x44",
-    "how": "bracketed (extend, no binary)"
-   }
   }
  }
 }
