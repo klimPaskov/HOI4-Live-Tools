@@ -418,6 +418,43 @@ pub(super) struct Def {
 /// 1.19.4.1 (f584) +0x180, Mach-O 089EA519 +0x320.
 const MACOS_CATALOGS: [u64; 2] = [0x180, 0x320];
 
+/// How far into CTechnologyStatus the bounded scan looks when no known offset holds the catalog
+/// (1.19.4.1 had subsets up to +0x1be0).
+const CATALOG_SCAN_END: u64 = 0x2800;
+
+/// Offsets (8-aligned) in a raw CTechnologyStatus block whose 16 bytes look like a CPdxArray of 2 to
+/// 400 pointers (data pointer, capacity >= count): the candidates the bounded scan checks.
+pub(super) fn array_candidates(block: &[u8]) -> Vec<u64> {
+    let mut out = Vec::new();
+    let mut off = 0usize;
+    while off + 16 <= block.len() {
+        let ptr = u64::from_le_bytes(block[off..off + 8].try_into().unwrap());
+        let cap = i32::from_le_bytes(block[off + 8..off + 12].try_into().unwrap());
+        let size = i32::from_le_bytes(block[off + 12..off + 16].try_into().unwrap());
+        if (2..=400).contains(&size) && size <= cap && cap <= 20_000 && is_ptr(ptr) {
+            out.push(off as u64);
+        }
+        off += 8;
+    }
+    out
+}
+
+/// The longest candidate array holding only sub-unit definitions (the full catalog: the subsets
+/// lack militia and irregular infantry), with its offset.
+pub(super) fn longest_catalog(
+    candidates: Vec<(u64, Option<Vec<u64>>)>,
+    is_def: impl Fn(u64) -> bool,
+) -> Option<(u64, Vec<u64>)> {
+    candidates
+        .into_iter()
+        .filter_map(|(off, list)| list.map(|l| (off, l)))
+        .filter(|(_, l)| !l.is_empty() && l.len() <= 400 && l.iter().all(|p| is_def(*p)))
+        .max_by_key(|(off, l)| (l.len(), std::cmp::Reverse(*off)))
+}
+
+/// The catalog offset the bounded scan found in this process (0 = not scanned or not found).
+static SCANNED_CATALOG: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// The first candidate array that is non-empty, at most 400 long and holds only sub-unit
 /// definitions (`is_def`); an unreadable candidate is None.
 pub(super) fn pick_catalog(
@@ -444,17 +481,51 @@ pub(super) fn catalog(r: &Reader<'_>, image: u64) -> Result<Vec<Def>> {
     // irregular_infantry). +0x320 now holds no array at all (shakedown 10 Nov 2026: every
     // hoi4_template_edit and hoi4_template_options failed with invalid_array). The macOS
     // reader takes the first candidate whose every entry is a sub-unit definition.
-    let candidates: Vec<u64> = match r.string_abi() {
+    // 1.20 (B8BF4554, live 115 on 28 Nov 2026: "No sub-unit catalog found") moved it again; the
+    // struct fields after +0x158 were not matched by the migration. When no known offset holds it,
+    // a bounded scan of the struct takes the longest array of sub-unit definitions (once per
+    // process; the offset is kept).
+    let scanned = SCANNED_CATALOG.load(std::sync::atomic::Ordering::Relaxed);
+    let mut candidates: Vec<u64> = match r.string_abi() {
         StringAbi::LibCxx => MACOS_CATALOGS.to_vec(),
         StringAbi::LibStdCxx | StringAbi::Msvc => vec![l.subunit_catalog],
     };
-    let list = pick_catalog(
+    if scanned != 0 {
+        candidates.insert(0, scanned);
+    }
+    let is_def = |p: u64| is_ptr(p) && r.u64(p).ok() == Some(image + l.subunit_vtable);
+    let list = match pick_catalog(
         candidates
             .iter()
             .map(|off| r.pointer_array(status + off).ok())
             .collect(),
-        |p| is_ptr(p) && r.u64(p).ok() == Some(image + l.subunit_vtable),
-    )?;
+        is_def,
+    ) {
+        Ok(list) => list,
+        Err(e) => {
+            let mut block = Vec::new();
+            let mut at = 0;
+            while at < CATALOG_SCAN_END {
+                match r.read(status + at, 0x400) {
+                    Ok(chunk) => block.extend(chunk),
+                    Err(_) => break,
+                }
+                at += 0x400;
+            }
+            let found = longest_catalog(
+                array_candidates(&block)
+                    .into_iter()
+                    .map(|off| (off, r.pointer_array(status + off).ok()))
+                    .collect(),
+                is_def,
+            );
+            let Some((off, list)) = found else {
+                return Err(e);
+            };
+            SCANNED_CATALOG.store(off, std::sync::atomic::Ordering::Relaxed);
+            list
+        }
+    };
     if list.len() > 400 {
         return Err(Error::new("invalid_array", "Too many sub-unit definitions"));
     }
@@ -1114,6 +1185,33 @@ mod tests {
                 .code,
             "invalid_array"
         );
+    }
+
+    #[test]
+    fn the_scan_finds_array_headers_and_takes_the_longest_catalog() {
+        let mut block = vec![0u8; 0x60];
+        let put = |b: &mut Vec<u8>, off: usize, ptr: u64, cap: i32, size: i32| {
+            b[off..off + 8].copy_from_slice(&ptr.to_le_bytes());
+            b[off + 8..off + 12].copy_from_slice(&cap.to_le_bytes());
+            b[off + 12..off + 16].copy_from_slice(&size.to_le_bytes());
+        };
+        put(&mut block, 0x10, 0x7000_0000, 128, 98);
+        put(&mut block, 0x30, 0x7100_0000, 4, 9); // count above capacity: no array
+        put(&mut block, 0x40, 0x13, 8, 4); // not a pointer
+        assert_eq!(array_candidates(&block), vec![0x10]);
+        let def = |p: u64| p >= 0x1000;
+        let got = longest_catalog(
+            vec![
+                (0x10, Some(vec![0x1000; 96])),
+                (0x20, Some(vec![0x1000; 98])),
+                (0x28, Some(vec![0x10; 120])),
+                (0x30, None),
+            ],
+            def,
+        )
+        .unwrap();
+        assert_eq!((got.0, got.1.len()), (0x20, 98));
+        assert!(longest_catalog(vec![(0x8, Some(vec![]))], def).is_none());
     }
 
     use super::*;

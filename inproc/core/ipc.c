@@ -15,8 +15,8 @@
 #include <time.h>
 #include <unistd.h>
 
-const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics", "construction", "training", "mio", "navy", "doctrine", "projects", "navyhq", "move"};
-const int IPC_ALLOWED_COUNT = 23;
+const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics", "construction", "training", "mio", "navy", "doctrine", "projects", "navyhq", "move", "raids", "diplomacy2"};
+const int IPC_ALLOWED_COUNT = 25;
 /* airwing (engineer 71, 24 Nov): split, merge, disband, attach, detach, region by id / hold; OFF in auto until its
  * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
 const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */,
@@ -77,7 +77,13 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                 0 /* navyhq (engineer 102, 28 Nov): an admiral to a naval headquarters (S20-NAVYHQ; no
                                    * read gives a headquarters' address yet) */,
                                 0 /* move (engineer 105, 28 Nov): a division's move order to a province, the right click's
-                                   * CMoveCommand (S20-MOVE) */};
+                                   * CMoveCommand (S20-MOVE) */,
+                                0 /* raids (engineer 118, 28 Nov): a prepared raid's Launch and Cancel (S23-RAID; raid
+                                   * creation and the raid instance read are not built yet) */,
+                                0 /* diplomacy2 (engineer 122, 28 Nov): every other diplomatic action class the game has
+                                   * whose player constructor has a known shape, found by the module's catalog (embargo,
+                                   * docking rights, air base access, licences access, autonomy, peace proposal ...);
+                                   * the diplomacy session S27-DIPLOMACY-ANY) */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;
@@ -313,6 +319,7 @@ static void handle(int fd, const ipc_backend *b, ipc_policy *p, rate_state *rs, 
                 else ok = b->fronts(g->str, frag, sizeof frag);
             }
             else if (!strcmp(op->str, "mios")) ok = b->mios ? b->mios(frag, sizeof frag) : 0; /* engineer 84: a pure read */
+            else if (!strcmp(op->str, "diplomacy_actions")) ok = b->diplomacy_actions ? b->diplomacy_actions(frag, sizeof frag) : 0; /* engineer 122: the scan's catalog */
             else if (!strcmp(op->str, "post")) {
                 const ipc_member *c = get(m, nm, "cmd"), *sp = get(m, nm, "speed");
                 int allowed = 0, fam = c && !c->is_num ? ipc_family_of(c->str) : -1;

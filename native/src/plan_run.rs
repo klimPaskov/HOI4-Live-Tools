@@ -45,6 +45,9 @@
 //!                          and the next key is tried (two refused keys per tick); `focus_blocked:[key:reason]`
 //!                          is in the digest
 //!   focus_fallback         focus keys tried only after every focus_path key is completed or skipped
+//!   focus_when             {focus key: predicate}: that focus is kept for its window: not started
+//!                          while the predicate does not hold (false or unknown); the keys after it
+//!                          go on meanwhile; the focus line names the keys kept and why
 //!   skip_hours             {"tech":72,"tech_fallback":168,"focus":24,"focus_blocked":240,"focus_unavailable":24}:
 //!                          game hours a refused key is left alone (defaults shown); all optional
 //!                          The digest carries one `research` line and one `focus` line per run (like `construction`)
@@ -291,6 +294,14 @@ use std::{
 /// battles, reach by range and base.
 #[path = "plan_air.rs"]
 mod plan_air;
+/// Air opportunity rules (interception, logistics strike, strategic bombing) filling
+/// `air_situation.missions[]`; pure until the missions executor calls them.
+#[allow(dead_code)]
+#[path = "plan_air_rules.rs"]
+mod plan_air_rules;
+/// Airborne drops as a standing opportunity rule (`airborne`): reach, the air over the target, FAIR link-up.
+#[path = "plan_airborne.rs"]
+mod plan_airborne;
 /// Concentrated command: formations and their tasks, a general for every army, the army group.
 #[path = "plan_formations.rs"]
 mod plan_formations;
@@ -300,6 +311,9 @@ mod plan_manage;
 /// Military domains (army groups, navy, naval invasions, casualty ratio, air superiority).
 #[path = "plan_military.rs"]
 mod plan_military;
+/// Volunteers and the attaché as a standing opportunity rule (`volunteers`): the game's own legality answers.
+#[path = "plan_volunteers.rs"]
+mod plan_volunteers;
 
 /// State, economy and diplomacy affairs (designs, diplomacy, faction, trade, MIOs, intelligence,
 /// research bonuses).
@@ -392,8 +406,6 @@ pub const UNBUILT_ARGS: &[(&str, &str)] = &[
     // the law of one occupied state (gap register occupation.per_state_law): the tool sets the
     // default law only
     ("hoi4_occupation_law", "state"),
-    // swapping a chosen doctrine (gap register doctrines.replace_doctrine)
-    ("hoi4_doctrine_adopt", "replace"),
     // the peace conference's force-government demand (gap register peace.force_government)
     ("hoi4_peace_take", "force_government"),
     // the area defence order's settings toggles (gap register orders.defensive_lines): the game's
@@ -456,6 +468,7 @@ fn bulk_paths(plan: &Value) -> HashSet<String> {
 }
 pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_skill_run",
+    "hoi4_paradrop",
     "hoi4_army_fallback",
     "hoi4_army_exercise",
     "hoi4_production_priority",
@@ -2810,6 +2823,9 @@ fn tick_inner(
     state.pcache = None;
     let merged = strategy_step(state, tools, plan, now);
     let plan = merged.as_ref().unwrap_or(plan);
+    // production lines whose `until` held close from that day (read as remove rows)
+    let ended = production_until(state, tools, plan, now);
+    let plan = ended.as_ref().unwrap_or(plan);
     // command concentrated in a few formations; small roles are tasks inside them
     // (plan_formations.rs)
     let concentrated = plan_formations::concentrate(plan);
@@ -3737,6 +3753,10 @@ struct HeldSlot {
     why: String,
     days_held: i64,
     days_max: i64,
+    /// The juggle: the technology the held slot runs while it waits (its progress is kept when
+    /// it is switched out), and whether the slot runs it now.
+    fill: Option<String>,
+    filled: bool,
 }
 
 /// The idle slots the plan's `research_waits` hold now. A wait is over (for good) when its
@@ -3772,19 +3792,30 @@ fn held_research_slots(
             state.done.insert(over, now);
             continue;
         }
+        let fill = w["fill"]
+            .as_str()
+            .filter(|t| !t.is_empty())
+            .map(String::from);
+        let running_fill = fill
+            .as_ref()
+            .and_then(|f| slots.iter().position(|s| s.as_ref() == Some(f)));
         let slot = match w["slot"].as_u64() {
             Some(s) => s as usize,
-            None => match slots.iter().rposition(Option::is_none) {
+            None => match running_fill.or_else(|| slots.iter().rposition(Option::is_none)) {
                 Some(s) => s,
                 None => continue,
             },
         };
-        if slots.get(slot).is_none_or(Option::is_some) || out.iter().any(|h| h.slot == slot) {
+        let filled = fill.is_some() && slots.get(slot).and_then(|s| s.as_ref()) == fill.as_ref();
+        if (!filled && slots.get(slot).is_none_or(Option::is_some))
+            || out.iter().any(|h| h.slot == slot)
+        {
             continue;
         }
         let since = *state.done.entry(format!("rwait:{index}")).or_insert(now);
         let days_max = w["days"].as_f64().map_or(30, |d| d.ceil() as i64);
-        if now - since > days_max * DAY {
+        // a filled slot banks nothing: the days bound only an empty slot
+        if !filled && now - since > days_max * DAY {
             state.done.insert(over, now);
             continue;
         }
@@ -3799,9 +3830,76 @@ fn held_research_slots(
             why: text(&w["why"]).to_string(),
             days_held: (now - since) / DAY,
             days_max,
+            fill,
+            filled,
         });
     }
     out
+}
+
+/// The juggle's switch: a held slot that runs its filler (`research_waits[].fill`) is switched to
+/// the technology it waits for the moment that one can start (replace: the filler's progress is
+/// kept by the game and it resumes through the plan's order later). Reads the startable list only
+/// while a filler runs.
+fn research_juggle_swap(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    slots: &[Option<String>],
+) -> Result<Option<String>> {
+    let busy: HashSet<String> = slots.iter().flatten().cloned().collect();
+    let held: Vec<HeldSlot> = held_research_slots(state, plan, now, slots, &HashSet::new(), &busy)
+        .into_iter()
+        .filter(|h| h.filled && h.tech.is_some())
+        .collect();
+    if held.is_empty() {
+        return Ok(None);
+    }
+    let Some(startable) = tools
+        .call("hoi4_technology_list", &json!({"available": true}))
+        .ok()
+        .filter(|v| v["available_only"] == json!(true))
+        .map(|v| {
+            strings(&v, "technologies")
+                .into_iter()
+                .collect::<HashSet<String>>()
+        })
+    else {
+        return Ok(None);
+    };
+    for h in held {
+        let tech = h.tech.clone().unwrap_or_default();
+        if !startable.contains(&tech) || state.skipped(now, "tech", &tech) {
+            continue;
+        }
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_research_start",
+            json!({"technology": tech, "slot": h.slot, "replace": true}),
+            "rj",
+        )?;
+        if ok {
+            state.done.insert(format!("rwait:{}:over", h.index), now);
+        } else {
+            state.skip(now, "tech", &tech, DAY);
+        }
+        let fill = h.fill.clone().unwrap_or_default();
+        state.stages.research = Some((
+            format!(
+                "research: slot {} switched from {fill} to {tech} ({}): {ok}",
+                h.slot, h.why
+            ),
+            false,
+        ));
+        return Ok(Some(format!(
+            "research {tech} slot {} (switched from the filler {fill}, its progress kept): {ok} {why}",
+            h.slot
+        )));
+    }
+    Ok(None)
 }
 
 /// Research (a lane): an idle slot gets the plan's next startable technology, else the in-time
@@ -3818,6 +3916,9 @@ fn research_lane(
         .iter()
         .map(|s| s["researching"].as_str().map(String::from))
         .collect();
+    if let Some(line) = research_juggle_swap(state, tools, plan, lease, now, &slots)? {
+        return Ok(Some(line));
+    }
     if slots.iter().any(Option::is_none) {
         let idle_slots = slots.iter().filter(|s| s.is_none()).count();
         let mut done: HashSet<String> = HashSet::new();
@@ -3859,7 +3960,10 @@ fn research_lane(
             .enumerate()
             .position(|(i, s)| s.is_none() && !held.iter().any(|h| h.slot == i))
         else {
-            let h = &held[0];
+            // the idle held slot (a filled one runs its filler and is not this branch's)
+            let Some(h) = held.iter().find(|h| !h.filled) else {
+                return Ok(None);
+            };
             if let Some(tech) = h
                 .tech
                 .as_ref()
@@ -3885,6 +3989,32 @@ fn research_lane(
                 return Ok(Some(format!(
                     "research {tech} slot {} (the slot research_waits held for it): {ok} {why}",
                     h.slot
+                )));
+            }
+            // the juggle: the held slot runs its filler until the target can start
+            if let Some(fill) = h.fill.as_ref().filter(|f| {
+                !h.filled
+                    && !done.contains(*f)
+                    && !busy.contains(*f)
+                    && startable.as_ref().is_none_or(|s| s.contains(*f))
+            }) {
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_research_start",
+                    json!({"technology": fill, "slot": h.slot}),
+                    "rw",
+                )?;
+                state.stages.research = Some((
+                    format!(
+                        "research: slot {} runs {fill} while it waits for {} ({}): {ok}",
+                        h.slot, h.target, h.why
+                    ),
+                    false,
+                ));
+                return Ok(Some(format!(
+                    "research {fill} slot {} (filler while it waits for {}): {ok} {why}",
+                    h.slot, h.target
                 )));
             }
             state.stages.research = Some((
@@ -3953,6 +4083,20 @@ fn research_lane(
                 tech_skip(&why, skip_hours(plan, "tech", 3 * DAY)),
             );
             refused.push(format!("{tech}:{}", why.split(':').next().unwrap_or("")));
+            // the next candidate goes into the same slot only when the game refused this one by
+            // its rules; after a try whose effect is unknown (not applied yet, a read-back) the
+            // slot is read again next tick (g115a, 28 Nov 2026: radio read NotApplied, the game
+            // took it a frame later, and the next tech into that slot was refused invalid_target)
+            if !game_rule_refusal(&refusal_code(&why)) {
+                state.stages.research = Some((
+                    format!(
+                        "research: {tech} slot {empty} not settled ({}); read again next tick",
+                        refusal_code(&why)
+                    ),
+                    false,
+                ));
+                return Ok(Some(format!("research {tech} slot {empty}: {why}")));
+            }
         }
         // Nothing from the priority list is startable: never leave a slot idle.
         // Walk the technology catalog; the game refuses ineligible ones before
@@ -4063,6 +4207,11 @@ fn research_lane(
                     &tech,
                     tech_skip(&why, skip_hours(plan, "tech_fallback", 7 * DAY)),
                 );
+                if !game_rule_refusal(&refusal_code(&why)) {
+                    return Ok(Some(format!(
+                        "research {tech} slot {empty} (fallback): {why}"
+                    )));
+                }
             }
         } else if fallback_on && plan["research_blind_catalogue"] == json!(true) {
             // The old catalogue walk (every key tried by input) only on request: without the
@@ -4155,6 +4304,43 @@ fn focus_lane(
     out
 }
 
+/// The plan's `focus_when` {focus key: predicate}: the not yet completed keys whose window is not
+/// open now, with why (the predicate's false or unknown atoms).
+fn focus_windows(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    completed: &[String],
+    now: GameHour,
+) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    let Some(windows) = plan["focus_when"].as_object() else {
+        return out;
+    };
+    for (key, when) in windows {
+        if completed.contains(key) {
+            continue;
+        }
+        match judge(state, tools, when, now) {
+            Truth::True => {}
+            Truth::False => {
+                out.insert(key.clone(), format!("until {}", when_text(when)));
+            }
+            Truth::Unknown => {
+                out.insert(key.clone(), format!("unreadable: {}", when_text(when)));
+            }
+        }
+    }
+    out
+}
+
+fn when_text(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        other => other.to_string(),
+    }
+}
+
 /// The focus order of one tick: a missed checkpoint's focuses first, then the path, keys the
 /// GUI failed to start FOCUS_GUI_FAILS times in a row behind the rest; pure.
 fn focus_order(
@@ -4228,12 +4414,20 @@ fn focus_lane_inner(
                         .is_none_or(|n| *n < FOCUS_GUI_FAILS)
             })
             .cloned();
+        // `focus_when`: a focus kept for its window (a one-shot benefit taken when it pays, e.g.
+        // a focus held after its prerequisite until a date or a state): not started while its
+        // predicate does not hold; the keys after it go on meanwhile
+        let window = focus_windows(state, tools, plan, &completed, now);
         let startable = |state: &State, keys: &[String]| -> Vec<String> {
             if held.is_some() {
                 return Vec::new();
             }
             keys.iter()
-                .filter(|f| !completed.contains(*f) && !state.skipped(now, "focus", f))
+                .filter(|f| {
+                    !completed.contains(*f)
+                        && !state.skipped(now, "focus", f)
+                        && !window.contains_key(*f)
+                })
                 .cloned()
                 .collect()
         };
@@ -4292,7 +4486,23 @@ fn focus_lane_inner(
         // tick looks at no more than this many refused focuses; the rest keep their turn for the
         // next tick.
         let mut probes_left = FOCUS_PROBES_PER_TICK;
+        // A key the files cannot judge (its `available` reads what no file holds) is tried at
+        // most once a tick, and only before the game has refused a key in this tick: after such
+        // a refusal only keys the files call available follow (g115a, 28 Nov 2026: GER_anschluss
+        // refused by the game, then GER_demand_sudetenland and GER_the_four_year_plan in the
+        // same second, all unjudged).
+        let mut unjudged_tried = false;
         for key in candidates {
+            if let Some(what) = known.unknown.get(&key) {
+                if unjudged_tried {
+                    state.stages.focus_why.insert(
+                        key.clone(),
+                        format!("not judged ({what}); waits for the next tick"),
+                    );
+                    continue;
+                }
+                unjudged_tried = true;
+            }
             if let Some(why) = known.unavailable.get(&key) {
                 // Read again after a game day: no input was spent, so no back-off is needed.
                 state.skip(
@@ -4329,6 +4539,10 @@ fn focus_lane_inner(
                 || why.contains("prerequisite")
                 || why.contains("exclusive")
                 || why.contains("invalid_target");
+            if blocked {
+                // the game refused a key: an unjudged one does not follow in this tick
+                unjudged_tried = true;
+            }
             let mut gui_failed = 0;
             let hours = if blocked {
                 // The same focus refused again and again waits twice as long each time (10, 20,
@@ -4350,7 +4564,11 @@ fn focus_lane_inner(
             };
             state.skip(now, "focus", &key, hours);
             let code = why.split(':').next().unwrap_or("refused").to_string();
-            state.stages.focus_why.insert(key.clone(), code.clone());
+            let shown = match known.unknown.get(&key) {
+                Some(what) => format!("{code} (the files could not judge: {what})"),
+                None => code.clone(),
+            };
+            state.stages.focus_why.insert(key.clone(), shown);
             if gui_failed >= FOCUS_GUI_FAILS {
                 // this key cannot be started by the GUI for now: the next one gets its chance in
                 // the same tick, and the lane says why the plan's order changed
@@ -4460,6 +4678,16 @@ fn focus_lane_inner(
                         )
                     }
                 )
+            };
+            let line = if window.is_empty() {
+                line
+            } else {
+                let mut w: Vec<String> = window
+                    .iter()
+                    .map(|(k, why)| format!("{k} ({why})"))
+                    .collect();
+                w.sort();
+                format!("{line}; kept for their window: {}", w.join(", "))
             };
             state.stages.focus = Some((line, left == 0));
         }
@@ -4653,7 +4881,7 @@ const FAIR_BUDGET: std::time::Duration = std::time::Duration::from_millis(1500);
 /// choosin a research, spending pp, etc"). HEAVY: many inputs or reads, or orders whose timing
 /// matters within a day: speed 3 from its first action until it has been quiet for a while.
 /// A lane not listed is heavy. (lane, minor, why)
-pub(super) const LANE_WEIGHT: [(&str, bool, &str); 50] = [
+pub(super) const LANE_WEIGHT: [(&str, bool, &str); 51] = [
     ("research", true, "one pick in the research view"),
     (
         "factories",
@@ -4679,6 +4907,7 @@ pub(super) const LANE_WEIGHT: [(&str, bool, &str); 50] = [
     ("fuel", true, "a fuel setting: one click"),
     ("manage", true, "the alert and ledger reads: no input"),
     ("diplomacy", true, "one diplomatic action"),
+    ("volunteers", true, "one volunteer or attache action"),
     ("faction", true, "one faction action"),
     ("call_allies", true, "one call to arms"),
     (
@@ -6239,6 +6468,116 @@ fn command_cap(limit: &Value, plan_max: u64, cfg: &Value) -> u64 {
     }
 }
 
+/// Training rows with `armies` (destination armies: army names or army_layout name hints): their
+/// divisions outside any army (fresh from training) join the listed army with the fewest divisions
+/// that still has room under `max`, by one command per army (hoi4_army_detach without `army`, the
+/// in-process units family), at most 18 a call, one call a tick. The deploy state then decides
+/// nothing about the army, so one row per template serves every army (the owner, 28 Nov 2026:
+/// one training row per deploy state made ~29 lines of one template). Templates from hoi4_supply.
+/// A refusal waits 7 days (`trainroute`) and the gather takes them meanwhile.
+fn route_trainees(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    roster: &Value,
+    max: u64,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let rows: Vec<&Value> = match &plan["training"] {
+        Value::Array(a) => a.iter().collect(),
+        v @ Value::Object(_) => vec![v],
+        _ => return Ok(None),
+    };
+    let dest: Vec<(String, Vec<String>)> = rows
+        .iter()
+        .filter_map(|r| {
+            let names: Vec<String> = list(r, "armies")
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|n| {
+                    state
+                        .layout
+                        .get(n)
+                        .filter(|a| !a.is_empty())
+                        .cloned()
+                        .unwrap_or_else(|| n.to_string())
+                })
+                .collect();
+            (!names.is_empty()).then(|| (text(&r["template"]).to_string(), names))
+        })
+        .collect();
+    let loose: Vec<String> = list(roster, "unassigned")
+        .iter()
+        .filter_map(|d| d.as_str().map(str::to_string))
+        .collect();
+    if dest.is_empty() || loose.is_empty() || state.skipped(now, "trainroute", "all") {
+        return Ok(None);
+    }
+    let supply = tools.call("hoi4_supply", &json!({}))?;
+    let template_of: HashMap<String, String> = list(&supply, "divisions")
+        .iter()
+        .filter_map(|d| {
+            Some((
+                d["id"].as_str()?.to_string(),
+                text(&d["template"]).to_string(),
+            ))
+        })
+        .collect();
+    let size = |army: &str| {
+        list(roster, "armies")
+            .iter()
+            .find(|a| text(&a["army"]) == army)
+            .map(|a| a["division_count"].as_u64().unwrap_or(0))
+    };
+    for (template, armies) in &dest {
+        let ids: Vec<String> = loose
+            .iter()
+            .filter(|d| template_of.get(*d).is_some_and(|t| t == template))
+            .take(18)
+            .cloned()
+            .collect();
+        if ids.is_empty() {
+            continue;
+        }
+        let target = armies
+            .iter()
+            .filter_map(|a| size(a).map(|n| (a, n)))
+            .filter(|(_, n)| *n < max)
+            .min_by_key(|(_, n)| *n);
+        let Some((army, n)) = target else {
+            plan_manage::note(
+                state,
+                "armies",
+                format!("{} new {template} division(s): no listed army stands with room ({}); the gather takes them", ids.len(), armies.join(", ")),
+            );
+            continue;
+        };
+        let room = (max - n) as usize;
+        let ids: Vec<String> = ids.into_iter().take(room.max(1)).collect();
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_army_detach",
+            json!({"divisions": ids, "into": army}),
+            "tr",
+        )?;
+        if !ok {
+            state.skip(now, "trainroute", "all", 7 * DAY);
+            plan_manage::note(
+                state,
+                "armies",
+                format!("new {template} divisions to {army} refused, the gather takes them: {why}"),
+            );
+        }
+        return Ok(Some(format!(
+            "trainees {} {template} -> {army}: {ok} {why}",
+            ids.len()
+        )));
+    }
+    Ok(None)
+}
+
 /// 9. every division in an army of sensible size, generals only for real armies. At war it runs
 ///    right after the war step: the war cannot start before its armies exist (w15: the opening's
 ///    armies came a month late behind research, production and construction ticks).
@@ -6266,6 +6605,10 @@ fn armies_step(
         // (hoi4_army_gather: the alert's select-all, then the army card), never state by state:
         // a large country is not walked. The target is a formation with room (see
         // `gather_target`), else a new army (the split rule below restores the cap).
+        // fresh divisions of a training row with `armies` go to their army by command first
+        if let Some(line) = route_trainees(state, tools, plan, &roster, max, lease, now)? {
+            return Ok(Some(line));
+        }
         let pool = list(&roster, "unassigned").len() as u64;
         if pool == 0 {
             state.done.remove("gatherwait");
@@ -9092,6 +9435,46 @@ fn sp_stopped(state: &State, key: &str) -> Option<i64> {
         .find_map(|k| k.strip_prefix(&prefix).and_then(|id| id.parse().ok()))
 }
 
+/// Completions seen between two special-project reads (the `project_done:<key>` atom): a project
+/// that ran unstopped in a facility at the last read (`sprun:<key>`) and now runs nowhere is done
+/// (`spdone:<key>`) when the visible pool no longer lists it; one still listed went back to the
+/// pool (stopped, or its facility lost) and is not counted. A project that is stopping is not
+/// remembered as running.
+fn sp_completions(state: &mut State, sp: &Value, now: GameHour) {
+    let running: HashMap<String, bool> = list(sp, "facilities")
+        .iter()
+        .filter_map(|f| {
+            let p = &f["project"];
+            p["key"]
+                .as_str()
+                .map(|k| (k.to_string(), p["stopping"] == json!(true)))
+        })
+        .collect();
+    let listed: HashSet<&str> = list(sp, "projects")
+        .iter()
+        .filter_map(|p| p["key"].as_str())
+        .collect();
+    let was: Vec<String> = state
+        .done
+        .keys()
+        .filter_map(|k| k.strip_prefix("sprun:").map(str::to_string))
+        .collect();
+    for key in was {
+        if running.get(&key) == Some(&false) {
+            continue;
+        }
+        state.done.remove(&format!("sprun:{key}"));
+        if !running.contains_key(&key) && !listed.contains(key.as_str()) {
+            state.done.insert(format!("spdone:{key}"), now);
+        }
+    }
+    for (key, stopping) in running {
+        if !stopping {
+            state.done.entry(format!("sprun:{key}")).or_insert(now);
+        }
+    }
+}
+
 /// Special projects (`special_projects`), read from hoi4_special_projects every 7 game days and
 /// again on the next tick after an action, one action per tick:
 ///   stop           [{"id"?,"project"|"scientist"|"facility_id","when"?,"unassign"?}] first: once
@@ -9127,6 +9510,7 @@ fn special_projects_step(
     }
     state.skip(now, "spcheck", "x", 7 * DAY);
     let sp = tools.call("hoi4_special_projects", &json!({}))?;
+    sp_completions(state, &sp, now);
     // an action is followed by a fresh read on the next tick, not after 7 game days
     let again = |state: &mut State| {
         state.bad.remove(&skip_key("spcheck", "x"));
@@ -9710,6 +10094,21 @@ fn extras_step(
                         format!(
                             "{doctrine}: {xp:.0} {kind} experience, {before:.0} held for {} first",
                             names.join(", ")
+                        ),
+                    );
+                } else {
+                    // the lane says what it waits for (g115a, 28 Nov 2026: 125 days without a
+                    // doctrine action or a note while army experience went 0 -> 5)
+                    plan_manage::note(
+                        state,
+                        "doctrines",
+                        format!(
+                            "{doctrine}: waits for {cost:.0} {kind} experience ({xp:.0} held{})",
+                            if price.is_none() {
+                                "; price not read, the game's Unlock decides"
+                            } else {
+                                ""
+                            }
                         ),
                     );
                 }
@@ -12332,12 +12731,84 @@ fn judge(state: &mut State, tools: &dyn Tools, predicate: &Value, now: GameHour)
     };
     let mut ctx = Ctx::with_cache(tools, now, cache);
     ctx.phase = state.strategy.phase_id();
+    if predicate.to_string().contains("project_done") {
+        ctx.projects_done = state
+            .done
+            .keys()
+            .filter_map(|k| k.strip_prefix("spdone:").map(str::to_string))
+            .collect();
+    }
     let truth = crate::plan_predicate::check(predicate, &mut ctx);
     for (atom, why) in ctx.take_unknown() {
         state.strategy.unknown.entry(atom).or_insert(why);
     }
     state.pcache = Some((now, ctx.into_cache()));
     truth
+}
+
+/// `production[].until` (a predicate, e.g. "stock:infantry_equipment >= 9000"): once it holds
+/// (judged at most once a game day after the entry's `from`), the lines of that entry's equipment
+/// close from that day: the entry is read as a remove row dated then (`remove`, `from`; recorded
+/// as `produntil:<index>:<equipment>`, so it survives a restart and is not judged again). A later
+/// floor of the same equipment family (a newer gun on its own row) starts its line again, as for
+/// any remove row. None when no entry carries `until` or none has held.
+fn production_until(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    now: GameHour,
+) -> Option<Value> {
+    let rows = plan["production"].as_array()?;
+    if rows.iter().all(|e| e["until"].is_null()) {
+        return None;
+    }
+    let mut out = plan.clone();
+    let mut changed = false;
+    for (i, e) in rows.iter().enumerate() {
+        if e["until"].is_null() {
+            continue;
+        }
+        let key = format!("produntil:{i}:{}", text(&e["equipment"]));
+        let at = match state.done.get(&key) {
+            Some(h) => Some(*h),
+            None if !reached(e, now) || state.skipped(now, "produntil", &key) => None,
+            None => {
+                if judge(state, tools, &e["until"], now).is_true() {
+                    state.done.insert(key.clone(), now);
+                    Some(now)
+                } else {
+                    state.skip(now, "produntil", &key, DAY);
+                    None
+                }
+            }
+        };
+        let Some(hour) = at else {
+            continue;
+        };
+        let row = &mut out["production"][i];
+        row["remove"] = json!(true);
+        row["from"] = json!(hour_ymd(hour));
+        if let Some(o) = row.as_object_mut() {
+            o.remove("until");
+            o.remove("factories");
+        }
+        changed = true;
+    }
+    changed.then_some(out)
+}
+
+/// "YYYY.M.D" of a game hour (the game's 365-day calendar from year -5000, as `date_hour`).
+fn hour_ymd(hour: GameHour) -> String {
+    const DAYS: [i64; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let days = hour.div_euclid(24);
+    let year = days.div_euclid(365) - 5000;
+    let mut day = days.rem_euclid(365);
+    let mut month = 0;
+    while day >= DAYS[month] {
+        day -= DAYS[month];
+        month += 1;
+    }
+    format!("{year}.{}.{}", month + 1, day + 1)
 }
 
 /// 0. The strategy layer (reads only, never input): `goal`, `phases`, `checkpoints` and
@@ -13679,6 +14150,8 @@ fn date_stop_pause(state: &mut State, tools: &dyn Tools, lease: &str, pause: boo
 struct FocusVerdicts {
     /// key -> the first reason, for the keys that are certainly unavailable now
     unavailable: HashMap<String, String>,
+    /// key -> the first thing the files could not judge, for the keys answered "unknown"
+    unknown: HashMap<String, String>,
     /// the countries at war with the player, sorted and joined (None: not read)
     wars: Option<String>,
 }
@@ -13710,12 +14183,22 @@ fn focus_verdicts(tools: &dyn Tools, keys: &[String]) -> FocusVerdicts {
         tags.join(",")
     });
     for row in reply["focuses"].as_array().into_iter().flatten() {
-        if row["state"] != json!("unavailable") {
-            continue;
-        }
         let Some(key) = row["focus"].as_str() else {
             continue;
         };
+        if row["state"] == json!("unknown") {
+            let what: String = row["unknown"][0]
+                .as_str()
+                .unwrap_or("not judged")
+                .chars()
+                .take(100)
+                .collect();
+            out.unknown.insert(key.to_string(), what);
+            continue;
+        }
+        if row["state"] != json!("unavailable") {
+            continue;
+        }
         let why: String = row["why"][0]
             .as_str()
             .unwrap_or("requirements unmet")
@@ -14902,6 +15385,103 @@ mod tests {
             refuse_text: RefCell::new(HashMap::new()),
         }
     }
+    #[test]
+    fn after_a_research_start_of_unknown_effect_the_next_tech_does_not_go_into_that_slot() {
+        let tools = fake(vec![
+            (
+                "hoi4_research",
+                json!({"slots": [{"researching": "construction1"}, {"researching": null}],
+                    "researched": []}),
+            ),
+            (
+                "hoi4_technology_list",
+                json!({"available_only": true, "technologies": ["radio", "electronic_mechanical_engineering"]}),
+            ),
+        ]);
+        tools.refuse("hoi4_research_start", "action_not_applied");
+        let plan = json!({"research_priority": ["radio", "electronic_mechanical_engineering"]});
+        let mut state = State::default();
+        research_lane(&mut state, &tools, &plan, "l", START).unwrap();
+        let sent: Vec<Value> = tools
+            .calls
+            .borrow()
+            .iter()
+            .filter(|(n, a)| n == "hoi4_research_start" && a.get("request_id").is_some())
+            .map(|(_, a)| a["technology"].clone())
+            .collect();
+        assert!(
+            !sent.is_empty() && sent.iter().all(|t| t == "radio"),
+            "{sent:?}"
+        );
+    }
+
+    /// The juggle (guide rows G093, G097): a held slot runs its filler while it waits, and is
+    /// switched to the awaited technology with replace the moment that one can start.
+    #[test]
+    fn a_held_slot_runs_its_filler_then_switches_to_the_awaited_tech() {
+        let sent = |tools: &Fake| -> Vec<Value> {
+            tools
+                .calls
+                .borrow()
+                .iter()
+                .filter(|(n, a)| n == "hoi4_research_start" && a.get("request_id").is_some())
+                .map(|(_, a)| {
+                    json!({"t": a["technology"], "s": a["slot"], "r": a.get("replace").cloned()})
+                })
+                .collect()
+        };
+        let plan = json!({"research_waits": [
+            {"tech": "radio", "slot": 1, "fill": "tools1", "why": "the focus bonus lands"}]});
+        // waiting: the held slot gets the filler
+        let tools = fake(vec![
+            (
+                "hoi4_research",
+                json!({"slots": [{"researching": "construction1"}, {"researching": null}],
+                    "researched": []}),
+            ),
+            (
+                "hoi4_technology_list",
+                json!({"available_only": true, "technologies": ["tools1"]}),
+            ),
+        ]);
+        let mut state = State::default();
+        research_lane(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            sent(&tools),
+            vec![json!({"t": "tools1", "s": 1, "r": null})]
+        );
+        // the awaited tech opens: the filler's slot switches to it with replace
+        let tools = fake(vec![
+            (
+                "hoi4_research",
+                json!({"slots": [{"researching": "construction1"}, {"researching": "tools1"}],
+                    "researched": []}),
+            ),
+            (
+                "hoi4_technology_list",
+                json!({"available_only": true, "technologies": ["radio", "tools1"]}),
+            ),
+        ]);
+        research_lane(&mut state, &tools, &plan, "l", START + 5 * DAY).unwrap();
+        assert_eq!(sent(&tools), vec![json!({"t": "radio", "s": 1, "r": true})]);
+        // not yet open: the filler keeps running, nothing is sent, past the empty-slot days too
+        let tools = fake(vec![
+            (
+                "hoi4_research",
+                json!({"slots": [{"researching": "construction1"}, {"researching": "tools1"}],
+                    "researched": []}),
+            ),
+            (
+                "hoi4_technology_list",
+                json!({"available_only": true, "technologies": ["tools1"]}),
+            ),
+        ]);
+        let mut fresh = State::default();
+        research_lane(&mut fresh, &tools, &plan, "l", START).unwrap();
+        research_lane(&mut fresh, &tools, &plan, "l", START + 40 * DAY).unwrap();
+        assert!(sent(&tools).is_empty());
+    }
+
     /// t1939n (27 Nov 2026): the trade judge shared the name `trade` with the plan's deals and
     /// was never offered; insufficient_resources stayed open 151 days and hoi4_trade was never read.
     #[test]
@@ -16611,6 +17191,69 @@ mod tests {
     }
 
     #[test]
+    fn fresh_divisions_of_a_training_row_join_its_army_with_the_most_room_by_command() {
+        struct Fresh(RefCell<Vec<(String, Value)>>, bool);
+        impl Tools for Fresh {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                match name {
+                    "hoi4_supply" => Ok(json!({"divisions": [
+                        {"id": "d1", "template": "Infanterie-Division"},
+                        {"id": "d2", "template": "Infanterie-Division"},
+                        {"id": "d3", "template": "Panzer-Division"}]})),
+                    "hoi4_army_detach" if self.1 => Ok(json!({"receipt": {"status": "Verified"}})),
+                    "hoi4_army_detach" => Err(Error::new("capability_unavailable", "units off")),
+                    _ => Ok(json!({})),
+                }
+            }
+        }
+        let roster = json!({"unassigned": ["d1", "d2", "d3"], "armies": [
+            {"army": "Armee 1", "division_count": 20},
+            {"army": "Armee 2", "division_count": 12},
+            {"army": "Armee 3", "division_count": 2}]});
+        let plan = json!({"training": [
+            {"template": "Infanterie-Division", "queue": 6, "armies": ["Armee 1", "Armee 2"]},
+            {"template": "Panzer-Division", "queue": 2}]});
+        let tools = Fresh(RefCell::new(vec![]), true);
+        let mut state = State::default();
+        let line = route_trainees(&mut state, &tools, &plan, &roster, 24, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            line.starts_with("trainees 2 Infanterie-Division -> Armee 2: true"),
+            "{line}"
+        );
+        let sent = tools.0.borrow();
+        let detach = sent.iter().find(|(n, _)| n == "hoi4_army_detach").unwrap();
+        assert_eq!(detach.1["divisions"], json!(["d1", "d2"]));
+        assert_eq!(detach.1["into"], json!("Armee 2"));
+        assert!(detach.1.get("army").is_none());
+        drop(sent);
+        // a refusal waits 7 days; the gather takes them meanwhile
+        let off = Fresh(RefCell::new(vec![]), false);
+        let mut state = State::default();
+        route_trainees(&mut state, &off, &plan, &roster, 24, "l", START).unwrap();
+        assert!(
+            route_trainees(&mut state, &off, &plan, &roster, 24, "l", START + DAY)
+                .unwrap()
+                .is_none()
+        );
+        // no row with armies: nothing
+        let plain = json!({"training": {"template": "Infanterie-Division"}});
+        assert!(route_trainees(
+            &mut State::default(),
+            &tools,
+            &plain,
+            &roster,
+            24,
+            "l",
+            START
+        )
+        .unwrap()
+        .is_none());
+    }
+
+    #[test]
     fn unassigned_divisions_are_gathered_in_one_action_not_state_by_state() {
         struct Gathering(RefCell<Vec<(String, Value)>>, bool);
         impl Tools for Gathering {
@@ -17134,6 +17777,66 @@ mod tests {
                 (n.clone(), a)
             })
             .collect()
+    }
+
+    #[test]
+    fn a_project_that_leaves_its_facility_and_the_pool_is_recorded_done() {
+        let mut state = State::default();
+        let running = sp_read(
+            &[
+                (1, "land", Some("Ada"), Some(("sp_flame", false))),
+                (2, "land", Some("Bo"), Some(("sp_mev", false))),
+                (3, "land", Some("Cy"), Some(("sp_cruiser", true))),
+            ],
+            &[],
+            &[
+                ("sp_flame", "land"),
+                ("sp_mev", "land"),
+                ("sp_cruiser", "land"),
+            ],
+            0,
+            &[],
+        );
+        sp_completions(&mut state, &running, START);
+        assert!(state.done.contains_key("sprun:sp_flame"));
+        // a stopping project is not remembered as running
+        assert!(!state.done.contains_key("sprun:sp_cruiser"));
+        // a week on: the flame project is gone from facility and pool (done); the MEV went back to
+        // the pool (stopped by hand): not done; the cruiser finished stopping: never counted
+        let later = sp_read(
+            &[
+                (1, "land", Some("Ada"), None),
+                (2, "land", Some("Bo"), None),
+                (3, "land", Some("Cy"), None),
+            ],
+            &[],
+            &[("sp_mev", "land"), ("sp_cruiser", "land")],
+            0,
+            &[],
+        );
+        sp_completions(&mut state, &later, START + 7 * DAY);
+        assert!(state.done.contains_key("spdone:sp_flame"));
+        assert!(!state.done.contains_key("spdone:sp_mev"));
+        assert!(!state.done.contains_key("spdone:sp_cruiser"));
+        assert!(!state.done.keys().any(|k| k.starts_with("sprun:")));
+        // the predicate reads the record through judge
+        let tools = fake(vec![("hoi4_special_projects", later)]);
+        assert!(judge(
+            &mut state,
+            &tools,
+            &json!("project_done:sp_flame"),
+            START + 7 * DAY
+        )
+        .is_true());
+        assert_eq!(
+            judge(
+                &mut state,
+                &tools,
+                &json!("project_done:sp_mev"),
+                START + 7 * DAY
+            ),
+            Truth::False
+        );
     }
 
     #[test]
@@ -23301,6 +24004,51 @@ mod tests {
     }
 
     #[test]
+    fn after_the_game_refuses_a_focus_no_unjudged_key_follows_in_that_tick() {
+        let reads = fake(vec![
+            ("hoi4_research", json!({"slots": [{"researching": "x"}]})),
+            (
+                "hoi4_focus_completed",
+                json!({"active_key": null, "completed": ["Done"]}),
+            ),
+            (
+                "hoi4_focus_available",
+                json!({"focuses": [
+                    {"focus": "A", "state": "unknown", "unknown": ["fighting_army_strength_ratio"]},
+                    {"focus": "B", "state": "unknown", "unknown": ["prerequisite A"]},
+                    {"focus": "C", "state": "available"}]}),
+            ),
+        ]);
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new(
+                [
+                    Err(Error::new(
+                        "refused_by_game_check",
+                        "the game's can-do said no",
+                    )),
+                    Ok(json!({"receipt": {"status": "Verified"}})),
+                ]
+                .into(),
+            ),
+        };
+        let mut state = State::default();
+        let plan = json!({"focus_path": ["Done", "A", "B", "C"]});
+        let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(step, Tick::Acted("focus C".into()));
+        let tried: Vec<String> = tools
+            .actions
+            .borrow()
+            .iter()
+            .map(|a| a.1["focus"].as_str().unwrap().into())
+            .collect();
+        assert_eq!(tried, ["A", "C"]);
+        assert!(state.stages.focus_why["A"].contains("could not judge"));
+        assert!(state.stages.focus_why["B"].contains("not judged"));
+    }
+
+    #[test]
     fn a_blocked_focus_waits_ten_days_and_the_next_key_starts_in_the_same_tick() {
         let reads = focus_reads();
         let tools = ActionReplies {
@@ -23331,6 +24079,78 @@ mod tests {
             ["A:focus_not_available"]
         );
         assert!(focus_blocked(&state, &plan, START + 10 * DAY).is_empty());
+    }
+
+    #[test]
+    fn a_production_line_closes_from_the_day_its_until_holds() {
+        let plan = json!({"production": [
+            {"equipment": "infantry_equipment_1", "factories": 12,
+             "until": "stock:infantry_equipment >= 5000"},
+            {"equipment": "infantry_equipment_2", "factories": 10, "from": "1938.2.1"}]});
+        let stock = |n: i64| {
+            fake(vec![(
+                "hoi4_stockpile",
+                json!({"equipment": [{"archetype": "infantry_equipment", "cover_after_shortfall": n}]}),
+            )])
+        };
+        let mut state = State::default();
+        let now = crate::plan_predicate::date_hour("1937.6.1").unwrap();
+        assert!(production_until(&mut state, &stock(4000), &plan, now).is_none());
+        // judged at most once a game day
+        assert!(production_until(&mut state, &stock(6000), &plan, now + 2).is_none());
+        let out = production_until(&mut state, &stock(6000), &plan, now + DAY).unwrap();
+        let row = &out["production"][0];
+        assert_eq!(row["remove"], true);
+        assert_eq!(row["from"], "1937.6.2");
+        assert!(row.get("factories").is_none() && row.get("until").is_none());
+        assert_eq!(out["production"][1], plan["production"][1]);
+        // recorded: the same rewrite after a restart, without a read
+        let mut again = State::default();
+        again.restore(&state.memory(now + DAY), now + DAY);
+        let out2 = production_until(&mut again, &fake(vec![]), &plan, now + 30 * DAY).unwrap();
+        assert_eq!(out2["production"][0]["from"], "1937.6.2");
+        assert!(production_until(&mut state, &stock(0), &json!({"production": []}), now).is_none());
+    }
+
+    #[test]
+    fn game_hours_print_back_as_their_dates() {
+        for d in ["1936.1.1", "1937.6.2", "1939.12.31", "1941.6.22"] {
+            assert_eq!(
+                hour_ymd(crate::plan_predicate::date_hour(d).unwrap() + 13),
+                d
+            );
+        }
+    }
+
+    #[test]
+    fn a_focus_kept_for_its_window_lets_the_next_keys_go_first_then_starts_in_it() {
+        let plan = json!({"focus_path": ["Done", "A", "B"], "focus_when": {"A": "1936.6.1"}});
+        let reads = focus_reads();
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([Ok(json!({"receipt": {"status": "Verified"}}))].into()),
+        };
+        let mut state = State::default();
+        let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(step, Tick::Acted("focus B".into()));
+        assert_eq!(tools.actions.borrow().len(), 1);
+        let window = focus_windows(&mut state, &reads, &plan, &["Done".into()], START);
+        assert_eq!(window["A"], "until 1936.6.1");
+        // the window opens: A starts
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([Ok(json!({"receipt": {"status": "Verified"}}))].into()),
+        };
+        let mut state = State::default();
+        let later = crate::plan_predicate::date_hour("1936.6.2").unwrap();
+        let step = tick(&mut state, &tools, &plan, "l", later).unwrap();
+        assert_eq!(step, Tick::Acted("focus A".into()));
+        // an unreadable window keeps the focus too, and says so
+        let plan = json!({"focus_path": ["A"], "focus_when": {"A": "var:x > 1"}});
+        let window = focus_windows(&mut state, &reads, &plan, &[], later);
+        assert!(window["A"].starts_with("unreadable"));
     }
 
     #[test]
@@ -24281,22 +25101,19 @@ mod tests {
     }
 
     #[test]
-    fn a_doctrine_replace_is_held_back_until_the_swap_is_built() {
+    fn a_doctrine_replace_is_sent_with_replace() {
         let plan = json!({"doctrines": [
             {"id": "swap", "folder": "land", "track": "infantry", "subdoctrine": "mobile_infantry",
              "xp": 50, "replace": true}]});
         let tools = doctrine_tools();
         let mut state = State::default();
         let line = doctrine_pass(&mut state, &tools, &plan, 0).unwrap();
-        assert!(
-            line.contains("replace not sent") && line.contains("doctrines.replace_doctrine"),
-            "{line}"
-        );
+        assert!(!line.contains("replace not sent"), "{line}");
         assert_eq!(
             adopted(&tools),
-            vec![json!({"doctrine": "mobile_infantry", "track": "infantry"})]
+            vec![json!({"doctrine": "mobile_infantry", "track": "infantry", "replace": true})]
         );
-        assert!(!arg_built("hoi4_doctrine_adopt", "replace"));
+        assert!(arg_built("hoi4_doctrine_adopt", "replace"));
     }
 
     #[test]

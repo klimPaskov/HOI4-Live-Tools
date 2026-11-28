@@ -23,6 +23,11 @@ pub fn validate_read_batch(requests: &[(u64, usize)]) -> Result<usize> {
             || !(0x10000..=0x7fff_ffff_0000).contains(&address)
             || address.checked_add(size as u64).is_none()
         {
+            // HOI4_TRACE_READS=1: name the refused read (address, size, budget used) on stderr, so a live capture
+            // shows which pointer a reader followed (the designer base reads of s115b failed here)
+            if std::env::var_os("HOI4_TRACE_READS").is_some_and(|v| v == "1") {
+                eprintln!("[read_bound] batch address=0x{address:x} size={size} total={total}");
+            }
             return Err(Error::new("read_bound", "Invalid bounded read batch"));
         }
     }
@@ -98,6 +103,15 @@ impl<'a> Reader<'a> {
             || !(0x10000..=0x7fff_ffff_0000).contains(&address)
             || address.checked_add(size as u64).is_none()
         {
+            // HOI4_TRACE_READS=1: name the refused read (address, size, budget used) on stderr, so a live capture
+            // shows which pointer a reader followed (the designer base reads of s115b failed here)
+            if std::env::var_os("HOI4_TRACE_READS").is_some_and(|v| v == "1") {
+                eprintln!(
+                    "[read_bound] address=0x{address:x} size={size} snapshot_bytes={} calls={}",
+                    self.bytes.get(),
+                    self.calls.get()
+                );
+            }
             return Err(Error::new(
                 "read_bound",
                 "Invalid address or snapshot read budget",
@@ -105,7 +119,11 @@ impl<'a> Reader<'a> {
         }
         self.calls.set(self.calls.get() + 1);
         self.bytes.set(total);
-        let data = self.memory.read(address, size)?;
+        let data = self.memory.read(address, size).inspect_err(|e| {
+            if std::env::var_os("HOI4_TRACE_READS").is_some_and(|v| v == "1") {
+                eprintln!("[{}] address=0x{address:x} size={size}", e.code);
+            }
+        })?;
         if data.len() != size {
             return Err(Error::new("short_read", "Incomplete process read"));
         }

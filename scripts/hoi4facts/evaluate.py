@@ -13,6 +13,12 @@
     evaluate.py doctrine --country TAG [--date D]
     evaluate.py focus --country TAG [--date D] [--goal ideology:fascism] [--goal no_war:FRA]
     evaluate.py refresh TECH --country TAG          (the design roles a finished technology re-opens)
+    evaluate.py variant --country TAG [--date D] [--equipment KEY]   (production-cost clicks on mass lines)
+    evaluate.py convert FAMILY --country TAG --date D --to-date D     (base-and-convert: a base now, the design later)
+
+Output: text (default), --json (the whole answer), --lines (one JSON object per decision: evaluators/lines.py, the
+plan generator's and the companion's shape), --jsonl PATH or --run RUN (append those lines to PATH or
+RUN/evaluations.jsonl as well as printing).
 
 Common options: --game DIR (default HOI4_DIR), --mod PATH (repeatable; a .mod descriptor or a mod folder, layered over
 the install like the launcher), --mods none|auto (auto: also the mods enabled in the user folder), --state JSON (a live
@@ -134,8 +140,14 @@ def text_template(r):
            f"  widths: {r['width_why']}", f"  chosen width {r.get('chosen_width')}: the widest of the equal fills "
            f"({r.get('command_rule')}: frontage per commander grows with width)",
            f"  against: {r['enemy_template']}: " + _fmt_stats(r["enemy_template_stats"])]
+    g = r.get("axis")
+    if g:
+        out.append(f"  axis: {g['why']}; terrain {g['shares']}; battle width {g['battle_width']}, movement cost "
+                   f"{g['movement_cost']}, {g['km']} km between provinces; supply delivered {g['supply']:g} "
+                   f"({g['supply_from']})")
     for arch, d in (r.get("designs_used") or {}).items():
-        out.append(f"  design for {arch}: {d['base']} " + ", ".join(sorted(d["modules"].values())))
+        sp = f" ({d['speed']:g} km/h, {d['ic']:g} IC, floor {d['floor']:g})" if d.get("speed") and d.get("floor") else ""
+        out.append(f"  design for {arch}{sp}: {d['base']} " + ", ".join(sorted(d["modules"].values())))
     for i, t in enumerate(r["templates"], 1):
         bats = ", ".join(f"{n} {k}" for k, n in t["battalions"].items())
         out.append(f"  #{i} width {t['width']:g}: {bats}; regimental {t['regimental'] or '-'} "
@@ -144,7 +156,17 @@ def text_template(r):
         out.append(f"     cost: {t['ic']:g} IC, {t['manpower']:g} manpower; equipment " +
                    ", ".join(f"{k} {v:g}" for k, v in t["equipment"].items()))
         p = t["parts"]
-        if "R" in p:
+        lg = t.get("logistics") or {}
+        if lg:
+            out.append(f"     logistics: speed {lg.get('speed', 0):g} km/h, supply {lg.get('supply', 0):g} a day, fuel "
+                       f"{lg.get('fuel', 0):g} (equipment fuel_consumption x amount; the game's time unit for it is not verified)")
+        if "provinces_per_day" in p:
+            out.append(f"     why: {p['provinces_per_day']:g} provinces a day = 24 / (battle {p['battle_hours']:g} h + march "
+                       f"{p['march_hours']:g} h at {p['speed']:g} km/h); R {p['R']:g}; supply ratio {p['supply_ratio']:g} "
+                       f"({p['divisions_per_battle']:g} divisions x {p['supply_use']:g} against {p['axis_supply']:g}); "
+                       f"exploitation {p['exploit_km_per_day']:g} km a day; score {t['score']:g} = provinces a day x "
+                       f"sqrt(width / IC)" + (f"; {p['note']}" if p.get("note") else ""))
+        elif "R" in p:
             out.append(f"     why: R {p['R']:g} = our endurance {p['our_hours']:g} h / theirs {p['their_hours']:g} h "
                        f"(attacks per width ours {p['our_attacks_per_width']:g}, theirs {p['their_attacks_per_width']:g});"
                        f" score {t['score']:g} = R x sqrt(width / IC)")
@@ -157,7 +179,7 @@ def text_template(r):
         c = r["special_forces_cap"]
         out.append(f"  special forces cap {c['cap']:g} battalions = max({c['min']:g}, {c['factor']:g} x "
                    f"{c['non_sf_battalions']} other battalions)")
-    out.append("  rules: " + "; ".join(r["rules"]))
+    out.append("  rules: " + "; ".join(r["rules"] + list(r.get("logistic_rules") or [])))
     return out
 
 
@@ -208,7 +230,9 @@ def text_research(r):
            f"{m['research_speed']:+g}; techs: {r['techs']}",
            f"  value base: {m['base']}; IC per factory-year {m['ic_per_factory_year']:g}; a civilian factory builds "
            f"{m['build_rate']:g} military factories a year ({m['build_rate_why']}); horizon {m['horizon_years']:g} years",
-           f"  army: {m['army_templates']} fielded templates, {m['army_ic']:g} IC, against {m['enemy_template']}",
+           f"  army: {m['army_templates']} fielded templates, {m['army_ic']:g} IC, against {m['enemy_template']}; "
+           f"built later: {m.get('future_template') or 'the fielded templates'}; military factories grow "
+           f"{m.get('military_growth_per_year', 0):g} a year (consumer goods {m.get('consumer_goods', 0):g})",
            f"  days: {r['method']}; " + "; ".join(m["defines"])]
     for i, sl in enumerate(r["picks"], 1):
         out.append(f"  slot {i}:")
@@ -229,6 +253,49 @@ def cmd_research(a, sit):
     r = research.evaluate(sit, slots=a.slots, picks=a.picks, horizon_years=a.horizon_years, enemies=a.enemy or None)
     r["country"], r["date"] = sit.tag, sit.date
     return r, text_research(r)
+
+
+def text_variant(r):
+    out = [f"VARIANT cost clicks for {r.get('country', '')} at {r.get('date', '')}"]
+    if not r["clicks"]:
+        out.append("  no buildable equipment with a production-cost upgrade")
+    for x in r["clicks"]:
+        out.append(f"  {x['equipment']} ({x['upgrade']}): take {x['chosen']}: {x['why']}")
+        for row in x["levels"]:
+            out.append(f"    {row['level']} clicks: {row['ic']:g} IC, reliability {row['reliability']:g}, {row['xp']:g} XP,"
+                       f" {row['units_per_100_ic']:g} per 100 IC, value per IC {row['value_per_ic']:g}")
+        out.append("    rules: " + "; ".join(x["rules"]))
+    return out
+
+
+def cmd_variant(a, sit):
+    from hoi4facts.evaluators import variant
+    r = {"clicks": variant.cost_clicks(sit, a.equipment), "country": sit.tag, "date": sit.date}
+    return r, text_variant(r)
+
+
+def text_convert(r):
+    if r.get("note") and not r.get("base"):
+        return [f"CONVERT {r.get('family')}: {r['note']}"]
+    b, f = r["base"], r["final"]
+    out = [f"CONVERT {r['family']} for {r.get('country', '')}: base at {r['date']}, design at {r['to_date']} "
+           f"({r['techs_then']})",
+           f"  final ({f['stats'].get('build_cost_ic', 0):g} IC): {f['base']} " + ", ".join(sorted(f["modules"].values()))
+           + f"; upgrades {f['upgrades']}",
+           f"  base  ({b['stats'].get('build_cost_ic', 0):g} IC): {b['base']} " + ", ".join(sorted(b["modules"].values()))
+           + f"; upgrades {b['upgrades']}" + (f"; NOT LEGAL: {b['legal']}" if b["legal"] else "")]
+    for row in r["conversion_rows"]:
+        out.append(f"    {row['part']}: {row['ic']:g} IC" + (f", {row['xp']:g} XP" if row.get("xp") else "")
+                   + (f" ({row.get('how') or row.get('rule')})" if row.get("how") or row.get("rule") else ""))
+    out.append(f"  conversion {r['conversion_ic']:g} IC and {r['conversion_xp']:g} XP per vehicle: {r['why']}")
+    return out
+
+
+def cmd_convert(a, sit):
+    from hoi4facts.evaluators import variant
+    r = variant.base_and_convert(sit, a.family, a.to_date, role=a.role, enemies=a.enemy or None)
+    r["country"] = sit.tag
+    return r, text_convert(r)
 
 
 def text_production(r):
@@ -291,8 +358,56 @@ def cmd_production(a, sit):
     return r, text_production(r)
 
 
-COMMANDS = {"training": cmd_training, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
-            "construction": cmd_construction}
+def text_force(r):
+    e = r["enemy"]
+    out = [f"FORCE against {e['tag']} for {r.get('country', '')} at {r.get('date', '')}: {e['divisions']} enemy divisions "
+           f"({e['how']})"]
+    if r.get("error"):
+        return out + [f"  {r['error']}"]
+    out += [f"  front: {r['front_provinces']} provinces, terrain {r['terrain']}, battle width {r['battle_width']}; "
+            f"enemy template {r['enemy_template']}",
+            f"  hold: their width per province {r['their_width_per_province']:g} / R_def {r['R_def']:g} -> "
+            f"{r['hold_per_province']} x {r['line_template']} (width {r['line_width']:g}) per province = {r['hold']}",
+            f"  attack: {r['axes']} axes x {r['wave']} x {r['attack_template']} (width {r['attack_width']:g}, R_att "
+            f"{r['R_att']:g}) x (1 + {r['refills']} refills of their reserve) = {r['attack']}",
+            f"  total {r['total']} divisions; we field {r['ours']}; missing {r['missing']}"]
+    return out
+
+
+def cmd_force(a, sit):
+    from hoi4facts.evaluators import force
+    if not a.enemy:
+        raise SystemExit("force: --enemy TAG is required")
+    r = force.needed(sit, a.enemy[0], a.war_date, axes=a.axes)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_force(r)
+
+
+def text_doctrine(r):
+    out = [f"DOCTRINE (land grand doctrines) for {r.get('country', '')} at {r.get('date', '')}: held {r['held']}; "
+           f"R against {r['enemy_template']} for our line and armour templates (base / with every milestone)"]
+    for x in r["rows"]:
+        out.append(f"  {x['doctrine']}{' (held)' if x['held'] else ''}: line {x.get('line')}, attacker "
+                   f"{x.get('attacker')}, armour {x.get('armour')}; planning {x['planning']} + milestones "
+                   f"{x['planning_milestones']}; other {x['other']} ({x['src']})")
+        for role, by in (x.get("attack") or {}).items():
+            out.append(f"      {role} attacking with planning (mean over the first T days): " + "; ".join(
+                f"{label}: " + ", ".join(f"{t} R {v['R']:g} (planning {v['planning']:g})" for t, v in d.items())
+                for label, d in by.items()))
+        out.append(f"      not valued: {x.get('unvalued', {}).get('all milestones')}")
+    out.append(f"  planning: {'; '.join(r.get('planning_defines') or [])}; subdoctrine tracks are the same under "
+               "every grand doctrine (not compared)")
+    return out
+
+
+def cmd_doctrine(a, sit):
+    from hoi4facts.evaluators import force
+    r = force.doctrines(sit, a.enemy or None, planning_days=tuple(a.planning_days))
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_doctrine(r)
+
+
+COMMANDS = {"training": cmd_training, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template, "construction": cmd_construction, "variant": cmd_variant, "convert": cmd_convert, "force": cmd_force, "doctrine": cmd_doctrine}
 
 
 def parser():
@@ -317,6 +432,9 @@ def parser():
         p.add_argument("--state", default=None, help="live snapshot JSON")
         p.add_argument("--enemy", action="append", default=[])
         p.add_argument("--json", action="store_true")
+        p.add_argument("--lines", action="store_true", help="one JSON object per decision (evaluators/lines.py)")
+        p.add_argument("--jsonl", default=None, help="also append the decision lines to this file")
+        p.add_argument("--run", default=None, help="also append the decision lines to RUN/evaluations.jsonl")
         return p
 
     p = add("design", "role")
@@ -324,6 +442,12 @@ def parser():
     add("refresh", "tech")
     p = add("template", "role")
     p.add_argument("--width", type=int, default=None, help="a width target instead of the theatre's terrain")
+    p = add("force")
+    p.add_argument("--war-date", default=None, help="the enemy grows by its factories to this date")
+    p.add_argument("--axes", type=int, default=None, help="attack axes (default: the enemy's border states)")
+    p = add("doctrine")
+    p.add_argument("--planning-days", type=int, nargs="+", default=[14, 30],
+                   help="offensive lengths the planning bonus is averaged over")
     p = add("production")
     p.add_argument("--need-date", required=True, help="the date the equipment must be in the stockpile")
     p = add("training", "role")
@@ -337,14 +461,28 @@ def parser():
     p = add("construction")
     p.add_argument("--war-date", default=None, help="the planned war date (the 'standing' horizon)")
     p.add_argument("--war-years", type=float, default=2.0, help="the war's planned length (the 'output' horizon)")
+    p = add("variant")
+    p.add_argument("--equipment", default=None, help="one equipment (default: the newest of every archetype held)")
+    p = add("convert", "family")
+    p.add_argument("--to-date", required=True, help="the date of the final design (techs by on-time research)")
+    p.add_argument("--role", default="tank_main")
     return ap
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
     a = parser().parse_args(argv)
     sit = situation(a)
     data, text = COMMANDS[a.cmd](a, sit)
-    if a.json:
+    if a.lines or a.jsonl or a.run:
+        from hoi4facts.evaluators import lines
+        rows = lines.lines(a.cmd, data, argv, sit)
+        for path in [x for x in (a.jsonl, os.path.join(a.run, "evaluations.jsonl") if a.run else None) if x]:
+            lines.write(path, rows)
+    if a.lines:
+        for row in rows:
+            print(json.dumps(row, ensure_ascii=False, default=lambda o: sorted(o) if isinstance(o, set) else str(o)))
+    elif a.json:
         print(json.dumps(data, indent=1, ensure_ascii=False, default=lambda o: sorted(o) if isinstance(o, set) else str(o)))
     else:
         print("\n".join(text))

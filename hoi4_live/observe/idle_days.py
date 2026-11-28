@@ -54,12 +54,47 @@ SINKS = (
 )
 ALERTS = "game alerts (any)"
 
+# A failing order keeps its sink idle: a tool fault of the executor counts for the sink the tool
+# fills (g115a, 28 Nov 2026: three focus starts failed while no focus ran and the idle table showed
+# the focus row at 0). Exact names first, then prefixes.
+TOOL_FAULT_CODES = ("tool_failing", "refusal_retried_unchanged", "invalid_arguments", "precondition_unmet",
+                    "readback_no_change")
+TOOL_SINKS = (
+    ("hoi4_focus_start", "focus"),
+    ("hoi4_research_start", "research slots"),
+    ("hoi4_general_trait", "leaders"),
+    ("hoi4_army_commander", "leaders"),
+    ("hoi4_fleet_admiral", "leaders"),
+    ("hoi4_doctrine_adopt", "army experience"),
+    ("hoi4_operative_", "intelligence"),
+    ("hoi4_agency_", "intelligence"),
+    ("hoi4_fleet_", "task forces"),
+    ("hoi4_air_mission", "air wings"),
+    ("hoi4_air_rebase", "air wings"),
+    ("hoi4_train", "manpower"),
+    ("hoi4_production_", "military factories"),
+    ("hoi4_construction_", "civilian factories"),
+    ("hoi4_mio_", "MIO points"),
+    ("hoi4_special_project_", "special projects"),
+)
+
+
+def tool_sink(tool):
+    """The sink a tool fills, or None."""
+    tool = str(tool or "")
+    for name, sink in TOOL_SINKS:
+        if tool == name or (name.endswith("_") and tool.startswith(name)):
+            return sink
+    return None
+
 
 def sink_of(issue):
     """The sink an issue counts for, or None."""
     code = str(issue.get("code") or "")
     name = R.alert_name(code) or code.split(":", 1)[0]
     subject = issue.get("subject")
+    if name in TOOL_FAULT_CODES:
+        return tool_sink(issue.get("tool") or subject)
     for sink, codes in SINKS:
         for c in codes:
             base, _, sub = c.partition(":")

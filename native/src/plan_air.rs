@@ -28,6 +28,18 @@
 //! Wings that `air_plan` names, attached wings and carrier wings are never touched. One order per
 //! call: a mission batch for one (mission, region), or the rebases to one base.
 //!
+//! Mission entries (`air_situation.missions[]`, engineer 125): [{"id","mission","region"|"state","wings"|"share",
+//! "when"?,"stop"?,"ignore_air"?,"why"}], `mission` one of hoi4_air_mission's missions (logistics_strike,
+//! interception, strategic_bombing, port_strike, naval_strike, recon, air_supply, ...). Each turn, before the
+//! fighters and CAS above, every entry whose `when` holds and whose `stop` does not claims free wings whose plane flies
+//! the mission (by plane type; a refusal by the game teaches the rest: that wing is left out of that mission for
+//! `every_days` x 10): `wings` N of them or `share` (0..1) of those free, the ones already flying it there first, then
+//! the nearest; a wing short of reach is rebased as above. An entry other than interception or air superiority waits
+//! while the enemy fighters our region window last showed there exceed ours there / `fighter_ratio`, unless
+//! `ignore_air` (the rules engine fills entries from its opportunity rules: logistics strike, interception,
+//! strategic bombing). A stopped entry's wings are free again. `front:<army>` targets are not built yet (the note says
+//! so).
+//!
 //! Plan key: `air_situation` {} (all defaults) or {"enabled":true,"fighter_ratio":1.5,"min_coverage":0.5,
 //! "every_days":3,"probe_regions":2,"probe_days":7,"stay_out":true,"roles":["fighter","cas"]}; a
 //! roleplay goal can switch it off (`enabled:false`) or bias it (`fighter_ratio`, `stay_out:false`).
@@ -276,6 +288,202 @@ pub(super) fn allocate(
 
 /// Whether `w` reaches `min_coverage` of `r`'s battles from its base: Some(false) needs a base
 /// nearer, None unknown (no range or no position: sent as asked).
+/// hoi4_air_mission's missions (the entry's `mission` must be one of them).
+const MISSIONS: [&str; 14] = [
+    "air_superiority",
+    "cas",
+    "interception",
+    "strategic_bombing",
+    "naval_strike",
+    "kamikaze",
+    "port_strike",
+    "logistics_strike",
+    "air_supply",
+    "training",
+    "naval_mines",
+    "naval_minesweeping",
+    "recon",
+    "naval_patrol",
+];
+
+/// Whether a wing's plane is one the game offers the mission: by its war role (plan_run war_mission of the plane
+/// type) or, for the planes without one, by the plane type's family (scout, transport). Missions not listed take any
+/// plane (the game's refusal teaches the rest).
+fn flies_mission(mission: &str, w: &MWing) -> bool {
+    let role = |r: &[&str]| w.war_role.is_some_and(|x| r.contains(&x));
+    let kind = |k: &str| w.kind.contains(k);
+    match mission {
+        "air_superiority" | "interception" => role(&["air_superiority"]),
+        "cas" | "logistics_strike" => role(&["cas"]),
+        "strategic_bombing" => role(&["strategic_bombing", "cas"]),
+        "naval_strike" | "port_strike" => role(&["port_strike", "cas"]),
+        "recon" => kind("scout"),
+        "naval_patrol" => kind("scout") || kind("naval_bomber") || kind("maritime_patrol"),
+        "air_supply" => kind("transport"),
+        _ => true,
+    }
+}
+
+/// A free wing as the mission entries see it (any plane type).
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct MWing {
+    pub wing: Wing,
+    /// plan_run war_mission of its plane type
+    pub war_role: Option<&'static str>,
+    /// the missions it flies now (hoi4_air `missions`)
+    pub flying: Vec<String>,
+    /// its plane type, lower case (hoi4_air `aircraft_type`)
+    pub kind: String,
+}
+
+/// One active mission entry, resolved for this turn.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct MEntry {
+    pub id: String,
+    pub mission: &'static str,
+    pub region: Region,
+    pub count: Option<usize>,
+    pub share: Option<f64>,
+    pub ignore_air: bool,
+}
+
+/// The mission entries' claims: (orders, claimed wing names, notes). Entries in plan order; a wing serves one entry.
+/// `refused` holds (wing, mission) pairs the game refused lately. Pure.
+pub(super) fn claim(
+    entries: &[MEntry],
+    wings: &[MWing],
+    refused: &[(String, String)],
+    geo: &mut Geo<'_>,
+    cfg: &Config,
+) -> (Vec<Order>, Vec<String>, Vec<String>) {
+    let (mut orders, mut taken, mut notes) = (Vec::new(), Vec::<String>::new(), Vec::new());
+    for e in entries {
+        // our fighters over the region against the enemy's last seen there
+        let ours: f64 = wings
+            .iter()
+            .filter(|w| {
+                w.wing.region == Some(e.region.id)
+                    && w.flying.iter().any(|m| m == "air_superiority")
+            })
+            .map(|w| w.wing.planes)
+            .sum();
+        let contested = !e.ignore_air
+            && !matches!(e.mission, "interception" | "air_superiority")
+            && e.region
+                .enemy_fighters
+                .is_some_and(|f| f > ours / cfg.fighter_ratio.max(0.01));
+        if contested {
+            notes.push(format!(
+                "{}: {} over region {} waits: enemy fighters {:.0} seen there against our {ours:.0} (ratio {})",
+                e.id,
+                e.mission,
+                e.region.id,
+                e.region.enemy_fighters.unwrap_or(0.0),
+                cfg.fighter_ratio
+            ));
+            continue;
+        }
+        let mut cands: Vec<&MWing> = wings
+            .iter()
+            .filter(|w| !taken.contains(&w.wing.name))
+            .filter(|w| flies_mission(e.mission, w))
+            .filter(|w| {
+                !refused
+                    .iter()
+                    .any(|(n, m)| *n == w.wing.name && m == e.mission)
+            })
+            .collect();
+        // the ones already flying it there first, then the nearest base to the region's states
+        let dist = |w: &MWing| {
+            w.wing
+                .base_state
+                .and_then(|b| {
+                    e.region
+                        .states
+                        .iter()
+                        .filter_map(|s| geo.km(b, *s))
+                        .reduce(f64::min)
+                })
+                .unwrap_or(f64::MAX)
+        };
+        cands.sort_by(|&a, &b| {
+            let there = |w: &MWing| {
+                !(w.wing.region == Some(e.region.id) && w.flying.iter().any(|m| m == e.mission))
+            };
+            there(a).cmp(&there(b)).then(dist(a).total_cmp(&dist(b)))
+        });
+        let want = match (e.count, e.share) {
+            (Some(n), _) => n,
+            (None, Some(f)) => (cands.len() as f64 * f.clamp(0.0, 1.0)).ceil() as usize,
+            (None, None) => cands.len(),
+        };
+        if cands.is_empty() {
+            notes.push(format!("{}: no free wing flies {}", e.id, e.mission));
+            continue;
+        }
+        let mut mine = Vec::new();
+        for w in cands.into_iter().take(want) {
+            let flying =
+                w.wing.region == Some(e.region.id) && w.flying.iter().any(|m| m == e.mission);
+            if flying
+                || assign(
+                    &w.wing,
+                    &e.region,
+                    e.mission,
+                    geo,
+                    cfg,
+                    &mut orders,
+                    &mut notes,
+                )
+            {
+                mine.push(w.wing.name.clone());
+            }
+        }
+        let got = mine.len();
+        taken.extend(mine.iter().cloned());
+        // assign() skips the order when the wing holds the region with another mission: give it this one
+        for w in wings.iter().filter(|w| mine.contains(&w.wing.name)) {
+            let has = w.flying.iter().any(|m| m == e.mission);
+            if w.wing.region == Some(e.region.id)
+                && !has
+                && !orders.iter().any(|o| matches!(o, Order::Mission { wing, .. } | Order::Rebase { wing, .. } if *wing == w.wing.name))
+            {
+                orders.push(Order::Mission {
+                    wing: w.wing.name.clone(),
+                    mission: e.mission,
+                    region: e.region.id,
+                });
+            }
+        }
+        notes.push(format!(
+            "{}: {got} of {want} wings on {} over region {}",
+            e.id, e.mission, e.region.id
+        ));
+    }
+    (orders, taken, notes)
+}
+
+/// The entry's region: `region` (id), or the region of `state`; None with the reason.
+fn entry_region(state: &State, e: &Value) -> std::result::Result<i64, String> {
+    if let Some(r) = e["region"]
+        .as_i64()
+        .or_else(|| e["region"].as_str().and_then(|s| s.parse().ok()))
+    {
+        return Ok(r);
+    }
+    if let Some(s) = e["state"].as_i64() {
+        return state
+            .regions
+            .get(&(s as i32))
+            .copied()
+            .ok_or_else(|| format!("the region of state {s} is not known yet"));
+    }
+    if text(&e["target"]).starts_with("front:") {
+        return Err("front:<army> targets are not built yet: name region or state".into());
+    }
+    Err("names no region or state".into())
+}
+
 fn reaches(geo: &Geo<'_>, cfg: &Config, w: &Wing, r: &Region) -> Option<bool> {
     let (b, range) = (w.base_state?, w.range_km?);
     geo.reach(b, range, r).map(|c| c >= cfg.min_coverage)
@@ -442,8 +650,103 @@ pub(super) fn air_situation_step(
             }
         }
     }
+    // engineer 125: the mission entries claim their wings first (the fighters and CAS below take the rest)
+    let mut entries = Vec::new();
+    let mut mnotes = Vec::new();
+    for (k, e) in list(&plan["air_situation"], "missions").iter().enumerate() {
+        let id = e["id"]
+            .as_str()
+            .map_or_else(|| format!("missions[{k}]"), str::to_string);
+        let Some(mission) = MISSIONS.iter().copied().find(|m| *m == text(&e["mission"])) else {
+            mnotes.push(format!(
+                "{id}: mission {} is not one of hoi4_air_mission's",
+                e["mission"]
+            ));
+            continue;
+        };
+        if !e["when"].is_null()
+            && super::judge(state, tools, &e["when"], now) != crate::plan_predicate::Truth::True
+        {
+            continue;
+        }
+        if !e["stop"].is_null()
+            && super::judge(state, tools, &e["stop"], now) == crate::plan_predicate::Truth::True
+        {
+            continue;
+        }
+        let rid = match entry_region(state, e) {
+            Ok(r) => r,
+            Err(why) => {
+                mnotes.push(format!("{id}: {why}"));
+                continue;
+            }
+        };
+        let states: Vec<i64> = state
+            .regions
+            .iter()
+            .filter(|(_, r)| **r == rid)
+            .map(|(s, _)| i64::from(*s))
+            .collect();
+        entries.push(MEntry {
+            id,
+            mission,
+            region: Region {
+                id: rid,
+                weight: 0.0,
+                states,
+                enemy_fighters: state
+                    .military
+                    .air_seen
+                    .get(&rid)
+                    .filter(|(_, at)| now.saturating_sub(*at) < probe_days)
+                    .map(|(e, _)| *e),
+            },
+            count: e["wings"].as_u64().map(|n| n as usize),
+            share: e["share"].as_f64(),
+            ignore_air: e["ignore_air"] == json!(true),
+        });
+    }
+    let all_free: Vec<MWing> = list(&air, "wings")
+        .iter()
+        .filter(|w| w["attached_army"].as_str().is_none_or(str::is_empty))
+        .filter(|w| !super::plan_manage::air_plan_claims(plan, w))
+        .filter(|w| w["transfer_to_base_id"].as_i64().is_none())
+        .filter(|w| !state.skipped(now, "airsitw", text(&w["wing"])))
+        .map(|w| MWing {
+            wing: Wing {
+                name: text(&w["wing"]).to_string(),
+                role: None,
+                planes: w["aircraft"].as_f64().unwrap_or(0.0),
+                region: w["region"]["id"].as_i64(),
+                base_state: w["air_base"]["state_id"].as_i64(),
+                range_km: w["air_range_km"].as_f64(),
+            },
+            war_role: super::war_mission(text(&w["aircraft_type"])),
+            flying: strings(w, "missions"),
+            kind: text(&w["aircraft_type"]).to_lowercase(),
+        })
+        .filter(|w| !w.wing.name.is_empty())
+        .collect();
+    let refused: Vec<(String, String)> = state
+        .military
+        .air_refused
+        .iter()
+        .filter(|(_, at)| now.saturating_sub(**at) < 10 * every)
+        .map(|(k, _)| k.clone())
+        .collect();
+    let mut mgeo = Geo {
+        centers: &state.centers,
+        km_per_pixel: air["km_per_pixel"].as_f64().unwrap_or(7.114),
+        bases: list(&air, "air_bases")
+            .iter()
+            .filter_map(|b| Some((b["state_id"].as_i64()?, b["free"].as_i64().unwrap_or(0))))
+            .collect(),
+    };
+    let (morders, claimed, cnotes) = claim(&entries, &all_free, &refused, &mut mgeo, &cfg);
+    mnotes.extend(cnotes);
     let wings: Vec<Wing> = list(&air, "wings")
         .iter()
+        .filter(|w| !claimed.iter().any(|c| c == text(&w["wing"])))
         .filter(|w| w["attached_army"].as_str().is_none_or(str::is_empty))
         .filter(|w| !super::plan_manage::air_plan_claims(plan, w))
         .filter(|w| w["transfer_to_base_id"].as_i64().is_none())
@@ -467,7 +770,11 @@ pub(super) fn air_situation_step(
             .filter_map(|b| Some((b["state_id"].as_i64()?, b["free"].as_i64().unwrap_or(0))))
             .collect(),
     };
-    let (orders, notes) = allocate(&wings, &regions, &mut geo, &cfg);
+    let (aorders, anotes) = allocate(&wings, &regions, &mut geo, &cfg);
+    let mut orders = morders;
+    orders.extend(aorders);
+    let mut notes = mnotes;
+    notes.extend(anotes);
     super::plan_manage::note(state, "air_situation", notes.join("; "));
     // one call: the rebases to the first base named, else the largest mission batch
     if let Some(Order::Rebase { state: base, .. }) =
@@ -523,6 +830,13 @@ pub(super) fn air_situation_step(
     let (ok, why) = state.act(tools, lease, "hoi4_air_mission", args, "as")?;
     for n in &names {
         state.skip(now, "airsitw", n, if ok { every } else { 3 * every });
+        // the game does not offer this mission to the wing's plane: leave it out of this mission a while
+        if !ok && why.contains("invalid_target") {
+            state
+                .military
+                .air_refused
+                .insert((n.clone(), mission.to_string()), now);
+        }
     }
     // more orders wait: come back on the next tick rather than in `every` days
     if orders.len() > names.len() {
@@ -577,6 +891,121 @@ mod tests {
             states: vec![state],
             enemy_fighters: enemy,
         }
+    }
+
+    fn mwing(
+        name: &str,
+        role: &'static str,
+        base: i64,
+        region: Option<i64>,
+        flying: &[&str],
+    ) -> MWing {
+        MWing {
+            wing: Wing {
+                name: name.into(),
+                role: None,
+                planes: 50.0,
+                region,
+                base_state: Some(base),
+                range_km: Some(500.0),
+            },
+            war_role: Some(role),
+            flying: flying.iter().map(|m| m.to_string()).collect(),
+            kind: String::new(),
+        }
+    }
+
+    fn mentry(
+        id: &str,
+        mission: &'static str,
+        region: Region,
+        count: Option<usize>,
+        share: Option<f64>,
+    ) -> MEntry {
+        MEntry {
+            id: id.into(),
+            mission,
+            region,
+            count,
+            share,
+            ignore_air: false,
+        }
+    }
+
+    #[test]
+    fn mission_entries_claim_wings_of_the_planes_that_fly_them_before_the_fighters_and_cas() {
+        let c = centers();
+        let mut geo = Geo {
+            centers: &c,
+            km_per_pixel: 1.0,
+            bases: vec![],
+        };
+        let wings = vec![
+            mwing("CAS far", "cas", 1, None, &[]),
+            mwing("CAS near", "cas", 3, None, &[]),
+            mwing("CAS there", "cas", 2, Some(7), &["logistics_strike"]),
+            mwing("F1", "air_superiority", 1, None, &[]),
+            mwing("F2", "air_superiority", 2, None, &[]),
+        ];
+        let entries = vec![
+            mentry(
+                "ls",
+                "logistics_strike",
+                region(7, 0.0, 10, None),
+                Some(2),
+                None,
+            ),
+            mentry(
+                "int",
+                "interception",
+                region(7, 0.0, 10, Some(500.0)),
+                None,
+                Some(0.5),
+            ),
+        ];
+        let (orders, taken, notes) = claim(&entries, &wings, &[], &mut geo, &cfg());
+        // logistics strike: the wing already on it there, then the nearest; interception: half the fighters, despite
+        // the enemy fighters (interception is never held back by them)
+        assert_eq!(taken, vec!["CAS there", "CAS near", "F2"]);
+        assert!(orders.contains(&Order::Mission {
+            wing: "CAS near".into(),
+            mission: "logistics_strike",
+            region: 7
+        }));
+        assert!(!orders
+            .iter()
+            .any(|o| matches!(o, Order::Mission { wing, .. } if wing == "CAS there")));
+        assert!(notes.iter().any(|n| n.contains("ls: 2 of 2")), "{notes:?}");
+        // a strike over a sky the enemy holds waits; a refused wing is left out
+        let held = vec![mentry(
+            "ls",
+            "logistics_strike",
+            region(7, 0.0, 10, Some(400.0)),
+            Some(1),
+            None,
+        )];
+        let (o, t, n) = claim(&held, &wings, &[], &mut geo, &cfg());
+        assert!(o.is_empty() && t.is_empty());
+        assert!(n[0].contains("waits"), "{n:?}");
+        let refused = vec![("CAS near".to_string(), "logistics_strike".to_string())];
+        let one = vec![mentry(
+            "ls",
+            "logistics_strike",
+            region(7, 0.0, 10, None),
+            Some(2),
+            None,
+        )];
+        let (_, t, _) = claim(&one, &wings, &refused, &mut geo, &cfg());
+        assert_eq!(t, vec!["CAS there", "CAS far"]);
+        // recon takes the scout plane only
+        let mut scout = mwing("Aufkl 1", "cas", 1, None, &[]);
+        scout.war_role = None;
+        scout.kind = "scout_plane_equipment_1".into();
+        let mut all = wings.clone();
+        all.push(scout);
+        let rec = vec![mentry("rc", "recon", region(7, 0.0, 10, None), None, None)];
+        let (_, t, _) = claim(&rec, &all, &[], &mut geo, &cfg());
+        assert_eq!(t, vec!["Aufkl 1"]);
     }
 
     #[test]

@@ -43,6 +43,10 @@ STATS = ("soft_attack", "hard_attack", "air_attack", "defense", "breakthrough", 
 SUMMED = ("soft_attack", "hard_attack", "air_attack", "defense", "breakthrough")
 ROWS = ("width", "hp", "organisation", "soft_attack", "hard_attack", "defense", "breakthrough", "armor", "piercing",
         "hardness", "air_attack")
+# logistics: equipment maximum_speed (km/h) and fuel_consumption; a sub-unit's supply_consumption (per battalion),
+# supply_consumption_factor (a support company's, on the whole division) and maximum_speed (a factor on its equipment)
+LOGISTIC = ("maximum_speed", "fuel_consumption", "supply_consumption", "supply_consumption_factor")
+LOGI_ROWS = ("speed", "supply", "fuel")
 
 
 def _num(v, default=None):
@@ -52,8 +56,8 @@ def _num(v, default=None):
         return default
 
 
-def _stats(block):
-    return {k: _num(v) for k, v in block if k in STATS and _num(v) is not None} if isinstance(block, list) else {}
+def _stats(block, keys=STATS):
+    return {k: _num(v) for k, v in block if k in keys and _num(v) is not None} if isinstance(block, list) else {}
 
 
 class Data:
@@ -94,6 +98,11 @@ class Data:
                         "max_organisation": _num(get1(body, "max_organisation"), 0.0),
                         "categories": set(bare(cats)) if isinstance(cats, list) else set(),
                         "types": set(bare(typ)) if isinstance(typ, list) else set(),
+                        "logistic": _stats(body, LOGISTIC),
+                        "transport": get1(body, "transport"),
+                        "affects_speed": get1(body, "affects_speed") != "no",
+                        "terrain_move": {t: _num(get1(tb, "movement")) for t, tb in body
+                                         if isinstance(tb, list) and _num(get1(tb, "movement")) is not None},
                     }
         for f in self._files("common/units/equipment"):
             for k, v in parse_file(f):
@@ -109,7 +118,8 @@ class Data:
                                 if _num(x) is not None:
                                     mult[s] = _num(x)
                     self.equipment[name] = {
-                        "stats": _stats(body), "archetype": get1(body, "archetype"),
+                        "stats": _stats(body), "logistic": _stats(body, LOGISTIC),
+                        "archetype": get1(body, "archetype"),
                         "year": _num(get1(body, "year"), 0.0),
                         "parent": get1(body, "parent"), "type": get1(body, "type"),
                         "is_archetype": get1(body, "is_archetype") == "yes", "module_mult": mult}
@@ -160,7 +170,7 @@ class Data:
             if not k or not isinstance(v, list):
                 continue
             if k in self.units or k.startswith("category_"):
-                st = _stats(v)
+                st = _stats(v, STATS + LOGISTIC)
                 if st:
                     out.append((k, st))
         return out
@@ -197,6 +207,12 @@ class Data:
         out = {}
         for k in reversed(self.chain(key)):
             out.update(self.equipment[k]["stats"])
+        return out
+
+    def base_logistic(self, key):
+        out = {}
+        for k in reversed(self.chain(key)):
+            out.update(self.equipment[k].get("logistic") or {})
         return out
 
     def module_mult(self, key):
@@ -310,7 +326,38 @@ def battalion(data, unit, equipment, mods):
     out["width"] = 0.0 if u["support"] else u["width"]
     out["support"] = u["support"]
     out["equipment"] = used
+    out.update(_logistic(data, u, equipment, pct))
+    out["affects_speed"] = u.get("affects_speed", True)
     return out
+
+
+def _logistic(data, u, equipment, pct):
+    """speed: the transport's maximum_speed when the sub-unit names one, else the slowest needed equipment's, x (1 +
+    the sub-unit's own maximum_speed factor + technology and doctrine factors); supply: its supply_consumption plus the
+    technology and doctrine supply_consumption on it (a flat amount per battalion [?: the files give small negative
+    numbers such as -0.02 against a base of 0.32]); supply_factor: its supply_consumption_factor plus technology
+    factors (a support company's, applied to the whole division); fuel: the needed equipment's fuel_consumption x
+    the amount needed (the files' figure; the game's time unit for it is not verified [?])."""
+    speeds, fuel = {}, 0.0
+    for need, amount in u["need"].items():
+        arch = data.archetype(need)
+        pick = equipment.get(arch) or equipment.get(need)
+        lg = dict(pick) if isinstance(pick, dict) else data.base_logistic(pick or need)
+        if lg.get("maximum_speed"):
+            speeds[arch] = lg["maximum_speed"]
+        fuel += float(lg.get("fuel_consumption") or 0.0) * float(amount or 0.0)
+    own = u.get("logistic") or {}
+    tr = u.get("transport")
+    if tr:
+        pick = equipment.get(data.archetype(tr)) or equipment.get(tr)
+        lg = dict(pick) if isinstance(pick, dict) else data.base_logistic(pick or tr)
+        base = lg.get("maximum_speed") or (min(speeds.values()) if speeds else 0.0)
+    else:
+        base = min(speeds.values()) if speeds else 0.0
+    speed = base * (1 + own.get("maximum_speed", 0.0) + pct.get("maximum_speed", 0.0))
+    return {"speed": speed, "supply": max(0.0, own.get("supply_consumption", 0.0) + pct.get("supply_consumption", 0.0)),
+            "supply_factor": own.get("supply_consumption_factor", 0.0) + pct.get("supply_consumption_factor", 0.0),
+            "fuel": fuel}
 
 
 def division(data, battalions, support, equipment, mods):
@@ -329,6 +376,13 @@ def division(data, battalions, support, equipment, mods):
     out["piercing"] = round(0.4 * max(prc) + 0.6 * sum(prc) / len(prc), 1)
     hard = [r["hardness"] for r in (line or rows)]
     out["hardness"] = round(sum(hard) / len(hard), 3)
+    # logistics: the division moves at its slowest sub-unit, except those marked affects_speed = no (most support
+    # companies); supply = the battalions' and companies' supply consumption x (1 + the companies'
+    # supply_consumption_factor); fuel summed
+    sp = [r["speed"] for r in rows if r.get("speed") and r.get("affects_speed", True)]
+    out["speed"] = round(min(sp), 2) if sp else 0.0
+    out["supply"] = round(sum(r["supply"] for r in rows) * max(0.0, 1 + sum(r["supply_factor"] for r in rows)), 3)
+    out["fuel"] = round(sum(r["fuel"] for r in rows), 1)
     return out
 
 

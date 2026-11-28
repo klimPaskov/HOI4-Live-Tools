@@ -173,10 +173,20 @@ fn a_long_window_title_at_the_point_is_read_not_refused() {
     assert_eq!(unsafe { label(s.0) }.unwrap(), wide);
 }
 #[test]
-fn a_label_beyond_the_bound_is_still_refused() {
-    let s = cf_string(&"x".repeat(LABEL_UNITS as usize + 1));
+fn a_label_beyond_the_bound_is_read_up_to_the_bound() {
+    // the terminal's title grew to 1095 units on 28 Nov and refused every click again under a 1024 bound
+    let long = format!("{}{}", "x".repeat(LABEL_UNITS as usize), "y".repeat(71));
+    let s = cf_string(&long);
     assert_eq!(
-        unsafe { label(s.0) }.unwrap_err().code,
-        "input_window_metadata"
+        unsafe { label(s.0) }.unwrap(),
+        "x".repeat(LABEL_UNITS as usize)
     );
+    let s = cf_string("");
+    assert_eq!(unsafe { label(s.0) }.unwrap(), "");
+    // a cut inside a surrogate pair: the read still answers, ending in one replacement character
+    let pairs = format!("a{}", "\u{1F600}".repeat(LABEL_UNITS as usize));
+    let s = cf_string(&pairs);
+    let read = unsafe { label(s.0) }.unwrap();
+    assert_eq!(read.encode_utf16().count(), LABEL_UNITS as usize);
+    assert!(read.ends_with('\u{FFFD}'));
 }

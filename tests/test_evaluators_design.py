@@ -78,6 +78,18 @@ class DesignFixtureTest(unittest.TestCase):
         self.assertEqual(p["base"], "mt_chassis_1")                     # what a poor country has, still designed
         self.assertLessEqual(p["upgrades"]["e_armor_up"], 4)
 
+    def test_floors_in_one_search(self):
+        prof = {"enemies": ["BBB"], "chosen": "test", "best_armor": 36.0, "piercing": 45.0, "division_piercing": 4.0,
+                "best_vehicle_piercing": 45.0, "hardness": 0.1, "tank_hardness": 0.85, "vehicles": [],
+                "divisions": [{"armor": 36.0, "piercing": 4.0, "hardness": 0.1}], "fighters": []}
+        one = design.best_land(self.sit, "tank_main", prof=prof, top=1)
+        many = design.best_land(self.sit, "tank_main", prof=prof, top=1, floor=[one["speed_floor"], 99.0])
+        self.assertEqual(many["by_floor"][0][1][0]["stats"], one["designs"][0]["stats"])   # same answer per floor
+        self.assertEqual(many["by_floor"][1][1], [])                                       # an unreachable floor
+        for fl, ds in many["by_floor"]:
+            for d in ds:
+                self.assertGreaterEqual(d["stats"]["maximum_speed"] + 1e-9, fl)
+
     def test_enemy_profile_counts_live_sightings(self):
         sit = fx.situation(state={"techs": ["e_tank_1"], "enemies": ["BBB"], "enemy_designs": {"BBB": [
             {"type": "mt_chassis_2", "modules": {"turret_type_slot": "e_turret_big", "main_armament_slot": "e_cannon",
@@ -114,6 +126,19 @@ class DesignRealGameTest(unittest.TestCase):
                                   {"tank_nsb_engine_upgrade": 0, "tank_nsb_armor_upgrade": 17}, prof=prof)
         self.assertEqual(his["legal"], [])
         self.assertGreaterEqual(top["score"], his["score"])
+
+    def test_ship_roles_use_their_hull_types_with_integrated_dlc(self):
+        # Man the Guns ships inside the install (integrated_dlc/): the ship designer counts as owned with no DLC given
+        sit = fx.real_situation("GER", "1939.1.1", bookmark="1936.1.1")
+        self.assertIn("Man the Guns", sit.world.dlcs)
+        v = design.Vehicles.of(sit.game)
+        for role, spec in design.SHIP_ROLES.items():
+            r = design.best(sit, role)
+            self.assertTrue(r["designs"], role)
+            for d in r["designs"]:
+                self.assertTrue(set(v.equip[v.family(d["base"])]["type"]) & spec["types"], (role, d["base"]))
+            keys = [(d["base"], tuple(sorted(d["modules"].values()))) for d in r["designs"]]
+            self.assertEqual(len(keys), len(set(keys)))
 
     def test_poor_minor_and_other_major(self):
         for tag, date in (("ETH", "1936.1.1"), ("SOV", "1938.1.1"), ("JAP", "1938.1.1")):

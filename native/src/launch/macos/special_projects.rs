@@ -408,8 +408,19 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
     // 1.19.4.1: a running project's facility link is its SProjectHistory at +0x68 (facility
     // id at +0x18, scientist handle at +0x20); the program's own project field stays 0
     // (read live 2 November 2026: Military Engineering Vehicles in facility 3499).
+    // The history record outlives the run: a project whose stop has no day left has ended, and
+    // its record names the facility it last ran in (live 126, s126a 28 Nov 2026: three idle
+    // facilities read "stopping, 0 days, 0%" for four months while their cards showed no project
+    // and offered new ones). Such a project gives its facility no running project.
     for index in 0..count.min(MAX_PROJECTS) as u64 {
         let project = data + index * stride;
+        if out
+            .projects
+            .get(index as usize)
+            .is_some_and(|p| p.stopping_days.is_some_and(|d| d <= 0))
+        {
+            continue;
+        }
         let history = r.u64(project + at(r, &PROJECT, 0x68)?)?;
         if history == 0 || r.u64(history)? != vt(r, image, VT_PROJECT_HISTORY)? {
             continue;
@@ -488,14 +499,47 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
 /// CPrototypeProjectState inside the machine while the project is idle or
 /// running, a CSimpleProjectState (name "STOPPING_STATE", days at +0x48) while
 /// a stop is in progress. Mapped live on 26 October 2026 by stopping a project.
+///
+/// The game has more than one simple state (PROTOTYPE_STATE, STOPPING_STATE, STOPPED_STATE in the
+/// 1.20 strings): a simple state counts as stopping only when its name is STOPPING_STATE (live 115,
+/// 28 Nov 2026: three facilities read "stopping, 0 days" for 5 game days). The name is looked for
+/// in the state object (an inline short string) or behind one of its pointers; a state whose name
+/// is found and is another one is not stopping; one whose name is not found keeps the old reading.
 fn stopping_days(r: &Reader<'_>, image: u64, project: u64) -> Result<Option<i32>> {
     let machine = r.u64(project + at(r, &PROJECT, 0x28)?)?;
     typed(r, image, machine, VT_STATE_MACHINE, "project state machine")?;
     let state = r.u64(machine + at(r, &MACHINE, 8)?)?;
     if state != 0 && r.u64(state)? == vt(r, image, VT_SIMPLE_STATE)? {
-        return Ok(Some(r.i32(state + at(r, &SIMPLE_STATE, 0x48)?)?));
+        let days_at = at(r, &SIMPLE_STATE, 0x48)?;
+        let raw = r.read(state, days_at as usize).unwrap_or_default();
+        let mut texts = vec![raw.clone()];
+        for word in raw.chunks_exact(8).skip(1) {
+            let p = u64::from_le_bytes(word.try_into().unwrap());
+            if (0x10000..=0x7fff_ffff_0000).contains(&p) {
+                if let Ok(t) = r.read(p, 32) {
+                    texts.push(t);
+                }
+            }
+        }
+        if let Some(name) = state_name(&texts) {
+            if name != "STOPPING_STATE" {
+                return Ok(None);
+            }
+        }
+        return Ok(Some(r.i32(state + days_at)?));
     }
     Ok(None)
+}
+
+/// The first project state name (PROTOTYPE_STATE, STOPPING_STATE, STOPPED_STATE) found in `texts`.
+fn state_name(texts: &[Vec<u8>]) -> Option<&'static str> {
+    const NAMES: [&str; 3] = ["STOPPING_STATE", "STOPPED_STATE", "PROTOTYPE_STATE"];
+    texts.iter().find_map(|t| {
+        NAMES
+            .iter()
+            .find(|n| t.windows(n.len()).any(|w| w == n.as_bytes()))
+            .copied()
+    })
 }
 /// A project's template: its pointer at +0x20 addresses the template's
 /// embedded base at +0x10.
@@ -615,7 +659,7 @@ fn facility_json(snap: &Snapshot, f: &Facility) -> Value {
         });
     let project = f.project.map(|id| match snap.project_by_id(id) {
         Some(p) => {
-            json!({"key": p.key, "template_id": p.id, "base_days": p.days, "stopping": p.stopping_days.is_some(), "stop_duration_days": p.stopping_days, "progress_percent": p.progress_percent, "iterations_completed": p.iterations, "iteration_gain_percent": [p.gain.0, p.gain.1]})
+            json!({"key": p.key, "template_id": p.id, "base_days": p.days, "stopping": p.stopping_days.is_some_and(|d| d > 0), "stopped": p.stopping_days.is_some_and(|d| d <= 0), "stop_duration_days": p.stopping_days, "progress_percent": p.progress_percent, "iterations_completed": p.iterations, "iteration_gain_percent": [p.gain.0, p.gain.1]})
         }
         None => json!({"key": null, "template_id": id}),
     });
@@ -667,7 +711,7 @@ pub(super) fn to_json(snap: &Snapshot) -> Value {
                 "specialization": spec_name(p.spec),
                 "base_days": p.days,
                 "running_in_facility_id": snap.facility_running(p.id).map(|f| f.id),
-                "stopping": p.stopping_days.is_some(),
+                "stopping": p.stopping_days.is_some_and(|d| d > 0), "stopped": p.stopping_days.is_some_and(|d| d <= 0),
             })
         })
         .collect();
@@ -2401,5 +2445,24 @@ mod tests {
             plain("\u{11}RRequires a \u{11}! \u{11}YScientist\u{11}! \u{11}Rto start\u{11}!"),
             "Requires a Scientist to start"
         );
+    }
+
+    #[test]
+    fn only_the_stopping_state_is_a_stop() {
+        let inline = |t: &str| {
+            let mut v = vec![0u8; 8];
+            v.push((t.len() * 2) as u8);
+            v.extend(t.as_bytes());
+            v
+        };
+        assert_eq!(
+            state_name(&[inline("STOPPING_STATE")]),
+            Some("STOPPING_STATE")
+        );
+        assert_eq!(
+            state_name(&[vec![0; 16], inline("STOPPED_STATE")]),
+            Some("STOPPED_STATE")
+        );
+        assert_eq!(state_name(&[vec![1, 2, 3]]), None);
     }
 }
