@@ -27,6 +27,7 @@ provinces) from the capital to the front, read from the railway graph. Trucks: t
 SUPPLY_HUB_FULL_MOTORIZATION_TRUCK_COST per hub to motorise; a hub's running truck use is the supply screen's (a live
 read: state["logistics"]). Convoys: SUPPLY_CONVOY_FACTOR per supply point sent overseas plus the trade convoys (live).
 """
+import math
 from collections import deque
 
 from .. import divstats, theatre
@@ -225,3 +226,134 @@ def evaluate(sit, need_date, add=None, enemies=None, lines=None, overseas_supply
             else "none read: the fielded divisions are taken as equipped",
             "efficiency": {"start": round(eff.start, 1), "max": round(eff.cap, 1), "days_to_max": eff.days_to_cap(),
                            "output": round(eff.output, 3), "change": eff.change, "defines": eff.src}}
+
+
+TRAINING_METHOD = (
+    "in training at once N = min(rate, equipment, manpower, training cap): T = the template's training days (the "
+    "longest training_time of its sub-units x (1 + training_time_factor + training_time_army_factor)); rate = "
+    "ceil(divisions still wanted / (days to the need date // T)) (all of them when one training period is left); "
+    "equipment = min over the equipment it needs of floor((stock + daily output x T) / need per division), the daily "
+    "output from the live lines or the history's lines on hand (factories x the efficiency curve's mean over T / unit "
+    "IC; the fielded divisions' own shortfall is not taken first [?]); "
+    "manpower = floor(free manpower / manpower per division), free = live, else owned states' manpower x "
+    "conscription x (1 + conscription_factor) less the fielded divisions' manpower [?: the game adds recruits "
+    "monthly]; cap = floor((max(MIN_POSSIBLE_TRAINING_MANPOWER, MIN_FIELD_TO_TRAINING_MANPOWER_RATIO x field "
+    "manpower) - manpower already in training) / manpower per division). One deployment line carries the N; more "
+    "lines only wait for the same equipment.")
+
+
+def _template_row(sit, role, enemies, b):
+    """(name, battalions [unit...], support [unit...], equipment need {arch: n}, manpower) of a role or a template."""
+    oob = sit.world.oob(sit.tag)
+    tpls = oob.get("templates") or {}
+    if role in tpls:
+        bats, sup = divstats.template_units(tpls[role])
+        _, mp, need = b.cost(bats, sup)
+        return role, bats, sup, need, mp
+    r = template.best(sit, role, enemies=enemies)
+    if not r["templates"]:
+        return None
+    t = r["templates"][0]
+    bats = [k for k, c in t["battalions"].items() for _ in range(c)]
+    sup = list(t["support"]) + list(t.get("regimental") or [])
+    name = f"{role} (evaluator 2): " + ", ".join(f"{c} {k}" for k, c in t["battalions"].items())
+    return name, bats, sup, dict(t["equipment"]), float(t["manpower"])
+
+
+def training(sit, role, count=None, need_date=None, enemies=None):
+    """How many divisions of one template to keep in training at once, from stock, production and manpower on hand
+    (TRAINING_METHOD). role: an evaluator-2 role (line, attacker, armour, ...) or a fielded template's name; count:
+    the divisions still wanted by need_date (None: as many as the means allow)."""
+    from ..world import day_number
+    b = template.Builder(sit, None, enemies, designs=False)
+    row = _template_row(sit, role, enemies, b)
+    if row is None:
+        return {"role": role, "error": "no template of that role or name"}
+    name, bats, sup, need, mp = row
+    units = sit.world.sub_units()
+    days_base = max([float((units.get(u) or {}).get("training_time") or 0) for u in bats + sup] or [0.0])
+    tmod = sit.modifier("training_time_factor") + sit.modifier("training_time_army_factor")
+    T = max(1.0, days_base * (1 + tmod))
+    days_left = max(0, day_number(need_date) - day_number(sit.date)) if need_date else None
+    terms, why = {}, {}
+    # rate: the divisions still wanted, spread over the training periods left
+    if count:
+        periods = max(1, int(days_left // T)) if days_left else 1
+        terms["rate"] = min(count, math.ceil(count / periods))
+        why["rate"] = f"ceil({count} / {periods} training periods of {T:g} days to {need_date})"
+    # equipment: stock + output over one training period, per division
+    stock = {k: float(v) for k, v in (sit.state.get("stockpile") or {}).items()}
+    live_out = sit.state.get("production_output") or {}
+    out_day, out_from = {}, ""
+    if live_out:
+        out_day = {k: float(v) for k, v in live_out.items()}
+        out_from = "live lines (units a day)"
+    else:
+        # production on hand: the country's lines now (history start lines), at the efficiency curve's mean over T
+        eff = Efficiency(sit)
+        veh = design.Vehicles.of(sit.game)
+        for ln in sit.world.oob(sit.tag).get("production") or []:
+            ic = float(veh.base_stats(ln["type"]).get("build_cost_ic") or 0.0)
+            if ic > 0 and ln.get("factories"):
+                arch = b.data.archetype(ln["type"])
+                out_day[arch] = out_day.get(arch, 0.0) + ln["factories"] * eff.ic_per_factory(T) / T / ic
+        out_from = (f"the production lines on hand ({sit.world.date} history lines; efficiency from "
+                    f"{eff.start:g}% over {T:g} days)")
+    eq = {}
+    for arch, n in need.items():
+        if n <= 0:
+            continue
+        have = stock.get(arch, 0.0) + out_day.get(arch, 0.0) * T
+        eq[arch] = {"need": n, "stock": stock.get(arch, 0.0), "per_day": round(out_day.get(arch, 0.0), 2),
+                    "divisions": round(have / n, 2)}
+    flow = None
+    if eq:
+        bind = min(eq, key=lambda k: eq[k]["divisions"])
+        flow = eq[bind]["divisions"]
+        terms["equipment"] = int(flow)
+        why["equipment"] = (f"{bind}: ({eq[bind]['stock']:g} stock + {eq[bind]['per_day']:g} a day x {T:g} days) / "
+                            f"{eq[bind]['need']:g} per division"
+                            + ("" if sit.state.get("stockpile") else " [no stockpile read: the stock counts 0; read "
+                               "the live stockpile]"))
+    # manpower on hand and the training cap
+    fielded = 0.0
+    oob = sit.world.oob(sit.tag)
+    for d in oob.get("divisions") or []:
+        bb, ss = divstats.template_units((oob.get("templates") or {}).get(d.get("template")) or {})
+        fielded += b.cost(bb, ss)[1]
+    field_mp = float(sit.state.get("field_manpower") or fielded)
+    if isinstance(sit.state.get("manpower"), (int, float)):
+        free, free_from = float(sit.state["manpower"]), "live snapshot"
+    else:
+        pop = sum(float(sit.world.states()[s].get("manpower") or 0) for s in sit.world.owned_states(sit.tag))
+        rec = pop * sit.modifier("conscription") * (1 + sit.modifier("conscription_factor"))
+        free = max(0.0, rec - fielded)
+        free_from = (f"{pop:,.0f} population x conscription {sit.modifier('conscription'):g} x (1 + "
+                     f"{sit.modifier('conscription_factor'):g}) - {fielded:,.0f} fielded (estimate)")
+    if mp > 0:
+        terms["manpower"] = int(free // mp)
+        why["manpower"] = f"{free:,.0f} free ({free_from}) / {mp:g} per division"
+        lo, ratio = sit.define("MIN_POSSIBLE_TRAINING_MANPOWER"), sit.define("MIN_FIELD_TO_TRAINING_MANPOWER_RATIO")
+        if lo is not None or ratio is not None:  # a mod without the training cap has none
+            lo, ratio = float(_first(lo, 0)), float(_first(ratio, 0))
+            busy = float(sit.state.get("training_manpower") or 0)
+            cap = max(lo, ratio * field_mp) - busy
+            terms["cap"] = max(0, int(cap // mp))
+            why["cap"] = (f"(max({lo:,.0f}, {ratio:g} x {field_mp:,.0f} in the field) - {busy:,.0f} in training) / "
+                          f"{mp:g}")
+    n = min(terms.values()) if terms else 0
+    binding = [k for k, v in terms.items() if v == n]
+    out = {"template": name, "role": role, "training_days": round(T, 1), "training_days_why":
+           f"longest sub-unit training_time {days_base:g} x (1 + {tmod:g})", "count": count, "need_date": need_date,
+           "in_training": n, "binding": binding, "terms": terms, "why": why, "equipment": eq, "output_from": out_from,
+           "lines": 1 if n else 0, "method": TRAINING_METHOD,
+           "defines": [sit.define_src(k) for k in ("MIN_POSSIBLE_TRAINING_MANPOWER",
+                                                   "MIN_FIELD_TO_TRAINING_MANPOWER_RATIO")]}
+    if days_left is not None:
+        # the binding equipment keeps flowing: its fractional divisions per period add up over the periods left
+        per = n if flow is None or n < terms.get("equipment", n) else flow
+        out["fielded_by_need_date"] = min(count or 10 ** 9, int(per * max(1, int(days_left // T))))
+    if n == 0 and binding:
+        out["note"] = ("nothing to train yet: " + ", ".join(binding) + " binds (" + "; ".join(why[k] for k in binding)
+                       + ")")
+    return out
