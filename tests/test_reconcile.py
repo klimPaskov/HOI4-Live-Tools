@@ -72,6 +72,34 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(code, 0, report)
         self.assertEqual(report.get("unresolved") or [], [])
 
+    def test_a_production_target_the_equipment_files_define_is_a_later_switch(self):
+        # g126a (28 Nov 2026): a dated "replace ship_hull_submarine_2" row stopped the start as
+        # unresolved although the game's equipment files define it
+        game = tempfile.mkdtemp()
+        folder = os.path.join(game, "common", "units", "equipment")
+        os.makedirs(folder)
+        with open(os.path.join(folder, "ship_hull_submarine.txt"), "w", encoding="utf-8") as f:
+            f.write("equipments = {\n\tship_hull_submarine = { year = 1922 can_be_produced = { always = yes } }\n"
+                    "\tship_hull_submarine_2 = { archetype = ship_hull_submarine }  # a comment {\n}\n")
+        plan = {"production": [{"equipment": "ship_hull_submarine_2", "replace": "ship_hull_submarine_2",
+                                "from": "1936.2.15"},
+                               {"equipment": "x", "replace": "ship_hull_nope"}]}
+        old = os.environ.get("HOI4_DIR")
+        os.environ["HOI4_DIR"] = game
+        try:
+            code, report, patched, d = self.run_it(plan)
+        finally:
+            if old is None:
+                os.environ.pop("HOI4_DIR", None)
+            else:
+                os.environ["HOI4_DIR"] = old
+        self.assertEqual([u["name"] for u in report["unresolved"]], ["ship_hull_nope"])
+        later = report["research"]["production_not_yet_available"]
+        self.assertEqual([e["equipment"] for e in later], ["ship_hull_submarine_2"])
+        from hoi4_live.play.reconcile import file_equipment
+        self.assertEqual(file_equipment(game), {"ship_hull_submarine", "ship_hull_submarine_2"})
+        self.assertEqual(file_equipment(None), set())
+
     def test_clean_plan_exits_zero_and_dry_run_does_not_write(self):
         plan = {"army_layout": [{"templates": ["Camicie Nere"], "general": "rodolfo graziani"}]}
         code, report, patched, d = self.run_it(plan, ["--dry-run"])

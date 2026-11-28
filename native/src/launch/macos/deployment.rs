@@ -166,25 +166,36 @@ pub(super) fn queued(r: &Reader<'_>, image: u64, name: &str) -> Result<usize> {
     }
     Ok(count)
 }
-/// The queues (conveyor addresses) of template `name` standing now.
-pub(super) fn queue_ids(r: &Reader<'_>, image: u64, name: &str) -> Result<Vec<u64>> {
+/// The queues (conveyor address, lines) of template `name` standing now.
+pub(super) fn queue_ids(r: &Reader<'_>, image: u64, name: &str) -> Result<Vec<(u64, i32)>> {
     Ok(conveyors(r, image)?
         .into_iter()
         .filter(|c| c.1 == name)
-        .map(|c| c.0)
+        .map(|c| (c.0, c.3))
         .collect())
 }
-/// Training lines of template `name` in queues that were not standing before (`before`).
-pub(super) fn added_lines(r: &Reader<'_>, image: u64, name: &str, before: &[u64]) -> Result<usize> {
-    Ok(lines_in_new_queues(&conveyors(r, image)?, name, before))
+/// Training lines of template `name` added since `before` was read.
+pub(super) fn added_lines(
+    r: &Reader<'_>,
+    image: u64,
+    name: &str,
+    before: &[(u64, i32)],
+) -> Result<usize> {
+    Ok(lines_added_since(&conveyors(r, image)?, name, before))
 }
-/// What one Train action added: lines of the queues absent from `before`. The template's
-/// total is no measure while older queues finish during the action (g17a, 17 Nov 2026: a
-/// queue of 2 was added while 2 lines deployed, the total stayed 19 and it read NotApplied).
-fn lines_in_new_queues(now: &[(u64, String, i32, i32)], name: &str, before: &[u64]) -> usize {
+/// What one Train action added: the lines of the queues absent from `before`, plus the lines a
+/// standing queue gained (one train action fills the template's standing queue: owner, 28 Nov
+/// 2026, "one queue of 8, not 4 queues of 2"). The template's total is no measure while older
+/// queues finish during the action (g17a, 17 Nov 2026: a queue of 2 was added while 2 lines
+/// deployed, the total stayed 19 and it read NotApplied); a standing queue that lost lines
+/// counts 0, never less.
+fn lines_added_since(now: &[(u64, String, i32, i32)], name: &str, before: &[(u64, i32)]) -> usize {
     now.iter()
-        .filter(|c| c.1 == name && !before.contains(&c.0))
-        .map(|c| c.3.clamp(1, 1024) as usize)
+        .filter(|c| c.1 == name)
+        .map(|c| match before.iter().find(|b| b.0 == c.0) {
+            Some(&(_, had)) => (c.3 - had).max(0) as usize,
+            None => c.3.clamp(1, 1024) as usize,
+        })
         .sum()
 }
 fn view(r: &Reader<'_>, image: u64) -> Result<u64> {
@@ -698,21 +709,27 @@ pub(super) fn set_locations(
 
 #[cfg(test)]
 mod tests {
-    use super::lines_in_new_queues;
+    use super::lines_added_since;
 
     #[test]
-    fn a_train_action_counts_only_the_queues_it_added() {
+    fn a_train_action_counts_the_queues_it_added_and_the_lines_a_standing_queue_gained() {
         let row = |id: u64, name: &str, lines: i32| (id, name.to_string(), 1, lines);
         // g17a: 19 lines before; a queue of 2 deployed while the new queue of 2 was made
-        let before = [1, 2, 3];
+        let before = [(1, 2), (2, 9), (3, 8)];
         let now = [
             row(2, "Inf", 9),
             row(3, "Inf", 8),
             row(4, "Inf", 2),
             row(5, "Tank", 1),
         ];
-        assert_eq!(lines_in_new_queues(&now, "Inf", &before), 2);
+        assert_eq!(lines_added_since(&now, "Inf", &before), 2);
         // nothing new: nothing added, whatever finished meanwhile
-        assert_eq!(lines_in_new_queues(&now[..2], "Inf", &before), 0);
+        assert_eq!(lines_added_since(&now[..2], "Inf", &before), 0);
+        // g126b: the template's standing queue of 2 filled to 8 is 6 added, no new queue
+        let grown = [row(2, "Inf", 15), row(3, "Inf", 8)];
+        assert_eq!(lines_added_since(&grown, "Inf", &before), 6);
+        // a standing queue that lost a line counts 0, not less
+        let shrunk = [row(2, "Inf", 8), row(3, "Inf", 8), row(4, "Inf", 1)];
+        assert_eq!(lines_added_since(&shrunk, "Inf", &before), 1);
     }
 }

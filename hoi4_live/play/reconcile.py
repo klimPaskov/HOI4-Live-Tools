@@ -11,6 +11,10 @@ read tools only (no lease, no input) this checks, against the names the plan use
                         and needs a lease)
   * production targets  (production[].remove / replace) vs hoi4_production_lines
   * first research block (research_path, earliest year) vs hoi4_technology_list {available: true}
+A production target no live line makes but the game's own equipment files define (common/units/equipment,
+read from the folder of the game the run attached to) is a later switch, not a dangling name: it is listed
+under production_not_yet_available, never as unresolved (g126a stopped on day one over a dated
+"replace ship_hull_submarine_2" row while ship_hull_submarine_2 stands in ship_hull_submarine.txt).
 A name that differs from exactly one live name only in case, accents, punctuation or the degree sign is
 patched; everything else is listed as unresolved. `run(folder, call)` writes the patched plan.json (the
 original kept as plan.pre-reconcile.json) and reconcile.json. Used by the play supervisor before it switches
@@ -148,9 +152,58 @@ def expand_wing_selectors(plan, names, patched, unresolved):
     plan["air_plan"] = out
 
 
+def file_equipment(game_dir):
+    """Every equipment key the game's files define (the keys one level inside `equipments = { }` of
+    common/units/equipment/*.txt); an empty set when the folder is unknown or unreadable."""
+    keys = set()
+    folder = os.path.join(game_dir or "", "common", "units", "equipment")
+    try:
+        files = sorted(n for n in os.listdir(folder) if n.endswith(".txt"))
+    except OSError:
+        return keys
+    for n in files:
+        try:
+            with open(os.path.join(folder, n), encoding="utf-8-sig", errors="replace") as f:
+                text = re.sub(r"#[^\n]*", "", f.read())
+        except OSError:
+            continue
+        depth, in_block = 0, False
+        for m in re.finditer(r"([A-Za-z0-9_.:@-]+)\s*=\s*\{|\{|\}", text):
+            tok = m.group(0)
+            if tok == "}":
+                depth -= 1
+                if depth == 0:
+                    in_block = False
+                continue
+            if m.group(1) is not None:
+                if depth == 0 and m.group(1) == "equipments":
+                    in_block = True
+                elif depth == 1 and in_block:
+                    keys.add(m.group(1))
+            depth += 1
+    return keys
+
+
+def game_dir_of(folder):
+    """The game's folder for a run: HOI4_DIR, else the folder of the executable in the run's session.json."""
+    d = os.environ.get("HOI4_DIR")
+    if d and os.path.isdir(os.path.join(d, "common")):
+        return d
+    try:
+        with open(os.path.join(folder, "session.json"), encoding="utf-8") as f:
+            exe = ((json.load(f) or {}).get("game") or {}).get("exe") or ""
+    except (OSError, ValueError, AttributeError):
+        return None
+    marker = os.sep + "hoi4.app" + os.sep
+    root = exe.split(marker)[0] if marker in exe else os.path.dirname(exe)
+    return root if root and os.path.isdir(os.path.join(root, "common")) else None
+
+
 def reconcile(plan, names):
     """(patched, unresolved, research) and patches `plan` in place."""
     patched, unresolved = [], []
+    later = names.get("equipment_in_files") or set()
+    research = {}
     expand_wing_selectors(plan, names, patched, unresolved)
     for kind, path, value, setter in references(plan):
         live = names.get(kind) or []
@@ -159,6 +212,11 @@ def reconcile(plan, names):
         if value in live or (kind == "wing" and SELECTOR.match(value)):
             continue  # selectors were resolved (or listed) by expand_wing_selectors
         matches = [n for n in live if norm(n) == norm(value)]
+        if kind == "equipment" and not matches and value in later:
+            research.setdefault("production_not_yet_available", []).append(
+                {"path": path, "equipment": value,
+                 "why": "no line makes it on day one; the game's equipment files define it (a later switch)"})
+            continue
         if len(matches) == 1:
             setter(matches[0])
             patched.append({"kind": kind, "path": path, "from": value, "to": matches[0]})
@@ -168,8 +226,8 @@ def reconcile(plan, names):
     available = set(names.get("tech_available") or [])
     block = first_block(plan)
     # an empty list is a read that listed nothing, not a game where nothing is researchable
-    research = {"first_block": block, "available_now": [t for t in block if t in available],
-                "not_yet_available": [t for t in block if t not in available] if available else []}
+    research.update({"first_block": block, "available_now": [t for t in block if t in available],
+                     "not_yet_available": [t for t in block if t not in available] if available else []})
     return patched, unresolved, research
 
 
@@ -186,6 +244,7 @@ def run(folder, call, dry_run=False):
     with open(plan_path, encoding="utf-8") as f:
         plan = json.load(f)
     names, info = live_names(call)
+    names["equipment_in_files"] = file_equipment(game_dir_of(folder))
     patched, unresolved, research = reconcile(plan, names)
     if patched and not dry_run:
         backup = os.path.join(folder, "plan.pre-reconcile.json")
