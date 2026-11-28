@@ -126,7 +126,46 @@ def cmd_refresh(a, sit):
     return {"tech": a.tech, "roles": roles}, [f"REFRESH after {a.tech}: re-run design for {', '.join(roles) or 'none'}"]
 
 
-COMMANDS = {"design": cmd_design, "refresh": cmd_refresh}
+def text_template(r):
+    out = [f"TEMPLATE {r['role']} for {r.get('country', '')} at {r.get('date', '')}; techs: {r['techs']}",
+           f"  widths: {r['width_why']}", f"  chosen width {r.get('chosen_width')}: the widest of the equal fills "
+           f"({r.get('command_rule')}: frontage per commander grows with width)",
+           f"  against: {r['enemy_template']}: " + _fmt_stats(r["enemy_template_stats"])]
+    for arch, d in (r.get("designs_used") or {}).items():
+        out.append(f"  design for {arch}: {d['base']} " + ", ".join(sorted(d["modules"].values())))
+    for i, t in enumerate(r["templates"], 1):
+        bats = ", ".join(f"{n} {k}" for k, n in t["battalions"].items())
+        out.append(f"  #{i} width {t['width']:g}: {bats}; regimental {t['regimental'] or '-'} "
+                   f"({t.get('regimental_slots', 0)} slots); support {t['support'] or '-'}")
+        out.append("     stats: " + _fmt_stats(t["stats"]))
+        out.append(f"     cost: {t['ic']:g} IC, {t['manpower']:g} manpower; equipment " +
+                   ", ".join(f"{k} {v:g}" for k, v in t["equipment"].items()))
+        p = t["parts"]
+        if "R" in p:
+            out.append(f"     why: R {p['R']:g} = our endurance {p['our_hours']:g} h / theirs {p['their_hours']:g} h "
+                       f"(attacks per width ours {p['our_attacks_per_width']:g}, theirs {p['their_attacks_per_width']:g});"
+                       f" score {t['score']:g} = R x sqrt(width / IC)")
+        else:
+            out.append(f"     why: {p}; score {t['score']:g}")
+    for t in r.get("other_widths") or []:
+        out.append(f"  best at width {t['target_width']}: " + ", ".join(f"{n} {k}" for k, n in t["battalions"].items())
+                   + f"; support {t['support']}; score {t['score']:g}")
+    if r.get("special_forces_cap"):
+        c = r["special_forces_cap"]
+        out.append(f"  special forces cap {c['cap']:g} battalions = max({c['min']:g}, {c['factor']:g} x "
+                   f"{c['non_sf_battalions']} other battalions)")
+    out.append("  rules: " + "; ".join(r["rules"]))
+    return out
+
+
+def cmd_template(a, sit):
+    from hoi4facts.evaluators import template
+    r = template.best(sit, a.role, width=a.width, enemies=a.enemy or None)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_template(r)
+
+
+COMMANDS = {"design": cmd_design, "refresh": cmd_refresh, "template": cmd_template}
 
 
 def parser():
@@ -156,6 +195,8 @@ def parser():
     p = add("design", "role")
     p.add_argument("--family", action="append", default=[], help="only these chassis families")
     add("refresh", "tech")
+    p = add("template", "role")
+    p.add_argument("--width", type=int, default=None, help="a width target instead of the theatre's terrain")
     return ap
 
 
