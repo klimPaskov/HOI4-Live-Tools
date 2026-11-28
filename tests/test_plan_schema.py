@@ -234,6 +234,7 @@ class Validator(unittest.TestCase):
 
 PRED_OK = [
     "stock:infantry_equipment >= 9000", "stock:infantry_equipment_1 < 0",
+    "mastery:infantry >= 200", "banked_mastery:irregulars > 150", "divisions:Infanterie-Division >= 92", "divisions:Panzer Division (M) > 0", "project_done:sp_land_flamethrower_tank",
     "1936.05.01", "date >= 1936.5.1", "date<1937.01.01", "province_controlled:2072", "state_fully_controlled:842",
     "owner:908=ITA", "owner:908 == ITA", "state_controller:271!=ETH", "province_controller:13250=ETH",
     "at_war:ETH", "not_at_war:ETH", "capitulated:ETH", "exists:AFA", "not_exists:AFA",
@@ -253,6 +254,7 @@ PRED_OK = [
     "", "true", "false",
 ]
 PRED_BAD = [  # rejected by the schema pattern and by validate.parse_atom
+    "divisions:Infanterie-Division", "project_done:sp_land_x == 1", "divisions: x > 1",
     "stability", "at_war:ETH == 1", "xp:sea > 5", "owner:908 > ITA", "foo > 1", " stability > 0.5",
     "stability > 0.5 ", "stability >> 0.5", "vp_share:Ethiopia>0.5", "resistance:Eritrea > 5", "phase:P-2",
     "stability = 0.5", "Ethiopia capitulated", "at_peace_conference:ETH", "equipment_fill: x < 0.8",
@@ -339,7 +341,7 @@ class PredicateGrammar(unittest.TestCase):
     def test_every_atom_has_a_pattern_branch(self):
         sample = {None: None, "province": "12", "state": "550", "tag": "ITA", "key": "ITA_x.y-1", "id": "P1",
                   "branch": "army", "army": "Army 1", "equipment": "infantry_equipment", "name": "ITA.v",
-                  "region": "42"}
+                  "region": "42", "template": "Infanterie-Division"}
         for name, atom in self.table.items():
             head = name + (":" + sample[atom["arg"]] if atom["arg"] else "")
             text = {"bool": head, "number": head + " >= 0", "tag": head + " == ETH",

@@ -19,9 +19,10 @@ Rules (error unless marked; every message ends with the rule in plain words):
   fair.special_forces   special forces battalions added to a template whose fielded divisions are reorganised
                         (upgrade_fielded: a cap bypass); (warning) planned special forces battalions above the
                         cap estimate (SPECIAL_FORCES_CAP_MIN, SPECIAL_FORCES_CAP_BASE x other battalions)
-  fair.submarines       research (path, priority, fallback), a special project, production, a design or a call
-                        for a submarine above Submarine II or an AIP or coating module; a start fleet of only
-                        submarines below 5 given a mission
+  fair.submarines       (only under a rule set with `submarines: false`; info otherwise) research (path,
+                        priority, fallback), a special project, production, a design or a call for a submarine
+                        above Submarine II or an AIP or coating module
+  fair.submarine_fleets a start fleet of only submarines below 5 given a mission
   fair.naval_mines      mine_laying fleet missions, naval_mines air missions; (warning) mine-laying modules
   fair.access           military access, docking rights or airbase access asked or offered; (warning) the
                         European Axis with Japan, or the Allies with the Soviet Union (allowed once the Iran
@@ -136,8 +137,9 @@ RULES = {
                           "division (tank support companies are fine)",
     "fair.paratroopers": "paratrooper divisions are at least 20 width and a nation has at most 18 of them",
     "fair.special_forces": "no intentional bypass of the special forces division limit",
-    "fair.submarines": "submarines: nothing above Submarine II, no special submarine modules (AIP, coating), at "
-                       "least 5 per submarine fleet, no always engage",
+    "fair.submarines": "submarines (multiplayer rule set only): nothing above Submarine II, no special submarine "
+                       "modules (AIP, coating)",
+    "fair.submarine_fleets": "at least 5 per submarine fleet, no always engage",
     "fair.naval_mines": "naval mining is banned",
     "fair.access": "no military access, docking rights or airbase access (only for civil-war supplies)",
     "fair.factions": "no disbanding factions; Japan's side never joins the Axis and no European Axis nation "
@@ -423,6 +425,11 @@ class Fair:
         for k, (v, layer) in sw.items():
             if v:
                 self.exceptions.setdefault("fair." + k, "%s rule set" % layer)
+        # the submarine limit (nothing above Submarine II, no AIP or coating) is a multiplayer rule only
+        # (the owner, 28 Nov: "do whatever is best"); a rule set turns it on with `submarines: false`
+        if sw.get("submarines", (True, ""))[0]:
+            self.exceptions.setdefault("fair.submarines", "no submarine limit in single-player FAIR; a multiplayer "
+                                       "rule set turns it on with _rules {\"multiplayer\": {\"submarines\": false}}")
         self.phases = {str(p.get("id")): p for p in lint.list_of("phases")}
         self.calls = list(calls(self.plan))
         self._cache = {}
@@ -821,7 +828,7 @@ class Fair:
                 n = sum(ships.values())
                 if ships and all("submarine" in types.get(k, set()) for k in ships) and n < SUB_FLEET_MIN:
                     reported.add(fleet)
-                    self.add("error", "fair.submarines", where,
+                    self.add("error", "fair.submarine_fleets", where,
                              f"fleet {fleet!r} has {n} submarines (at least {SUB_FLEET_MIN} per submarine fleet)")
         for where, entry, missions in self.air_entries():
             ms = {m.lower() for m in missions}

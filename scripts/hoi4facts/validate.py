@@ -1080,13 +1080,24 @@ _TAG_RE = r"[A-Z][A-Z0-9]{2}"
 PRED_ARGS = {
     "province": r"\d+", "state": r"\d+", "tag": _TAG_RE, "key": r"[A-Za-z0-9_.\-]+", "id": r"[A-Za-z0-9_]+",
     "branch": r"army|air|navy|land|naval", "army": r"[^<>=!\s](?:[^<>=!]*[^<>=!\s])?", "equipment": r"[A-Za-z0-9_]+",
-    "name": r"[A-Za-z0-9_.@^:]+", "region": r"\d+",
+    "name": r"[A-Za-z0-9_.@^:]+", "region": r"\d+", "template": r"[^<>=!\s](?:[^<>=!]*[^<>=!\s])?",
 }
 PRED_OPS = ("<=", ">=", "==", "!=", "<", ">")
 _PRED_CMP = re.compile(r"^(?P<name>[a-z_]+)(?::(?P<arg>.*?))?\s*(?P<op><=|>=|==|!=|=|<|>)\s*(?P<value>[^<>=!\s][^<>=!]*)$")
 _PRED_FLAG = re.compile(r"^(?P<name>[a-z_]+)(?::(?P<arg>[^<>=!]+))?$")
 _PRED_DATE = re.compile(r"^(?:date:)?(\d{4}[.-]\d{1,2}[.-]\d{1,2})$")
 _PRED_NUM = re.compile(r"^-?\d+(\.\d+)?%?$")
+
+
+_SP_CACHE = {}
+
+
+def _special_projects(game):
+    """The special project keys of common/special_projects/projects (empty without the folder)."""
+    key = id(game)
+    if key not in _SP_CACHE:
+        _SP_CACHE[key] = derive._top_keys(game, "common/special_projects/projects")
+    return _SP_CACHE[key]
 
 
 def predicate_table(schema=None):
@@ -1299,6 +1310,8 @@ def check_predicates(game, plan, rep, schema=None, meta=None):
                 rep.error(f"{label}: no phases[] entry with id {arg}")
             elif name in ("stockpile_days", "stock") and arg not in game.equipment() and arg not in derive.equipment_archetypes(game):
                 rep.error(f"{label}: no equipment {arg} in common/units/equipment")
+            elif name == "project_done" and _special_projects(game) and arg not in _special_projects(game):
+                rep.error(f"{label}: no special project {arg} in common/special_projects/projects")
             elif name == "mission_days" and arg not in game.decisions():
                 rep.error(f"{label}: no decision or mission {arg} in common/decisions")
     return n
