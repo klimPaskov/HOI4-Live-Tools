@@ -5424,7 +5424,7 @@
           "default": 0.5,
           "minimum": 0,
           "maximum": 1,
-          "description": "fuel / capacity below which training wings are held and no wing starts training"
+          "description": "fuel / capacity below which training wings are held and no wing starts training; with air_training_days set it is also the floor of the training fuel budget: the executor measures the net fuel per day over the current training load and the burn per training plane from two loads, holds the wing trained longest when the stock would end air_training_days under this floor, and starts a wing only when the stock stays above it. The plan computes it (the stock its first war days need over the capacity: evaluate.py fuel), not a guess."
         },
         "air_training_days": {"type": ["number", "null"], "default": null, "x-rule": "air_idle", "exclusiveMinimum": 0, "description": "Days a wing trains before training stops giving experience: the game's AIR_WING_XP_TRAINING_MAX / AIR_WING_XP_TRAINING_MISSION_GAIN_DAILY (facts.py air-training); the wing trains again once new aircraft joined it. Absent: no limit."},
         "fuel_days_floor": {
