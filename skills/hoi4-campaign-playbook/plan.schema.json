@@ -3375,6 +3375,20 @@
             "additionalProperties": false,
             "description": "the operation reads as ready (its declaration goes out) only once the attacking armies' planning bonus, weighted by divisions, reaches share (0.9) of cap (0.3, PLANNING_MAX) or has stopped growing for two game days; a dated declaration waits for it at most max_wait_days (7) past its date"
           },
+          "weather_gate": {
+            "type": [
+              "boolean",
+              "object"
+            ],
+            "properties": {
+              "max_wait_days": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "description": "on unless false: before the declaration, the attack's regions (the units' lines and the offensive's target) are read with hoi4_weather; when most of them are on bad ground (mud more likely than not, or medium/high ground snow) that clears within max_wait_days (default: planning_gate's, else 7) past the date, the declaration waits; otherwise the attack goes on and the operation's notes carry the expected attack factor"
+          },
           "spear_pockets": {
             "type": "boolean",
             "description": "true: the pocket order for spearheads: the two spearheads nearest a one-neck pocket (hoi4_encirclement_candidates) are painted to its neck state, the arms of a closed ring keep their orders while the group reduces it, a neck not closed in 6 days is given up. Not with strike formations in the operation. pockets false switches it off"

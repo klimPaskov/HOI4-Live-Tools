@@ -5819,6 +5819,51 @@
     "type": "object"
    },
    "source": "--list-tools"
+  },
+  "hoi4_weather": {
+   "description": "Read-only, no input (the game's files; the date from memory unless given): the weather and ground an offensive or an air mission meets, per strategic region, as the map's own weather tables make it likely on a day of the year (an estimate, not the live weather of a province). Name `regions` (strategic region ids, as hoi4_air_regions lists them), `states` or `provinces` (mapped to their region); optional `date` (Y.M.D) or `day_of_year`, and `days` (horizon, default 30). Per region: mud chance, ground snow (none/medium/high), phenomenon chances, temperature bands, the expected modifiers (army_attack_factor, army_speed_factor, army_attack_speed_factor, breakthrough_factor, supply_factor, attrition, winter_attrition, air_mission_efficiency ...), the worst attack factor in the horizon, and when bad ground (mud more likely than not, or medium/high ground snow) clears or starts. Every number comes from map/strategicregions, common/weather.txt and the weather_* static modifiers of the running game (a mod's files win).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "date": {
+      "maxLength": 12,
+      "type": "string"
+     },
+     "day_of_year": {
+      "maximum": 364,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "days": {
+      "maximum": 120,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "provinces": {
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 64,
+      "type": "array"
+     },
+     "regions": {
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 64,
+      "type": "array"
+     },
+     "states": {
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 64,
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
   }
  }
 }

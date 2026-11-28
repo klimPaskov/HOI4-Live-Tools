@@ -1048,6 +1048,18 @@ Stop at once on: a crash, any `unexplained`, a division moving that was not name
 differs from the right click's, a battle that a right click would not open, or a post the game's check refused.
 Pass -> IPC_LIVE_PASSED entry 23 (move) = 1.
 
+## Session S23-WEATHER: the weather evaluator against the game's own weather (read only; about 10 minutes) -- any time
+What it proves: hoi4_weather's estimate agrees with what the game shows, so the operation step's ground gate
+(`operations[].weather_gate`) holds a declaration only for real mud or snow.
+M1 a 1936 save, paused on 1 January: `hoi4_weather {"states":[<a Moscow-area state>,<a Paris-area state>,<a Libyan
+state>]}`: the Russian region reads ground snow medium/high and an attack factor at or below -0.2, Paris none or light,
+Libya clear. Compare with the weather map mode (screenshot): snow where the tool says ground snow.
+M2 the same states with `"date":"1936.4.15"`: the Russian region in mud (mud_chance >= 0.5) and
+bad_ground_clears_in_days > 0; then let the game run to mid-April (or load a save of that date) and check the map mode
+shows mud there.
+M3 `"date":"1936.7.15"`: no region on bad ground.
+Pass: M1-M3 agree with the map mode on snow/mud regions. A mismatch: record the region, the date and the tool's water /
+snow numbers in the notes (the model's drying or melting rate is then off).
 ## Session S21-ARMYHQ: army headquarters, whether the mechanic is in force (read only; about 2 minutes) -- any time
 What it proves: `hoi4_army_hq` reads the install's DLC state and the defines the way the game loads them.
 M1 any save, paused: `hoi4_army_hq {}`. On an install without Thunder at Our Gates (the owner's: 10 DLCs, none of

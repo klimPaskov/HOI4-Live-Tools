@@ -70,6 +70,7 @@ mod events;
 mod faction;
 mod fleetmem;
 mod fleetops;
+mod weather;
 // The input probe is used by the macOS main loop only.
 #[cfg_attr(target_os = "linux", allow(dead_code, unused_imports))]
 mod focus;
@@ -908,6 +909,7 @@ pub fn mac_tool_list() -> Vec<Value> {
     ])
     .chain(fleetops::tools())
     .chain(std::iter::once(invasion::tool()))
+    .chain(std::iter::once(weather::tool()))
     .chain(std::iter::once(abilities::tool()))
     .chain(faction::tools())
     .chain(agency_act::tools())
@@ -935,6 +937,7 @@ impl Commands for MacClock {
             || name == learn_tools::RUN
             || faction::handles(name)
             || name == invasion::TOOL
+            || name == weather::TOOL
             || name == army_hq::TOOL
             || name == abilities::TOOL
             || matches!(
@@ -1746,6 +1749,9 @@ impl MacClock {
                 ));
             }
             return mios::mios(process, tag, mgmt::flag(args, "include_all")?);
+        }
+        if name == weather::TOOL {
+            return weather::call(process, args);
         }
         if name == army_hq::TOOL {
             return army_hq::call(process, args);
