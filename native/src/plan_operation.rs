@@ -2261,9 +2261,9 @@ pub(super) fn lend_idle(
                 .get(&key(id, "need_at"))
                 .filter(|t| now - **t <= LEND_FRESH)
                 .and_then(|_| state.done.get(&key(id, "need")).copied())
-                .unwrap_or(0)
-                - behind;
-            (id.clone(), room.max(need))
+                .filter(|n| *n > 0)
+                .map(|n| n - behind);
+            (id.clone(), need.map_or(room, |n| room.max(n)))
         })
         .collect();
     let mut idle: Vec<&Value> = list(roster, "armies")
