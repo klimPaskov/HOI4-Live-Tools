@@ -181,6 +181,50 @@ pub(super) fn step(
     }
 }
 
+/// Trait keys (the scripts' `token`, as the module's read names each trait) to their indices in the tree, in the
+/// order asked; an index given as a number passes through. A key the organisation does not hold is refused
+/// trait_unknown with the keys it does hold, before any input.
+pub(super) fn indices_of(
+    org: &Org,
+    asked: &[Value],
+) -> std::result::Result<Vec<usize>, (&'static str, String)> {
+    let mut out = Vec::new();
+    for a in asked {
+        let i = match a {
+            Value::Number(n) => n.as_u64().map(|n| n as usize),
+            Value::String(s) => match s.trim().parse::<usize>() {
+                Ok(n) => Some(n),
+                Err(_) => {
+                    let key = s.trim();
+                    let Some(i) = org.traits.iter().position(|t| t.key == key) else {
+                        let held: Vec<&str> = org.traits.iter().map(|t| t.key.as_str()).collect();
+                        return Err((
+                            "trait_unknown",
+                            format!(
+                                "{} has no trait {key:?}; its traits: {}",
+                                org.key,
+                                held.join(", ")
+                            ),
+                        ));
+                    };
+                    Some(i)
+                }
+            },
+            _ => None,
+        };
+        let i = i.ok_or_else(|| {
+            (
+                "invalid_arguments",
+                "a trait is a key (string) or a 0-based index".to_string(),
+            )
+        })?;
+        if !out.contains(&i) {
+            out.push(i);
+        }
+    }
+    Ok(out)
+}
+
 /// `auto`: the first traits the game would unlock now (state a), in tree order, until `want` traits wait in the queue
 /// or are unlocked by this call; never one already held.
 pub(super) fn auto_picks(org: &Org, want: usize, skip: &[usize]) -> Vec<usize> {
@@ -347,5 +391,27 @@ mod tests {
         assert_eq!(policy_held(&m, k, 141, true), Some(false));
         assert_eq!(trait_held(&m, "nope", 1), None);
         assert_eq!(listing(&m.orgs[0])["entries"][2]["unlockable_now"], true);
+    }
+
+    #[test]
+    fn trait_keys_resolve_to_the_tree_order_and_unknown_keys_are_refused() {
+        let m = parse(&reply()).unwrap();
+        let o = &m.orgs[0];
+        assert_eq!(
+            indices_of(
+                o,
+                &[json!("e_trait"), json!("c_trait"), json!(1), json!("3")]
+            ),
+            Ok(vec![4, 2, 1, 3])
+        );
+        // the same trait twice is asked once
+        assert_eq!(indices_of(o, &[json!("c_trait"), json!(2)]), Ok(vec![2]));
+        let (code, msg) = indices_of(o, &[json!("z_trait")]).unwrap_err();
+        assert_eq!(code, "trait_unknown");
+        assert!(msg.contains("a_trait") && msg.contains("e_trait"));
+        assert_eq!(
+            indices_of(o, &[json!(true)]).unwrap_err().0,
+            "invalid_arguments"
+        );
     }
 }

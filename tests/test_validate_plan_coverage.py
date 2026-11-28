@@ -149,7 +149,7 @@ WAVE2 = {
     "intelligence": {"agency": True, "upgrades": ["upgrade_army_department", "branch_army:upgrade_army_department"],
                      "operatives": [{"mission": "build_intel_network", "state_id": 3},
                                     {"mission": "propaganda", "target": "BBB"}, {"mission": "counter_intelligence"}]},
-    "mio": [{"organisation": "AAA_works_organization", "traits": [0, "2"], "policy": "mio_policy_fix"}],
+    "mio": [{"organisation": "AAA_works_organization", "traits": [0, "2", "t2"], "policy": "mio_policy_fix"}],
     "trade": [{"resource": "steel", "from": "BBB"}, {"resource": "oil", "partner": "Some Country"}],
     "research_bonuses": {"cat": ["t_a"], "why": "a bonus"},
 }
@@ -571,7 +571,7 @@ class CoverageTests(unittest.TestCase):
                           "operatives": [{"mission": "root_out_resistance"}, {"mission": "control_trade"},
                                          {"mission": "boost_ideology", "target": "QQQ", "state_id": 99}]},
             mio=[{"organisation": "BBB_works_organization"},
-                 {"organization": "AAA_works_organization", "traits": [3], "policy": "nope"},
+                 {"organization": "AAA_works_organization", "traits": [3, "t1", "t9"], "policy": "nope"},
                  {"organisation": "nope"}],
             trade={"deals": [{"resource": "gold", "from": "QQQ"}, {"resource": "steel", "partner": "AAA"}]},
             research_bonuses={"cat": ["t_none"]})
@@ -591,12 +591,14 @@ class CoverageTests(unittest.TestCase):
                     "mio[0] BBB_works_organization: BBB_works_organization is not allowed for AAA",
                     "mio[1] AAA_works_organization: no MIO policy nope",
                     "mio[1] AAA_works_organization: trait_index 3 but the tree has 3 entries",
+                    "mio[1] AAA_works_organization: no trait t9 in AAA_works_organization's tree",
                     "mio[2] nope: no organisation nope",
                     "trade.deals[0]: no resource gold in common/resources (oil, steel)",
                     "trade.deals[0]: partner QQQ is not a country tag",
                     "trade.deals[1]: partner AAA is the player's own tag",
                     "research_bonuses.cat: unknown technology t_none"):
             self.assertIn(msg, text)
+        self.assertNotIn("no trait t1", text)  # a key of the tree
         self.assertIn("diplomacy[1] k: war_goal and states are read only by a justify item", warn)
         self.assertIn("diplomacy[1] k: rejustify are read only by a declare item", warn)
         self.assertIn("faction.create.template 'faction_template_none' is not a template", warn)
