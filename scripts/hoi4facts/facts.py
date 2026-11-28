@@ -1415,6 +1415,33 @@ def cmd_air_cover(args):
                                        + f"; 90% at {r['range_for_90']} km" for r in x["regions"]] + [x["d"]])
 
 
+def cmd_raids(args):
+    from hoi4facts import raids
+    w = world(args, args.TAG)
+    cool = float(w.define(raids.DEFAULT_COOLDOWN_DEFINE, 365)[0] or 365)
+    rs = raids.Raids(w.game, cool)
+    c = w.country(args.TAG)
+    techs = set(c["techs"]) | set((args.techs or "").split(","))
+    focuses = {f["v"] if isinstance(f, dict) else f for f in c.get("completed_focuses", [])}
+    focuses |= set((args.focuses or "").split(","))
+    inputs = {"prep_time": 1.0}
+    for x in args.input or []:
+        k, _, v = x.partition("=")
+        inputs[k] = float(v)
+    rows = rs.rows(w.ctx_for(args.TAG), techs, focuses, inputs)
+    if args.id:
+        rows = [r for r in rows if r["id"] == args.id]
+    elif not args.all:
+        rows = [{k: r[k] for k in ("id", "category", "command_power", "days_to_prepare", "fire_only_once", "units",
+                                   "equipment", "targets", "starting_points", "needs", "probabilities", "allowed",
+                                   "launchable")} for r in rows]
+    data = {"tag": args.TAG, "inputs": inputs, "raids": rows, "method": raids.METHOD}
+    return emit(args, data, lambda x: [f"{r['id']} ({r['category']}): CP {r['command_power']}, "
+                                       f"{r['days_to_prepare']} days, units {r['units']}, equipment {r['equipment']}, "
+                                       f"targets {r['targets']}; needs {r['needs']}; P {r['probabilities']}"
+                                       for r in x["raids"]] + [x["method"]])
+
+
 def cmd_mio(args):
     w = world(args, args.TAG)
     data = w.mio(args.TAG)
@@ -1895,6 +1922,12 @@ def parser():
     p.add_argument("--states")
     p.add_argument("--provinces")
     p.add_argument("--ranges")
+    p = add("raids", cmd_raids, "TAG")
+    p.add_argument("--id", help="one raid type with every field")
+    p.add_argument("--all", action="store_true", help="every field for every raid")
+    p.add_argument("--techs", help="techs assumed held besides the history's (comma list)")
+    p.add_argument("--focuses", help="focuses assumed completed (comma list)")
+    p.add_argument("--input", action="append", help="success input, e.g. air_superiority=0.6 experience=0.3")
     p = add("mio", cmd_mio, "TAG")
     p.add_argument("--id", help="one organisation with its whole trait tree")
     add("projects", cmd_projects, "TAG")
