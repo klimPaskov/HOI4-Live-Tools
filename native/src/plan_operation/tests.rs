@@ -594,8 +594,8 @@ fn every_attacker_a_wing_too_executes_before_the_declaration_and_the_declaration
     let pending = pre_pending(&state, at + 8);
     assert_eq!(pending.len(), 1, "{pending:?}");
     assert!(pending[0].contains("Nord"), "{pending:?}");
-    // once war is on the pass no longer holds anything
-    assert!(pre_pending(&state, at + PRE_EXECUTE + 1).is_empty());
+    // past the pre-declaration window it holds nothing
+    assert!(pre_pending(&state, at + 8 + PRE_EXECUTE + 1).is_empty());
 }
 
 #[test]
