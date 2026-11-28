@@ -59,6 +59,7 @@ mod capacity;
 mod ground;
 #[path = "plan_operation/pace.rs"]
 mod pace;
+#[path = "plan_operation/weather_gate.rs"]
 mod weather_gate;
 
 /// Game days without a gain on the line before the next line is drawn.
