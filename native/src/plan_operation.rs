@@ -8531,7 +8531,11 @@ fn armour_ground(
                     .iter()
                     .chain(list(them, "reserve_divisions").iter())
                     .any(|d| d["tag"].as_str().is_some_and(|t| t != u.enemy));
-                if let Some(s) = b["province"].as_i64().and_then(|p| g.get(&p)).map(|r| r.state) {
+                if let Some(s) = b["province"]
+                    .as_i64()
+                    .and_then(|p| g.get(&p))
+                    .map(|r| r.state)
+                {
                     if others {
                         allied.insert(s);
                     }
@@ -8928,10 +8932,13 @@ fn choke_step(
         .as_i64()
         .filter(|m| *m >= 1)
         .unwrap_or(CHOKE_MIN_SURPLUS);
-    for u in units.iter().filter(|u| {
-        attacker(u) && u.role != Role::Strike && !u.spear && !u.enemy.is_empty()
-    }) {
-        if state.done.contains_key(&key(id, &format!("choke:{}", u.name)))
+    for u in units
+        .iter()
+        .filter(|u| attacker(u) && u.role != Role::Strike && !u.spear && !u.enemy.is_empty())
+    {
+        if state
+            .done
+            .contains_key(&key(id, &format!("choke:{}", u.name)))
             || state.skipped(now, "opchoke", &u.name)
         {
             continue;
@@ -9005,8 +9012,13 @@ fn choke_step(
             };
             let oid = o["id"].as_i64().unwrap_or(0);
             let entry = ground::arrow_entry(&path, &theirs).unwrap_or(0);
-            let terrain = g.get(&entry).map_or("?", |r| r.terrain.as_str()).to_string();
-            state.done.insert(key(id, &format!("choke:{}", u.name)), now);
+            let terrain = g
+                .get(&entry)
+                .map_or("?", |r| r.terrain.as_str())
+                .to_string();
+            state
+                .done
+                .insert(key(id, &format!("choke:{}", u.name)), now);
             match judged {
                 ArrowGround::Redraw(way) if by_cmd(state, id) => {
                     let first = way.first().copied().unwrap_or(0);
@@ -9046,7 +9058,9 @@ fn choke_step(
                         u.name
                     );
                     if u.role == Role::Group || surplus < min {
-                        state.op_notes.insert(format!("{id}:choke:{}", u.name), note);
+                        state
+                            .op_notes
+                            .insert(format!("{id}:choke:{}", u.name), note);
                         continue;
                     }
                     // the reserve stands behind the line army with the fewest divisions
@@ -9099,7 +9113,9 @@ fn choke_step(
                         .map(|(_, i)| i)
                         .collect();
                     if ids.is_empty() {
-                        state.op_notes.insert(format!("{id}:choke:{}", u.name), note);
+                        state
+                            .op_notes
+                            .insert(format!("{id}:choke:{}", u.name), note);
                         continue;
                     }
                     let present: HashSet<String> = list(roster, "armies")
@@ -9121,7 +9137,9 @@ fn choke_step(
                         args,
                     )?;
                     if state.last_ok == Some(true) {
-                        state.done.insert(key(id, &format!("thinned:{}", u.name)), now);
+                        state
+                            .done
+                            .insert(key(id, &format!("thinned:{}", u.name)), now);
                         let made = into.clone().or_else(|| {
                             tools
                                 .call("hoi4_armies", &json!({"threat": false}))
@@ -9134,7 +9152,9 @@ fn choke_step(
                                 })
                         });
                         if let Some(e) = made {
-                            state.layout.insert(format!("echelon:{id}:{src}"), e.clone());
+                            state
+                                .layout
+                                .insert(format!("echelon:{id}:{src}"), e.clone());
                             state
                                 .done
                                 .entry(key(id, &format!("echmade:{e}")))
@@ -10993,7 +11013,9 @@ fn hostile_states_but(wars: &Value, tag: &str) -> HashMap<i64, (String, f64)> {
             continue;
         }
         let states = ints(&b["neighbour_states"]);
-        let n = b["hostile_divisions_in_border_states"].as_f64().unwrap_or(0.0);
+        let n = b["hostile_divisions_in_border_states"]
+            .as_f64()
+            .unwrap_or(0.0);
         if states.is_empty() || n <= 0.0 {
             continue;
         }
@@ -11008,12 +11030,7 @@ fn hostile_states_but(wars: &Value, tag: &str) -> HashMap<i64, (String, f64)> {
 /// BEFORE THE DECLARATION: what can stand against a small enemy of the opening within its deadline
 /// (what our country sees of it, plus its would-be allies' divisions that border it), with the
 /// note's words. One graph read.
-fn prewar_threat(
-    tools: &dyn Tools,
-    wars: &Value,
-    tag: &str,
-    days: i64,
-) -> (f64, Vec<Reach>) {
+fn prewar_threat(tools: &dyn Tools, wars: &Value, tag: &str, days: i64) -> (f64, Vec<Reach>) {
     let own = list(wars, "borders")
         .iter()
         .find(|b| text(&b["neighbour_tag"]) == tag)
@@ -11205,9 +11222,10 @@ fn opening_tags(
             })
             .unwrap_or_default();
         if let Some(r) = reach.first() {
-            state
-                .done
-                .insert(key(id, &format!("opening:bar:{tag}")), r.hours.round() as i64);
+            state.done.insert(
+                key(id, &format!("opening:bar:{tag}")),
+                r.hours.round() as i64,
+            );
         }
         state.op_notes.insert(
             format!("{id}:opening:{tag}"),
@@ -11272,7 +11290,9 @@ fn opening_tags(
                     && u.role != Role::Group
                     && army_row(roster, &u.name).is_some()
                     && (!matches!(u.role, Role::Mobile | Role::Strike)
-                        || state.done.contains_key(&key(id, &format!("asm:{}", u.name))))
+                        || state
+                            .done
+                            .contains_key(&key(id, &format!("asm:{}", u.name))))
             })
             .map(|u| u.name.clone())
             .filter(|a| !thinned.contains(a) && room_of(a) > 0);
@@ -11305,7 +11325,10 @@ fn opening_tags(
             };
             let nk = format!("{id}:opening:{tag}");
             let line = if prewar {
-                format!("{}: {why}", state.op_notes.get(&nk).cloned().unwrap_or_default())
+                format!(
+                    "{}: {why}",
+                    state.op_notes.get(&nk).cloned().unwrap_or_default()
+                )
             } else {
                 format!(
                     "operation {id}: {tag} day {day} of {days}: {ours} facing it against {theirs:.0}: {why}"
