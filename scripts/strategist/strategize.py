@@ -11,6 +11,9 @@ Steps, each gated; the script owns the order so no step can be skipped or self-r
 
   1. dossier    facts.py dossier build -> RUN/dossier/ (deterministic, cached by its manifest), then
                 pack.py -> RUN/pack/ (the facts every plan needs, the schema digest, the lint rules)
+  1b'. computed computed.py -> RUN/computed.md: the evaluators' answers (design, templates, research, production,
+                construction, force, doctrines, focus), each line tagged "computed"; the guide beside it where
+                country knowledge or RUN/guide-claims.json exists (never fatal)
   1c. decisions run.py --role researcher, prompt prompts/decisions.md -> RUN/decisions.md: the sourced
                 decision table for the request (per decision area: what the playbook, the private sources in
                 RUN/sources/, the run-time web research and the game files say, the decision and its reason).
@@ -467,6 +470,15 @@ def strategize(args, runner=None):
     report["steps"].append({"step": "pack", "exit": code, "seconds": round(time.time() - t0)})
     if code != 0:
         log("work pack failed (the models fetch the facts themselves): %s" % out[-500:])
+
+    # 1b'. computed decisions (deterministic): the evaluators' answers for this country before anyone plans
+    # (scripts/strategist/computed.py -> RUN/computed.md, every line tagged "computed"); never fatal
+    if not os.path.exists(os.path.join(run_dir, "computed.md")) or runner.dry:
+        t0 = time.time()
+        code, out = runner.run([sys.executable, os.path.join(HERE, "computed.py"), "--run", run_dir] + game_args(args))
+        report["steps"].append({"step": "computed", "exit": code, "seconds": round(time.time() - t0)})
+        if code != 0:
+            log("computed decisions failed (the strategist plans from the playbook and the facts): %s" % out[-500:])
 
     # Reuse a reviewed plan made for the same request: the gates decide whether it still holds on this install.
     reused = None
