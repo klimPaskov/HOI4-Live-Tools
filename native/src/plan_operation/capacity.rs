@@ -1143,7 +1143,7 @@ mod tests {
     fn a_front_facing_no_enemy_weighs_nothing_in_a_spread() {
         // p101a W+10: Army 2's front 14 faces 7 enemy provinces (cap 51, 14 there), its front 169
         // none (9 there)
-        let rooms = vec![
+        let rooms = [
             Room {
                 id: 14,
                 cap: 51,
