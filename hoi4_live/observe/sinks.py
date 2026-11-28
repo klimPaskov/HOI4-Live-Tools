@@ -192,12 +192,13 @@ def intelligence(snap):
         out.append(F("operatives_home_only", "medium",
                      f"all {len(ops)} operatives at home ({', '.join(sorted({str(o.get('mission')) for o in home}))}) "
                      f"while at war: no network abroad, no operation, no decryption support", operatives=len(ops)))
-    if intel and intel.get("decryption") is None and _at_war(snap):
+    dec = intel.get("decryption") if intel else None
+    unread = dec is None or (isinstance(dec, dict) and dec.get("state_read") is False)
+    if intel and unread and _at_war(snap):
         out.append(F("decryption_unread", "medium",
-                     "decryption and encryption (cipher progress per enemy) are not read: whether the agency decrypts "
-                     "any enemy is unknown; the read and a decryption tool are the intelligence lane's gap",
-                     target=None))
-    elif isinstance(intel.get("decryption"), dict) and _at_war(snap) and not intel["decryption"].get("target"):
+                     "decryption (cipher work per enemy) is not read on this build: whether the agency decrypts "
+                     "any enemy is unknown", target=None))
+    elif isinstance(dec, dict) and _at_war(snap) and not dec.get("target"):
         out.append(F("decryption_idle", "high", "at war and the agency decrypts no enemy: cipher bonuses unused"))
     return out
 

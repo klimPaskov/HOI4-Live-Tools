@@ -100,6 +100,18 @@ class Sinks(unittest.TestCase):
     def codes(self, snap, prev=()):
         return {f["code"]: f for f in sinks.findings(snap, prev, self.g)}
 
+    def test_decryption_unread_idle_and_working_are_told_apart(self):
+        # engineer 133: hoi4_intelligence now reads the agency's ciphers; an unread part stays "unread", not "idle"
+        cases = [({"state_read": False, "error": "layout_unmapped"}, "decryption_unread"),
+                 ({"state_read": True, "target": None, "ciphers": []}, "decryption_idle"),
+                 ({"state_read": True, "target": "FRA", "ciphers": [{"target": "FRA", "decrypting": True}]}, None)]
+        for dec, want in cases:
+            snap = snapshot()
+            snap["intelligence"]["decryption"] = dec
+            got = self.codes(snap)
+            for code in ("decryption_unread", "decryption_idle"):
+                self.assertEqual(code in got, code == want, (dec, code))
+
     def test_the_owner_examples_are_all_named(self):
         prev = [snapshot("1940.05.20.10", xp={"army": 90, "navy": 250, "air": 280})]
         got = self.codes(snapshot(), prev)

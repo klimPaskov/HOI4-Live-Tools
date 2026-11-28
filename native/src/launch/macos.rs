@@ -25,6 +25,7 @@ mod construction_find;
 mod fair_facts;
 mod inproc;
 mod inproc_construction;
+mod inproc_decrypt;
 mod inproc_diplomacy;
 mod inproc_doctrine;
 mod inproc_events;
@@ -2106,6 +2107,11 @@ impl MacClock {
         }
         if leader_act::TOOLS.contains(&name) {
             return leader_act::call(name, args, process, &self.keys, guard, authority, actions);
+        }
+        if name == "hoi4_agency_upgrade" && args.contains_key("decryption") {
+            // engineer 133: the agency's cipher work through the module's decrypt family (no mouse path;
+            // HOI4_BACKEND=inprocess until S33-DECRYPT passes)
+            return inproc_decrypt::act(args, process, guard, authority, actions);
         }
         if agency_act::TOOLS.contains(&name) {
             return agency_act::call(name, args, process, &self.keys, guard, authority, actions);

@@ -152,6 +152,14 @@
 //!                already; `runs` times (default 1) or until the target's collaboration reaches the
 //!                goal (at most `runs`, default 5). Refusals and the agency state come from memory
 //!                (receipts verified by memory readback, live 14 Nov)
+//!                `decrypt` [TAG | {"target","when"?}] (engineer 133): the agency decrypts the first
+//!                listed country whose `when` holds, whose cipher's bonus is not active and that the game
+//!                did not refuse lately, while it decrypts none (hoi4_agency_upgrade decryption start, the
+//!                module's decrypt family); the game's refusal (not a valid target, the cipher broken
+//!                already) leaves that country 30 days and the next goes; the module not serving waits 30
+//!                days. `activate` [{"target","when"?|"operation"?}]: a broken cipher's bonuses are activated
+//!                once, the day `when` holds or the named operation's `execute_on` holds (the operation's
+//!                first day); refused (not broken yet) it is asked again daily while that holds
 //!   mio          [{"organisation" ("organization" too),"traits":[trait_index,..],"when"?,"slot"?,
 //!                "line"?,"design_team"?,"policy"?}] per organisation, in order: `line` (an equipment key)
 //!                puts it on the own production line of that equipment family (hoi4_mio_line; the
@@ -3765,6 +3773,139 @@ fn auto_trait_pick(entries: &[Value], tried: &dyn Fn(u64) -> bool) -> Option<u64
 // W2-7: intelligence agency, upgrades in order, operatives (O1, O2, rule 34).
 
 /// hoi4_intelligence, read at most once a game day.
+/// What one decryption answer changes next.
+#[derive(Debug, PartialEq)]
+enum CipherAnswer {
+    Done,
+    /// the game's check refused it now: that country waits (start) or is asked again next day
+    Wait,
+    /// the plan names something that cannot be done (own country, unknown tag): settled with a note
+    Settle,
+    /// the module's decrypt family is not serving: the section waits 30 days
+    NoRoute,
+}
+
+fn cipher_answer(ok: bool, code: &str) -> CipherAnswer {
+    match (ok, code) {
+        (true, _) | (false, "nothing_to_change") => CipherAnswer::Done,
+        (false, "invalid_target" | "invalid_arguments" | "unknown_country") => CipherAnswer::Settle,
+        (false, "in_process_unavailable") => CipherAnswer::NoRoute,
+        _ => CipherAnswer::Wait,
+    }
+}
+
+/// The target of a `decrypt` / `activate` entry: a tag string or {"target"}.
+fn cipher_target(entry: &Value) -> String {
+    match entry {
+        Value::String(t) => t.trim().to_string(),
+        _ => text(&entry["target"]).trim().to_string(),
+    }
+}
+
+/// `intelligence.decrypt` and `intelligence.activate` (engineer 133): the agency's cipher work through
+/// hoi4_agency_upgrade's `decryption` (the module's decrypt family; the game's own check decides).
+/// Activations come first (an operation's first day), then one decryption start while none runs.
+fn decryption_step(state: &mut State, run: &Run<'_>, cfg: &Value) -> Result<Option<String>> {
+    let (tools, plan, now) = (run.tools, run.plan, run.now);
+    let decrypt = list(cfg, "decrypt");
+    let activate = list(cfg, "activate");
+    if (decrypt.is_empty() && activate.is_empty()) || state.skipped(now, "mdecrypt", "x") {
+        return Ok(None);
+    }
+    let Some(read) = intel_read(state, tools, now) else {
+        state.skip(now, "mdecrypt", "x", DAY);
+        return Ok(None);
+    };
+    let dec = &read["decryption"];
+    if dec["state_read"] != json!(true) {
+        note(
+            state,
+            "decryption",
+            format!(
+                "the agency's ciphers are not read ({}): decryption waits",
+                text(&dec["error"])
+            ),
+        );
+        state.skip(now, "mdecrypt", "x", 7 * DAY);
+        return Ok(None);
+    }
+    let ciphers = list(dec, "ciphers");
+    let row = |t: &str| ciphers.iter().find(|c| text(&c["target"]) == t).cloned();
+    for (i, entry) in activate.iter().enumerate() {
+        let target = cipher_target(entry);
+        let key = format!("decrypt:activate:{i}:{target}");
+        if target.is_empty() || state.done.contains_key(&key) || state.skipped(now, "dact", &key) {
+            continue;
+        }
+        let when = match text(&entry["operation"]) {
+            "" => entry["when"].clone(),
+            op => list(plan, "operations")
+                .iter()
+                .find(|o| text(&o["id"]) == op)
+                .map(|o| o["execute_on"].clone())
+                .unwrap_or_else(|| json!("never")),
+        };
+        if when_holds(state, tools, &when, now) != Truth::True {
+            continue;
+        }
+        if row(&target).is_some_and(|c| c["bonus_active"] == json!(true)) {
+            state.done.insert(key, now);
+            continue;
+        }
+        let args = json!({"decryption": {"target": target, "action": "activate"}});
+        let (ok, why) = state.act(tools, run.lease, "hoi4_agency_upgrade", args, "da")?;
+        match cipher_answer(ok, code(&why)) {
+            CipherAnswer::Done => {
+                state.done.insert(key, now);
+            }
+            CipherAnswer::Settle => {
+                state.done.insert(key, now);
+                note(state, "decryption", format!("activate {target}: {why}"));
+            }
+            CipherAnswer::NoRoute => {
+                note(state, "decryption", format!("activate {target}: {why}"));
+                state.skip(now, "mdecrypt", "x", 30 * DAY);
+            }
+            CipherAnswer::Wait => state.skip(now, "dact", &key, DAY),
+        }
+        state.affairs.intel = None;
+        return Ok(Some(format!("decryption activate {target}: {ok} {why}")));
+    }
+    if ciphers.iter().any(|c| c["decrypting"] == json!(true)) {
+        return Ok(None);
+    }
+    for entry in decrypt {
+        let target = cipher_target(entry);
+        if target.is_empty()
+            || state
+                .done
+                .contains_key(&format!("decrypt:settled:{target}"))
+            || state.skipped(now, "dstart", &target)
+            || row(&target).is_some_and(|c| c["bonus_active"] == json!(true))
+            || when_holds(state, tools, &entry["when"], now) != Truth::True
+        {
+            continue;
+        }
+        let args = json!({"decryption": {"target": target, "action": "start"}});
+        let (ok, why) = state.act(tools, run.lease, "hoi4_agency_upgrade", args, "ds")?;
+        match cipher_answer(ok, code(&why)) {
+            CipherAnswer::Done => {}
+            CipherAnswer::Settle => {
+                state.done.insert(format!("decrypt:settled:{target}"), now);
+                note(state, "decryption", format!("decrypt {target}: {why}"));
+            }
+            CipherAnswer::NoRoute => {
+                note(state, "decryption", format!("decrypt {target}: {why}"));
+                state.skip(now, "mdecrypt", "x", 30 * DAY);
+            }
+            CipherAnswer::Wait => state.skip(now, "dstart", &target, 30 * DAY),
+        }
+        state.affairs.intel = None;
+        return Ok(Some(format!("decryption start {target}: {ok} {why}")));
+    }
+    Ok(None)
+}
+
 fn intel_read(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Value> {
     if let Some((at, read)) = &state.affairs.intel {
         if now - *at < DAY {
@@ -3841,6 +3982,13 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
         .alert_since
         .contains_key("operative_recruitable")
         && cfg["operatives"] != json!(0);
+    // the cipher work keeps its own timers: an operation's first day is not missed while the
+    // agency's upgrade or recruit timers rest
+    if plan["intelligence"].is_object() {
+        if let Some(done) = decryption_step(state, run, cfg)? {
+            return Ok(Some(done));
+        }
+    }
     if !(plan["intelligence"].is_object() || offered) || state.skipped(now, "mintel", "x") {
         return Ok(None);
     }
@@ -6703,6 +6851,73 @@ mod tests {
         let no = json!({"intelligence": {"operatives": 0}});
         let out = intelligence_step(&mut state, &Run::new(&tools, &no, "l", START)).unwrap();
         assert_eq!(out, None);
+    }
+
+    #[test]
+    fn decryption_starts_the_first_open_target_moves_on_after_a_refusal_and_activates_on_the_operations_day(
+    ) {
+        let idle = json!({"decryption": {"state_read": true, "target": null, "ciphers": [
+            {"target": "ENG", "decrypting": false, "bonus_active": true}]}});
+        let tools = fake(vec![("hoi4_intelligence", idle)]);
+        let later = json!({"intelligence": {"decrypt": ["ENG", "FRA", {"target": "SOV"}],
+            "activate": [{"target": "FRA", "operation": "gelb"}]},
+            "operations": [{"id": "gelb", "execute_on": "date >= 2100.1.1"}]});
+        let mut state = State::default();
+        // ENG's bonus runs: FRA is the first open target; the game refuses it (its cipher broken)
+        tools.refuse("hoi4_agency_upgrade", "refused_by_game_check");
+        let out = step(&mut state, &tools, &later, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.starts_with("decryption start FRA: false"), "{out}");
+        // FRA waits 30 days: SOV goes next
+        tools.accept("hoi4_agency_upgrade");
+        let out = step(&mut state, &tools, &later, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert_eq!(out, "decryption start SOV: true Verified");
+        // the agency decrypts SOV now: no further start
+        tools.reply(
+            "hoi4_intelligence",
+            json!({"decryption": {"state_read": true, "target": "SOV", "ciphers": [
+                {"target": "SOV", "decrypting": true, "bonus_active": false}]}}),
+        );
+        assert!(step(&mut state, &tools, &later, "l", START + 2 * DAY)
+            .unwrap()
+            .is_none_or(|o| !o.starts_with("decryption")));
+        // the operation's first day: FRA's bonuses are activated once
+        let now = json!({"intelligence": later["intelligence"].clone(),
+            "operations": [{"id": "gelb"}]});
+        let out = step(&mut state, &tools, &now, "l", START + 3 * DAY)
+            .unwrap()
+            .unwrap();
+        assert_eq!(out, "decryption activate FRA: true Verified");
+        assert!(step(&mut state, &tools, &now, "l", START + 4 * DAY)
+            .unwrap()
+            .is_none_or(|o| !o.starts_with("decryption")));
+        let sent: Vec<Value> = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_agency_upgrade")
+            .map(|(_, a)| a["decryption"].clone())
+            .collect();
+        assert_eq!(sent.len(), 3, "{sent:?}");
+        assert_eq!(sent[2]["action"], "activate");
+    }
+
+    #[test]
+    fn unread_ciphers_wait_a_week_and_say_why() {
+        let tools = fake(vec![(
+            "hoi4_intelligence",
+            json!({"decryption": {"state_read": false, "error": "layout_unmapped"}}),
+        )]);
+        let plan = json!({"intelligence": {"decrypt": ["FRA"]}});
+        let mut state = State::default();
+        assert!(step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .is_none_or(|o| !o.starts_with("decryption")));
+        assert!(state.affairs.notes["decryption"].contains("layout_unmapped"));
+        assert!(actions(&tools)
+            .iter()
+            .all(|(n, _)| n != "hoi4_agency_upgrade"));
     }
 
     #[test]

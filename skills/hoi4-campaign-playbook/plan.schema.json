@@ -6427,7 +6427,51 @@
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9]{2}$",
           "x-owner": "text",
-          "description": "not read by the executor (no decryption tool)"
+          "description": "not read by the executor: use `decrypt` (engineer 133)"
+        },
+        "decrypt": {
+          "type": "array",
+          "description": "engineer 133: countries the agency decrypts, in order: the first whose `when` holds, whose cipher's bonus is not active and that the game did not refuse in the last 30 days, while the agency decrypts none (hoi4_agency_upgrade decryption start; the module's decrypt family, off in auto until S33-DECRYPT)",
+          "items": {
+            "type": [
+              "string",
+              "object"
+            ],
+            "pattern": "^[A-Z][A-Z0-9]{2}$",
+            "properties": {
+              "target": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9]{2}$"
+              },
+              "when": {}
+            },
+            "required": [
+              "target"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "activate": {
+          "type": "array",
+          "description": "engineer 133: a broken cipher's bonuses are activated once, the day `when` holds or the named operation's execute_on holds (its first day); refused (not broken yet) it is asked again daily while that holds",
+          "items": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9]{2}$"
+              },
+              "when": {},
+              "operation": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "target"
+            ],
+            "additionalProperties": false
+          }
         },
         "why": {
           "type": "string",
