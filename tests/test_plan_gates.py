@@ -115,6 +115,15 @@ class FocusSlot(unittest.TestCase):
         self.assertEqual(s["rows"][2]["start"], WAR_END)
         self.assertEqual(s["never"], [])
 
+    def test_a_focus_held_by_focus_when_waits_and_the_next_one_goes_first(self):
+        s = plan_gates.focus_schedule(["open_a", "peace_1"], [], TREE, META, 7.0, 0, WAR_END + 400,
+                                      lambda day, done: at_war_until(WAR_END + day, done), holds={"open_a": 50})
+        self.assertEqual([(r["focus"], r["start"]) for r in s["rows"]], [("peace_1", 0), ("open_a", 70.0)])
+        s = plan_gates.focus_schedule(["open_a"], [], TREE, META, 7.0, 0, 200, at_war_until, holds={"open_a": 120})
+        self.assertEqual([(r["focus"], r["start"]) for r in s["rows"]], [("open_a", 120)])
+        self.assertEqual((s["idle"][0]["from"], s["idle"][0]["to"]), (0, 120))
+        self.assertIn("focus_when", s["idle"][0]["blocked"][0]["why"])
+
     def test_undecided_gate_is_an_assumption(self):
         s = walk(["holds_land"], [], horizon=100)
         self.assertIsNone(s["rows"][0]["gate"])

@@ -249,6 +249,11 @@ def focus_meta(game):
     def load():
         out = {}
         for f in game.files("common/national_focus"):
+            try:  # the file's own @constants (e.g. @inner_circle_time_tier_1 = 20) name some focus costs
+                with open(f, encoding="utf-8-sig", errors="replace") as fh:
+                    consts = dict(re.findall(r"(?m)^\s*(@\w+)\s*=\s*(-?[\d.]+)", fh.read()))
+            except OSError:
+                consts = {}
             for k, v in parse_file(f):
                 if k not in ("focus_tree", "shared_focus") or not isinstance(v, list):
                     continue
@@ -259,9 +264,10 @@ def focus_meta(game):
                     if not fid:
                         continue
                     av = get1(fv, "available")
+                    raw = get1(fv, "cost", "1")
                     try:
-                        cost = float(get1(fv, "cost", "1"))
-                    except ValueError:
+                        cost = float(consts.get(raw, raw) if isinstance(raw, str) else raw)
+                    except (TypeError, ValueError):
                         cost = 1.0
                     out[fid] = {"available": av if isinstance(av, list) and av else None,
                                 "cost": cost, "tree": tid}

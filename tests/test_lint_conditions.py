@@ -175,6 +175,58 @@ class GermanyConditions(unittest.TestCase):
         self.assertIn("x AUS", f[0]["message"])
         self.assertNotIn(GAME_DIR, f[0]["message"])
 
+    def test_a_capitulated_country_hands_over_the_states_where_targets_fell(self):
+        plan = copy.deepcopy(self.plan)
+        plan["vp_targets"] = [{"id": "vp_poz", "province": 6558, "state": 86, "by": "1939.9.8", "order": 1},
+                              {"id": "vp_waw", "province": 3544, "state": 10, "by": "1939.9.25", "order": 2}]
+        lt = lint_plan.Lint(plan, self.game)
+        poznan = set(lt.states()[86]["provinces"])
+        self.assertFalse(poznan <= lt.control_at("state_fully_controlled:10"))
+        plan["goals"] = [{"id": "g_pol", "done": "capitulated:POL", "by": "1939.9.20"}]
+        lt = lint_plan.Lint(plan, self.game)
+        self.assertTrue(poznan <= lt.control_at("state_fully_controlled:10"))
+        plan["goals"][0]["by"] = "1939.10.30"  # capitulated after Warsaw falls: nothing handed over yet
+        self.assertFalse(poznan <= lint_plan.Lint(plan, self.game).control_at("state_fully_controlled:10"))
+
+    def test_an_inner_circle_focus_runs_beside_the_slot_for_its_cost(self):
+        plan = copy.deepcopy(self.plan)
+        plan["focus_path"] = ["GER_remilitarize_the_rhineland", "GER_fuhrerprinzip", "GER_ascension_of_todt", "GER_form_organization_todt",
+                              "GER_the_four_year_plan"]
+        lt = lint_plan.Lint(plan, self.game)
+        lt.focus()
+        sched = {r["focus"]: r for r in lt.facts["focus"]["schedule"]}
+        todt, asc, fyp = sched["GER_form_organization_todt"], sched["GER_ascension_of_todt"], sched["GER_the_four_year_plan"]
+        self.assertEqual(todt["from"], "script")
+        self.assertEqual(todt["start"], asc["end"])
+        self.assertEqual(derive.day(todt["end"]) - derive.day(todt["start"]), 140)  # @inner_circle_time_tier_1 weeks
+        self.assertEqual(fyp["start"], asc["end"])  # the slot does not wait for it
+        self.assertFalse([f for f in lt.findings if f["rule"] == "focus.available"
+                          and "GER_form_organization_todt" in f["message"]])
+
+    def test_focus_when_holds_a_focus_in_the_slot_walk(self):
+        plan = copy.deepcopy(self.plan)
+        k = plan["focus_path"][0]
+        plan["focus_when"] = {k: "date >= 1937.6.1"}
+        lt = lint_plan.Lint(plan, self.game)
+        lt.focus()
+        row = next(r for r in lt.facts["focus"]["schedule"] if r["focus"] == k)
+        self.assertGreaterEqual(derive.day(row["start"]), derive.day("1937.6.1"))
+        self.assertEqual(lt.facts["focus"]["holds"], {k: "1937.06.01"})
+
+    def test_queue_from_is_a_run_of_stages_like_dated_rows(self):
+        def army(training):
+            plan = copy.deepcopy(self.plan)
+            plan["training"] = training
+            tl = cond.Timeline(lint_plan.Lint(plan, self.game))
+            return tl.forecast(equipment=False)["rows"][-1][1]
+        one_row = army([{"template": "Infanterie-Division", "queue": 2, "cap": 300,
+                         "queue_from": [{"from": "1937.1.1", "queue": 9}]}])
+        dated = army([{"template": "Infanterie-Division", "queue": 2, "cap": 300, "when": "date < 1937.1.1"},
+                      {"template": "Infanterie-Division", "queue": 9, "cap": 300, "when": "date >= 1937.1.1"}])
+        flat = army([{"template": "Infanterie-Division", "queue": 2, "cap": 300}])
+        self.assertEqual(one_row, dated)
+        self.assertGreater(one_row, flat)
+
     def test_an_advisor_the_game_never_shows(self):
         f = self.hits("politics.visible")
         self.assertTrue(any("GER_hermann_goring" in x["message"] and x["severity"] == "error" for x in f), f)
