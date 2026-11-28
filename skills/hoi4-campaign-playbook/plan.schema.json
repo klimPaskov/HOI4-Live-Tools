@@ -1003,6 +1003,17 @@
           "default": true,
           "description": "true checks the politics lane (the plan's picks, then politics_auto) among the fast lanes at least once a game day, every tick while it buys; false leaves politics to its turn in the pass"
         },
+        "slow_reads": {
+          "type": "boolean",
+          "default": true,
+          "description": "true keeps a slow panel read (politics options, the air region probe, the diplomacy panel) for its span of the calendar while a war or an operation runs, so no war tick waits on it; an order of the same family forgets it; false reads every time"
+        },
+        "war_idle_hours": {
+          "type": "integer",
+          "default": 24,
+          "minimum": 1,
+          "description": "game hours the war step may go without a turn while an operation executes before the gate packet shows a FAIL line naming what ran instead"
+        },
         "war_every_tick": {
           "type": "boolean",
           "default": false,
@@ -7040,6 +7051,13 @@
           "minimum": 1,
           "x-owner": "executor",
           "description": "orders one tick's war burst may give: the war step is called again within the tick until no army has an order left, so every army gets its order in the tick that needs it"
+        },
+        "burst_hours": {
+          "type": "integer",
+          "default": 12,
+          "minimum": 1,
+          "x-owner": "executor",
+          "description": "game hours after which a tick's war burst of mouse orders gives the tick back (the rest go in the next tick), so one burst never holds the calendar for days"
         },
         "burst_seconds": {
           "type": "integer",

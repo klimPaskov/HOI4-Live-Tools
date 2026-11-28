@@ -632,8 +632,10 @@ fn a_war_burst_of_mouse_orders_gives_the_tick_back_once_half_a_game_day_has_pass
     // w101b (28 Nov 2026): one 84-second war burst ran 164 game hours
     let mut game = Game::new(false);
     game.step = 7;
-    let mut state = State::default();
-    state.last_hour = START;
+    let mut state = State {
+        last_hour: START,
+        ..Default::default()
+    };
     let plan = json!({"war": {"enabled": true}});
     let out = war_burst_for(&mut state, &game, &plan, "l", START, slow_order_step, 30)
         .unwrap()
