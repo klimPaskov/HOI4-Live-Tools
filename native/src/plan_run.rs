@@ -702,6 +702,19 @@ thread_local! {
     static INPUT_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     /// The executor's orders that the tool answered as sent in process (see [`reply_in_process`]).
     static IN_PROCESS_ORDERS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Tool -> whether its last order on this thread needed the input (see [`Metered`]): what the
+    /// war's turn by command alone defers (see `State::act`, `Sched::input_yield`).
+    static TOOL_INPUT: std::cell::RefCell<HashMap<String, bool>> = std::cell::RefCell::new(HashMap::new());
+}
+/// Whether tool `name`'s last order needed the input (None: no order of it yet on this thread).
+fn tool_last_input(name: &str) -> Option<bool> {
+    TOOL_INPUT.with(|m| m.borrow().get(name).copied())
+}
+/// Records whether tool `name`'s order needed the input.
+fn note_tool_input(name: &str, input: bool) {
+    TOOL_INPUT.with(|m| {
+        m.borrow_mut().insert(name.to_string(), input);
+    });
 }
 /// How many tool calls on this thread needed the input so far (see [`Metered`]).
 fn input_calls() -> u64 {
@@ -737,8 +750,12 @@ impl Tools for Metered<'_> {
             // is watched can the meter know that no input went out)
             Err(e) => e.code == "refused_by_game_check" && crate::pause_guard::input_watched(),
         };
-        if moved || (args.get("lease_token").is_some() && !by_command) {
+        let input = moved || (args.get("lease_token").is_some() && !by_command);
+        if input {
             INPUT_CALLS.with(|c| c.set(c.get() + 1));
+        }
+        if args.get("request_id").is_some() && out.is_ok() {
+            note_tool_input(name, input);
         }
         if args.get("request_id").is_some() && out.as_ref().is_ok_and(reply_in_process) {
             IN_PROCESS_ORDERS.with(|c| c.set(c.get() + 1));
@@ -930,6 +947,8 @@ pub struct State {
     op_events_now: bool,
     /// Each operation's last status line (digest).
     op_notes: BTreeMap<String, String>,
+    /// The slow panel reads kept across ticks (see [`SlowReads`]).
+    slow_reads: SlowCache,
 }
 
 /// What `run` knows about the persisted memory next to plan.json.
@@ -993,6 +1012,104 @@ struct Sched {
     first_turn: HashMap<&'static str, GameHour>,
     /// The pass's lanes (the ones the fairness promises a turn; see `lane_turns`' `starved`).
     pass_names: HashSet<&'static str>,
+    /// The war's turn runs while the lanes are owed the input: its orders by command go, an order
+    /// whose tool last needed the input is deferred (see `State::act`).
+    input_yield: bool,
+    /// Orders deferred by `input_yield` so far, and orders the executor dispatched so far.
+    yielded: u64,
+    acts_sent: u64,
+    /// The war step's offers while an operation executes (the gate's watchdog, see [`WarWatch`]).
+    war_watch: WarWatch,
+}
+
+/// THE WAR STEP'S WATCHDOG (engineer 105): the game hours between two offers of the war's turn
+/// while an operation executes, the longest such gap with what ran in it instead, and how many
+/// gaps passed the limit (`scheduler.war_idle_hours`, default [`WAR_IDLE_HOURS`]). The gate packet
+/// reads it from `lane_turns` (a FAIL line while any gap passed the limit). p101b (28 Nov 2026):
+/// 353 game hours between two war turns of op_poland while five ticks went to fast lanes and the
+/// fairness.
+#[derive(Default, Clone, Debug)]
+pub(super) struct WarWatch {
+    /// The hour of the last offer while an operation executed (None outside one).
+    last_offer: Option<GameHour>,
+    /// The hour of the last war turn that acted.
+    last_acted: Option<GameHour>,
+    /// The limit in force (game hours).
+    limit: GameHour,
+    /// Gaps between offers past the limit, and the longest gap (hours, from, to, what ran).
+    over: u32,
+    longest: Option<(GameHour, GameHour, GameHour, String)>,
+    /// The longest gap between two acting war turns while an operation executed.
+    longest_acted: GameHour,
+    /// Wall seconds per lane (and the war's own turn) since the last offer.
+    instead: BTreeMap<String, f64>,
+}
+
+/// The longest the war step may wait for its turn while an operation executes (game hours).
+const WAR_IDLE_HOURS: GameHour = DAY;
+
+impl WarWatch {
+    /// Wall seconds `secs` went to `what` since the war's last offer.
+    fn spent(&mut self, what: &str, secs: f64) {
+        *self.instead.entry(what.to_string()).or_insert(0.0) += secs;
+    }
+
+    /// What ran since the last offer, the costliest first; pure.
+    fn instead_line(&self) -> String {
+        let mut rows: Vec<(&String, &f64)> = self.instead.iter().collect();
+        rows.sort_by(|a, b| b.1.total_cmp(a.1));
+        if rows.is_empty() {
+            return "no turn ran (no tick)".into();
+        }
+        rows.iter()
+            .take(6)
+            .map(|(k, v)| format!("{k} {v:.1} s"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// The war's turn is offered at `now`; `executing`: an operation executes; `limit`: game hours.
+    fn offered(&mut self, now: GameHour, executing: bool, limit: GameHour) {
+        self.limit = limit;
+        if !executing {
+            self.last_offer = None;
+            self.last_acted = None;
+            self.instead.clear();
+            return;
+        }
+        if let Some(prev) = self.last_offer {
+            let gap = now.saturating_sub(prev);
+            if gap > limit {
+                self.over += 1;
+            }
+            if self.longest.as_ref().is_none_or(|l| gap > l.0) {
+                self.longest = Some((gap, prev, now, self.instead_line()));
+            }
+        }
+        self.last_offer = Some(now);
+        self.instead.clear();
+    }
+
+    /// The war's turn acted at `now` while an operation executed.
+    fn acted(&mut self, now: GameHour) {
+        if let Some(prev) = self.last_acted {
+            self.longest_acted = self.longest_acted.max(now.saturating_sub(prev));
+        }
+        self.last_acted = Some(now);
+    }
+
+    /// The gate's row; None before any offer while an operation executed; pure.
+    fn row(&self) -> Option<Value> {
+        let (gap, from, to, instead) = self.longest.clone()?;
+        Some(json!({"kind": "war_idle", "lane": "(war)",
+            "limit_hours": self.limit,
+            "over": self.over,
+            "longest_hours": gap,
+            "from": from,
+            "to": to,
+            "instead": instead,
+            "longest_acted_hours": self.longest_acted}))
+    }
 }
 
 impl Sched {
@@ -1193,6 +1310,9 @@ pub(super) fn lane_turns(state: &State, now: GameHour) -> Value {
         "ticks_per_day": per_day(state.sched.ticks, state.sched.first_hour),
         "lane_turns": state.sched.lane_turn_count,
         "lane_turns_per_day": per_day(state.sched.lane_turn_count, state.sched.first_hour)}));
+    if let Some(row) = state.sched.war_watch.row() {
+        rows.push(row);
+    }
     Value::Array(rows)
 }
 
@@ -1442,6 +1562,7 @@ impl Default for State {
             op_acting: false,
             op_events_now: false,
             op_notes: BTreeMap::new(),
+            slow_reads: SlowCache::new(),
         }
     }
 }
@@ -1958,6 +2079,22 @@ impl State {
                 self.sched.claims.entry(key).or_insert(lane);
             }
         }
+        // THE WAR'S TURN BY COMMAND ALONE (see `Sched::input_yield`): while the lanes are owed the
+        // input, the war is still offered in the tick; its orders by the game's own command go now
+        // (milliseconds), an order whose tool needed the input last time waits for the war's next
+        // input tick. Not a failure: the ledger does not count it.
+        if self.sched.input_yield && tool_last_input(name) == Some(true) {
+            self.sched.deferred = true;
+            self.sched.yielded += 1;
+            self.last_ok = Some(false);
+            return Ok((
+                false,
+                "deferred: the lanes have this tick's input; the order goes in the war's next \
+                 input turn"
+                    .to_string(),
+            ));
+        }
+        self.sched.acts_sent += 1;
         let clock = self.clock;
         if war_order(name) && self.war_bursting {
             if let Some(army) = args["army"].as_str().filter(|a| !a.is_empty()) {
@@ -2502,9 +2639,122 @@ pub fn tick(
     lease: &str,
     now: GameHour,
 ) -> Result<Tick> {
-    // every call of the tick through the cost meter (see `Metered`, `lanes_turns`)
+    // every call of the tick through the cost meter (see `Metered`, `lanes_turns`); the slow
+    // panel reads answered from the game hour's or day's first answer (see `SlowReads`) outside
+    // it, so an answer kept costs no input
     let metered = Metered { inner: tools };
-    let tools: &dyn Tools = &metered;
+    let cache = std::cell::RefCell::new(std::mem::take(&mut state.slow_reads));
+    let slow = SlowReads {
+        inner: &metered,
+        cache: &cache,
+        now,
+        // at war and while an operation runs (the ticks the war's turn waits on); in peace every
+        // read is fresh
+        on: plan["scheduler"]["slow_reads"] != json!(false)
+            && (state.war_active
+                || plan_operation::executing_any(state)
+                || plan_operation::preparing(state)),
+    };
+    let out = tick_inner(state, &slow, plan, lease, now);
+    state.slow_reads = cache.into_inner();
+    out
+}
+
+/// The slow reads through a panel (seconds of input each) and how long one answer stands: the
+/// politics view's options of a seat (0.9-10 s a read; the power and the picks change with an
+/// order of the lane, which forgets them), the air map's enemy superiority probe (4.4-13.6 s), and
+/// the diplomacy view's actions of a country (1.6-8.8 s; a declaration's readiness matters by the
+/// hour, so it stands a quarter day). w101b/w101c (28 Nov 2026): 26 politics reads (26 s), 10
+/// probes (41 s) and 18 diplomacy reads (72 s) in the war's ticks.
+const SLOW_READS: [(&str, GameHour); 3] = [
+    ("hoi4_politics_options", DAY),
+    ("hoi4_air_region_probe", DAY),
+    ("hoi4_diplomacy", DAY / 4),
+];
+
+/// The orders that change what a slow read shows (tool prefix -> the reads they forget).
+const SLOW_FORGET: [(&str, &str); 6] = [
+    ("hoi4_politics_", "hoi4_politics_options"),
+    ("hoi4_event_choose", "hoi4_politics_options"),
+    ("hoi4_decision_take", "hoi4_politics_options"),
+    ("hoi4_air_", "hoi4_air_region_probe"),
+    ("hoi4_diplomacy_act", "hoi4_diplomacy"),
+    ("hoi4_event_choose", "hoi4_diplomacy"),
+];
+
+/// (tool, arguments without the lease) -> (the hour read, the answer).
+type SlowCache = HashMap<String, (GameHour, Value)>;
+
+/// The executor's slow panel reads (SLOW_READS), answered from their first answer while it
+/// stands: until the end of the game day it was read in (a quarter day for the diplomacy view),
+/// or until an order that changes it (SLOW_FORGET). A failed read is not kept. `scheduler.
+/// slow_reads: false` reads every time.
+struct SlowReads<'a> {
+    inner: &'a dyn Tools,
+    cache: &'a std::cell::RefCell<SlowCache>,
+    now: GameHour,
+    on: bool,
+}
+
+/// The cache key of a slow read (None: not a slow read); pure.
+fn slow_key(name: &str, args: &Value) -> Option<(String, GameHour)> {
+    let (_, stands) = SLOW_READS.iter().find(|(n, _)| *n == name)?;
+    if args.get("request_id").is_some() {
+        return None;
+    }
+    let mut args = args.clone();
+    if let Some(o) = args.as_object_mut() {
+        o.remove("lease_token");
+    }
+    Some((format!("{name} {args}"), *stands))
+}
+
+/// Whether an answer read at `at` still stands at `now` for a read that stands `stands` hours:
+/// within the same span of `stands` hours of the game calendar; pure.
+fn slow_fresh(at: GameHour, now: GameHour, stands: GameHour) -> bool {
+    let stands = stands.max(1);
+    now >= at && now.div_euclid(stands) == at.div_euclid(stands)
+}
+
+impl Tools for SlowReads<'_> {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        if args.get("request_id").is_some() {
+            let forget: Vec<&str> = SLOW_FORGET
+                .iter()
+                .filter(|(p, _)| name.starts_with(p))
+                .map(|(_, r)| *r)
+                .collect();
+            if !forget.is_empty() {
+                self.cache
+                    .borrow_mut()
+                    .retain(|k, _| !forget.iter().any(|r| k.split(' ').next() == Some(*r)));
+            }
+            return self.inner.call(name, args);
+        }
+        let Some((key, stands)) = slow_key(name, args).filter(|_| self.on) else {
+            return self.inner.call(name, args);
+        };
+        if let Some((at, v)) = self.cache.borrow().get(&key) {
+            if slow_fresh(*at, self.now, stands) {
+                return Ok(v.clone());
+            }
+        }
+        let out = self.inner.call(name, args)?;
+        let now = self.now;
+        let mut cache = self.cache.borrow_mut();
+        cache.retain(|_, (at, _)| now >= *at && now - *at < 2 * DAY);
+        cache.insert(key, (now, out.clone()));
+        Ok(out)
+    }
+}
+
+fn tick_inner(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Tick> {
     state.clock = now;
     if plan["active"] == json!(false) {
         return Ok(Tick::Idle);
@@ -2970,13 +3220,10 @@ fn lanes_tick_inner(
     // rounds (w92c, 28 Nov 2026: 11 operation turns in 33 war days)
     let war_leads = war_first && op_war && !due;
     if !due && !war_leads {
-        if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
+        if let Some(line) =
+            lanes_first_turns(state, tools, plan, lease, now, &lanes, war_first && op_war)?
+        {
             return Ok(Tick::Acted(line));
-        }
-        if fair_turn_open(&state.sched, war_first && op_war, now) {
-            if let Some(line) = overdue_turns(state, tools, plan, lease, now, &lanes)? {
-                return Ok(Tick::Acted(line));
-            }
         }
     }
     // Before the war, a role an operation names that has no army takes the tick ahead of every
@@ -3037,31 +3284,31 @@ fn lanes_tick_inner(
     // lanes get a tick at the latest LANE_MAX_WAIT game hours after their last one. A lane tick
     // that finds nothing hands the tick back to the war (below), so the share costs the war
     // nothing when the economy is quiet.
+    // THE WAR STEP EVERY TICK (engineer 105): while an operation prepares or executes the war is
+    // offered in every tick, whatever the lanes are owed. When they are owed the input (WAR_SHARE
+    // input turns in a row, or LANE_MAX_WAIT since their last tick) the war's turn runs by command
+    // alone (`war_lane_turn`): its orders by the game's own command go now, its mouse orders wait
+    // for its next input tick, and the lanes take this tick's input. With a tick of 8-10 s at war
+    // (0.7-0.8 game days) the lanes were owed after every input tick, and the war had at best every
+    // other tick (w101b/w101c/p101b, 28 Nov 2026: 0.27-0.43 acting war ticks a war day, gaps of
+    // 187-353 game hours).
+    let owed = state.round.lanes_owed(now);
     let war_turn = war_first
         && (declaring
-            || (!state.round.lanes_owed(now)
-                && (!state.round.war_last
-                    || op_war
-                    || plan["scheduler"]["war_every_tick"] == json!(true))));
+            || op_war
+            || (!owed
+                && (!state.round.war_last || plan["scheduler"]["war_every_tick"] == json!(true))));
     if war_turn {
-        state.sched.war_tick = Some(state.sched.tick_no);
-        let before = input_calls();
-        if let Some(line) = war_lane(state, tools, plan, lease, now)? {
-            state.round.war_acted(now, input_calls() != before);
-            trace_lanes(now, "war_turn");
+        let by_command_only = op_war && owed && !declaring && !due;
+        if let Some(line) = war_lane_turn(state, tools, plan, lease, now, by_command_only)? {
             return Ok(Tick::Acted(line));
         }
     }
     // the operation led: the fast lanes and the fairness come right after its turn (a tick the
     // lanes are owed reaches them here too)
     if war_leads && !declaring {
-        if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
+        if let Some(line) = lanes_first_turns(state, tools, plan, lease, now, &lanes, true)? {
             return Ok(Tick::Acted(line));
-        }
-        if fair_turn_open(&state.sched, true, now) {
-            if let Some(line) = overdue_turns(state, tools, plan, lease, now, &lanes)? {
-                return Ok(Tick::Acted(line));
-            }
         }
     }
     if declaring {
@@ -3184,14 +3431,95 @@ fn lanes_tick_inner(
     }
     // every lane is quiet: the war takes the turn it left to them
     if war_first && !war_turn {
-        state.sched.war_tick = Some(state.sched.tick_no);
-        let before = input_calls();
-        if let Some(line) = war_lane(state, tools, plan, lease, now)? {
-            state.round.war_acted(now, input_calls() != before);
+        if let Some(line) = war_lane_turn(state, tools, plan, lease, now, false)? {
             return Ok(Tick::Acted(line));
         }
     }
     Ok(Tick::Nothing)
+}
+
+/// The fast lanes, then the fairness (see [`fast_lanes_turn`], [`overdue_turns`]); a turn of
+/// theirs that needed the input is the lanes' tick (`Round::lanes_turn`): the lanes are no longer
+/// owed, so the war's next turn has the input again. They returned before the pass's own
+/// `lanes_turn`, and the lanes stayed owed tick after tick while the war waited (p101b, 28 Nov
+/// 2026: five ticks of fast lanes and fairness, 353 game hours without a war turn).
+fn lanes_first_turns(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    lanes: &[Lane],
+    war_owed: bool,
+) -> Result<Option<String>> {
+    let before = input_calls();
+    let mut out = fast_lanes_turn(state, tools, plan, lease, now)?;
+    if out.is_none() && fair_turn_open(&state.sched, war_owed, now) {
+        out = overdue_turns(state, tools, plan, lease, now, lanes)?;
+    }
+    if out.is_some() && input_calls() != before {
+        state.round.war_last = false;
+        state.round.lanes_turn(now);
+    }
+    Ok(out)
+}
+
+/// One offer of the war's turn (the scheduler's `war_lane` with its bookkeeping): the watchdog
+/// counts the offer (and what ran since the last one), `by_command_only` defers the turn's
+/// orders that need the input (see `Sched::input_yield`). A turn whose every order was deferred
+/// gives the tick back (None). Its orders bounded by game hours (see [`war_burst_for`]).
+fn war_lane_turn(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    by_command_only: bool,
+) -> Result<Option<String>> {
+    // one war turn a tick (again only while its orders go by command: see `close_turn`)
+    if state.sched.tick_turned.contains("war") {
+        return Ok(None);
+    }
+    state.sched.war_tick = Some(state.sched.tick_no);
+    let executing = plan_operation::executing_any(state);
+    let limit = plan["scheduler"]["war_idle_hours"]
+        .as_i64()
+        .filter(|h| *h > 0)
+        .unwrap_or(WAR_IDLE_HOURS);
+    for (lane, secs) in std::mem::take(&mut state.round.since_war) {
+        state.sched.war_watch.spent(lane, secs);
+    }
+    state.sched.war_watch.offered(now, executing, limit);
+    let before = input_calls();
+    let sent = state.sched.acts_sent;
+    let yielded = state.sched.yielded;
+    let started = std::time::Instant::now();
+    state.sched.input_yield = by_command_only;
+    let out = war_lane(state, tools, plan, lease, now);
+    state.sched.input_yield = false;
+    let line = out?;
+    state
+        .sched
+        .war_watch
+        .spent("war turn", started.elapsed().as_secs_f64());
+    let deferred = state.sched.yielded - yielded;
+    if by_command_only && deferred > 0 {
+        trace_lanes(
+            now,
+            &format!("war_turn by command: {deferred} order(s) wait for its input turn"),
+        );
+    }
+    // every order of the turn waited for the input: nothing was done, the lanes have the tick
+    let line = line.filter(|_| !(by_command_only && state.sched.acts_sent == sent && deferred > 0));
+    let Some(line) = line else {
+        return Ok(None);
+    };
+    state.round.war_acted(now, input_calls() != before);
+    if executing {
+        state.sched.war_watch.acted(now);
+    }
+    trace_lanes(now, "war_turn");
+    Ok(Some(line))
 }
 
 /// Every pass lane gets a turn within [`FAIR_MAX_WAIT`] game days: one whose last turn (or, never
@@ -4667,6 +4995,8 @@ struct Round {
     /// while the game runs (a moving mean; see `pace_at`).
     pace: Option<(std::time::Instant, GameHour)>,
     hours_per_sec: f64,
+    /// Wall seconds per lane since the war's last offer (moved into the watchdog at each offer).
+    since_war: HashMap<&'static str, f64>,
 }
 
 impl Round {
@@ -4694,8 +5024,14 @@ impl Round {
 
     /// Lane `name`'s step returned (`acted`: it gave an order) after it began at `started`.
     fn timed(&mut self, name: &'static str, acted: bool, started: std::time::Instant) {
+        let secs = started.elapsed().as_secs_f64();
         if acted {
-            self.secs.insert(name, started.elapsed().as_secs_f64());
+            self.secs.insert(name, secs);
+        }
+        // what took the wall since the war's last offer (the watchdog's `instead`), quiet turns
+        // that read through a panel included
+        if acted || secs >= 0.5 {
+            *self.since_war.entry(name).or_insert(0.0) += secs;
         }
     }
 
@@ -5638,6 +5974,8 @@ fn war_burst(
     war_burst_for(state, tools, plan, lease, now, step, max_seconds)
 }
 
+/// Game hours a war burst may let pass before it gives the tick back (see [`war_burst_for`]).
+const WAR_BURST_HOURS: GameHour = 12;
 /// Seconds of a tick the air burst may hold while an operation runs.
 const AIR_TICK_SECONDS: u64 = 6;
 /// Game hours the air waits at most behind the land orders of an executing operation.
@@ -5659,6 +5997,15 @@ fn war_burst_for(
 ) -> Result<Option<String>> {
     let cfg = &plan["war"];
     let max_orders = cfg["burst_orders"].as_u64().unwrap_or(16).max(1) as usize;
+    // A burst ends once the game has run `war.burst_hours` (default WAR_BURST_HOURS) since it
+    // began: the rest goes in the next tick, which offers the war first again with fresh reads,
+    // and the events and the lanes' input come between (w101b, 28 Nov 2026: one 84-second war
+    // burst of mouse orders ran 164 game hours and the next war turn came a week later).
+    let max_hours = cfg["burst_hours"]
+        .as_i64()
+        .filter(|h| *h > 0)
+        .unwrap_or(WAR_BURST_HOURS);
+    let hour0 = state.last_hour;
     let began = std::time::Instant::now();
     let mut lines: Vec<String> = Vec::new();
     let mut any_ok = false;
@@ -5677,6 +6024,14 @@ fn war_burst_for(
             any_ok |= ok;
             lines.push(line);
             if began.elapsed().as_secs() >= max_seconds {
+                break;
+            }
+            // the clock is read only after an order that took a second or more (a mouse order);
+            // orders by command take milliseconds and never end the burst
+            if began.elapsed() >= Duration::from_secs(1)
+                && hour0 > 0
+                && game_hour(state, tools).saturating_sub(hour0) >= max_hours
+            {
                 break;
             }
         }
