@@ -28,7 +28,7 @@
 //! Wings that `air_plan` names, attached wings and carrier wings are never touched. One order per
 //! call: a mission batch for one (mission, region), or the rebases to one base.
 //!
-//! Plan key: `air_situation` true or {"enabled":true,"fighter_ratio":1.5,"min_coverage":0.5,
+//! Plan key: `air_situation` {} (all defaults) or {"enabled":true,"fighter_ratio":1.5,"min_coverage":0.5,
 //! "every_days":3,"probe_regions":2,"probe_days":7,"stay_out":true,"roles":["fighter","cas"]}; a
 //! roleplay goal can switch it off (`enabled:false`) or bias it (`fighter_ratio`, `stay_out:false`).
 //! Off unless the plan names it: the live session in LIVE_VALIDATION_QUEUE (air-situation) gates the
@@ -357,7 +357,7 @@ fn role(kind: &str) -> Option<&'static str> {
 }
 
 /// The lane step (plan_military LANES `air_situation`).
-pub(super) fn step(
+pub(super) fn air_situation_step(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,

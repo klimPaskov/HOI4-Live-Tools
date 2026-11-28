@@ -269,7 +269,7 @@ pub(super) const LANES: [super::Lane; 8] = [
     ("casualties", casualty_rule),
     ("air_superiority", air_superiority_rule),
     ("air_attach", air_attach_rule),
-    ("air_situation", super::plan_air::step),
+    ("air_situation", super::plan_air::air_situation_step),
     ("army_groups", army_group_step),
     ("navy", navy_step),
 ];
