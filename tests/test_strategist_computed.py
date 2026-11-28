@@ -16,7 +16,7 @@ class ComputedTest(unittest.TestCase):
                                 data)
         self.assertEqual(rows[0]["difference"], round(1.786 - 1.92, 4))
         self.assertEqual(rows[1]["computed"], "construction1")
-        self.assertIsNone(rows[1]["difference"])
+        self.assertEqual(rows[1]["difference"], "differs")
 
     def test_country_knowledge(self):
         self.assertIn("germany-fair.md", computed.references_for("Germany", "GER"))

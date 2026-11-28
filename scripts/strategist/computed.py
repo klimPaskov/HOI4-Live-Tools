@@ -59,6 +59,10 @@ def compare(claims, data):
         diff = None
         if isinstance(got, (int, float)) and isinstance(says, (int, float)):
             diff = round(got - says, 4)
+        elif got is None:
+            diff = "not computed"
+        else:
+            diff = "same" if got == says else "differs"
         rows.append({"what": c.get("what"), "guide": says, "computed": got, "difference": diff,
                      "where": c.get("where")})
     return rows
