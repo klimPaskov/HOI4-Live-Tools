@@ -62,3 +62,62 @@ class ProductionRealGameTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+UNITS = """
+sub_units = {
+	infantry = { group = infantry combat_width = 2 manpower = 1000 training_time = 90 need = { infantry_equipment = 100 } }
+	artillery = { group = support regimental = no combat_width = 0 manpower = 500 training_time = 120
+		need = { artillery_equipment = 12 support_equipment = 5 } }
+}
+"""
+TRAINING_DEFINES = """
+NDefines.NCountry.MIN_POSSIBLE_TRAINING_MANPOWER = 10000
+NDefines.NCountry.MIN_FIELD_TO_TRAINING_MANPOWER_RATIO = 0.75
+"""
+
+
+class TrainingSizeTest(unittest.TestCase):
+    """How many divisions of a template to keep in training at once (the owner's question of 28 Nov)."""
+
+    def sit(self, **state):
+        base = {"techs": ["e_inf"], "stockpile": {"infantry_equipment": 1000, "artillery_equipment": 100,
+                                                  "support_equipment": 100},
+                "production_output": {"infantry_equipment": 2.0}, "manpower": 20000, "field_manpower": 5000}
+        base.update(state)
+        return fx.situation(state=base, extra={"common/units/infantry.txt": UNITS,
+                                               "common/defines/zz_e121.lua": TRAINING_DEFINES})
+
+    def test_terms_and_binding(self):
+        r = production.training(self.sit(), "Line", count=10, need_date="1937.1.1")
+        self.assertEqual(r["training_days"], 120)                     # the longest sub-unit training_time
+        self.assertEqual(r["terms"]["equipment"], 6)                  # (1000 + 2 x 120) / 200 infantry equipment
+        self.assertEqual(r["terms"]["manpower"], 8)                   # 20000 / 2500
+        self.assertEqual(r["terms"]["cap"], 4)                        # max(10000, 0.75 x 5000) / 2500
+        self.assertEqual(r["terms"]["rate"], 4)                       # ceil(10 / (365 // 120))
+        self.assertEqual(r["in_training"], 4)
+        self.assertEqual(sorted(r["binding"]), ["cap", "rate"])
+        self.assertEqual(r["lines"], 1)
+
+    def test_equipment_binds_and_says_so(self):
+        r = production.training(self.sit(stockpile={}, production_output={}), "Line", count=10, need_date="1937.1.1")
+        self.assertEqual(r["in_training"], 0)
+        self.assertIn("equipment", r["binding"])
+        self.assertIn("nothing to train yet", r["note"])
+
+    def test_training_already_running_lowers_the_cap(self):
+        r = production.training(self.sit(training_manpower=5000), "Line")
+        self.assertEqual(r["terms"]["cap"], 2)                        # (10000 - 5000) / 2500
+        self.assertNotIn("rate", r["terms"])                          # no count: as many as the means allow
+        self.assertEqual(r["in_training"], 2)
+
+
+@unittest.skipUnless(fx.real_situation("GER") is not None, "installed game not found (HOI4_EVAL_GAME / HOI4_DIR)")
+class TrainingRealGameTest(unittest.TestCase):
+    def test_germany_line_divisions(self):
+        r = production.training(fx.real_situation("GER"), "Infanterie-Division", count=20, need_date="1939.9.1",
+                                enemies=["POL"])
+        self.assertGreater(r["training_days"], 0)
+        self.assertIn("manpower", r["terms"])
+        self.assertIn("cap", r["terms"])
+        self.assertLessEqual(r["in_training"], 20)

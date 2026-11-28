@@ -5,6 +5,9 @@
     evaluate.py template ROLE --country TAG [--date D] [--enemy TAG] [--width N]
     evaluate.py research --country TAG [--date D] [--slots N]
     evaluate.py production --country TAG [--date D] [--need-date D]
+    evaluate.py training ROLE|TEMPLATE --country TAG [--count N] [--need-date D]   (divisions in training at once;
+                     live snapshot keys: stockpile, production_output {equipment: units a day}, manpower,
+                     field_manpower, training_manpower)
     evaluate.py construction --country TAG [--date D] [--war-date D]
     evaluate.py force --country TAG --enemy TAG [--date D]
     evaluate.py doctrine --country TAG [--date D]
@@ -335,6 +338,32 @@ def text_production(r):
     return out
 
 
+def text_training(r):
+    if r.get("error"):
+        return [f"TRAINING {r['role']}: {r['error']}"]
+    out = [f"TRAINING {r['template']} for {r.get('country', '')} at {r.get('date', '')}: {r['training_days']:g} days "
+           f"({r['training_days_why']})",
+           f"  IN TRAINING AT ONCE: {r['in_training']} (one deployment line of {r['in_training']}); binding: "
+           f"{', '.join(r['binding'])}"]
+    for k, v in r["terms"].items():
+        out.append(f"  {k}: {v} = {r['why'][k]}")
+    if r.get("fielded_by_need_date") is not None:
+        out.append(f"  fielded by {r['need_date']}: {r['fielded_by_need_date']}" +
+                   (f" of {r['count']}" if r.get("count") else ""))
+    out.append(f"  output: {r['output_from']}")
+    if r.get("note"):
+        out.append(f"  {r['note']}")
+    out.append("  method: " + r["method"])
+    return out
+
+
+def cmd_training(a, sit):
+    from hoi4facts.evaluators import production
+    r = production.training(sit, a.role, count=a.count, need_date=a.need_date, enemies=a.enemy or None)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_training(r)
+
+
 def cmd_production(a, sit):
     from hoi4facts.evaluators import production
     add = {}
@@ -395,7 +424,7 @@ def cmd_doctrine(a, sit):
     return r, text_doctrine(r)
 
 
-COMMANDS = {"research": cmd_research, "air": cmd_air, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template, "construction": cmd_construction, "variant": cmd_variant, "convert": cmd_convert, "force": cmd_force, "doctrine": cmd_doctrine, "production": cmd_production}
+COMMANDS = {"training": cmd_training, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template, "construction": cmd_construction, "variant": cmd_variant, "convert": cmd_convert, "force": cmd_force, "doctrine": cmd_doctrine, "air": cmd_air}
 
 
 def parser():
@@ -438,6 +467,9 @@ def parser():
                    help="offensive lengths the planning bonus is averaged over")
     p = add("production")
     p.add_argument("--need-date", required=True, help="the date the equipment must be in the stockpile")
+    p = add("training", "role")
+    p.add_argument("--count", type=int, default=None, help="divisions of it still wanted by --need-date")
+    p.add_argument("--need-date", default=None)
     p.add_argument("--add", action="append", default=[], help="ROLE=N divisions to add (templates from evaluator 2)")
     p = add("research")
     p.add_argument("--slots", type=int, default=None)
