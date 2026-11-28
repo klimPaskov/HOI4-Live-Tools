@@ -878,6 +878,22 @@ class Lint:
         return self.game.cached(f"lint:startctl:{self.tag}:{self.start}",
                                 lambda: derive.tag_provinces(self.game, self.ctx, [self.tag], self.start))
 
+    def start_owners(self):
+        """{state id: owner tag} at the plan's start."""
+        return self.game.state_owners(self.ctx, self.start)
+
+    def capitulation_days(self):
+        """{tag: earliest day the plan has it capitulated}: a checkpoint's `by` or a goal's `by` whose `must` /
+        `done` names capitulated:<tag>."""
+        out = {}
+        for c in self.list_of("checkpoints") + self.list_of("goals"):
+            d = derive.day(c.get("by")) if c.get("by") else None
+            if d is None:
+                continue
+            for tag in re.findall(r"capitulated:([A-Z][A-Z0-9]{2})", json.dumps([c.get("must"), c.get("done")])):
+                out[tag] = min(out.get(tag, d), d)
+        return out
+
     def targets(self):
         """vp_targets in plan order ("order" when every entry has one)."""
         t = self.list_of("vp_targets")
@@ -912,6 +928,22 @@ class Lint:
             last = max((i for i, e in enumerate(targets) if e.get("state") == w[1]), default=-1)
             for x in targets[:last + 1]:
                 ctl.update(self.captures(x))
+            # a country that capitulates hands each of its states to whoever holds ground in it: once the plan
+            # has it capitulated (its checkpoint or goal date) by the day the trigger state's targets fall, every
+            # state of it where the plan has taken a target by then is controlled whole (a capitulated country's
+            # land in our zone is never captured target by target; the partner's zone has no target of ours)
+            days = [derive.day(e["by"]) for e in targets[:last + 1] if e.get("by") and derive.day(e["by"]) is not None]
+            if days:
+                fire = max(days)
+                owner = self.start_owners()
+                for tag, cap in self.capitulation_days().items():
+                    if cap > fire:
+                        continue
+                    for e in targets:
+                        sid = e.get("state")
+                        by = derive.day(e["by"]) if e.get("by") else None
+                        if isinstance(sid, int) and by is not None and by <= fire and owner.get(sid) == tag:
+                            ctl.update(self.states().get(sid, {}).get("provinces", []))
         elif kind == "owner" and w[2] == self.tag:
             ctl.update(self.states().get(w[1], {}).get("provinces", []))
         return ctl
@@ -1158,6 +1190,30 @@ class Lint:
         end = max(ends) if ends else (derive.day(self.goal["deadline"]) if self.goal.get("deadline") else None)
         return start, end, enemies
 
+    def focus_holds(self, listed):
+        """{focus: day} from the plan's focus_when (the executor keeps a listed focus while its predicate does not
+        hold, plan_focus): the day its date atoms hold and, for `divisions:<template> >= N`, the first day the
+        army forecast (conditions.Timeline, the plan's training) fields N of that template. A predicate with
+        nothing datable holds no day (None: the focus is not held in the walk)."""
+        fw = self.plan.get("focus_when") if isinstance(self.plan.get("focus_when"), dict) else {}
+        out = {}
+        fc = None
+        for k, pred in fw.items():
+            if k not in listed or pred is None:
+                continue
+            days = [derive.day(d) for d in predicate_dates(pred, self.table) if derive.day(d) is not None]
+            for t, op, n in re.findall(r"divisions:([^\"<>=!]+?)\s*(>=|>)\s*(\d+)", json.dumps(pred, ensure_ascii=False)):
+                if fc is None:
+                    conditions = __import__((__package__ or "hoi4facts") + ".conditions", fromlist=["Timeline"])
+                    fc = conditions.Timeline(self).forecast()
+                need = int(n) + (1 if op == ">" else 0)
+                hit = next((fc["rows"][i][0] for i, bt in enumerate(fc["by_template"])
+                            if bt.get(t.strip(), 0) >= need), None)
+                days.append(hit if hit is not None else derive.day(self.start) + 100 * 365)
+            if days:
+                out[k] = max(days)
+        return out
+
     def focus_slot(self, path, fallback, tree, fmeta, days_per):
         """focus.available, focus.idle, focus.unconfirmed: the focus slot walked through the plan's own
         conditions (plan_gates.focus_schedule)."""
@@ -1186,6 +1242,14 @@ class Lint:
         changes = [d for d in (war_start, war_end) if d is not None]
         sched = plan_gates.focus_schedule(path, fallback, tree, fmeta, days_per, start, horizon, facts_at,
                                           self.meta.get("completed_focuses", []), changes)
+        # focus_when: the army forecast that dates a hold reads the focus timeline (factories from focuses), so
+        # the slot is walked once without holds, the holds are dated on that timeline, and the slot walked again
+        self._focus_done = [(int(r["end"]), r["focus"]) for r in sched["rows"]]
+        holds = self.focus_holds(path + fallback)
+        if holds:
+            sched = plan_gates.focus_schedule(path, fallback, tree, fmeta, days_per, start, horizon, facts_at,
+                                              self.meta.get("completed_focuses", []), changes, holds=holds)
+            self.facts["focus"]["holds"] = {k: derive.fmt(derive.date_of(int(d))) for k, d in holds.items()}
         day = lambda d: derive.fmt(derive.date_of(int(d)))  # noqa: E731
         self._focus_done = [(int(r["end"]), r["focus"]) for r in sched["rows"]]
         self.facts["focus"]["schedule"] = [dict(r, start=day(r["start"]), end=day(r["end"])) for r in sched["rows"]]

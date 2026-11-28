@@ -37,7 +37,53 @@ def evaluate(block, facts):
     """True / False / None of a trigger block (implicit AND) under the plan's facts."""
     if not isinstance(block, list):
         return None
-    return _and(_one(k, v, op, facts) for k, v, op in _pairs(block))
+    return _and(r for r, _ in _units(_pairs(block), facts))
+
+
+def _units(pairs, facts):
+    """[(result, [(key, value, op), ...])] of a trigger block's lines, an `if` with its `else_if` / `else`
+    siblings taken as one unit: its value is the branch its `limit` picks; when the limit cannot be decided,
+    the unit is False only if every branch (a missing `else` is an open one) is False, True only if every one
+    is True."""
+    pairs = list(pairs)
+    out, i = [], 0
+    while i < len(pairs):
+        k, v, op = pairs[i]
+        if (k or "").lower() != "if" or not isinstance(v, list):
+            out.append((_one(k, v, op, facts), [pairs[i]]))
+            i += 1
+            continue
+        chain = [pairs[i]]
+        i += 1
+        while i < len(pairs) and (pairs[i][0] or "").lower() in ("else_if", "else") and isinstance(pairs[i][1], list):
+            chain.append(pairs[i])
+            i += 1
+            if (chain[-1][0] or "").lower() == "else":
+                break
+        out.append((_chain(chain, facts), chain))
+    return out
+
+
+def _chain(chain, facts):
+    """An if / else_if / else chain: the value of the branch its limits pick; while a limit cannot be decided,
+    every branch it may pick counts (False only if all of them are False, True only if all are True)."""
+    possible = []
+    for k, v, _ in chain:
+        lim = [b for a, b, _ in _pairs(v) if (a or "").lower() == "limit"]
+        body = [(a, b) for a, b, _ in _pairs(v) if (a or "").lower() != "limit"]
+        took = True if (k or "").lower() == "else" else (evaluate(lim[0], facts) if lim else True)
+        if took is False:
+            continue
+        possible.append(evaluate(body, facts) if body else True)
+        if took is True:
+            break
+    else:
+        possible.append(True)  # no branch surely taken and no else: the chain may ask nothing
+    if all(r is False for r in possible):
+        return False
+    if all(r is True for r in possible):
+        return True
+    return None
 
 
 def _yes(value, fact):
@@ -52,7 +98,8 @@ def _one(key, value, op, facts):
     if k in WRAPPERS:
         if not isinstance(value, list):
             return None
-        return _and(_one(a, b, o, facts) for a, b, o in _pairs(value) if (a or "").lower() not in WRAPPER_TEXT_KEYS)
+        return _and(r for r, _ in _units([(a, b, o) for a, b, o in _pairs(value)
+                                           if (a or "").lower() not in WRAPPER_TEXT_KEYS], facts))
     if k == "and":
         return evaluate(value, facts)
     if k == "or":
@@ -89,8 +136,15 @@ def blocking(block, facts):
     if not isinstance(block, list):
         return out
     from .script import render
-    for k, v, op in _pairs(block):
-        if _one(k, v, op, facts) is False:
+    for res, unit in _units(_pairs(block), facts):
+        if res is not False:
+            continue
+        if len(unit) > 1 or (unit[0][0] or "").lower() == "if":
+            for _, v, _ in unit:  # a closed if / else chain: what closes each branch
+                out += blocking([(a, b) for a, b, _ in _pairs(v) if (a or "").lower() != "limit"], facts)
+            continue
+        k, v, op = unit[0]
+        if True:
             kl = (k or "").lower()
             if kl in WRAPPERS + ("and",) and isinstance(v, list):
                 inner = blocking([(a, b) for a, b in v if (a or "").lower() not in WRAPPER_TEXT_KEYS], facts)
@@ -100,12 +154,14 @@ def blocking(block, facts):
     return out
 
 
-def focus_schedule(path, fallback, tree, meta, days_per, start, horizon, facts_at, done=(), changes=()):
+def focus_schedule(path, fallback, tree, meta, days_per, start, horizon, facts_at, done=(), changes=(), holds=None):
     """Walk the focus slot from day `start` to `horizon` (day numbers).
 
     path / fallback: focus ids in plan order; tree: {focus: {"prereq": [set], "exclusive": set}}; meta:
     {focus: {"available": block or None, "cost": float}}; facts_at(day, completed) -> Facts; changes: days on
-    which the plan's conditions change (a war starts or ends), so a blocked slot is tried again then.
+    which the plan's conditions change (a war starts or ends), so a blocked slot is tried again then; holds:
+    {focus: day} the plan's focus_when keeps a focus from starting before (the executor takes the next listed
+    focus meanwhile); the slot is tried again on each such day.
 
     Each time the slot is free the first focus of the path, then of the fallback, that can start is taken:
     prerequisites done, no exclusive focus done, `available` not False. Returns
@@ -119,9 +175,10 @@ def focus_schedule(path, fallback, tree, meta, days_per, start, horizon, facts_a
               victory), directly or through another waiting focus; when that happens is not in the plan
     """
     done = set(done)
+    holds = {k: d for k, d in (holds or {}).items() if d is not None}
     listed = [(k, "path") for k in path] + [(k, "fallback") for k in fallback]
     rows, idle = [], []
-    changes = sorted(d for d in set(changes) if start < d < horizon)
+    changes = sorted(d for d in set(changes) | set(holds.values()) if start < d < horizon)
     last_why = {}
 
     def state(k, day):
@@ -135,6 +192,8 @@ def focus_schedule(path, fallback, tree, meta, days_per, start, horizon, facts_a
         hit = sorted(info["exclusive"] & done)
         if hit:
             return False, "mutually exclusive with " + ", ".join(hit)
+        if day < holds.get(k, day):
+            return False, "held by the plan's focus_when until day %d" % holds[k]
         gate = (meta.get(k) or {}).get("available")
         if not gate:
             return True, None
@@ -144,11 +203,35 @@ def focus_schedule(path, fallback, tree, meta, days_per, start, horizon, facts_a
             return False, "not available: " + "; ".join(blocking(gate, facts) or ["its gate is closed"])
         return r, None
 
+    # a listed focus the game itself works on once its prerequisites are done (its gate is closed for the player
+    # in every branch, the open branch only shows a script's in-progress flag: Germany's inner-circle focuses,
+    # worked on by the ascended advisor) runs beside the slot for its own cost and takes no slot time
+    side = {k for k, _ in listed if worked_by_script(k, meta)}
+    side_rows = []
+
+    def side_step(t_now):
+        for k in sorted(side):
+            if k in done or k not in tree:
+                continue
+            ends = []
+            for block in tree[k]["prereq"]:
+                hit = [r["end"] for r in rows + side_rows if r["focus"] in block]
+                if not hit and not block & done:
+                    break
+                ends.append(min(hit) if hit else start)
+            else:
+                s0 = max(ends) if ends else start
+                if s0 <= t_now:
+                    dur = max(1.0, float((meta.get(k) or {}).get("cost", 1.0)) * days_per)
+                    side_rows.append({"focus": k, "start": s0, "end": s0 + dur, "from": "script", "gate": None})
+                    done.add(k)
+
     t = start
     while t < horizon:
+        side_step(t)
         pick = None
         for k, src in listed:
-            if k in done:
+            if k in done or k in side:
                 continue
             ok, why = state(k, t)
             if ok is False:
@@ -163,11 +246,13 @@ def focus_schedule(path, fallback, tree, meta, days_per, start, horizon, facts_a
             done.add(k)
             t += dur
             continue
-        left = [k for k, _ in listed if k not in done]
+        left = [k for k, _ in listed if k not in done and k not in side]
         nxt = next((d for d in changes if d > t), horizon) if left else horizon
         idle.append({"from": t, "to": nxt, "exhausted": not left,
                      "blocked": [{"focus": k, "why": last_why.get(k, "")} for k in left]})
         t = nxt
+    side_step(horizon)
+    rows = sorted(rows + [r for r in side_rows if r["start"] < horizon], key=lambda r: r["start"])
     stuck = {k: src for k, src in listed if k not in done and k in last_why}
     waiting = {}
     grew = True
@@ -187,6 +272,21 @@ def focus_schedule(path, fallback, tree, meta, days_per, start, horizon, facts_a
     never = [{"focus": k, "list": src, "why": last_why[k]} for k, src in stuck.items() if k not in waiting]
     wait = [{"focus": k, "list": stuck[k], "why": last_why[k], "on": on} for k, on in waiting.items()]
     return {"rows": rows, "idle": idle, "never": never, "waiting": wait}
+
+
+def worked_by_script(focus, meta):
+    """A focus closed to the player whose gate's open branch is a script's in-progress flag (an `if` on
+    has_country_flag): the game starts and completes it itself (Germany's inner-circle focuses: the ascended
+    advisor works on them for the focus's cost)."""
+    if not scripted(focus, meta):
+        return False
+    gate = (meta.get(focus) or {}).get("available") or []
+    for k, v, _ in _pairs(gate):
+        if (k or "").lower() == "if" and isinstance(v, list):
+            for a, b, _ in _pairs(v):
+                if (a or "").lower() == "limit" and "has_country_flag" in repr(b):
+                    return True
+    return False
 
 
 def scripted(focus, meta):

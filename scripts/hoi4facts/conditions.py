@@ -262,8 +262,25 @@ class Timeline:
             cap = e.get("cap") if isinstance(e.get("cap"), int) else (
                 rules.get("cap") if rules.get("cap_template") in (None, e["template"]) and
                 isinstance(rules.get("cap"), int) else None)
-            lines.append({"template": e["template"], "from": first, "until": last, "queue": float(q), "cap": cap,
-                          "days": train_days(e["template"])})
+            # queue_from (the executor's row_queue): the last entry whose date has come replaces `queue`, so one
+            # row is a run of stages, each its own line between its date and the next one's
+            stages = [(first, float(q))]
+            for step in sorted((s for s in e.get("queue_from") or [] if isinstance(s, dict)
+                                and isinstance(s.get("queue"), (int, float)) and derive.day(s.get("from")) is not None),
+                               key=lambda s: derive.day(s["from"])):
+                d = derive.day(step["from"])
+                if d <= first:
+                    stages = [(first, float(step["queue"]))]
+                else:
+                    stages.append((d, float(step["queue"])))
+            for i, (frm, qq) in enumerate(stages):
+                until = stages[i + 1][0] if i + 1 < len(stages) else None
+                if last is not None:
+                    if frm >= last:
+                        break
+                    until = last if until is None else min(until, last)
+                lines.append({"template": e["template"], "from": frm, "until": until, "queue": qq, "cap": cap,
+                              "days": train_days(e["template"])})
         total_cap = rules.get("cap") if isinstance(rules.get("cap"), int) and not rules.get("cap_template") else None
         count = Counter({k: float(v) for k, v in divs.items()})
         # equipment: the start stockpile less the start divisions' shortfall (reinforcement comes first), plus
@@ -301,6 +318,7 @@ class Timeline:
         rows = []
         by_template = []
         limits = []
+        stocks = []  # the equipment pool each week before training draws on it (None when not counted)
         end = self.forecast_end()
         day = self.start
         obs_day, obs = self.observed_army()
@@ -335,6 +353,7 @@ class Timeline:
                     made_ic = sum(n * lt.factory_speed(day) * lt.efficiency(e0, b, day) / 100.0 for b, n in idle)
                     for f, x in ic.items():
                         stock[f] += made_ic * x / sum(ic.values()) / ic_cost[f] * 7
+            stocks.append({f: round(max(0.0, x), 1) for f, x in stock.items()} if stock is not None else None)
             training = Counter()
             for _, t, n in started:
                 training[t] += n
@@ -371,7 +390,7 @@ class Timeline:
             limits.append(limit)
             day += 7
         self._forecast[equipment] = {"rows": rows, "by_template": by_template, "start": start_n, "lines": lines,
-                          "limits": limits, "equipment_counted": stock is not None,
+                          "limits": limits, "equipment_counted": stock is not None, "stock": stocks,
                           "manpower_per_division": {t: mp(t) for t in count}}
         return self._forecast[equipment]
 
