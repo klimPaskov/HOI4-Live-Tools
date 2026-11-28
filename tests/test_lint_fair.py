@@ -246,10 +246,11 @@ class Seeded(unittest.TestCase):
         self.assertHit(plan("JAP", faction={"join": "GER"}), "fair.factions", text="joins GER")
         self.assertHit(plan("ITA", diplomacy=[dip("join_faction", "JAP")]), "fair.factions")
 
-    def test_volunteers(self):
-        self.assertHit(plan("GER", diplomacy=[dip("send_volunteers", "CHI")]), "fair.volunteers")
-        self.assertClean(plan("GER", diplomacy=[dip("send_volunteers", "SPR")]), "fair.volunteers")
-        self.assertHit(plan("USA", diplomacy=[dip("send_volunteers", "CHI")]), "fair.volunteers", "warning", "6 div")
+    def test_volunteers_and_lend_lease_are_allowed_under_fair(self):
+        # the owner's decision of 28 Nov 2026: volunteers, air volunteers, lend-lease and attaches are FAIR
+        for tag, target in (("GER", "CHI"), ("GER", "SPR"), ("USA", "CHI"), ("SOV", "ENG")):
+            self.assertClean(plan(tag, diplomacy=[dip("send_volunteers", target)]), "fair.volunteers")
+        self.assertClean(plan("FRA", diplomacy=[dip("start_lend_lease", "ENG")]), "fair.france")
 
     # ------------------------------------------------------------------ nation rules
     def test_war_timing(self):
@@ -319,8 +320,6 @@ class Seeded(unittest.TestCase):
         line = {"template": "Division d'Infanterie", "deploy_state": algeria,
                 "only_if_stockpile": {"infantry_equipment": 1}}
         self.assertHit(plan("FRA", training=line), "fair.france", text="outside mainland Europe")
-        self.assertHit(plan("FRA", diplomacy=[dip("start_lend_lease", "ENG")]), "fair.france", text="lend-lease")
-        self.assertClean(plan("FRA", diplomacy=[dip("start_lend_lease", "SPR")]), "fair.france")
 
     def test_licensed_plane_designs(self):
         design = {"id": "d_lic", "kind": "plane", "base": "small_plane_airframe_2", "modules": {}}

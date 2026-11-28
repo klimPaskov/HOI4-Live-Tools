@@ -613,6 +613,47 @@ pub(super) fn enemy_provinces(
         .collect()
 }
 
+/// Rough ground for an attack: the terrain's attack modifier is below zero or the state's history
+/// fortifies it. Pure.
+pub(super) fn rough(p: &Prov) -> bool {
+    p.attack < 0.0 || p.forts > 0
+}
+
+/// THE ARROW'S ENTRY (pure): the first province of an arrow's path (as the game routed it) that
+/// is the enemy's (`theirs`), the province its attack concentrates on first.
+pub(super) fn arrow_entry(path: &[i64], theirs: &HashSet<i64>) -> Option<i64> {
+    path.iter().copied().find(|p| theirs.contains(p))
+}
+
+/// THE OPEN WAYS IN (pure): the enemy provinces (`theirs`) that touch one of `ours` across a
+/// border with no river penalty and whose own ground is not rough, sorted.
+pub(super) fn open_entries(
+    g: &HashMap<i64, Prov>,
+    ours: &HashSet<i64>,
+    theirs: &HashSet<i64>,
+) -> Vec<i64> {
+    let mut out: Vec<i64> = theirs
+        .iter()
+        .copied()
+        .filter(|q| g.get(q).is_some_and(|r| !rough(r)))
+        .filter(|q| {
+            ours.iter().any(|p| {
+                g.get(p)
+                    .is_some_and(|r| r.borders.iter().any(|(n, river)| n == q && *river >= 0.0))
+            })
+        })
+        .collect();
+    out.sort_unstable();
+    out
+}
+
+/// What a choke carries (pure): the divisions of width `w` the battle in `p` takes from the
+/// `sides` own provinces touching it (`best_fit`), and half as many again for its relief.
+pub(super) fn choke_carries(p: &Prov, sides: usize, w: f64) -> i64 {
+    let fit = best_fit(battle_width(p, sides.max(1)), sides.max(1), w);
+    fit + (fit + 1) / 2
+}
+
 /// The hostile divisions our country sees per state: the `hoi4_wars` border rows' hostile
 /// divisions in each neighbour's border states, spread evenly over those states. Pure.
 pub(super) fn hostile_by_state(wars: &Value, tags: &[String]) -> HashMap<i64, f64> {

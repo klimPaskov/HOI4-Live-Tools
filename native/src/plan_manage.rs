@@ -32,9 +32,9 @@
 //!                    army experience needed first (default for a create: 5 per battalion, 10 per
 //!                    company, 25 per extra column, the tool's costs), read from hoi4_doctrines; an
 //!                    entry short of XP waits and blocks the ones after it. `regimental_support`
-//!                    (the 1.19 row, one company per column) is sent as the tools' argument of that
-//!                    name once plan_run::UNBUILT_ARGS stops holding it back; until then it is
-//!                    skipped with a note (gap register templates.regimental_support).
+//!                    (the regimental row, one company per regiment column, "" for none) is sent as
+//!                    the tools' argument of that name; a column's slot opens with the defines'
+//!                    REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS battalions (the tool refuses otherwise).
 //!                    `role` "strike" / "assault" / "armour" / "mobile" puts the template on elite
 //!                    reinforcement priority once a war with a `war.enemies` tag runs, "garrison" on
 //!                    reserve (hoi4_template_edit priority only; no battalion changes), and the
@@ -10424,13 +10424,8 @@ mod tests {
             ])
         );
         assert_eq!(sent[0].1["priority"], "elite");
-        let line = &state.manage.notes["templates"];
-        assert!(
-            line.contains("regimental support row skipped")
-                && line.contains("templates.regimental_support"),
-            "{line}"
-        );
-        assert!(sent[0].1.get("regimental_support").is_none());
+        // the regimental row goes with the call (engineer 110: the template tools fill it)
+        assert_eq!(sent[0].1["regimental_support"], json!(["x"]));
         // once per id, and the done-memory survives a restart through plan_state.json
         assert_eq!(
             step(&mut state, &tools, &plan, "l", START + 9 * DAY).unwrap(),

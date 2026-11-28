@@ -96,9 +96,35 @@ the strongest legitimate route; no message, lint or note treats a goal as doubtf
 * No deleting stockpiles, factories or research facilities. Dockyards may go only when the state is out of
   slots.
 
+## Rule sets: multiplayer > roleplay > FAIR defaults
+
+The owner's order (28 Nov 2026): a multiplayer game's rules win over a roleplay instruction, which wins over the FAIR
+defaults. The plan carries them as `_rules` {"multiplayer": {switch: true|false}, "roleplay": {switch: true|false}}; per
+switch the first layer that names it decides. The plan lint, the server's guard (every action) and the run result
+(`rules`) apply the same layering.
+
+| switch | FAIR default | what it allows |
+|---|---|---|
+| collaboration | on | the collaboration-government operation (the Soviet one included) |
+| volunteers, air_volunteers | on | volunteer divisions and air volunteers |
+| lend_lease | on | lend-lease |
+| attaches | on | attachés |
+| paradrops | off | paratroop drops (a roleplay goal or META turns them on) |
+| eben_emael_raid | on | the Eben-Emael raid (the owner, 28 Nov midday) |
+| propaganda | on | propaganda operations against an enemy's war support (the Soviet one included) |
+| strategic_bombing_war_support | on | strategic bombing for war support |
+| refinery_bombing | off | strategic bombing of refineries |
+| naval_mines, access, factions, timing, space_marines, paratroopers, submarines | off (guarded) | true lifts that guard |
+
+## Owner's decisions (28 Nov 2026): allowed under FAIR
+
+* On the agent's own initiative: volunteer divisions, air volunteers, lend-lease and attaches, wherever the
+  game allows them. The multiplayer limits on volunteers and lend-lease below no longer bind.
+* The collaboration-government operation on the Soviet Union is allowed.
+* Paratroop drops are not used by default under FAIR; META may use them, and a roleplay request is honoured.
+
 ## Axis rules
 
-* No collaboration governments in the Soviet Union.
 * Military and docking access between the European Axis and Japan only once the Iran corridor is secured.
 * Sea Lion (invading Great Britain): the European Axis first holds 2 of Gibraltar, Malta and Suez; 1 is
   enough once Barbarossa has started.
@@ -131,7 +157,6 @@ the strongest legitimate route; no message, lint or note treats a goal as doubtf
 ## Allies rules
 
 * No Allied troops from outside mainland Europe in mainland Europe until France capitulates.
-* No volunteers outside Spain (exceptions below).
 * Take Iwo Jima, Taiwan and Okinawa before attacking mainland Japan.
 * Secure North Africa before invading the core Italian mainland. Islands are fine; attacks over land are
   exempt.
@@ -141,7 +166,6 @@ the strongest legitimate route; no message, lint or note treats a goal as doubtf
 **France**
 * No building or upgrading ports or air bases in France before capitulation.
 * All troops stay in mainland Europe before capitulation.
-* No lend-lease before capitulation; Republican Spain is the exception.
 
 **Soviet Union**
 * Attacks the Axis from 1942, or earlier once the Axis has invaded the mainland USA or UK.

@@ -6,15 +6,22 @@ import time
 
 from ..errors import ToolError
 from ..perception import screen as screen_mod
+from ..perception import uiprofile
 from . import ui
 
 ESC_RX = re.compile(r"resume|save\s*game|load\s*game|game\s*options|playthrough|exit\s*to\s*menu|exit\s*game|"
                     r"^\W*close\W*$|settings|quit|surrender", re.I)
 
 
+def _rx(section, name, vanilla, anchored=False):
+    """The vanilla regex, or (a mod's interface profile) the vanilla regex or the mod's labels."""
+    return uiprofile.pattern(section, name, vanilla, anchored)
+
+
 def esc_menu_open(session, img=None):
     img, res = ui.ocr_screen(session, img, region=_center(session, img), scale=1.5)
-    hits = [l.text for l in res.lines if ESC_RX.search(l.text)]
+    rx = uiprofile.active().section_rx(ESC_RX, "pause_menu")
+    hits = [l.text for l in res.lines if rx.search(l.text)]
     return len(hits) >= 3, hits
 
 
@@ -33,7 +40,11 @@ def open_esc_menu(session, max_presses=6):
         session.sleep(0.9)
     ok, hits = esc_menu_open(session)
     if not ok:
-        raise ToolError("the pause menu did not open", {"seen": hits})
+        prof = uiprofile.active()
+        labels = [v[2] for v in uiprofile.ANCHORS["pause_menu"].values()] + prof.section_extras("pause_menu")
+        raise ToolError("the pause menu did not open: fewer than 3 of its buttons were recognised (looked for "
+                        f"{labels}); if a mod renames them, add them to the mod profile (pause_menu)",
+                        {"error": "pause_menu_unrecognised", "seen": hits, "anchors": labels})
     return hits
 
 
@@ -55,15 +66,17 @@ def clear_windows(session, max_presses=8):
 
 def main_menu_load(session):
     """Main menu -> Single Player -> Load (button labels found by OCR)."""
-    img, lines, res = ui.find_text(session, r"^\W*load(\s*game)?\W*$")
+    load_rx = _rx("main_menu", "load", r"^\W*load(\s*game)?\W*$", anchored=True)
+    img, lines, res = ui.find_text(session, load_rx)
     if not lines:
-        ui.click_text(session, r"single\s*player")
+        ui.click_text(session, _rx("main_menu", "single_player", r"single\s*player"))
         session.sleep(2.5)
-    ui.click_text(session, r"^\W*load(\s*game)?\W*$", retries=4)
+    ui.click_text(session, load_rx, retries=4)
     session.sleep(3.0)
 
 
 SAVE_DATE_RX = re.compile(r"\d{1,2}:\d{2},?\s*\d{1,2}\s+[A-Za-z]{3,}")     # the year may wrap to the next line
+SAVE_DATE_ANY_RX = re.compile(r"\d{1,2}:\d{2},?\s*\d{1,2}\s+[^\W\d_]{2,}")    # a mod's month names (uiprofile)
 
 
 MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
@@ -77,7 +90,13 @@ def _date_rx(save_date):
         h = int(str(save_date).split(".")[3]) if str(save_date).count(".") >= 3 else 0
     except (ValueError, IndexError):
         return None
-    return re.compile(rf"\b{h}:00,?\s*{d}\s+{MONTHS[m - 1]}", re.I)
+    if not 1 <= m <= 12:
+        return None
+    prof = uiprofile.active()
+    if prof.month_table() is None:
+        return re.compile(rf"\b{h}:00,?\s*{d}\s+{MONTHS[m - 1]}", re.I)
+    alts = "|".join(uiprofile.label_rx(x) for x in prof.long_month_alts(m))
+    return re.compile(rf"\b{h}:00,?\s*{d}\s+(?:{alts})", re.I)
 
 
 def _row_filename(session, x, y):
@@ -116,7 +135,8 @@ def pick_save_in_dialog(session, base, save_date=None, max_scrolls=60):
             x0 = max(0, local.box[0] - 60)
             y0 = local.box[1] + local.box[3] + 8
             res = session.ocr.recognize(img, region=[x0, y0, 330, back.box[1] - y0 - 8], scale=2.5)
-        dates = [l for l in res.lines if SAVE_DATE_RX.search(l.text)]
+        date_rx = SAVE_DATE_RX if uiprofile.active().month_table() is None else SAVE_DATE_ANY_RX
+        dates = [l for l in res.lines if date_rx.search(l.text)]
         if i == 0 and local and back:
             bx = local.box[0] + 262
             t0, t1 = local.box[1] + 45, back.box[1] - 35
@@ -172,9 +192,9 @@ def pick_save_in_dialog(session, base, save_date=None, max_scrolls=60):
 def press_load_button(session):
     """Confirm the picked save. On the front-end load screen the save becomes the scenario and START begins it
     (the Load button there only toggles the list); the in-game dialog confirms with its Load button."""
-    img, lines, res = ui.find_text(session, r"start", exact=True)
+    img, lines, res = ui.find_text(session, _rx("setup", "start", r"start"), exact=True)
     if lines:
-        return ui.click_text(session, r"start", exact=True, prefer="bottom", retries=2)
+        return ui.click_text(session, _rx("setup", "start", r"start"), exact=True, prefer="bottom", retries=2)
     return ui.click_text(session, r"load", exact=True, prefer="bottom", retries=3)
 
 
@@ -197,7 +217,7 @@ def save_via_dialog(session, name):
         panels.dismiss_notices(session)         # a "National Focus Completed" window ignores Esc
         open_esc_menu(session)
         try:
-            ui.click_text(session, r"save\s*game")
+            ui.click_text(session, _rx("pause_menu", "save_game", r"save\s*game"))
         except ToolError:
             # OCR missed the label of the open pause menu (seen live, twice): the button sits at a fixed place
             w, h = session.window.size()
@@ -246,18 +266,27 @@ FORWARD_BUTTON_RX = r"(select\s*(country|nation)|play|continue|confirm|next|proc
 STRONG_FORWARD_RX = r"(select\s*(country|nation)|confirm|proceed|embark)"
 
 
+def _confirm_rx(vanilla):
+    """A dialog's confirming button: the vanilla regex, plus the profile's `confirm` labels (whole lines)."""
+    extra = uiprofile.active().confirm
+    if not extra:
+        return vanilla
+    return "(?:" + vanilla + ")|" + "|".join(r"^\W*" + uiprofile.label_rx(x) + r"\W*$" for x in extra)
+
+
 def pregame_stage(texts):
     """Which pre-game screen OCR lines show: 'select_country' (vanilla), 'select_scenario', 'ready' (START and Back
     to menu), 'custom_country' (a mod's own country screen: a country heading, or Back to menu with a confirming
     button) or None."""
     has = lambda rx: any(re.search(rx, t, re.I) for t in texts)
+    back = _rx("setup", "back_to_menu", r"back\s*to\s*menu")
     if has(r"select\s*country") and has(r"other\s*countries|not\s*played"):
         return "select_country"
     if has(r"select\s*scenario") and has(r"brief\s*history"):
         return "select_scenario"
-    if has(r"^\W*start\W*$") and has(r"back\s*to\s*menu"):
+    if has(_rx("setup", "start", r"^\W*start\W*$", anchored=True)) and has(back):
         return "ready"
-    if has(COUNTRY_HEADING_RX) or (has(r"back\s*to\s*menu") and has(r"^\W*" + STRONG_FORWARD_RX + r"\W*$")):
+    if has(COUNTRY_HEADING_RX) or (has(back) and has(r"^\W*" + STRONG_FORWARD_RX + r"\W*$")):
         return "custom_country"
     return None
 
@@ -318,13 +347,13 @@ def _confirm_if_asked(session, before_texts):
     session.sleep(1.2)
     _rest_cursor_above_dialog(session)
     img, res = ui.ocr_screen(session, scale=1.5)
-    new = [l for l in res.lines if l.text not in before_texts and re.search(CONFIRM_RX, l.text, re.I)]
+    new = [l for l in res.lines if l.text not in before_texts and re.search(_confirm_rx(CONFIRM_RX), l.text, re.I)]
     if not new:
         # short button labels ("OK") are missed at full-screen scale: read the centre of the screen closer
         h, w = img.shape[:2]
         region = [int(w * 0.25), int(h * 0.2), int(w * 0.5), int(h * 0.6)]
         img, res = ui.ocr_screen(session, img, region=region, scale=2.5)
-        new = [l for l in res.lines if re.search(r"^\W*([o0]k|yes|confirm)\W*$", l.text, re.I)]
+        new = [l for l in res.lines if re.search(_confirm_rx(r"^\W*([o0]k|yes|confirm)\W*$"), l.text, re.I)]
     if new:
         x, y = new[-1].center
         session.input.click(x, y)
@@ -363,7 +392,7 @@ def quit_to_main_menu(session, timeout=240):
     the Playthrough Overview window's Exit to Menu) -> main menu. Never touches the pause menu's Wiki button (it
     opens a browser)."""
     hits = open_esc_menu(session)
-    ui.click_text(session, r"exit\s*to\s*menu")
+    ui.click_text(session, _rx("pause_menu", "exit_to_menu", r"exit\s*to\s*menu"))
     confirmed = _confirm_if_asked(session, hits)
     t0 = time.time()
     clicked_quit = False
@@ -398,7 +427,7 @@ def _click_ok(session):
     h, w = img.shape[:2]
     region = [int(w * 0.25), int(h * 0.2), int(w * 0.5), int(h * 0.6)]
     img, res = ui.ocr_screen(session, img, region=region, scale=2.5)
-    hit = [l for l in res.lines if re.search(r"^\W*([o0]k|yes|confirm)\W*$", l.text, re.I)]
+    hit = [l for l in res.lines if re.search(_confirm_rx(r"^\W*([o0]k|yes|confirm)\W*$"), l.text, re.I)]
     if not hit:
         return None
     session.input.click(*hit[-1].center)
@@ -411,13 +440,13 @@ def quit_to_desktop(session):
     (a previous attempt) is confirmed directly: that dialog ignores Esc."""
     state, _ = ui.classify(session)
     if state["screen"] == "main_menu":
-        clicked = ui.click_text(session, r"quit", exact=True)
+        clicked = ui.click_text(session, _rx("main_menu", "quit", r"quit"), exact=True)
         return {"exit_requested": True, "from": "main_menu", "clicked": clicked}
     img, res = ui.ocr_screen(session, region=_center(session), scale=1.5)
     if any(re.search(r"sure you want to exit", l.text, re.I) for l in res.lines):
         return {"confirmed": _click_ok(session), "dialog_was_open": True}
     hits = open_esc_menu(session)
-    ui.click_text(session, r"exit\s*game")
+    ui.click_text(session, _rx("pause_menu", "exit_game", r"exit\s*game"))
     confirmed = _confirm_if_asked(session, hits)
     return {"confirmed": confirmed}
 
@@ -425,7 +454,30 @@ def quit_to_desktop(session):
 def main_menu_visible(session, img=None):
     img, res = ui.ocr_screen(session, img, scale=1.0)
     texts = [l.text for l in res.lines]
-    return any(re.search(r"single\s*player", t, re.I) for t in texts), texts
+    if any(re.search(r"single\s*player", t, re.I) for t in texts):
+        return True, texts
+    return uiprofile.active().main_menu_hits(texts)[0], texts
+
+
+def main_menu_anchor_labels():
+    """Every label the main menu is recognised by: the vanilla ones and the active profile's."""
+    prof = uiprofile.active()
+    out = ["Single Player"]
+    for x in prof.main_menu_anchors():
+        if x not in out:
+            out.append(x)
+    return out
+
+
+def main_menu_unrecognised(texts, data=None):
+    """The ToolError of a launch whose screen settled without any main-menu anchor (a mod's own main menu)."""
+    anchors = main_menu_anchor_labels()
+    details = dict(data or {})
+    details.update({"error": "main_menu_unrecognised", "anchors": anchors, "seen": list(texts)[:25],
+                    "ui_profile": uiprofile.summary()})
+    return ToolError(f"main menu not recognised: none of the anchors {anchors} seen on the settled screen; if a mod "
+                     "replaces the main menu, add labels it shows to the mod profile (main_menu.anchors, see "
+                     "docs/LEGACY_WINDOWS_USAGE.md)", details)
 
 
 def _wait_text(session, pattern, timeout=60, exact=False, scale=1.5):
@@ -445,7 +497,7 @@ def review_setup_rules(session, reset=False):
     Keep the dialog evidence and return to ready. A button click is not a
     complete structured readback of every rule, so report that limit explicitly.
     """
-    _, ready, _ = ui.find_text(session, r"start", exact=True)
+    _, ready, _ = ui.find_text(session, _rx("setup", "start", r"start"), exact=True)
     _, back, _ = ui.find_text(session, r"back\s*to\s*menu")
     if not ready or not back:
         raise ToolError("game rules inspection requires the pre-game ready screen")
@@ -457,7 +509,7 @@ def review_setup_rules(session, reset=False):
     img, res = ui.ocr_screen(session, scale=1.5)
     evidence = session.artifact(img, "setup_rules")
     steps.append(ui.click_text(session, r"apply", exact=True))
-    _wait_text(session, r"start", 15, exact=True)
+    _wait_text(session, _rx("setup", "start", r"start"), 15, exact=True)
     return {"steps": steps, "reset_requested": reset, "screen": evidence,
             "visible_text": [line.text for line in res.lines],
             "all_rule_values_verified": False}
@@ -498,30 +550,30 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
         st = stage()
     steps.append({"stage": st})
     if st == "main_menu":
-        steps.append(ui.click_text(session, r"single\s*player"))
+        steps.append(ui.click_text(session, _rx("main_menu", "single_player", r"single\s*player")))
         session.sleep(2.5)
         st = "single_player_menu"
     if st == "single_player_menu":
-        steps.append(ui.click_text(session, r"new\s*game"))
-        _wait_text(session, r"select\s*scenario", 90)
+        steps.append(ui.click_text(session, _rx("main_menu", "new_game", r"new\s*game")))
+        _wait_text(session, _rx("setup", "select_scenario", r"select\s*scenario"), 90)
         st = "select_scenario"
     if st == "select_scenario":
         if bookmark:
             steps.append(ui.click_text(session, bookmark, retries=3))
             session.sleep(1.0)
-        steps.append(ui.click_text(session, r"select\s*scenario", prefer="bottom"))
+        steps.append(ui.click_text(session, _rx("setup", "select_scenario", r"select\s*scenario"), prefer="bottom"))
         st = _wait_country_stage(session, 120)
     if st == "select_country":
         if country:
             rx = re.escape(country) if not any(c in country for c in r"\^$[]()|*+?") else country
             steps.append(ui.click_text(session, rx, retries=3))
             session.sleep(1.0)
-        steps.append(ui.click_text(session, r"select\s*country", prefer="bottom"))
-        _wait_text(session, r"start", 120, exact=True)
+        steps.append(ui.click_text(session, _rx("setup", "select_country", r"select\s*country"), prefer="bottom"))
+        _wait_text(session, _rx("setup", "start", r"start"), 120, exact=True)
         st = "ready"
     if st == "custom_country":
         steps.extend(_custom_country(session, country))
-        _wait_text(session, r"start", 120, exact=True)
+        _wait_text(session, _rx("setup", "start", r"start"), 120, exact=True)
         st = "ready"
     if st != "ready":
         raise ToolError(f"new_game starts from the main menu or a pre-game screen (now: {st})")
@@ -531,7 +583,7 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
         return {"steps": steps, "prepared": True, "started": False, "stage": "ready"}
     from . import gamemode
     gamemode.begin_run(session)
-    steps.append(ui.click_text(session, r"start", exact=True, prefer="bottom"))
+    steps.append(ui.click_text(session, _rx("setup", "start", r"start"), exact=True, prefer="bottom"))
     t0 = last_click = time.time()
     retries = 0
     while time.time() - t0 < timeout:
@@ -546,7 +598,7 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
                                 "on this screen blocks the game from starting (a custom game rule, or a mod dialog); "
                                 "take a screenshot and look.", {"error": "start_not_registered", "steps": steps})
             retries += 1
-            steps.append(ui.click_text(session, r"start", exact=True, prefer="bottom"))
+            steps.append(ui.click_text(session, _rx("setup", "start", r"start"), exact=True, prefer="bottom"))
             last_click = time.time()
         session.report(f"starting the game ({int(time.time() - t0)} s)")
         session.sleep(3)

@@ -38,7 +38,6 @@ Rules (error unless marked; every message ends with the rule in plain words):
                         (warning for dockyards: allowed only when the state is out of slots)
   fair.ghost_divisions  (warning) a training line without a stockpile guard (only_if_stockpile)
   fair.licence          a plane design built on equipment the plan only has by licence
-  fair.volunteers       volunteers outside Spain; (warning) USA to China, the Soviet Union to China (limits)
   fair.timing           Germany against the Soviet Union before 1941 (warning after 1942); Japan, Manchukuo or
                         Siam against the Allies before 1941 or the Soviet Union (warning); the Soviet Union
                         against the Axis before 1942; Italy joining the war after 1941.01.01 (warning when it
@@ -70,9 +69,8 @@ module doc lists what it guards and what is not guarded yet (needs live state):
                             strategic bombing aimed at refineries (refuse any target option that names them)
   hoi4_diplomacy_act        ask/offer military access, docking rights or airbase access (side exceptions only
                             with the corridor verified); justify_war_goal / add_war_goal while Germany and Poland
-                            are not at war (hoi4_wars), outside the exceptions; send_volunteers outside Spain
-                            and the USA / Soviet China limits; join_faction, declare_war and invitations against
-                            the nation timing rules; start_lend_lease by France before capitulation;
+                            are not at war (hoi4_wars), outside the exceptions; join_faction, declare_war and
+                            invitations against the nation timing rules;
                             expeditionary_force into mainland Europe by outside Allies before France falls
   hoi4_faction_leave        as faction leader (dismantles the faction)
   hoi4_division_disband     divisions encircled or about to be (hoi4_encirclement_candidates, pocket flags)
@@ -91,8 +89,8 @@ module doc lists what it guards and what is not guarded yet (needs live state):
   hoi4_construction_add / _place  France: ports or air bases in France before capitulation; any demolition of
                             factories or research facilities (dockyards only when out of slots)
   hoi4_naval_invasion       the invasion prerequisites of fair.invasions, checked against hoi4_states
-  hoi4_operative_assign (operations), hoi4_operation_start  Axis: no collaboration government in the
-                            Soviet Union
+  (allowed under FAIR by the owner's decision of 28 Nov 2026, never refused here: volunteer divisions, air
+   volunteers, lend-lease, attaches and the Soviet collaboration-government operation)
   (equipment toggles)       no mastery grinding with the main equipment type switched off (no tool today)
 
 Stdlib only, Python 3.9+.
@@ -140,12 +138,10 @@ RULES = {
     "fair.deletion": "no deleting stockpiles, factories (dockyards only when out of slots) or research facilities",
     "fair.ghost_divisions": "no ghost divisions without equipment",
     "fair.licence": "no changing the type or role of licensed aircraft, nor any way around licence penalties",
-    "fair.volunteers": "no volunteers outside Spain (the USA may send them to China, the Allies and the Soviet "
-                       "Union; the Soviet Union to China)",
     "fair.timing": "the nation rules on when a war, a faction join or a justification may happen",
     "fair.invasions": "the nation rules on what must be taken before an invasion",
     "fair.france": "France before capitulation: no building or upgrading ports or air bases in France, all "
-                   "troops in mainland Europe, no lend-lease (Republican Spain excepted)",
+                   "troops in mainland Europe",
 }
 
 _SPECIAL_SUB = re.compile(r"aip|anechoic|coating", re.I)
@@ -401,6 +397,18 @@ class Fair:
         fair = self.plan.get("_fair") if isinstance(self.plan.get("_fair"), dict) else {}
         exc = fair.get("exceptions") if isinstance(fair.get("exceptions"), dict) else {}
         self.exceptions = {k: str(v) for k, v in exc.items() if isinstance(k, str)}
+        # rule sets (the owner, 28 Nov): a multiplayer game's rules > a roleplay instruction > the FAIR
+        # defaults; a guarded rule's switch set true lifts it like a host exception
+        rules = self.plan.get("_rules") if isinstance(self.plan.get("_rules"), dict) else {}
+        sw = {}
+        for layer in ("roleplay", "multiplayer"):
+            vals = rules.get(layer) if isinstance(rules.get(layer), dict) else {}
+            for k, v in vals.items():
+                if isinstance(v, bool):
+                    sw[str(k).strip().lower()] = (v, layer)
+        for k, (v, layer) in sw.items():
+            if v:
+                self.exceptions.setdefault("fair." + k, "%s rule set" % layer)
         self.phases = {str(p.get("id")): p for p in lint.list_of("phases")}
         self.calls = list(calls(self.plan))
         self._cache = {}
@@ -883,22 +891,12 @@ class Fair:
                 self.justify(where, target, when, action)
             elif kind == "declare":
                 self.declare(where, target, when)
-            elif kind == "volunteers":
-                if target in SPAIN or (me == "USA" and target in ALLIES | {"SOV"}):
-                    continue
-                if (me == "USA" and target == "CHI") or (me == "SOV" and target == "CHI"):
-                    limit = "6 divisions and 1 air wing" if me == "USA" else "6 divisions, no tanks or air"
-                    self.add("warning", "fair.volunteers", where, f"volunteers to China: at most {limit}")
-                else:
-                    self.add("error", "fair.volunteers", where, f"volunteers to {target}")
             elif kind == "expedition" and me in OUTSIDE_ALLIES:
                 cap = self.capital(target) if isinstance(target, str) else None
                 if cap in mainland(self.game, "europe") and not self.capitulated_req(when, "FRA"):
                     self.add("error", "fair.invasions", where,
                              f"expeditionary force to {target} in mainland Europe before France capitulates "
                              f"(`when` needs capitulated:FRA)")
-            elif kind == "lend_lease" and me == "FRA" and target not in SPAIN:
-                self.add("error", "fair.france", where, f"lend-lease to {target} before capitulation")
         for where, target, when in self.joins():
             self.join(where, target, when)
         self.italy_joins()

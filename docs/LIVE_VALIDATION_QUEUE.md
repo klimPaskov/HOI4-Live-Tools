@@ -1060,3 +1060,17 @@ shows mud there.
 M3 `"date":"1936.7.15"`: no region on bad ground.
 Pass: M1-M3 agree with the map mode on snow/mud regions. A mismatch: record the region, the date and the tool's water /
 snow numbers in the notes (the model's drying or melting rate is then off).
+## Session S22-REGIMENTAL: the Division Designer's regimental support row (mouse; about 15 minutes) -- any time
+What it proves: hoi4_template_create / hoi4_template_edit fill `regiment_support_grid` and read the row back from the
+template data (support array + 0x20, read from the executable, not yet seen live).
+M1 a save with army experience >= 60 (Germany 1936 has 40-ish: use 1938+), paused: `hoi4_template_create {"name":"Test
+Regimental","regiments":[["infantry","infantry","infantry"],["infantry","infantry","infantry"]],"regimental_support":
+["<a company the designer offers, e.g. field_guns or heavy_weapons_company>"]}`: Verified; `template_before` absent;
+open the designer on "Test Regimental": the company stands under column 0, column 1's slot is empty.
+M2 `hoi4_template_edit {"template":"Test Regimental","regimental_support":["","<same company>"]}`: Verified; the company
+moved under column 1 (removed from 0). A second identical call: nothing_to_change.
+M3 refusals before input: a column of 2 battalions with a company under it: regimental_slot_closed; a battalion key in
+the row: unit_wrong_slot.
+M4 `hoi4_template_edit` changing only `support` on a template with a regimental row: the row is unchanged (read back).
+Stop at once on: a slot clicked that is not the row's, a mismatch error naming regimental, or Save with another layout.
+Pass: M1-M4. Then delete the test template (hoi4_template_delete).

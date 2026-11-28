@@ -160,12 +160,23 @@ pub(super) fn draft(r: &Reader<'_>, image: u64) -> Result<Layout5> {
 pub(super) enum Grid {
     Regiments,
     Support,
+    /// The regimental support row under the regiment columns (`regiment_support_grid`), one slot per
+    /// column, opened by REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS battalions in that column.
+    Regimental,
 }
 impl Grid {
     fn name(self) -> &'static str {
         match self {
             Self::Regiments => "regiments_grid",
             Self::Support => "support_grid",
+            Self::Regimental => "regiment_support_grid",
+        }
+    }
+    pub(super) fn label(self) -> &'static str {
+        match self {
+            Self::Regiments => "Regiment",
+            Self::Support => "Support",
+            Self::Regimental => "Regimental support",
         }
     }
 }
@@ -217,10 +228,16 @@ pub(super) fn slots(r: &Reader<'_>, image: u64, grid: Grid, draft: &Layout5) -> 
                 0,
                 ((pos.y - y0 + SUPPORT_PITCH / 2) / SUPPORT_PITCH) as usize,
             ),
+            // one row; the slots sit under the regiment columns at the regiment pitch
+            Grid::Regimental => (
+                ((pos.x - x0 + REGIMENT_PITCH.0 / 2) / REGIMENT_PITCH.0) as usize,
+                0,
+            ),
         };
         let filled = match grid {
             Grid::Regiments => draft.columns.get(col).is_some_and(|c| row < c.len()),
             Grid::Support => row < draft.support.len(),
+            Grid::Regimental => draft.regimental.get(col).is_some_and(|k| !k.is_empty()),
         };
         let state = if filled && unit_shown {
             SlotState::Filled
@@ -608,10 +625,7 @@ pub(super) fn choose(
             "slot_locked",
             format!(
                 "{} slot column {col} row {row} is locked in this designer",
-                match grid {
-                    Grid::Regiments => "Regiment",
-                    Grid::Support => "Support",
-                }
+                grid.label()
             ),
         ));
     }

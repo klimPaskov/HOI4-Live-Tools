@@ -1,0 +1,8 @@
+guiTypes = {
+	containerWindowType = {
+		name = "mainmenu_panel_bottom"
+		iconType = { name = "menu_title_art" spriteType = "GFX_menu_title" }
+		ButtonType = { name = "begin_button" buttonText = "OVH_BEGIN" }
+		ButtonType = { name = "depart_button" buttonText = "OVH_DEPART" }
+	}
+}
