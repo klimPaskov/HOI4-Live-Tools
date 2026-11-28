@@ -1047,3 +1047,13 @@ M6 save + reload; a plain load without the module.
 Stop at once on: a crash, any `unexplained`, a division moving that was not named, a move arrow or march time that
 differs from the right click's, a battle that a right click would not open, or a post the game's check refused.
 Pass -> IPC_LIVE_PASSED entry 23 (move) = 1.
+
+## Session S21-ARMYHQ: army headquarters, whether the mechanic is in force (read only; about 2 minutes) -- any time
+What it proves: `hoi4_army_hq` reads the install's DLC state and the defines the way the game loads them.
+M1 any save, paused: `hoi4_army_hq {}`. On an install without Thunder at Our Gates (the owner's: 10 DLCs, none of
+them TaoG): `active` false, `why` names the DLC and "returns 1.0"; `worth.with_hq` close 0.95 / medium 0.9 / far 0.85
+for planning cap and speed, `without_hq` 0.8; `hq_battalion_dlcs` ["Thunder at Our Gates"]. Cross-check in game: an
+army's planning tooltip shows no HQ line and no deploy button exists on the army card.
+M2 (only on an install with the DLC): `active` true; the army card shows the deploy button; the planning tooltip of an
+army without a deployed HQ shows the x0.8 line. Record both and the deploy days of the default HQ template.
+Pass: M1 as stated (M2 when the DLC is present). Nothing is posted; no family to switch on.
