@@ -362,13 +362,16 @@ pub(super) fn claim(
         let ours: f64 = wings
             .iter()
             .filter(|w| {
-                w.wing.region == Some(e.region.id) && w.flying.iter().any(|m| m == "air_superiority")
+                w.wing.region == Some(e.region.id)
+                    && w.flying.iter().any(|m| m == "air_superiority")
             })
             .map(|w| w.wing.planes)
             .sum();
         let contested = !e.ignore_air
             && !matches!(e.mission, "interception" | "air_superiority")
-            && e.region.enemy_fighters.is_some_and(|f| f > ours / cfg.fighter_ratio.max(0.01));
+            && e.region
+                .enemy_fighters
+                .is_some_and(|f| f > ours / cfg.fighter_ratio.max(0.01));
         if contested {
             notes.push(format!(
                 "{}: {} over region {} waits: enemy fighters {:.0} seen there against our {ours:.0} (ratio {})",
@@ -384,17 +387,29 @@ pub(super) fn claim(
             .iter()
             .filter(|w| !taken.contains(&w.wing.name))
             .filter(|w| flies_mission(e.mission, w))
-            .filter(|w| !refused.iter().any(|(n, m)| *n == w.wing.name && m == e.mission))
+            .filter(|w| {
+                !refused
+                    .iter()
+                    .any(|(n, m)| *n == w.wing.name && m == e.mission)
+            })
             .collect();
         // the ones already flying it there first, then the nearest base to the region's states
         let dist = |w: &MWing| {
             w.wing
                 .base_state
-                .and_then(|b| e.region.states.iter().filter_map(|s| geo.km(b, *s)).reduce(f64::min))
+                .and_then(|b| {
+                    e.region
+                        .states
+                        .iter()
+                        .filter_map(|s| geo.km(b, *s))
+                        .reduce(f64::min)
+                })
                 .unwrap_or(f64::MAX)
         };
         cands.sort_by(|a, b| {
-            let there = |w: &MWing| !(w.wing.region == Some(e.region.id) && w.flying.iter().any(|m| m == e.mission));
+            let there = |w: &MWing| {
+                !(w.wing.region == Some(e.region.id) && w.flying.iter().any(|m| m == e.mission))
+            };
             there(a).cmp(&there(b)).then(dist(a).total_cmp(&dist(b)))
         });
         let want = match (e.count, e.share) {
@@ -408,8 +423,19 @@ pub(super) fn claim(
         }
         let mut mine = Vec::new();
         for w in cands.into_iter().take(want) {
-            let flying = w.wing.region == Some(e.region.id) && w.flying.iter().any(|m| m == e.mission);
-            if flying || assign(&w.wing, &e.region, e.mission, geo, cfg, &mut orders, &mut notes) {
+            let flying =
+                w.wing.region == Some(e.region.id) && w.flying.iter().any(|m| m == e.mission);
+            if flying
+                || assign(
+                    &w.wing,
+                    &e.region,
+                    e.mission,
+                    geo,
+                    cfg,
+                    &mut orders,
+                    &mut notes,
+                )
+            {
                 mine.push(w.wing.name.clone());
             }
         }
@@ -429,14 +455,20 @@ pub(super) fn claim(
                 });
             }
         }
-        notes.push(format!("{}: {got} of {want} wings on {} over region {}", e.id, e.mission, e.region.id));
+        notes.push(format!(
+            "{}: {got} of {want} wings on {} over region {}",
+            e.id, e.mission, e.region.id
+        ));
     }
     (orders, taken, notes)
 }
 
 /// The entry's region: `region` (id), or the region of `state`; None with the reason.
 fn entry_region(state: &State, e: &Value) -> std::result::Result<i64, String> {
-    if let Some(r) = e["region"].as_i64().or_else(|| e["region"].as_str().and_then(|s| s.parse().ok())) {
+    if let Some(r) = e["region"]
+        .as_i64()
+        .or_else(|| e["region"].as_str().and_then(|s| s.parse().ok()))
+    {
         return Ok(r);
     }
     if let Some(s) = e["state"].as_i64() {
@@ -622,15 +654,24 @@ pub(super) fn air_situation_step(
     let mut entries = Vec::new();
     let mut mnotes = Vec::new();
     for (k, e) in list(&plan["air_situation"], "missions").iter().enumerate() {
-        let id = e["id"].as_str().map_or_else(|| format!("missions[{k}]"), str::to_string);
+        let id = e["id"]
+            .as_str()
+            .map_or_else(|| format!("missions[{k}]"), str::to_string);
         let Some(mission) = MISSIONS.iter().copied().find(|m| *m == text(&e["mission"])) else {
-            mnotes.push(format!("{id}: mission {} is not one of hoi4_air_mission's", e["mission"]));
+            mnotes.push(format!(
+                "{id}: mission {} is not one of hoi4_air_mission's",
+                e["mission"]
+            ));
             continue;
         };
-        if !e["when"].is_null() && super::judge(state, tools, &e["when"], now) != crate::plan_predicate::Truth::True {
+        if !e["when"].is_null()
+            && super::judge(state, tools, &e["when"], now) != crate::plan_predicate::Truth::True
+        {
             continue;
         }
-        if !e["stop"].is_null() && super::judge(state, tools, &e["stop"], now) == crate::plan_predicate::Truth::True {
+        if !e["stop"].is_null()
+            && super::judge(state, tools, &e["stop"], now) == crate::plan_predicate::Truth::True
+        {
             continue;
         }
         let rid = match entry_region(state, e) {
@@ -791,7 +832,10 @@ pub(super) fn air_situation_step(
         state.skip(now, "airsitw", n, if ok { every } else { 3 * every });
         // the game does not offer this mission to the wing's plane: leave it out of this mission a while
         if !ok && why.contains("invalid_target") {
-            state.military.air_refused.insert((n.clone(), mission.to_string()), now);
+            state
+                .military
+                .air_refused
+                .insert((n.clone(), mission.to_string()), now);
         }
     }
     // more orders wait: come back on the next tick rather than in `every` days
@@ -849,7 +893,13 @@ mod tests {
         }
     }
 
-    fn mwing(name: &str, role: &'static str, base: i64, region: Option<i64>, flying: &[&str]) -> MWing {
+    fn mwing(
+        name: &str,
+        role: &'static str,
+        base: i64,
+        region: Option<i64>,
+        flying: &[&str],
+    ) -> MWing {
         MWing {
             wing: Wing {
                 name: name.into(),
@@ -865,7 +915,13 @@ mod tests {
         }
     }
 
-    fn mentry(id: &str, mission: &'static str, region: Region, count: Option<usize>, share: Option<f64>) -> MEntry {
+    fn mentry(
+        id: &str,
+        mission: &'static str,
+        region: Region,
+        count: Option<usize>,
+        share: Option<f64>,
+    ) -> MEntry {
         MEntry {
             id: id.into(),
             mission,
@@ -892,8 +948,20 @@ mod tests {
             mwing("F2", "air_superiority", 2, None, &[]),
         ];
         let entries = vec![
-            mentry("ls", "logistics_strike", region(7, 0.0, 10, None), Some(2), None),
-            mentry("int", "interception", region(7, 0.0, 10, Some(500.0)), None, Some(0.5)),
+            mentry(
+                "ls",
+                "logistics_strike",
+                region(7, 0.0, 10, None),
+                Some(2),
+                None,
+            ),
+            mentry(
+                "int",
+                "interception",
+                region(7, 0.0, 10, Some(500.0)),
+                None,
+                Some(0.5),
+            ),
         ];
         let (orders, taken, notes) = claim(&entries, &wings, &[], &mut geo, &cfg());
         // logistics strike: the wing already on it there, then the nearest; interception: half the fighters, despite
@@ -904,15 +972,29 @@ mod tests {
             mission: "logistics_strike",
             region: 7
         }));
-        assert!(!orders.iter().any(|o| matches!(o, Order::Mission { wing, .. } if wing == "CAS there")));
+        assert!(!orders
+            .iter()
+            .any(|o| matches!(o, Order::Mission { wing, .. } if wing == "CAS there")));
         assert!(notes.iter().any(|n| n.contains("ls: 2 of 2")), "{notes:?}");
         // a strike over a sky the enemy holds waits; a refused wing is left out
-        let held = vec![mentry("ls", "logistics_strike", region(7, 0.0, 10, Some(400.0)), Some(1), None)];
+        let held = vec![mentry(
+            "ls",
+            "logistics_strike",
+            region(7, 0.0, 10, Some(400.0)),
+            Some(1),
+            None,
+        )];
         let (o, t, n) = claim(&held, &wings, &[], &mut geo, &cfg());
         assert!(o.is_empty() && t.is_empty());
         assert!(n[0].contains("waits"), "{n:?}");
         let refused = vec![("CAS near".to_string(), "logistics_strike".to_string())];
-        let one = vec![mentry("ls", "logistics_strike", region(7, 0.0, 10, None), Some(2), None)];
+        let one = vec![mentry(
+            "ls",
+            "logistics_strike",
+            region(7, 0.0, 10, None),
+            Some(2),
+            None,
+        )];
         let (_, t, _) = claim(&one, &wings, &refused, &mut geo, &cfg());
         assert_eq!(t, vec!["CAS there", "CAS far"]);
         // recon takes the scout plane only

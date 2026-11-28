@@ -9513,7 +9513,10 @@ mod tests {
                         {"wing": "KG 1", "missions": [], "region": null,
                          "air_base": {"state_id": 64}}]}),
                 ),
-                ("hoi4_resources".to_string(), json!({"fuel": {"ratio": 0.2}})),
+                (
+                    "hoi4_resources".to_string(),
+                    json!({"fuel": {"ratio": 0.2}}),
+                ),
             ])),
             refuse: RefCell::new(HashMap::new()),
             message: RefCell::new(None),
