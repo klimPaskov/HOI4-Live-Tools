@@ -4525,10 +4525,22 @@ fn assault_guarded(
     let together = ours + beside.iter().map(|(_, n)| n).sum::<i64>();
     let one_blow =
         !beside.is_empty() && (!odds || theirs.is_none_or(|t| together >= ASSAULT_SUPERIORITY * t));
+    // THE DECLARATION'S BURST: in the tick the war is declared every attacker of the war's
+    // operations executes (plan_run declare_first), so the wing is not alone; it executes with
+    // them, not a war turn later (p101a, 28 Nov 2026: Armee Nord, 23 divisions, held 'never
+    // alone' through the burst and stood until the next war turn 70 game hours on)
+    let burst_joint = joint.is_empty()
+        && !weak
+        && pre_executing(state, now)
+        && state.op_owned.iter().any(|(army, owner)| {
+            *army != u.name
+                && (owner.as_str() == id
+                    || (!my_war.is_empty() && war_of(owner).is_some_and(|w| w == my_war)))
+        });
     // NEVER ALONE is the rule: with an attack of the same war executing the wing attacks with it
     // at once; the wait for a second direction or JOINT_MAX_WAIT applies only with the odds
     let hard = match joint_days {
-        _ if one_blow => false,
+        _ if one_blow || burst_joint => false,
         None => true,
         Some(days) => odds && second.is_empty() && (days < JOINT_MAX_WAIT / DAY || weak),
     };
