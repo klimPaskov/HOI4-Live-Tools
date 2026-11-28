@@ -228,7 +228,41 @@ def cmd_research(a, sit):
     return r, text_research(r)
 
 
-COMMANDS = {"research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
+def text_production(r):
+    e = r["efficiency"]
+    out = [f"PRODUCTION for {r.get('country', '')} at {r.get('date', '')} to {r['need_date']} ({r['days']} days): "
+           f"{r['military_factories']:g} military factories; stockpile: {r['stockpile']}",
+           f"  efficiency {e['start']:g}% -> {e['max']:g}% in {e['days_to_max']} days, output x{e['output']:g}; a line "
+           f"change keeps {e['change']} (%); " + "; ".join(e["defines"])]
+    for d in r["divisions"]:
+        out.append(f"  divisions: {d['divisions']} x {d['template']} ({d['source']})")
+    for ln in r["lines"]:
+        if not ln["shortfall"]:
+            continue
+        out.append(f"  line {ln['variant']}: need {ln['need']:g}, have {ln['have']:g}, short {ln['shortfall']:g} x "
+                   f"{ln['unit_ic']:g} IC = {ln['ic']:g} IC; one factory makes {ln['ic_per_factory']:g} IC by then -> "
+                   f"{ln['factories']} factories ({ln['start']})" + (f"; {ln['late']}" if ln.get("late") else ""))
+    out.append(f"  unassigned military factories: {r['unassigned']:g}")
+    lg = r["logistics"]
+    out.append(f"  trains {lg['trains']}: {lg['trains_why']}")
+    out.append(f"  trucks: {lg['trucks_divisional']:g} in the templates; {lg['trucks_per_motorised_hub']:g} per hub "
+               f"motorised; convoys {lg['convoys']:g} (overseas supply and trade, live)")
+    out.append("  logistics defines: " + "; ".join(lg["defines"]))
+    return out
+
+
+def cmd_production(a, sit):
+    from hoi4facts.evaluators import production
+    add = {}
+    for x in a.add or []:
+        role, _, n = x.partition("=")
+        add[role] = int(n or 1)
+    r = production.evaluate(sit, a.need_date, add=add, enemies=a.enemy or None)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_production(r)
+
+
+COMMANDS = {"production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
             "construction": cmd_construction}
 
 
@@ -261,6 +295,9 @@ def parser():
     add("refresh", "tech")
     p = add("template", "role")
     p.add_argument("--width", type=int, default=None, help="a width target instead of the theatre's terrain")
+    p = add("production")
+    p.add_argument("--need-date", required=True, help="the date the equipment must be in the stockpile")
+    p.add_argument("--add", action="append", default=[], help="ROLE=N divisions to add (templates from evaluator 2)")
     p = add("research")
     p.add_argument("--slots", type=int, default=None)
     p.add_argument("--picks", type=int, default=3, help="picks per slot")

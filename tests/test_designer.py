@@ -44,6 +44,25 @@ duplicate_archetypes = {
         variant_name = { small_plane_cas_airframe_1 = CAS_equipment_1 } }
 }
 equipments = { CAS_equipment_1 = { archetype = small_plane_cas_airframe year = 1936 } }
+equipments = {
+    ship_hull_light = {
+        year = 1922
+        is_archetype = yes
+        type = screen_ship
+        module_slots = {
+            fixed_ship_engine_slot = { required = yes allowed_module_categories = { engine } }
+            fixed_ship_battery_slot = { required = yes allowed_module_categories = { fixed_gun } }
+        }
+        build_cost_ic = 100
+    }
+    ship_hull_light_1 = { archetype = ship_hull_light year = 1922 module_slots = inherit }
+    ship_hull_light_2 = { archetype = ship_hull_light parent = ship_hull_light_1 year = 1936
+        module_slots = {
+            fixed_ship_engine_slot = inherit
+            mid_1_custom_slot = { required = no allowed_module_categories = { fuel } }
+        }
+    }
+}
 """
 MODULES = """
 equipment_modules = {
@@ -101,6 +120,21 @@ class DesignerTest(unittest.TestCase):
         self.assertIn("small_plane_cas_airframe_2", self.cat.equip)  # duplicated family
         self.assertEqual(self.cat.base_stats("small_plane_cas_airframe_1")["air_range"], 650)
         self.assertEqual(len(self.cat.slots("small_plane_cas_airframe_2")), 4)
+
+    def test_slot_inherit_whole_and_per_slot(self):
+        # module_slots = inherit: the archetype's slots
+        self.assertEqual([s["slot"] for s in self.cat.slots("ship_hull_light_1")],
+                         ["fixed_ship_engine_slot", "fixed_ship_battery_slot"])
+        # fixed_ship_engine_slot = inherit: that slot as the archetype defines it; a slot it does not list is gone
+        s2 = self.cat.slots("ship_hull_light_2")
+        self.assertEqual([s["slot"] for s in s2], ["fixed_ship_engine_slot", "mid_1_custom_slot"])
+        self.assertEqual(s2[0]["categories"], ["engine"])
+        self.assertTrue(s2[0]["required"])
+        ev = designer.evaluate(self.cat, "ship_hull_light_2",
+                               {"fixed_ship_engine_slot": "engine_1", "mid_1_custom_slot": "fuel_tank"})
+        self.assertEqual(ev["problems"], [])
+        ev = designer.evaluate(self.cat, "ship_hull_light_2", {"mid_1_custom_slot": "fuel_tank"})
+        self.assertIn("required slot fixed_ship_engine_slot empty", " ".join(ev["problems"]))
 
     def test_stat_rule_add_then_multiply(self):
         ev = designer.evaluate(self.cat, "small_plane_airframe_2",

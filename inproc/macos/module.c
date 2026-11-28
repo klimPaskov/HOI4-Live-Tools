@@ -404,6 +404,8 @@ typedef void *(*alloc_fn)(void *, uint64_t, uint64_t);
 #define J2_DIVS 512
 
 #define J2_MAX 32
+/* engineer 106: the order kind COrderSetParadropSourceCommand creates (1.20.0.0 exec 0x10094bba0: CreateOrder(group, 4)) */
+#define PARADROP_ORDER_KIND 4
 enum { R_NONE = 0, R_POSTED, R_INVALID, R_NOT_OWN, R_BAD_OBJ, R_BAD_OBJ2, R_DROPPED, R_UNEXPECTED, R_SKIPPED, R_CAN_DO };
 static const char *const R_NAMES[] = {"none", "posted", "refused_by_game_check", "not_own", "not_a_live_object",
                                       "second_object_invalid", "dropped_by_post", "unexpected_object", "skipped",
@@ -515,8 +517,10 @@ static const char *orders_prep(job2_t *j) {
     static char why[160];
     if (!strcmp(op, "orders.execute") && j->order_id == 0) return NULL; /* 0 = the whole plan (the plan bar's button) */
     int new_front = !strcmp(op, "orders.new_front") || !strcmp(op, "orders2.spearhead");
-    /* orders2 ops without an order: nothing to find here (new_root, unassign, fallback) */
+    /* orders2 ops without an order: nothing to find here (new_root, unassign, fallback; a paradrop source with order 0
+     * creates its order) */
     if (!strcmp(op, "orders2.new_root") || !strcmp(op, "orders2.unassign") || !strcmp(op, "orders2.fallback")) return NULL;
+    if (!strcmp(op, "orders2.paradrop_source") && j->order_id == 0) return NULL;
     uint64_t lk = of->lookup_fn + (uint64_t)g_slide;
     if (!code_ptr(lk)) return "the order lookup is not game code";
     uint64_t o = (uint64_t)(uintptr_t)((order_lookup_fn)(uintptr_t)lk)((void *)(uintptr_t)grp, j->order_id);
@@ -1664,18 +1668,23 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
          *   assign: order id; divs (1..)      unassign: no vals; divs (1..)
          *   fallback: no vals; provs (the line, drawing order); divs (0..)
          *   edit_root: order id, from, to     invasion_target / paradrop_target: order id, province id
+         *   paradrop_source (engineer 106): order id (0 = a new paradrop order), the departure province id; divs (1.. with
+         *   order 0: the paratroopers the new order takes)
          *   spearhead: parent order id; provs (as orders.new_front; the parent's free divisions are handed over) */
         int64_t lim_hi = 100000;
         int want = !strcmp(op, "orders2.new_root") ? 4 : !strcmp(op, "orders2.edit_root") ? 3 :
-                   (!strcmp(op, "orders2.invasion_target") || !strcmp(op, "orders2.paradrop_target")) ? 2 :
+                   (!strcmp(op, "orders2.invasion_target") || !strcmp(op, "orders2.paradrop_target") ||
+                    !strcmp(op, "orders2.paradrop_source")) ? 2 :
                    (!strcmp(op, "orders2.assign") || !strcmp(op, "orders2.spearhead")) ? 1 : 0;
         int wants_provs = !strcmp(op, "orders2.fallback") || !strcmp(op, "orders2.spearhead");
         int wants_divs = !strcmp(op, "orders2.assign") || !strcmp(op, "orders2.unassign");
-        int may_divs = wants_divs || !strcmp(op, "orders2.new_root") || !strcmp(op, "orders2.fallback");
+        int source = !strcmp(op, "orders2.paradrop_source");
+        int may_divs = wants_divs || !strcmp(op, "orders2.new_root") || !strcmp(op, "orders2.fallback") || source;
         if (j->n != 1) why = "orders2: exactly one orders group per request";
         else if (nv != want) why = "vals: the wrong number of values for this op";
         else if (flag) why = "orders2 ops take no flag";
-        else if (want >= 1 && strcmp(op, "orders2.new_root") && (j->val[0] < 1 || j->val[0] > 100000000)) why = "vals[0]: an order id";
+        else if (want >= 1 && strcmp(op, "orders2.new_root") && (j->val[0] < (source ? 0 : 1) || j->val[0] > 100000000))
+            why = source ? "vals[0]: an order id (0 = a new paradrop order)" : "vals[0]: an order id";
         else if (!strcmp(op, "orders2.new_root") && (j->val[0] < 0 || j->val[0] > 100000000 || j->val[1] < 0 || j->val[1] > lim_hi ||
                                                     j->val[2] < 0 || j->val[2] > lim_hi || j->val[1] >= j->val[2] || (j->val[3] != 0 && j->val[3] != 1)))
             why = "new_root vals: section id, from < to within 0..100000, split 0/1";
@@ -1688,6 +1697,8 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         else if (divs && *divs && !may_divs) why = "this op takes no divs";
         else if (may_divs && divs && *divs && (j->ndiv = parse_list_u64(divs, j->divs, J2_DIVS)) < 1) why = "divs: comma-separated hex division addresses";
         else if (wants_divs && j->ndiv < 1) why = "divs: at least one division";
+        else if (source && j->val[0] == 0 && j->ndiv < 1) why = "divs: a new paradrop order needs its paratroopers";
+        else if (source && j->val[0] != 0 && j->ndiv) why = "divs: only a new paradrop order (order 0) takes divisions";
         else {
             j->order_id = want >= 1 && strcmp(op, "orders2.new_root") ? (int32_t)j->val[0] : 0;
             j->blitz = !strcmp(op, "orders2.spearhead");
@@ -2050,9 +2061,19 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
                     pending = !(orders_find(of, sread, vt, g, j->order_id) == j->order && sread(j->order + ff->root_range_off, rg, 16) &&
                                 rg[0] == j->val[1] && rg[1] == j->val[2]);
                     if (!pending) snprintf(rbx, sizeof rbx, ",\"range\":[%lld,%lld]", (long long)rg[0], (long long)rg[1]);
+                } else if (!strcmp(op, "orders2.paradrop_source") && j->order_id == 0) {
+                    /* engineer 106: a new paradrop order: the group's top orders grew and the newest is of the paradrop
+                     * kind (4 on 1.20.0.0); its id is what paradrop_target and orders.execute name next */
+                    int32_t cnt = -1, kind = -1, nid = 0; uint64_t d = 0, o = 0, v = 0;
+                    if (sread(g + of->list_cnt[0], &cnt, 4) && cnt > j->before_top && sq(g + of->list_off[0], &d) &&
+                        sq(d + 8 * (uint64_t)(cnt - 1), &o) && sq(o, &v) && v == vt && sread(o + of->kind_off, &kind, 4) &&
+                        sread(o + of->id_off, &nid, 4) && kind == PARADROP_ORDER_KIND) {
+                        pending = 0;
+                        snprintf(rbx, sizeof rbx, ",\"order_id\":%d,\"order_kind\":%d,\"source_read\":\"not mapped (order +0xb8 on 1.20.0.0)\"", nid, kind);
+                    }
                 } else {
-                    /* invasion/paradrop target: the module has no read of the target field yet; the order must still be
-                     * there and the MCP side reads the plan */
+                    /* invasion/paradrop target and an existing paradrop source: the module has no read of the province
+                     * field yet; the order must still be there and the MCP side reads the plan */
                     pending = orders_find(of, sread, vt, g, j->order_id) != j->order;
                     if (!pending) snprintf(rbx, sizeof rbx, ",\"target_read\":\"not mapped (the order is still there)\"");
                 }

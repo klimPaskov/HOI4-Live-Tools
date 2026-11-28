@@ -204,6 +204,8 @@ pub(super) struct Memory {
     /// Enemy fighters active per strategic region as the region window last showed them, with the
     /// game hour of the read (plan_air: the air war by situation).
     pub(super) air_seen: HashMap<i64, (f64, GameHour)>,
+    /// The enemy's share of the air per region as the region window estimated it, with the hour (plan_airborne).
+    pub(super) air_share: HashMap<i64, (f64, GameHour)>,
     /// Wake alarms raised since the last run result.
     alarms: Vec<Value>,
     /// The last status line of each rule (the run result's `military`).
@@ -261,7 +263,7 @@ pub(super) fn digest(state: &State) -> Option<Value> {
 
 /// The military rules as lanes of the pass (plan_run.rs `lanes`): rests that are over, the
 /// running naval invasion, the casualty and air superiority rules, army groups, the navy.
-pub(super) const LANES: [super::Lane; 8] = [
+pub(super) const LANES: [super::Lane; 9] = [
     ("rests", |state, tools, _, lease, now| {
         rest_step(state, tools, lease, now)
     }),
@@ -270,6 +272,7 @@ pub(super) const LANES: [super::Lane; 8] = [
     ("air_superiority", air_superiority_rule),
     ("air_attach", air_attach_rule),
     ("air_situation", super::plan_air::air_situation_step),
+    ("airborne", super::plan_airborne::airborne_step),
     ("army_groups", army_group_step),
     ("navy", navy_step),
 ];

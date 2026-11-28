@@ -83,8 +83,11 @@ the strongest legitimate route; no message, lint or note treats a goal as doubtf
 **Navy**
 * No naval blockade in peacetime.
 * No naval mining.
-* Submarines: no always engage, at least 5 per submarine fleet, no special submarine modules (AIP,
-  coating), and nothing above Submarine II (no research, design or production of later hulls).
+* Submarines: no always engage and at least 5 per submarine fleet. Single-player FAIR has no
+  submarine tier limit (the owner's decision of 28 Nov 2026). A multiplayer game whose rules say
+  "nothing above Submarine II, no special submarine modules (AIP, coating)" writes
+  `_rules {"multiplayer": {"submarines": false}}`, and the guard and the lint then refuse later
+  hulls and those modules.
 
 **Air**
 * Strategic bombing may not target refineries specifically.
@@ -114,7 +117,8 @@ switch the first layer that names it decides. The plan lint, the server's guard 
 | propaganda | on | propaganda operations against an enemy's war support (the Soviet one included) |
 | strategic_bombing_war_support | on | strategic bombing for war support |
 | refinery_bombing | off | strategic bombing of refineries |
-| naval_mines, access, factions, timing, space_marines, paratroopers, submarines | off (guarded) | true lifts that guard |
+| naval_mines, access, factions, timing, space_marines, paratroopers | off (guarded) | true lifts that guard |
+| submarines | on (no tier limit) | false turns on the Submarine II and AIP/coating limit (a multiplayer rule set) |
 
 ## Owner's decisions (28 Nov 2026): allowed under FAIR
 
@@ -269,7 +273,8 @@ as unknown. Preserve the mode and profile revision in the run manifest and revie
 evidence before calling a showcase FAIR.
 
 Where another playbook file marks a tactic FAIR that these rules ban (for example always-engage
-submarines, improved or advanced submarine hulls, anechoic tiles, naval mines, military access), the rules
+submarines, naval mines, military access; later submarine hulls and anechoic tiles only under a
+multiplayer rule set with `submarines: false`), the rules
 here win and the tactic is META-only.
 
 ## META-only, banned and patched tricks

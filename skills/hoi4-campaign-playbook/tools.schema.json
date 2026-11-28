@@ -430,7 +430,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_abilities": {
-   "description": "Read-only, no input: the commander abilities of the running game (common/abilities, mods included): per ability its command power cost per day (for each battalion group the game's tooltip names), duration, cooldown, whether a field marshal may use it, its unit modifiers, and its worth in each situation (prepare_attack: planning speed; reinforce: reinforce rate; attack, attack_river, attack_fort: attack and breakthrough plus the river's or fort's own bonus; defend: defence and dig-in; short_supply: days without supply), with the drawback named (more strength lost, no retreat, less attack); best_by_situation picks the highest gain per command power without a drawback; the current command power from the top bar. The order itself is not built yet (issue).",
+   "description": "Read-only, no input: the commander abilities of the running game (common/abilities, mods included): per ability its command power cost per day (for each battalion group the game's tooltip names), duration, cooldown, whether a field marshal may use it, its unit modifiers, and its worth in each situation (prepare_attack: planning speed; reinforce: reinforce rate; attack, attack_river, attack_fort: attack and breakthrough plus the river's or fort's own bonus; defend: defence and dig-in; short_supply: days without supply), with the drawback named (more strength lost, no retreat, less attack); best_by_situation picks the highest gain per command power without a drawback among the abilities with no country condition (an ability whose allowed names a focus, flag or tag lists it in country_requires and is never picked: those conditions are not checked here); the current command power from the top bar. The order itself is not built yet (issue).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},
@@ -3889,7 +3889,7 @@
    "source": "--list-tools"
   },
   "hoi4_operative_assign": {
-   "description": "Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` refuse with mission_not_built / operation_not_built (operations are started with hoi4_operation_start). Typed refusals before input: invalid_arguments, target_required, country_has_no_states, unknown_country; agency_not_created, operative_unknown, operative_busy (on an operation), already_on_mission from memory; operative_bar_unavailable, mission_unavailable (the game disables the button) from the windows. Verified by memory (mission and target). Live-verified on 1.19.4.",
+   "description": "Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` refuse with mission_not_built / operation_not_built (operations are started with hoi4_operation_start). Typed refusals before input: invalid_arguments, target_required, country_has_no_states, unknown_country; agency_not_created, operative_unknown, operative_busy (on an operation), already_on_mission, mission_running (the operative runs another mission than the starting counter-intelligence at home: pass replace:true to end it) from memory; operative_bar_unavailable, mission_unavailable (the game disables the button) from the windows. Verified by memory (mission and target). Live-verified on 1.19.4.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3911,6 +3911,9 @@
       "maximum": 31,
       "minimum": 0,
       "type": "integer"
+     },
+     "replace": {
+      "type": "boolean"
      },
      "request_id": {
       "type": "string"
@@ -3960,6 +3963,55 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_paradrop": {
+   "description": "Drop an own army's paratroopers from an own air base onto a province with the game's own battle-plan commands (in-process module, family orders2): the paradrop tool's source click (a new paradrop order with the divisions; the game removes the army's area-defence orders), its target click, then the plan bar's execute (execute:false leaves the order drawn). `from_state` names the state of the departure air base (an own air base). `division_ids` limits the drop to those divisions of the army (ids as hoi4_armies lists them; default: all its divisions; the game drops only what can drop). The game's own checks decide: paratrooper divisions, transport planes within range of the target, the air superiority the paradrop needs (PARADROP_AIR_SUPERIORITY_RATIO); a refused drop is reported (paradrop_refused). Refused before any post: army_unknown, air_base_unknown, paradrop_unvalidated (off unless HOI4_BACKEND=inprocess until its live session S21-PARADROP passes), in_process_unavailable. Verified when the army has a paradrop order with the read-back order id (executing when asked).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "division_ids": {
+      "items": {
+       "maxLength": 64,
+       "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
+     },
+     "execute": {
+      "type": "boolean"
+     },
+     "from_state": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "target_province": {
+      "maximum": 100000,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "army",
+     "from_state",
+     "target_province",
+     "request_id",
+     "lease_token"
+    ],
     "type": "object"
    },
    "source": "--list-tools"
