@@ -379,6 +379,49 @@
       "x-owner": "executor",
       "description": "false: stop acting at stop_on_date but never pause"
     },
+    "volunteers": {
+      "type": "object",
+      "x-owner": "executor",
+      "description": "volunteers and the attache as a standing opportunity rule (plan_volunteers.rs): weekly, before send_until the army is sent to each receiver through hoi4_volunteers and the game's own legality answers (a war not started, the cap, the divisions-required floor, the ideology gate refuse with nothing posted); from recall_from it is recalled (the recall lock refuses until it ends); the attache goes to each tag of attache. The rule sets decide (_rules: volunteers, attaches; FAIR allows them). The strategist computes the window from the defines (scripts/hoi4facts/volunteers.py): send_until = the first own war minus RECALL_VOLUNTEERS_AFTER_ARRIVAL_COOLDOWN and VOLUNTEERS_TRANSFER_SPEED days, recall_from = the first own war minus VOLUNTEERS_RECALL_DAYS_PER_UNIT x the army's divisions and a margin.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "receivers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]{3}$"
+          },
+          "description": "the tags of the wars we would help (every side the game may let us help; the game refuses the others)"
+        },
+        "army": {
+          "type": "string",
+          "description": "the army sent: formations no operation needs inside the recall lock"
+        },
+        "send_until": {
+          "type": "string",
+          "description": "last date to send (Y.M.D)"
+        },
+        "recall_from": {
+          "type": "string",
+          "description": "first date to recall (Y.M.D)"
+        },
+        "attache": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]{3}$"
+          },
+          "description": "tags to send an attache to"
+        },
+        "why": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
     "air_situation": {
       "type": "object",
       "x-owner": "executor",

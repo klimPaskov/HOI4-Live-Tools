@@ -291,6 +291,9 @@ use std::{
 /// battles, reach by range and base.
 #[path = "plan_air.rs"]
 mod plan_air;
+/// Volunteers and the attaché as a standing opportunity rule (`volunteers`): the game's own legality answers.
+#[path = "plan_volunteers.rs"]
+mod plan_volunteers;
 /// Concentrated command: formations and their tasks, a general for every army, the army group.
 #[path = "plan_formations.rs"]
 mod plan_formations;
@@ -456,6 +459,7 @@ fn bulk_paths(plan: &Value) -> HashSet<String> {
 }
 pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_skill_run",
+    "hoi4_volunteers",
     "hoi4_army_fallback",
     "hoi4_army_exercise",
     "hoi4_production_priority",
@@ -4653,7 +4657,7 @@ const FAIR_BUDGET: std::time::Duration = std::time::Duration::from_millis(1500);
 /// choosin a research, spending pp, etc"). HEAVY: many inputs or reads, or orders whose timing
 /// matters within a day: speed 3 from its first action until it has been quiet for a while.
 /// A lane not listed is heavy. (lane, minor, why)
-pub(super) const LANE_WEIGHT: [(&str, bool, &str); 50] = [
+pub(super) const LANE_WEIGHT: [(&str, bool, &str); 51] = [
     ("research", true, "one pick in the research view"),
     (
         "factories",
@@ -4679,6 +4683,7 @@ pub(super) const LANE_WEIGHT: [(&str, bool, &str); 50] = [
     ("fuel", true, "a fuel setting: one click"),
     ("manage", true, "the alert and ledger reads: no input"),
     ("diplomacy", true, "one diplomatic action"),
+    ("volunteers", true, "one volunteer or attache action"),
     ("faction", true, "one faction action"),
     ("call_allies", true, "one call to arms"),
     (
