@@ -228,6 +228,15 @@ const cmd_spec CMD2_SPECS[] = {
      "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "22CRecallVolunteerAction"},
     {"volunteers", "volunteers.attache", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_DIPLO_SIMPLE, 0, 0x28,
      "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "18CSendAttacheAction"},
+    /* ---- raids (engineer 118, 28 Nov): a prepared raid's Launch and Cancel buttons (Götterdämmerung raids, common/raids).
+     * Read from 1.20.0.0: NRaids::NNet::CExecuteRaidCommand and CCancelRaidCommand, 0x30 each, one handle +0x24 (0x4aef) of
+     * the raid INSTANCE; the auth slot's resolver casts it to NRaids::CRaidInstance (generic shape: resolver, owner,
+     * sender controls). Creating a raid (CCreateRaidCommand 0xa8: tag, raid type by name, starting point, target,
+     * units) is not built yet; the raid instances are not read yet. OFF in auto until S23-RAID. */
+    {"raids", "raids.execute", "N6NRaids4NNet19CExecuteRaidCommandE", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
+     "N6NRaids13CRaidInstanceE", 1, {{"raid", 0x24, FK_REF, 0, 0x4aef, 0}}, OBJ2_NONE, 0},
+    {"raids", "raids.cancel", "N6NRaids4NNet18CCancelRaidCommandE", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
+     "N6NRaids13CRaidInstanceE", 1, {{"raid", 0x24, FK_REF, 0, 0x4aef, 0}}, OBJ2_NONE, 0},
     /* ---- holds (engineer 79, 24 Nov): the AREA DEFENCE order, as the battle-plan map tool posts it. Read from 1.20.0.0
      * and 1.19.4.1 (identical layout and code). The area button only arms the tool; each left click on a state posts
      * EditAreaDefenseState(group, order id, the state's id, settings) through the tool's own constructor (1.20 0x10094a330,
@@ -722,6 +731,12 @@ static int auth_shape(const scan_image *im, uint64_t fn, const cmd_spec *s, cmd_
         const uint8_t *lb = scan_ptr(im, owner + 18 + (int64_t)(int32_t)c[1], 16);
         uint32_t d[2];
         if (!lb || !cmd_pmatch(lb, 13, "55 48 89 e5 48 8b 87 D 5d c3", d, 2)) return 0;
+    } else if (ob && cmd_pmatch(ob, 19, "55 48 89 e5 48 85 ff 74 06 5d e9 D 31 c0 5d c3", c, 8)) {
+        /* engineer 118: a framed null check that tail-jumps to the getter (the raid instance's owner: 0 for NULL, else
+         * jmp to a two-load leaf: the instance's country, its tag) */
+        const uint8_t *lb = scan_ptr(im, owner + 15 + (int64_t)(int32_t)c[0], 16);
+        uint32_t d[2];
+        if (!lb || !cmd_pmatch(lb, 13, "55 48 89 e5 48 8b 47 B 8b 40 B 5d c3", d, 2)) return 0;
     } else {
         if (!ob || !cmd_pmatch(ob, 0x40, "48 85 ff 74 B 55 48 89 e5", c, 8) || c[0] < 6 || c[0] > 0x30) return 0;
         if (!cmd_pmatch(ob + 5 + c[0], 3, "31 c0 c3", c + 1, 1) || !cmd_pmatch(ob + 5 + c[0] - 2, 2, "5d c3", c + 1, 1)) return 0;

@@ -1888,6 +1888,11 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             else for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a task force is listed twice";
         } else why = "unknown navy op";
         nv = 0;
+    } else if (!strncmp(op, "raids.", 6)) {
+        /* engineer 118: a prepared raid's Launch / Cancel: objs = the own raid instances (NRaids::CRaidInstance, its handle
+         * resolves to it and the owner is the player; the game's own "can do" decides), one command each. No read gives a
+         * raid instance's address yet: off until S23-RAID */
+        if (nv || flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "raids ops take no vals, flag, obj2, provs or divs";
     } else if (!strncmp(op, "navyhq.", 7)) {
         /* engineer 102: a naval headquarters' admiral, as the game's own command (its AI and two UI sites build it).
          *   admiral: objs = ONE own admiral (CUnitLeader, the auth object); obj2 = the headquarters building item
