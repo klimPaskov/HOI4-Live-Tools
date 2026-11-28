@@ -2015,7 +2015,7 @@ fn order(
         state.op_events_now = true;
     }
     if let Some((kind, army, n)) = moved {
-        ledger(state, id, kind, &army, n, ok, what);
+        ledger(state, id, kind, &army, n, ok, what, &why);
     }
     let line = format!("operation {id}: {what}: {ok} {why}");
     state.op_notes.insert(id.to_string(), line.clone());
@@ -2098,6 +2098,31 @@ fn refinement(what: &str, tool: &str, args: &Value) -> Option<(&'static str, Str
     Some((kind, army, n))
 }
 
+/// One ledger line: what was ordered (cut to a few words) and, for a refused order, the game's or
+/// the tool's answer in front, so the reason survives the cut (w126a: "peace opening Army 1 16
+/// refused: opening: 16 of echelon Army 1 join Army 7 (before the war: 10 against " every step,
+/// the refusal itself never shown); pure.
+fn ledger_entry(day: &str, kind: &str, army: &str, n: usize, ok: bool, what: &str, why: &str) -> String {
+    let count = if n > 0 { format!(" {n}") } else { String::new() };
+    let short = |text: &str, max: usize| -> String {
+        let t: String = text.chars().take(max).collect();
+        if text.chars().count() > max {
+            format!("{t}...")
+        } else {
+            t
+        }
+    };
+    if ok {
+        return format!("{day} {kind} {army}{count} ok: {}", short(what, 70));
+    }
+    let answer = why.trim().trim_start_matches("false").trim();
+    format!(
+        "{day} {kind} {army}{count} refused [{}]: {}",
+        short(if answer.is_empty() { "no answer given" } else { answer }, 160),
+        short(what, 50)
+    )
+}
+
 /// How many recent refinements the ledger note lists.
 const LEDGER_RECENT: usize = 8;
 
@@ -2106,7 +2131,17 @@ const LEDGER_RECENT: usize = 8;
 /// in the note `<id>:ledger` that the [ops] line prints: a refinement that moved divisions out of
 /// the attack at the wrong hour is visible in one read (w101c: three sheds by the mouse in the
 /// declaration's burst took Holland's opening; nothing in the notes said so).
-fn ledger(state: &mut State, id: &str, kind: &str, army: &str, n: usize, ok: bool, what: &str) {
+#[allow(clippy::too_many_arguments)]
+fn ledger(
+    state: &mut State,
+    id: &str,
+    kind: &str,
+    army: &str,
+    n: usize,
+    ok: bool,
+    what: &str,
+    why: &str,
+) {
     let now = state.clock;
     let bump = |state: &mut State, what: String, by: i64| {
         *state.done.entry(key(id, &what)).or_insert(0) += by;
@@ -2126,16 +2161,7 @@ fn ledger(state: &mut State, id: &str, kind: &str, army: &str, n: usize, ok: boo
         Some(t) => format!("W{:+.1}", (now - t) as f64 / DAY as f64),
         None => "peace".to_string(),
     };
-    let short: String = what.chars().take(70).collect();
-    let entry = format!(
-        "{day} {kind} {army}{} {}: {short}",
-        if n > 0 {
-            format!(" {n}")
-        } else {
-            String::new()
-        },
-        if ok { "ok" } else { "refused" }
-    );
+    let entry = ledger_entry(&day, kind, army, n, ok, what, why);
     let nk = format!("{id}:ledger");
     let mut recent: Vec<String> = state
         .op_notes

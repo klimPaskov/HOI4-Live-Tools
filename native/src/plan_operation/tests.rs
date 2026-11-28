@@ -6248,6 +6248,28 @@ fn every_refinement_is_counted_in_the_operation_s_ledger() {
     assert!(!note.contains("execute"), "{note}");
 }
 
+#[test]
+fn a_refused_refinement_keeps_its_reason_in_the_ledger() {
+    // w126a: the reason of 'peace opening Army 1 16 refused' was never shown and the text was cut
+    let what = "opening: 16 of echelon Army 1 join Army 7 (before the war: 10 against the 34-40 that can stand there)";
+    let line = ledger_entry(
+        "peace",
+        "opening",
+        "Army 1",
+        16,
+        false,
+        what,
+        "false refused_by_game_check: Army 7 is at its commander's limit (24 of 24)",
+    );
+    assert!(
+        line.starts_with("peace opening Army 1 16 refused [refused_by_game_check: Army 7 is at its commander's limit (24 of 24)]: opening: 16"),
+        "{line}"
+    );
+    assert!(line.ends_with("..."), "{line}");
+    let ok = ledger_entry("W+1.0", "shed", "Mitte", 3, true, "shed: 3", "true Verified");
+    assert_eq!(ok, "W+1.0 shed Mitte 3 ok: shed: 3");
+}
+
 // ENGINEER 109 (the West: a small enemy on day one, arrows over open ground, Belgium in days)
 
 /// The Low Countries' provinces of o96a's graph reads (states 980, 34, 977, 6, 8, 35 and the
