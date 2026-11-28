@@ -525,6 +525,61 @@ fn the_declaration_executes_the_attackers_never_the_hold() {
 }
 
 #[test]
+fn every_attacker_a_wing_too_executes_before_the_declaration_and_the_declaration_waits_for_it() {
+    // p101a (28 Nov 2026): the pre-declaration burst executed Army Group 1 and both Panzergruppen;
+    // the East Prussian wing (23 divisions, one way in over a large river) held "never alone"
+    // for the guard's day-long read and executed at the first war turn, W+3
+    let game = Game::new();
+    let plan = plan();
+    let mut state = State::default();
+    prepared(&mut state, &game, &plan);
+    *game.own_border.borrow_mut() = vec![5];
+    *game.graph.borrow_mut() = Some(json!({"provinces": [
+        {"province": 1, "state_id": 98, "terrain": "urban", "attack_modifier": -0.5,
+         "forts_in_history": [],
+         "borders": [{"province": 2, "river": "large", "river_share": 1.0,
+                      "river_attack_penalty": -0.6}]},
+        {"province": 2, "state_id": 5, "terrain": "plains", "attack_modifier": 0.0,
+         "borders": []}]}));
+    // the declaration is due: the pass runs before the war
+    let at = START + DAY;
+    state.done.insert("preexec".to_string(), at);
+    burst(&mut state, &game, &plan, at);
+    let executed: Vec<String> = game
+        .orders()
+        .iter()
+        .filter(|(_, a)| a["execute"] == json!(true))
+        .map(|(_, a)| text(&a["army"]).to_string())
+        .collect();
+    assert!(executed.contains(&"Nord".to_string()), "{executed:?}");
+    assert!(executed.contains(&"Panzer".to_string()), "{executed:?}");
+    assert!(executed.contains(&"Army Group 1".to_string()), "{executed:?}");
+    assert!(
+        state.op_notes["op_pol:guard:Nord"].contains("ATTACKS together with"),
+        "{:?}",
+        state.op_notes.get("op_pol:guard:Nord")
+    );
+    // every attacker reads executing: nothing holds the declaration
+    assert!(pre_pending(&state, at).is_empty());
+    // an attacker the roster does not read executing holds it, and is named
+    game.unit("Nord", |r| {
+        for o in r["plan"].as_array_mut().unwrap() {
+            o["executing"] = json!(false);
+            for off in o["offensives"].as_array_mut().unwrap() {
+                off["executing"] = json!(false);
+            }
+        }
+    });
+    game.calls.borrow_mut().clear();
+    burst(&mut state, &game, &plan, at + 1);
+    let pending = pre_pending(&state, at + 1);
+    assert_eq!(pending.len(), 1, "{pending:?}");
+    assert!(pending[0].contains("Nord"), "{pending:?}");
+    // once war is on the pass no longer holds anything
+    assert!(pre_pending(&state, at + PRE_EXECUTE + 1).is_empty());
+}
+
+#[test]
 fn a_stalled_line_draws_the_next_phase_line_and_executes_it() {
     let game = Game::new();
     let plan = plan();
@@ -3165,6 +3220,7 @@ fn a_guarded_wing_never_attacks_alone_and_never_waits_forever() {
         &panzer,
         &roster,
         &wars(15),
+        &[],
         START + 2 * DAY
     ));
 }
@@ -3234,7 +3290,7 @@ fn assert_guard(
     wars: &Value,
     at: GameHour,
 ) -> bool {
-    assault_guarded(state, game, plan, "op_lux", op, u, roster, wars, at)
+    assault_guarded(state, game, plan, "op_lux", op, u, roster, wars, &[], at)
 }
 
 #[test]
@@ -5026,6 +5082,55 @@ fn fronts_are_weighted_by_what_their_stretch_fights_with_and_feeds_and_a_full_ba
         vec!["m8", "m7", "m6", "m5", "m4"]
     );
     assert!(state.op_notes["op:capacity:Army Group 1"].contains("breadth: 1 of 2"));
+}
+
+#[test]
+fn at_war_a_front_facing_no_enemy_province_gives_its_divisions_to_the_front_that_does_at_once() {
+    // p101a (28 Nov 2026): Army 2's second front 169 held 9 divisions facing 0 enemy provinces for
+    // the whole war; one sideways move in 33 days
+    let game = Game::new();
+    capacity_theatre(&game, 5, 9);
+    // the Belgian piece is behind the line: no enemy province faces front 110 any more
+    let wars = json!({"wars": {"enemies": ["HOL"]}, "borders": [
+        {"neighbour_tag": "HOL", "neighbour_states": [7], "own_border_states": [57]}]});
+    let mut grp = unit(
+        "Army Group 1".into(),
+        Role::Group,
+        &json!({"enemy": "HOL", "own_states": [57, 42]}),
+        &json!({"target_line": [7]}),
+    );
+    grp.members = vec!["Mitte".into(), "Sued".into()];
+    let units = vec![grp];
+    // a long refinement cool-down: the dead front does not wait for it
+    let op = json!({"id": "op", "enemies": ["HOL"], "refine_days": 30});
+    let mut state = State::default();
+    state.done.insert(key("op", "by_command"), 1);
+    state.done.insert(key("op", "exec"), START);
+    state
+        .done
+        .insert(key("op", "spread:Army Group 1:2"), START);
+    let roster = game.roster.borrow().clone();
+    let line = border_fronts(
+        &mut state,
+        &game,
+        "op",
+        &op,
+        &units,
+        &roster,
+        &wars,
+        "l",
+        START + DAY,
+    )
+    .unwrap()
+    .expect("a spread");
+    assert!(line.contains("face no enemy province"), "{line}");
+    let spread = game
+        .orders()
+        .into_iter()
+        .find(|(n, a)| n == "hoi4_army_plan" && a["distribute"].is_object())
+        .expect("a spread by weights");
+    assert_eq!(spread.1["distribute"]["weights"]["110"], json!(0));
+    assert!(spread.1["distribute"]["weights"]["109"].as_i64().unwrap() >= 1);
 }
 
 // ARMOUR WHERE IT CAN BREAK THROUGH (engineer 99, after o96a)

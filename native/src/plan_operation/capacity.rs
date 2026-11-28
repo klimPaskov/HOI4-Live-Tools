@@ -230,6 +230,27 @@ pub(super) fn unbalanced(rooms: &[Room], slack: i64) -> bool {
     rooms.iter().any(|r| r.free() <= -slack) && rooms.iter().any(|r| r.free() >= slack)
 }
 
+/// The weight a stretch is spread by: its cap, at least one while it faces an enemy, none when it
+/// faces no enemy province (a front the line has left behind keeps no division the game can move).
+pub(super) fn weight(r: &Room) -> i64 {
+    if r.facing == 0 {
+        0
+    } else {
+        r.cap.max(1)
+    }
+}
+
+/// DEAD FRONTS: stretches facing no enemy province that hold more than the one division a spread
+/// leaves on every front, while another stretch faces an enemy: the weights to spread the unit by
+/// at once (`weight`), None otherwise. p101a (28 Nov 2026): every attacker kept a second front
+/// facing 0 enemy provinces (Army 2's 169 with 9 divisions, Army Group 1's 172 with 8, 22 in
+/// all) for the whole war while Army Group 1's main front stood 40 of cap 24. Pure.
+pub(super) fn dead_spread(rooms: &[Room]) -> Option<Vec<(i64, i64)>> {
+    let dead = rooms.iter().any(|r| r.facing == 0 && r.divisions > 1);
+    let live = rooms.iter().any(|r| r.facing > 0);
+    (dead && live).then(|| rooms.iter().map(|r| (r.id, weight(r))).collect())
+}
+
 /// A battle whose reserve outnumbers its engaged divisions, with our divisions waiting in it.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(super) struct Pile {
@@ -860,6 +881,41 @@ mod tests {
         let mut won = battles.clone();
         won["list"][0]["winning"] = json!("attacker");
         assert!(stuck_push(&won, &g, &read, &armies, 72, 6, &|_| false).is_none());
+    }
+
+    #[test]
+    fn a_front_facing_no_enemy_gives_its_divisions_to_the_fronts_that_do() {
+        // p101a W+10: Army 2's front 14 faces 7 enemy provinces (cap 51, 14 there), its front 169
+        // none (9 there)
+        let rooms = vec![
+            Room {
+                id: 14,
+                cap: 51,
+                divisions: 14,
+                facing: 7,
+                ..Default::default()
+            },
+            Room {
+                id: 169,
+                cap: 0,
+                divisions: 9,
+                facing: 0,
+                ..Default::default()
+            },
+        ];
+        assert_eq!(dead_spread(&rooms), Some(vec![(14, 51), (169, 0)]));
+        // one division left there (what a spread keeps on every front): nothing to move
+        let mut one = rooms.clone();
+        one[1].divisions = 1;
+        assert_eq!(dead_spread(&one), None);
+        // no front faces an enemy (a read without the enemy): nothing moves
+        let mut none = rooms.clone();
+        none[0].facing = 0;
+        assert_eq!(dead_spread(&none), None);
+        assert_eq!(weight(&rooms[1]), 0);
+        let mut thin = rooms[0].clone();
+        thin.cap = 0;
+        assert_eq!(weight(&thin), 1);
     }
 
     #[test]

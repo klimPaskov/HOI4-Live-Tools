@@ -2434,6 +2434,37 @@ pub(super) fn idle_holds(
 pub(super) const PRE_EXECUTE: GameHour = 12;
 
 /// The declaration is going out now: the prepared operations execute first.
+/// Game hours a declaration waits after the pre-declaration burst for the attackers the roster
+/// does not read executing yet (a failed execute is tried again after 3 hours).
+pub(super) const PRE_HOLD: GameHour = 6;
+
+/// Whether one of the operation's enemies is at war already (the pass is no longer before it).
+fn before_war_of(op: &Value, at_war: &[String]) -> bool {
+    strings(op, "enemies").iter().any(|e| at_war.contains(e))
+}
+
+/// The operations whose pre-declaration pass left an attacker not executing (within the
+/// pre-execute window): the declaration waits for them (`PRE_HOLD`). The notes name them.
+pub(super) fn pre_pending(state: &State, now: GameHour) -> Vec<String> {
+    let mut out: Vec<String> = state
+        .done
+        .iter()
+        .filter(|(k, t)| k.ends_with(":prepending") && now >= **t && now - **t <= PRE_EXECUTE)
+        .filter_map(|(k, _)| {
+            let id = k.strip_prefix("op:")?.strip_suffix(":prepending")?;
+            Some(
+                state
+                    .op_notes
+                    .get(&format!("{id}:prepending"))
+                    .cloned()
+                    .unwrap_or_else(|| format!("operation {id}: an attacker is being executed")),
+            )
+        })
+        .collect();
+    out.sort();
+    out
+}
+
 pub(super) fn pre_executing(state: &State, now: GameHour) -> bool {
     state
         .done
@@ -2882,8 +2913,22 @@ fn one(
     };
     // a wing whose every way in is a hard crossing holds (ASSAULT GUARD)
     let mut guarded: HashSet<String> = HashSet::new();
+    // the attackers this pass executes besides a wing: the operation's own attack of the same
+    // hour (EXECUTE, THEN DECLARE), so a wing is not alone while they are only being executed
+    // (p101a, 28 Nov 2026: Armee Nord's 23 divisions held "never alone" in the pre-declaration
+    // burst because the group and both Panzergruppen were executed one order after another in
+    // the same burst; the guard's day-long read kept it holding to the first war turn at W+3)
+    let pass: Vec<String> = units
+        .iter()
+        .filter(|v| {
+            attacker(v)
+                && v.role != Role::Wing
+                && (!offensives(roster, &v.name).is_empty() || front_only(state, v))
+        })
+        .map(|v| v.name.clone())
+        .collect();
     for u in units.iter().filter(|u| u.role == Role::Wing) {
-        if assault_guarded(state, tools, plan, id, op, u, roster, wars, now) {
+        if assault_guarded(state, tools, plan, id, op, u, roster, wars, &pass, now) {
             guarded.insert(u.name.clone());
         }
     }
@@ -2909,6 +2954,10 @@ fn one(
             "hoi4_army_plan",
             json!({"army": u.name, "execute": true}),
         )?;
+        // before the war the declaration waits until the roster reads it executing
+        if pre && !before_war_of(op, &at_war) {
+            state.done.insert(key(id, "prepending"), now);
+        }
         return Ok(Some(line));
     }
     let attackers: Vec<&Unit> = units
@@ -2919,6 +2968,29 @@ fn one(
                 && (!offensives(roster, &u.name).is_empty() || front_only(state, u))
         })
         .collect();
+    // EVERY FORMATION EXECUTES BEFORE THE DECLARATION, VERIFIED: in the pre-declaration pass the
+    // attackers the roster does not read executing yet hold the declaration (plan_run
+    // declare_first, at most PRE_HOLD game hours); the note names them
+    if pre && !before_war_of(op, &at_war) {
+        let pending: Vec<&str> = attackers
+            .iter()
+            .filter(|u| !executing(roster, &u.name))
+            .map(|u| u.name.as_str())
+            .collect();
+        if pending.is_empty() {
+            state.done.remove(&key(id, "prepending"));
+            state.op_notes.remove(&format!("{id}:prepending"));
+        } else {
+            state.done.insert(key(id, "prepending"), now);
+            state.op_notes.insert(
+                format!("{id}:prepending"),
+                format!(
+                    "operation {id}: before the declaration {} not executing yet",
+                    pending.join(", ")
+                ),
+            );
+        }
+    }
     if let Some(line) = strikes(
         state, tools, plan, op, &units, roster, &enemies, &at_war, lease, now,
     )? {
@@ -4375,14 +4447,46 @@ fn assault_guarded(
     u: &Unit,
     roster: &Value,
     wars: &Value,
+    pass: &[String],
     now: GameHour,
 ) -> bool {
     if u.role != Role::Wing || u.spear || op["assault_guard"] == json!(false) {
         return false;
     }
     let k = key(id, &format!("guard:{}", u.name));
+    let alone_k = key(id, &format!("guardalone:{}", u.name));
+    let war_of = |owner_id: &str| {
+        list(plan, "operations")
+            .iter()
+            .enumerate()
+            .find(|(i, o)| op_id(o, *i) == owner_id)
+            .map(|(_, o)| text(&o["war"]).to_string())
+    };
+    let my_war = text(&op["war"]).to_string();
+    // the joint attack: an army of an operation of the same war that executes, and the attackers
+    // this operation executes in the same pass
+    let mut joint: Vec<String> = state
+        .op_owned
+        .iter()
+        .filter(|(army, owner)| {
+            **army != u.name
+                && (my_war.is_empty() || war_of(owner).is_some_and(|w| w == my_war))
+                && executing(roster, army)
+        })
+        .map(|(army, _)| army.clone())
+        .collect();
+    for a in pass {
+        if *a != u.name && !joint.contains(a) {
+            joint.push(a.clone());
+        }
+    }
+    joint.sort();
     if state.skipped(now, "opguard", &u.name) {
-        return state.done.get(&k) == Some(&1);
+        // a hold read while no attack of the war ran is read again once one runs
+        let alone = state.done.get(&alone_k) == Some(&1);
+        if !(alone && !joint.is_empty()) {
+            return state.done.get(&k) == Some(&1);
+        }
     }
     state.skip(now, "opguard", &u.name, DAY);
     let me = player(tools, plan);
@@ -4445,24 +4549,6 @@ fn assault_guarded(
     // group's or the armour's attack on the neighbours): at once when the ground and the odds
     // allow, at even odds when they do not, and after JOINT_MAX_WAIT of the joint attack
     // whatever stands there (the neighbours' attack has drawn them off or never will).
-    let war_of = |owner_id: &str| {
-        list(plan, "operations")
-            .iter()
-            .enumerate()
-            .find(|(i, o)| op_id(o, *i) == owner_id)
-            .map(|(_, o)| text(&o["war"]).to_string())
-    };
-    let my_war = text(&op["war"]).to_string();
-    let joint: Vec<String> = state
-        .op_owned
-        .iter()
-        .filter(|(army, owner)| {
-            **army != u.name
-                && (my_war.is_empty() || war_of(owner).is_some_and(|w| w == my_war))
-                && executing(roster, army)
-        })
-        .map(|(army, _)| army.clone())
-        .collect();
     let jk = key(id, &format!("joint:{}", u.name));
     let joint_days = if joint.is_empty() {
         state.done.remove(&jk);
@@ -4581,6 +4667,9 @@ fn assault_guarded(
         ),
     );
     state.done.insert(k, i64::from(hard));
+    state
+        .done
+        .insert(alone_k, i64::from(hard && joint_days.is_none()));
     hard
 }
 
@@ -7244,7 +7333,7 @@ fn advance(
         // ASSAULT GUARD: a wing with only hard ways in keeps its front and does not start its
         // attack alone; an executing order is never stopped by it (w92c, 28 Nov 2026: Army 3 was
         // stopped on W+16 and stood twelve days while Belgium held 2 of 86 points)
-        if assault_guarded(state, tools, plan, id, op, u, roster, wars, now)
+        if assault_guarded(state, tools, plan, id, op, u, roster, wars, &[], now)
             && !executing(roster, &u.name)
         {
             continue;
@@ -8288,7 +8377,7 @@ fn border_fronts(
                     Some(rooms) => {
                         let weights: serde_json::Map<String, Value> = rooms
                             .iter()
-                            .map(|r| (r.id.to_string(), json!(r.cap.max(1))))
+                            .map(|r| (r.id.to_string(), json!(capacity::weight(r))))
                             .collect();
                         (
                             json!({ "weights": weights }),
@@ -8612,7 +8701,7 @@ fn capacity_turn(
             state.op_notes.insert(nk, note.clone());
             let weights: serde_json::Map<String, Value> = rooms
                 .iter()
-                .map(|r| (r.id.to_string(), json!(r.cap.max(1))))
+                .map(|r| (r.id.to_string(), json!(capacity::weight(r))))
                 .collect();
             return Ok(Some(order(
                 state,
@@ -8626,6 +8715,35 @@ fn capacity_turn(
         }
         state.op_notes.insert(nk, note);
         return Ok(None);
+    }
+    // DEAD FRONTS at once (no refinement wait: a front facing nobody costs no planning that
+    // matters): its divisions go to the fronts that face the enemy, by their rooms
+    if let Some(weights) = capacity::dead_spread(rooms) {
+        if !state.skipped(now, "opdead", &u.name) {
+            state.skip(now, "opdead", &u.name, DAY);
+            state.op_notes.insert(nk, note.clone());
+            let dead: Vec<String> = rooms
+                .iter()
+                .filter(|r| r.facing == 0 && r.divisions > 1)
+                .map(|r| format!("{} ({} divisions)", r.id, r.divisions))
+                .collect();
+            let weights: serde_json::Map<String, Value> = weights
+                .into_iter()
+                .map(|(id, w)| (id.to_string(), json!(w)))
+                .collect();
+            return Ok(Some(order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!(
+                    "{note}: front(s) {} face no enemy province: their divisions go to the fronts that do",
+                    dead.join(", ")
+                ),
+                "hoi4_army_plan",
+                json!({"army": u.name, "distribute": {"weights": weights}}),
+            )?));
+        }
     }
     let Ok(battles) = tools.call("hoi4_battles", &json!({"divisions": true})) else {
         state.op_notes.insert(nk, note);
