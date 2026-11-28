@@ -7228,6 +7228,21 @@ fn capitulation_path(origin: (f64, f64), states: &[Far], share: f64) -> Vec<(i64
     path
 }
 
+/// Each state's points as PROVINCE WORTH (pure): its provinces in `g` count 1 each plus 10 x the
+/// state's victory points; a state the graph does not list keeps 10 x its points plus 1.
+fn province_worth(rows: &[Far], g: &HashMap<i64, ground::Prov>) -> Vec<Far> {
+    let mut count: HashMap<i64, f64> = HashMap::new();
+    for p in g.values() {
+        *count.entry(p.state).or_default() += 1.0;
+    }
+    rows.iter()
+        .map(|r| Far {
+            vp: count.get(&r.id).copied().unwrap_or(1.0) + 10.0 * r.vp.max(0.0),
+            ..*r
+        })
+        .collect()
+}
+
 /// One enemy state as the far line reads it: id, victory points, map centre.
 #[derive(Clone, Copy, Debug)]
 struct Far {
@@ -7370,8 +7385,20 @@ fn learn_deep(
         return None;
     }
     state.done.insert(tried, 0);
+    // PROVINCE WORTH (with the plan's surrender limits): each province counts 1 + 10 x its
+    // victory points (define VICTORY_POINT_WORTH_FACTOR, "province worth (surrender)")
+    let by_worth = op["surrender_limit"]
+        .as_object()
+        .is_some_and(|m| !m.is_empty());
+    if by_worth {
+        let ids: Vec<i64> = rows.iter().map(|r| r.id).take(128).collect();
+        if let Ok(read) = tools.call("hoi4_province_graph", &json!({"states": ids})) {
+            let g = ground::read_graph(&read);
+            rows = province_worth(&rows, &g);
+        }
+    }
     // THE CAPITULATION PATH: the far line lies behind what the enemies' surrender limits ask
-    // (with the margin), and the cheapest victory-point path to it is noted
+    // (with the margin), and the cheapest path of points to it is noted
     let share = must_fall_share(op, enemies);
     state
         .done
@@ -7383,8 +7410,13 @@ fn learn_deep(
     state.op_notes.insert(
         format!("{id}:capitulation"),
         format!(
-            "operation {id}: {} capitulate(s) at {:.0}% of their victory points ({}): the cheapest path from the front {} = {got:.0} of {total:.0}",
+            "operation {id}: {} capitulate(s) at {:.0}% of their {} ({}): the cheapest path from the front {} = {got:.0} of {total:.0}",
             enemies.join(", "),
+            if by_worth {
+                "province worth (1 + 10 x victory points per province)"
+            } else {
+                "victory points"
+            },
             limit * 100.0,
             limit_source(op, enemies),
             path.iter()

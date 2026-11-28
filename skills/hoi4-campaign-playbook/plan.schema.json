@@ -3027,8 +3027,7 @@
           "surrender_limit": {
             "type": "object",
             "additionalProperties": {"type": "number", "minimum": 0.2, "maximum": 1},
-            "propertyNames": {"pattern": "^[A-Z0-9]{3}$"},
-            "description": "each enemy's surrender limit {TAG: share of its victory points}, as the plan reads it from the game files (defines BASE_SURRENDER_LIMIT 0.8 plus the surrender_limit modifiers of the national spirits our country sees, lowered by collaboration; floor 0.2); default the base. The far line (offensive.deep) lies behind the highest limit with the base margin in proportion (limit x 0.95 / 0.8, never over 0.95) and the note op_<id>:capitulation lists the cheapest victory-point path from the front to it"
+            "description": "each enemy's surrender limit {TAG: share}, as the plan reads it from the game files: max(0.2, (0.8 + the surrender_limit of its ideas, leader traits and dynamic modifiers our country sees, -0.3 while its war support is low: war_support_bad_modifier) x (1 - 0.0015 x collaboration %)); default the base. Set, the executor counts PROVINCE WORTH (1 + 10 x victory points per province: define VICTORY_POINT_WORTH_FACTOR) for the capitulation path and the far line; unset, victory points as before. The far line (offensive.deep) lies behind the highest limit with the base margin in proportion (limit x 0.95 / 0.8, never over 0.95) and the note op_<id>:capitulation lists the cheapest victory-point path from the front to it"
           },
           "opening": {
             "type": "object",

@@ -7115,3 +7115,33 @@ fn the_capitulation_path_takes_the_points_a_surrender_limit_asks_and_the_far_lin
     let base = far_line_at((0.0, 0.0), &states, DEEP_SHARE);
     assert!(base.iter().any(|s| [40, 41, 42].contains(s)), "{base:?}");
 }
+
+#[test]
+fn province_worth_counts_every_province_and_ten_per_victory_point() {
+    // Poland, t1939n 1939.09.25 (28 Nov 2026): 110 of 134 points held (0.82) and no
+    // capitulation at the base 0.8: the empty eastern provinces still count 1 each
+    let rows = [
+        Far {
+            id: 10,
+            vp: 30.0,
+            x: 0.0,
+            z: 0.0,
+        },
+        Far {
+            id: 95,
+            vp: 0.0,
+            x: 500.0,
+            z: 0.0,
+        },
+    ];
+    let g = ground::read_graph(&json!({"provinces": [
+        graph_row(1, 10, "plains", &[]),
+        graph_row(2, 10, "plains", &[]),
+        graph_row(3, 95, "marsh", &[]),
+        graph_row(4, 95, "marsh", &[]),
+        graph_row(5, 95, "marsh", &[])]}));
+    let w = province_worth(&rows, &g);
+    assert_eq!(w[0].vp, 302.0);
+    assert_eq!(w[1].vp, 3.0);
+    assert_eq!((w[1].x, w[1].id), (500.0, 95));
+}
