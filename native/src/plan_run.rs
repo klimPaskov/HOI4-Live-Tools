@@ -388,9 +388,6 @@ pub const UNBUILT_ARGS: &[(&str, &str)] = &[
     // the law of one occupied state (gap register occupation.per_state_law): the tool sets the
     // default law only
     ("hoi4_occupation_law", "state"),
-    // the Division Designer's regimental support row (gap register templates.regimental_support)
-    ("hoi4_template_create", "regimental_support"),
-    ("hoi4_template_edit", "regimental_support"),
     // swapping a chosen doctrine (gap register doctrines.replace_doctrine)
     ("hoi4_doctrine_adopt", "replace"),
     // the peace conference's force-government demand (gap register peace.force_government)
