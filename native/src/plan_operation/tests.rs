@@ -1965,8 +1965,8 @@ fn the_far_line_lies_behind_the_points_that_make_the_enemy_capitulate() {
         .fold((0.0, 0.0), |a, p| (a.0 + p.1 / n, a.1 + p.2 / n));
     // Lwow, Polesie, Nowogrodek, Vilna: the eastern border from south to north; every city
     // with points (Warsaw, Krakow, Danzig, Gdynia, Poznan, Lodz, Kielce) lies in front of it
-    assert_eq!(far_line(origin, &states), [91, 94, 95, 784]);
-    assert!(far_line(origin, &states[..1]).is_empty());
+    assert_eq!(far_line_at(origin, &states, DEEP_SHARE), [91, 94, 95, 784]);
+    assert!(far_line_at(origin, &states[..1], DEEP_SHARE).is_empty());
 }
 
 fn deep_plan(replace: bool) -> Value {
@@ -6789,6 +6789,7 @@ fn before_the_war_a_small_enemy_s_army_is_filled_by_what_its_allies_can_bring_in
     let game = Opening {
         calls: RefCell::new(vec![]),
     };
+    state.op_acting = true;
     // 1. the threat before the war: the French in reach, the need is what Army 7 can still take
     let at_war = vec!["FRA".to_string(), "ENG".to_string()];
     let out = opening_prewar(
@@ -6847,7 +6848,7 @@ fn before_the_war_a_small_enemy_s_army_is_filled_by_what_its_allies_can_bring_in
         .iter()
         .find(|(n, _)| n == "hoi4_army_detach")
         .map(|(_, a)| a.clone())
-        .expect("a detach");
+        .unwrap_or_else(|| panic!("{out} {:?}", game.calls.borrow()));
     assert_eq!(detach["into"], json!("Army 7"));
     assert_eq!(detach["divisions"].as_array().unwrap().len(), 16);
 }
@@ -7017,4 +7018,100 @@ fn the_armour_goes_round_its_own_thrust_when_the_small_enemy_s_allies_hold_its_f
     assert!(state.done.contains_key(&key("op", "spearskip:Panzer:8")));
     let note = &state.op_notes["op:armour:Panzer"];
     assert!(note.contains("got into its rough ground first"), "{note}");
+}
+
+#[test]
+fn an_army_meeting_the_enemy_where_the_borrower_already_holds_is_lent_to_it() {
+    // w101b W+21..W+35 (28 Nov 2026): Armee West Süd (18), named by no later operation, stood on
+    // the French border beside the Westwall hold (Armee West Nord) and Army Group 2's front,
+    // "meets an enemy, holds where it stands", while op_france's battles had room for 56-60
+    let roster = json!({"armies": [
+        {"army": "Armee West Süd", "division_count": 18, "states": {"42": 4, "980": 6, "18": 8}},
+        {"army": "Armee West Nord", "division_count": 20, "states": {"42": 10, "978": 10}},
+        {"army": "Army 2", "army_group": "Army Group 2", "division_count": 24, "states": {"980": 24}},
+        {"army": "Army 9", "division_count": 12, "states": {"6": 12}}],
+        "army_groups": [{"army_group": "Army Group 2", "plan": [
+            {"kind": "front", "id": 47, "line": {"states": [6, 980, 18]}}]}]});
+    let wars = json!({"wars": {"at_war": true, "enemies": ["FRA"]}, "borders": [
+        {"neighbour_tag": "FRA", "own_border_states": [42, 978, 980, 6], "neighbour_states": [18, 28]}]});
+    let ops = json!([
+        {"id": "op_france", "enemies": ["FRA"], "stacking": {"by_width": true},
+         "formations": [{"army": "Army 2", "role": "line"}, {"army": "Army 9", "role": "mobile"}],
+         "holds": [{"id": "hold_westwall", "facing": ["FRA"], "states": [978, 42],
+                    "armies": [{"army": "Armee West Nord"}]}]}]);
+    let plan = json!({"war": {"land_orders": false}, "operations": ops});
+    let now = 1000 * DAY;
+    let mut state = State::default();
+    for k in ["prep", "exec"] {
+        state.done.insert(key("op_france", k), now - 5 * DAY);
+    }
+    state.done.insert(key("op_france", "room"), 56);
+    state.done.insert(key("op_france", "room_at"), now - DAY);
+    for a in ["Army 2", "Army 9", "Armee West Nord", "Army Group 2"] {
+        state.op_owned.insert(a.into(), "op_france".into());
+    }
+    let ops = list(&plan, "operations").to_vec();
+    let active = vec![("op_france".to_string(), ops[0].clone())];
+    lend_idle(&mut state, &plan, &ops, &active, &roster, &wars, now);
+    let note = state.op_notes["lend"].clone();
+    assert!(
+        note.contains("Armee West Süd (18): lent to op_france (room 56) as the echelon of Army 2 (its sector is held by Armee West Nord, Army Group 2)"),
+        "{note}"
+    );
+    // a sector nobody of the borrower covers (Lorraine 28 alone): it holds where it stands
+    let mut alone = roster.clone();
+    alone["armies"][0]["states"] = json!({"28": 18});
+    let mut state2 = State::default();
+    for k in ["prep", "exec"] {
+        state2.done.insert(key("op_france", k), now - 5 * DAY);
+    }
+    state2.done.insert(key("op_france", "room"), 56);
+    state2.done.insert(key("op_france", "room_at"), now - DAY);
+    state2.op_owned = state.op_owned.clone();
+    state2.op_owned.remove("Armee West Süd");
+    lend_idle(&mut state2, &plan, &ops, &active, &alone, &wars, now);
+    assert!(
+        state2.op_notes["lend"]
+            .contains("Armee West Süd (18): meets an enemy, holds where it stands"),
+        "{}",
+        state2.op_notes["lend"]
+    );
+}
+
+#[test]
+fn the_capitulation_path_takes_the_points_a_surrender_limit_asks_and_the_far_line_follows_it() {
+    // France (1.20 files): surrender limit 0.8 less 0.5 of FRA_disjointed_government = 0.3;
+    // Paris 50, Lille 10, Calais 15, Le Havre 10, Orleans 15 near the Belgian front, the south far
+    let at = |id, vp, x, z| Far { id, vp, x, z };
+    let states = [
+        at(29, 10.0, 100.0, 0.0),   // Lille
+        at(28, 15.0, 60.0, -40.0),  // Calais
+        at(16, 50.0, 200.0, 0.0),   // Paris
+        at(18, 10.0, 160.0, -60.0), // Le Havre
+        at(27, 15.0, 300.0, 20.0),  // Orleans
+        at(30, 20.0, 150.0, 40.0),  // Reims
+        at(31, 20.0, 120.0, -20.0), // Amiens
+        at(32, 20.0, 180.0, -40.0), // Rouen
+        at(40, 80.0, 900.0, 0.0),   // the south
+        at(41, 76.0, 950.0, 80.0),
+        at(42, 80.0, 1000.0, -60.0),
+    ];
+    let total = 396.0;
+    let path = capitulation_path((0.0, 0.0), &states, 0.3);
+    let got: f64 = path.iter().map(|(_, v)| v).sum();
+    assert!(got >= 0.3 * total, "{path:?}");
+    let ids: Vec<i64> = path.iter().map(|(s, _)| *s).collect();
+    assert!(ids.contains(&16), "{ids:?}");
+    assert!(!ids.iter().any(|s| [40, 41, 42].contains(s)), "{ids:?}");
+    // the limit from the plan, the base without it; the share the far line lies behind
+    let op = json!({"surrender_limit": {"FRA": 0.3}});
+    assert_eq!(surrender_limit(&op, "FRA"), 0.3);
+    assert_eq!(surrender_limit(&op, "POL"), 0.8);
+    assert!((must_fall_share(&op, &["FRA".into()]) - 0.35625).abs() < 1e-9);
+    assert!((must_fall_share(&op, &["POL".into()]) - DEEP_SHARE).abs() < 1e-9);
+    // the far line at France's share stays in the north; at the base it runs to the south
+    let north = far_line_at((0.0, 0.0), &states, must_fall_share(&op, &["FRA".into()]));
+    assert!(!north.iter().any(|s| [40, 41, 42].contains(s)), "{north:?}");
+    let base = far_line_at((0.0, 0.0), &states, DEEP_SHARE);
+    assert!(base.iter().any(|s| [40, 41, 42].contains(s)), "{base:?}");
 }

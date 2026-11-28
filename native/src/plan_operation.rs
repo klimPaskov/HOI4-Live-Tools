@@ -2476,7 +2476,15 @@ pub(super) fn lend_idle(
             ));
             continue;
         }
-        if in_contact(roster, wars, &name) {
+        // A SECTOR ALREADY HELD: an army meeting the enemy only where a borrower's own hold
+        // stands (the hold's army in the same states) is surplus there and is lent to that
+        // borrower. w101b (28 Nov 2026): Armee West Süd (18), handed on by nobody after the Low
+        // Countries, joined the Westwall hold beside Armee West Nord (20-24) from W+21 to W+35
+        // while op_france's battles had room for 56-60 more divisions
+        let surplus_at = in_contact(roster, wars, &name)
+            .then(|| held_sector_of(state, roster, wars, active, &rooms, &name))
+            .flatten();
+        if in_contact(roster, wars, &name) && surplus_at.is_none() {
             lines.push(format!(
                 "{name} ({n}): meets an enemy, holds where it stands"
             ));
@@ -2484,7 +2492,7 @@ pub(super) fn lend_idle(
         }
         let Some((b, room)) = rooms
             .iter_mut()
-            .filter(|(_, r)| *r > 0)
+            .filter(|(b, r)| *r > 0 && surplus_at.as_ref().is_none_or(|(o, _)| o == b))
             .max_by_key(|(_, r)| *r)
         else {
             let seen: Vec<String> = rooms.iter().map(|(b, r)| format!("{b} {r}")).collect();
@@ -2532,8 +2540,12 @@ pub(super) fn lend_idle(
         state.done.insert(key(b, &format!("lent:{name}")), now);
         state.op_owned.insert(name.clone(), b.clone());
         lines.push(format!(
-            "{name} ({n}): lent to {b} (room {room}) as the echelon of {src}{}",
-            match later {
+            "{name} ({n}): lent to {b} (room {room}) as the echelon of {src}{}{}",
+            match &surplus_at {
+                Some((_, by)) => format!(" (its sector is held by {by})"),
+                None => String::new(),
+            },
+            match later.filter(|o| !state.done.contains_key(&key(o, "end"))) {
                 Some(o) => format!(", until {o} starts its prepare"),
                 None => String::new(),
             }
@@ -2543,6 +2555,88 @@ pub(super) fn lend_idle(
     if !lines.is_empty() {
         state.op_notes.insert("lend".into(), lines.join("; "));
     }
+}
+
+/// The borrower (with room) that already covers every contact state the army `name` stands in,
+/// and by whom: its own hold whose army has divisions there, or the fronts of the armies and
+/// groups it owns. (borrower, who covers it.)
+fn held_sector_of(
+    state: &State,
+    roster: &Value,
+    wars: &Value,
+    active: &[(String, Value)],
+    rooms: &[(String, i64)],
+    name: &str,
+) -> Option<(String, String)> {
+    let contact = contact_states(wars);
+    let row = army_row(roster, name)?;
+    let standing = |r: &Value| -> Vec<i64> {
+        r["states"].as_object().map_or(Vec::new(), |m| {
+            m.iter()
+                .filter(|(_, n)| n.as_i64().unwrap_or(0) > 0)
+                .filter_map(|(s, _)| s.parse::<i64>().ok())
+                .collect()
+        })
+    };
+    let at: Vec<i64> = standing(row)
+        .into_iter()
+        .filter(|s| contact.contains(s))
+        .collect();
+    if at.is_empty() {
+        return None;
+    }
+    for (b, room) in rooms {
+        if *room <= 0 {
+            continue;
+        }
+        let Some((_, op)) = active.iter().find(|(id, _)| id == b) else {
+            continue;
+        };
+        let mut covered: HashSet<i64> = HashSet::new();
+        let mut by: Vec<String> = Vec::new();
+        for h in list(op, "holds") {
+            let states = ints(&h["states"]);
+            for a in list(h, "armies") {
+                let a = name_of(state, roster, text(&a["army"]));
+                if a.is_empty() || a == name {
+                    continue;
+                }
+                let there: Vec<i64> = army_row(roster, &a)
+                    .map(standing)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|s| states.contains(s))
+                    .collect();
+                if !there.is_empty() {
+                    covered.extend(states.iter().copied());
+                    by.push(a);
+                }
+            }
+        }
+        let mut mine: Vec<&String> = state
+            .op_owned
+            .iter()
+            .filter(|(a, o)| *o == b && a.as_str() != name)
+            .map(|(a, _)| a)
+            .collect();
+        mine.sort();
+        for a in mine {
+            let fronts: Vec<i64> = orders(roster, a)
+                .iter()
+                .filter(|f| text(&f["kind"]) == "front")
+                .flat_map(|f| ints(&f["line"]["states"]))
+                .collect();
+            if !fronts.is_empty() {
+                covered.extend(fronts);
+                by.push(a.clone());
+            }
+        }
+        if at.iter().all(|s| covered.contains(s)) {
+            by.dedup();
+            return Some((b.clone(), by.join(", ")));
+        }
+    }
+    None
 }
 
 /// Hold orders an idle army may get before it is left alone.
@@ -6019,9 +6113,13 @@ fn prepare(
     // the group's one offensive at the far side of what must fall, computed once in peace
     if group.is_some() && war_tags(wars).is_empty() {
         if let Some(far) = learn_deep(state, tools, id, op, &strings(op, "enemies")) {
+            let share = state
+                .done
+                .get(&key(id, "deep_share"))
+                .map_or(DEEP_SHARE, |v| *v as f64 / 100.0);
             let line = format!(
                 "operation {id}: the group's one offensive runs at the far line {far:?} (behind {:.0}% of the enemy's victory points)",
-                DEEP_SHARE * 100.0
+                share * 100.0
             );
             state.op_notes.insert(id.to_string(), line.clone());
             return Ok(Some(line));
@@ -7046,6 +7144,90 @@ pub(super) fn player(tools: &dyn Tools, plan: &Value) -> String {
         .unwrap_or_default()
 }
 
+/// The game's surrender limit with no modifier (defines `BASE_SURRENDER_LIMIT`), its floor
+/// (`MIN_SURRENDER_LIMIT`); the far line keeps the margin DEEP_SHARE has over the base limit, in
+/// proportion (Poland stood at 0.81 of its points for weeks on the base limit: b38f/b38g).
+const BASE_SURRENDER_LIMIT: f64 = 0.8;
+const MIN_SURRENDER_LIMIT: f64 = 0.2;
+
+/// An enemy's surrender limit: the operation's `surrender_limit` {TAG: share} (the plan reads it
+/// from the game files: the base define plus the national spirits' surrender_limit modifiers our
+/// country sees, lowered by collaboration), else the base. Clamped to [MIN, 1].
+fn surrender_limit(op: &Value, tag: &str) -> f64 {
+    op["surrender_limit"][tag]
+        .as_f64()
+        .unwrap_or(BASE_SURRENDER_LIMIT)
+        .clamp(MIN_SURRENDER_LIMIT, 1.0)
+}
+
+/// Where the limits came from, for the note.
+fn limit_source(op: &Value, enemies: &[String]) -> String {
+    enemies
+        .iter()
+        .map(|t| {
+            format!(
+                "{t} {:.2}{}",
+                surrender_limit(op, t),
+                if op["surrender_limit"][t.as_str()].is_number() {
+                    " by the plan"
+                } else {
+                    " base"
+                }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The highest surrender limit of the enemies.
+fn top_limit(op: &Value, enemies: &[String]) -> f64 {
+    enemies
+        .iter()
+        .map(|t| surrender_limit(op, t))
+        .fold(MIN_SURRENDER_LIMIT, f64::max)
+}
+
+/// The share of the enemies' points the far line lies behind: the highest of their surrender
+/// limits with DEEP_SHARE's margin over the base in proportion, never over DEEP_SHARE (the base
+/// limit gives DEEP_SHARE as before; France's 0.3 gives about 0.36).
+fn must_fall_share(op: &Value, enemies: &[String]) -> f64 {
+    (top_limit(op, enemies) * DEEP_SHARE / BASE_SURRENDER_LIMIT).min(DEEP_SHARE)
+}
+
+/// THE CHEAPEST VICTORY-POINT PATH TO A CAPITULATION (pure): from the front at `origin`, the
+/// state with the most points per extra reach (its distance from the front beyond the deepest
+/// state already taken: what lies within the reach costs only the base) until the points taken
+/// reach `share` of all; (state, points) in order. France (1.20 files): Paris 50 with Calais,
+/// Lille, Le Havre, Orleans and Metz are 28% of its 396 points against its 0.3 limit (the base
+/// 0.8 less 0.5 of its disjointed government idea).
+fn capitulation_path(origin: (f64, f64), states: &[Far], share: f64) -> Vec<(i64, f64)> {
+    const REACH_BASE: f64 = 100.0;
+    let total: f64 = states.iter().map(|s| s.vp.max(0.0)).sum();
+    let away = |f: &Far| ((f.x - origin.0).powi(2) + (f.z - origin.1).powi(2)).sqrt();
+    let mut left: Vec<&Far> = states.iter().filter(|s| s.vp > 0.0).collect();
+    let (mut reach, mut got) = (0.0_f64, 0.0);
+    let mut path = Vec::new();
+    while got < share * total && !left.is_empty() {
+        let worth = |f: &Far| f.vp / ((away(f) - reach).max(0.0) + REACH_BASE);
+        let (i, s) = left
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| {
+                worth(a)
+                    .total_cmp(&worth(b))
+                    .then(a.vp.total_cmp(&b.vp))
+                    .then(b.id.cmp(&a.id))
+            })
+            .map(|(i, s)| (i, *s))
+            .expect("not empty");
+        got += s.vp;
+        reach = reach.max(away(s));
+        path.push((s.id, s.vp));
+        left.remove(i);
+    }
+    path
+}
+
 /// One enemy state as the far line reads it: id, victory points, map centre.
 #[derive(Clone, Copy, Debug)]
 struct Far {
@@ -7063,7 +7245,8 @@ struct Far {
 /// A player draws it once and lets it run; a phase line's second arrow on the same front gets no
 /// divisions from the game (b38g, 19 Nov 2026: Poland stood at 105-109 points for weeks while
 /// the group's opening arrow kept all 56 divisions). Empty when there is nothing to order.
-fn far_line(origin: (f64, f64), states: &[Far]) -> Vec<i64> {
+/// `share` = the share of the enemy's victory points the line lies behind (`must_fall_share`).
+fn far_line_at(origin: (f64, f64), states: &[Far], share: f64) -> Vec<i64> {
     let total: f64 = states.iter().map(|s| s.vp.max(0.0)).sum();
     if states.len() < 2 || total <= 0.0 {
         return Vec::new();
@@ -7087,7 +7270,7 @@ fn far_line(origin: (f64, f64), states: &[Far]) -> Vec<i64> {
     let mut sum = 0.0;
     let mut needed: Vec<&Far> = Vec::new();
     for s in order.iter() {
-        if sum >= DEEP_SHARE * total {
+        if sum >= share * total {
             break;
         }
         sum += s.vp.max(0.0);
@@ -7187,7 +7370,30 @@ fn learn_deep(
         return None;
     }
     state.done.insert(tried, 0);
-    let line = far_line(origin, &rows);
+    // THE CAPITULATION PATH: the far line lies behind what the enemies' surrender limits ask
+    // (with the margin), and the cheapest victory-point path to it is noted
+    let share = must_fall_share(op, enemies);
+    state
+        .done
+        .insert(key(id, "deep_share"), (share * 100.0).round() as i64);
+    let limit = top_limit(op, enemies);
+    let path = capitulation_path(origin, &rows, limit);
+    let total: f64 = rows.iter().map(|r| r.vp.max(0.0)).sum();
+    let got: f64 = path.iter().map(|(_, v)| v).sum();
+    state.op_notes.insert(
+        format!("{id}:capitulation"),
+        format!(
+            "operation {id}: {} capitulate(s) at {:.0}% of their victory points ({}): the cheapest path from the front {} = {got:.0} of {total:.0}",
+            enemies.join(", "),
+            limit * 100.0,
+            limit_source(op, enemies),
+            path.iter()
+                .map(|(s, v)| format!("{s} ({v:.0})"))
+                .collect::<Vec<_>>()
+                .join(" -> ")
+        ),
+    );
+    let line = far_line_at(origin, &rows, share);
     if line.len() < 2 {
         return None;
     }
