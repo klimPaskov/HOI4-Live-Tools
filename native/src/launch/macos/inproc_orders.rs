@@ -137,7 +137,8 @@ pub(super) fn request(
 /// spearhead), the division addresses (assign, unassign; optional for new_root and fallback) and, for new_root, the
 /// CFront. The arity rules are the module's own (`be_post2`), checked here first so a bad call never reaches it.
 /// vals: new_root [section, from, to, split]; assign [order]; unassign []; fallback []; edit_root [order, from, to];
-/// invasion_target / paradrop_target [order, province]; spearhead [parent order].
+/// invasion_target / paradrop_target [order, province]; paradrop_source [order or 0, province] (divisions with 0);
+/// spearhead [parent order].
 pub(super) fn request2(
     op: &str,
     group: u64,
@@ -154,6 +155,7 @@ pub(super) fn request2(
         "orders2.fallback" => (0, true, false, true),
         "orders2.edit_root" => (3, false, false, false),
         "orders2.invasion_target" | "orders2.paradrop_target" => (2, false, false, false),
+        "orders2.paradrop_source" => (2, false, false, true),
         "orders2.spearhead" => (1, true, false, false),
         _ => return bad("unknown orders2 op"),
     };
@@ -186,12 +188,20 @@ pub(super) fn request2(
         "orders2.edit_root" if !range(vals[1], vals[2]) => {
             return bad("edit_root: from < to in 0..100000")
         }
-        "orders2.invasion_target" | "orders2.paradrop_target" if vals[1] <= 0 => {
+        "orders2.invasion_target" | "orders2.paradrop_target" | "orders2.paradrop_source"
+            if vals[1] <= 0 =>
+        {
             return bad("a province id")
+        }
+        "orders2.paradrop_source" if vals[0] < 0 => return bad("vals[0]: an order id or 0"),
+        "orders2.paradrop_source" if (vals[0] == 0) == divisions.is_empty() => {
+            return bad(
+                "paradrop_source: divisions with order 0 (a new order), none with an order id",
+            )
         }
         _ => {}
     }
-    if op != "orders2.new_root" && arity >= 1 && vals[0] <= 0 {
+    if op != "orders2.new_root" && op != "orders2.paradrop_source" && arity >= 1 && vals[0] <= 0 {
         return bad("vals[0]: an order id");
     }
     if (op == "orders2.new_root") != front.is_some() {
@@ -834,6 +844,30 @@ mod tests {
         );
         assert!(request2("orders2.invasion_target", 0x10, &[5, 0], &[], &[], None).is_err());
         assert!(request2("orders2.invasion_target", 0x10, &[5, 9001], &[], &[], None).is_ok());
+        // engineer 106: a new paradrop order (0) takes its divisions; an existing one takes none
+        let r = request2(
+            "orders2.paradrop_source",
+            0x10,
+            &[0, 6521],
+            &[],
+            &[0x20, 0x30],
+            None,
+        )
+        .unwrap();
+        assert_eq!(r["vals"], "0,6521");
+        assert_eq!(r["divs"], "0x20,0x30");
+        assert!(request2("orders2.paradrop_source", 0x10, &[0, 6521], &[], &[], None).is_err());
+        assert!(request2(
+            "orders2.paradrop_source",
+            0x10,
+            &[7, 6521],
+            &[],
+            &[0x20],
+            None
+        )
+        .is_err());
+        assert!(request2("orders2.paradrop_source", 0x10, &[7, 6521], &[], &[], None).is_ok());
+        assert!(request2("orders2.paradrop_source", 0x10, &[0, 0], &[], &[0x20], None).is_err());
         assert!(
             request2("orders2.edit_root", 0x10, &[5, 0, 100], &[], &[0x1], None).is_err(),
             "no divisions"

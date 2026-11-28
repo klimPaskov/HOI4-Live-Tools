@@ -887,6 +887,22 @@ CCreateConveyor 13479 / CSetConveyorSeries 13483 / CAddConveyorLine 13484 / CSet
   (in process: the queues' province field is the read-back; mouse: the panel's labels). The location is the deploy
   state's first province from the game files' state definition.
 Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,training ./inproc_stage2.sh PREV-1936 s15t` (Germany 1936).
+T0 FIRST (engineer 123, 28 Nov; the coordinator's question decides the training shape): PARALLEL OR ONE AFTER ANOTHER.
+The conveyor holds a series amount at +0x38 (each line trains that many divisions in turn; 0 = forever) and parallel
+lines at +0x70 (mapped 1.19.4.1). By hand in the deployment view, paused: make queue A of Infanterie-Division with ONE line
+and its + raised to 3 (amount 3), and queue B with THREE lines of amount 1. Unpause at speed 3 for 10 game days. Write per
+queue the divisions in training shown and each one's progress %: if A shows 1 in progress and B shows 3, lines are
+parallel and the amount is a series (the executor's shape: L lines of amount 1, L = `evaluate.py training`'s number);
+if A shows 3 in progress, one line with amount N trains N at once (then tell tools 123's successor: hoi4_train sends
+ONE line with amount N). Both are built for: `training[].queue` is the number in training at once either way. Cancel
+both queues after.
+T0b THE STOP AT FIVE (s115a: ask 7 stopped at 5, the 6th Add Unit post read posted and added nothing): at war in a 1939
+save (the stop was seen there), `HOI4_BACKEND=inprocess`, `hoi4_train {"template":"Infanterie-Division","count":7,
+"deploy_state_id":64}`. If the reply has `short` > 0: copy the reply's `posts` (each post's posted/refused/result) and the
+module log's `post2` lines with op training.add_lines (the module log names each post's game check and result), then
+click the SAME queue's Add Unit once by hand. Mouse adds the line -> the command path differs from the button (report
+both, family stays off); mouse adds nothing -> a game rule caps the lines (read the button's tooltip text into the
+notes; the tool then reports the cap instead of a short). Write manpower free and the template's manpower per division.
 T1 paused, `HOI4_BACKEND=inprocess`: `hoi4_train {"template":"Infanterie-Division","count":3,"deploy_state_id":64}`:
 Verified; `in_process.posts` = create, series, add_lines, location; open the panel by hand AFTER: one queue, 3 lines,
 1 division each, location Brandenburg (not "No location set").
@@ -1048,6 +1064,115 @@ Stop at once on: a crash, any `unexplained`, a division moving that was not name
 differs from the right click's, a battle that a right click would not open, or a post the game's check refused.
 Pass -> IPC_LIVE_PASSED entry 23 (move) = 1.
 
+## Session S21-PARADROP: the in-process module, paradrops (family `orders2`, tool `hoi4_paradrop`; about 30 minutes) -- after S20-MOVE
+
+Built by engineer 106 (28 Nov 2026), offline-proven only: `orders2.paradrop_source` (COrderSetParadropSourceCommand 12729,
+0x50 bytes) resolves at full confidence on 1.19.4.1 and 1.20.0.0 macOS with the same field offsets as the existing
+`orders2.paradrop_target` (`inproc/test_offline.sh`). The orders2 family itself passed live (S5-PLAN), so the gate is in
+the tool: `hoi4_paradrop` refuses `paradrop_unvalidated` unless `HOI4_BACKEND=inprocess` until this session passes
+(`paradrop::LIVE_PASSED` in native/src/launch/macos/paradrop.rs). There is no mouse path.
+- What it posts: source with order 0 and the army's divisions (the paradrop tool's first click: the game removes the
+  army's area-defence orders, makes a kind-4 order, sets the departure province and assigns the divisions; the module
+  reads the new order's id back from the group's top list), then `orders2.paradrop_target` with that id and the drop
+  province, then `orders.execute` (flag 1) unless `execute:false`. Each through the game's own "can do".
+- The executor's `airborne` opportunity rule (native/src/plan_airborne.rs) sends it when transports reach, the region's
+  air is ours by the region window's estimate, and (FAIR) a battle of ours lies within `link_up_km`.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,orders2 ./inproc_stage2.sh <save> s21p`: a save at war with an
+own army of trained paratrooper divisions (Germany 1940 with Fallschirmjäger, or train 2-3 para divisions first),
+transport-plane wings at an own air base within range of an enemy province, and the region's air superiority ours
+(fighters on air superiority first). `HOI4_BACKEND=inprocess`.
+P1 paused: `hoi4_air {}` (transport wing, its `air_range_km`), `hoi4_air_regions {}` (coverage of the target region).
+`hoi4_paradrop {"army":"<para army>","from_state":<base state>,"target_province":<enemy province in range>,
+"execute":false}`: Verified; the receipt's `in_process.order_id`; the plan bar shows a paradrop arrow from the base to
+the province, exactly as the tool's two clicks draw it; the army's other orders are gone only where the game's own
+source click removes them (area defence). RECORD: hoi4_armies orders row `kind` = "paradrop".
+P2 running at speed 2: the same with `execute` default: the divisions take off (the unit's paradrop state), land on
+the province, a battle opens. RECORD the transport wings' mission and how many divisions dropped.
+P3 refusals: a province beyond the transports' range; a region where the enemy holds the air
+(PARADROP_AIR_SUPERIORITY_RATIO); an army without paratroopers: `paradrop_refused` (the game's check) or an inproc
+refusal, nothing posted, no order drawn. Unexpected success on any of these = stop.
+P4 `division_ids` naming 2 of 3 para divisions: only those 2 are on the order.
+P5 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, a drop on a province not named, divisions of another army on the order,
+a paradrop order the game's own tool would not draw.
+Pass -> set `LIVE_PASSED` true in native/src/launch/macos/paradrop.rs (auto then runs it).
+
+## Air reads and the air plan (engineer 106, 28 Nov 2026): live checks, no new command
+
+- air-coverage: `hoi4_air {}` per wing `air_range_km` and `coverage` against the game's own "Coverage in this region"
+  (the region tooltip over a wing's base). Coverage is computed from map/unitstacks.txt land positions within the range
+  of the base province at MAP_SCALE_PIXEL_TO_KM; record both numbers for 3 wings (short, medium, long range), and
+  whether a range MIO's bonus shows in `air_range_km` (the variant's stats at fleetmem 0x260).
+- air-superiority-read: the enemy's share per region is read only through the region window (hoi4_air_region_probe).
+  Static lead for a direct read: routine 0x1009f8460 (1.20.0.0), stride 0xb0 entries at +0xe0, fields +0x88/+0x90/+0xa8;
+  owner unconfirmed. Engineer 125's reading of the routine (static): rsi is the region (index at +0x58, size term at
+  +0xd8); it walks two per-region wing lists of rdi (rdi+0x98 and rdi+0x140, each a {data,size} pair per region index,
+  stride 0x18), takes only live wings (wing+0x14 != 0) and sums each wing's fixed-point value at wing+0xe8: the sum goes to
+  entry+0x88 (capped), the sum over (region size term x a global define) to entry+0x90 (scaled, capped at 100000, at least
+  1 when the sum is positive) and the wing count to entry+0xa8 (16 bit). So +0x88 is the region's air superiority value
+  of rdi's side, +0x90 its share of what the region needs (x 100000), +0xa8 its wings. The caller 0x100a18e10 runs it per
+  (object, region) next to the CStrategicAir allocator's type info: rdi is likely one country's strategic air object.
+  Confirm against the region window for 2 regions (ours and the enemy's numbers), then the probe can be replaced; FAIR:
+  read the enemy's entry only for regions our air map shows.
+- air-situation (plan key `air_situation`): a war save; record each executor turn's orders against the region window
+  (fighters sized to the ratio or kept out; CAS only over regions not lost; one forward rebase when out of range).
+  Mission entries (engineer 125, written): `air_situation.missions:[{"id":"ls","mission":"logistics_strike","region":<a
+  region of our battles>,"wings":2},{"id":"rc","mission":"recon","region":<same>,"wings":1}]`: the two CAS wings nearest are
+  sent on logistics strike and the scout wing on recon before the fighters and CAS take the rest; with the enemy's fighters
+  seen there above ours / fighter_ratio the strike waits (the note says so); a wing the game refuses for the mission is
+  left out of it for 10 turns. Record each order and the region window.
+- designs: `scripts/hoi4facts/facts.py design-best GER --role fighter --need air_range=1100` and the owner's Fw 190
+  (1235 km): the designer's shown range, agility, attack and cost against the computed numbers for the same modules.
+- S18-DOCTRINE also adopts a special-forces grand doctrine (D2): the paratrooper line needs it.
+
+## Session S28-AIRTRAIN: air training that pays, and its stop (mouse; about 20 minutes plus a 40-day soak at speed 5) -- any time
+Engineer 125 (written, not run): g115a's wings gained 6 air XP in four months because training (pilot exercises) has no
+region, so the fuel cut never saw the training wings (fuel fell to 10%) and hoi4_air_hold refused them; and training past
+the game's cap (AIR_WING_XP_TRAINING_MAX / AIR_WING_XP_TRAINING_MISSION_GAIN_DAILY: 42.9 days on 1.20.1,
+`scripts/hoi4facts/facts.py air-training`) gives a wing nothing more. Bed: the 1936 Germany start, paused.
+T1 `hoi4_air_mission {wings:[2 fighter wings], mission:"training"}` (no region): both Verified, mask has frame 12, region 0.
+Record fuel, country air XP and each wing's experience (the wing card) at the start.
+T2 `hoi4_air_hold {wing:<one of them>}`: the reply `training_stopped:true`; the wing card shows no mission; the other wing
+still trains. Record whether the game took the click as a toggle (training off) or opened a mission picker.
+T3 `hoi4_air_mission` training for the held wing again; run 10 game days at speed 5 with fuel above the plan's floor: record
+air XP per day and fuel per day against g115a's 0.047 air XP a day.
+T4 plan executor: a plan with `manage.air_training_days` set to the facts value (or 10 for a quick check) and the wings
+on training: after that many game days the executor posts hoi4_air_hold for each with the note "trained N days, the
+game's training cap"; a wing is re-trained only when its aircraft count rose (new planes). Record the days each stopped.
+T5 a refused wing: LG Greifswald (g115a issue I0002, refused_by_game_check on training): its plane type, its base and
+the mission button's tooltip, so the refusal can be named.
+Pass: T1-T4. Then the air training rule may be turned on in the strategist's default (`manage.air_training_days`).
+
+## Capture C-RAID: a raid made by hand, for the raid tool (mouse; about 20 minutes) -- before the raid tool is built (a 1940 need)
+Not pass/fail: the offline engineer needs the live layout of a raid instance and of the create command to build `hoi4_raid`
+(create, read, launch, cancel) for the Eben-Emael step (GER_eben_emael_raid: focus GER_expanding_the_luftwaffe, tech
+paratroopers, a division with 2+ paratrooper battalions, 5 transport planes, 30 days to prepare, 20 command power,
+Gotterdammerung). Static facts so far (1.20.0.0, engineer 120): CCreateRaidCommand constructor 0x1014d0740 (tag, CRaidType*,
+SRaidTarget 0x38 B, CRaidUnit 16 B, SRaidStartingPoint 40 B, int, bool); the commands NRaids::NNet::CCreateRaidCommand,
+CExecuteRaidCommand, CCancelRaidCommand, CRemoveRaidCommand, CSetRaidRiskLevelCommand, CSetRaidAutoLaunchOption,
+CSetRaidAutoComplete; instances are NRaids::CRaidInstance (a reference object).
+Bed: any save where a raid is offered (the 1936 Germany start has none: use a bed with the paratrooper tech and a
+paratrooper division, or a nation with an air raid such as a strategic bomber raid if offered). Module log on, HOI4_TRACE=1.
+R1 open the raid view (the raids button), screenshot the offered raid types and targets.
+R2 create ONE raid by hand (record type, target, the division and planes assigned, risk level shown), screenshot; save.
+R3 ask the module for the last posted command of each type above if the log shows it (type id and size), and save the
+game; keep the save under the run folder (not in Git).
+R4 cancel that raid by hand; save again.
+Hand the three saves, the screenshots and the log to the air engineer: the save's raid block and the posted command bytes
+give the layouts the tool needs.
+
+## Session S23-WEATHER: the weather evaluator against the game's own weather (read only; about 10 minutes) -- any time
+What it proves: hoi4_weather's estimate agrees with what the game shows, so the operation step's ground gate
+(`operations[].weather_gate`) holds a declaration only for real mud or snow.
+M1 a 1936 save, paused on 1 January: `hoi4_weather {"states":[<a Moscow-area state>,<a Paris-area state>,<a Libyan
+state>]}`: the Russian region reads ground snow medium/high and an attack factor at or below -0.2, Paris none or light,
+Libya clear. Compare with the weather map mode (screenshot): snow where the tool says ground snow.
+M2 the same states with `"date":"1936.4.15"`: the Russian region in mud (mud_chance >= 0.5) and
+bad_ground_clears_in_days > 0; then let the game run to mid-April (or load a save of that date) and check the map mode
+shows mud there.
+M3 `"date":"1936.7.15"`: no region on bad ground.
+Pass: M1-M3 agree with the map mode on snow/mud regions. A mismatch: record the region, the date and the tool's water /
+snow numbers in the notes (the model's drying or melting rate is then off).
 ## Session S21-ARMYHQ: army headquarters, whether the mechanic is in force (read only; about 2 minutes) -- any time
 What it proves: `hoi4_army_hq` reads the install's DLC state and the defines the way the game loads them.
 M1 any save, paused: `hoi4_army_hq {}`. On an install without Thunder at Our Gates (the owner's: 10 DLCs, none of
@@ -1079,3 +1204,193 @@ the row: unit_wrong_slot.
 M4 `hoi4_template_edit` changing only `support` on a template with a regimental row: the row is unchanged (read back).
 Stop at once on: a slot clicked that is not the row's, a mismatch error naming regimental, or Save with another layout.
 Pass: M1-M4. Then delete the test template (hoi4_template_delete).
+## Session S27-TRAINROUTE: fresh divisions to their armies by command (in process, family `units`; about 15 game days) -- any time
+What it proves: hoi4_army_detach without `army` moves divisions that stand outside any army into a named army, and the
+executor's training[].armies routing sends a row's fresh divisions to its listed armies, so one row per template suffices.
+T1 a save with a division outside any army (train one, or detach one into a new army and dissolve it): `hoi4_armies` lists
+it under unassigned; `hoi4_army_detach {"divisions":["<id>"],"into":"<an army with room>"}`: Verified; hoi4_armies shows it in
+that army; the army card lists it. A division inside an army without `army`: invalid_target before any post.
+T2 executor on, plan with ONE training row {"template":"<infantry>","queue":4,"batch":2,"armies":["<army A>","<army B>"]}:
+the deployment view shows ONE queue per train action with its lines (no per-state rows); within a day of each deployment
+the digest shows "trainees N <template> -> <army>" and the divisions stand in the army with fewer divisions.
+Pass: T1-T2. Stop on: a division moved twice in a row between the listed armies, a refusal repeated within 7 days.
+
+## Session S26-PLANKEYS: the plan keys of engineer 117 in one executor run (no new input path; about 20 game days) -- any time
+What it proves: `production[].until` with `stock:<equipment>`, the atoms `divisions:<template>`, `mastery:<track>`,
+`banked_mastery:<track>`, `project_done:<key>` and `focus_when` read what the screens show, before a campaign relies on them.
+P1 a 1936 save of the plan's country, executor on, plan with: a production row `{"equipment":"<rifle variant>","factories":<n>,
+"until":"stock:infantry_equipment >= <stock now + 300>"}`; `focus_when` holding the next focus until a date 10 days ahead; a
+`special_projects` object; digest predicates `divisions:<a template> >= 0`, `mastery:<a track> >= 0`, `banked_mastery:<a track> >= 0`.
+P2 the digest's predicate values: divisions equals the count of that template on the army screen; mastery and banked mastery
+equal the doctrine view's track (write both); the focus lane line says "kept for their window: <focus> (until ...)".
+P3 run to the day the store passes the figure: the next day's production tick removes that line (one hoi4_production_remove),
+the notes show produntil:<i>:<equipment>; restart the server: the line is not added back. On the window date the focus starts.
+P4 (when a project completes in the run, else later) project_done:<key> turns true the week it completes.
+Pass: P2-P3 (P4 when seen). Stop on: a second removal of the same line, a line added back after the restart.
+
+## Session S25-VOLUNTEERS: volunteers and the attaché through the one diplomacy tool (module family `diplomacy`; about 40 minutes) -- part of the diplomacy session, after S10-DIPLOMACY
+Owner, 28 Nov: ONE dynamic diplomacy tool; there is no separate volunteers tool. The calls below are `hoi4_diplomacy_act`
+with action `send_volunteers` / `recall_volunteers` (+ `army`, `division_ids`) and `send_attache`.
+What it proves: `hoi4_diplomacy_act` sends and recalls volunteer divisions and sends an attaché by the diplomacy view's own
+actions (no dialog), the game's own legality refuses what the view greys, and nothing else changes. Launch with
+`HOI4_BACKEND=inprocess` and the opt-in naming `diplomacy`.
+Bed: the 1936 start as Germany, run to the Spanish Civil War (it fires in 1936 in the vanilla files; the two Spanish
+tags at war: SPR and SPD, or as the game names them in `hoi4_diplomacy_state`), paused. Germany holds >= the define's
+VOLUNTEERS_DIVISIONS_REQUIRED divisions at the start.
+V0 `hoi4_inproc_status` (or the hello): family `diplomacy` on, types diplomacy.send_volunteers / .recall_volunteers / .send_attache on with
+act_units 0x70/0x90/2 and 0x70/0x90/4 (the offline scan's values) on 1.20.1.0.
+V1 refusals before the war: `hoi4_diplomacy_act {action:send_volunteers, country:<a Spanish tag>, army:<a 2-division army>}` before the
+civil war: refused_by_game, nothing posted, the army unchanged (`hoi4_armies`).
+V2 the view's cap: open the diplomacy view on the side Germany may help (read only, no click) and note the volunteer
+limit it shows; compare with 0.05 x the receiver's provinces + 0.05 x our divisions (defines VOLUNTEERS_PER_TARGET_PROVINCE,
+VOLUNTEERS_PER_COUNTRY_ARMY): record both numbers.
+V3 send 3 divisions of one army (division_ids): the reply shows 2 actions posted (2 + 1); within 2 game days the
+diplomacy view lists 3 volunteer divisions in transfer (VOLUNTEERS_TRANSFER_SPEED days); world tension rises by about
+3 x TENSION_VOLUNTEER_FORCE_DIVISION. Record where the divisions appear in our memory read (army, theatre, location) on
+the day of sending and on arrival: this is the read-back the tool still lacks (journal says Unconfirmed today).
+V4 over the cap: send more divisions than the shown limit: the game refuses the actions past the limit (refused_by_game
+or a partial post: record which).
+V5 recall: right after arrival `action:recall_volunteers` on those divisions: refused (RECALL_VOLUNTEERS_AFTER_ARRIVAL_COOLDOWN days);
+then advance past the lock (or use a save past it) and recall 3 (`action:recall_volunteers`): the reply shows 1 action; the divisions come home in
+about VOLUNTEERS_RECALL_DAYS_PER_UNIT x 3 days with most of their equipment (VOLUNTEERS_RETURN_EQUIPMENT).
+V6 air volunteers (read and one try): `hoi4_air_rebase` of one fighter wing to a Spanish air base of the side we help:
+record whether the tool accepts the foreign base and whether the game moves the wing (expected: the game's own transfer
+check decides; the tool may refuse a base it does not list as own: record the refusal text).
+V7 attaché: `hoi4_diplomacy_act {action:send_attache}` to the side we help (the view's own row; the module op diplomacy.send_attache is built and off until this session): PP drops by the define BASE_SEND_ATTACHE_COST and command power by
+BASE_SEND_ATTACHE_CP_COST (or as modified), the diplomacy view shows our attaché; a second call is refused.
+Stop at once on: any post the game did not refuse while the view greys the button, a division leaving that was not
+named, an attaché or volunteers to a country not named, a module `unexplained` result.
+Pass: V0, V1, V3, V5, V7 (V2, V4, V6 recorded). Then set LIVE_PASSED in native/src/launch/macos/volunteers.rs and the
+`volunteers` entry of IPC_LIVE_PASSED in inproc/core/ipc.c to 1, with the session's numbers in the comment.
+
+## Session S27-DIPLOMACY-ANY: every diplomatic action by its key, the catalog and the game's own answer (module family `diplomacy2`; about 30 minutes) -- part of the diplomacy session, with S25-VOLUNTEERS
+Owner, 28 Nov: ONE dynamic diplomacy tool for any diplomatic action. What it proves: `hoi4_diplomacy {catalog:true}` lists
+every diplomatic action class the game has (43 on 1.20.1.0: the module's scan of the game's own action classes) plus the
+content's scripted actions, each with its shape and the game's own "can do" toward a country asked WITHOUT sending; and
+`hoi4_diplomacy_act` posts a catalog key the module builds (family `diplomacy2`) only when the game's check passes.
+Launch with `HOI4_BACKEND=inprocess` and the opt-in naming `diplomacy` and `diplomacy2` (HOI4_INPROC_POST=...,diplomacy,diplomacy2).
+Bed: the 1939 bookmark as Germany (w92b or the game's own 1939 start), paused; Spain or a minor at peace as a neutral target.
+D0 hello: family `diplomacy2` on, 14 types on (embargo, docking_rights, offer_docking_rights, air_base_access,
+offer_air_base_access, naval_blockade, peace_proposal, reduce_autonomy, increase_autonomy,
+request_access_to_license_production, cancel_licensed_production, return_all_expeditionary_forces, generate_war_goal,
+send_expeditionary_force).
+D1 catalog read: `hoi4_diplomacy {catalog:true, country:"SPR"}` (or the neutral tag): 43 rows (+ scripted rows if a mod adds
+any), every row has shape and route; rows whose shape is unsupported are present (justify_war_goal constructor_args_1,
+stage_coup dialog_fields, scripted_diplomatic scripted_type ...). Open the diplomacy view on the same country (read only,
+no click) and compare: for each simple row, can_do true exactly where the view's button is enabled. Record any row
+where they differ (key, can_do, the view's state, the tooltip text). Measure the call's time.
+D2 nothing sent by the read: political power, relations (`hoi4_diplomacy_state`) and world tension unchanged after D1.
+D3 a refusal: `hoi4_diplomacy_act {action:"increase_autonomy", country:"SPR"}` (not our subject): refused_by_game, nothing posted.
+D4 a post: `hoi4_diplomacy_act {action:"embargo", country:<a neutral we do not trade with>}` while can_do is true: the reply
+shows 1 posted; the view shows the embargo; record PP before and after. Then the SAME call again: it must NOT lift the
+embargo silently: record whether the tool refuses (nothing_to_change) or the game toggles it off. If it toggles, the
+`embargo` mapping in inproc_diplomacy::op_of must be removed before this family is switched on (report it).
+D5 docking rights: `{action:"ask_docking_rights", country:<an ally or friendly minor>}`: posted only when can_do is true;
+the AI answers when the game runs (Diverged until then); record the answer after 2 game days.
+D6 a key the module cannot build: `{action:"justify_war_goal", war_goal:..., states:[...]}` (no war_goal_key) keeps the
+mouse path (the view's dialog); a catalog key with an unsupported shape and no view row (e.g.
+`{action:"request_foreign_manpower", country:...}`) is refused dialog_unsupported and nothing is sent.
+D7 justify by key (engineer 125; written, module catalog row generate_war_goal, shape war_goal_type): D1's catalog shows
+generate_war_goal with shape war_goal_type and `war_goal_types:true` in the module's hello. Against a neutral minor we have
+no goal on (e.g. LIT or a minor the 1939 bed offers): `{action:"justify_war_goal", country:<tag>, war_goal_key:"take_state",
+state_ids:[<one of its states>]}`: the reply shows 1 posted; the view's war goal list (or hoi4_diplomacy_state
+own_war_goals) shows the justification in progress toward that country with that state; record PP and world tension
+before and after, and the justification days the view shows. Then `war_goal_key:"no_such_goal"`: refused, nothing posted
+(the module answers "no war goal type of that key"). Then `war_goal_key:"annex_everything"` with no state_ids against a
+country where the view offers no such goal: refused_by_game, nothing posted. Stop at once if the justification names a
+different goal type or state than asked.
+D8 an expeditionary force (engineer 125; written, catalog row send_expeditionary_force, shape division_list): only on a
+bed where an ally at war accepts expeditions (Germany and Italy at war, Italy in our faction; else Japan-China with a
+faction ally): `{action:"expeditionary_force", country:<the ally>, army:<an army of 1-2 divisions>}`: the reply shows the
+divisions posted; the divisions turn to the ally's control (the army card's flag, or hoi4_units owner); then
+`{action:"return_expeditions", country:<the ally>}` returns them. Not at war or no ally: refused_by_game, nothing posted.
+Record the division count before and after.
+Stop at once on: any post while the view greys the button, any change after D1/D2, a module `unexplained` result, a
+toggle that removed a relation we had.
+Pass: D0-D4, D6, D7 (D5 and D8 recorded; D8 when the bed allows it). Then set the `diplomacy2` entry of IPC_LIVE_PASSED in
+inproc/core/ipc.c to 1 with the numbers. D0's type count is 14 with engineer 125's module (generate_war_goal and
+send_expeditionary_force added).
+
+## Capture C-LICENCE: what the licence request action carries (read only plus one licence request; about 15 minutes) -- with the diplomacy session
+Not pass/fail: it gives the offline engineer the meaning of CRequestLicensedProductionAction's two equipment lists
+(+0x70 and +0x88) and its byte +0xa0, which the binary alone left open (one list is executed with 100000, the other with 0).
+Server env: `HOI4_BACKEND=inprocess HOI4_TRACE=1`, module log on. Bed: 1939 Germany or 1936 Germany, paused; a country with
+a licensable design we lack (Italy, Japan, the USA: the view's Request licence row).
+L1 open the diplomacy view on that country, Request licence production: the dialog lists equipment; screenshot it.
+L2 choose ONE equipment (record its name and version as shown) and send; then save the game (licence-before/after saves
+are not needed in Git: keep them under the run folder).
+L3 the module's `diplomacy2` catalog read toward the same country before and after (`hoi4_diplomacy {catalog:true,
+country:<tag>}`): request_licensed_production row's can_do both times.
+L4 the module log's last posted command trace for the action (the game builds it itself here, so ask the module for a dump
+of the last action of type 0x37bf if the log has it; else note "not traced").
+L5 record: equipment chosen, the AI's answer after 2 game days, the licence line in the production view (cost, whether the
+licence shows under the equipment).
+Hand the folder to the diplomacy engineer.
+
+## Capture C-DESIGNER: why the designer base reads fail (read only, mouse opens and closes the designer; about 15 minutes) -- any time, before the next designer session
+Not a pass/fail session: it records what an offline engineer needs. s115b (28 Nov) failed `hoi4_design_options` with a base:
+tank 4517 and plane 1320 `read_bound` "Invalid address or snapshot read budget" (a pointer outside the address range or one
+read over 1 MB, while reading the OPENED designer), plane 1323 `read_failed`, ship 1348 `design_not_offered` (1348 is not a
+design id the Production list offers: probably an equipment type id passed as a design id).
+Server env: `HOI4_TRACE=1 HOI4_TRACE_READS=1` (the second prints `[read_bound] address=0x.. size=.. snapshot_bytes=..` or
+`[read_failed] address=0x.. size=..` on stderr for the refused read). Bed: the same save as s115b if kept (else w92b or the
+1936 study end GER_1936_05_05_05), paused. Save everything under `<run>/designer-capture/`.
+C1 the lists: `hoi4_design_options {kind:"tank"}`, `{kind:"plane"}`, `{kind:"ship"}` -> tank.json, plane.json, ship.json; and
+`hoi4_designs {kind:...}` for the same three -> designs-<kind>.json (to see whether 1348/4517/1320/1323 are design ids, which
+types, which designer: upgrade or modules).
+C2 for each of: tank 4517 and the first listed default tank chassis (e.g. 1333), plane 1320, 1323 and the first listed default
+plane airframe (e.g. 1318), ship 1348 and one listed ship hull id: call `hoi4_design_options {kind, base}`; save the reply as
+<kind>-<base>.json and the server's stderr lines of that call (the [read_bound]/[read_failed] lines and the HOI4_TRACE steps) as
+<kind>-<base>.trace.txt; take ONE screenshot while the designer is open (before the tool closes it; if it closes at once, the
+screenshot right after the error) as <kind>-<base>.png.
+C3 for the failing bases also run `{kind, base, slot:<one slot name from designs-<kind>.json>}`: does the one-slot scan pass?
+(save as <kind>-<base>-slot.json).
+C4 record the build (master sha of the server and module), the game version, and whether each base's designer is the
+module designer (slots) or the upgrade designer (rows) on screen.
+Hand the folder to the air engineer: the trace's address and the screenshot tell which reader followed a wrong pointer.
+
+## Session S25-MIOKEY: organisation traits by key (in process, family `mio`; about 5 minutes) -- any time
+What it proves: hoi4_mio_trait `trait` / `traits` resolve the scripts' trait keys to the tree through the module's
+organisations read, and the executor's `mio[].traits` keys reach the game.
+K1 Germany 1936, paused, `HOI4_BACKEND=auto` (mio passed live): `hoi4_mio_trait {"organization":"GER_henschel_organization",
+"list":true}`: write the first five entries' `trait` keys. Then `hoi4_mio_trait {"organization":"GER_henschel_organization",
+"trait":"<the key of an entry with unlockable_now true>"}`: Verified; the tree window shows that trait (by its icon and
+tooltip name) unlocked or queued, the index in the receipt is the entry's index from the listing.
+K2 `{"traits":["<two keys not held>","<one key already queued>"]}`: Verified, the held one counted as reached.
+K3 refusals before input: `{"trait":"GER_mio_trait_nope"}` -> trait_unknown naming Henschel's keys; with
+`HOI4_BACKEND=gui` -> trait_key_unresolved; nothing posted in either case.
+K4 the window's ORDER: hover the tree icon the listing calls index 0 and index 3: their tooltip names match the keys'
+localisation (this settles whether the mouse path's indices equal the module's; record it either way).
+Pass: K1-K3 (K4 recorded). Then the plan's `mio[].traits` may carry keys.
+
+## Session S28-REFUSALS: the refusal classes of g115a do not repeat (no new input path; part of the next short 1936 study) -- any time
+What it proves (engineer 123, 28 Nov): a refusal changes the next decision instead of being retried. Read from the study's
+issues.jsonl, game-actions.jsonl and the executor notes; nothing extra to click.
+R1 navy: with ships in the reserve fleet, `hoi4_fleet_assign` out of it is sent at most ONCE by the executor; on the mouse
+backend it is refused reserve_fleet and the navy_shape note says "its task forces cannot be moved on this backend"; with
+`HOI4_INPROC_POST` naming navy it is posted in process (task force leaves the reserve; a new step of the passed `navy`
+family: watch the first one by eye, the fleet list shows it in the receiving fleet).
+R2 intelligence: an operative a `networks[]` entry names is not sent elsewhere by `operatives[]` (note "held by the
+network entry for <TAG>"); `hoi4_operative_recruit` refused operative_slot_locked waits the days the refusal names.
+R3 air: a wing the game refuses training for (refused_by_game_check) is tried once; its aircraft type is not sent
+again (note "<type>: the game refuses training for it").
+R4 research: after a research start that reads NotApplied, no second technology goes into that slot in the same tick.
+R5 focus: after the game refuses a focus, no focus the files could not judge follows in that tick (focus_why "not judged").
+R6 general trait: an assignment whose window observation is lost settles from the general's trait list (Reached or
+Unchanged, never "Diverged unverified"); the mouse path still fails on 1.20.1 (trait tree window not found, s115/g115a):
+report the error code; the in-process route (CLearnTraitCommand) is not built.
+R7 idle table: a failing focus start counts in the focus row (tool faults map to the sink of their tool).
+Pass: R1-R5 and R7 with no class repeated more than once; R6 reported.
+
+## Session S29-SWAPS: doctrine replace by command, the research juggle, projects on idle facilities (about 30 game days) -- any time
+Build: e123 (tools 123). A save with a grand doctrine already chosen (Germany: Mobile Warfare from history) and enough army XP.
+D1 doctrine replace (family `doctrine` on): hoi4_doctrine_adopt {doctrine: grand_battleplan, replace: true}. Expect Verified
+in 1-2 s, the land folder's grand doctrine GBP in hoi4_doctrines, army XP down by the game's own price; record the
+mastery left on the old tracks. With the family off, the same call is refused grand_doctrine_set and nothing is posted.
+D2 the same call again: already_adopted.
+J1 research juggle: plan research_waits [{tech: <a tech that opens in a few days>, slot: <an idle slot>, fill: <a startable
+tech>}]. Expect the filler started in that slot; when the awaited tech opens, one hoi4_research_start with replace:true
+into that slot; the filler's progress is still shown when it resumes later (the game keeps it).
+P1 hoi4_special_projects on an idle facility that once ran a project: project none, `stopped` true on that project;
+hoi4_special_project_assign of an available project: Verified (rerun S19 P1-P5).
+Pass: D1, D2, J1, P1.

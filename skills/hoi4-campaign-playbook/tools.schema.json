@@ -101,7 +101,7 @@
    "source": "--list-tools"
   },
   "hoi4_air_hold": {
-   "description": "Stop an own air wing's mission (the toolbar's Hold Air Wings button, shortcut H): the wing keeps its base and stands by (its panel row reads 'Standing by', the Air Forces Overview's Area column empties); its assigned region is cleared, the last mission selection stays in memory. Typed refusals before input: wing_unknown, wing_ambiguous, nothing_to_change (already standing by); hold_unavailable if the game disables the button. Verified from the wing's assigned region pointer in memory.",
+   "description": "Stop an own air wing's mission (the toolbar's Hold Air Wings button, shortcut H): the wing keeps its base and stands by (its panel row reads 'Standing by', the Air Forces Overview's Area column empties); its assigned region is cleared, the last mission selection stays in memory. A wing on training (pilot exercises, which has no region) is stopped by its training button instead, verified by the training bit leaving its mission mask. Typed refusals before input: wing_unknown, wing_ambiguous, nothing_to_change (already standing by); hold_unavailable if the game disables the button. Verified from the wing's assigned region pointer in memory.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -430,7 +430,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_abilities": {
-   "description": "Read-only, no input: the commander abilities of the running game (common/abilities, mods included): per ability its command power cost per day (for each battalion group the game's tooltip names), duration, cooldown, whether a field marshal may use it, its unit modifiers, and its worth in each situation (prepare_attack: planning speed; reinforce: reinforce rate; attack, attack_river, attack_fort: attack and breakthrough plus the river's or fort's own bonus; defend: defence and dig-in; short_supply: days without supply), with the drawback named (more strength lost, no retreat, less attack); best_by_situation picks the highest gain per command power without a drawback; the current command power from the top bar. The order itself is not built yet (issue).",
+   "description": "Read-only, no input: the commander abilities of the running game (common/abilities, mods included): per ability its command power cost per day (for each battalion group the game's tooltip names), duration, cooldown, whether a field marshal may use it, its unit modifiers, and its worth in each situation (prepare_attack: planning speed; reinforce: reinforce rate; attack, attack_river, attack_fort: attack and breakthrough plus the river's or fort's own bonus; defend: defence and dig-in; short_supply: days without supply), with the drawback named (more strength lost, no retreat, less attack); best_by_situation picks the highest gain per command power without a drawback among the abilities with no country condition (an ability whose allowed names a focus, flag or tag lists it in country_requires and is never picked: those conditions are not checked here); the current command power from the top bar. The order itself is not built yet (issue).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},
@@ -642,7 +642,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_detach": {
-   "description": "Move chosen divisions out of an army: `divisions` are ids as hoi4_armies / hoi4_supply list them (hoi4_supply shows each division's template, equipment fill, strength and supply, so you can pick weak or strong ones). Without `into` they form one new army; with `into` they join that own army. Uses the game's controls one division at a time (the army's card, the division's row in its list, then the new-army card or a right click on the target's card), each move verified from division membership. Use it to pull weak units (irregulars, cavalry, low equipment) out of a strike army into a rear army, or to send fresh divisions forward. Refused before input when a division is not in the army or the army would be emptied (use hoi4_army_merge).",
+   "description": "Move chosen divisions out of an army: `divisions` are ids as hoi4_armies / hoi4_supply list them (hoi4_supply shows each division's template, equipment fill, strength and supply, so you can pick weak or strong ones). Without `into` they form one new army; with `into` they join that own army. Uses the game's controls one division at a time (the army's card, the division's row in its list, then the new-army card or a right click on the target's card), each move verified from division membership. Use it to pull weak units (irregulars, cavalry, low equipment) out of a strike army into a rear army, or to send fresh divisions forward. Refused before input when a division is not in the army or the army would be emptied (use hoi4_army_merge). Without `army`: the divisions stand outside any army (fresh from training, hoi4_armies unassigned) and join `into` by one command (in-process units family only; refused with capability_unavailable without it, invalid_target for a division inside an army).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -671,7 +671,6 @@
      }
     },
     "required": [
-     "army",
      "divisions",
      "request_id",
      "lease_token"
@@ -729,6 +728,17 @@
      },
      "lease_token": {
       "type": "string"
+     },
+     "provinces": {
+      "description": "in-process only (family orders2): the fallback line's own provinces in drawing order, posted as one fallback order; states is then the mouse path's line",
+      "items": {
+       "maximum": 99999,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 1024,
+      "minItems": 1,
+      "type": "array"
      },
      "request_id": {
       "type": "string"
@@ -1035,9 +1045,17 @@
      "lease_token": {
       "type": "string"
      },
+     "parent_order": {
+      "minimum": 1,
+      "type": "integer"
+     },
      "province_id": {
       "description": "The objective inside the state: the line is drawn at its depth from the army",
       "maximum": 29999,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "replace_order": {
       "minimum": 1,
       "type": "integer"
      },
@@ -1062,6 +1080,17 @@
       },
       "maxItems": 12,
       "minItems": 2,
+      "type": "array"
+     },
+     "target_provinces": {
+      "description": "in-process only: the exact target line in drawing order; with spearhead:true a new spearhead under parent_order (family orders2), with replace_order the new path of that existing order (family orders); a plain new offensive is still drawn by the stroke",
+      "items": {
+       "maximum": 99999,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 1024,
+      "minItems": 1,
       "type": "array"
      }
     },
@@ -1330,7 +1359,7 @@
    "source": "--list-tools"
   },
   "hoi4_commanders": {
-   "description": "Own army commanders: every commander who leads an own army or army group (name, rank, assigned_to) plus, while the army panel's commander list is open, every listed general with available true/false. Every army leader of the country is listed with id, skill, attack, defense, planning, logistics and traits (base values, matched against common/characters for five leaders); while the list is open, leaders it does not show (not recruited, foreign, retired) are only named in not_assignable; with the list closed they appear with listed_in_panel_or_assigned false and available null. Pure memory read: no lease, no input, no cursor. Use the names with hoi4_army_commander; it refuses unknown_commander, commander_unavailable and army_unknown before any click.",
+   "description": "Own army commanders: every commander who leads an own army or army group (name, rank, assigned_to) plus, while the army panel's commander list is open, every listed general with available true/false. Every army leader of the country is listed with id, skill, attack, defense, planning, logistics and traits (base values, matched against common/characters for five leaders); while the list is open, leaders it does not show (not recruited, foreign, retired) are only named in not_assignable; with the list closed they appear with listed_in_panel_or_assigned false and available null. Pure memory read: no lease, no input, no cursor. A leader whose army role the game keeps hidden until a trigger (common/characters `visible`, e.g. a focus) carries visible_when, that trigger as a plan predicate (unreadable triggers as unread_trigger atoms): such a leader is not assignable until it holds (an assignment reads back and the game removes him again). Use the names with hoi4_army_commander; it refuses unknown_commander, commander_unavailable and army_unknown before any click.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},
@@ -2116,13 +2145,16 @@
    "source": "--list-tools"
   },
   "hoi4_diplomacy": {
-   "description": "Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries.",
+   "description": "Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries. With `catalog:true` and `country` (no view opened, nothing sent): EVERY diplomatic action the game itself has, from the in-process module's scan of the game's action classes plus the content's scripted actions (a mod's actions), each with its key, shape (simple, divisions, war_goal, war_goal_type, division_list, or unsupported:<shape>), the route that sends it (in_process, the view's row by mouse, or not postable yet) and can_do = the game's own check toward that country (the one that enables the view's Send button), asked without sending.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "action": {
       "maxLength": 128,
       "type": "string"
+     },
+     "catalog": {
+      "type": "boolean"
      },
      "countries": {
       "items": {
@@ -2164,7 +2196,7 @@
    "source": "--list-tools"
   },
   "hoi4_diplomacy_act": {
-   "description": "Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, call_to_arms, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices, e.g. volunteers groups), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt.",
+   "description": "Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, call_to_arms, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices the tool cannot make yet), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt. send_volunteers / recall_volunteers carry `army` (the army whose divisions go) and optionally `division_ids` within it, and go through the in-process module's diplomacy family (the view's own action; HOI4_BACKEND=inprocess until S25-VOLUNTEERS): the game's own check decides (volunteer cap, divisions required, recall lock, war and ideology gates; refused_by_game posts nothing). Air volunteers are a rebase of wings to the receiver's air base (hoi4_air_rebase). Any other key that hoi4_diplomacy catalog:true lists with route in_process (a game action class with no view row the tool reads: air_base_access, offer_air_base_access, naval_blockade, peace_proposal, reduce_autonomy, increase_autonomy, request_access_to_license_production, cancel_licensed_production, or one a later game adds) takes `country` only and goes through the module's diplomacy2 family (HOI4_BACKEND=inprocess until S27-DIPLOMACY-ANY); a key whose shape the module cannot build is refused dialog_unsupported and nothing is sent. justify_war_goal may instead carry `war_goal_key` (the game's own key from common/wargoals, e.g. take_state, annex_everything, topple_government) and `state_ids` (the states a take-state goal names; none for a goal on the whole country): the module's diplomacy2 family then builds the justification by the action's own constructor and the game's own check decides (HOI4_BACKEND=inprocess until S27-DIPLOMACY-ANY). expeditionary_force with `army` (and optionally `division_ids`) goes the same way as send_volunteers, through the diplomacy2 family.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -2174,12 +2206,23 @@
      "action": {
       "type": "string"
      },
+     "army": {
+      "type": "string"
+     },
      "confirm": {
       "type": "string"
      },
      "country": {
       "pattern": "^[A-Z0-9]{3}$",
       "type": "string"
+     },
+     "division_ids": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
      },
      "lease_token": {
       "type": "string"
@@ -2204,6 +2247,19 @@
      },
      "war_goal": {
       "type": "string"
+     },
+     "war_goal_key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]{1,39}$"
+     },
+     "state_ids": {
+      "type": "array",
+      "items": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 100000
+      },
+      "maxItems": 64
      }
     },
     "required": [
@@ -2335,7 +2391,7 @@
    "source": "--list-tools"
   },
   "hoi4_doctrine_adopt": {
-   "description": "Adopt a grand doctrine (e.g. new_mobile_warfare) or a subdoctrine (e.g. mobile_infantry) with ordinary input: Shift+E officer corps view, the folder's doctrine button, the folder tab, the grand doctrine slot or the track's subdoctrine slot, the row whose localised name matches, Unlock (the game's confirmation is accepted). Ids and tracks are those of hoi4_doctrines (include_catalog:true); a subdoctrine that fits several tracks needs `track`. Typed refusals before input: doctrine_unknown, no_grand_doctrine, track_required, track_unknown, already_adopted, grand_doctrine_set, track_occupied, subdoctrine_taken, excluded_by_chosen, insufficient_experience (clear shortfall only; cost modifiers are not read); found while driving: doctrine_not_offered, doctrine_unavailable (Unlock disabled; the message names the game's price read from the row and the experience held, or says the price is covered and a precondition is unmet). Verified from the doctrine system in memory (the folder's grand doctrine or the track's subdoctrine names the doctrine). Track mastery rewards unlock by themselves; they have no button. Results carry validated:false. `replace` (swap the grand doctrine or the track's subdoctrine already chosen, instead of the refusals grand_doctrine_set and track_occupied) is not yet built: refused with not_yet_built.",
+   "description": "Adopt a grand doctrine (e.g. new_mobile_warfare) or a subdoctrine (e.g. mobile_infantry) with ordinary input: Shift+E officer corps view, the folder's doctrine button, the folder tab, the grand doctrine slot or the track's subdoctrine slot, the row whose localised name matches, Unlock (the game's confirmation is accepted). Ids and tracks are those of hoi4_doctrines (include_catalog:true); a subdoctrine that fits several tracks needs `track`. Typed refusals before input: doctrine_unknown, no_grand_doctrine, track_required, track_unknown, already_adopted, grand_doctrine_set, track_occupied, subdoctrine_taken, excluded_by_chosen, insufficient_experience (clear shortfall only; cost modifiers are not read); found while driving: doctrine_not_offered, doctrine_unavailable (Unlock disabled; the message names the game's price read from the row and the experience held, or says the price is covered and a precondition is unmet). Verified from the doctrine system in memory (the folder's grand doctrine or the track's subdoctrine names the doctrine). Track mastery rewards unlock by themselves; they have no button. Results carry validated:false. `replace`:true swaps the grand doctrine or the track's subdoctrine already chosen (the game's own unlock command on the filled slot, at the game's price); by command only (in-process family doctrine): without it a filled slot is refused grand_doctrine_set / track_occupied before input.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -2643,7 +2699,7 @@
    "source": "--list-tools"
   },
   "hoi4_fleet_assign": {
-   "description": "Live-verified (31 Oct 2026 on 1.19.4): Move one own task force into another own fleet: select the task force, then RIGHT-click the receiving fleet's card (route right_click, the army cards' convention) or drag the entry onto the card (route drag); a reassign confirmation is accepted. Verified by the task force being in the receiving fleet. Adds refusal target_is_reserve. Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
+   "description": "Live-verified (31 Oct 2026 on 1.19.4): Move one own task force into another own fleet: select the task force, then RIGHT-click the receiving fleet's card (route right_click, the army cards' convention) or drag the entry onto the card (route drag); a reassign confirmation is accepted. Verified by the task force being in the receiving fleet. Adds refusal target_is_reserve. A task force of the reserve fleet moves only by command (in-process family navy; refused reserve_fleet without it, never by the mouse). Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3438,7 +3494,7 @@
    "source": "--list-tools"
   },
   "hoi4_mio_trait": {
-   "description": "Live-verified (6 Nov 2026 on 1.19.4 with 10 DLCs: a trait queued, read back by reopening the detail window): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.",
+   "description": "Live-verified (6 Nov 2026 on 1.19.4 with 10 DLCs: a trait queued, read back by reopening the detail window): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. By key: `trait` (one trait key, the scripts' token) or `traits` (keys or indices in queue order) resolve to the tree's indices through the in-process organisations read (family mio; refused trait_key_unresolved before input when it is not usable, trait_unknown names the organisation's keys). Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3469,6 +3525,12 @@
       "minimum": 0,
       "type": "integer"
      },
+     "trait": {
+      "description": "one trait by its key (the scripts' trait token), resolved in process",
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
      "trait_index": {
       "maximum": 63,
       "minimum": 0,
@@ -3480,6 +3542,18 @@
        "maximum": 63,
        "minimum": 0,
        "type": "integer"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "type": "array"
+     },
+     "traits": {
+      "description": "traits by key (or index) in queue order, queued in one visit like trait_indices",
+      "items": {
+       "type": [
+        "string",
+        "integer"
+       ]
       },
       "maxItems": 16,
       "minItems": 1,
@@ -3827,7 +3901,7 @@
    "source": "--list-tools"
   },
   "hoi4_operative_assign": {
-   "description": "Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` refuse with mission_not_built / operation_not_built (operations are started with hoi4_operation_start). Typed refusals before input: invalid_arguments, target_required, country_has_no_states, unknown_country; agency_not_created, operative_unknown, operative_busy (on an operation), already_on_mission from memory; operative_bar_unavailable, mission_unavailable (the game disables the button) from the windows. Verified by memory (mission and target). Live-verified on 1.19.4.",
+   "description": "Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` refuse with mission_not_built / operation_not_built (operations are started with hoi4_operation_start). Typed refusals before input: invalid_arguments, target_required, country_has_no_states, unknown_country; agency_not_created, operative_unknown, operative_busy (on an operation), already_on_mission, mission_running (the operative runs another mission than the starting counter-intelligence at home: pass replace:true to end it) from memory; operative_bar_unavailable, mission_unavailable (the game disables the button) from the windows. Verified by memory (mission and target). Live-verified on 1.19.4.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3849,6 +3923,9 @@
       "maximum": 31,
       "minimum": 0,
       "type": "integer"
+     },
+     "replace": {
+      "type": "boolean"
      },
      "request_id": {
       "type": "string"
@@ -3898,6 +3975,55 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_paradrop": {
+   "description": "Drop an own army's paratroopers from an own air base onto a province with the game's own battle-plan commands (in-process module, family orders2): the paradrop tool's source click (a new paradrop order with the divisions; the game removes the army's area-defence orders), its target click, then the plan bar's execute (execute:false leaves the order drawn). `from_state` names the state of the departure air base (an own air base). `division_ids` limits the drop to those divisions of the army (ids as hoi4_armies lists them; default: all its divisions; the game drops only what can drop). The game's own checks decide: paratrooper divisions, transport planes within range of the target, the air superiority the paradrop needs (PARADROP_AIR_SUPERIORITY_RATIO); a refused drop is reported (paradrop_refused). Refused before any post: army_unknown, air_base_unknown, paradrop_unvalidated (off unless HOI4_BACKEND=inprocess until its live session S21-PARADROP passes), in_process_unavailable. Verified when the army has a paradrop order with the read-back order id (executing when asked).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "division_ids": {
+      "items": {
+       "maxLength": 64,
+       "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
+     },
+     "execute": {
+      "type": "boolean"
+     },
+     "from_state": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "target_province": {
+      "maximum": 100000,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "army",
+     "from_state",
+     "target_province",
+     "request_id",
+     "lease_token"
+    ],
     "type": "object"
    },
    "source": "--list-tools"
@@ -5166,7 +5292,7 @@
    "source": "--list-tools"
   },
   "hoi4_template_create": {
-   "description": "Create a new own division template with ordinary input (U panel, Division Designer button, Create Empty, battalion slots, name box, Save). `regiments` is up to 5 columns of up to 5 battalion keys from common/units (infantry, mountaineers, cavalry, motorized, artillery_brigade, anti_tank_brigade, light_armor, ...; one list per column, top to bottom, no gaps); `support` is up to 5 company keys (engineer, recon, artillery, logistics_company, ...). Saving spends army experience (5 per battalion, 10 per company, 25 per extra column on this build; the cost is read from the window and returned). Refused before any input: name_taken, name_not_typable, unit_unknown, unit_wrong_slot (a company in a column or a battalion in support), column_mixed_groups (one column holds one group: infantry/mountaineers together, cavalry or artillery in their own column), template_too_wide (> 40), regiments_gap, support_duplicate, empty_template, insufficient_experience (checked before Save). unit_not_unlocked and slot_locked are found while building (nothing is saved; the draft is dropped). Returns the receipt and the resulting hoi4_template_get row (width, hit points, organisation, manpower, equipment need, ...). `regimental_support` (the regimental support row, one company per column) is not yet built: refused with not_yet_built.",
+   "description": "Create a new own division template with ordinary input (U panel, Division Designer button, Create Empty, battalion slots, name box, Save). `regiments` is up to 5 columns of up to 5 battalion keys from common/units (infantry, mountaineers, cavalry, motorized, artillery_brigade, anti_tank_brigade, light_armor, ...; one list per column, top to bottom, no gaps); `support` is up to 5 company keys (engineer, recon, artillery, logistics_company, ...). Saving spends army experience (5 per battalion, 10 per company, 25 per extra column on this build; the cost is read from the window and returned). Refused before any input: name_taken, name_not_typable, unit_unknown, unit_wrong_slot (a company in a column or a battalion in support), column_mixed_groups (one column holds one group: infantry/mountaineers together, cavalry or artillery in their own column), template_too_wide (> 40), regiments_gap, support_duplicate, empty_template, insufficient_experience (checked before Save). unit_not_unlocked and slot_locked are found while building (nothing is saved; the draft is dropped). Returns the receipt and the resulting hoi4_template_get row (width, hit points, organisation, manpower, equipment need, ...). `regimental_support` is the regimental support row under the regiment columns: up to 5 entries, one per column (a company key such as heavy_weapons_company / field_guns, or \"\" for none); a column's slot opens with REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS battalions (3 on 1.20.1.0, read from the defines): regimental_slot_closed before any input otherwise; omitted on edit = unchanged. Verified from the template data's regimental row.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -5253,7 +5379,7 @@
    "source": "--list-tools"
   },
   "hoi4_template_edit": {
-   "description": "Edit an own division template in place through its Edit button: give the complete new `regiments` and/or `support` layout (omitted = unchanged), `priority` (reserve, regular, elite) and/or `new_name`. Only the differing slots are touched (Shift+click removes, slot click plus a choice replaces or adds). Verified from the designer's working copy and from the saved template. Templates used by divisions or training lines are refused (template_in_use) for layout changes unless allow_in_use is true: the game then reorganises those divisions at the new composition. Same refusals as hoi4_template_create plus template_unknown, nothing_to_change. `regimental_support` (the regimental support row, one company per column) is not yet built: refused with not_yet_built.",
+   "description": "Edit an own division template in place through its Edit button: give the complete new `regiments` and/or `support` layout (omitted = unchanged), `priority` (reserve, regular, elite) and/or `new_name`. Only the differing slots are touched (Shift+click removes, slot click plus a choice replaces or adds). Verified from the designer's working copy and from the saved template. Templates used by divisions or training lines are refused (template_in_use) for layout changes unless allow_in_use is true: the game then reorganises those divisions at the new composition. Same refusals as hoi4_template_create plus template_unknown, nothing_to_change. `regimental_support` is the regimental support row under the regiment columns: up to 5 entries, one per column (a company key such as heavy_weapons_company / field_guns, or \"\" for none); a column's slot opens with REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS battalions (3 on 1.20.1.0, read from the defines): regimental_slot_closed before any input otherwise; omitted on edit = unchanged. Verified from the template data's regimental row.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -5814,6 +5940,51 @@
       "maximum": 1100,
       "minimum": 1,
       "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_weather": {
+   "description": "Read-only, no input (the game's files; the date from memory unless given): the weather and ground an offensive or an air mission meets, per strategic region, as the map's own weather tables make it likely on a day of the year (an estimate, not the live weather of a province). Name `regions` (strategic region ids, as hoi4_air_regions lists them), `states` or `provinces` (mapped to their region); optional `date` (Y.M.D) or `day_of_year`, and `days` (horizon, default 30). Per region: mud chance, ground snow (none/medium/high), phenomenon chances, temperature bands, the expected modifiers (army_attack_factor, army_speed_factor, army_attack_speed_factor, breakthrough_factor, supply_factor, attrition, winter_attrition, air_mission_efficiency ...), the worst attack factor in the horizon, and when bad ground (mud more likely than not, or medium/high ground snow) clears or starts. Every number comes from map/strategicregions, common/weather.txt and the weather_* static modifiers of the running game (a mod's files win).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "date": {
+      "maxLength": 12,
+      "type": "string"
+     },
+     "day_of_year": {
+      "maximum": 364,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "days": {
+      "maximum": 120,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "provinces": {
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 64,
+      "type": "array"
+     },
+     "regions": {
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 64,
+      "type": "array"
+     },
+     "states": {
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 64,
+      "type": "array"
      }
     },
     "type": "object"

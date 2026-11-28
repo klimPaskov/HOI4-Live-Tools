@@ -68,6 +68,19 @@
 //!                               (an archetype or a variant key); a stock that is not falling
 //!                               (depleting false) counts as 9999 days; unknown until the server
 //!                               has measured a trend (net_per_day null)            readable
+//!   divisions:<template>        own deployed divisions of the template of that exact name
+//!                               (hoi4_supply divisions[].template)                   readable
+//!   mastery:<track>             a doctrine track's mastery / banked mastery (the grand doctrine's
+//!   banked_mastery:<track>      track key, or the subdoctrine it holds): hoi4_doctrines
+//!                               folders[].tracks[] (validated:false until a track is seen
+//!                               holding a subdoctrine on screen)                    readable
+//!   project_done:<key>          special project <key> completed: true once the special-project
+//!                               step saw it leave its facility unstopped and leave the visible
+//!                               pool (Ctx::projects_done, from the done-memory); false while a
+//!                               facility runs it or the pool lists it (hoi4_special_projects);
+//!                               unknown otherwise (done before the run or not visible) readable
+//!   stock:<equipment>           pieces in store beyond what the own divisions lack: hoi4_stockpile
+//!                               cover_after_shortfall of the archetype (or variant) row  readable
 //!   var:<name>                  unknown: no tool reads scenario variables (audit W1-18)
 //!   bop:<id>                    hoi4_country_status balances_of_power[].value of the balance
 //!                               whose id is <id> (-1..1); an inactive balance is unknown
@@ -237,6 +250,10 @@ const ATOMS: &[(&str, Kind, bool)] = &[
     ("convoys_free", Kind::Number, false),
     ("xp", Kind::Number, true),
     ("stockpile_days", Kind::Number, true),
+    ("stock", Kind::Number, true),
+    ("divisions", Kind::Number, true),
+    ("mastery", Kind::Number, true),
+    ("banked_mastery", Kind::Number, true),
     ("var", Kind::Number, true),
     ("bop", Kind::Number, true),
     ("mission_days", Kind::Number, true),
@@ -249,6 +266,7 @@ const ATOMS: &[(&str, Kind, bool)] = &[
     ("province_controlled", Kind::Flag, true),
     ("focus_done", Kind::Flag, true),
     ("tech_done", Kind::Flag, true),
+    ("project_done", Kind::Flag, true),
     ("phase", Kind::Flag, true),
     ("exists", Kind::Flag, true),
     ("capitulated", Kind::Flag, true),
@@ -257,6 +275,67 @@ const ATOMS: &[(&str, Kind, bool)] = &[
     ("state_controller", Kind::Tag, true),
     ("province_controller", Kind::Tag, true),
 ];
+
+/// Own divisions of the template named `template` in a hoi4_supply read (deployed divisions; a
+/// division in training is not one yet). Unknown when the read carries no template names.
+pub(crate) fn divisions_of(supply: &Value, template: &str) -> std::result::Result<f64, String> {
+    let rows = supply["divisions"]
+        .as_array()
+        .ok_or("hoi4_supply lists no divisions")?;
+    if !rows.is_empty() && rows.iter().all(|d| d["template"].as_str().is_none()) {
+        return Err("hoi4_supply names no division's template".into());
+    }
+    Ok(rows
+        .iter()
+        .filter(|d| d["template"].as_str().map(str::trim) == Some(template))
+        .count() as f64)
+}
+
+/// A doctrine track's `field` (mastery or banked_mastery) in a hoi4_doctrines read: the track
+/// named `track` (the grand doctrine's track key) or holding the subdoctrine `track`, in any
+/// folder. Unknown when no track matches or the field is not read.
+pub(crate) fn track_mastery(
+    read: &Value,
+    track: &str,
+    field: &str,
+) -> std::result::Result<f64, String> {
+    let folders = read["folders"]
+        .as_array()
+        .ok_or("hoi4_doctrines lists no folders")?;
+    let row = folders
+        .iter()
+        .flat_map(|f| f["tracks"].as_array().into_iter().flatten())
+        .find(|t| {
+            t["track"].as_str() == Some(track) || t["subdoctrine"]["id"].as_str() == Some(track)
+        })
+        .ok_or_else(|| format!("no doctrine track or subdoctrine {track} in hoi4_doctrines"))?;
+    row[field]
+        .as_f64()
+        .ok_or_else(|| format!("{track}: {field} not read"))
+}
+
+/// Whether special project `key` is still open in a hoi4_special_projects read: Ok(true) when a
+/// facility runs it or the visible pool lists it, Err (unknown) when neither: it may be done
+/// before this run or not visible yet, and no read tells the two apart (a completion is known
+/// only when the executor saw it leave its facility: `Ctx::projects_done`).
+pub(crate) fn project_open(sp: &Value, key: &str) -> std::result::Result<bool, String> {
+    let facilities = sp["facilities"]
+        .as_array()
+        .ok_or("hoi4_special_projects lists no facilities")?;
+    let running = facilities
+        .iter()
+        .any(|f| f["project"]["key"].as_str() == Some(key));
+    let listed = sp["projects"]
+        .as_array()
+        .is_some_and(|ps| ps.iter().any(|p| p["key"].as_str() == Some(key)));
+    if running || listed {
+        return Ok(true);
+    }
+    Err(format!(
+        "project {key} is neither running nor in the visible pool, and was not seen completing \
+         in this run (done earlier or not visible yet)"
+    ))
+}
 
 /// Whether `tag` still holds our border in a hoi4_wars read: its divisions stand in its states
 /// on our border (`neighbour_divisions_in_border_states` > 0), or, when that count is not read,
@@ -557,6 +636,9 @@ pub struct Ctx<'a> {
     pub now: GameHour,
     /// The plan's active phase (`phase:<id>` atoms).
     pub phase: Option<String>,
+    /// Special projects the executor saw complete (`project_done:<key>`; plan_run's special-project
+    /// step records a project that left its facility unstopped and left the visible pool).
+    pub projects_done: HashSet<String>,
     cache: Cache,
     unknown: BTreeMap<String, String>,
 }
@@ -580,6 +662,7 @@ impl<'a> Ctx<'a> {
             tools,
             now,
             phase: None,
+            projects_done: HashSet::new(),
             cache,
             unknown: BTreeMap::new(),
         }
@@ -1126,6 +1209,29 @@ pub(crate) fn stockpile_days(read: &Value, equipment: &str) -> Read<f64> {
     ))
 }
 
+/// Pieces of `equipment` in store beyond what the own divisions still lack (hoi4_stockpile
+/// cover_after_shortfall of the archetype row, or of the row holding that variant; negative when
+/// the store cannot even fill the divisions).
+pub(crate) fn spare_stock(read: &Value, equipment: &str) -> Read<f64> {
+    let rows = read["equipment"]
+        .as_array()
+        .ok_or("hoi4_stockpile lists no equipment")?;
+    let row = rows
+        .iter()
+        .find(|r| r["archetype"].as_str() == Some(equipment))
+        .or_else(|| {
+            rows.iter().find(|r| {
+                r["variants"]
+                    .as_array()
+                    .is_some_and(|v| v.iter().any(|x| x["type"].as_str() == Some(equipment)))
+            })
+        })
+        .ok_or_else(|| format!("{equipment} not in hoi4_stockpile"))?;
+    row["cover_after_shortfall"]
+        .as_f64()
+        .ok_or_else(|| format!("{equipment}: no cover_after_shortfall in hoi4_stockpile"))
+}
+
 /// Days of cover of a stockpile that is not falling.
 pub(crate) const NOT_FALLING_DAYS: f64 = 9999.0;
 
@@ -1238,6 +1344,33 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
                 .read("hoi4_stockpile", &json!({"equipment": arg}))
                 .ok_or("hoi4_stockpile unreadable")?;
             stockpile_days(read, arg).map(Reading::Number)
+        }
+        "divisions" => {
+            if arg.is_empty() {
+                return Err("divisions needs a template name".into());
+            }
+            let read = ctx
+                .read("hoi4_supply", &json!({}))
+                .ok_or("hoi4_supply unreadable")?;
+            divisions_of(read, arg).map(Reading::Number)
+        }
+        "mastery" | "banked_mastery" => {
+            if arg.is_empty() {
+                return Err(format!("{} needs a doctrine track", atom.name));
+            }
+            let read = ctx
+                .read("hoi4_doctrines", &json!({}))
+                .ok_or("hoi4_doctrines unreadable")?;
+            track_mastery(read, arg, &atom.name).map(Reading::Number)
+        }
+        "stock" => {
+            if arg.is_empty() {
+                return Err("stock needs an equipment key".into());
+            }
+            let read = ctx
+                .read("hoi4_stockpile", &json!({"equipment": arg}))
+                .ok_or("hoi4_stockpile unreadable")?;
+            spare_stock(read, arg).map(Reading::Number)
         }
         "var" => Err("no tool reads scenario variables (audit W1-18)".into()),
         "bop" => {
@@ -1436,6 +1569,15 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
             ctx.paged("hoi4_research", "researched")?.contains(arg),
         )),
         "phase" => Ok(Reading::Flag(ctx.phase.as_deref() == Some(arg))),
+        "project_done" => {
+            if ctx.projects_done.contains(arg) {
+                return Ok(Reading::Flag(true));
+            }
+            let read = ctx
+                .read("hoi4_special_projects", &json!({}))
+                .ok_or("hoi4_special_projects unreadable")?;
+            project_open(read, arg).map(|open| Reading::Flag(!open))
+        }
         other => Err(format!("unknown atom '{other}' (see plan_predicate.rs)")),
     }
 }
@@ -1550,6 +1692,113 @@ mod tests {
         assert_eq!(
             eval(&f, json!("province_controller:3 == ETH")),
             Truth::False
+        );
+    }
+
+    #[test]
+    fn divisions_count_the_template_by_name_and_need_the_names() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_supply",
+            json!({"divisions": [
+                {"army": "Army 1", "template": "Infanterie-Division"},
+                {"army": "Army 1", "template": "Infanterie-Division"},
+                {"army": "Army 2", "template": "Panzer-Division"}]}),
+        );
+        assert_eq!(
+            eval(&f, json!("divisions:Infanterie-Division >= 2")),
+            Truth::True
+        );
+        assert_eq!(
+            eval(&f, json!("divisions:Panzer-Division >= 2")),
+            Truth::False
+        );
+        assert_eq!(eval(&f, json!("divisions:Gebirgsjäger == 0")), Truth::True);
+        // the old fixture names no template: unknown, never a count of 0
+        assert_eq!(
+            eval(&game(), json!("divisions:Infanterie-Division >= 1")),
+            Truth::Unknown
+        );
+    }
+
+    #[test]
+    fn a_project_is_done_once_seen_completing_and_open_while_running_or_listed() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_special_projects",
+            json!({"facilities": [{"facility_id": 1, "project": {"key": "sp_land_flamethrower_tank"}},
+                                  {"facility_id": 2, "project": null}],
+                   "projects": [{"key": "sp_land_flamethrower_tank"},
+                                {"key": "sp_land_military_engineering_vehicles"}]}),
+        );
+        let now = date_hour("1937.1.1").unwrap();
+        let mut ctx = Ctx::new(&f, now);
+        assert_eq!(
+            check(&json!("project_done:sp_land_flamethrower_tank"), &mut ctx),
+            Truth::False
+        );
+        assert_eq!(
+            check(
+                &json!("project_done:sp_land_military_engineering_vehicles"),
+                &mut ctx
+            ),
+            Truth::False
+        );
+        // gone from facility and pool, never seen completing: unknown, with the reason
+        assert_eq!(
+            check(&json!("project_done:sp_land_land_cruiser"), &mut ctx),
+            Truth::Unknown
+        );
+        assert!(ctx
+            .take_unknown()
+            .into_iter()
+            .any(|(_, why)| why.contains("not seen completing")));
+        let mut ctx = Ctx::new(&f, now);
+        ctx.projects_done.insert("sp_land_land_cruiser".into());
+        assert_eq!(
+            check(&json!("project_done:sp_land_land_cruiser"), &mut ctx),
+            Truth::True
+        );
+    }
+
+    #[test]
+    fn mastery_is_read_per_track_or_subdoctrine() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_doctrines",
+            json!({"folders": [{"folder": "land", "tracks": [
+                {"track": "infantry", "subdoctrine": {"id": "irregulars"}, "mastery": 210.5, "banked_mastery": 120.0},
+                {"track": "armor", "subdoctrine": null, "mastery": null, "banked_mastery": 40.0}]}]}),
+        );
+        assert_eq!(eval(&f, json!("mastery:infantry >= 200")), Truth::True);
+        assert_eq!(
+            eval(&f, json!("banked_mastery:irregulars >= 200")),
+            Truth::False
+        );
+        assert_eq!(eval(&f, json!("banked_mastery:armor > 0")), Truth::True);
+        assert_eq!(eval(&f, json!("mastery:armor > 0")), Truth::Unknown);
+        assert_eq!(eval(&f, json!("mastery:naval_x > 0")), Truth::Unknown);
+    }
+
+    #[test]
+    fn stock_is_the_store_beyond_what_the_divisions_lack() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_stockpile",
+            json!({"equipment": [{"archetype": "infantry_equipment", "cover_after_shortfall": 6200,
+                "variants": [{"type": "infantry_equipment_1"}]}]}),
+        );
+        assert_eq!(
+            eval(&f, json!("stock:infantry_equipment >= 6000")),
+            Truth::True
+        );
+        assert_eq!(
+            eval(&f, json!("stock:infantry_equipment_1 > 7000")),
+            Truth::False
+        );
+        assert_eq!(
+            eval(&f, json!("stock:artillery_equipment > 0")),
+            Truth::Unknown
         );
     }
 

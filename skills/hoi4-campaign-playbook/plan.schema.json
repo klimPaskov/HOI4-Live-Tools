@@ -126,8 +126,8 @@
     },
     "volunteers": {
       "type": "array",
-      "x-owner": "player",
-      "description": "volunteer forces to send: land divisions or air wings to a country at war. Cap (defines): 0.05 x the receiver's provinces + 0.05 x own divisions, at least 30 own divisions (VOLUNTEERS_DIVISIONS_REQUIRED), recall locked 180 days after arrival; air volunteers up to 20% of own planes and 10% of the receiver's air-base capacity. No executor reads it yet, and sending is a gap (register lendlease.send_volunteers: the send_volunteers dialog needs a division group choice); lint_fair checks the side rules",
+      "x-owner": "executor",
+      "description": "volunteer forces and the attaché (plan_volunteers.rs, through hoi4_diplomacy_act's send_volunteers / recall_volunteers / send_attache): a land row sends `army` to `target` once while `when` holds and `until` does not, and recalls it once `until` holds; an attache row sends the attaché once `when` holds; an air row is a rebase of wings to the receiver's air base (hoi4_air_rebase), noted, not sent. The game's own check decides (cap 0.05 x the receiver's provinces + 0.05 x own divisions, VOLUNTEERS_DIVISIONS_REQUIRED own divisions, recall locked after arrival; scripts/hoi4facts/volunteers.py computes the window). Rule sets volunteers / attaches (FAIR allows both, owner 28 Nov). Until S25-VOLUNTEERS passes the module path needs HOI4_BACKEND=inprocess",
       "items": {
         "type": "object",
         "required": [
@@ -149,22 +149,31 @@
             "type": "string",
             "enum": [
               "land",
-              "air"
+              "air",
+              "attache"
             ]
           },
           "divisions": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "x-owner": "lint",
+            "description": "how many divisions the army should hold (the strategist forms it; the lint checks the cap)"
           },
           "template": {
-            "type": "string"
+            "type": "string",
+            "x-owner": "lint",
+            "description": "the template of the volunteer divisions (the strategist trains them)"
           },
           "planes": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "x-owner": "lint",
+            "description": "air rows: planes to rebase (the strategist checks the 20% rule)"
           },
           "airframe": {
-            "type": "string"
+            "type": "string",
+            "x-owner": "lint",
+            "description": "air rows: the airframe of the wings"
           },
           "when": {
             "$ref": "#/definitions/predicate"
@@ -177,22 +186,28 @@
           },
           "note": {
             "type": "string"
+          },
+          "army": {
+            "type": "string",
+            "minLength": 1,
+            "description": "land: the army whose divisions go (hoi4_armies name), formed in peace of divisions no operation needs inside the recall lock"
           }
         }
       }
     },
     "airborne": {
       "type": "object",
-      "x-owner": "player",
-      "description": "paratroop drops and airborne raids. Owner, 28 Nov: drops are off by default in FAIR (\"paratroopers yes, aren't considered for fair play\"), META may use them, a roleplay goal switches them on. enabled false keeps every drop and raid row inert; the trace lint reports paratrooper templates or drops while it is false",
-      "additionalProperties": false,
+      "x-owner": "executor",
+      "description": "paratroop drops and airborne raids, one key for the plan and the executor. standing opportunity rule for paratroopers (plan_airborne.rs): at war, once a day, the first target whose `when` holds, that a transport wing reaches from one of the air bases, whose region's air is ours by the region window's estimate (min_air_share), and in FAIR mode lies within link_up_km of one of our battles, gets hoi4_paradrop with `army`; then the rule rests cooldown_days. The game's own checks still decide. Absent or enabled:false: off (a roleplay goal switches it off). FAIR: off unless roleplay_request (the owner's rule); META: on. hoi4_paradrop is off in auto until S21-PARADROP passes. The plan's `drops[]` rows (target_province/target_state, when) are read as targets after `targets[]`; `raids[]` are the raid rows (their own `switch`, e.g. eben_emael_raid, which FAIR allows: `enabled` governs drops only). Owner, 28 Nov: drops are off by default in FAIR (\"paratroopers yes, aren't considered for fair play\"), META may use them, a roleplay goal switches them on.",
       "properties": {
         "enabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "switch": {
+          "x-owner": "lint",
           "type": "string",
-          "description": "the constraints key that sets enabled"
+          "description": "the constraints key that sets enabled (lint_trace reads it)"
         },
         "drops": {
           "type": "array",
@@ -217,6 +232,8 @@
                 "type": "integer"
               },
               "transports": {
+                "x-owner": "text",
+                "description": "transport planes the drop needs (the strategist sizes production by it; the executor counts the live wings)",
                 "type": "integer"
               },
               "air_superiority": {
@@ -235,6 +252,8 @@
           }
         },
         "raids": {
+          "x-owner": "text",
+          "description": "raid rows (common/raids, facts.py raids TAG): the preparation goes through research, templates, training and production rows; creating and launching a raid waits for the raid tool (gap air.raids); each row keeps its own rule switch (eben_emael_raid is allowed in FAIR), independent of `enabled`",
           "type": "array",
           "items": {
             "type": "object",
@@ -275,12 +294,93 @@
           }
         },
         "why": {
-          "type": "string"
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
         },
         "note": {
-          "type": "string"
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "army": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the army of paratrooper divisions (hoi4_armies name)"
+        },
+        "from_states": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/state_id"
+          },
+          "description": "air base states to drop from; absent: every own air base"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "province": {
+                "$ref": "#/definitions/province_id"
+              },
+              "state": {
+                "$ref": "#/definitions/state_id"
+              },
+              "when": {
+                "$ref": "#/definitions/predicate"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "required": [
+              "province",
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          "description": "drop targets in order (victory points, ports, air fields from the game files), each dropped once"
+        },
+        "min_air_share": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.7,
+          "description": "our least share of the region's air (1 - the region window's enemy estimate)"
+        },
+        "link_up_km": {
+          "type": "number",
+          "minimum": 0,
+          "default": 300,
+          "description": "FAIR: the most a target lies from our nearest battle (MX12, MX43); META ignores it"
+        },
+        "cooldown_days": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 14
+        },
+        "roleplay_request": {
+          "type": "boolean",
+          "default": false,
+          "description": "FAIR: drops are off by default; true when the player asked for them (META drops without it)"
+        },
+        "min_transports": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 50,
+          "description": "the game's MIN_PLANE_COUNT_PARADROP of the game and mod in use"
+        },
+        "transports_per_division": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 45,
+          "description": "the game's BASE_UNIT_WEIGHT_IN_TRANSPORT_PLANES of the game and mod in use"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "_meta": {
       "type": "object",
@@ -687,6 +787,7 @@
           },
           "description": "roles the rule manages (default both)"
         },
+        "missions": {"type": "array", "description": "mission entries, claimed before the fighters and CAS each turn (plan_air.rs): wings whose plane flies `mission` over `region` (id) or the region of `state`; `wings` N or `share` 0..1 of the free ones; `when`/`stop` predicates; entries other than interception and air superiority wait while the enemy fighters last seen there exceed ours / fighter_ratio unless ignore_air. Filled by the rules engine's opportunity rules (logistics strike, interception, strategic bombing) or by the plan.", "items": {"type": "object", "additionalProperties": false, "required": ["mission"], "properties": {"id": {"type": "string"}, "mission": {"type": "string", "enum": ["air_superiority", "cas", "interception", "strategic_bombing", "naval_strike", "kamikaze", "port_strike", "logistics_strike", "air_supply", "training", "naval_mines", "naval_minesweeping", "recon", "naval_patrol"]}, "region": {"type": ["integer", "string"]}, "state": {"type": "integer", "minimum": 1}, "target": {"type": "string", "description": "front:<army> (not built yet)"}, "wings": {"type": "integer", "minimum": 1}, "share": {"type": "number", "minimum": 0, "maximum": 1}, "when": {"$ref": "#/definitions/predicate"}, "stop": {"$ref": "#/definitions/predicate"}, "ignore_air": {"type": "boolean"}, "why": {"type": "string"}, "note": {"type": "string"}}}},
         "why": {
           "type": "string",
           "description": "Free text for people and the player; never read by the executor."
@@ -778,6 +879,7 @@
           "date": {"type": "string", "description": "the date the slot waits for, when the wait is for a date (a tech that opens, a bonus that lands)"},
           "slot": {"type": "integer", "description": "which research slot (0-based) is held"},
           "days": {"type": "number", "description": "how long the slot is held; beyond BASE_RESEARCH_POINTS_SAVED the lint warns"},
+          "fill": {"type": "string", "description": "the juggle: a technology the held slot runs while it waits (the game keeps its progress when it is switched out); the executor switches the slot to `tech` with replace the moment `tech` can start, and the filler resumes later through research_path. A filled slot banks nothing, so `days` does not bound it"},
           "why": {"type": "string", "x-owner": "executor", "description": "why the slot is held; the research line quotes it while the slot waits"}
         },
         "additionalProperties": false
@@ -867,6 +969,14 @@
     "research_blind_catalogue": {
       "type": "boolean",
       "x-owner": "executor"
+    },
+    "focus_when": {
+      "type": "object",
+      "x-owner": "executor",
+      "description": "{focus key: predicate}: the focus is kept for its window (a one-shot benefit taken when it pays): not started while the predicate does not hold (false or unknown); the focus_path keys after it go on meanwhile; the digest's focus line names the keys kept and why",
+      "additionalProperties": {
+        "$ref": "#/definitions/predicate"
+      }
     },
     "focus_path": {
       "type": "array",
@@ -1119,9 +1229,36 @@
           "type": "integer",
           "minimum": 0
         },
+        "queue_from": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "$ref": "#/definitions/date"
+              },
+              "queue": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "from",
+              "queue"
+            ],
+            "additionalProperties": false
+          },
+          "description": "lines to keep queued from each date on (the last entry whose date has come replaces `queue`): one row per template carries every stage; size each from `evaluate.py training` (divisions in training at once)"
+        },
         "batch": {
           "type": "integer",
           "minimum": 1
+        },
+        "armies": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "description": "destination armies (names or army_layout name hints): the row's divisions outside any army join the listed army with the fewest divisions and room, by command (hoi4_army_detach without army, in-process units family), whatever the deploy state; one row per template serves every army"
         },
         "deploy_state": {
           "$ref": "#/definitions/state_id"
@@ -1159,7 +1296,7 @@
       "items": {
         "$ref": "#/definitions/training_line"
       },
-      "description": "one training line or a list of them (plan_manage.rs training_step: each template kept at `queue` lines, the first one short trains `batch`)"
+      "description": "one training line or a list of them (plan_manage.rs training_step: each template kept at `queue` lines (or its `queue_from` schedule), the first one short fills its gap in one queue, at most `batch` lines)"
     },
     "production_priority": {
       "type": "array",
@@ -1248,6 +1385,11 @@
             "default": false,
             "x-owner": "executor",
             "description": "true switches a mature line to a new tier at once (default: the new tier starts as a separate line and the old line keeps building until switch_at_cover_days)"
+          },
+          "until": {
+            "$ref": "#/definitions/predicate",
+            "x-owner": "executor",
+            "description": "once it holds (judged once a game day after `from`), the lines of this equipment close from that day: the entry is read as a remove row dated then (recorded, so it holds across restarts); a later row of the same family, e.g. the next gun, starts its own line again"
           },
           "switch_at_cover_days": {
             "type": [
@@ -3375,6 +3517,20 @@
             "additionalProperties": false,
             "description": "the operation reads as ready (its declaration goes out) only once the attacking armies' planning bonus, weighted by divisions, reaches share (0.9) of cap (0.3, PLANNING_MAX) or has stopped growing for two game days; a dated declaration waits for it at most max_wait_days (7) past its date"
           },
+          "weather_gate": {
+            "type": [
+              "boolean",
+              "object"
+            ],
+            "properties": {
+              "max_wait_days": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "description": "on unless false: before the declaration, the attack's regions (the units' lines and the offensive's target) are read with hoi4_weather; when most of them are on bad ground (mud more likely than not, or medium/high ground snow) that clears within max_wait_days (default: planning_gate's, else 7) past the date, the declaration waits; otherwise the attack goes on and the operation's notes carry the expected attack factor"
+          },
           "spear_pockets": {
             "type": "boolean",
             "description": "true: the pocket order for spearheads: the two spearheads nearest a one-neck pocket (hoi4_encirclement_candidates) are painted to its neck state, the arms of a closed ring keep their orders while the group reduces it, a neck not closed in 6 days is given up. Not with strike formations in the operation. pockets false switches it off"
@@ -3897,6 +4053,8 @@
             "maxItems": 5,
             "description": "justify: 1 to 5 state names as hoi4_diplomacy lists them"
           },
+          "war_goal_key": {"type": "string", "pattern": "^[A-Za-z0-9_]{1,39}$", "description": "justify by command: the game's own war goal key (common/wargoals: take_state, annex_everything, topple_government ...) instead of war_goal + states; the module builds it (HOI4_BACKEND=inprocess until S27-DIPLOMACY-ANY)"},
+          "state_ids": {"type": "array", "items": {"type": "integer", "minimum": 1}, "maxItems": 64, "description": "with war_goal_key: the states a take-state goal names, by id"},
           "justify_days": {
             "type": "integer",
             "minimum": 0,
@@ -5266,6 +5424,7 @@
           "maximum": 1,
           "description": "fuel / capacity below which training wings are held and no wing starts training"
         },
+        "air_training_days": {"type": ["number", "null"], "default": null, "x-rule": "air_idle", "exclusiveMinimum": 0, "description": "Days a wing trains before training stops giving experience: the game's AIR_WING_XP_TRAINING_MAX / AIR_WING_XP_TRAINING_MISSION_GAIN_DAILY (facts.py air-training); the wing trains again once new aircraft joined it. Absent: no limit."},
         "fuel_days_floor": {
           "type": "number",
           "x-rule": "air_idle",
@@ -6357,6 +6516,109 @@
             "type": "string",
             "description": "Free text for people and the player; never read by the executor."
           },
+          "refresh": {
+            "type": "object",
+            "x-owner": "executor",
+            "description": "the design follows the technology: after the item's design is made, a new version is made whenever a better candidate becomes available (its tech researched, its when holding); the item's production line moves to each new version. Candidate lists come from the designer evaluator (facts.py design-refresh), best first",
+            "properties": {
+              "slots": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "module": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "base": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "tech": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "when": {
+                            "$ref": "#/definitions/predicate"
+                          },
+                          "why": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "description": "slot -> candidate modules, best first: a module key or {module, tech?, when?}"
+              },
+              "bases": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "module": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "base": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "tech": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "when": {
+                          "$ref": "#/definitions/predicate"
+                        },
+                        "why": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "minItems": 1,
+                "description": "candidate bases (equipment type keys), best first: a key or {base, tech?, when?}; a better available base makes the next version from that type with every wanted slot"
+              },
+              "xp": {
+                "type": "number",
+                "minimum": 0,
+                "description": "held experience of the kind's branch needed for a version (default 5 per changed slot)"
+              },
+              "names": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                },
+                "description": "names of versions 2, 3, ..; else '<name> <n>'"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false
+          },
           "switch_mature": {
             "type": "boolean",
             "default": false,
@@ -6457,10 +6719,15 @@
                 {
                   "type": "string",
                   "pattern": "^[0-9]+$"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                  "maxLength": 128
                 }
               ]
             },
-            "description": "0-based trait_index values in queue order, as hoi4_mio_trait list:true numbers the tree (trait entries carry no text)"
+            "description": "traits in queue order: each a trait key (the scripts' trait token, e.g. GER_mio_trait_technical_superiority; hoi4_mio_trait resolves it through the in-process organisations read) or a 0-based trait_index as hoi4_mio_trait list:true numbers the tree"
           },
           "when": {
             "$ref": "#/definitions/predicate"
@@ -6961,12 +7228,49 @@
           "read": "hoi4_convoys convoys.free (stock minus in use, the top-bar figure), else hoi4_country_status convoys.free",
           "readable": true
         },
+        "stock": {
+          "kind": "number",
+          "arg": "equipment",
+          "unit": "pieces in store beyond what the own divisions lack (negative: the store cannot fill them)",
+          "read": "hoi4_stockpile cover_after_shortfall of the archetype (or variant) row",
+          "readable": true
+        },
         "stockpile_days": {
           "kind": "number",
           "arg": "equipment",
           "min": 0,
           "unit": "days of cover",
           "read": "hoi4_stockpile days_of_cover of the archetype (or variant key) row; a stock that is not falling counts as 9999 days; unknown until the server has measured a trend",
+          "readable": true
+        },
+        "divisions": {
+          "kind": "number",
+          "arg": "template",
+          "min": 0,
+          "unit": "own deployed divisions of the template of that exact name",
+          "read": "hoi4_supply divisions[].template (a division in training is not counted)",
+          "readable": true
+        },
+        "mastery": {
+          "kind": "number",
+          "arg": "id",
+          "min": 0,
+          "unit": "mastery on a doctrine track (the grand doctrine's track key, or the subdoctrine it holds)",
+          "read": "hoi4_doctrines folders[].tracks[].mastery",
+          "readable": true
+        },
+        "banked_mastery": {
+          "kind": "number",
+          "arg": "id",
+          "min": 0,
+          "unit": "banked mastery on a doctrine track (kept when the track's subdoctrine changes, up to the bank cap)",
+          "read": "hoi4_doctrines folders[].tracks[].banked_mastery",
+          "readable": true
+        },
+        "project_done": {
+          "kind": "bool",
+          "arg": "key",
+          "read": "the special-project step's record (a project that left its facility unstopped and left the visible pool; needs the plan's special_projects key), else hoi4_special_projects: false while a facility runs it or the pool lists it, unknown otherwise",
           "readable": true
         },
         "var": {
@@ -7071,7 +7375,7 @@
         "array",
         "boolean"
       ],
-      "pattern": "^(|true|false|(date:)?\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|date\\s*(<=|>=|==|!=|<|>)\\s*\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|(province_controlled|state_fully_controlled|controls_state):\\d+|(at_war_with|at_war|not_at_war|capitulated|exists|not_exists):[A-Z][A-Z0-9]{2}|(focus_done|tech_done|focus_completed|tech_researched):[A-Za-z0-9_.-]+|phase:[A-Za-z0-9_]+|at_peace_conference|(owner|controller|state_controller|province_controller):\\d+\\s*(==|!=|=)\\s*[A-Z][A-Z0-9]{2}|(stability|war_support|pp|manpower|fuel_ratio|convoys_free|world_tension|own_surrender_progress|xp:(army|air|navy|land|naval)|(vp_share|factories|industry_ratio|casualty_ratio):[A-Z][A-Z0-9]{2}|(resistance|compliance):\\d+|equipment_fill:[^<>=!\\s]([^<>=!]*[^<>=!\\s])?|stockpile_days:[A-Za-z0-9_]+|var:[A-Za-z0-9_.@^:]+|bop:[A-Za-z0-9_]+|mission_days:[A-Za-z0-9_.-]+|surrender_progress:[A-Z][A-Z0-9]{2}|naval_dominance:\\d+|naval_intel:[A-Z][A-Z0-9]{2})\\s*(<=|>=|==|!=|<|>)\\s*-?\\d+(\\.\\d+)?%?)$",
+      "pattern": "^(|true|false|(date:)?\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|date\\s*(<=|>=|==|!=|<|>)\\s*\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|(province_controlled|state_fully_controlled|controls_state):\\d+|(at_war_with|at_war|not_at_war|capitulated|exists|not_exists):[A-Z][A-Z0-9]{2}|(focus_done|tech_done|focus_completed|tech_researched|project_done):[A-Za-z0-9_.-]+|phase:[A-Za-z0-9_]+|at_peace_conference|(owner|controller|state_controller|province_controller):\\d+\\s*(==|!=|=)\\s*[A-Z][A-Z0-9]{2}|(stability|war_support|pp|manpower|fuel_ratio|convoys_free|world_tension|own_surrender_progress|xp:(army|air|navy|land|naval)|(vp_share|factories|industry_ratio|casualty_ratio):[A-Z][A-Z0-9]{2}|(resistance|compliance):\\d+|equipment_fill:[^<>=!\\s]([^<>=!]*[^<>=!\\s])?|stockpile_days:[A-Za-z0-9_]+|stock:[A-Za-z0-9_]+|(mastery|banked_mastery):[A-Za-z0-9_]+|divisions:[^<>=!\\s]([^<>=!]*[^<>=!\\s])?|var:[A-Za-z0-9_.@^:]+|bop:[A-Za-z0-9_]+|mission_days:[A-Za-z0-9_.-]+|surrender_progress:[A-Z][A-Z0-9]{2}|naval_dominance:\\d+|naval_intel:[A-Z][A-Z0-9]{2})\\s*(<=|>=|==|!=|<|>)\\s*-?\\d+(\\.\\d+)?%?)$",
       "items": {
         "$ref": "#/definitions/predicate"
       },
@@ -8140,10 +8444,26 @@
           "minimum": 0,
           "default": 6
         },
+        "queue_from": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {"from": {"$ref": "#/definitions/date"}, "queue": {"type": "integer", "minimum": 0}},
+            "required": ["from", "queue"],
+            "additionalProperties": false
+          },
+          "description": "lines to keep queued from each date on (the last entry whose date has come replaces `queue`): one row per template carries every stage; size each from `evaluate.py training` (divisions in training at once)"
+        },
         "batch": {
           "type": "integer",
           "minimum": 1,
-          "default": 2
+          "description": "at most this many lines per train action; without it one action fills the whole gap to `queue` in ONE queue"
+        },
+        "armies": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "description": "destination armies (names or army_layout name hints): the row's divisions outside any army join the listed army with the fewest divisions and room, by command (hoi4_army_detach without army, in-process units family), whatever the deploy state; one row per template serves every army"
         },
         "deploy_state": {
           "$ref": "#/definitions/state_id"

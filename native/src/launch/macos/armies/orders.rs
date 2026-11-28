@@ -57,6 +57,8 @@ pub(crate) fn kind_name(kind: i32, list: List) -> String {
         (2, List::Defensive) => "fallback".into(),
         (1, _) => "offensive".into(),
         (5, _) => "area_defense".into(),
+        // engineer 106: COrderSetParadropSourceCommand creates kind 4 (1.20.0.0 exec 0x10094bba0)
+        (4, _) => "paradrop".into(),
         (k, _) => format!("kind_{k}"),
     }
 }

@@ -336,6 +336,11 @@ def check_focus(game, plan, meta, rep):
             for b in info["prereq"]
         ):
             rep.warn(f"focus_fallback[{i}] {k}: a prerequisite is neither in focus_path nor fallback")
+    windows = plan.get("focus_when") if isinstance(plan.get("focus_when"), dict) else {}
+    for k in sorted(windows):
+        if k not in listed and k not in set(fallback):
+            rep.error(f"focus_when.{k}: {k} is in neither focus_path nor focus_fallback (only a listed focus "
+                      f"is started, so its window holds nothing)")
 
 
 def check_production(game, plan, rep):
@@ -606,6 +611,22 @@ def _check_training_line(game, tr, label, rep, meta, planned_names):
     for key in ("queue", "batch"):
         if key in tr and (not isinstance(tr[key], int) or tr[key] < 1):
             rep.error(f"{label}.{key} must be a positive integer")
+    sched = tr.get("queue_from")
+    if sched is not None:
+        last = None
+        for j, step in enumerate(sched if isinstance(sched, list) else [None]):
+            where = f"{label}.queue_from[{j}]"
+            if not isinstance(step, dict) or not isinstance(step.get("queue"), int) or step["queue"] < 0:
+                rep.error(f"{where} must be {{from: date, queue: lines >= 0}}")
+                continue
+            m = _DATE.match(str(step.get("from") or ""))
+            if not m:
+                rep.error(f"{where}.from must be a date (Y.M.D)")
+                continue
+            ymd = tuple(int(x) for x in m.groups())
+            if last is not None and ymd <= last:
+                rep.error(f"{where}.from must come after the entry before it")
+            last = ymd
     dep = tr.get("deploy_state")
     if dep is None:
         rep.error(f"{label}.deploy_state is required (a line without a location never deploys)")
@@ -1080,13 +1101,24 @@ _TAG_RE = r"[A-Z][A-Z0-9]{2}"
 PRED_ARGS = {
     "province": r"\d+", "state": r"\d+", "tag": _TAG_RE, "key": r"[A-Za-z0-9_.\-]+", "id": r"[A-Za-z0-9_]+",
     "branch": r"army|air|navy|land|naval", "army": r"[^<>=!\s](?:[^<>=!]*[^<>=!\s])?", "equipment": r"[A-Za-z0-9_]+",
-    "name": r"[A-Za-z0-9_.@^:]+", "region": r"\d+",
+    "name": r"[A-Za-z0-9_.@^:]+", "region": r"\d+", "template": r"[^<>=!\s](?:[^<>=!]*[^<>=!\s])?",
 }
 PRED_OPS = ("<=", ">=", "==", "!=", "<", ">")
 _PRED_CMP = re.compile(r"^(?P<name>[a-z_]+)(?::(?P<arg>.*?))?\s*(?P<op><=|>=|==|!=|=|<|>)\s*(?P<value>[^<>=!\s][^<>=!]*)$")
 _PRED_FLAG = re.compile(r"^(?P<name>[a-z_]+)(?::(?P<arg>[^<>=!]+))?$")
 _PRED_DATE = re.compile(r"^(?:date:)?(\d{4}[.-]\d{1,2}[.-]\d{1,2})$")
 _PRED_NUM = re.compile(r"^-?\d+(\.\d+)?%?$")
+
+
+_SP_CACHE = {}
+
+
+def _special_projects(game):
+    """The special project keys of common/special_projects/projects (empty without the folder)."""
+    key = id(game)
+    if key not in _SP_CACHE:
+        _SP_CACHE[key] = derive._top_keys(game, "common/special_projects/projects")
+    return _SP_CACHE[key]
 
 
 def predicate_table(schema=None):
@@ -1297,8 +1329,10 @@ def check_predicates(game, plan, rep, schema=None, meta=None):
                 rep.error(f"{label}: no technology {arg}")
             elif name == "phase" and arg not in phases:
                 rep.error(f"{label}: no phases[] entry with id {arg}")
-            elif name == "stockpile_days" and arg not in game.equipment() and arg not in derive.equipment_archetypes(game):
+            elif name in ("stockpile_days", "stock") and arg not in game.equipment() and arg not in derive.equipment_archetypes(game):
                 rep.error(f"{label}: no equipment {arg} in common/units/equipment")
+            elif name == "project_done" and _special_projects(game) and arg not in _special_projects(game):
+                rep.error(f"{label}: no special project {arg} in common/special_projects/projects")
             elif name == "mission_days" and arg not in game.decisions():
                 rep.error(f"{label}: no decision or mission {arg} in common/decisions")
     return n
@@ -1935,10 +1969,16 @@ def check_affairs_keys(game, plan, meta, rep):
             if isinstance(e.get("policy"), str) and policies and e["policy"] not in policies:
                 rep.error(f"{label}: no MIO policy {e['policy']} in common/military_industrial_organization/policies")
             entries = len(orgs[org]["traits"]) + 1  # the tree window lists the initial trait and the traits
+            tokens = {t.get("token") for t in orgs[org]["traits"]}
+            tokens.add((orgs[org].get("initial_trait") or {}).get("token"))
+            tokens.discard(None)
             for t in e.get("traits") or []:
                 idx = int(t) if isinstance(t, str) and t.isdigit() else t
                 if _is_int(idx) and idx >= entries:
                     rep.error(f"{label}: trait_index {idx} but the tree has {entries} entries (initial trait included)")
+                elif isinstance(idx, str) and tokens and idx not in tokens:
+                    rep.error(f"{label}: no trait {idx} in {org}'s tree (include, remove_trait and add_trait applied; "
+                              f"facts.py mio {tag} --id {org} lists the tokens)")
 
     tr = plan.get("trade")
     deals = tr if isinstance(tr, list) else (tr.get("deals") if isinstance(tr, dict) else None)

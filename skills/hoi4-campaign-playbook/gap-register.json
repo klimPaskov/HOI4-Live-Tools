@@ -1007,12 +1007,13 @@
     "diplomacy[].action"
    ],
    "tools": [
+    "hoi4_diplomacy_act",
     "hoi4_diplomacy_act"
    ],
    "payoff": "medium",
    "why": "about +10% war support for democracies and neutrals short of a gate",
    "closing": "live",
-   "owner": "live send_attache (dialog=true; confirm the dialog is a sendable one)"
+   "owner": "live session S25-VOLUNTEERS (CSendAttacheAction through the module, family volunteers)"
   },
   {
    "id": "diplomacy.call_allies",
@@ -1547,14 +1548,10 @@
    "tools": [
     "hoi4_diplomacy_act"
    ],
-   "blocked": "send_volunteers dialog needs a division group choice: dialog_unsupported",
-   "blocked_terms": [
-    "volunteer"
-   ],
    "payoff": "medium",
    "why": "army XP and veteran divisions before the main war",
-   "closing": "both",
-   "owner": "volunteer dialog support, then live"
+   "closing": "live",
+   "owner": "live session S25-VOLUNTEERS (module family volunteers: CSendVolunteerAction with the division handles, one action per two divisions; off in auto until it passes); the standing opportunity rule and plan key are open"
   },
   {
    "id": "lendlease.air_volunteers",
@@ -1565,11 +1562,11 @@
    ],
    "plan": [],
    "tools": [],
-   "blocked": "no tool for air volunteers",
+   "blocked": "air volunteers are a rebase of wings to an air base of the receiver (CStratAirTransferCommand); hoi4_air_rebase names own bases only; S25-VOLUNTEERS V6 checks whether the game takes the transfer",
    "payoff": "low",
    "why": "air XP only",
    "closing": "both",
-   "owner": "air-volunteer action (air wing view)"
+   "owner": "engineer 118: S25-VOLUNTEERS V6, then hoi4_air_rebase to a foreign base"
   },
   {
    "id": "lendlease.recall_volunteers",
@@ -1579,12 +1576,13 @@
     "politics-diplomacy-espionage.md#12 DI22"
    ],
    "plan": [],
-   "tools": [],
-   "blocked": "no tool; 1.19.4 recall QoL 'not yet driven'",
+   "tools": [
+    "hoi4_diplomacy_act"
+   ],
    "payoff": "low",
    "why": "recover divisions before the main war",
-   "closing": "both",
-   "owner": "recall action, then live"
+   "closing": "live",
+   "owner": "live session S25-VOLUNTEERS (CRecallVolunteerAction with the division handles, up to four per action; the game refuses an empty list and the 180-day lock)"
   },
   {
    "id": "lendlease.expeditionary_force",
@@ -3516,7 +3514,7 @@
    "tools": [
     "hoi4_doctrine_adopt"
    ],
-   "blocked": "hoi4_doctrine_adopt refuses `replace` with not_yet_built (held back in plan_run::UNBUILT_ARGS), and refuses a filled slot (grand_doctrine_set, track_occupied) before input: no swap path",
+   "blocked": "written 28 Nov (tools 123), not proven: hoi4_doctrine_adopt replace:true posts the game's own unlock command on the filled slot, by command only (in-process family doctrine, OFF until S18-DOCTRINE passes); the mouse swap is not driven",
    "blocked_terms": [
     "replace",
     "swap"
@@ -5594,19 +5592,38 @@
    "owner": "Decide whether carrier wings need orders (game assigns them to the carrier); map carrier wings in hoi4_air"
   },
   {
-   "id": "air.paradrop_and_raids",
+   "id": "air.paradrop",
    "domain": "air",
-   "capability": "Paratrooper drops and Gotterdammerung raids (lock, dam, oilfield bombing; paratrooper sabotage)",
+   "capability": "Paratrooper drops on victory points, ports and air fields when transports reach, the region's air is ours and (FAIR) the front can link up",
+   "playbook": [
+    "exploits.md#paradrop rows (META only)"
+   ],
+   "plan": [
+    "airborne",
+    "airborne.targets"
+   ],
+   "tools": [
+    "hoi4_paradrop"
+   ],
+   "payoff": "low",
+   "why": "A drop costs 50 transports a division (90 for two, 135 for three) and 70% air superiority: worth it only where it decides a capitulation VP, a port an invasion needs, or a pocket",
+   "closing": "live",
+   "owner": "S21-PARADROP (docs/LIVE_VALIDATION_QUEUE.md), then paradrop::LIVE_PASSED; para template, transport line and special-forces doctrine (S18 D2) in the strategist's plan"
+  },
+  {
+   "id": "air.raids",
+   "domain": "air",
+   "capability": "Gotterdammerung raids: list the raids a country may run (common/raids), plan their prerequisites, prepare and launch them (Eben-Emael before the West, pathfinder before a landing, facility and oilfield raids)",
    "playbook": [
     "exploits.md#paradrop rows (META only)"
    ],
    "plan": [],
    "tools": [],
-   "blocked": "hoi4_air_mission has no paradrop mission (MISSIONS lacks it, unknown mission -> invalid_arguments); no tool for raids; playbook does not know raids (common/raids, Gotterdammerung active)",
-   "payoff": "low",
-   "why": "Niche in FAIR play; raids are an extra lever for majors with bombers",
+   "blocked": "no tool: the raid list, the prerequisites and the success chance are computed offline (facts.py raids TAG: raids.py, any country and mod), but no command path is built. CCreateRaidCommand (1.20.0.0, type 19192, 0xa8 bytes, vtable 0x1035937f8, full constructor 0x1014d0740) holds: +0x24 tag (0x289a), +0x28 the raid type pointer (0xe1, serialised by name through the raid database), +0x30 the starting point (0x6b, 40 bytes: +0 type 0x284f, +8 province 0x2840, +0x10 0x1b7, +0x18 a unit or fleet handle 0x28b7, +0x20 0x41cc), +0x58 the target (0x288f, 0x34 bytes with an inline array object at +0x78), +0x90 the units (0x28a3), +0xa0 an int the AI caller sets to 1 (0x4afc), +0xa4 a bool (0x27ab). The AI's creator is at 0x1014db680. CExecuteRaidCommand, CCancelRaidCommand, CSetRaidRiskLevelCommand layouts are not read; no read of the raid instances (NRaids::CRaidInstance)",
+   "payoff": "high",
+   "why": "Belgium is where the West loses most days: Eben-Emael (FAIR allowed) removes 4-6 bunker levels at Liege and gives -25% river crossing against Belgium for 180 days; raids are a general system for any country (custom raids first)",
    "closing": "both",
-   "owner": "Playbook: assess common/raids/air_raids.txt for FAIR value; tool only if worth it"
+   "owner": "engineer 106: in-process raid family (a builder for the starting point and target structs, the raid type by name), a read of available raids and instances, hoi4_raid (list, prepare, launch, read), the raids plan key and the operation step; live session S23-RAID"
   },
   {
    "id": "navy.patrol_dominance",

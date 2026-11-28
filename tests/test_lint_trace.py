@@ -74,6 +74,17 @@ class Switches(unittest.TestCase):
         plan["_inert"] = [{"section": "templates", "entry": "fj", "needs": "airborne switch", "why": "owner"}]
         self.assertFalse([f for f in run(plan).findings if f[1] == "trace.airborne"])
 
+    def test_a_raid_keeps_its_paratroopers_while_drops_are_off(self):
+        plan = {"airborne": {"enabled": False, "raids": [{"id": "raid_eben_emael", "switch": "eben_emael_raid",
+                                                           "why": "x"}]},
+                "templates": [{"id": "fj", "regiments": [["paratrooper", "paratrooper"]]}]}
+        self.assertFalse([f for f in run(plan).findings if f[1] == "trace.airborne"])
+        plan["airborne"]["drops"] = [{"id": "ab_holland", "why": "x"}]
+        self.assertTrue([f for f in run(plan).findings if f[1] == "trace.airborne"])
+        del plan["airborne"]["drops"]
+        plan["constraints"] = {"eben_emael_raid": {"value": False, "why": "a multiplayer rule"}}
+        self.assertTrue([f for f in run(plan).findings if f[1] == "trace.airborne"])
+
     def test_airborne_on_in_fair_needs_roleplay_or_owner(self):
         plan = {"airborne": {"enabled": True, "switch": "airborne"}}
         self.assertTrue([f for f in run(plan).findings if f[1] == "trace.airborne"])

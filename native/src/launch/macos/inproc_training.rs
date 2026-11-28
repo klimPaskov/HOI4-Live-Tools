@@ -108,57 +108,90 @@ pub(super) fn train(
     };
     let lines_of = |qs: &[Queue]| qs.iter().find(|x| x.address == q).map(|x| x.lines);
     let mut replies = vec![created];
-    let filled = |route: &mut Option<Channel>, replies: &mut Vec<Value>| -> Result<(i32, usize)> {
-        if queue.amount == 0 {
+    // the game's own check refusing a later line (a battalion cap, manpower): the lines it took
+    // stay and the reply says why it stopped (live 126, s126a 28 Nov 2026: a Gebirgs-Division
+    // queue of 7 refused its 5th line and the whole 4-line queue was cancelled as "nothing posted")
+    let mut stopped_by: Option<String> = None;
+    let mut filled =
+        |route: &mut Option<Channel>, replies: &mut Vec<Value>| -> Result<(i32, usize)> {
+            if queue.amount == 0 {
+                replies.push(step(
+                    route,
+                    "training.series",
+                    &[1],
+                    "one division per line",
+                )?);
+                until(process, "the series amount", |qs| {
+                    qs.iter().any(|x| x.address == q && x.amount == 1)
+                })?;
+            }
+            // the lines: one Add Unit post of ONE line at a time, the queue read after each until it
+            // stands still, and posted again only while short (S15-TRAINING, 28 Nov 2026: 7 asked, posts
+            // of 5 and then the remainder left the queue at 9; asks of 1 and 2 were exact)
+            let got = fill_lines(count, queue.lines.max(1), |v| {
+                let before = lines_of(&ui::read(process, deployment::queues)?).unwrap_or(0);
+                match step(
+                    route,
+                    "training.add_lines",
+                    &[v],
+                    "more lines for this queue",
+                ) {
+                    Ok(reply) => replies.push(reply),
+                    Err(e) if e.code == "refused_by_game_check" && before >= 1 => {
+                        stopped_by = Some(e.message);
+                        return Ok(before);
+                    }
+                    Err(e) => return Err(e),
+                }
+                // a post the game takes but does not carry out (its own check when the command runs;
+                // S15-TRAINING s115a, 28 Nov 2026: 7 asked, the line count stopped at 5 at war in 1939)
+                // adds nothing: the lines standing are the answer, the queue is kept
+                let Ok(now) = until(process, "the added lines", |qs| {
+                    lines_of(qs).is_some_and(|n| n > before)
+                }) else {
+                    return Ok(before);
+                };
+                let first = lines_of(&now).unwrap_or(before);
+                // a post may show its lines over more than one frame: the count it answers is the one
+                // that stands still over two reads
+                settled(first, || {
+                    crate::phase::sleep(Duration::from_millis(SETTLE_MS));
+                    Ok(lines_of(&ui::read(process, deployment::queues)?).unwrap_or(first))
+                })
+            })?;
             replies.push(step(
                 route,
-                "training.series",
-                &[1],
-                "one division per line",
+                "training.location",
+                &[i64::from(province)],
+                "this deployment location",
             )?);
-            until(process, "the series amount", |qs| {
-                qs.iter().any(|x| x.address == q && x.amount == 1)
+            until(process, "the deployment location", |qs| {
+                qs.iter().any(|x| x.address == q && x.location == province)
             })?;
-        }
-        // the lines: one Add Unit post of ONE line at a time, the queue read after each until it
-        // stands still, and posted again only while short (S15-TRAINING, 28 Nov 2026: 7 asked, posts
-        // of 5 and then the remainder left the queue at 9; asks of 1 and 2 were exact)
-        let got = fill_lines(count, queue.lines.max(1), |v| {
-            let before = lines_of(&ui::read(process, deployment::queues)?).unwrap_or(0);
-            replies.push(step(
-                route,
-                "training.add_lines",
-                &[v],
-                "more lines for this queue",
-            )?);
-            let now = until(process, "the added lines", |qs| {
-                lines_of(qs).is_some_and(|n| n > before)
-            })?;
-            let first = lines_of(&now).unwrap_or(before);
-            // a post may show its lines over more than one frame: the count it answers is the one
-            // that stands still over two reads
-            settled(first, || {
-                crate::phase::sleep(Duration::from_millis(SETTLE_MS));
-                Ok(lines_of(&ui::read(process, deployment::queues)?).unwrap_or(first))
-            })
-        })?;
-        replies.push(step(
-            route,
-            "training.location",
-            &[i64::from(province)],
-            "this deployment location",
-        )?);
-        until(process, "the deployment location", |qs| {
-            qs.iter().any(|x| x.address == q && x.location == province)
-        })?;
-        Ok(got)
-    };
+            Ok(got)
+        };
     match filled(&mut *route, &mut replies) {
-        Ok((lines, posts)) => Ok(Some(
-            json!({"backend":"inprocess","queue":format!("{q:#x}"),
+        Ok((lines, posts)) => {
+            let short = (count as i64 - lines as i64).max(0);
+            let mut out = json!({"backend":"inprocess","queue":format!("{q:#x}"),
             "province":province,"lines":lines,"asked":count,"line_posts":posts,
-            "over":(lines as i64 - count as i64).max(0),"posts":replies}),
-        )),
+            "over":(lines as i64 - count as i64).max(0),"short":short,"posts":replies});
+            if short > 0 {
+                out["short_reason"] = json!(match &stopped_by {
+                    Some(why) => format!(
+                        "the game's own check refused line {} of {count} before it was posted ({why}); the queue keeps its {lines} line(s): a cap of the template (e.g. special forces) or manpower",
+                        lines + 1
+                    ),
+                    None => format!(
+                        "the game took the Add Unit post but added no line at {lines} of {count} (its own check when the command runs, e.g. manpower or the template); the queue keeps its {lines} line(s): ask again later"
+                    ),
+                });
+                if stopped_by.is_some() {
+                    out["short_code"] = json!("refused_by_game_check");
+                }
+            }
+            Ok(Some(out))
+        }
         Err(e) => {
             // a refusal after the queue was made: the queue it made is cancelled (S15-TRAINING: a
             // refused add left a one-line queue behind)
@@ -208,7 +241,8 @@ pub(super) fn settled(first: i32, mut read: impl FnMut() -> Result<i32>) -> Resu
 /// lines and returns the lines the queue holds after it (settled). One line is asked a post, and
 /// a post is made only while the queue is short, so the queue never passes `count` by more than
 /// the game adds to a single one-line post (which is in the reply as `over`; no command takes a
-/// line off a queue). Returns (lines, posts).
+/// line off a queue). A post that adds nothing ends the filling short (the game's own check when the
+/// command runs: the lines it took stand, the caller reports the shortfall). Returns (lines, posts).
 pub(super) fn fill_lines(
     count: usize,
     mut lines: i32,
@@ -221,10 +255,7 @@ pub(super) fn fill_lines(
         let now = post(ask)?;
         posts += 1;
         if now <= lines {
-            return Err(Error::new(
-                "input_readback_failed",
-                format!("An Add Unit post for {ask} line(s) added none ({lines} of {count})"),
-            ));
+            break;
         }
         lines = now;
     }
@@ -308,7 +339,15 @@ mod tests {
         assert_eq!(got, (7, 5));
         // nothing to add, or a post that adds nothing
         assert_eq!(fill_lines(1, 1, |_| unreachable!()).unwrap(), (1, 0));
-        assert!(fill_lines(3, 1, |_| Ok(1)).is_err());
+        assert_eq!(fill_lines(3, 1, |_| Ok(1)).unwrap(), (1, 1));
+        // s115a: the count stops rising at 5 of 7: five lines stand, the sixth post ends it
+        let mut q = 1;
+        let got = fill_lines(7, 1, |_| {
+            q = (q + 1).min(5);
+            Ok(q)
+        })
+        .unwrap();
+        assert_eq!(got, (5, 5));
         // a refusal is passed on (the caller cancels the queue)
         let e = fill_lines(6, 1, |_| {
             Err(Error::new("refused_by_game_check", "more lines"))

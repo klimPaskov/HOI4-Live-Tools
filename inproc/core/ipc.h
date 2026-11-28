@@ -40,6 +40,9 @@ typedef struct {
     /* engineer 84: the player's own military-industrial organisations (traits, queue, policies, points): a pure read of
      * the player's own country, served whenever the organisation facts resolved */
     int (*mios)(char *out, size_t n);
+    /* engineer 122: every diplomatic action class the game has, its key, shape and the op that posts it (or
+     * "unsupported:<shape>"): the scan's catalog, no game state read */
+    int (*diplomacy_actions)(char *out, size_t n);
     int (*killed)(void);
     void (*log)(const char *json_members);
 } ipc_backend;

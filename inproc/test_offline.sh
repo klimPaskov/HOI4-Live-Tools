@@ -40,6 +40,11 @@ S2=(valid_slot=0x50 exec_flag=0x624 player_tag=0x4d8 line_factories=0xe8 region_
 # (engineer 85, 24 Nov: navy = the mission bar's selection (one command), merge, a fleet's region add/remove, its admiral,
 #  task forces into a fleet; hand-checked in both disassemblies: UI mission 1.20 0x101dc9930, merge 0x101dca940;
 #  doctrine = the officer corps view's grand doctrine and subdoctrine picks (nested class names, UI 1.20 0x101051db0))
+# (engineer 125, 28 Nov: justify (generate_war_goal: type pointer +0x88, state list +0x70, the war goal type database
+#  list +0x40 / count +0x4c / token +0x8 from the action's own reader and lookup) and the expeditionary force (an allocated
+#  division list +0x70, proven by the volunteers' element serializer) join the buildable rows; hand-checked in 1.20.0.0)
+# (engineer 122, 28 Nov: the diplomacy catalog = every RTTI subclass of CDiplomaticAction (43 on 1.19.4.1 and 1.20), 12 more
+#  buildable as family diplomacy2 by the hand-written rows' shapes; type ids hand-checked in the 1.20.0.0 constructors)
 # stage 2, the next families (engineer 71, 24 Nov; hand-found in both disassemblies, identical payloads): the rest of
 # air (split, merge, disband, attach, detach; a region by id the way EnableMission's own check reads it: gamestate
 # +0x2a8 array, +0x2b4 count; the army cast's typeinfo COrdersGroup)
@@ -51,9 +56,9 @@ S2N=(regions_arr=0x2a8 regions_cnt=0x2b4 on:airwing.split=1 on:airwing.merge=1 o
      order_provs_off=0x70 order_divs_off=0x1e0 order_children_off=0x1c8 group_lists_off=0x98
      order_div_get_slot=0x28 order_div_alive=0xc order_div_sub=0xb8
      on:orders2.new_root=1 on:orders2.assign=1 on:orders2.unassign=1 on:orders2.fallback=1 on:orders2.edit_root=1
-     on:orders2.invasion_target=1 on:orders2.paradrop_target=1 on:orders2.spearhead=1 type:orders2.new_root=13096
+     on:orders2.invasion_target=1 on:orders2.paradrop_target=1 on:orders2.paradrop_source=1 on:orders2.spearhead=1 type:orders2.new_root=13096
      type:orders2.assign=12350 type:orders2.unassign=12365 type:orders2.fallback=13271 type:orders2.edit_root=13097
-     type:orders2.invasion_target=12661 type:orders2.paradrop_target=12730 type:orders2.spearhead=13095
+     type:orders2.invasion_target=12661 type:orders2.paradrop_target=12730 type:orders2.paradrop_source=12729 type:orders2.spearhead=13095
      fronts_ok=1 group_parent_off=0x40 theatre_fronts_off=0x50 front_sections_off=0x58 section_provs_off=0x30 province_id_off=0x9c
      root_front_off=0x228 root_range_off=0x238 alloc_slot=0x10 unit_group_off=0xc0 unit_hint=0x10
      on:units.new_army=1 on:units.transfer=1 on:units.leader=1 on:units.rename=1 on:units.army_group_new=1
@@ -69,6 +74,15 @@ S2N=(regions_arr=0x2a8 regions_cnt=0x2b4 on:airwing.split=1 on:airwing.merge=1 o
      act_type:diplomacy.guarantee=0x28da act_type:diplomacy.military_access=0x2934 act_type:diplomacy.offer_military_access=0x2fc8
      act_type:diplomacy.non_aggression=0x2fbc act_type:diplomacy.improve_relations=0x2cd7 act_type:diplomacy.declare_war=0x277f
      act_size:diplomacy.guarantee=0x70 act_size:diplomacy.declare_war=0x78 act_goal_off:diplomacy.declare_war=0x6c
+     on:diplomacy.send_volunteers=1 on:diplomacy.recall_volunteers=1 on:diplomacy.send_attache=1 act_type:diplomacy.send_volunteers=0x3415
+     act_type:diplomacy.recall_volunteers=0x2e3a act_type:diplomacy.send_attache=0x38d9 act_units:diplomacy.send_volunteers=0x709002
+     act_units:diplomacy.recall_volunteers=0x709004 act_units:diplomacy.send_attache=0
+     diplo_classes=43 diplo_buildable=14 wgt_offs=0x404c08 on:diplomacy2.generate_war_goal=1 act_type:diplomacy2.generate_war_goal=0x341b
+     act_goal_off:diplomacy2.generate_war_goal=0x88 act_units:diplomacy2.generate_war_goal=0x700000 on:diplomacy2.send_expeditionary_force=1
+     act_type:diplomacy2.send_expeditionary_force=0x33fe act_units:diplomacy2.send_expeditionary_force=0x700000 on:diplomacy2.embargo=1 act_type:diplomacy2.embargo=0x3274
+     act_type:diplomacy2.docking_rights=0x3afa act_type:diplomacy2.request_access_to_license_production=0x4b99
+     act_type:diplomacy2.peace_proposal=0x30ba
+     on:raids.execute=1 on:raids.cancel=1 type:raids.execute=19194 type:raids.cancel=19209
      on:holds.area_defense=1 type:holds.area_defense=13873 holds_ok=1 holds_kind=5 holds_area_off=0xe0 holds_area_cnt=0xec
      holds_setting_off=0xf8 on:construction.add=1 type:construction.add=12151 on:construction.remove=1 type:construction.remove=13088
      on:construction.move=1 type:construction.move=17412 build_ok=1 build_tmpl=0x1800026c08 build_loc=0x40009c
@@ -85,9 +99,9 @@ S2N=(regions_arr=0x2a8 regions_cnt=0x2b4 on:airwing.split=1 on:airwing.merge=1 o
      conf:projects.start=0x7f on:projects.stop=1 type:projects.stop=16403 conf:projects.stop=0x7f on:projects.attach=1
      type:projects.attach=16398 conf:projects.attach=0x7f on:projects.unattach=1 type:projects.unattach=16399
      conf:projects.unattach=0x7f on:move.division=1 type:move.division=10402 act_offs:move.division=0xc18243050)
-S2_1194=(stage2_on=73 mio_fns=0x101ed5ba0 ctor:construction.add=0x1001f9740 ctor:politics.add=0x1002059f0 ctor:politics.replace=0x1002096b0 ctor:research.start=0x1001fff00 ctor:holds.area_defense=0x100949320 diplo_make_cmd=0x100f80940 diplo_country_of=0x101277b90 diplo_date_vt=0x103503020 ctor:diplomacy.guarantee=0x100f99c60 ctor:diplomacy.declare_war=0x100f8bce0 ctor:events.answer=0x1005ecc00 events_vt_window=0x1035e5c40 events_avail=0x1005f4230 ctor:units.new_army=0x1009287a0 ctor:units.leader=0x100946ae0 ctor:units.rename=0x100926280 ctor:units.army_group_new=0x100929ed0 ctor:units.to_army_group=0x10092b5f0 ctor:units.from_army_group=0x10092c110 orders_vt=0x103512bf0 orders_lookup=0x10095a510 ctor:orders.set_path=0x1009355a0 ctor:orders.new_front=0x100940c60 ctor:production2.add_line=0x1001eef30 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
+S2_1194=(stage2_on=79 mio_fns=0x101ed5ba0 ctor:construction.add=0x1001f9740 ctor:politics.add=0x1002059f0 ctor:politics.replace=0x1002096b0 ctor:research.start=0x1001fff00 ctor:holds.area_defense=0x100949320 diplo_make_cmd=0x100f80940 diplo_country_of=0x101277b90 diplo_date_vt=0x103503020 ctor:diplomacy.guarantee=0x100f99c60 ctor:diplomacy.declare_war=0x100f8bce0 ctor:events.answer=0x1005ecc00 events_vt_window=0x1035e5c40 events_avail=0x1005f4230 ctor:units.new_army=0x1009287a0 ctor:units.leader=0x100946ae0 ctor:units.rename=0x100926280 ctor:units.army_group_new=0x100929ed0 ctor:units.to_army_group=0x10092b5f0 ctor:units.from_army_group=0x10092c110 orders_vt=0x103512bf0 orders_lookup=0x10095a510 ctor:orders.set_path=0x1009355a0 ctor:orders.new_front=0x100940c60 ctor:production2.add_line=0x1001eef30 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
          ctor:airwing.detach=0x100a293b0 ti_orders_group=0x103516d08 ctor:move.division=0x100b2dc30 act_ctor:move.division=0x100b2b440)
-S2_120=(stage2_on=73 mio_fns=0x101ed8bf0 train_can=0x1014876a0 ctor:construction.add=0x1001f9e80 build_ref_vt=0x1035341c0 ctor:politics.add=0x100206130 ctor:politics.replace=0x100209df0 ctor:research.start=0x100200640 ctor:holds.area_defense=0x10094a330 diplo_make_cmd=0x100f83c10 diplo_country_of=0x10127b0c0 diplo_date_vt=0x1035074c0 ctor:diplomacy.guarantee=0x100f9cf30 ctor:diplomacy.declare_war=0x100f8efb0 ctor:events.answer=0x1005ed6d0 events_vt_window=0x1035ead60 events_avail=0x1005f4d00 ctor:units.new_army=0x1009297b0 ctor:units.leader=0x100947af0 ctor:units.rename=0x100927290 ctor:units.army_group_new=0x10092aee0 ctor:units.to_army_group=0x10092c600 ctor:units.from_army_group=0x10092d120 orders_vt=0x1035173b8 orders_lookup=0x10095b520 ctor:orders.set_path=0x1009365b0 ctor:orders.new_front=0x100941c70 ctor:production2.add_line=0x1001ef670 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
+S2_120=(stage2_on=79 mio_fns=0x101ed8bf0 train_can=0x1014876a0 ctor:construction.add=0x1001f9e80 build_ref_vt=0x1035341c0 ctor:politics.add=0x100206130 ctor:politics.replace=0x100209df0 ctor:research.start=0x100200640 ctor:holds.area_defense=0x10094a330 diplo_make_cmd=0x100f83c10 diplo_country_of=0x10127b0c0 diplo_date_vt=0x1035074c0 ctor:diplomacy.guarantee=0x100f9cf30 ctor:diplomacy.declare_war=0x100f8efb0 ctor:events.answer=0x1005ed6d0 events_vt_window=0x1035ead60 events_avail=0x1005f4d00 ctor:units.new_army=0x1009297b0 ctor:units.leader=0x100947af0 ctor:units.rename=0x100927290 ctor:units.army_group_new=0x10092aee0 ctor:units.to_army_group=0x10092c600 ctor:units.from_army_group=0x10092d120 orders_vt=0x1035173b8 orders_lookup=0x10095b520 ctor:orders.set_path=0x1009365b0 ctor:orders.new_front=0x100941c70 ctor:production2.add_line=0x1001ef670 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
         ctor:airwing.detach=0x100a2a3c0 ti_orders_group=0x10351b6b0 ctor:move.division=0x100b2ed60 act_ctor:move.division=0x100b2c570)
 fail=0
 echo "== 1.19.4.1 f584 ($NEW)"

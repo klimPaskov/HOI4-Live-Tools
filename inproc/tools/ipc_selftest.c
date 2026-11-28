@@ -48,6 +48,9 @@ static int mios(char *o, size_t n) {
     snprintf(o, n, "\"policies\":[],\"empty_token\":19479,\"organisations\":[{\"org\":\"0x10\",\"key\":\"ita_ansaldo\",\"traits\":[[7,\"t\",\"a\"]]}],\"organisations_read\":1,\"truncated\":false");
     return 1;
 }
+static int dacts(char *o, size_t n) { /* engineer 122: the diplomacy catalog's shape */
+    return snprintf(o, n, "\"classes\":2,\"buildable\":1,\"actions\":[{\"key\":\"embargo\",\"class\":\"14CEmbargoAction\",\"op\":\"diplomacy2.embargo\",\"shape\":\"simple\",\"type\":12916,\"on\":true},{\"key\":\"call_ally\",\"class\":\"15CCallAllyAction\",\"op\":\"\",\"shape\":\"unsupported:constructor_args_1\",\"type\":0,\"on\":false}]") > 0;
+}
 static int orders(const char *group, char *o, size_t n) {
     snprintf(o, n, "\"group\":\"%s\",\"lists\":[{\"list\":\"top\",\"orders\":[]}],\"orders_read\":0,\"truncated\":false", group);
     return 1;
@@ -73,6 +76,6 @@ int main(int argc, char **argv) {
     p.fam_on[0] = 1; p.fam_on[1] = !getenv("IPC_SELFTEST_SPEED_ONLY"); p.fam_on[2] = 0; /* production on, air off (not resolved in the mock) */
     snprintf(p.fam_reason[1], sizeof p.fam_reason[1], "on"); snprintf(p.fam_reason[2], sizeof p.fam_reason[2], "not opted in"); snprintf(p.fam_reason[3], sizeof p.fam_reason[3], "not opted in"); snprintf(p.fam_reason[4], sizeof p.fam_reason[4], "not opted in"); snprintf(p.fam_reason[5], sizeof p.fam_reason[5], "not opted in");
     p.stage2_jobs_per_minute = 600; p.stage2_cmds_per_minute = 2400;
-    ipc_backend b = {hello, rd, probe, post, post2, orders, fronts, mios, killed, lg};
+    ipc_backend b = {hello, rd, probe, post, post2, orders, fronts, mios, dacts, killed, lg};
     return ipc_serve(g_sock, &b, &p) ? 0 : 1;
 }
