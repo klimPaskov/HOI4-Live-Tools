@@ -963,6 +963,8 @@ pub struct State {
     op_notes: BTreeMap<String, String>,
     /// The slow panel reads kept across ticks (see [`SlowReads`]).
     slow_reads: SlowCache,
+    /// The slow panel reads that failed, with how long the failure stands (see [`SlowReads`]).
+    slow_failed: SlowFailed,
 }
 
 /// What `run` knows about the persisted memory next to plan.json.
@@ -1057,20 +1059,43 @@ pub(super) struct WarWatch {
     longest_acted: GameHour,
     /// Wall seconds per lane (and the war's own turn) since the last offer.
     instead: BTreeMap<String, f64>,
+    /// Wall seconds per lane, event answer and war turn since the last ACTING war turn, and the
+    /// war orders deferred for want of the input since then: an offer whose every order waited is
+    /// no turn (p126a, 28 Nov 2026: the war was offered every tick, the offers stood 75 game
+    /// hours apart at most, but no war turn acted for 119 hours while a failed event answer took
+    /// 13-20 s of every tick and the war's mouse orders waited; the row named only "politics").
+    acted_instead: BTreeMap<String, f64>,
+    deferred_since: u64,
+    /// The longest gap between two acting war turns with what took the wall and how many war
+    /// orders waited in it (hours, from, to, instead, deferred).
+    longest_acted_gap: Option<(GameHour, GameHour, GameHour, String, u64)>,
 }
 
 /// The longest the war step may wait for its turn while an operation executes (game hours).
 const WAR_IDLE_HOURS: GameHour = DAY;
+/// The operations' note the watchdog writes while the war step is held (see [`WarWatch::blocker`]).
+const WAR_WATCH_NOTE: &str = "war_watch";
 
 impl WarWatch {
     /// Wall seconds `secs` went to `what` since the war's last offer.
     fn spent(&mut self, what: &str, secs: f64) {
         *self.instead.entry(what.to_string()).or_insert(0.0) += secs;
+        *self.acted_instead.entry(what.to_string()).or_insert(0.0) += secs;
+    }
+
+    /// `n` war orders waited for the input in this offer.
+    fn deferred(&mut self, n: u64) {
+        self.deferred_since += n;
     }
 
     /// What ran since the last offer, the costliest first; pure.
     fn instead_line(&self) -> String {
-        let mut rows: Vec<(&String, &f64)> = self.instead.iter().collect();
+        Self::line_of(&self.instead)
+    }
+
+    /// The costliest entries of `rows`; pure.
+    fn line_of(rows: &BTreeMap<String, f64>) -> String {
+        let mut rows: Vec<(&String, &f64)> = rows.iter().collect();
         rows.sort_by(|a, b| b.1.total_cmp(a.1));
         if rows.is_empty() {
             return "no turn ran (no tick)".into();
@@ -1082,6 +1107,22 @@ impl WarWatch {
             .join(", ")
     }
 
+    /// THE WATCHDOG'S LIVE LINE: at an offer while an operation executes, the war has not acted
+    /// for longer than its limit: how long, what took the wall since its last acting turn and
+    /// how many of its orders waited for the input (None while it acts in time); pure.
+    fn blocker(&self, now: GameHour) -> Option<String> {
+        let last = self.last_acted?;
+        let idle = now.saturating_sub(last);
+        (self.limit > 0 && idle > self.limit).then(|| {
+            format!(
+                "war step: no acting war turn for {idle} game hours (limit {}) while an operation executes; the wall went to: {}; {} war order(s) waited for the input",
+                self.limit,
+                Self::line_of(&self.acted_instead),
+                self.deferred_since
+            )
+        })
+    }
+
     /// The war's turn is offered at `now`; `executing`: an operation executes; `limit`: game hours.
     fn offered(&mut self, now: GameHour, executing: bool, limit: GameHour) {
         self.limit = limit;
@@ -1089,8 +1130,13 @@ impl WarWatch {
             self.last_offer = None;
             self.last_acted = None;
             self.instead.clear();
+            self.acted_instead.clear();
+            self.deferred_since = 0;
             return;
         }
+        // the first offer of an execution counts as its last acting turn: a war that never acts
+        // is watched too
+        self.last_acted.get_or_insert(now);
         if let Some(prev) = self.last_offer {
             let gap = now.saturating_sub(prev);
             if gap > limit {
@@ -1107,22 +1153,41 @@ impl WarWatch {
     /// The war's turn acted at `now` while an operation executed.
     fn acted(&mut self, now: GameHour) {
         if let Some(prev) = self.last_acted {
-            self.longest_acted = self.longest_acted.max(now.saturating_sub(prev));
+            let gap = now.saturating_sub(prev);
+            self.longest_acted = self.longest_acted.max(gap);
+            if self.longest_acted_gap.as_ref().is_none_or(|l| gap > l.0) {
+                self.longest_acted_gap = Some((
+                    gap,
+                    prev,
+                    now,
+                    Self::line_of(&self.acted_instead),
+                    self.deferred_since,
+                ));
+            }
         }
         self.last_acted = Some(now);
+        self.acted_instead.clear();
+        self.deferred_since = 0;
     }
 
     /// The gate's row; None before any offer while an operation executed; pure.
     fn row(&self) -> Option<Value> {
         let (gap, from, to, instead) = self.longest.clone()?;
-        Some(json!({"kind": "war_idle", "lane": "(war)",
+        let mut row = json!({"kind": "war_idle", "lane": "(war)",
             "limit_hours": self.limit,
             "over": self.over,
             "longest_hours": gap,
             "from": from,
             "to": to,
             "instead": instead,
-            "longest_acted_hours": self.longest_acted}))
+            "longest_acted_hours": self.longest_acted});
+        if let Some((_, from, to, instead, deferred)) = &self.longest_acted_gap {
+            row["acted_from"] = json!(from);
+            row["acted_to"] = json!(to);
+            row["acted_instead"] = json!(instead);
+            row["acted_deferred"] = json!(deferred);
+        }
+        Some(row)
     }
 }
 
@@ -1428,6 +1493,12 @@ struct Stages {
     /// and the completed-focus count when that was counted. Each further refusal doubles the
     /// key's wait; a newly completed focus clears the counts (prerequisites may now be met).
     focus_refused: HashMap<String, u32>,
+    /// Refused keys whose verdict was "not judged" by the files when the game refused them (the
+    /// part that failed reads what no file holds, e.g. GER_anschluss's army-strength ratio
+    /// against Austria). A newly completed focus does not clear them: the files judged their
+    /// prerequisites met already, so the completion changes nothing the refusal was about
+    /// (g126b: GER_anschluss and GER_demand_sudetenland refused again after each completion).
+    focus_refused_unjudged: HashSet<String>,
     focus_refused_at_completed: usize,
     /// The countries at war with the player when the refusals were counted. A war that starts
     /// or ends clears the counts too: the conditions the server cannot read (flags, events)
@@ -1577,6 +1648,7 @@ impl Default for State {
             op_events_now: false,
             op_notes: BTreeMap::new(),
             slow_reads: SlowCache::new(),
+            slow_failed: SlowFailed::new(),
         }
     }
 }
@@ -2658,9 +2730,11 @@ pub fn tick(
     // it, so an answer kept costs no input
     let metered = Metered { inner: tools };
     let cache = std::cell::RefCell::new(std::mem::take(&mut state.slow_reads));
+    let failed = std::cell::RefCell::new(std::mem::take(&mut state.slow_failed));
     let slow = SlowReads {
         inner: &metered,
         cache: &cache,
+        failed: &failed,
         now,
         // at war and while an operation runs (the ticks the war's turn waits on); in peace every
         // read is fresh
@@ -2671,6 +2745,7 @@ pub fn tick(
     };
     let out = tick_inner(state, &slow, plan, lease, now);
     state.slow_reads = cache.into_inner();
+    state.slow_failed = failed.into_inner();
     out
 }
 
@@ -2698,6 +2773,20 @@ const SLOW_FORGET: [(&str, &str); 6] = [
 
 /// (tool, arguments without the lease) -> (the hour read, the answer).
 type SlowCache = HashMap<String, (GameHour, Value)>;
+/// (tool, arguments without the lease) -> the failed read: the hour until which the failure
+/// stands, the failures in a row, the error.
+type SlowFailed = HashMap<String, (GameHour, u32, &'static str, String)>;
+
+/// How long a slow read that failed `in_row` times in a row stands as failed: its own span for
+/// the first failure, doubling with each further one, at most SLOW_FAILED_MAX. A failed read was not kept, so a panel that kept refusing took its
+/// seconds in every tick (w126a, 28 Nov 2026: the diplomacy views of two declarations the plan
+/// could not make yet failed their read-back, 13-17 s in every tick of the West's war; p126a:
+/// the politics view refused as events_open after 19 s, twice in one gap). Pure.
+fn slow_failed_rest(stands: GameHour, in_row: u32) -> GameHour {
+    (stands.max(1) << in_row.saturating_sub(1).min(8)).min(SLOW_FAILED_MAX)
+}
+/// The longest a failed slow read stands (the war orders' longest repeated rest in `ledger_rest`).
+const SLOW_FAILED_MAX: GameHour = 4 * DAY;
 
 /// The executor's slow panel reads (SLOW_READS), answered from their first answer while it
 /// stands: until the end of the game day it was read in (a quarter day for the diplomacy view),
@@ -2706,6 +2795,7 @@ type SlowCache = HashMap<String, (GameHour, Value)>;
 struct SlowReads<'a> {
     inner: &'a dyn Tools,
     cache: &'a std::cell::RefCell<SlowCache>,
+    failed: &'a std::cell::RefCell<SlowFailed>,
     now: GameHour,
     on: bool,
 }
@@ -2738,23 +2828,58 @@ impl Tools for SlowReads<'_> {
                 .filter(|(p, _)| name.starts_with(p))
                 .map(|(_, r)| *r)
                 .collect();
-            if !forget.is_empty() {
-                self.cache
-                    .borrow_mut()
-                    .retain(|k, _| !forget.iter().any(|r| k.split(' ').next() == Some(*r)));
+            let out = self.inner.call(name, args);
+            // only an order that took changes what the reads show: a refused answer of an event
+            // forgot the politics view in every tick, and the view refused as events_open was read
+            // again each time (p126a, 28 Nov 2026)
+            let took = out.as_ref().is_ok_and(|b| {
+                b["receipt"]["status"] != json!("NotApplied")
+                    && b["receipt"]["status"] != json!("Refused")
+            });
+            if took && !forget.is_empty() {
+                let gone = |k: &String| forget.iter().any(|r| k.split(' ').next() == Some(*r));
+                self.cache.borrow_mut().retain(|k, _| !gone(k));
+                self.failed.borrow_mut().retain(|k, _| !gone(k));
             }
-            return self.inner.call(name, args);
+            return out;
         }
         let Some((key, stands)) = slow_key(name, args).filter(|_| self.on) else {
             return self.inner.call(name, args);
         };
+        let now = self.now;
         if let Some((at, v)) = self.cache.borrow().get(&key) {
-            if slow_fresh(*at, self.now, stands) {
+            if slow_fresh(*at, now, stands) {
                 return Ok(v.clone());
             }
         }
-        let out = self.inner.call(name, args)?;
-        let now = self.now;
+        if let Some((until, n, code, message)) = self.failed.borrow().get(&key) {
+            if now < *until {
+                return Err(Error::new(
+                    code,
+                    format!(
+                        "{message} (failed {n} time(s) in a row: not read again before game hour {until})"
+                    ),
+                ));
+            }
+        }
+        let out = match self.inner.call(name, args) {
+            Ok(out) => out,
+            Err(e) => {
+                let mut failed = self.failed.borrow_mut();
+                let n = failed.get(&key).map_or(0, |f| f.1) + 1;
+                failed.insert(
+                    key,
+                    (
+                        now + slow_failed_rest(stands, n),
+                        n,
+                        e.code,
+                        e.message.clone(),
+                    ),
+                );
+                return Err(e);
+            }
+        };
+        self.failed.borrow_mut().remove(&key);
         let mut cache = self.cache.borrow_mut();
         cache.retain(|_, (at, _)| now >= *at && now - *at < 2 * DAY);
         cache.insert(key, (now, out.clone()));
@@ -2952,7 +3077,36 @@ fn tick_inner(
             {
                 continue;
             }
+            // AT WAR A REFUSED ANSWER WAITS FOR THE WAR'S INPUT TURN: while the war's orders that
+            // need the input waited in its last turn, an answer the game refused before goes after
+            // that turn, in the next tick (an event that holds the war's own orders, op_events_now,
+            // still goes first). p126a (28 Nov 2026): news.234's read-back failed six times, 13-20 s
+            // each; every tick began with it while the war's mouse orders waited, and the ticks
+            // stood 44-75 game hours apart.
+            if state.war_active
+                && !state.op_events_now
+                && state.round.war_waits
+                && state.failed_run.keys().any(|k| {
+                    k.starts_with(&format!("hoi4_event_choose {{\"event\":{}", json!(key)))
+                })
+            {
+                waiting.get_or_insert((key, false));
+                continue;
+            }
+            let began = std::time::Instant::now();
             let (ok, why) = state.act(tools, lease, "hoi4_event_choose", args, "ev")?;
+            // what the answer took counts in the war step's watchdog (it runs outside the lanes)
+            if state.war_active || state.op_events_now {
+                *state
+                    .round
+                    .since_war
+                    .entry(if ok {
+                        "event answers"
+                    } else {
+                        "event answers refused"
+                    })
+                    .or_insert(0.0) += began.elapsed().as_secs_f64();
+            }
             let line = format!("event {key} option {option}{how}: {ok} {why}");
             // At war a failed answer never takes the tick: the war's lanes get their turn after
             // it in the same tick. The answer goes again within hours (EVENT_WAR_REST), but each
@@ -3524,6 +3678,17 @@ fn war_lane_turn(
         state.sched.war_watch.spent(lane, secs);
     }
     state.sched.war_watch.offered(now, executing, limit);
+    // the watchdog's live line in the operations' notes (the [ops] line, the gate): what held the
+    // war step back, while it is held
+    match state.sched.war_watch.blocker(now) {
+        Some(line) => {
+            state.op_notes.insert(WAR_WATCH_NOTE.to_string(), line);
+        }
+        None if executing => {
+            state.op_notes.remove(WAR_WATCH_NOTE);
+        }
+        None => {}
+    }
     let before = input_calls();
     let sent = state.sched.acts_sent;
     let yielded = state.sched.yielded;
@@ -3537,6 +3702,11 @@ fn war_lane_turn(
         .war_watch
         .spent("war turn", started.elapsed().as_secs_f64());
     let deferred = state.sched.yielded - yielded;
+    // the deferred orders have the next tick's input (see `Round::lanes_owed`)
+    state.round.war_waits = by_command_only && deferred > 0;
+    if deferred > 0 {
+        state.sched.war_watch.deferred(deferred);
+    }
     if by_command_only && deferred > 0 {
         trace_lanes(
             now,
@@ -4341,6 +4511,25 @@ fn when_text(v: &Value) -> String {
     }
 }
 
+/// The refused keys a newly completed focus gives a fresh try (removed from `refused`): every
+/// key but those the game refused while the files could not judge them, which keep their count
+/// and wait; pure.
+fn refused_cleared_by_completion(
+    refused: &mut HashMap<String, u32>,
+    unjudged: &HashSet<String>,
+) -> Vec<String> {
+    let mut cleared: Vec<String> = refused
+        .keys()
+        .filter(|k| !unjudged.contains(*k))
+        .cloned()
+        .collect();
+    cleared.sort_unstable();
+    for key in &cleared {
+        refused.remove(key);
+    }
+    cleared
+}
+
 /// The focus order of one tick: a missed checkpoint's focuses first, then the path, keys the
 /// GUI failed to start FOCUS_GUI_FAILS times in a row behind the rest; pure.
 fn focus_order(
@@ -4434,7 +4623,10 @@ fn focus_lane_inner(
         // A completed focus can unlock others: every refused key gets a fresh try at once.
         if state.stages.focus_refused_at_completed != completed.len() {
             state.stages.focus_refused_at_completed = completed.len();
-            let refused: Vec<String> = state.stages.focus_refused.drain().map(|(k, _)| k).collect();
+            let refused = refused_cleared_by_completion(
+                &mut state.stages.focus_refused,
+                &state.stages.focus_refused_unjudged,
+            );
             for key in refused {
                 state.bad.remove(&skip_key("focus", &key));
                 // the game changed under the order: it is no longer the same order
@@ -4472,6 +4664,7 @@ fn focus_lane_inner(
                 // A war started or ended: every refused key gets a fresh try at once.
                 let refused: Vec<String> =
                     state.stages.focus_refused.drain().map(|(k, _)| k).collect();
+                state.stages.focus_refused_unjudged.clear();
                 for key in refused {
                     state.bad.remove(&skip_key("focus", &key));
                     state.ledger_forget("hoi4_focus_start", &json!({"focus": key}));
@@ -4527,6 +4720,7 @@ fn focus_lane_inner(
             if ok {
                 state.stages.focus_why.remove(&key);
                 state.stages.focus_gui_fails.remove(&key);
+                state.stages.focus_refused_unjudged.remove(&key);
                 state.stages.focus = Some((format!("focus: started {key}"), false));
                 return Ok(Some(format!("focus {key}")));
             }
@@ -4549,6 +4743,9 @@ fn focus_lane_inner(
                 // 40, 80 game days by default): in one shakedown three fallback focuses that
                 // could not start yet were opened about a hundred times, a quarter of the
                 // input lane.
+                if known.unknown.contains_key(&key) {
+                    state.stages.focus_refused_unjudged.insert(key.clone());
+                }
                 let refusals = state.stages.focus_refused.entry(key.clone()).or_insert(0);
                 let doubling = 1 << (*refusals).min(FOCUS_REFUSAL_DOUBLINGS);
                 *refusals += 1;
@@ -5223,6 +5420,9 @@ struct Round {
     war_last: bool,
     /// War-lane ticks since the lanes last had one (see WAR_SHARE).
     war_streak: u32,
+    /// The war's last turn ran by command alone and deferred orders that need the input: the
+    /// next tick's input is the war's, whatever the lanes are owed (see [`Round::lanes_owed`]).
+    war_waits: bool,
     /// The game hour the lanes last had a tick (None: not yet in this run).
     lanes_at: Option<GameHour>,
     /// The game hour a lane or the war last acted (the speed rule's empty stretch).
@@ -5347,11 +5547,21 @@ impl Round {
 
     /// The war has had its share: this tick belongs to the lanes (WAR_SHARE war ticks in a row, or
     /// LANE_MAX_WAIT game hours since the lanes' last tick); pure.
+    ///
+    /// Never while the war's orders that need the input waited in its last turn (`war_waits`):
+    /// LANE_MAX_WAIT is game hours, and when the ticks themselves stand a day or more apart (a
+    /// slow failing event answer, a slow panel read, speed 2 with ticks of 15-35 s) every tick
+    /// found the lanes a day late, so every war turn ran by command alone and its mouse orders
+    /// (an execute, a mode, a detach) waited for an input turn that never came (p126a, w126a,
+    /// 28 Nov 2026: ticks 20-75 game hours apart; 2-17 war orders deferred on 15 of 21 West war
+    /// days; Army 7's execute and Panzergruppe Nord's detaches deferred for weeks). With it the
+    /// war has the input at least every other tick.
     fn lanes_owed(&self, now: GameHour) -> bool {
-        self.war_streak >= WAR_SHARE
-            || self
-                .lanes_at
-                .is_some_and(|at| now.saturating_sub(at) >= LANE_MAX_WAIT)
+        !self.war_waits
+            && (self.war_streak >= WAR_SHARE
+                || self
+                    .lanes_at
+                    .is_some_and(|at| now.saturating_sub(at) >= LANE_MAX_WAIT))
     }
 
     /// Close the pass: Some lane acted in it (true) or it was quiet.
@@ -15064,6 +15274,24 @@ mod tests {
             super::decision_rest(&mut state, "d@FRA", false, 8 * DAY),
             3 * DAY
         );
+    }
+
+    /// g126b (28 Nov 2026): GER_anschluss and GER_demand_sudetenland were refused by the game
+    /// while the files could not judge their `available`; every newly completed focus cleared
+    /// the refusal and they were refused again. Such keys keep their count; the others clear.
+    #[test]
+    fn a_completed_focus_does_not_clear_a_refusal_the_files_could_not_judge() {
+        let mut refused: HashMap<String, u32> = [
+            ("GER_anschluss".to_string(), 1),
+            ("GER_rhine".to_string(), 2),
+        ]
+        .into_iter()
+        .collect();
+        let unjudged: HashSet<String> = ["GER_anschluss".to_string()].into_iter().collect();
+        let cleared = super::refused_cleared_by_completion(&mut refused, &unjudged);
+        assert_eq!(cleared, vec!["GER_rhine".to_string()]);
+        assert_eq!(refused.get("GER_anschluss"), Some(&1));
+        assert!(!refused.contains_key("GER_rhine"));
     }
 
     /// t1939n (27 Nov 2026): GER_autonomy_in_the_kriegsschulen failed six starts on the GUI path

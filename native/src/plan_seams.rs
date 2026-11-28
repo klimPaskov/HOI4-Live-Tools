@@ -65,7 +65,9 @@
 //!                 the set changed (a line added or gone) a round sends hoi4_production_priority
 //!                 {line, equipment, to: top} for each, last first, one per tick, so the first
 //!                 key ends on top. Done-memory `po:<handles>` (the round), `po:<handles>:<n>`
-//!   commanders [{"general","traits":[trait keys or names]}], manage.cp_trait_prefer [trait keys
+//!   commanders [{"general","promote":bool,"traits":[trait keys or names]}] (promote: engineer 131,
+//!                 G004: field marshal first, hoi4_general_trait promote:true, done-memory
+//!                 `cpm:<general>`), manage.cp_trait_prefer [trait keys
 //!                 or names], manage.command_power_max (rule cp_spend, manage.off "cp_spend"):
 //!                 command power near its cap buys assignable unit-leader traits
 //!                 (hoi4_general_trait), the plan's picks first, then the first trait the tree
@@ -259,6 +261,30 @@ const CP_PICK_REFUSALS: &[&str] = &[
     "no_enabled_trait",
 ];
 
+/// What a promotion's answer means for the next decision (engineer 131).
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum PromotionAnswer {
+    /// promoted, or the game's own check says there is nothing to promote (already a field marshal)
+    Done,
+    /// short command power: the whole rule waits until it has grown
+    WaitPower,
+    /// this launch cannot post a promotion (no module family): no promotion is tried again
+    NoRoute,
+    /// anything else (an unknown name, a module refusal): this general waits a month
+    RestGeneral,
+}
+
+/// [`PromotionAnswer`] of a hoi4_general_trait promote:true answer; pure.
+pub(super) fn promotion_answer(ok: bool, code: &str) -> PromotionAnswer {
+    match code {
+        _ if ok => PromotionAnswer::Done,
+        "promotion_refused" => PromotionAnswer::Done,
+        "insufficient_command_power" => PromotionAnswer::WaitPower,
+        "in_process_unavailable" => PromotionAnswer::NoRoute,
+        _ => PromotionAnswer::RestGeneral,
+    }
+}
+
 /// Rule (manage.off "cp_spend"): command power is not left at its cap. Once a week command
 /// power is read (hoi4_country_status fields.command_power.value; the cap from
 /// manage.command_power_max, else the 1.19.4 BASE_MAX_COMMAND_POWER 80, never below the power
@@ -319,6 +345,42 @@ fn cp_spend_step(
             format!("command power {cp:.0} of {max:.0}: kept"),
         );
         return Ok(None);
+    }
+    // engineer 131 (guide row G004): the plan's promotions before any trait, each once
+    // (done-memory `cpm:<general>`): a general marked promote:true is made field marshal
+    // (hoi4_general_trait promote:true, the game's own promote command) so his field-marshal traits
+    // can follow. Short power waits until it has grown; the game's own refusal (already a field
+    // marshal) ends that promotion; a launch without the module's family rests every promotion.
+    if built(TRAIT_TOOL) && !state.skipped(now, "cpm", "x") {
+        for c in list(plan, "commanders") {
+            let general = text(&c["general"]);
+            if general.is_empty()
+                || c["promote"].as_bool() != Some(true)
+                || state.done.contains_key(&format!("cpm:{general}"))
+                || state.skipped(now, "cpm", general)
+            {
+                continue;
+            }
+            let args = json!({"general": general, "promote": true});
+            let (ok, why) = state.act(tools, lease, TRAIT_TOOL, args, "cp")?;
+            let code = super::plan_military::code(&why).to_string();
+            match promotion_answer(ok, &code) {
+                PromotionAnswer::Done => {
+                    state.done.insert(format!("cpm:{general}"), now);
+                    // his traits (or the next promotion) next tick, not next week
+                    state.skip(now, "cps", "x", DAY);
+                }
+                PromotionAnswer::WaitPower => {
+                    let days = super::plan_military::cp_wait_days(&why);
+                    state.skip(now, "cps", "x", days * DAY);
+                }
+                PromotionAnswer::NoRoute => state.skip(now, "cpm", "x", CP_WINDOW_REST_DAYS * DAY),
+                PromotionAnswer::RestGeneral => state.skip(now, "cpm", general, 30 * DAY),
+            }
+            let line = format!("command power {cp:.0} of {max:.0}: promote {general}: {ok} {why}");
+            note(state, key, line.clone());
+            return Ok(Some(line));
+        }
     }
     // the plan's own picks first, in order
     let mut picks: Vec<(String, Option<String>)> = Vec::new();
@@ -1924,6 +1986,60 @@ mod tests {
         assert_eq!(
             generals_by_divisions(&armies),
             ["Gerd von Rundstedt", "Erwin Rommel"]
+        );
+    }
+
+    #[test]
+    fn a_plan_promotion_goes_first_once_then_the_generals_traits() {
+        let f = cp_game(70.0);
+        let plan = json!({"commanders": [{"general": "Fedor von Bock", "promote": true,
+            "traits": ["offensive_doctrine"]}]});
+        let mut state = State::default();
+        let out = step(clocked(&mut state, START), &f, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("promote Fedor von Bock: true"), "{out}");
+        let sent = actions(&f);
+        assert_eq!(sent[0].0, TRAIT_TOOL);
+        assert_eq!(sent[0].1["promote"], json!(true));
+        assert!(sent[0].1.get("trait").is_none());
+        assert!(state.done.contains_key("cpm:Fedor von Bock"));
+        // the next tick: his trait, no second promotion
+        let out = step(
+            clocked(&mut state, START + DAY),
+            &f,
+            &plan,
+            "l",
+            START + DAY,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(
+            out.contains("trait for Fedor von Bock:offensive_doctrine"),
+            "{out}"
+        );
+        assert_eq!(actions(&f).len(), 2);
+        assert!(actions(&f)[1].1.get("promote").is_none());
+    }
+
+    #[test]
+    fn a_promotion_answer_changes_the_next_decision() {
+        assert_eq!(promotion_answer(true, ""), PromotionAnswer::Done);
+        assert_eq!(
+            promotion_answer(false, "promotion_refused"),
+            PromotionAnswer::Done
+        );
+        assert_eq!(
+            promotion_answer(false, "insufficient_command_power"),
+            PromotionAnswer::WaitPower
+        );
+        assert_eq!(
+            promotion_answer(false, "in_process_unavailable"),
+            PromotionAnswer::NoRoute
+        );
+        assert_eq!(
+            promotion_answer(false, "unknown_commander"),
+            PromotionAnswer::RestGeneral
         );
     }
 

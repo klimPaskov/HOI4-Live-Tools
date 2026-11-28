@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_template_get","description":"Own division templates read from game memory (no input, no lease, no pause): per template the regiment columns (column x rows, e.g. [[infantry,infantry,infantry],...]), support companies, width, hit points, base organisation (mean of the battalions and companies; `organisation_live` is the same mean times the country's organisation modifier, taken from a live division of the template), manpower, supply use, equipment need per archetype (pieces), and per equipment archetype the variant a live division holds with its per-piece stats. `equipment_stats_estimate` (soft/hard attack, defence, breakthrough, armour, piercing, air attack) is an ESTIMATE summed from each battalion's main equipment variant, validated:false. Exact fields were recomputed against common/units and live divisions (hit points and manpower matched all own divisions). Optional `template` (exact name) narrows to one.","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128}},"additionalProperties":false}})
+    json!({"name":"hoi4_template_get","description":"Own division templates read from game memory (no input, no lease, no pause): per template the regiment columns (column x rows, e.g. [[infantry,infantry,infantry],...]), support companies, the regimental support row (regimental_support: the company under each column, \"\" for none; its companies count in units, totals and equipment need), width, hit points, base organisation (mean of the battalions and companies; `organisation_live` is the same mean times the country's organisation modifier, taken from a live division of the template), manpower, supply use, equipment need per archetype (pieces), and per equipment archetype the variant a live division holds with its per-piece stats. `equipment_stats_estimate` (soft/hard attack, defence, breakthrough, armour, piercing, air attack) is an ESTIMATE summed from each battalion's main equipment variant, validated:false. Exact fields were recomputed against common/units and live divisions (hit points and manpower matched all own divisions). Optional `template` (exact name) narrows to one.","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128}},"additionalProperties":false}})
 }
 
 fn unit_json(u: &SubUnit) -> Value {
@@ -90,6 +90,7 @@ pub(super) fn get(process: &dyn Process, only: Option<&str>) -> Result<Value> {
                 "priority":units::priority_name(t.priority),
                 "columns":columns,
                 "support":t.support,
+                "regimental_support":t.regimental,
                 "composition":combat,
                 "totals":totals.to_json(),
                 "organisation_live":organisation_live,

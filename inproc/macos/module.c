@@ -846,18 +846,23 @@ static uint64_t mio_name_cb(void *ctx, int32_t tok);
 static int mio_rd_cb(uint64_t a, void *b, size_t n);
 /* engineer 125: the war goal type of that key from the game's own database (entry 0 is the lookup's fallback, never a
  * match): each type's token named by the game's token-to-name function; 0 = no such type */
-static uint64_t war_goal_type(const char *key) {
-    const diplo_facts *d = &g_t.st2.diplo;
+/* engineer 127: the item of that key in a token database (GOT slot -> database pointer; list +arr, count +cnt, entry 0
+ * the lookup's fallback, never a match; an item's token +tok named by the game's token-to-name function); 0 = none */
+static uint64_t db_item_by_key(uint64_t got, uint32_t arr_off, uint32_t cnt_off, uint32_t tok_off, const char *key) {
     uint64_t slot = 0, db = 0, arr = 0; int32_t cnt = 0;
-    if (!d->wgt_got || !g_t.st2.mio.tok2str || !sq(d->wgt_got + (uint64_t)g_slide, &slot) || !plausible(slot) || !sq(slot, &db) ||
-        !plausible(db) || !sread(db + d->wgt_cnt_off, &cnt, 4) || cnt < 2 || cnt > 4096 || !sq(db + d->wgt_arr_off, &arr) || !plausible(arr))
+    if (!got || !g_t.st2.mio.tok2str || !sq(got + (uint64_t)g_slide, &slot) || !plausible(slot) || !sq(slot, &db) ||
+        !plausible(db) || !sread(db + cnt_off, &cnt, 4) || cnt < 2 || cnt > 4096 || !sq(db + arr_off, &arr) || !plausible(arr))
         return 0;
     for (int32_t i = 1; i < cnt; i++) {
         uint64_t ty = 0; int32_t tok = 0; char nm[64];
-        if (!sq(arr + 8 * (uint64_t)i, &ty) || !plausible(ty) || !sread(ty + d->wgt_tok_off, &tok, 4)) continue;
+        if (!sq(arr + 8 * (uint64_t)i, &ty) || !plausible(ty) || !sread(ty + tok_off, &tok, 4)) continue;
         if (mio_str(mio_rd_cb, mio_name_cb(NULL, tok), nm, sizeof nm) && !strcmp(nm, key)) return ty;
     }
     return 0;
+}
+static uint64_t war_goal_type(const char *key) {
+    const diplo_facts *d = &g_t.st2.diplo;
+    return db_item_by_key(d->wgt_got, d->wgt_arr_off, d->wgt_cnt_off, d->wgt_tok_off, key);
 }
 typedef void **(*make_cmd_fn)(void **, void **);
 typedef void *(*new_fn)(size_t);
@@ -1395,7 +1400,7 @@ static void run_job2(void *ctx) {
                 if (f->keep < 0) continue; /* engineer 85: the factory leaves it unwritten (the UI's constructor fills it) */
                 if (f->kind == FK_REF || f->kind == FK_HANDLE) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == nullref;
                 else if (f->kind == FK_I32 || f->kind == FK_TAG) { int32_t v = 1; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 4) && v == f->def; }
-                else if (f->kind == FK_PTR) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == 0;
+                else if (f->kind == FK_PTR || f->kind == FK_PTR2) ok = sq((uint64_t)(uintptr_t)cmd + f->off, &cur) && cur == 0;
                 else if (f->kind == FK_I64) { int64_t v = 1; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 8) && v == (int64_t)f->def; }
                 else if (f->kind == FK_U8) { uint8_t v = 9; ok = sread((uint64_t)(uintptr_t)cmd + f->off, &v, 1) && v == (uint8_t)f->def; }
                 else if (f->kind == FK_REF_ARRAY || f->kind == FK_I32_ARRAY) ok = 1; /* checked empty by fill_array */
@@ -2016,6 +2021,34 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
          * resolves to it and the owner is the player; the game's own "can do" decides), one command each. No read gives a
          * raid instance's address yet: off until S23-RAID */
         if (nv || flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "raids ops take no vals, flag, obj2, provs or divs";
+    } else if (!strncmp(op, "leader.", 7)) {
+        /* engineer 127: a general's assignable trait, the trait tree's own command (CLearnTraitCommand).
+         *   learn_trait: objs = ONE own unit leader (CUnitLeader, the auth object); vals = the trait's key as character
+         *                codes (1..32, as justify passes its war goal key); the trait comes from the game's own leader
+         *                trait database by that key and must be exactly a CUnitLeaderTrait; the game's own "can do"
+         *                decides the rest (not owned yet, prerequisites, slots, command power) */
+        /*   promote:     objs = ONE own unit leader; nothing else (engineer 131: CPromoteUnitLeaderCommand; the game's own
+         *                can-promote decides: a general, not yet a field marshal, command power for the cost) */
+        if (!strcmp(op, "leader.promote")) {
+            if (j->n != 1) why = "exactly one leader";
+            else if (nv || flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "leader.promote takes no vals, flag, obj2, provs or divs";
+        } else {
+            if (strcmp(op, "leader.learn_trait")) why = "unknown leader op";
+            else if (j->n != 1) why = "exactly one leader";
+            else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "leader.learn_trait takes no flag, obj2, provs or divs";
+            else if (nv < 1 || nv >= (int)sizeof j->wgkey) why = "vals: the trait's key as character codes (1..32)";
+            for (int k = 0; !why && k < nv; k++) {
+                int64_t ch = j->val[k];
+                if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_')) why = "the trait key is letters, digits and _ only";
+                else j->wgkey[k] = (char)ch;
+            }
+            if (!why) {
+                j->wgkey[nv] = 0;
+                j->obj2 = db_item_by_key(g_t.st2.trait_got, g_t.st2.trait_arr_off, g_t.st2.trait_cnt_off, g_t.st2.trait_tok_off, j->wgkey);
+                if (!j->obj2) why = "no unit-leader trait of that key in the game's trait database";
+            }
+        }
+        nv = 0;
     } else if (!strncmp(op, "navyhq.", 7)) {
         /* engineer 102: a naval headquarters' admiral, as the game's own command (its AI and two UI sites build it).
          *   admiral: objs = ONE own admiral (CUnitLeader, the auth object); obj2 = the headquarters building item

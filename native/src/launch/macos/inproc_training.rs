@@ -1,6 +1,7 @@
 //! Training through the in-process module (engineer 82, family `training`): the deployment view's own posts, each
 //! checked by the game's own "can do" (and, for the Train button, the game's "can train" the view calls first).
-//! - hoi4_train: CreateConveyor(template) as the template row's Train button; the new queue read back from the own
+//! - hoi4_train: the template's standing queue (one division a line, deploying to the same place) takes the new lines;
+//!   only without one, CreateConveyor(template) as the template row's Train button; the new queue read back from the own
 //!   deployment status; SetConveyorSeries(queue, 1) as its + (a new queue trains forever); AddConveyorLine(queue, n)
 //!   as Add Unit clicks, ONE LINE a post, the queue's lines read after each until they stand still, and posted
 //!   again only while short (S15-TRAINING on master: a post of 5 left the queue at 9 for 7 asked; posts of 1 and 2
@@ -71,32 +72,44 @@ pub(super) fn train(
     let Ok(template) = ui::read(process, |r, i| deployment::template_object(r, i, name)) else {
         return Ok(None);
     };
-    let before: Vec<u64> = ui::read(process, deployment::queues)?
-        .into_iter()
-        .map(|q| q.address)
-        .collect();
-    let Some(created) = post(
-        route,
-        "training.create",
-        &[template],
-        &[],
-        "training this template now",
-    )?
-    else {
-        return Ok(None);
+    let standing = ui::read(process, deployment::queues)?;
+    let before: Vec<u64> = standing.iter().map(|q| q.address).collect();
+    // ONE queue per template (owner, 28 Nov 2026; g126b: 4 queues of 2 lines for 8 Infanterie
+    // lines): a queue of this template that trains one division a line and deploys where this
+    // call deploys (or nowhere yet) takes the new lines; a new queue only when none stands
+    let reused = reusable(&standing, name, province);
+    let (queue, created, target) = match reused {
+        Some(queue) => {
+            let target = queue.lines.max(0) as usize + count;
+            (queue, None, target)
+        }
+        None => {
+            let Some(created) = post(
+                route,
+                "training.create",
+                &[template],
+                &[],
+                "training this template now",
+            )?
+            else {
+                return Ok(None);
+            };
+            let fresh = |qs: &[Queue]| {
+                qs.iter()
+                    .find(|q| !before.contains(&q.address) && q.template == name)
+                    .cloned()
+            };
+            let queue = fresh(&until(process, "the new queue", |qs| fresh(qs).is_some())?)
+                .ok_or_else(|| {
+                    Error::new(
+                        "input_readback_failed",
+                        "The new training queue left the list",
+                    )
+                })?;
+            (queue, Some(created), count)
+        }
     };
-    let fresh = |qs: &[Queue]| {
-        qs.iter()
-            .find(|q| !before.contains(&q.address) && q.template == name)
-            .cloned()
-    };
-    let queue =
-        fresh(&until(process, "the new queue", |qs| fresh(qs).is_some())?).ok_or_else(|| {
-            Error::new(
-                "input_readback_failed",
-                "The new training queue left the list",
-            )
-        })?;
+    let made_here = created.is_some();
     let q = queue.address;
     let step = |route: &mut Option<Channel>, op: &str, vals: &[i64], what: &str| -> Result<Value> {
         post(route, op, &[q], vals, what)?.ok_or_else(|| {
@@ -107,7 +120,7 @@ pub(super) fn train(
         })
     };
     let lines_of = |qs: &[Queue]| qs.iter().find(|x| x.address == q).map(|x| x.lines);
-    let mut replies = vec![created];
+    let mut replies: Vec<Value> = created.into_iter().collect();
     // the game's own check refusing a later line (a battalion cap, manpower): the lines it took
     // stay and the reply says why it stopped (live 126, s126a 28 Nov 2026: a Gebirgs-Division
     // queue of 7 refused its 5th line and the whole 4-line queue was cancelled as "nothing posted")
@@ -128,7 +141,7 @@ pub(super) fn train(
             // the lines: one Add Unit post of ONE line at a time, the queue read after each until it
             // stands still, and posted again only while short (S15-TRAINING, 28 Nov 2026: 7 asked, posts
             // of 5 and then the remainder left the queue at 9; asks of 1 and 2 were exact)
-            let got = fill_lines(count, queue.lines.max(1), |v| {
+            let got = fill_lines(target, queue.lines.max(1), |v| {
                 let before = lines_of(&ui::read(process, deployment::queues)?).unwrap_or(0);
                 match step(
                     route,
@@ -159,31 +172,34 @@ pub(super) fn train(
                     Ok(lines_of(&ui::read(process, deployment::queues)?).unwrap_or(first))
                 })
             })?;
-            replies.push(step(
-                route,
-                "training.location",
-                &[i64::from(province)],
-                "this deployment location",
-            )?);
-            until(process, "the deployment location", |qs| {
-                qs.iter().any(|x| x.address == q && x.location == province)
-            })?;
+            if queue.location != province {
+                replies.push(step(
+                    route,
+                    "training.location",
+                    &[i64::from(province)],
+                    "this deployment location",
+                )?);
+                until(process, "the deployment location", |qs| {
+                    qs.iter().any(|x| x.address == q && x.location == province)
+                })?;
+            }
             Ok(got)
         };
     match filled(&mut *route, &mut replies) {
         Ok((lines, posts)) => {
-            let short = (count as i64 - lines as i64).max(0);
+            let short = (target as i64 - lines as i64).max(0);
             let mut out = json!({"backend":"inprocess","queue":format!("{q:#x}"),
             "province":province,"lines":lines,"asked":count,"line_posts":posts,
-            "over":(lines as i64 - count as i64).max(0),"short":short,"posts":replies});
+            "reused_queue":!made_here,"lines_before":if made_here { 0 } else { queue.lines },
+            "over":(lines as i64 - target as i64).max(0),"short":short,"posts":replies});
             if short > 0 {
                 out["short_reason"] = json!(match &stopped_by {
                     Some(why) => format!(
-                        "the game's own check refused line {} of {count} before it was posted ({why}); the queue keeps its {lines} line(s): a cap of the template (e.g. special forces) or manpower",
+                        "the game's own check refused line {} of {target} before it was posted ({why}); the queue keeps its {lines} line(s): a cap of the template (e.g. special forces) or manpower",
                         lines + 1
                     ),
                     None => format!(
-                        "the game took the Add Unit post but added no line at {lines} of {count} (its own check when the command runs, e.g. manpower or the template); the queue keeps its {lines} line(s): ask again later"
+                        "the game took the Add Unit post but added no line at {lines} of {target} (its own check when the command runs, e.g. manpower or the template); the queue keeps its {lines} line(s): ask again later"
                     ),
                 });
                 if stopped_by.is_some() {
@@ -192,6 +208,13 @@ pub(super) fn train(
             }
             Ok(Some(out))
         }
+        Err(e) if !made_here => Err(Error::new(
+            e.code,
+            format!(
+                "{} (the standing queue {q:#x} keeps the lines it holds; nothing of it was cancelled)",
+                e.message
+            ),
+        )),
         Err(e) => {
             // a refusal after the queue was made: the queue it made is cancelled (S15-TRAINING: a
             // refused add left a one-line queue behind)
@@ -214,6 +237,20 @@ pub(super) fn train(
             ))
         }
     }
+}
+
+/// The standing queue of template `name` that takes new lines: one division a line (series 1, or
+/// a fresh queue's 0 before its series is set) deploying to `province` or not placed yet; the
+/// first in list order. None: a new queue is made.
+pub(super) fn reusable(queues: &[Queue], name: &str, province: i32) -> Option<Queue> {
+    queues
+        .iter()
+        .find(|q| {
+            q.template == name
+                && (0..=1).contains(&q.amount)
+                && (q.location == province || q.location <= 0)
+        })
+        .cloned()
 }
 
 /// The lines one Add Unit post asks for: one (S15-TRAINING: a post of 5 overshot, asks of 1 and 2 were exact).
@@ -306,6 +343,32 @@ pub(super) fn unlocated(process: &dyn Process) -> Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_standing_queue_of_the_template_takes_the_new_lines() {
+        let q = |address: u64, template: &str, amount: i32, location: i32| Queue {
+            address,
+            template: template.to_string(),
+            amount,
+            lines: 2,
+            location,
+        };
+        // g126b: Infanterie-Division in 4 queues of 2; the first standing one now takes the lines
+        let qs = [
+            q(1, "Tank", 1, 500),
+            q(2, "Inf", 3, 500),
+            q(3, "Inf", 1, 777),
+            q(4, "Inf", 1, 500),
+        ];
+        assert_eq!(reusable(&qs, "Inf", 500).map(|q| q.address), Some(4));
+        // a queue deploying elsewhere or training a series is never filled; none: a new queue
+        assert_eq!(reusable(&qs[..3], "Inf", 500).map(|q| q.address), None);
+        // a queue placed nowhere yet takes them and is placed by this call
+        assert_eq!(
+            reusable(&[q(5, "Inf", 1, 0)], "Inf", 500).map(|q| q.address),
+            Some(5)
+        );
+    }
 
     #[test]
     fn lines_are_posted_one_a_post_while_the_queue_is_short() {

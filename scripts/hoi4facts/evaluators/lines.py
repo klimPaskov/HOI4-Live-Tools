@@ -128,8 +128,73 @@ def convert(r):
                                                "conversion_rows": r["conversion_rows"]}}]
 
 
+def production(r):
+    out = []
+    for ln in r.get("lines") or []:
+        if not ln.get("shortfall"):
+            continue
+        out.append({"decision": f"factories on {ln['variant']} to {r['need_date']}", "chosen": str(ln["factories"]),
+                    "value": ln["factories"], "unit": "military factories",
+                    "alternatives": [], "reasoning": (f"need {ln['need']:g}, have {ln['have']:g}, short "
+                                                      f"{ln['shortfall']:g} x {ln['unit_ic']:g} IC; one factory makes "
+                                                      f"{ln['ic_per_factory']:g} IC by then ({ln['start']})"
+                                                      + (f"; {ln['late']}" if ln.get("late") else "")),
+                    "inputs": {"divisions": r.get("divisions"), "unassigned": r.get("unassigned")}})
+    return out or [{"decision": "production lines", "chosen": "no shortfall", "value": 0, "unit": "military factories",
+                    "alternatives": [], "reasoning": f"unassigned {r.get('unassigned')}"}]
+
+
+def force(r):
+    if not r or r.get("error"):
+        return [{"decision": "force needed", "chosen": "none", "value": None, "unit": "divisions",
+                 "alternatives": [], "reasoning": str((r or {}).get("error"))}]
+    return [{"decision": f"divisions against {r['enemy']['tag']}", "chosen": str(r["total"]), "value": r["total"],
+             "unit": "divisions", "alternatives": [_opt("hold", r["hold"]), _opt("attack", r["attack"])],
+             "reasoning": (f"hold {r['hold_per_province']} x {r['line_template']} per province on "
+                           f"{r['front_provinces']} provinces; attack {r['axes']} axes x {r['wave']} x "
+                           f"{r['attack_template']} (R_att {r['R_att']:g}); we field {r['ours']}, missing "
+                           f"{r['missing']}"), "inputs": {"enemy": r["enemy"], "terrain": r.get("terrain")}}]
+
+
+def doctrine(r):
+    rows = r.get("rows") or []
+
+    def att(x):
+        a = ((x.get("attack") or {}).get("attacker") or {}).get("base") or {}
+        return min((v["R"] for v in a.values()), default=(x.get("attacker") or {}).get("base"))
+    best = max(rows, key=lambda x: att(x) or 0, default=None)
+    if not best:
+        return [{"decision": "land grand doctrine", "chosen": "none", "value": None, "unit": "R", "alternatives": [],
+                 "reasoning": "no doctrine rows"}]
+    return [{"decision": "land grand doctrine (attack R, base)", "chosen": best["doctrine"], "value": att(best),
+             "unit": "attacker R with planning, the longest offensive given",
+             "alternatives": [_opt(x["doctrine"], att(x),
+                                   [f"unvalued {(x.get('unvalued') or {}).get('all milestones')}"])
+                              for x in rows if x is not best],
+             "reasoning": "held " + str(r.get("held")) + "; a comparison, never a switch: the owner decides",
+             "inputs": {"enemy_template": r.get("enemy_template"), "roles": r.get("roles")}}]
+
+
+def focus(r):
+    return [{"decision": f"focus {i}", "chosen": o["focus"], "value": o["value"], "unit": "factory-years",
+             "alternatives": [_opt(f, v, ["chain rate per day"]) for f, v in o.get("next_best") or []],
+             "reasoning": f"{o['days']:g} days, chain rate {o['rate']:g}/day via {' > '.join(o['chain'])}",
+             "inputs": {"parts": o.get("parts"), "unvalued": o.get("unvalued")}}
+            for i, o in enumerate(r.get("order") or [], 1)]
+
+
+def air(r):
+    return [{"decision": f"fighters against {', '.join(r['enemies'])}", "chosen": str(r["fighters"]),
+             "value": r["fighters"], "unit": "planes", "alternatives": [], "reasoning": r["why"]["fighters"],
+             "inputs": r["terms"]},
+            {"decision": f"close air support against {', '.join(r['enemies'])}", "chosen": str(r["cas"]),
+             "value": r["cas"], "unit": "planes", "alternatives": [], "reasoning": r["why"]["cas"] + "; " +
+             r["cas_requires"], "inputs": {"cas_cap": r["cas_cap"]}}]
+
+
 ADAPTERS = {"design": design, "template": template, "construction": construction, "research": research,
-            "variant": variant, "convert": convert}
+            "variant": variant, "convert": convert, "production": production, "force": force, "doctrine": doctrine,
+            "focus": focus, "air": air}
 
 
 def lines(cmd, data, argv=None, sit=None):

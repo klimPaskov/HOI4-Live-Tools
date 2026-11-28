@@ -123,7 +123,12 @@ pub(super) fn pick_drop(
 /// on when `_rules.roleplay.paradrops` is true and the multiplayer rules do not forbid it); `roleplay_request` on the
 /// rule itself also turns drops on in FAIR.
 pub(super) fn drops_allowed(run: &crate::fair_guard::Run, cfg: &Value) -> bool {
-    run.allows("paradrops") || cfg["roleplay_request"].as_bool() == Some(true)
+    run.allows("paradrops")
+        || (cfg["roleplay_request"].as_bool() == Some(true)
+            && run
+                .switches
+                .get("paradrops")
+                .is_none_or(|(_, layer)| *layer != "multiplayer"))
 }
 
 /// Transport planes a drop of `divisions` needs: the game's minimum, else the weight of each division.

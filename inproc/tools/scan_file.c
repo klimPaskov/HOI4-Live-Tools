@@ -158,6 +158,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "mio_tree")) got = ((uint64_t)t.st2.mio.tree_arr << 32) | ((uint64_t)t.st2.mio.tree_cnt << 16) | t.st2.mio.trait_stride;
         else if (!strcmp(argv[a], "mio_gate")) got = ((uint64_t)t.st2.mio.gate_policy_off << 32) | ((uint64_t)t.st2.mio.gate_org_off << 16) | t.st2.mio.line_org_off;
         else if (!strcmp(argv[a], "mio_fns")) got = t.st2.mio.policy_gate;
+        /* engineer 127: the leader trait database (CLearnTraitCommand's reader) */
+        else if (!strcmp(argv[a], "trait_got")) got = t.st2.trait_got;
+        else if (!strcmp(argv[a], "trait_offs")) got = ((uint64_t)t.st2.trait_arr_off << 32) | ((uint64_t)t.st2.trait_cnt_off << 16) | t.st2.trait_tok_off;
         else if (!strcmp(argv[a], "holds_ok")) { got = (uint64_t)t.st2.holds.ok; fprintf(stderr, "holds: %s\n", t.st2.holds.evidence); }
         else if (!strcmp(argv[a], "holds_kind")) got = t.st2.holds.kind_area;
         else if (!strcmp(argv[a], "holds_area_off")) got = t.st2.holds.area_off;

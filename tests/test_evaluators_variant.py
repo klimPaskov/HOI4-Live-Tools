@@ -123,5 +123,28 @@ class VariantRealGameTest(unittest.TestCase):
         self.assertGreater(r["recovered_per_base"], 0)
 
 
+class AdapterTest(unittest.TestCase):
+    def test_production_force_doctrine_focus_air_rows(self):
+        prod = {"need_date": "1939.9.1", "unassigned": 2, "divisions": [], "lines": [
+            {"variant": "inf_1", "shortfall": 10.0, "factories": 3, "need": 20.0, "have": 10.0, "unit_ic": 0.5,
+             "ic_per_factory": 900.0, "start": "now"}, {"variant": "art_1", "shortfall": 0}]}
+        rows = lines.lines("production", prod)
+        self.assertEqual([r["value"] for r in rows], [3])
+        self.assertEqual(lines.lines("production", {"need_date": "x", "lines": []})[0]["chosen"], "no shortfall")
+        f = {"enemy": {"tag": "BBB"}, "total": 9, "hold": 5, "attack": 4, "hold_per_province": 1, "line_template": {},
+             "front_provinces": 5, "axes": 2, "wave": 2, "attack_template": {}, "R_att": 1.2, "ours": 3, "missing": 6}
+        self.assertEqual(lines.lines("force", f)[0]["value"], 9)
+        self.assertEqual(lines.lines("force", {"error": "no land front"})[0]["chosen"], "none")
+        d = {"held": ["a"], "rows": [{"doctrine": "a", "attack": {"attacker": {"base": {"T14": {"R": 1.0}}}}},
+                                     {"doctrine": "b", "attack": {"attacker": {"base": {"T14": {"R": 2.0}}}}}]}
+        row = lines.lines("doctrine", d)[0]
+        self.assertEqual(row["chosen"], "b")
+        self.assertIn("never a switch", row["reasoning"])
+        fo = {"order": [{"focus": "f1", "value": 2.0, "days": 70, "rate": 0.1, "chain": ["f1"]}]}
+        self.assertEqual(lines.lines("focus", fo)[0]["chosen"], "f1")
+        a = {"enemies": ["BBB"], "fighters": 10, "cas": 4, "cas_cap": 6, "cas_requires": "air first",
+             "why": {"fighters": "x", "cas": "y"}, "terms": {}}
+        self.assertEqual([r["value"] for r in lines.lines("air", a)], [10, 4])
+
 if __name__ == "__main__":
     unittest.main()

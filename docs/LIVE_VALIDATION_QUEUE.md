@@ -31,6 +31,7 @@ its mouse path.
 | projects | S19-PROJECTS | not run |
 | navyhq | S20-NAVYHQ | not runnable yet: the command is found, but no read gives a headquarters' address |
 | move | S20-MOVE | not run: division moves by command (hoi4_army_move), off under `auto` |
+| leader | S31-TRAIT | not run: a general's trait by its key and the promotion to field marshal (hoi4_general_trait trait / promote:true), off under `auto` |
 | multiplayer | S1-MP, S2-MP | not run (needs two clients); every post refuses outside single player |
 
 ## Proof state of the registered tools (23 November 2026)
@@ -1443,3 +1444,57 @@ into that slot; the filler's progress is still shown when it resumes later (the 
 P1 hoi4_special_projects on an idle facility that once ran a project: project none, `stopped` true on that project;
 hoi4_special_project_assign of an available project: Verified (rerun S19 P1-P5).
 Pass: D1, D2, J1, P1.
+
+## Session S30-FAULTS: the g126b, p126a and s126a faults at their roots (read and mouse; about 30 minutes plus 20 game days) -- any time
+Build: e127 (tools 127). Any 1936 save of a country with operatives, trade partners and a few templates. Nothing new is posted
+in process; every step is a tool call or an executor run.
+F1 operative replace: hoi4_operative_assign {operative, mission, ..., replace: true} on an operative on a mission. Expect it
+accepted by the argument check (it was invalid_arguments) and settled. The same call without replace on an operative the
+save gave a real mission (not counter-intelligence at home, not idle): refused mission_running, nothing clicked.
+F2 trade row below the list: hoi4_trade_set for a partner whose row is below the visible list (the 10th or later). Expect
+the list wheeled until the row is inside the band, then the click; refused partner_row_offscreen if the list does not move.
+It was "Point outside the owned game client area".
+F3 one training queue: hoi4_train twice for the same template and province (2 then 6). Expect ONE deployment queue of 8
+lines; the second reply has reused_queue and lines_before 2. A queue at another province is not reused.
+F4 train line: a day-one executor run with a train production line already open: no second train line (note
+"train line open"). Read hoi4_economy production_lines in the reply.
+F5 focus refusal kept: a focus whose available block the files cannot judge (Germany: Anschluss before the army ratio) is
+refused once; when another focus completes, it is NOT retried at once (it was retried after every completion).
+F6 reconcile: a plan whose production names equipment that exists in the files but is not researched yet. Expect it in
+research.production_not_yet_available, not in unresolved, and the run starts.
+F7 operation ledger: a refused refinement in an operation shows "refused [<the tool's answer>]: <what>" in the ledger.
+F8 paradrop guard: hoi4_paradrop under FAIR without roleplay: refused fair.paradrops BEFORE any in-process check (it was
+in_process_unavailable first). With plan airborne.roleplay_request true: passes the guard. Under multiplayer rules: refused.
+F9 template regimental row: hoi4_template_get on a template with field guns or another regimental company: regimental_support
+lists them (compare the designer's row by eye). hoi4_template_options: regimental_companies lists the unit files' regimental
+companies with unlocked matching the designer (a researched company unlocked true).
+F10 abilities: hoi4_abilities: a country-limited ability shows its full requirement text (OR blocks included), no null keys.
+F11 weather: hoi4_weather on a state in mud: clears_in_days a number, or bad_ground_clears_beyond_horizon true with the date;
+bad_ground_all_year true only for a state whose files give bad ground the whole year.
+Pass: F1-F11. Open (not built): the weather map mode; army_move by mouse in auto (needs S20 M6).
+
+## Session S31-TRAIT: a general's trait by command (in process, family `leader`; about 15 minutes) -- any time
+Build: e127 (tools 127). Module family `leader` named in HOI4_INPROC_POST and HOI4_BACKEND=inprocess. Any save with an own
+general who has a free trait slot and enough command power (hoi4_general_trait list:true shows can_pick).
+T0 hello: families.leader resolved (on true with the family named), live_passed false. scan evidence names "trait db got".
+T1 hoi4_general_trait {general, trait: <a can_pick trait key>}: expect backend inprocess, assigned true within 2.5 s, the
+trait in hoi4_commanders' trait list, command power down by the game's cost (UNIT_LEADER_ASSIGN_TRAIT_COST); no window
+opened. The trait tree window afterwards shows it owned.
+T2 the same call again: refused_by_game_check (already owned), nothing posted, no window.
+T3 a trait whose prerequisite is missing, or with too little command power: refused_by_game_check, command power unchanged.
+T4 an unknown key: trait_unknown before any post (the catalog); a key the module's trait database lacks (a mod trait not
+loaded): the module refuses and the window path runs in the same call.
+T5 by localised name (trait: "Desert Fox"): the same as T1 (the catalog gives the key).
+PROMOTION (engineer 131, G004; the same family: it passes with T1-T9 or not at all). A save with an own general who is not a
+field marshal (hoi4_commanders: Promote shown in the army panel's commander list) and command power at or above
+PROMOTE_LEADER_CP_COST (40 on 1.20.1).
+T6 hoi4_general_trait {general: <that general>, promote: true}: expect backend inprocess, promoted true within 2.5 s,
+command power down by the cost; the army panel's commander list shows him with no Promote button (field marshal); he can
+now be made an army group's commander (hoi4_army_commander on a group: no promotion step). No window opened by the tool.
+T7 the same call again: promotion_refused (already a field marshal), command power unchanged, nothing posted.
+T8 another general with command power below the cost (spend it first, or a save short of it): insufficient_command_power
+"costs 40 command power and N are held", nothing posted.
+T9 a field-marshal trait (for example logistics_wizard or offensive_doctrine, can_pick in list:true) on the general of T6:
+assigned (T1's path); before T6 the same trait is refused for a corps commander.
+Pass: T1-T9, no window opened in T1-T3 and T6-T8. Then IPC_LIVE_PASSED for leader may be set to 1 (the executor then
+promotes the plan's commanders[].promote:true generals before their traits).

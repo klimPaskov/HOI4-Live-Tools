@@ -221,7 +221,14 @@ fn train_line_step(
         return Ok(None);
     };
     let stock = row["stockpile"].as_f64().unwrap_or(0.0);
-    if row["lines"].as_u64().unwrap_or(0) > 0 {
+    // A line makes trains when the stockpile read counts one (`production_lines`) or the
+    // production list holds one: a line added this tick has put nothing out yet (g126b day one:
+    // the balance step opened train_equipment_1 and this step, reading a field the stockpile
+    // reply does not have, opened a second one in the same tick).
+    let economy = tools.call("hoi4_economy", &json!({}))?;
+    let (military, idle) = super::plan_manage::military_lines(tools, &economy)?;
+    let listed = military.iter().any(|m| m.1.starts_with("train_equipment"));
+    if row["production_lines"].as_u64().unwrap_or(0) > 0 || listed {
         super::plan_manage::note(
             state,
             "logistics",
@@ -236,8 +243,6 @@ fn train_line_step(
     // A line asks for factories the game gives only when some are free: with every factory on a
     // line, the new line is fed by one factory taken from the largest line (the smallest share
     // of any output), never from a line the plan's own production entry sizes below that.
-    let economy = tools.call("hoi4_economy", &json!({}))?;
-    let (military, idle) = super::plan_manage::military_lines(tools, &economy)?;
     let mut freed = String::new();
     if idle < factories as i64 {
         let donor = largest_line(&military, plan, factories as i64 - idle.max(0));
@@ -610,7 +615,7 @@ mod tests {
     fn a_train_line_opens_when_nothing_makes_trains_and_a_full_economy_frees_one_factory() {
         // owner, 27 Nov 2026: "put one mil on trains in the beginning"; t1939n had no
         // `logistics` key, no train line all war, and every factory on a line
-        let stock = |lines: u64| json!({"equipment": [{"archetype": "train_equipment", "stockpile": 71.0, "lines": lines}]});
+        let stock = |lines: u64| json!({"equipment": [{"archetype": "train_equipment", "stockpile": 71.0, "production_lines": lines}]});
         let lines = json!({"lines": [
             {"line_kind": "military", "entry_index": 0, "equipment_id": "infantry_equipment_2",
              "factory_counters": {"requested_factories_raw_signed": 18}},
@@ -658,6 +663,26 @@ mod tests {
         assert!(f.sent.borrow().is_empty());
         let note = super::super::plan_manage::digest(&state).unwrap()["logistics"].to_string();
         assert!(note.contains("a line makes them"), "{note}");
+        // g126b: a train line opened this tick (no output yet, the stockpile counts none) is
+        // seen in the production list: no second line
+        let listed = json!({"lines": [
+            {"line_kind": "military", "entry_index": 0, "equipment_id": "infantry_equipment_2",
+             "factory_counters": {"requested_factories_raw_signed": 18}},
+            {"line_kind": "military", "entry_index": 2, "equipment_id": "train_equipment_1",
+             "factory_counters": {"requested_factories_raw_signed": 1}}]});
+        let f = Fake {
+            replies: BTreeMap::from([
+                ("hoi4_stockpile", stock(0)),
+                ("hoi4_production_lines", listed),
+                ("hoi4_economy", economy(20)),
+            ]),
+            sent: RefCell::new(Vec::new()),
+        };
+        assert_eq!(
+            logistics_step(&mut State::default(), &f, &json!({}), "l", START).unwrap(),
+            None
+        );
+        assert!(f.sent.borrow().is_empty());
         let f = fake(20, 0);
         let off = json!({"logistics": {"trains": false}});
         assert_eq!(

@@ -502,10 +502,12 @@ fn by_command_alone_the_war_s_mouse_orders_wait_and_its_orders_by_command_go() {
 fn a_slow_panel_read_stands_for_its_span_at_war_and_an_order_of_its_family_forgets_it() {
     let game = Game::new(false);
     let cache = std::cell::RefCell::new(SlowCache::new());
+    let failed = std::cell::RefCell::new(SlowFailed::new());
     let read = |now: GameHour, args: Value| {
         SlowReads {
             inner: &game,
             cache: &cache,
+            failed: &failed,
             now,
             on: true,
         }
@@ -543,6 +545,7 @@ fn a_slow_panel_read_stands_for_its_span_at_war_and_an_order_of_its_family_forge
     SlowReads {
         inner: &game,
         cache: &cache,
+        failed: &failed,
         now: day0 + DAY + 1,
         on: true,
     }
@@ -557,6 +560,7 @@ fn a_slow_panel_read_stands_for_its_span_at_war_and_an_order_of_its_family_forge
     SlowReads {
         inner: &game,
         cache: &cache,
+        failed: &failed,
         now: day0 + DAY + 3,
         on: false,
     }
@@ -645,4 +649,190 @@ fn a_war_burst_of_mouse_orders_gives_the_tick_back_once_half_a_game_day_has_pass
         "{} orders: {out}",
         game.orders()
     );
+}
+
+#[test]
+fn when_the_ticks_stand_a_day_apart_the_war_s_waiting_mouse_orders_have_the_next_tick() {
+    // p126a, w126a (28 Nov 2026): ticks 20-75 game hours apart found the lanes a day late every
+    // time, so every war turn ran by command alone and its mouse orders never had an input turn
+    let mut round = super::Round::default();
+    round.lanes_turn(START);
+    assert!(round.lanes_owed(START + 40), "a day late at the next tick");
+    // the war's turn by command alone deferred an order that needs the input
+    round.war_waits = true;
+    assert!(
+        !round.lanes_owed(START + 80),
+        "the war has this tick's input whatever the hours say"
+    );
+    // its input turn ran: the lanes are owed again (the share alternates)
+    round.war_waits = false;
+    round.war_acted(START + 80, true);
+    assert!(round.lanes_owed(START + 120));
+}
+
+/// The Game with one open event (one option) and a war to read.
+struct EventGame {
+    game: Game,
+}
+impl Tools for EventGame {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        if name == "hoi4_events" {
+            self.game
+                .calls
+                .borrow_mut()
+                .push((name.to_string(), args.clone()));
+            return Ok(json!({"events": [
+                {"event": "news.234", "options": [{"name": "ok"}]}]}));
+        }
+        self.game.call(name, args)
+    }
+}
+
+#[test]
+fn at_war_a_refused_event_answer_waits_while_the_war_s_mouse_orders_wait() {
+    let game = EventGame {
+        game: Game::new(false),
+    };
+    let mut state = State {
+        war_active: true,
+        ..Default::default()
+    };
+    // the answer was refused before (the ledger's failures in a row) and rests no longer
+    state.failed_run.insert(
+        r#"hoi4_event_choose {"event":"news.234","option":0}"#.to_string(),
+        (2, "input_readback_failed: event answered".to_string()),
+    );
+    state.round.war_waits = true;
+    let plan = json!({});
+    tick(&mut state, &game, &plan, "l", START).unwrap();
+    assert_eq!(
+        game.game.count("hoi4_event_choose"),
+        0,
+        "the war's waiting orders go first"
+    );
+    // once the war had its turn the answer goes again
+    state.round.war_waits = false;
+    tick(&mut state, &game, &plan, "l", START + 1).unwrap();
+    assert_eq!(game.game.count("hoi4_event_choose"), 1);
+}
+
+/// Refuses every read of `failing` (after counting it).
+struct Refusing {
+    game: Game,
+    failing: &'static str,
+}
+impl Tools for Refusing {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        if name == self.failing && args.get("request_id").is_none() {
+            self.game
+                .calls
+                .borrow_mut()
+                .push((name.to_string(), args.clone()));
+            return Err(Error::new("input_readback_failed", "the view did not open"));
+        }
+        if name == "hoi4_event_choose" {
+            self.game
+                .calls
+                .borrow_mut()
+                .push((name.to_string(), args.clone()));
+            return Ok(json!({"receipt": {"status": "NotApplied"}}));
+        }
+        self.game.call(name, args)
+    }
+}
+
+#[test]
+fn a_failed_slow_read_stands_doubling_and_a_refused_order_does_not_forget_it() {
+    // w126a (28 Nov 2026): two diplomacy views failed their read-back 13-17 s in every tick
+    let game = Refusing {
+        game: Game::new(false),
+        failing: "hoi4_diplomacy",
+    };
+    let cache = std::cell::RefCell::new(SlowCache::new());
+    let failed = std::cell::RefCell::new(SlowFailed::new());
+    let call = |now: GameHour, name: &str, args: Value| {
+        SlowReads {
+            inner: &game,
+            cache: &cache,
+            failed: &failed,
+            now,
+            on: true,
+        }
+        .call(name, &args)
+    };
+    let den = json!({"country": "DEN", "lease_token": "l"});
+    let t0 = (START / DAY) * DAY;
+    assert!(call(t0, "hoi4_diplomacy", den.clone()).is_err());
+    let err = call(t0 + 2, "hoi4_diplomacy", den.clone()).unwrap_err();
+    assert_eq!(
+        err.code, "input_readback_failed",
+        "the failure is answered again"
+    );
+    assert_eq!(
+        game.game.count("hoi4_diplomacy"),
+        1,
+        "not read again in its span"
+    );
+    // the span over: read again; failed twice: it stands twice as long
+    assert!(call(t0 + DAY / 4, "hoi4_diplomacy", den.clone()).is_err());
+    assert_eq!(game.game.count("hoi4_diplomacy"), 2);
+    assert!(call(t0 + DAY / 4 + DAY / 4, "hoi4_diplomacy", den.clone()).is_err());
+    assert_eq!(
+        game.game.count("hoi4_diplomacy"),
+        2,
+        "the second failure stands longer"
+    );
+    assert_eq!(slow_failed_rest(DAY / 4, 2), DAY / 2);
+    assert_eq!(slow_failed_rest(DAY, 9), SLOW_FAILED_MAX);
+    // another country's view is another read
+    assert!(call(
+        t0 + 1,
+        "hoi4_diplomacy",
+        json!({"country": "NOR", "lease_token": "l"})
+    )
+    .is_err());
+    assert_eq!(game.game.count("hoi4_diplomacy"), 3);
+    // a refused event answer forgets nothing; a verified one would
+    let _ = call(
+        t0 + DAY / 4 + DAY / 4 + 1,
+        "hoi4_event_choose",
+        json!({"request_id": "r", "event": "news.234"}),
+    );
+    assert!(call(t0 + DAY / 4 + DAY / 4 + 2, "hoi4_diplomacy", den).is_err());
+    assert_eq!(game.game.count("hoi4_diplomacy"), 3);
+}
+
+#[test]
+fn the_watchdog_line_names_what_held_the_war_step_and_the_orders_that_waited() {
+    let mut watch = WarWatch::default();
+    watch.offered(START, true, DAY);
+    watch.acted(START);
+    assert!(watch.blocker(START + 10).is_none());
+    watch.spent("event answers refused", 13.0);
+    watch.spent("politics", 19.3);
+    watch.deferred(6);
+    watch.offered(START + 75, true, DAY);
+    let line = watch.blocker(START + 75).unwrap();
+    assert!(
+        line.contains("no acting war turn for 75 game hours"),
+        "{line}"
+    );
+    assert!(
+        line.contains("politics 19.3 s, event answers refused 13.0 s"),
+        "{line}"
+    );
+    assert!(
+        line.contains("6 war order(s) waited for the input"),
+        "{line}"
+    );
+    watch.offered(START + 119, true, DAY);
+    watch.acted(START + 119);
+    assert!(watch.blocker(START + 120).is_none(), "it acted again");
+    let row = watch.row().unwrap();
+    assert_eq!(row["longest_acted_hours"], 119);
+    assert_eq!(row["acted_deferred"], 6);
+    assert!(row["acted_instead"]
+        .as_str()
+        .unwrap()
+        .starts_with("politics"));
 }

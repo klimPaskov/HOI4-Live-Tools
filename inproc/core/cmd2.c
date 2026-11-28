@@ -473,6 +473,26 @@ const cmd_spec CMD2_SPECS[] = {
     {"navyhq", "navyhq.admiral", "CAssignAdmiralToNavyHeadquarter", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x2c, "11CUnitLeader", 2,
      {{"admiral", 0x2c, FK_REF, 0, 0x3042, 0}, {"headquarters", 0x24, FK_REF, 0, 0x284f, 0}},
      OBJ2_CAST, 0, AUTH_HANDLE, NULL, "25CCustomizableBuildingItem", 0},
+    /* ---- leader (engineer 127, 28 Nov): a general's assignable trait bought with command power, the trait tree's own
+     * command. Read from 1.20.0.0: CLearnTraitCommand (0x38; factory 0x100956440, vtable 0x10351a140): unit leader +0x24
+     * (0x28b7, a handle), the trait +0x30 (a const CUnitLeaderTrait *, written by its token +0x8 as field 0x2e8e; the
+     * factory's 0). Constructor 0x10094d730 (cmd, CUnitLeader *, const CUnitLeaderTrait *). "Can do" (0x10094d960): the
+     * leader resolves, the trait is not in the leader's own trait list (+0xc08 / +0xc14), and the trait's own can-learn
+     * (prerequisites, slots, command power). Auth (0x10094dc90): the leader's owner (resolver 0x10022db60 casts to
+     * CUnitLeader, owner 0x100135060) is the sender. The trait by its key from the leader trait database the command's own
+     * reader resolves it through (scan_trait_db); the object must be exactly a CUnitLeaderTrait. */
+    {"leader", "leader.learn_trait", "CLearnTraitCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "11CUnitLeader", 2,
+     {{"leader", 0x24, FK_REF, 0, 0x28b7, 0}, {"trait", 0x30, FK_PTR2, 0, 0x2e8e, 0}},
+     OBJ2_PTR_EXACT, 0, AUTH_HANDLE, NULL, "16CUnitLeaderTrait"},
+    /* engineer 131 (28 Nov): a general promoted to field marshal, the leader list's Promote button's own command. Read
+     * from 1.20.0.0 (1.20.1.0 byte-identical at the same addresses; 1.19.4.1 factory 0x100b406d0 the same shape):
+     * CPromoteUnitLeaderCommand (0x30; factory 0x100b41800, vtable 0x103528038): unit leader +0x24 (0x28b7, a handle,
+     * the factory's empty handle). "Can do" (0x100b3bd00): the leader resolves and casts to CUnitLeader, then the
+     * leader's own can-promote (0x101945810: rank +0xcb4 == 1, a general, and the country's command power >= the
+     * promote cost from the defines times the leader's cost modifier). Execution sets the rank to 0 (field marshal,
+     * 0x101945980) and takes the power. Auth (0x100b3be00): the leader's owner is the sender, as learn_trait. */
+    {"leader", "leader.promote", "CPromoteUnitLeaderCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "11CUnitLeader", 1,
+     {{"leader", 0x24, FK_REF, 0, 0x28b7, 0}}, OBJ2_NONE, 0, AUTH_HANDLE},
     /* ---- move (engineer 105, 28 Nov): a division's move order, as the right click on a province posts it. Read from
      * 1.20.0.0 and 1.19.4.1 (identical code): CMoveCommand 10402 (0x88; factory 1.20 0x100b403b0, vtable 0x103526f28)
      * holds a unit action at +0x28 (its own serializer writes everything through that action, so no field of the command
@@ -1617,6 +1637,7 @@ static void scan_mio_facts(const scan_image *im, const stage2_table *t, mio_fact
 }
 
 static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stage2_table *t);
+static int scan_trait_db(const scan_image *im, const post_layout *pl, cmd_type *ct, stage2_table *t);
 int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global, stage2_table *t) {
     memset(t, 0, sizeof *t);
     scan_stage2_common(im, pl, gs_global, &t->common);
@@ -1641,6 +1662,7 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
     scan_construction_facts(im, stage2_find(t, "construction.add"), &t->build); /* engineer 82 */
     scan_training_facts(im, stage2_find(t, "training.add_lines"), &t->diplo, &t->train); /* engineer 82 */
     scan_mio_facts(im, t, &t->mio); /* engineer 84 */
+    on -= scan_trait_db(im, pl, (cmd_type *)stage2_find(t, "leader.learn_trait"), t); /* engineer 127 */
     /* every type must agree on the "sender controls" check and the generic lookup (one game, one rule) */
     for (int i = 1; i < t->n; i++)
         if (t->t[i].ok && t->t[0].ok &&
@@ -1803,6 +1825,47 @@ static void scan_wgt(const scan_image *im, uint64_t vt, uint32_t type_off, diplo
     uint32_t t[2];
     if (pfind_at(im, fn, 0xa0, "48 8b 04 f1 39 58 B 74 B", t, 2, &mt) < 0 || mt != 1) return;
     d->wgt_got = got; d->wgt_cnt_off = e[0]; d->wgt_arr_off = e[1]; d->wgt_tok_off = t[0];
+}
+
+/* engineer 127: the leader trait database, read from CLearnTraitCommand's own reader (vtable: the auth slot + 0x18, the
+ * slot after the writer): the trait field's branch loads the database through a GOT slot (mov rax,[rip+GOT]; mov
+ * reg,[rax]), names the token and calls the lookup by token, storing the result at the trait offset (mov [rbx+OFF],rax);
+ * the lookup walks the database's trait list from entry 1 comparing each trait's token (entry 0 is its fallback), the
+ * same shape as the war goal type database. Every fact from these two sites; the type stays off without them. */
+static int scan_trait_db(const scan_image *im, const post_layout *pl, cmd_type *ct, stage2_table *t) {
+    t->trait_got = 0; t->trait_arr_off = t->trait_cnt_off = t->trait_tok_off = 0;
+    if (!ct || !(ct->conf & C_SLOTS)) return 0;
+    uint32_t off = 0;
+    for (int i = 0; i < ct->spec->nf; i++) if (ct->spec->f[i].kind == FK_PTR2) off = ct->spec->f[i].off;
+    uint64_t rd = 0;
+    if (!off || !scan_q(im, ct->vtable + pl->auth_slot + 0x18, &rd) || !in_text(im, rd)) goto off;
+    const uint8_t *b = scan_ptr(im, rd, 0x200);
+    uint64_t got = 0, fn = 0; uint32_t c[4];
+    for (size_t k = 0; b && k + 13 <= 0x200 && !fn; k++) {
+        if (!cmd_pmatch(b + k, 10, "48 8b 05 D B 8b B", c, 4) || (c[1] != 0x48 && c[1] != 0x4c) || (c[2] & 0xc7) != 0) continue;
+        uint64_t g = rd + k + 7 + (int64_t)(int32_t)c[0];
+        for (size_t e = k + 10; e + 9 <= 0x200 && e < k + 0x60; e++) {
+            uint32_t d[2];
+            if (!cmd_pmatch(b + e, 9, "e8 D 48 89 43 B", d, 2) || d[1] != off) continue;
+            uint64_t f = rd + e + 5 + (int64_t)(int32_t)d[0];
+            if (in_text(im, f)) { got = g; fn = f; }
+            break;
+        }
+    }
+    if (!fn) goto off;
+    uint32_t e[6], tk[2]; unsigned me = 0, mt = 0;
+    if (pfind_at(im, fn, 0x80, "41 8b 46 B 49 8b 4e B 83 f8 02 7c B", e, 6, &me) < 0 || me != 1) goto off;
+    if (pfind_at(im, fn, 0xa0, "48 8b 04 f1 39 58 B 74 B", tk, 2, &mt) < 0 || mt != 1) goto off;
+    t->trait_got = got; t->trait_cnt_off = e[0]; t->trait_arr_off = e[1]; t->trait_tok_off = tk[0];
+    snprintf(ct->evidence + strlen(ct->evidence), sizeof ct->evidence - strlen(ct->evidence),
+             "; trait db got 0x%llx list +0x%x count +0x%x token +0x%x", (unsigned long long)got, t->trait_arr_off,
+             t->trait_cnt_off, t->trait_tok_off);
+    return 0;
+off:
+    if (!ct->ok) return 0;
+    ct->ok = 0;
+    snprintf(ct->evidence + strlen(ct->evidence), sizeof ct->evidence - strlen(ct->evidence), "; trait database not found");
+    return 1; /* one type fewer on */
 }
 
 static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stage2_table *t) {

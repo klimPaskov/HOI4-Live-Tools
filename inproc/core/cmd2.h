@@ -369,6 +369,10 @@ typedef struct {
     construction_facts build; /* engineer 82: the building reference */
     training_facts train;     /* engineer 82: the Train click's "can train" */
     mio_facts mio;            /* engineer 84: the organisations */
+    /* engineer 127: the leader trait database (CLearnTraitCommand's reader): the GOT slot holding the database pointer's
+     * address, the trait list (data, count; entry 0 is the lookup's fallback) and a trait's token */
+    uint64_t trait_got;
+    uint32_t trait_arr_off, trait_cnt_off, trait_tok_off;
     int n;
     cmd_type t[CMD2_MAX];
     /* engineer 122: the diplomatic action catalog and the specs of its rows (the rows are t[n - ndyn .. n - 1]) */
