@@ -12954,35 +12954,6 @@ mod tests {
             step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap(),
             None
         );
-        // the law's price from the game's scripts (the options read's cost) above the power held:
-        // it waits with both numbers, no click
-        let options = tools.replies.borrow()["hoi4_politics_options"].clone();
-        tools.replies.borrow_mut().insert(
-            "hoi4_politics_options".into(),
-            json!({"current": "volunteer_only", "options": [
-                {"idea": "limited_conscription", "enabled": true, "cost": 150.0},
-                {"idea": "extensive_conscription", "enabled": false}]}),
-        );
-        tools.replies.borrow_mut().insert(
-            "hoi4_economy".into(),
-            json!({"political_power": {"raw_signed": 5_000_000}}),
-        );
-        assert_eq!(
-            step(&mut state, &tools, &plan, "l", START + 9 * DAY).unwrap(),
-            None
-        );
-        assert!(
-            state.manage.notes["manpower"]
-                .contains("limited_conscription costs 150 political power, 50 held"),
-            "{}",
-            state.manage.notes["manpower"]
-        );
-        assert!(actions(&tools).is_empty());
-        tools
-            .replies
-            .borrow_mut()
-            .insert("hoi4_politics_options".into(), options);
-        tools.replies.borrow_mut().remove("hoi4_economy");
         let out = step(&mut state, &tools, &plan, "l", START + 10 * DAY).unwrap();
         assert_eq!(
             out.as_deref(),
@@ -13004,6 +12975,41 @@ mod tests {
         );
         assert_eq!(wakes(&mut state)[0]["reason"], "manpower_low");
         assert_eq!(actions(&tools).len(), 1);
+        // the law's price from the game's scripts (the options read's cost) above the power
+        // held: it waits with both numbers, no click
+        let tools = fake(vec![
+            (
+                "hoi4_country_status",
+                json!({"fields": {"manpower": {"value": 50000.0}, "stability": {"value": 0.7}}}),
+            ),
+            ("hoi4_war_stats", war_stats(10000.0)),
+            (
+                "hoi4_politics_options",
+                json!({"current": "volunteer_only", "options": [
+                {"idea": "limited_conscription", "enabled": true, "cost": 150.0},
+                {"idea": "extensive_conscription", "enabled": false}]}),
+            ),
+            (
+                "hoi4_economy",
+                json!({"political_power": {"raw_signed": 5_000_000}}),
+            ),
+        ]);
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        tools
+            .replies
+            .borrow_mut()
+            .insert("hoi4_war_stats".into(), war_stats(50000.0));
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 10 * DAY).unwrap(),
+            None
+        );
+        let n = &state.manage.notes["manpower"];
+        assert!(
+            n.contains("limited_conscription costs 150 political power, 50 held"),
+            "{n}"
+        );
+        assert!(actions(&tools).is_empty());
     }
 
     #[test]
