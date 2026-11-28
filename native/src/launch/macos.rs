@@ -40,7 +40,9 @@ mod inproc_research;
 mod inproc_training;
 mod inproc_units;
 mod operation_act;
+mod paradrop;
 mod railway;
+mod volunteers;
 // Internal prospective click opener; no tool/configuration registration.
 mod construction_find_open;
 // Default-off single ordinary Escape qualification.
@@ -797,6 +799,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         stockpile::tool(),
         airread::schema(),
         designs::schema(),
+        paradrop::schema(),
         doctrines::tool(),
         mios::tool(),
         intelligence::tool(),
@@ -853,13 +856,13 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_war_goal_targets","description":"Which enemy-owned states to demand in the peace conference, ranked by points, industry, manpower and resources with tiers (must_take, worth_taking, optional), resource prizes, contiguous blocks, own cores and which states we already occupy. A read, not an action; the conference cost itself is not modelled. No lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["enemy"],"additionalProperties":false}}),
         json!({"name":"hoi4_events","description":"Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed. Each event comes with its full text read from game memory (no screenshot): title, description (markup removed), the leader for leader/operative layouts, and every option text, so the event can be judged from the report alone. option_keys gives, per shown option, the name the event script uses for it (for example my_event.1.b; null when it cannot be told from the event files and the localisation), so a rule or a guide that names an option by its script name finds the right one even when an option is hidden.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
         json!({"name":"hoi4_event_choose","description":"Choose an option of an open event by clicking it: `option` is the 0-based index in listed order, or the option's script key as hoi4_events lists it in option_keys (\"germany.14.a\", or just \"a\"), or its shown text (the list order is not the stacking order: single-option windows over it are acknowledged first; a choice window over it is named in event_covered). Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"anyOf":[{"type":"integer","minimum":0,"maximum":7},{"type":"string","minLength":1,"maxLength":200}]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"countries":{"type":"array","items":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"maxItems":6},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string","maxLength":128},"war_goal":{"type":"string","maxLength":128},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries. With `catalog:true` and `country` (no view opened, nothing sent): EVERY diplomatic action the game itself has, from the in-process module's scan of the game's action classes plus the content's scripted actions (a mod's actions), each with its key, shape (simple, divisions, war_goal, or unsupported:<shape>), the route that sends it (in_process, the view's row by mouse, or not postable yet) and can_do = the game's own check toward that country (the one that enables the view's Send button), asked without sending.","inputSchema":{"type":"object","properties":{"catalog":{"type":"boolean"},"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"countries":{"type":"array","items":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"maxItems":6},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string","maxLength":128},"war_goal":{"type":"string","maxLength":128},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
         railway::tool(),
         json!({"name":"hoi4_army_attack","description":"Front line, offensive line and execute for one army in one call (the same steps as hoi4_army_front, hoi4_army_offensive and hoi4_army_plan execute:true, each verified and journalled as <request_id>:front, :offensive, :execute). Skip a step with front:false (the army already holds a front), offensive:false or execute:false. Stops at the first failing step and says which steps were done.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"front":{"type":"boolean"},"offensive":{"type":"boolean"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_construction_order","description":"Reorder or remove one own construction line with its row buttons in the construction panel: action top (Shift+Click on the up arrow), up, down, bottom or remove (the row's close button). `line` is the 0-based index as hoi4_construction_queue lists the lines; the first lines get the civilian factories (15 per line), so put the supply hub or railway the front needs first. Verified by the line's new position in the own queue (or its absence after remove).","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":127},"action":{"type":"string","enum":["top","up","down","bottom","remove"]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","action","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_save","description":"Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games. Use it at the end of a campaign segment so the next launch continues exactly from this point (no turns are replayed). The game stays paused if it was paused; a game that was running is unpaused again after the save (resumed:true).","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_war_risk","description":"Read-only, before justifying or declaring war on `country`: which countries would join that war on its side (its faction, every country guaranteeing it, its overlord and subjects) and which of our borders with them are not held (need a division in every border state and two per state). hoi4_diplomacy_act declare_war refuses with war_would_widen in that case unless accept_widening:true. Memory and map files only; no input.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"}},"required":["country"],"additionalProperties":false}}),
-        json!({"name":"hoi4_diplomacy_act","description":"Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, call_to_arms, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices, e.g. volunteers groups), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"try_anyway":{"type":"boolean"},"accept_widening":{"type":"boolean"},"confirm":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["action","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_diplomacy_act","description":"Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, call_to_arms, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices the tool cannot make yet), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt. send_volunteers / recall_volunteers carry `army` (the army whose divisions go) and optionally `division_ids` within it, and go through the in-process module's diplomacy family (the view's own action; HOI4_BACKEND=inprocess until S25-VOLUNTEERS): the game's own check decides (volunteer cap, divisions required, recall lock, war and ideology gates; refused_by_game posts nothing). Air volunteers are a rebase of wings to the receiver's air base (hoi4_air_rebase). Any other key that hoi4_diplomacy catalog:true lists with route in_process (a game action class with no view row the tool reads: air_base_access, offer_air_base_access, naval_blockade, peace_proposal, reduce_autonomy, increase_autonomy, request_access_to_license_production, cancel_licensed_production, or one a later game adds) takes `country` only and goes through the module's diplomacy2 family (HOI4_BACKEND=inprocess until S27-DIPLOMACY-ANY); a key whose shape the module cannot build is refused dialog_unsupported and nothing is sent.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"army":{"type":"string"},"division_ids":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":64},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"try_anyway":{"type":"boolean"},"accept_widening":{"type":"boolean"},"confirm":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["action","request_id","lease_token"],"additionalProperties":false}}),
         commanders::tool(),
         supply::tool(),
         template_get::tool(),
@@ -1022,6 +1025,7 @@ impl Commands for MacClock {
                     | "hoi4_army_offensive"
                     | "hoi4_army_fallback"
                     | "hoi4_army_area_defense"
+                    | "hoi4_paradrop"
                     | "hoi4_army_exercise"
                     | "hoi4_army_move"
                     | "hoi4_army_commander"
@@ -3739,6 +3743,262 @@ impl MacClock {
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
         }
+        if name == "hoi4_diplomacy_act"
+            && args
+                .get("action")
+                .and_then(Value::as_str)
+                .and_then(volunteers::Action::from_key)
+                .is_some()
+        {
+            // engineer 118/120: send_volunteers and recall_volunteers, the diplomacy view's own actions through the
+            // module's diplomacy family (HOI4_BACKEND=inprocess until S25-VOLUNTEERS); one diplomacy tool (owner, 28 Nov):
+            // these keys of hoi4_diplomacy_act carry `army` / `division_ids`; no mouse path (the dialog is not driven)
+            allowed(
+                args,
+                &[
+                    "action",
+                    "country",
+                    "army",
+                    "division_ids",
+                    "try_anyway",
+                    "request_id",
+                    "lease_token",
+                ],
+            )?;
+            volunteers::allowed_mode(inproc::mode())?;
+            let action = volunteers::Action::from_key(string(args, "action")?)
+                .ok_or_else(|| Error::new("invalid_arguments", "not a volunteers action"))?;
+            let country = string(args, "country")?;
+            if !volunteers::valid_tag(country) {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "country must be a country tag such as SPR",
+                ));
+            }
+            let army = args.get("army").and_then(Value::as_str).map(str::to_string);
+            let ids: Option<Vec<String>> = match args.get("division_ids") {
+                None | Some(Value::Null) => None,
+                Some(v) => Some(
+                    v.as_array()
+                        .filter(|a| (1..=volunteers::MAX_DIVISIONS).contains(&a.len()))
+                        .and_then(|a| {
+                            a.iter()
+                                .map(|x| {
+                                    x.as_str()
+                                        .filter(|s| !s.is_empty() && s.len() <= 64)
+                                        .map(String::from)
+                                })
+                                .collect::<Option<Vec<String>>>()
+                        })
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", "division_ids: 1..64 division ids")
+                        })?,
+                ),
+            };
+            if action.takes_divisions() == army.is_none() {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "send_volunteers and recall_volunteers name the army whose divisions go",
+                ));
+            }
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let observed = guard.observe(process)?;
+            let epoch = observed.epoch;
+            authority.authorize(token, &epoch)?;
+            let mut route = inproc::route("diplomacy");
+            if route.is_none() {
+                return Err(Error::new(
+                    "in_process_unavailable",
+                    "the in-process module's diplomacy family is not serving: nothing was posted",
+                ));
+            }
+            let tag_index = ui::read(process, |r, i| diplomacy_state::tag_index_of(r, i, country))?;
+            let divisions = match &army {
+                None => Vec::new(),
+                Some(army) => {
+                    if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
+                        return Err(Error::new("invalid_arguments", "Invalid army name"));
+                    }
+                    let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+                    let in_group =
+                        ui::read(process, |r, i| armies::group_division_ptrs(r, i, group))?;
+                    match &ids {
+                        Some(ids) => {
+                            let ptrs = ui::read(process, |r, i| armies::division_ptrs(r, i, ids))?;
+                            if let Some(k) = ptrs.iter().position(|p| !in_group.contains(p)) {
+                                return Err(Error::new(
+                                    "invalid_arguments",
+                                    format!("division {} is not in {army}", ids[k]),
+                                ));
+                            }
+                            ptrs
+                        }
+                        None => in_group,
+                    }
+                }
+            };
+            if action.takes_divisions()
+                && (divisions.is_empty() || divisions.len() > volunteers::MAX_DIVISIONS)
+            {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    format!(
+                        "1..{} divisions per call (found {})",
+                        volunteers::MAX_DIVISIONS,
+                        divisions.len()
+                    ),
+                ));
+            }
+            let what = json!({"kind":"volunteers","action":action.op(),"country":country,"army":army,
+                "divisions":divisions.len()});
+            let mut reply = Value::Null;
+            // the read-back of volunteers abroad is mapped by S25-VOLUNTEERS; until then the module's posted count is
+            // the verdict
+            let mut settle = || -> Result<journal::Outcome> { Ok(journal::Outcome::Unobservable) };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let ch = route
+                    .as_mut()
+                    .ok_or_else(|| Error::new("in_process_unavailable", "no channel"))?;
+                reply = volunteers::post(ch, action, tag_index, &divisions)?;
+                Ok(())
+            };
+            let receipt = actions.execute(id, &epoch, what, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt,"in_process":reply}));
+        }
+        if name == "hoi4_diplomacy" && args.get("catalog").and_then(Value::as_bool) == Some(true) {
+            // engineer 122 (the owner's rule: one dynamic diplomacy tool): every diplomatic action the game has, from the
+            // module's catalog of the game's own action classes (and the content's scripted actions), each with the
+            // game's own "can do" toward the country where the module can build it; no view is opened, nothing is sent
+            allowed(args, &["catalog", "country", "lease_token"])?;
+            let country = string(args, "country")?;
+            if !volunteers::valid_tag(country) {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "country must be a country tag such as POL",
+                ));
+            }
+            let mut ch = match inproc::route("diplomacy") {
+                Some(ch) => ch,
+                None => {
+                    return Err(Error::new(
+                        "in_process_unavailable",
+                        "the catalog is the in-process module's read: the module is not serving (HOI4_BACKEND=gui or the module is not loaded); hoi4_diplomacy without catalog reads the view's rows",
+                    ))
+                }
+            };
+            let cat = inproc_diplomacy::catalog(&mut ch)?;
+            let tag_index = ui::read(process, |r, i| diplomacy_state::tag_index_of(r, i, country))?;
+            let mut checks = Vec::new();
+            for a in cat["actions"].as_array().into_iter().flatten() {
+                let op = a["op"].as_str().unwrap_or("");
+                // the check builds the action whole; division and war-goal shapes need their choices, so they are not asked
+                if op.is_empty() || a["on"].as_bool() != Some(true) || a["shape"] != "simple" {
+                    continue;
+                }
+                let fam = inproc_diplomacy::family_of(op);
+                if !inproc::family_usable(&ch.hello, fam, inproc::Mode::InProcess) {
+                    continue;
+                }
+                if let Ok(reply) = inproc_diplomacy::check(&mut ch, op, tag_index) {
+                    checks.push((op.to_string(), reply));
+                }
+            }
+            let scripted = process
+                .identity()
+                .map(|i| i.exe.clone())
+                .and_then(|exe| crate::protocol::focus_content(&exe).ok())
+                .map(|(content, _)| inproc_diplomacy::scripted_keys(&content))
+                .unwrap_or_default();
+            let mut out = inproc_diplomacy::listing(&cat, &checks, &scripted, |k| {
+                diplomacy_keys::spec_of_key(k).is_some()
+            });
+            out["country"] = json!(country);
+            out["note"] = json!("can_do is the game's own check (the one that enables the view's Send button), asked without sending; null = not asked (a shape that needs choices, or its family is not opted in). An action the game toggles (access, docking rights, embargo) revokes when already in force: read hoi4_diplomacy_state first. Send with hoi4_diplomacy_act and the row's key.");
+            return Ok(out);
+        }
+        if name == "hoi4_diplomacy_act"
+            && args.get("action").and_then(Value::as_str).is_some_and(|a| {
+                !a.is_empty()
+                    && a.len() <= 64
+                    && a.bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+                    && diplomacy_keys::spec_of_key(a).is_none()
+                    && diplomacy_keys::spec_of_row(a).is_none()
+                    && volunteers::Action::from_key(a).is_none()
+            })
+            && args.get("country").is_some()
+        {
+            // engineer 122: a catalog key with no view row the tool reads (a class the game has: air base access, naval
+            // blockade, autonomy, peace proposal, licence access ...; or one a later game adds): the module's diplomacy2
+            // family builds it by its shape; the game's own check decides. Off under `auto` until S27-DIPLOMACY-ANY.
+            allowed(args, &["action", "country", "request_id", "lease_token"])?;
+            let key = string(args, "action")?.to_string();
+            let country = string(args, "country")?;
+            if !volunteers::valid_tag(country) {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "country must be a country tag such as POL",
+                ));
+            }
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let observed = guard.observe(process)?;
+            let epoch = observed.epoch;
+            authority.authorize(token, &epoch)?;
+            let mut route = inproc::route("diplomacy2");
+            let cat = match route.as_mut() {
+                Some(ch) => inproc_diplomacy::catalog(ch)?,
+                None => {
+                    return Err(Error::new(
+                        "in_process_unavailable",
+                        format!("{key}: the module's diplomacy2 family is not serving (HOI4_BACKEND=inprocess with diplomacy2 opted in, until S27-DIPLOMACY-ANY passes); this action has no view row the tool reads, so nothing was sent"),
+                    ))
+                }
+            };
+            let e = inproc_diplomacy::entry(&cat, &key).ok_or_else(|| {
+                Error::new(
+                    "action_not_offered",
+                    format!("{key} is not a diplomatic action of this game: hoi4_diplomacy with catalog:true lists them"),
+                )
+            })?;
+            let op = e["op"].as_str().unwrap_or("").to_string();
+            if op.is_empty() || e["on"].as_bool() != Some(true) || e["shape"] != "simple" {
+                return Err(Error::new(
+                    "dialog_unsupported",
+                    format!(
+                        "{key}: shape {} (the module does not build it yet; nothing was sent)",
+                        e["shape"]
+                    ),
+                ));
+            }
+            let tag_index = ui::read(process, |r, i| diplomacy_state::tag_index_of(r, i, country))?;
+            let what = json!({"kind":"diplomacy_act","action":key,"op":op,"country":country});
+            let mut reply = Value::Null;
+            // no relation read is mapped for these classes yet: the module's posted count after the game's own check is
+            // the verdict (S27 maps the read-back per action)
+            let mut settle = || -> Result<journal::Outcome> { Ok(journal::Outcome::Unobservable) };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let ch = route
+                    .as_mut()
+                    .ok_or_else(|| Error::new("in_process_unavailable", "no channel"))?;
+                match inproc_diplomacy::act(ch, &op, tag_index) {
+                    inproc::Routed::Done(body) => {
+                        reply = body;
+                        Ok(())
+                    }
+                    inproc::Routed::Refused(what) => Err(inproc::refused_error(&what)),
+                    inproc::Routed::Gui => Err(Error::new(
+                        "in_process_unavailable",
+                        "the module did not post the action (see its log); this action has no view row, so the mouse sent nothing",
+                    )),
+                }
+            };
+            let receipt = actions.execute(id, &epoch, what, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt,"in_process":reply}));
+        }
         if name == "hoi4_diplomacy" || name == "hoi4_diplomacy_act" {
             let act = name == "hoi4_diplomacy_act";
             if act {
@@ -3921,8 +4181,9 @@ impl MacClock {
                     .and_then(|s| inproc_diplomacy::op_of(s.key)),
                 _ => None,
             };
-            let diplo_route =
-                std::cell::RefCell::new(inproc_op.and_then(|_| inproc::route("diplomacy")));
+            let diplo_route = std::cell::RefCell::new(
+                inproc_op.and_then(|op| inproc::route(inproc_diplomacy::family_of(op))),
+            );
             let war_checks = |key: Option<&str>, tag: &str| -> Result<()> {
                 if key == Some("declare_war") && confirm != Some("declare_war") {
                     return Err(Error::new(
@@ -6856,6 +7117,125 @@ impl MacClock {
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
         }
+        if name == "hoi4_paradrop" {
+            // engineer 106: the paradrop tool's source and target clicks and the plan bar's execute, by the game's own
+            // commands through the module (family orders2; off in auto until S21-PARADROP); no mouse path
+            allowed(
+                args,
+                &[
+                    "army",
+                    "from_state",
+                    "target_province",
+                    "division_ids",
+                    "execute",
+                    "request_id",
+                    "lease_token",
+                ],
+            )?;
+            paradrop::allowed_mode(inproc::mode())?;
+            let army = string(args, "army")?;
+            if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
+                return Err(Error::new("invalid_arguments", "Invalid army name"));
+            }
+            let from = args
+                .get("from_state")
+                .and_then(Value::as_i64)
+                .filter(|v| (1..4096).contains(v))
+                .ok_or_else(|| {
+                    Error::new(
+                        "invalid_arguments",
+                        "from_state must be a state id (1..4095)",
+                    )
+                })? as i32;
+            let target = args
+                .get("target_province")
+                .and_then(Value::as_i64)
+                .filter(|v| (1..100_000).contains(v))
+                .ok_or_else(|| {
+                    Error::new("invalid_arguments", "target_province must be a province id")
+                })? as i32;
+            let ids: Option<Vec<String>> = match args.get("division_ids") {
+                None | Some(Value::Null) => None,
+                Some(v) => Some(
+                    v.as_array()
+                        .filter(|a| (1..=64).contains(&a.len()))
+                        .and_then(|a| {
+                            a.iter()
+                                .map(|x| {
+                                    x.as_str()
+                                        .filter(|s| !s.is_empty() && s.len() <= 64)
+                                        .map(String::from)
+                                })
+                                .collect::<Option<Vec<String>>>()
+                        })
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", "division_ids: 1..64 division ids")
+                        })?,
+                ),
+            };
+            let execute = args.get("execute").and_then(Value::as_bool).unwrap_or(true);
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let observed = guard.observe(process)?;
+            let epoch = observed.epoch;
+            authority.authorize(token, &epoch)?;
+            let mut route = inproc::route("orders2");
+            if route.is_none() {
+                return Err(Error::new(
+                    "in_process_unavailable",
+                    "the in-process module's orders2 family is not serving: nothing was posted",
+                ));
+            }
+            let (bases, _) = airact::own(process)?;
+            let source = paradrop::source_province(&bases, from)?;
+            let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+            let in_group = ui::read(process, |r, i| armies::group_division_ptrs(r, i, group))?;
+            let divisions = match &ids {
+                Some(ids) => {
+                    let ptrs = ui::read(process, |r, i| armies::division_ptrs(r, i, ids))?;
+                    if let Some(k) = ptrs.iter().position(|p| !in_group.contains(p)) {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            format!("division {} is not in {army}", ids[k]),
+                        ));
+                    }
+                    ptrs
+                }
+                None => in_group,
+            };
+            let action = json!({"kind":"paradrop","army":army,"source_province":source,
+                "target_province":target,"divisions":divisions.len(),"execute":execute});
+            let order: std::cell::Cell<Option<i32>> = std::cell::Cell::new(None);
+            let mut reply = Value::Null;
+            let mut settle = || {
+                let Some(o) = order.get() else {
+                    return Ok(journal::Outcome::Unknown);
+                };
+                let tops: Vec<(i32, i32, bool)> =
+                    ui::read(process, |r, i| armies::orders::group_orders(r, i, group))?
+                        .into_iter()
+                        .map(|(_, n)| (n.kind, n.id, n.executing))
+                        .collect();
+                let detail = json!({"army":army,"order_id":o,"orders":tops.len()});
+                Ok(match paradrop::settled(&tops, o, execute) {
+                    Some(true) => journal::Outcome::Reached(detail),
+                    Some(false) => journal::Outcome::Diverged(detail),
+                    None => journal::Outcome::Unchanged(detail),
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let ch = route
+                    .as_mut()
+                    .ok_or_else(|| Error::new("in_process_unavailable", "no channel"))?;
+                let (o, r) = paradrop::drop(ch, group, source, target, &divisions, execute)?;
+                order.set(Some(o));
+                reply = r;
+                Ok(())
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt,"in_process":reply}));
+        }
         if name == "hoi4_army_fallback" || name == "hoi4_army_area_defense" {
             let fallback = name == "hoi4_army_fallback";
             if fallback {
@@ -7469,9 +7849,13 @@ impl MacClock {
                     let headings = ui::read(process, armies::division_headings)?;
                     let at = ui::read(process, armies::division_provinces)?;
                     let on_way = ids.iter().filter(|d| headings.get(*d) == Some(&p)).count();
+                    // standing there and not marching away (live 115, 28 Nov 2026)
                     let there = ids
                         .iter()
-                        .filter(|d| at.get(*d).copied().flatten() == Some(p))
+                        .filter(|d| {
+                            at.get(*d).copied().flatten() == Some(p)
+                                && headings.get(*d).is_none_or(|h| *h == 0 || *h == p)
+                        })
                         .count();
                     Ok((on_way, there))
                 };
@@ -7512,11 +7896,16 @@ impl MacClock {
                 let mut dispatch = || {
                     authority.authorize(token, &epoch)?;
                     let at = ui::read(process, armies::division_provinces).unwrap_or_default();
+                    let away = ui::read(process, armies::division_headings).unwrap_or_default();
                     let pending: Vec<String> = ids
                         .iter()
-                        .filter(|d| at.get(*d).copied().flatten() != Some(p))
+                        .filter(|d| {
+                            at.get(*d).copied().flatten() != Some(p)
+                                || away.get(*d).is_some_and(|h| *h != 0 && *h != p)
+                        })
                         .cloned()
                         .collect();
+                    let mut posted = (Vec::new(), BTreeMap::new());
                     move_reply = module_in_process(&mut move_route, |ch| {
                         let headings = ui::read(process, armies::division_headings)?;
                         let left = inproc_moves::pending(&pending, &headings, &at, p, &[p]);
@@ -7524,9 +7913,15 @@ impl MacClock {
                             return Ok(inproc::Routed::Gui);
                         }
                         let ptrs = ui::read(process, |r, i| armies::division_ptrs(r, i, &left))?;
+                        posted = (left, headings);
                         Ok(inproc_moves::move_divisions(ch, &ptrs, p))
                     })?;
                     if move_reply.is_some() {
+                        inproc_moves::wait_started(
+                            || ui::read(process, armies::division_headings),
+                            &posted.1,
+                            &posted.0,
+                        );
                         return Ok(());
                     }
                     if had_route {
@@ -7553,6 +7948,7 @@ impl MacClock {
                 let ids = ui::read(process, |r, i| armies::army_division_ids(r, i, army))
                     .unwrap_or_default();
                 let at = ui::read(process, armies::division_provinces).unwrap_or_default();
+                let away = ui::read(process, armies::division_headings).unwrap_or_default();
                 let standing = ids
                     .iter()
                     .filter(|d| {
@@ -7560,6 +7956,7 @@ impl MacClock {
                             .copied()
                             .flatten()
                             .is_some_and(|p| wanted.contains(&p))
+                            && away.get(*d).is_none_or(|h| *h == 0 || wanted.contains(h))
                     })
                     .count();
                 if total > 0 && on_way + standing >= total {
@@ -7648,6 +8045,7 @@ impl MacClock {
             let mut move_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                let mut posted = (Vec::new(), BTreeMap::new());
                 move_reply = module_in_process(&mut move_route, |ch| {
                     let to = match province {
                         Some(p) => Some(p),
@@ -7673,9 +8071,15 @@ impl MacClock {
                         return Ok(inproc::Routed::Gui);
                     }
                     let ptrs = ui::read(process, |r, i| armies::division_ptrs(r, i, &left))?;
+                    posted = (left, headings);
                     Ok(inproc_moves::move_divisions(ch, &ptrs, to))
                 })?;
                 if move_reply.is_some() {
+                    inproc_moves::wait_started(
+                        || ui::read(process, armies::division_headings),
+                        &posted.1,
+                        &posted.0,
+                    );
                     return Ok(());
                 }
                 if had_route {

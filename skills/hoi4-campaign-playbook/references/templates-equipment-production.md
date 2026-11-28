@@ -269,7 +269,7 @@ Only fully equipped with equipment on, never deployed at war (RE26).
 | Light cruiser | Light cruiser hull, four light battery II or III, best engine | Light attack ~29, ~4,900 IC; kills enemy screens (NA48) |
 | Recon cruiser | Light cruiser hull, float plane, radar | Surface detection ~63, ~3,100 IC; spotter for the strike force |
 | Carrier | Historical or improved carrier hull, most hangars the hull takes, no armour | ~8,900 IC with two hangars; the most sea control per IC; about 4 per fleet (NA28) |
-| Submarine | Basic (1936) hull (Submarine II), best torpedo, best engine | The FAIR raider (NA12); the cruiser submarine and every later hull are META-only |
+| Submarine | The best hull researched (the improved hull with three tubes once there), best torpedo, best engine | The raider (NA12); a multiplayer rule set with `submarines: false` keeps it to the basic (1936) hull (Submarine II) without AIP or coating |
 | Mechanised (cost variant) | Every click on production cost, nothing else | About half the IC (~4), reliability falls to ~60%; the first variant of an own mechanised design, before the MIO (PR38) |
 
 ### Evolution path (by era; changes are template edits, see §8 and AR13)

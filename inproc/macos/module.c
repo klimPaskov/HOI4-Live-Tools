@@ -404,16 +404,19 @@ typedef void *(*alloc_fn)(void *, uint64_t, uint64_t);
 #define J2_DIVS 512
 
 #define J2_MAX 32
-enum { R_NONE = 0, R_POSTED, R_INVALID, R_NOT_OWN, R_BAD_OBJ, R_BAD_OBJ2, R_DROPPED, R_UNEXPECTED, R_SKIPPED };
+/* engineer 106: the order kind COrderSetParadropSourceCommand creates (1.20.0.0 exec 0x10094bba0: CreateOrder(group, 4)) */
+#define PARADROP_ORDER_KIND 4
+enum { R_NONE = 0, R_POSTED, R_INVALID, R_NOT_OWN, R_BAD_OBJ, R_BAD_OBJ2, R_DROPPED, R_UNEXPECTED, R_SKIPPED, R_CAN_DO };
 static const char *const R_NAMES[] = {"none", "posted", "refused_by_game_check", "not_own", "not_a_live_object",
-                                      "second_object_invalid", "dropped_by_post", "unexpected_object", "skipped"};
+                                      "second_object_invalid", "dropped_by_post", "unexpected_object", "skipped",
+                                      "can_do" /* engineer 122: a check-only diplomacy request the game's own check accepts */};
 
 typedef struct {
     int refs;
     const cmd_type *ct;
     int n; uint64_t obj[J2_MAX]; int64_t val[J2_MAX]; uint64_t obj2; int64_t flag; long id;
     long long queued_us, deadline_us;
-    int ran, main_thread, forbid, requeues, unexplained, posted, refused;
+    int ran, main_thread, forbid, requeues, unexplained, posted, refused, checked; /* checked: engineer 122, check-only answers */
     int32_t player_tag, region_id;
     int res[J2_MAX]; int32_t before[J2_MAX];
     /* orders (engineer 73): the province list, the order named by id (vals[0]), the divisions a new front gets, the
@@ -514,8 +517,10 @@ static const char *orders_prep(job2_t *j) {
     static char why[160];
     if (!strcmp(op, "orders.execute") && j->order_id == 0) return NULL; /* 0 = the whole plan (the plan bar's button) */
     int new_front = !strcmp(op, "orders.new_front") || !strcmp(op, "orders2.spearhead");
-    /* orders2 ops without an order: nothing to find here (new_root, unassign, fallback) */
+    /* orders2 ops without an order: nothing to find here (new_root, unassign, fallback; a paradrop source with order 0
+     * creates its order) */
     if (!strcmp(op, "orders2.new_root") || !strcmp(op, "orders2.unassign") || !strcmp(op, "orders2.fallback")) return NULL;
+    if (!strcmp(op, "orders2.paradrop_source") && j->order_id == 0) return NULL;
     uint64_t lk = of->lookup_fn + (uint64_t)g_slide;
     if (!code_ptr(lk)) return "the order lookup is not game code";
     uint64_t o = (uint64_t)(uintptr_t)((order_lookup_fn)(uintptr_t)lk)((void *)(uintptr_t)grp, j->order_id);
@@ -833,10 +838,21 @@ static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint6
     }
     /* the date object the constructors read (+8), laid out as they build their own: two vtables of the CDate group */
     uint64_t dobj[3] = {d->date_vt + sl + 0x10, (uint64_t)(uint32_t)date, d->date_vt + sl + 0x60};
+    /* engineer 118: volunteers carry divisions; one action per group of at most the list's inline places (j->res[k] per
+     * action); every other action is one post */
+    int vol = ct->spec->ctor == CTOR_VOLUNTEER, nact = 1, per = 1;
+    if (vol) {
+        per = (int)ct->act_units_cap;
+        if (per < 1 || j->ndivh < 1) { j->res[0] = R_BAD_OBJ; return "no division to send or recall"; }
+        nact = (j->ndivh + per - 1) / per;
+        if (nact > J2_MAX) { j->res[0] = R_BAD_OBJ; return "too many divisions for one request"; }
+        j->n = nact;
+    }
+    for (int k = 0; k < nact; k++) {
     char *act = (char *)nw(ct->act_size);
     if (!act) { j->unexplained = 1; return "allocation failed"; }
     memset(act, 0, ct->act_size);
-    if (ct->spec->ctor == CTOR_DIPLO_SIMPLE) ((act_simple_fn)(uintptr_t)(ct->act_ctor + sl))(act, &j->player_tag, &target, dobj);
+    if (ct->spec->ctor == CTOR_DIPLO_SIMPLE || vol) ((act_simple_fn)(uintptr_t)(ct->act_ctor + sl))(act, &j->player_tag, &target, dobj);
     else ((act_war_fn)(uintptr_t)(ct->act_ctor + sl))(act, &j->player_tag, &target, (const void *)(uintptr_t)goal, 0, dobj);
     /* what the game built must be exactly what was asked */
     uint64_t av = 0, ah = 0; int32_t at = -1, as = -1, ar = -1;
@@ -847,22 +863,39 @@ static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint6
         uint8_t fl = 9;
         ok = sq((uint64_t)(uintptr_t)act + ct->act_goal_off, &ah) && ah == j->hx && sread((uint64_t)(uintptr_t)act + ct->act_flag_off, &fl, 1) && fl == 0;
     }
-    if (!ok) { void **vt0 = *(void ***)act; ((delete_fn2)vt0[1])(act); j->res[0] = R_UNEXPECTED; j->unexplained = 1; return "the action constructor built an unexpected object"; }
+    if (ok && vol) {
+        /* the empty list the constructor built: data -> its inline places, capacity = the places, count 0; the module
+         * writes this group's division handles into those places, as the action's own setter stores them */
+        uint64_t data = 0; int32_t cap = -1, cnt = -1;
+        uint64_t a0 = (uint64_t)(uintptr_t)act;
+        ok = sq(a0 + ct->act_units_off, &data) && data == a0 + ct->act_units_inline && sread(a0 + ct->act_units_off + 8, &cap, 4) &&
+             cap == (int32_t)ct->act_units_cap && sread(a0 + ct->act_units_off + 0xc, &cnt, 4) && cnt == 0;
+        if (ok) {
+            int first = k * per, m = j->ndivh - first < per ? j->ndivh - first : per;
+            memcpy(act + ct->act_units_inline, &j->divh[first], (size_t)m * 8);
+            *(int32_t *)(act + ct->act_units_off + 0xc) = m;
+        }
+    }
+    if (!ok) { void **vt0 = *(void ***)act; ((delete_fn2)vt0[1])(act); j->res[k] = R_UNEXPECTED; j->unexplained = 1; return "the action constructor built an unexpected object"; }
     void *up = act, *cmd = NULL;
     ((make_cmd_fn)(uintptr_t)(d->make_cmd + sl))(&cmd, &up); /* moves the action into a fresh command, stamps the date */
-    if (!cmd) { if (up) { void **vt0 = *(void ***)up; ((delete_fn2)vt0[1])(up); } j->res[0] = R_UNEXPECTED; j->unexplained = 1; return "the command maker built nothing"; }
+    if (!cmd) { if (up) { void **vt0 = *(void ***)up; ((delete_fn2)vt0[1])(up); } j->res[k] = R_UNEXPECTED; j->unexplained = 1; return "the command maker built nothing"; }
     uint64_t cv = 0, ca = 0; int32_t ad = 0;
     if (!sq((uint64_t)(uintptr_t)cmd, &cv) || cv != ct->vtable + sl || !sq((uint64_t)(uintptr_t)cmd + ct->spec->auth_off, &ca) ||
         ca != (uint64_t)(uintptr_t)act || !sread((uint64_t)(uintptr_t)act + d->act_date_off, &ad, 4) || ad != date) {
-        j->res[0] = R_UNEXPECTED; j->unexplained = 1; return "the command maker built an unexpected command"; /* not posted; leaked rather than freed blind */
+        j->res[k] = R_UNEXPECTED; j->unexplained = 1; return "the command maker built an unexpected command"; /* not posted; leaked rather than freed blind */
     }
     void **vt = *(void ***)cmd;
-    if (!((valid_fn2)vt[c->valid_slot / 8])(cmd, 0)) { ((delete_fn2)vt[c->delete_slot / 8])(cmd); j->res[0] = R_INVALID; j->refused++; return NULL; }
+    if (!((valid_fn2)vt[c->valid_slot / 8])(cmd, 0)) { ((delete_fn2)vt[c->delete_slot / 8])(cmd); j->res[k] = R_INVALID; j->refused++; continue; }
+    /* engineer 122: check only (flag 2): the game's own answer is the result; the command and its action are freed by the
+     * game's own destructor, nothing is posted */
+    if (j->flag == 2) { ((delete_fn2)vt[c->delete_slot / 8])(cmd); j->res[k] = R_CAN_DO; j->checked++; continue; }
     long long t0 = mono_us();
     unsigned char r = ((post_fn)(uintptr_t)post)((void *)(uintptr_t)q, cmd, 0);
-    j->post_us = mono_us() - t0;
-    if (!r) { j->res[0] = R_DROPPED; j->unexplained = 1; return "Post dropped a command every check passed"; }
-    j->res[0] = R_POSTED; j->posted++;
+    j->post_us += mono_us() - t0;
+    if (!r) { j->res[k] = R_DROPPED; j->unexplained = 1; return "Post dropped a command every check passed"; }
+    j->res[k] = R_POSTED; j->posted++;
+    }
     return NULL;
 }
 
@@ -1140,6 +1173,10 @@ static void run_job2(void *ctx) {
     }
     if (ct->spec->auth_kind == AUTH_DIPLO) { /* engineer 78: no object handles; the action is built and checked whole */
         uint64_t post2 = g_t.post.post + (uint64_t)g_slide;
+        if (ct->spec->ctor == CTOR_VOLUNTEER) { /* engineer 118: every division checked as the division commands check one */
+            const char *w = orders2_divisions(j);
+            if (w) { j->res[0] = R_BAD_OBJ; snprintf(j->reason, sizeof j->reason, "%s", w); finish2(j); return; }
+        }
         const char *why = diplo_build(j, ct, gs, q, post2);
         if (why) { if (j->res[0] == R_NONE) j->res[0] = R_UNEXPECTED; snprintf(j->reason, sizeof j->reason, "%s", why); }
         finish2(j); return;
@@ -1568,13 +1605,20 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
     j->n = parse_list_u64(objs, j->obj, J2_MAX);
     int nv = vals && *vals ? parse_list_i64(vals, j->val, J2_MAX) : 0;
     const char *why = NULL;
-    if (!strncmp(op, "diplomacy.", 10)) {
-        /* engineer 78: no object (objs = "0", the channel's one placeholder); vals = the receiving country's tag id (the
-         * shown country of the diplomacy view) */
+    if (ct->spec->auth_kind == AUTH_DIPLO) {
+        /* engineer 78 / 118 / 122: every diplomatic action, hand-written (diplomacy.*) or from the catalog (diplomacy2.*):
+         * no object (objs = 0, the channel's one placeholder); vals = the receiving country's tag id (the shown country of
+         * the diplomacy view); a division-list action (send / recall volunteers) also names the divisions (divs: hex
+         * addresses, at most 64); flag 0 = post, 2 = check only (the action is built and the game's own "can do" asked,
+         * then destroyed: nothing is posted; the answer of the view's Send button for the diplomacy read) */
+        int wants_divs = ct->spec->ctor == CTOR_VOLUNTEER;
         if (j->n != 1 || j->obj[0] != 0) why = "diplomacy ops name no object: objs = 0 (vals: the receiving country's tag id)";
         else if (nv != 1 || j->val[0] < 1 || j->val[0] > 100000) why = "vals: the receiving country's tag id";
-        else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "diplomacy ops take no flag, obj2, provs or divs";
-        else { j->n = 1; j->obj[0] = 0; }
+        else if ((flag != 0 && flag != 2) || (obj2 && *obj2) || (provs && *provs)) why = "diplomacy ops take flag 0 (post) or 2 (check only) and no obj2 or provs";
+        else if (!wants_divs && divs && *divs) why = "this diplomatic action takes no divs";
+        else if (wants_divs && ((j->ndiv = parse_list_u64(divs ? divs : "", j->divs, 64)) < 1)) why = "divs: 1 to 64 comma-separated division addresses";
+        for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a division is listed twice";
+        if (!why) { j->n = 1; j->obj[0] = 0; if (wants_divs) j->allow_free = 1; }
         if (why) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused_by_policy\",\"reason\":\"%s\"", op, why); free(j); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
         nv = 0; /* consumed */
     } else if (j->n < 1) why = "objs: comma-separated hex addresses";
@@ -1624,18 +1668,23 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
          *   assign: order id; divs (1..)      unassign: no vals; divs (1..)
          *   fallback: no vals; provs (the line, drawing order); divs (0..)
          *   edit_root: order id, from, to     invasion_target / paradrop_target: order id, province id
+         *   paradrop_source (engineer 106): order id (0 = a new paradrop order), the departure province id; divs (1.. with
+         *   order 0: the paratroopers the new order takes)
          *   spearhead: parent order id; provs (as orders.new_front; the parent's free divisions are handed over) */
         int64_t lim_hi = 100000;
         int want = !strcmp(op, "orders2.new_root") ? 4 : !strcmp(op, "orders2.edit_root") ? 3 :
-                   (!strcmp(op, "orders2.invasion_target") || !strcmp(op, "orders2.paradrop_target")) ? 2 :
+                   (!strcmp(op, "orders2.invasion_target") || !strcmp(op, "orders2.paradrop_target") ||
+                    !strcmp(op, "orders2.paradrop_source")) ? 2 :
                    (!strcmp(op, "orders2.assign") || !strcmp(op, "orders2.spearhead")) ? 1 : 0;
         int wants_provs = !strcmp(op, "orders2.fallback") || !strcmp(op, "orders2.spearhead");
         int wants_divs = !strcmp(op, "orders2.assign") || !strcmp(op, "orders2.unassign");
-        int may_divs = wants_divs || !strcmp(op, "orders2.new_root") || !strcmp(op, "orders2.fallback");
+        int source = !strcmp(op, "orders2.paradrop_source");
+        int may_divs = wants_divs || !strcmp(op, "orders2.new_root") || !strcmp(op, "orders2.fallback") || source;
         if (j->n != 1) why = "orders2: exactly one orders group per request";
         else if (nv != want) why = "vals: the wrong number of values for this op";
         else if (flag) why = "orders2 ops take no flag";
-        else if (want >= 1 && strcmp(op, "orders2.new_root") && (j->val[0] < 1 || j->val[0] > 100000000)) why = "vals[0]: an order id";
+        else if (want >= 1 && strcmp(op, "orders2.new_root") && (j->val[0] < (source ? 0 : 1) || j->val[0] > 100000000))
+            why = source ? "vals[0]: an order id (0 = a new paradrop order)" : "vals[0]: an order id";
         else if (!strcmp(op, "orders2.new_root") && (j->val[0] < 0 || j->val[0] > 100000000 || j->val[1] < 0 || j->val[1] > lim_hi ||
                                                     j->val[2] < 0 || j->val[2] > lim_hi || j->val[1] >= j->val[2] || (j->val[3] != 0 && j->val[3] != 1)))
             why = "new_root vals: section id, from < to within 0..100000, split 0/1";
@@ -1648,6 +1697,8 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         else if (divs && *divs && !may_divs) why = "this op takes no divs";
         else if (may_divs && divs && *divs && (j->ndiv = parse_list_u64(divs, j->divs, J2_DIVS)) < 1) why = "divs: comma-separated hex division addresses";
         else if (wants_divs && j->ndiv < 1) why = "divs: at least one division";
+        else if (source && j->val[0] == 0 && j->ndiv < 1) why = "divs: a new paradrop order needs its paratroopers";
+        else if (source && j->val[0] != 0 && j->ndiv) why = "divs: only a new paradrop order (order 0) takes divisions";
         else {
             j->order_id = want >= 1 && strcmp(op, "orders2.new_root") ? (int32_t)j->val[0] : 0;
             j->blitz = !strcmp(op, "orders2.spearhead");
@@ -1846,6 +1897,11 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             else for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a task force is listed twice";
         } else why = "unknown navy op";
         nv = 0;
+    } else if (!strncmp(op, "raids.", 6)) {
+        /* engineer 118: a prepared raid's Launch / Cancel: objs = the own raid instances (NRaids::CRaidInstance, its handle
+         * resolves to it and the owner is the player; the game's own "can do" decides), one command each. No read gives a
+         * raid instance's address yet: off until S23-RAID */
+        if (nv || flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "raids ops take no vals, flag, obj2, provs or divs";
     } else if (!strncmp(op, "navyhq.", 7)) {
         /* engineer 102: a naval headquarters' admiral, as the game's own command (its AI and two UI sites build it).
          *   admiral: objs = ONE own admiral (CUnitLeader, the auth object); obj2 = the headquarters building item
@@ -2005,9 +2061,19 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
                     pending = !(orders_find(of, sread, vt, g, j->order_id) == j->order && sread(j->order + ff->root_range_off, rg, 16) &&
                                 rg[0] == j->val[1] && rg[1] == j->val[2]);
                     if (!pending) snprintf(rbx, sizeof rbx, ",\"range\":[%lld,%lld]", (long long)rg[0], (long long)rg[1]);
+                } else if (!strcmp(op, "orders2.paradrop_source") && j->order_id == 0) {
+                    /* engineer 106: a new paradrop order: the group's top orders grew and the newest is of the paradrop
+                     * kind (4 on 1.20.0.0); its id is what paradrop_target and orders.execute name next */
+                    int32_t cnt = -1, kind = -1, nid = 0; uint64_t d = 0, o = 0, v = 0;
+                    if (sread(g + of->list_cnt[0], &cnt, 4) && cnt > j->before_top && sq(g + of->list_off[0], &d) &&
+                        sq(d + 8 * (uint64_t)(cnt - 1), &o) && sq(o, &v) && v == vt && sread(o + of->kind_off, &kind, 4) &&
+                        sread(o + of->id_off, &nid, 4) && kind == PARADROP_ORDER_KIND) {
+                        pending = 0;
+                        snprintf(rbx, sizeof rbx, ",\"order_id\":%d,\"order_kind\":%d,\"source_read\":\"not mapped (order +0xb8 on 1.20.0.0)\"", nid, kind);
+                    }
                 } else {
-                    /* invasion/paradrop target: the module has no read of the target field yet; the order must still be
-                     * there and the MCP side reads the plan */
+                    /* invasion/paradrop target and an existing paradrop source: the module has no read of the province
+                     * field yet; the order must still be there and the MCP side reads the plan */
                     pending = orders_find(of, sread, vt, g, j->order_id) != j->order;
                     if (!pending) snprintf(rbx, sizeof rbx, ",\"target_read\":\"not mapped (the order is still there)\"");
                 }
@@ -2162,7 +2228,8 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
                                  "\"result\":\"%s\",\"reason\":\"%s\",\"main_wait_ms\":%.2f,\"requeues\":%d,\"forbid\":%d,"
                                  "\"post_us_total\":%lld,\"readback_ms\":%.2f,\"total_ms\":%.2f,\"player_tag_id\":%d,\"per_object\":[",
                                  op, ct->type_id, j->n, j->posted, j->refused, executed,
-                                 !j->ran ? "not_run" : j->unexplained ? "unexplained" : j->refused ? (j->posted ? "partly_refused" : "refused") : "posted",
+                                 !j->ran ? "not_run" : j->unexplained ? "unexplained" : (j->checked && !j->refused) ? "can_do" :
+                                 j->refused ? (j->posted ? "partly_refused" : "refused") : "posted",
                                  j->reason, j->ran_us / 1000.0, j->requeues, j->forbid, j->post_us, rb_us >= 0 ? rb_us / 1000.0 : -1.0,
                                  (mono_us() - t0) / 1000.0, j->player_tag);
     for (int i = 0; i < j->n && at < n; i++)
@@ -2171,6 +2238,7 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
     if (at < n) at += (size_t)snprintf(out + at, n - at, "]%s", rbx);
     logj("\"event\":\"post2\",\"id\":%ld,%s", id, out);
     int ok = j->ran && !j->unexplained && j->refused == 0 && j->posted == j->n && (pending == 0);
+    if (j->flag == 2 && ct->spec->auth_kind == AUTH_DIPLO) ok = j->ran && !j->unexplained; /* a check's answer, either way */
     job2_release(j);
     return ok;
 }
@@ -2283,12 +2351,18 @@ static int be_mios(char *out, size_t n) {
 }
 
 static int be_orders(const char *group, char *out, size_t n) { return be_tree(group, out, n, 0); }
+/* engineer 122: the diplomacy catalog (scan facts only; no game state is read, so no main-thread job) */
+static int be_diplomacy_actions(char *out, size_t n) {
+    if (!g_t.st2.common.ok) { snprintf(out, n, "\"classes\":0,\"buildable\":0,\"actions\":[],\"reason\":\"stage-2 common facts unresolved\""); return 0; }
+    stage2_diplo_json(&g_t.st2, out, n);
+    return 1;
+}
 static int be_fronts(const char *group, char *out, size_t n) { return be_tree(group, out, n, 1); }
 static void be_log(const char *members) { logj("%s", members); }
 
 static void *ipc_thread(void *arg) {
     pthread_setname_np("hoi4-live-inproc-ipc");
-    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, be_post2, be_orders, be_fronts, be_mios, killed, be_log};
+    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, be_post2, be_orders, be_fronts, be_mios, be_diplomacy_actions, killed, be_log};
     ipc_serve((const char *)arg, &be, &g_policy);
     return NULL;
 }

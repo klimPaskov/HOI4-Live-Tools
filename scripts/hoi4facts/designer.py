@@ -166,12 +166,13 @@ class Catalog:
         return stats
 
     def slots(self, e):
+        found = []
         for x in self.chain(e):
             r = self.equip[x]
             s = r["slots"] or (self.equip.get(r.get("duplicate_of"), {}).get("slots") if r.get("duplicate_of") else None)
             if s:
-                return s
-        return []
+                found.append(s)
+        return resolve_slots(found)
 
     def family(self, e):
         c = self.chain(e)
@@ -186,7 +187,30 @@ def _slots(block):
         if n and isinstance(b, list):
             out.append({"slot": n, "required": get1(b, "required") == "yes",
                         "categories": bare(get1(b, "allowed_module_categories", []))})
+        elif n and b == "inherit":
+            # `fixed_ship_engine_slot = inherit` (ship_hull_light_2, the Panzerschiff): the slot as the next
+            # equipment up the chain defines it
+            out.append({"slot": n, "inherit": True})
     return out or None
+
+
+def resolve_slots(found):
+    """The slot list of an equipment from the slot lists along its chain, the equipment's own first: the first
+    list wins, and each of its `inherit` slots takes the definition from the next list that defines that slot (an
+    inherit slot no list defines is dropped)."""
+    if not found:
+        return []
+    out = []
+    for s in found[0]:
+        if not s.get("inherit"):
+            out.append(s)
+            continue
+        for lst in found[1:]:
+            d = next((x for x in lst if x["slot"] == s["slot"] and not x.get("inherit")), None)
+            if d:
+                out.append(d)
+                break
+    return out
 
 
 # ---------------------------------------------------------------- the evaluator
@@ -460,17 +484,63 @@ def unlocking_techs(cat, design, start_techs):
     return sorted(need)
 
 
+def _module_unlocks(cat):
+    munlock = {}
+    for name, body in _tech_blocks(cat.game):
+        for en in get(body, "enable_equipment_modules"):
+            for m in bare(en):
+                munlock.setdefault(m, set()).add(name)
+    return munlock
+
+
+def refresh_block(cat, designs, start_techs):
+    """Fold a role's designs by year (earliest first, as plan_fragment computes them) into one `designs[].refresh`
+    block: per slot the modules the later years choose, the latest first, each with the technology that unlocks it
+    (none when the country starts with it), and the bases likewise. The executor makes a new version whenever the
+    best available candidate differs from the newest version, so the line follows the research as it lands, not as a
+    year was assumed. Nothing is ranked by hand: the order is the evaluator's choice by year."""
+    from . import derive
+    unlocks = derive.equipment_unlocks(cat.game)
+    munlock = _module_unlocks(cat)
+    start = set(start_techs)
+
+    def gate(opts):
+        return None if not opts or (opts & start) else sorted(opts)[0]
+
+    def cand(field, key, opts):
+        t = gate(opts)
+        return {field: key, "tech": t} if t else key
+
+    slots, bases = {}, []
+    for d in reversed(designs):
+        r = cat.equip.get(d["base"], {})
+        b = cand("base", d["base"], unlocks.get(d["base"]) or unlocks.get(r.get("duplicate_of") or "") or set())
+        if b not in bases:
+            bases.append(b)
+        for slot, m in sorted(d["modules"].items()):
+            c = cand("module", m, munlock.get(m, set()))
+            if c not in slots.setdefault(slot, []):
+                slots[slot].append(c)
+    out = {"slots": slots}
+    if len(bases) > 1:
+        out["bases"] = bases
+    return out
+
+
 def plan_fragment(cat, tag, start_techs, years, roles, tech_year, needs=None, rivals=None, objective="per_ic",
-                  bonus=None):
+                  bonus=None, refresh=False):
     """Plan `designs[]` and the research they need, per role by year: at each year the techs of that year or before
     are assumed researched (on-time research; the strategist moves the dates), the best design is computed, and a
     new entry is written only when it beats the previous one by 5% or more. The later design of a role names the
     earlier one's base as `production` (the line switches once the design exists; the executor's mature-line guard
     applies). needs: {role: {stat: min}} (range by theatre from aircover); rivals: {role: enemy stats}; bonus:
     {role: {stat: fraction}} the country's MIO/tech bonus on that role's line (a range trait lets fewer modules
-    reach the range: armour instead of a second tank)."""
+    reach the range: armour instead of a second tank). refresh: one row per role (its first year's design) whose
+    `refresh` block carries the later years' choices with their techs (refresh_block): the executor makes each
+    version when its technology lands and moves the line, instead of one dated row per year."""
     needs, rivals = needs or {}, rivals or {}
     rows, research, last = [], [], {}
+    by_role = {}
     for y in sorted(years):
         techs = set(start_techs) | {t for t, yr in tech_year.items() if yr and yr <= y}
         bases, mods = available(cat, techs)
@@ -494,10 +564,22 @@ def plan_fragment(cat, tag, start_techs, years, roles, tech_year, needs=None, ri
                              why=f"{role} for {y}" + (f" (need {needs[role]})" if needs.get(role) else ""))
             row["xp"] = xp_estimate(cat, d)
             rows.append(row)
+            by_role.setdefault(role, []).append((row, d))
             research.extend(t for t in gate if t not in research)
             last[role] = d
+    if refresh:
+        folded = []
+        for role, pairs in by_role.items():
+            row = dict(pairs[0][0])
+            if len(pairs) > 1:
+                row["refresh"] = refresh_block(cat, [d for _, d in pairs], start_techs)
+                row["why"] += "; refresh: later years' designs as their techs land (" + \
+                    ", ".join(r["id"] for r, _ in pairs[1:]) + ")"
+            folded.append(row)
+        rows = folded
     return {"designs": rows, "research_needed": research,
-            "method": "designer.plan_fragment: best per role and year by computed stats; techs of a year assumed on time"}
+            "method": "designer.plan_fragment: best per role and year by computed stats; techs of a year assumed on time"
+            + ("; refresh blocks follow the research as it lands" if refresh else "")}
 
 
 # ---------------------------------------------------------------- MIO by value for a design's line

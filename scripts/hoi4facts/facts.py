@@ -32,7 +32,7 @@
     facts.py design-best <TAG> --role R [--techs a,b] [--need air_range=900] [--rival BASE:slot=mod,...]
                                  best module-by-module designs for a role by computed stats (designer.py)
     facts.py design-eval BASE slot=module ... [--mission M]   one design's stats and problems
-    facts.py design-plan <TAG> [--roles fighter,cas] [--years 1936,1940] [--need fighter:air_range=900]
+    facts.py design-plan <TAG> [--roles fighter,cas] [--years 1936,1940] [--need fighter:air_range=900] [--refresh]
                                  plan designs[] by year and the research they need (designer.plan_fragment)
     facts.py air-cover --regions 131,133 (--states 1,2 | --provinces 9,10) [--ranges 550,650,825]
                                  region radius, coverage per range, the range for 90% (aircover.py)
@@ -1392,7 +1392,8 @@ def cmd_design_plan(args):
         k, _, v = kv.partition("=")
         needs.setdefault(role, {})[k] = float(v)
     years = [int(y) for y in (args.years or "1936,1938,1940,1942,1944").split(",")]
-    frag = designer.plan_fragment(cat, args.TAG, set(w.country(args.TAG)["techs"]), years, roles, tech_year, needs)
+    frag = designer.plan_fragment(cat, args.TAG, set(w.country(args.TAG)["techs"]), years, roles, tech_year, needs,
+                                  refresh=args.refresh)
     return emit(args, frag, lambda x: [f"{d['id']}: {d['base']} {d['modules']} when {d.get('when')} xp<={d['xp']}"
                                        f" production {d.get('production')}\n  {d['why']}" for d in x["designs"]]
                 + ["research: " + ", ".join(x["research_needed"]), x["method"]])
@@ -1412,6 +1413,33 @@ def cmd_air_cover(args):
     return emit(args, data, lambda x: [f"region {r['region']}: radius {r['radius_km']} km; coverage "
                                        + " ".join(f"{k}km {v:.0%}" for k, v in r["coverage"].items())
                                        + f"; 90% at {r['range_for_90']} km" for r in x["regions"]] + [x["d"]])
+
+
+def cmd_raids(args):
+    from hoi4facts import raids
+    w = world(args, args.TAG)
+    cool = float(w.define(raids.DEFAULT_COOLDOWN_DEFINE, 365)[0] or 365)
+    rs = raids.Raids(w.game, cool)
+    c = w.country(args.TAG)
+    techs = set(c["techs"]) | set((args.techs or "").split(","))
+    focuses = {f["v"] if isinstance(f, dict) else f for f in c.get("completed_focuses", [])}
+    focuses |= set((args.focuses or "").split(","))
+    inputs = {"prep_time": 1.0}
+    for x in args.input or []:
+        k, _, v = x.partition("=")
+        inputs[k] = float(v)
+    rows = rs.rows(w.ctx_for(args.TAG), techs, focuses, inputs)
+    if args.id:
+        rows = [r for r in rows if r["id"] == args.id]
+    elif not args.all:
+        rows = [{k: r[k] for k in ("id", "category", "command_power", "days_to_prepare", "fire_only_once", "units",
+                                   "equipment", "targets", "starting_points", "needs", "probabilities", "allowed",
+                                   "launchable")} for r in rows]
+    data = {"tag": args.TAG, "inputs": inputs, "raids": rows, "method": raids.METHOD}
+    return emit(args, data, lambda x: [f"{r['id']} ({r['category']}): CP {r['command_power']}, "
+                                       f"{r['days_to_prepare']} days, units {r['units']}, equipment {r['equipment']}, "
+                                       f"targets {r['targets']}; needs {r['needs']}; P {r['probabilities']}"
+                                       for r in x["raids"]] + [x["method"]])
 
 
 def cmd_mio(args):
@@ -1887,11 +1915,19 @@ def parser():
     p.add_argument("--roles", help="comma list of designer roles (default fighter,cas,naval_bomber)")
     p.add_argument("--years", help="comma list of years (default 1936,1938,1940,1942,1944)")
     p.add_argument("--need", action="append", help="role:stat=minimum, e.g. fighter:air_range=900")
+    p.add_argument("--refresh", action="store_true",
+                   help="one row per role with a refresh block: the executor makes each later design as its tech lands")
     p = add("air-cover", cmd_air_cover)
     p.add_argument("--regions", required=True)
     p.add_argument("--states")
     p.add_argument("--provinces")
     p.add_argument("--ranges")
+    p = add("raids", cmd_raids, "TAG")
+    p.add_argument("--id", help="one raid type with every field")
+    p.add_argument("--all", action="store_true", help="every field for every raid")
+    p.add_argument("--techs", help="techs assumed held besides the history's (comma list)")
+    p.add_argument("--focuses", help="focuses assumed completed (comma list)")
+    p.add_argument("--input", action="append", help="success input, e.g. air_superiority=0.6 experience=0.3")
     p = add("mio", cmd_mio, "TAG")
     p.add_argument("--id", help="one organisation with its whole trait tree")
     add("projects", cmd_projects, "TAG")

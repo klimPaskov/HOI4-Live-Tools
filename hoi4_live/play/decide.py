@@ -90,6 +90,7 @@ LANES = [
     ("overdrawn", False, "production"),
     ("equipment", False, "production"),
     ("diplomacy", True, "diplomacy"),
+    ("volunteers", True, "diplomacy"),
     ("faction", True, "diplomacy"),
     ("call_allies", True, "diplomacy"),
     ("incoming", True, "diplomacy"),
