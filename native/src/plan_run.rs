@@ -6308,6 +6308,116 @@ fn command_cap(limit: &Value, plan_max: u64, cfg: &Value) -> u64 {
     }
 }
 
+/// Training rows with `armies` (destination armies: army names or army_layout name hints): their
+/// divisions outside any army (fresh from training) join the listed army with the fewest divisions
+/// that still has room under `max`, by one command per army (hoi4_army_detach without `army`, the
+/// in-process units family), at most 18 a call, one call a tick. The deploy state then decides
+/// nothing about the army, so one row per template serves every army (the owner, 28 Nov 2026:
+/// one training row per deploy state made ~29 lines of one template). Templates from hoi4_supply.
+/// A refusal waits 7 days (`trainroute`) and the gather takes them meanwhile.
+fn route_trainees(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    roster: &Value,
+    max: u64,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let rows: Vec<&Value> = match &plan["training"] {
+        Value::Array(a) => a.iter().collect(),
+        v @ Value::Object(_) => vec![v],
+        _ => return Ok(None),
+    };
+    let dest: Vec<(String, Vec<String>)> = rows
+        .iter()
+        .filter_map(|r| {
+            let names: Vec<String> = list(r, "armies")
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|n| {
+                    state
+                        .layout
+                        .get(n)
+                        .filter(|a| !a.is_empty())
+                        .cloned()
+                        .unwrap_or_else(|| n.to_string())
+                })
+                .collect();
+            (!names.is_empty()).then(|| (text(&r["template"]).to_string(), names))
+        })
+        .collect();
+    let loose: Vec<String> = list(roster, "unassigned")
+        .iter()
+        .filter_map(|d| d.as_str().map(str::to_string))
+        .collect();
+    if dest.is_empty() || loose.is_empty() || state.skipped(now, "trainroute", "all") {
+        return Ok(None);
+    }
+    let supply = tools.call("hoi4_supply", &json!({}))?;
+    let template_of: HashMap<String, String> = list(&supply, "divisions")
+        .iter()
+        .filter_map(|d| {
+            Some((
+                d["id"].as_str()?.to_string(),
+                text(&d["template"]).to_string(),
+            ))
+        })
+        .collect();
+    let size = |army: &str| {
+        list(roster, "armies")
+            .iter()
+            .find(|a| text(&a["army"]) == army)
+            .map(|a| a["division_count"].as_u64().unwrap_or(0))
+    };
+    for (template, armies) in &dest {
+        let ids: Vec<String> = loose
+            .iter()
+            .filter(|d| template_of.get(*d).is_some_and(|t| t == template))
+            .take(18)
+            .cloned()
+            .collect();
+        if ids.is_empty() {
+            continue;
+        }
+        let target = armies
+            .iter()
+            .filter_map(|a| size(a).map(|n| (a, n)))
+            .filter(|(_, n)| *n < max)
+            .min_by_key(|(_, n)| *n);
+        let Some((army, n)) = target else {
+            plan_manage::note(
+                state,
+                "armies",
+                format!("{} new {template} division(s): no listed army stands with room ({}); the gather takes them", ids.len(), armies.join(", ")),
+            );
+            continue;
+        };
+        let room = (max - n) as usize;
+        let ids: Vec<String> = ids.into_iter().take(room.max(1)).collect();
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_army_detach",
+            json!({"divisions": ids, "into": army}),
+            "tr",
+        )?;
+        if !ok {
+            state.skip(now, "trainroute", "all", 7 * DAY);
+            plan_manage::note(
+                state,
+                "armies",
+                format!("new {template} divisions to {army} refused, the gather takes them: {why}"),
+            );
+        }
+        return Ok(Some(format!(
+            "trainees {} {template} -> {army}: {ok} {why}",
+            ids.len()
+        )));
+    }
+    Ok(None)
+}
+
 /// 9. every division in an army of sensible size, generals only for real armies. At war it runs
 ///    right after the war step: the war cannot start before its armies exist (w15: the opening's
 ///    armies came a month late behind research, production and construction ticks).
@@ -6335,6 +6445,10 @@ fn armies_step(
         // (hoi4_army_gather: the alert's select-all, then the army card), never state by state:
         // a large country is not walked. The target is a formation with room (see
         // `gather_target`), else a new army (the split rule below restores the cap).
+        // fresh divisions of a training row with `armies` go to their army by command first
+        if let Some(line) = route_trainees(state, tools, plan, &roster, max, lease, now)? {
+            return Ok(Some(line));
+        }
         let pool = list(&roster, "unassigned").len() as u64;
         if pool == 0 {
             state.done.remove("gatherwait");
@@ -16805,6 +16919,69 @@ mod tests {
         state.skip(now, "armycreate", "66", 2 * DAY);
         let second = tick(&mut state, &Roster, &plan, "l", now).unwrap();
         assert!(matches!(&second, Tick::Acted(s) if s.starts_with("army_split Army 1 16: true")));
+    }
+
+    #[test]
+    fn fresh_divisions_of_a_training_row_join_its_army_with_the_most_room_by_command() {
+        struct Fresh(RefCell<Vec<(String, Value)>>, bool);
+        impl Tools for Fresh {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                match name {
+                    "hoi4_supply" => Ok(json!({"divisions": [
+                        {"id": "d1", "template": "Infanterie-Division"},
+                        {"id": "d2", "template": "Infanterie-Division"},
+                        {"id": "d3", "template": "Panzer-Division"}]})),
+                    "hoi4_army_detach" if self.1 => Ok(json!({"receipt": {"status": "Verified"}})),
+                    "hoi4_army_detach" => Err(Error::new("capability_unavailable", "units off")),
+                    _ => Ok(json!({})),
+                }
+            }
+        }
+        let roster = json!({"unassigned": ["d1", "d2", "d3"], "armies": [
+            {"army": "Armee 1", "division_count": 20},
+            {"army": "Armee 2", "division_count": 12},
+            {"army": "Armee 3", "division_count": 2}]});
+        let plan = json!({"training": [
+            {"template": "Infanterie-Division", "queue": 6, "armies": ["Armee 1", "Armee 2"]},
+            {"template": "Panzer-Division", "queue": 2}]});
+        let tools = Fresh(RefCell::new(vec![]), true);
+        let mut state = State::default();
+        let line = route_trainees(&mut state, &tools, &plan, &roster, 24, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            line.starts_with("trainees 2 Infanterie-Division -> Armee 2: true"),
+            "{line}"
+        );
+        let sent = tools.0.borrow();
+        let detach = sent.iter().find(|(n, _)| n == "hoi4_army_detach").unwrap();
+        assert_eq!(detach.1["divisions"], json!(["d1", "d2"]));
+        assert_eq!(detach.1["into"], json!("Armee 2"));
+        assert!(detach.1.get("army").is_none());
+        drop(sent);
+        // a refusal waits 7 days; the gather takes them meanwhile
+        let off = Fresh(RefCell::new(vec![]), false);
+        let mut state = State::default();
+        route_trainees(&mut state, &off, &plan, &roster, 24, "l", START).unwrap();
+        assert!(
+            route_trainees(&mut state, &off, &plan, &roster, 24, "l", START + DAY)
+                .unwrap()
+                .is_none()
+        );
+        // no row with armies: nothing
+        let plain = json!({"training": {"template": "Infanterie-Division"}});
+        assert!(route_trainees(
+            &mut State::default(),
+            &tools,
+            &plain,
+            &roster,
+            24,
+            "l",
+            START
+        )
+        .unwrap()
+        .is_none());
     }
 
     #[test]

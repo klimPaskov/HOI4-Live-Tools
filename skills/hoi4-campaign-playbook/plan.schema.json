@@ -1231,6 +1231,12 @@
           "type": "integer",
           "minimum": 1
         },
+        "armies": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "description": "destination armies (names or army_layout name hints): the row's divisions outside any army join the listed army with the fewest divisions and room, by command (hoi4_army_detach without army, in-process units family), whatever the deploy state; one row per template serves every army"
+        },
         "deploy_state": {
           "$ref": "#/definitions/state_id"
         },
@@ -8416,6 +8422,12 @@
           "type": "integer",
           "minimum": 1,
           "default": 2
+        },
+        "armies": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "description": "destination armies (names or army_layout name hints): the row's divisions outside any army join the listed army with the fewest divisions and room, by command (hoi4_army_detach without army, in-process units family), whatever the deploy state; one row per template serves every army"
         },
         "deploy_state": {
           "$ref": "#/definitions/state_id"

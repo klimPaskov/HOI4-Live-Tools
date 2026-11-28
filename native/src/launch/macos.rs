@@ -900,7 +900,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_division_disband","description":"Disband own divisions of one army (the division list's delete button; their equipment and manpower go back to the pool). Use it to cut useless divisions that only eat equipment, manpower and supply: tiny starting divisions (2-4 battalions), cavalry or irregulars a strong player would not keep, once the army has enough good divisions. `divisions` are ids as hoi4_armies / hoi4_supply list them; listing every division of the army disbands the whole army in one press. Each division is verified gone. Refused before input when a division is not in that army.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"divisions":{"type":"array","items":{"type":"string","maxLength":32},"minItems":1,"maxItems":24},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","divisions","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_map_mode","description":"Switch the map mode with the game's own F-key shortcut, as a human checks the map: political (F1, default; armies and fronts), naval (F2), air (F3, air regions and superiority), supply (F4), terrain (F5), resistance (F6), compliance (F7), resources (F8), air_raids (F9), factions (F10). A view change only (no game state changes, nothing to read back): switch to political again before giving army orders. Look at a mode when its domain matters: supply before an offensive, resistance and compliance for occupied states, air for superiority, naval for sea lanes.","inputSchema":{"type":"object","properties":{"mode":{"type":"string","enum":["political","naval","air","supply","terrain","resistance","compliance","resources","air_raids","factions"]},"lease_token":{"type":"string"}},"required":["mode","lease_token"],"additionalProperties":false}}),
         daynight::tool(),
-        json!({"name":"hoi4_army_detach","description":"Move chosen divisions out of an army: `divisions` are ids as hoi4_armies / hoi4_supply list them (hoi4_supply shows each division's template, equipment fill, strength and supply, so you can pick weak or strong ones). Without `into` they form one new army; with `into` they join that own army. Uses the game's controls one division at a time (the army's card, the division's row in its list, then the new-army card or a right click on the target's card), each move verified from division membership. Use it to pull weak units (irregulars, cavalry, low equipment) out of a strike army into a rear army, or to send fresh divisions forward. Refused before input when a division is not in the army or the army would be emptied (use hoi4_army_merge).","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"divisions":{"type":"array","items":{"type":"string","maxLength":32},"minItems":1,"maxItems":18},"into":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","divisions","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_detach","description":"Move chosen divisions out of an army: `divisions` are ids as hoi4_armies / hoi4_supply list them (hoi4_supply shows each division's template, equipment fill, strength and supply, so you can pick weak or strong ones). Without `into` they form one new army; with `into` they join that own army. Uses the game's controls one division at a time (the army's card, the division's row in its list, then the new-army card or a right click on the target's card), each move verified from division membership. Use it to pull weak units (irregulars, cavalry, low equipment) out of a strike army into a rear army, or to send fresh divisions forward. Refused before input when a division is not in the army or the army would be emptied (use hoi4_army_merge). Without `army`: the divisions stand outside any army (fresh from training, hoi4_armies unassigned) and join `into` by one command (in-process units family only; refused with capability_unavailable without it, invalid_target for a division inside an army).","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"divisions":{"type":"array","items":{"type":"string","maxLength":32},"minItems":1,"maxItems":18},"into":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["divisions","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_merge","description":"Move every division of army `source` into army `target` with the game's own controls: a left click on the source's card selects exactly its divisions, a right click on the target's card transfers them (the empty source army disappears). Use it to fold many small armies into a few full ones (24 divisions each, one general each). Refused before input when either army is unknown, they are the same, or the merged army would exceed 24 divisions (split first). Verified from division membership.","inputSchema":{"type":"object","properties":{"source":{"type":"string"},"target":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["source","target","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_gather","description":"Put EVERY own division that is outside an army into one army, wherever the divisions stand, with the game's own controls: Shift+click on the unassigned-divisions alert selects all of them (the alert's tooltip), a right click on the army's card assigns them (army), or a click on the new-army card makes one new army of them (no army). No state is opened and the camera does not travel: the cost is the same for 3 divisions or 300. Refused before input with no_unassigned, no_such_army, army_full (the army would pass max, default 24: name another army or leave army out and split afterwards) or gui_target_unavailable (the game shows the alert some days after a division is left outside an army). Verified from division membership.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"max":{"type":"integer","minimum":1,"maximum":1000},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_split","description":"Split the first N divisions (list order, N 1..19) of an own army into a new army: the army's card, the panel's first row, Shift on row N, then the new-army card. Use it to bring an oversized army (more than 24 divisions) under its general's cap. Verified by a new army holding exactly those divisions.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"count":{"type":"integer","minimum":1,"maximum":19},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","count","request_id","lease_token"],"additionalProperties":false}}),
@@ -6430,15 +6430,24 @@ impl MacClock {
                 args,
                 &["army", "divisions", "into", "request_id", "lease_token"],
             )?;
-            let army = string(args, "army")?;
+            // without `army`: divisions outside any army (fresh from training) join `into`, in
+            // process only (the units family; the mouse path selects through an army card)
+            let loose = args.get("army").is_none();
+            let army = if loose { "" } else { string(args, "army")? };
             let into = args.get("into").and_then(Value::as_str);
-            for v in std::iter::once(army).chain(into) {
+            for v in (!loose).then_some(army).into_iter().chain(into) {
                 if v.is_empty() || v.len() > 128 || v.chars().any(char::is_control) {
                     return Err(Error::new("invalid_arguments", "Invalid army name"));
                 }
             }
             if into == Some(army) {
                 return Err(Error::new("invalid_arguments", "into is the same army"));
+            }
+            if loose && into.is_none() {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "without army (divisions outside any army) `into` names the army they join",
+                ));
             }
             let ids: Vec<String> = args
                 .get("divisions")
@@ -6456,6 +6465,12 @@ impl MacClock {
             authority.authorize(token, &epoch)?;
             let mut units_route = inproc::route("units");
             let had_route = units_route.is_some();
+            if loose && !had_route {
+                return Err(Error::new(
+                    "capability_unavailable",
+                    "Divisions outside any army join an army by command only (the units family of the in-process module is not on); hoi4_army_gather takes them through the alert",
+                ));
+            }
             if !actions.receipt_exists(id) && !had_route {
                 self.keys.preflight()?;
             }
@@ -6478,7 +6493,9 @@ impl MacClock {
                 };
                 let now: Vec<Option<String>> = ids.iter().map(|d| army_of(d)).collect();
                 let detail = json!({"army":army,"divisions":ids,"now_in":now});
-                let all_out = now.iter().all(|a| a.as_deref().is_some_and(|a| a != army));
+                let all_out = now
+                    .iter()
+                    .all(|a| a.as_deref().is_some_and(|a| a != army && !a.is_empty()));
                 let same = now.windows(2).all(|w| w[0] == w[1]);
                 let target_ok = moved_to
                     .borrow()
@@ -6486,7 +6503,13 @@ impl MacClock {
                     .is_none_or(|t| now.first().and_then(|a| a.as_deref()) == Some(t));
                 Ok(if all_out && same && target_ok {
                     journal::Outcome::Reached(detail)
-                } else if now.iter().all(|a| a.as_deref() == Some(army)) {
+                } else if now.iter().all(|a| {
+                    if loose {
+                        a.is_none()
+                    } else {
+                        a.as_deref() == Some(army)
+                    }
+                }) {
                     journal::Outcome::Unchanged(detail)
                 } else {
                     journal::Outcome::Diverged(detail)
@@ -6497,7 +6520,26 @@ impl MacClock {
                 authority.authorize(token, &epoch)?;
                 // engineer 75: in process = one command (a new army of these divisions, or Assign into `into`)
                 units_reply = module_in_process(&mut units_route, |ch| {
-                    let divs = ui::read(process, |r, i| armies::detach_targets(r, i, army, &ids))?;
+                    let divs = if loose {
+                        let view = armies::armies(process)?;
+                        let pool: Vec<&str> = view["unassigned"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(Value::as_str)
+                            .collect();
+                        if let Some(d) = ids.iter().find(|d| !pool.contains(&d.as_str())) {
+                            return Err(Error::new(
+                                "invalid_target",
+                                format!(
+                                    "Division {d} is not outside an army (hoi4_armies unassigned)"
+                                ),
+                            ));
+                        }
+                        ui::read(process, |r, i| armies::division_ptrs(r, i, &ids))?
+                    } else {
+                        ui::read(process, |r, i| armies::detach_targets(r, i, army, &ids))?
+                    };
                     Ok(match into {
                         Some(t) => {
                             let g = ui::read(process, |r, i| armies::group_address(r, i, t))?;
