@@ -478,6 +478,13 @@ Passing tests or listing a tool does not mean live play works. Only recorded liv
 runs count, and failures are kept in the record. See the [changelog](CHANGELOG.md)
 for every run.
 
+## A roleplay companion (in development)
+
+A roleplay companion built on this MCP server is in development: an AI that plays
+its own country beside you, with personas, voice, and goals you set in plain words
+("no war with Britain", "navy first"). It uses the same engine and tools as the
+campaigns described here. It is not released yet.
+
 ## Contributing
 
 Bug reports and ideas are welcome in [Issues](https://github.com/klimPaskov/HOI4-Live-Tools/issues).

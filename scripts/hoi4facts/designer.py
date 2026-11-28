@@ -141,6 +141,11 @@ class Catalog:
                                  "allow_types": set(x for blk in get(b, "allow_equipment_type")
                                                     for x in (bare(blk) if isinstance(blk, list) else [blk])),
                                  "resources": numbers(get1(b, "build_cost_resources")),
+                                 # a turret opens slots of its own (allowed_module_categories = { main_armament_slot
+                                 # = { tank_medium_main_armament } }): slot -> categories it adds
+                                 "opens": {n: bare(c) for n, c in (get1(b, "allowed_module_categories") or [])
+                                           if n and isinstance(c, list)}
+                                 if isinstance(get1(b, "allowed_module_categories"), list) else {},
                                  "xp_cost": num(get1(b, "xp_cost"))}
         return out
 
@@ -195,7 +200,11 @@ def evaluate(cat, base, modules, mission=None, bonus=None):
     stats = dict(cat.base_stats(base))
     add, mul, avg = {}, {}, {}
     types = set()
-    slots = {s["slot"]: s for s in cat.slots(base)}
+    slots = {s["slot"]: dict(s, categories=list(s["categories"])) for s in cat.slots(base)}
+    for m in modules.values():  # a chosen turret adds the categories its own slots take
+        for slot, cats in (cat.modules.get(m) or {}).get("opens", {}).items():
+            if slot in slots:
+                slots[slot]["categories"] += [c for c in cats if c not in slots[slot]["categories"]]
     for s in slots.values():
         if s["required"] and not modules.get(s["slot"]) or (s["required"] and modules.get(s["slot"]) == "empty"):
             problems.append(f"required slot {s['slot']} empty")
@@ -233,7 +242,8 @@ def evaluate(cat, base, modules, mission=None, bonus=None):
         if out.get("thrust", 0.0) < out.get("weight", 0.0):
             problems.append(f"thrust {out.get('thrust', 0):g} below weight {out.get('weight', 0):g}")
     btype = cat.equip.get(cat.family(base), {}).get("type")
-    return {"base": base, "modules": dict(modules), "stats": out, "types": sorted(types | ({btype} if btype else set())),
+    btypes = set(bare(btype)) if isinstance(btype, list) else ({btype} if btype else set())  # type = { a b } on duplicates
+    return {"base": base, "modules": dict(modules), "stats": out, "types": sorted(types | btypes),
             "problems": problems}
 
 

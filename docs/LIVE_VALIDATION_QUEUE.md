@@ -1048,6 +1048,18 @@ Stop at once on: a crash, any `unexplained`, a division moving that was not name
 differs from the right click's, a battle that a right click would not open, or a post the game's check refused.
 Pass -> IPC_LIVE_PASSED entry 23 (move) = 1.
 
+## Session S23-WEATHER: the weather evaluator against the game's own weather (read only; about 10 minutes) -- any time
+What it proves: hoi4_weather's estimate agrees with what the game shows, so the operation step's ground gate
+(`operations[].weather_gate`) holds a declaration only for real mud or snow.
+M1 a 1936 save, paused on 1 January: `hoi4_weather {"states":[<a Moscow-area state>,<a Paris-area state>,<a Libyan
+state>]}`: the Russian region reads ground snow medium/high and an attack factor at or below -0.2, Paris none or light,
+Libya clear. Compare with the weather map mode (screenshot): snow where the tool says ground snow.
+M2 the same states with `"date":"1936.4.15"`: the Russian region in mud (mud_chance >= 0.5) and
+bad_ground_clears_in_days > 0; then let the game run to mid-April (or load a save of that date) and check the map mode
+shows mud there.
+M3 `"date":"1936.7.15"`: no region on bad ground.
+Pass: M1-M3 agree with the map mode on snow/mud regions. A mismatch: record the region, the date and the tool's water /
+snow numbers in the notes (the model's drying or melting rate is then off).
 ## Session S21-ARMYHQ: army headquarters, whether the mechanic is in force (read only; about 2 minutes) -- any time
 What it proves: `hoi4_army_hq` reads the install's DLC state and the defines the way the game loads them.
 M1 any save, paused: `hoi4_army_hq {}`. On an install without Thunder at Our Gates (the owner's: 10 DLCs, none of
@@ -1114,3 +1126,17 @@ Stop at once on: any post the game did not refuse while the view greys the butto
 named, an attaché or volunteers to a country not named, a module `unexplained` result.
 Pass: V0, V1, V3, V5, V7 (V2, V4, V6 recorded). Then set LIVE_PASSED in native/src/launch/macos/volunteers.rs and the
 `volunteers` entry of IPC_LIVE_PASSED in inproc/core/ipc.c to 1, with the session's numbers in the comment.
+
+## Session S25-MIOKEY: organisation traits by key (in process, family `mio`; about 5 minutes) -- any time
+What it proves: hoi4_mio_trait `trait` / `traits` resolve the scripts' trait keys to the tree through the module's
+organisations read, and the executor's `mio[].traits` keys reach the game.
+K1 Germany 1936, paused, `HOI4_BACKEND=auto` (mio passed live): `hoi4_mio_trait {"organization":"GER_henschel_organization",
+"list":true}`: write the first five entries' `trait` keys. Then `hoi4_mio_trait {"organization":"GER_henschel_organization",
+"trait":"<the key of an entry with unlockable_now true>"}`: Verified; the tree window shows that trait (by its icon and
+tooltip name) unlocked or queued, the index in the receipt is the entry's index from the listing.
+K2 `{"traits":["<two keys not held>","<one key already queued>"]}`: Verified, the held one counted as reached.
+K3 refusals before input: `{"trait":"GER_mio_trait_nope"}` -> trait_unknown naming Henschel's keys; with
+`HOI4_BACKEND=gui` -> trait_key_unresolved; nothing posted in either case.
+K4 the window's ORDER: hover the tree icon the listing calls index 0 and index 3: their tooltip names match the keys'
+localisation (this settles whether the mouse path's indices equal the module's; record it either way).
+Pass: K1-K3 (K4 recorded). Then the plan's `mio[].traits` may carry keys.

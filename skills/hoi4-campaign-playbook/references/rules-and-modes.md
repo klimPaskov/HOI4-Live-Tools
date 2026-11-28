@@ -120,14 +120,24 @@ switch the first layer that names it decides. The plan lint, the server's guard 
 
 * On the agent's own initiative: volunteer divisions, air volunteers, lend-lease and attaches, wherever the
   game allows them. The multiplayer limits on volunteers and lend-lease below no longer bind.
-* The collaboration-government operation on the Soviet Union is allowed.
+* The collaboration-government operation on the Soviet Union is allowed in single player. His words: "Multiplayer
+  rules always override the fair rules. Collaboration governments are allowed in singleplayer in fair play,
+  however, if some multiplayer game doesn't allow that or player in roleplay said to not do it, then yes, no
+  collaboration government."
 * Paratroop drops are not used by default under FAIR; META may use them, and a roleplay request is honoured.
+* 28 Nov midday: FAIR may use the Eben-Emael raid, propaganda against Soviet war support, and strategic bombing
+  for war support (never refineries).
+* A plan family generated from switches names each rule it depends on in `constraints` (`rule.<name>`, with
+  its source: multiplayer, roleplay, owner, fair); the switches a multiplayer game or a roleplay instruction set
+  go into `_rules` (above), which the guard and `lint_fair.py` read (`fair.collaboration`, `fair.rules`).
 
 ## Axis rules
 
 * Military and docking access between the European Axis and Japan only once the Iran corridor is secured.
-* Sea Lion (invading Great Britain): the European Axis first holds 2 of Gibraltar, Malta and Suez; 1 is
-  enough once Barbarossa has started.
+* Sea Lion (invading Great Britain), the owner's decision of 28 Nov, which replaced the Gibraltar, Malta and
+  Suez rule: "after barbarossa or during barbarossa. USA has to be in the allies. Otherwise capitulating
+  britain would end the allies, if us is not in the faction." So never before the war with the Soviet Union,
+  and only once the USA is in the Allies (`when` holds `at_war_with:SOV` and `at_war_with:USA`).
 * Win condition: the Soviet Union capitulated and no Allied foothold in Europe.
 * Japan and its co-prosperity sphere never join the Axis; no European Axis nation joins the co-prosperity
   sphere.

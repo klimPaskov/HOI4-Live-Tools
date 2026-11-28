@@ -93,7 +93,7 @@
 //!   faction                {"join"?,"create"?:{"name","template"?,"invite"?},"when"?} (plan_affairs.rs)
 //!   intelligence           {"agency","upgrades":[ordered],"operatives"?} agency, next upgrade when none runs
 //!                          (plan_affairs.rs)
-//!   mio                    [{"organisation","traits":[trait_index..],"when"?,"design_team"?,"policy"?}] (plan_affairs.rs)
+//!   mio                    [{"organisation","traits":[trait key|trait_index..],"when"?,"design_team"?,"policy"?}] (plan_affairs.rs)
 //!   trade                  [{"resource","amount","from"?,"when"?}] manual purchases once each (plan_affairs.rs)
 //!   research_bonuses       {"<bonus category or name>":[techs]} or true: an active research bonus puts its
 //!                          techs first in the research step (plan_affairs.rs)

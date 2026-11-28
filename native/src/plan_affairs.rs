@@ -140,9 +140,11 @@
 //!                (rule mio_lines, manage.off "mio_lines"); an empty `traits` list (or "auto") keeps one
 //!                trait queued (rule mio_traits, monthly listing);
 //!                `policy` attaches that policy once (hoi4_mio_policy), then the traits are queued in list
-//!                order, one per action (hoi4_mio_trait). Trait entries carry no text in the game, so a trait
-//!                is its 0-based trait_index as hoi4_mio_trait list:true numbers it (a numeric string is
-//!                read too; another string stops that organisation's traits with a note).
+//!                order, one per action (hoi4_mio_trait). A trait is its key (the scripts' trait token, e.g.
+//!                GER_mio_trait_technical_superiority; hoi4_mio_trait resolves it through the module's
+//!                organisations read, refused trait_key_unresolved without it) or its 0-based trait_index
+//!                as hoi4_mio_trait list:true numbers it (a numeric string is read too; any other string
+//!                stops that organisation's traits with a note).
 //!                trait_already_queued counts as done; trait_unavailable/trait_not_visible leave the
 //!                organisation 14 game days; mio_system_absent leaves the whole key 30 days. No tool reads
 //!                trait points (hoi4_mios state_read:false), and the game's `mio_traits` alert still wakes
@@ -2782,6 +2784,46 @@ fn trait_index(v: &Value) -> Option<u64> {
         .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
 }
 
+/// A plan trait: its 0-based index in the tree, or its key (the scripts' trait token: letters, digits, `_`), which
+/// hoi4_mio_trait resolves through the organisations read. Anything else is not a trait.
+#[derive(Clone, Debug, PartialEq)]
+enum TraitRef {
+    Index(u64),
+    Key(String),
+}
+
+impl TraitRef {
+    fn of(v: &Value) -> Option<TraitRef> {
+        if let Some(i) = trait_index(v) {
+            return Some(TraitRef::Index(i));
+        }
+        let k = v.as_str()?.trim();
+        (!k.is_empty()
+            && k.len() <= 128
+            && k.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_'))
+        .then(|| TraitRef::Key(k.to_string()))
+    }
+    /// The done key of this trait (indices keep their old keys).
+    fn done(&self, org: &str) -> String {
+        match self {
+            TraitRef::Index(i) => format!("mio:{org}:t{i}"),
+            TraitRef::Key(k) => format!("mio:{org}:k{k}"),
+        }
+    }
+    fn arg(&self) -> Value {
+        match self {
+            TraitRef::Index(i) => json!(i),
+            TraitRef::Key(k) => json!(k),
+        }
+    }
+    fn label(&self) -> String {
+        match self {
+            TraitRef::Index(i) => i.to_string(),
+            TraitRef::Key(k) => k.clone(),
+        }
+    }
+}
+
 /// The skip after a refused MIO order. `kind` keeps the design-team, policy and trait orders of one
 /// organisation apart: a refused policy no longer holds its traits (sk2, 10 Nov: 33 refused policies
 /// and not one trait queued).
@@ -2808,6 +2850,10 @@ fn mio_refused(state: &mut State, now: GameHour, kind: &str, org: &str, why: &st
         | "policy_not_offered"
         | "trait_unavailable"
         | "trait_not_visible" => 14,
+        "trait_key_unresolved" => {
+            note(state, "mio", format!("{org}: {why}"));
+            14
+        }
         _ => 3,
     };
     state.skip(now, kind, org, days * DAY);
@@ -2855,21 +2901,21 @@ fn mio_plan(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         let want_policy = !policy.is_empty()
             && !state.done.contains_key(&policy_key)
             && !state.skipped(now, "miopol", &org);
-        let mut next: Option<u64> = None;
+        let mut next: Option<TraitRef> = None;
         // with manage.bulk mio_queue_many: every listed trait still to queue, in ONE visit
-        let mut rest: Vec<u64> = Vec::new();
+        let mut rest: Vec<TraitRef> = Vec::new();
         let mut bad: Option<String> = None;
         for t in list(entry, "traits") {
-            match trait_index(t) {
-                Some(i) if state.done.contains_key(&format!("mio:{org}:t{i}")) => {}
-                Some(i) if next.is_some() => {
+            match TraitRef::of(t) {
+                Some(r) if state.done.contains_key(&r.done(&org)) => {}
+                Some(r) if next.is_some() => {
                     if rest.len() < 16 {
-                        rest.push(i);
+                        rest.push(r);
                     }
                 }
-                Some(i) => {
-                    next = Some(i);
-                    rest.push(i);
+                Some(r) => {
+                    next = Some(r.clone());
+                    rest.push(r);
                     if !state.bulk_on("mio_queue_many") {
                         break;
                     }
@@ -2882,7 +2928,7 @@ fn mio_plan(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         }
         if let Some(b) = &bad {
             waits.push(format!(
-                "{org}: trait {b} is not a trait_index (hoi4_mio_trait list:true numbers them)"
+                "{org}: trait {b} is neither a trait key nor a trait_index (hoi4_mio_trait list:true lists both)"
             ));
         }
         let next = next.filter(|_| !state.skipped(now, "mio", &org));
@@ -2930,28 +2976,38 @@ fn mio_plan(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             return Ok(Some(format!("mio {org} policy {policy}: {ok} {why}")));
         }
         if next.is_some() && rest.len() > 1 {
-            args["trait_indices"] = json!(rest);
+            let keys = rest.iter().any(|r| matches!(r, TraitRef::Key(_)));
+            let labels: Vec<String> = rest.iter().map(TraitRef::label).collect();
+            if keys {
+                args["traits"] = Value::Array(rest.iter().map(TraitRef::arg).collect());
+            } else {
+                args["trait_indices"] = Value::Array(rest.iter().map(TraitRef::arg).collect());
+            }
             let (ok, why) = state.act(tools, run.lease, "hoi4_mio_trait", args, "mi")?;
             if ok {
-                for i in &rest {
-                    state.done.insert(format!("mio:{org}:t{i}"), now);
+                for r in &rest {
+                    state.done.insert(r.done(&org), now);
                 }
             } else {
                 mio_refused(state, now, "mio", &org, &why);
             }
             return Ok(Some(format!(
-                "mio {org} traits {rest:?} in one visit: {ok} {why}"
+                "mio {org} traits [{}] in one visit: {ok} {why}",
+                labels.join(", ")
             )));
         }
-        if let Some(index) = next {
-            args["trait_index"] = json!(index);
+        if let Some(r) = next {
+            match &r {
+                TraitRef::Index(i) => args["trait_index"] = json!(i),
+                TraitRef::Key(k) => args["trait"] = json!(k),
+            }
             let (ok, why) = state.act(tools, run.lease, "hoi4_mio_trait", args, "mi")?;
             if ok || code(&why) == "trait_already_queued" {
-                state.done.insert(format!("mio:{org}:t{index}"), now);
+                state.done.insert(r.done(&org), now);
             } else {
                 mio_refused(state, now, "mio", &org, &why);
             }
-            return Ok(Some(format!("mio {org} trait {index}: {ok} {why}")));
+            return Ok(Some(format!("mio {org} trait {}: {ok} {why}", r.label())));
         }
     }
     if !waits.is_empty() {
@@ -5504,7 +5560,7 @@ mod tests {
     fn mio_traits_queue_in_order_once_and_a_refused_one_waits() {
         let tools = fake(vec![]);
         let plan = json!({"mio": [{"organisation": "ITA_ansaldo_organization",
-            "traits": [3, "5", "armor_focus"], "design_team": true, "slot": 1}]});
+            "traits": [3, "5", "armor_focus", "best trait"], "design_team": true, "slot": 1}]});
         let mut state = State::default();
         // the politics view's design-team slot only browses: settled without input
         let out = step(&mut state, &tools, &plan, "l", START + 1).unwrap();
@@ -5525,17 +5581,66 @@ mod tests {
         let out = step(&mut state, &tools, &plan, "l", START + 15 * DAY).unwrap();
         assert!(out.unwrap().contains("trait 5: false trait_already_queued"));
         assert!(state.done.contains_key("mio:ITA_ansaldo_organization:t5"));
-        // the text trait stops the list with a note; nothing more is sent, also after a restart
+        // a trait key goes as `trait` (the tool resolves it through the organisations read), after a restart too
         let mut again = restarted(&state, START + 16 * DAY);
+        tools.accept("hoi4_mio_trait");
+        let out = step(&mut again, &tools, &plan, "l", START + 16 * DAY).unwrap();
         assert_eq!(
-            step(&mut again, &tools, &plan, "l", START + 16 * DAY).unwrap(),
+            out.as_deref(),
+            Some("mio ITA_ansaldo_organization trait armor_focus: true Verified")
+        );
+        assert!(again
+            .done
+            .contains_key("mio:ITA_ansaldo_organization:karmor_focus"));
+        // a text that is no key stops the list with a note; nothing more is sent
+        assert_eq!(
+            step(&mut again, &tools, &plan, "l", START + 17 * DAY).unwrap(),
             None
         );
-        assert!(again.affairs.notes["mio"].contains("armor_focus"));
+        assert!(again.affairs.notes["mio"].contains("best trait"));
         let sent = actions(&tools);
-        assert_eq!(sent.len(), 3);
+        assert_eq!(sent.len(), 4);
         assert_eq!(sent[0].1["trait_index"], 3);
         assert_eq!(sent[0].1["slot"], 1);
+        assert_eq!(sent[3].1["trait"], "armor_focus");
+        assert!(sent[3].1.get("trait_index").is_none());
+    }
+
+    #[test]
+    fn trait_keys_go_in_one_visit_with_the_bulk_path_and_an_unresolved_key_waits_with_a_note() {
+        let tools = fake(vec![]);
+        let plan = json!({"manage": {"bulk": ["mio_queue_many"]},
+            "mio": [{"organisation": "GER_henschel_organization",
+                     "traits": ["GER_mio_trait_technical_superiority", 5]}]});
+        let mut state = State {
+            bulk: super::super::bulk_paths(&plan),
+            ..State::default()
+        };
+        tools.refuse("hoi4_mio_trait", "trait_key_unresolved");
+        let out = step(&mut state, &tools, &plan, "l", START + 1).unwrap();
+        assert!(out.unwrap().contains("false trait_key_unresolved"));
+        assert!(state.affairs.notes["mio"].contains("trait_key_unresolved"));
+        // the organisation waits 14 days: nothing is sent again before
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 13 * DAY).unwrap(),
+            None
+        );
+        tools.accept("hoi4_mio_trait");
+        let out = step(&mut state, &tools, &plan, "l", START + 15 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("mio GER_henschel_organization traits [GER_mio_trait_technical_superiority, 5] in one visit: true Verified")
+        );
+        assert!(state
+            .done
+            .contains_key("mio:GER_henschel_organization:kGER_mio_trait_technical_superiority"));
+        assert!(state.done.contains_key("mio:GER_henschel_organization:t5"));
+        let sent = actions(&tools);
+        assert_eq!(
+            sent.last().unwrap().1["traits"],
+            json!(["GER_mio_trait_technical_superiority", 5])
+        );
+        assert!(sent.last().unwrap().1.get("trait_indices").is_none());
     }
 
     #[test]
