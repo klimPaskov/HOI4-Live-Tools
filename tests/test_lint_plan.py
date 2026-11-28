@@ -78,7 +78,7 @@ FORCE_RULES = {"force.required", "force.breakthrough", "force.single_template", 
               "force.unused_line", "force.template_late", "force.readiness", "force.anti_tank",
               "force.anti_air", "force.budget", "force.air_support", "force.air_none", "force.air_use",
               "force.air_lost", "force.air_deploy", "force.air_losses", "force.air_bases", "force.air_research",
-              "force.air_design", "force.air_doctrine", "force.air_command", "force.air_defence", "force.air_fuel",
+              "force.air_design", "force.air_design_blind", "force.air_doctrine", "force.air_command", "force.air_defence", "force.air_fuel",
               "force.air_resources"}
 # the navy as an arm and the dominance standard (lint_force_navy.py, test_force_navy, test_force_decisive)
 FORCE_RULES |= {"force.bombers", "force.design_cost", "force.decisive", "force.sea_required", "force.sea_control",

@@ -1,0 +1,7 @@
+{
+  "format": 1,
+  "description": "What the files cannot tell: the menu title is drawn as an image, the navy panel title, the dialog button.",
+  "main_menu": {"anchors": ["Chronicle of Ages"], "new_game": "Open a Chronicle"},
+  "panels": {"navy_overview": "Armada"},
+  "confirm": ["So be it"]
+}

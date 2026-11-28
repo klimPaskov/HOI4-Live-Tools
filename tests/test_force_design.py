@@ -245,6 +245,15 @@ class Germany(unittest.TestCase):
         self.assertFalse(self.rules(g, "force.air_use") and
                          any("air_superiority by then" in x["message"] for x in self.rules(g, "force.air_use")))
 
+    def test_blind_plane_design(self):
+        plan = germany_at_war()
+        plan["designs"] = [
+            {"id": "d_blind", "kind": "plane", "base": "small_plane_airframe_2", "name": "Blind"},
+            {"id": "d_seen", "kind": "plane", "base": "small_plane_airframe_2", "name": "Seen",
+             "modules": {"engine_type_slot": "engine_3_1x", "fixed_main_weapon_slot": "heavy_mg_4x"}}]
+        blind = self.rules(lint_plan.lint(plan, self.game)["findings"], "force.air_design_blind", "warning")
+        self.assertEqual([x["where"] for x in blind], ["designs[0]"], blind)
+
     def test_unit_cost_counts_the_modules(self):
         cost, how = force.unit_cost(self.lt, "small_plane_airframe_1")
         row = lint_plan.derive.equipment_rows(self.game)["small_plane_airframe_1"]["cost"]

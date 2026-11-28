@@ -9,12 +9,14 @@ reading the game compare.
 | System | Game version | Build id | Native runtime (memory) | Python runtime (screen) |
 |---|---|---|---|---|
 | macOS | 1.19.4.1 (checksum f584) | Mach-O UUID `DFA875A5-25BA-35E0-9736-627F8A5C4396` | supported (the canonical build) | any version, limited |
-| Linux | 1.19.4.1 | GNU build ID `2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082` | supported (generated table) | not available |
+| Linux | 1.19.4.1 | GNU build ID `2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082` | no longer accepted (its table moved to 1.20.0.0) | not available |
 | Windows | any | | not yet (see [Windows](#windows)) | supported, last run on 1.19.4.2 |
 | Windows | 1.20.0.0 (checksum 0c4f) | CodeView `3A4878DC2F3A481EA5375E5943C5541C1` | vtables only (164 of 168); no attachment yet | supported |
 | macOS | 1.20.0.0 (checksum 0c4f) | Mach-O UUID `ED135FE5-CDA8-38E8-8835-3F7381B79974` | its own runtime binary, generated from the migration map ([below](#macos-120-a-generated-runtime-per-build)); live self-check passed 24 Nov 2026 | |
 | macOS | 1.20.1.0 (checksum 724a) | Mach-O UUID `B8BF4554-DC8D-3381-B277-9F4E6230CBA5` | its own runtime binary, generated from the 1.20.0.0 map: the same code in place (`game_migrate.py same-code`, [below](#a-rebuild-with-the-code-in-place)); live self-check passed 27 Nov 2026 (reads, input, save, in-process module); the current build | |
-| Linux | 1.20.0.0 (checksum 0c4f) | GNU build ID `71806afa707a46fb72f0738a719c3f1c3f5e2e42` | table generated, not yet proven live or used by the runtime | not available |
+| Linux | 1.20.0.0 (checksum 0c4f) | GNU build ID `71806afa707a46fb72f0738a719c3f1c3f5e2e42` | no longer accepted; its table (generated and moved from 1.19.4.1) was checked live on 24 Nov 2026 and moved to 1.20.1.0 | not available |
+| Linux | 1.20.1.0 (checksum 724a) | GNU build ID `8e7ff8b3de4402d28ada7f7c976e7464e1fbe458` | supported: the generated table joined with the 1.20.0.0 table moved by matched code (every image address unchanged); the current build | not available |
+| Windows | 1.20.1.0 (checksum 724a) | CodeView `BF781FCA70344BAC96568ED624D0FAE81` | vtables only (164 of 179), at the same addresses as 1.20.0.0; core game and army layouts read live on 1.20.0.0, not yet re-checked; no release attachment | supported |
 
 `hoi4-live-native --supported-builds` prints the same list as JSON.
 
