@@ -30,6 +30,10 @@ class Fake(strategize.Runner):
             return 0, "built"
         if "pack.py" in joined:
             return 0, "{}"
+        if "computed.py" in joined:
+            with open(os.path.join(self.run_dir, "computed.md"), "w") as f:
+                f.write("# Computed decisions\n")
+            return 0, ""
         if "validate_plan.py" in joined:
             if self.validate_fails:
                 self.validate_fails -= 1
