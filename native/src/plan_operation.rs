@@ -7410,15 +7410,55 @@ fn stuck_push_step(
     )?))
 }
 
+/// The supply nodes that feed own province `p` in a `hoi4_supply` read, the largest flow first:
+/// (node province, the node's railway level). Pure.
+fn feeders(read: &Value, p: i64) -> Vec<(i64, i64)> {
+    let rail: HashMap<i64, i64> = list(read, "supply_nodes")
+        .iter()
+        .filter_map(|n| {
+            Some((
+                n["province_id"].as_i64()?,
+                n["railway_level"].as_i64().unwrap_or(0),
+            ))
+        })
+        .collect();
+    let Some(row) = list(read, "provinces")
+        .iter()
+        .find(|r| r["province_id"].as_i64() == Some(p))
+    else {
+        return Vec::new();
+    };
+    let mut flows: Vec<(f64, i64)> = list(row, "flows")
+        .iter()
+        .filter_map(|f| {
+            Some((
+                f["flow"].as_f64().unwrap_or(0.0),
+                f["node_province"].as_i64()?,
+            ))
+        })
+        .collect();
+    flows.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+    let mut out: Vec<(i64, i64)> = Vec::new();
+    for (_, q) in flows {
+        if !out.iter().any(|(x, _)| *x == q) {
+            out.push((q, rail.get(&q).copied().unwrap_or(0)));
+        }
+    }
+    out
+}
+
 /// SUPPLY BEFORE THE ATTACK (`supply.prepare`, on unless `false`): once a game day while the
-/// operation prepares, the provinces where its attackers' divisions stand are read: the most
-/// starved one with no railway gets a railway from the nearest node the network feeds
-/// (`hoi4_railway_build` to_nearest_node, from_nearest_node; each province once in 30 days), so
-/// the line is fed before the declaration, not after the advance has outrun it; the stacks over
-/// their supply are in the note (the capacity spread takes them down; the trucks come from the
-/// logistics hubs rule, which reads the truck stock first). o96a (28 Nov 2026): 26 divisions in the
-/// Ardennes forest province 3488 with no railway on supply 1.7 against 21.3 from W+10; 41-49 of
-/// 68 divisions under half supply.
+/// operation prepares, the provinces where its attackers' divisions stand are read. Supply reaches
+/// a province from the supply nodes (hubs, ports, the capital) that feed it, and a node carries
+/// what its railway brings: for the most starved province whose feeding node has no railway, that
+/// node gets one from the nearest node the network feeds (`hoi4_railway_build` to_province = the
+/// node, from_nearest_node; each node once in 30 days), so the line is fed before the declaration,
+/// not after the advance has outrun it. A province fed by railed nodes only is short by its
+/// stack or by the hub's reach: the note says so (the capacity spread takes the stack down; the
+/// hubs rule brings trucks after reading the stock). o96a (28 Nov 2026): 26 divisions in the
+/// Ardennes forest province 3488 on supply 1.7 against 21.3; w96c (28 Nov): a railway to the
+/// starved province's NEAREST node (to_nearest_node) chose node 3458, already the network's own,
+/// as both ends: railway_not_queued.
 #[allow(clippy::too_many_arguments)]
 fn prepare_supply(
     state: &mut State,
@@ -7453,10 +7493,19 @@ fn prepare_supply(
     let shown: Vec<String> = starved
         .iter()
         .take(4)
-        .map(|(p, s, n, r, rail)| {
+        .map(|(p, s, n, r, _)| {
+            let fed: Vec<String> = feeders(&read, *p)
+                .iter()
+                .map(|(q, rail)| format!("node {q} railway {rail}"))
+                .collect();
             format!(
-                "{p} (state {s}): {n} divisions at {:.0}% of their need, railway {rail}",
-                r * 100.0
+                "{p} (state {s}): {n} divisions at {:.0}% of their need, fed by {}",
+                r * 100.0,
+                if fed.is_empty() {
+                    "no node".to_string()
+                } else {
+                    fed.join(", ")
+                }
             )
         })
         .collect();
@@ -7467,28 +7516,33 @@ fn prepare_supply(
             shown.join("; ")
         ),
     );
-    let due = starved.iter().find(|(p, _, _, _, rail)| {
-        *rail == 0
-            && state
-                .done
-                .get(&key(id, &format!("prail:{p}")))
-                .is_none_or(|t| now.saturating_sub(*t) >= 30 * DAY)
+    let recent = |state: &State, q: i64| {
+        state
+            .done
+            .get(&key(id, &format!("prail:{q}")))
+            .is_some_and(|t| now.saturating_sub(*t) < 30 * DAY)
+    };
+    let due = starved.iter().find_map(|(p, s, n, r, _)| {
+        feeders(&read, *p)
+            .into_iter()
+            .find(|(q, rail)| *rail == 0 && !recent(state, *q))
+            .map(|(q, _)| (*p, *s, *n, *r, q))
     });
-    let Some((p, s, n, r, _)) = due.copied() else {
+    let Some((p, s, n, r, q)) = due else {
         return Ok(None);
     };
-    state.done.insert(key(id, &format!("prail:{p}")), now);
+    state.done.insert(key(id, &format!("prail:{q}")), now);
     Ok(Some(order(
         state,
         tools,
         lease,
         id,
         &format!(
-            "supply before the attack: railway to province {p} (state {s}: {n} divisions at {:.0}% of their need, no railway)",
+            "supply before the attack: railway to the supply node in province {q}, which feeds province {p} (state {s}: {n} divisions at {:.0}% of their need)",
             r * 100.0
         ),
         "hoi4_railway_build",
-        json!({"to_province": p, "to_state": s, "to_nearest_node": true, "from_nearest_node": true}),
+        json!({"to_province": q, "from_nearest_node": true}),
     )?))
 }
 

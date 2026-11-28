@@ -2822,7 +2822,7 @@
               },
               "prepare": {
                 "type": "boolean",
-                "description": "default true: while the operation prepares, the most starved start-line province of its attackers with no railway gets a railway from the nearest fed node (once a game day, each province once in 30 days)"
+                "description": "default true: while the operation prepares, the supply node with no railway that feeds the most starved start-line province of its attackers gets a railway from the nearest fed node (once a game day, each node once in 30 days)"
               },
               "railways": {
                 "x-owner": "text",

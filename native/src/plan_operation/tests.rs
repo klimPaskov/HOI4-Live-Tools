@@ -5109,10 +5109,11 @@ fn the_armour_leaves_a_rough_ground_battle_s_reserve_and_goes_where_its_ground_i
 // SUPPLY BEFORE THE ATTACK (engineer 99, after o96a)
 
 #[test]
-fn before_the_attack_the_most_starved_start_province_without_a_railway_gets_one() {
+fn before_the_attack_the_unrailed_node_feeding_the_most_starved_start_province_gets_a_railway() {
     let game = Game::new();
-    // o96a W+10: 26 divisions in the Ardennes forest province 3488 (no railway) on 1.66 against
-    // 21.3; 8 in 11562 (railway 2) on 2.0 against 5.0; 6 in Rheinland 3444 with headroom
+    // o96a W+10: 26 divisions in the Ardennes forest province 3488 on 1.66 against 21.3, fed by a
+    // hub in 3500 with no railway; 8 in 11562 on 2.0 against 5.0, fed by the railed node 11500; 6
+    // in Rheinland 3444 with headroom
     let ids = |prefix: &str, n: usize| -> Vec<Value> {
         (0..n).map(|i| json!(format!("{prefix}{i}"))).collect()
     };
@@ -5122,11 +5123,17 @@ fn before_the_attack_the_most_starved_start_province_without_a_railway_gets_one(
             divisions.push(json!({"id": format!("{prefix}{i}"), "army": "Mitte"}));
         }
     }
-    *game.supply.borrow_mut() = Some(json!({"divisions": divisions, "provinces": [
+    *game.supply.borrow_mut() = Some(json!({"divisions": divisions,
+        "supply_nodes": [{"node": 1, "kind": "hub", "province_id": 3500, "railway_level": 0},
+                         {"node": 2, "kind": "hub", "province_id": 11500, "railway_level": 2}],
+        "provinces": [
         {"province_id": 11562, "state_id": 35, "divisions": 8, "division_ids": ids("b", 8),
-         "supply": 2.03, "demand": 4.98, "railway_level": 2},
+         "supply": 2.03, "demand": 4.98, "railway_level": 2,
+         "flows": [{"node": 2, "flow": 2.0, "node_province": 11500}]},
         {"province_id": 3488, "state_id": 980, "divisions": 26, "division_ids": ids("a", 26),
-         "supply": 1.66, "demand": 21.3, "railway_level": 0},
+         "supply": 1.66, "demand": 21.3, "railway_level": 0,
+         "flows": [{"node": 2, "flow": 0.2, "node_province": 11500},
+                   {"node": 1, "flow": 1.4, "node_province": 3500}]},
         {"province_id": 3444, "state_id": 51, "divisions": 6, "division_ids": ids("c", 6),
          "supply": 4.57, "demand": 1.75, "railway_level": 0}]}));
     let u = unit("Mitte".into(), Role::Line, &Value::Null, &Value::Null);
@@ -5137,16 +5144,22 @@ fn before_the_attack_the_most_starved_start_province_without_a_railway_gets_one(
     let line = prepare_supply(&mut state, &game, "op", &op, &units, &roster, "l", START)
         .unwrap()
         .expect("a railway");
-    assert!(line.contains("railway to province 3488"), "{line}");
+    assert!(
+        line.contains("railway to the supply node in province 3500, which feeds province 3488"),
+        "{line}"
+    );
     let rail = game
         .orders()
         .into_iter()
         .find(|(n, _)| n == "hoi4_railway_build")
         .unwrap();
-    assert_eq!(rail.1["to_province"], json!(3488));
-    assert_eq!(rail.1["to_nearest_node"], json!(true));
-    assert!(state.op_notes["op:supply_prepare"].contains("11562 (state 35): 8 divisions"));
-    // once a day; the same province not again for 30 days, a province with a railway never
+    assert_eq!(rail.1["to_province"], json!(3500));
+    assert_eq!(rail.1["from_nearest_node"], json!(true));
+    assert!(rail.1.get("to_nearest_node").is_none());
+    let note = &state.op_notes["op:supply_prepare"];
+    assert!(note.contains("3488 (state 980): 26 divisions at 8% of their need, fed by node 3500 railway 0, node 11500 railway 2"), "{note}");
+    assert!(note.contains("11562 (state 35): 8 divisions"));
+    // once a day; the same node not again for 30 days; a province fed by railed nodes only never
     assert!(prepare_supply(
         &mut state,
         &game,
