@@ -1381,3 +1381,16 @@ Unchanged, never "Diverged unverified"); the mouse path still fails on 1.20.1 (t
 report the error code; the in-process route (CLearnTraitCommand) is not built.
 R7 idle table: a failing focus start counts in the focus row (tool faults map to the sink of their tool).
 Pass: R1-R5 and R7 with no class repeated more than once; R6 reported.
+
+## Session S29-SWAPS: doctrine replace by command, the research juggle, projects on idle facilities (about 30 game days) -- any time
+Build: e123 (tools 123). A save with a grand doctrine already chosen (Germany: Mobile Warfare from history) and enough army XP.
+D1 doctrine replace (family `doctrine` on): hoi4_doctrine_adopt {doctrine: grand_battleplan, replace: true}. Expect Verified
+in 1-2 s, the land folder's grand doctrine GBP in hoi4_doctrines, army XP down by the game's own price; record the
+mastery left on the old tracks. With the family off, the same call is refused grand_doctrine_set and nothing is posted.
+D2 the same call again: already_adopted.
+J1 research juggle: plan research_waits [{tech: <a tech that opens in a few days>, slot: <an idle slot>, fill: <a startable
+tech>}]. Expect the filler started in that slot; when the awaited tech opens, one hoi4_research_start with replace:true
+into that slot; the filler's progress is still shown when it resumes later (the game keeps it).
+P1 hoi4_special_projects on an idle facility that once ran a project: project none, `stopped` true on that project;
+hoi4_special_project_assign of an available project: Verified (rerun S19 P1-P5).
+Pass: D1, D2, J1, P1.
