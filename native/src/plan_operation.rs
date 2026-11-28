@@ -8647,9 +8647,13 @@ fn capacity_turn(
         .call("hoi4_armies", &json!({"threat": false}))
         .unwrap_or(Value::Null);
     let (ours, _) = unit_divisions(&read_cap.read, &roster, u, &HashMap::new());
-    // the battles' reserves beyond their engaged first, then the front provinces standing over
-    // what their battles take (w96a W+1: 10 divisions in 9522 for 4, 9 in 11470 for 2)
-    let mut piles = capacity::piles(&battles, &ours);
+    // a front facing no enemy province first: its divisions fight nowhere (p101a: 22 divisions
+    // on four such fronts all through the war on Poland); then the battles' reserves beyond
+    // their engaged, then the front provinces standing over what their battles take (w96a W+1:
+    // 10 divisions in 9522 for 4, 9 in 11470 for 2)
+    let mut piles =
+        capacity::dead_fronts(&read_cap.read, rooms, &|p| root_of.get(&p).copied(), &ours);
+    piles.extend(capacity::piles(&battles, &ours));
     piles.extend(capacity::overstacked(&read_cap.read, &read_cap.caps, &ours));
     // the breadth of the attack: enemy provinces in reach, attacked, attacked from too few sides
     let (reach, attacked, narrow) =
