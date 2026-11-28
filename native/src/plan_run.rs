@@ -9819,6 +9819,21 @@ fn extras_step(
                             names.join(", ")
                         ),
                     );
+                } else {
+                    // the lane says what it waits for (g115a, 28 Nov 2026: 125 days without a
+                    // doctrine action or a note while army experience went 0 -> 5)
+                    plan_manage::note(
+                        state,
+                        "doctrines",
+                        format!(
+                            "{doctrine}: waits for {cost:.0} {kind} experience ({xp:.0} held{})",
+                            if price.is_none() {
+                                "; price not read, the game's Unlock decides"
+                            } else {
+                                ""
+                            }
+                        ),
+                    );
                 }
                 break;
             }
