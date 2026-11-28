@@ -14186,6 +14186,16 @@ pub fn run(
         .take(8)
         .map(|(k, n, ms)| format!("{k} x{n} {ms}"))
         .collect::<Vec<_>>());
+    // the rule set in force where it differs from the FAIR defaults (`_rules`: multiplayer >
+    // roleplay > FAIR; the guard applies it to every action), so the player reads which rules hold
+    if plan["_rules"].is_object() {
+        let changed: Vec<String> = crate::fair_guard::switches(&plan)
+            .into_iter()
+            .filter(|(_, (_, layer))| *layer != "fair")
+            .map(|(k, (on, layer))| format!("{k} {} ({layer})", if on { "on" } else { "off" }))
+            .collect();
+        result["rules"] = json!(changed);
+    }
     if let Some(digest) = construction {
         result["construction"] = json!(digest);
     }

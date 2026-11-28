@@ -11,6 +11,15 @@
 //! side rules use the plan's own tag (`_validator.tag`, else `_meta.tag`); without one they are
 //! not checked.
 //!
+//! RULE SETS (the owner, 28 Nov 2026: "a multiplayer game's rules > a roleplay instruction > the FAIR
+//! defaults"): `_rules` {"multiplayer": {switch: bool}, "roleplay": {switch: bool}} in the plan; per
+//! switch the multiplayer value wins over the roleplay value, which wins over the FAIR default
+//! (`FAIR_DEFAULTS`). A switch named after a guarded rule (naval_mines, access, factions, timing,
+//! space_marines, paratroopers, submarines) set true lets that rule's actions through; the
+//! allowances (collaboration, volunteers, air_volunteers, lend_lease, attaches, eben_emael_raid,
+//! propaganda, strategic_bombing_war_support: on; paradrops, refinery_bombing: off)
+//! are read by the lanes and tools that own them through `Run::allows`.
+//!
 //! A refusal is the error `fair_rule_refused` whose message starts with the rule id
 //! ("fair.naval_mines: ..."), names what was refused and ends with the rule in plain words.
 //!
@@ -110,6 +119,51 @@ pub struct Run {
     pub exceptions: BTreeMap<String, String>,
     /// The plan creates (leads) a faction (`faction.create`).
     pub leads_faction: bool,
+    /// `_rules`: switch -> (allowed, the layer that set it: multiplayer, roleplay or fair).
+    pub switches: BTreeMap<String, (bool, &'static str)>,
+}
+
+/// The FAIR defaults of every switch (true = allowed). The guarded rules are off (refused); the
+/// owner's allowances of 28 Nov are on; paratroop drops are off by default under FAIR.
+pub const FAIR_DEFAULTS: &[(&str, bool)] = &[
+    ("naval_mines", false),
+    ("access", false),
+    ("factions", false),
+    ("timing", false),
+    ("space_marines", false),
+    ("paratroopers", false),
+    ("submarines", false),
+    ("paradrops", false),
+    ("collaboration", true),
+    ("volunteers", true),
+    ("air_volunteers", true),
+    ("lend_lease", true),
+    ("attaches", true),
+    // the owner, 28 Nov midday: "FAIR MAY USE: the Eben-Emael raid; propaganda against Soviet war
+    // support; strategic bombing for war support (not refineries)"
+    ("eben_emael_raid", true),
+    ("propaganda", true),
+    ("strategic_bombing_war_support", true),
+    ("refinery_bombing", false),
+];
+
+/// The switches of a plan's `_rules`, layered multiplayer > roleplay > FAIR defaults; a key the
+/// defaults do not know is kept (a host's own rule for a lane that reads it).
+pub fn switches(plan: &Value) -> BTreeMap<String, (bool, &'static str)> {
+    let mut out: BTreeMap<String, (bool, &'static str)> = FAIR_DEFAULTS
+        .iter()
+        .map(|(k, v)| (k.to_string(), (*v, "fair")))
+        .collect();
+    for layer in ["roleplay", "multiplayer"] {
+        if let Some(o) = plan["_rules"][layer].as_object() {
+            for (k, v) in o {
+                if let Some(b) = v.as_bool() {
+                    out.insert(k.trim().to_ascii_lowercase(), (b, layer));
+                }
+            }
+        }
+    }
+    out
 }
 
 impl Run {
@@ -117,6 +171,7 @@ impl Run {
     pub fn default_fair() -> Self {
         Self {
             fair: true,
+            switches: switches(&Value::Null),
             ..Self::default()
         }
     }
@@ -151,7 +206,22 @@ impl Run {
             tag,
             exceptions,
             leads_faction: plan["faction"]["create"].is_object(),
+            switches: switches(plan),
         }
+    }
+    /// Whether a switch allows its actions in this run: META allows everything; otherwise the
+    /// layered value, else the FAIR default, else allowed (an unknown switch guards nothing).
+    pub fn allows(&self, switch: &str) -> bool {
+        if !self.fair {
+            return true;
+        }
+        if let Some((b, _)) = self.switches.get(switch) {
+            return *b;
+        }
+        FAIR_DEFAULTS
+            .iter()
+            .find(|(k, _)| *k == switch)
+            .is_none_or(|(_, v)| *v)
     }
     fn me(&self) -> &str {
         self.tag.as_deref().unwrap_or("")
@@ -265,11 +335,17 @@ pub fn check(name: &str, args: &Value, run: &Run, facts: Option<&Facts>) -> Resu
     if run.exceptions.contains_key(rule) {
         return Ok(());
     }
+    // a rule set (multiplayer, then roleplay) that switches this rule on
+    let switch = rule.trim_start_matches("fair.");
+    if run.switches.get(switch).is_some_and(|(b, _)| *b) {
+        return Ok(());
+    }
     Err(Error::new(
         "fair_rule_refused",
         format!(
-            "{rule}: {name} refused before any input: {what}. FAIR rule: {}. A host-approved exception goes in the plan as _fair.exceptions {{\"{rule}\": \"<reason>\"}}; META mode lifts it",
-            rule_text(rule)
+            "{rule}: {name} refused before any input: {what}. FAIR rule: {}. A host-approved exception goes in the plan as _fair.exceptions {{\"{rule}\": \"<reason>\"}}, a multiplayer or roleplay rule set as _rules {{\"multiplayer\": {{\"{}\": true}}}}; META mode lifts it",
+            rule_text(rule),
+            switch
         ),
     ))
 }
@@ -514,6 +590,41 @@ mod tests {
         check(name, &args, run, Some(&facts())).expect(name);
     }
 
+    #[test]
+    fn rule_sets_layer_multiplayer_over_roleplay_over_the_fair_defaults() {
+        let plain = fair("GER");
+        assert!(
+            plain.allows("collaboration") && plain.allows("volunteers") && plain.allows("attaches")
+        );
+        assert!(plain.allows("lend_lease") && plain.allows("air_volunteers"));
+        assert!(!plain.allows("paradrops") && !plain.allows("naval_mines"));
+        assert!(plain.allows("eben_emael_raid") && plain.allows("propaganda"));
+        assert!(plain.allows("strategic_bombing_war_support") && !plain.allows("refinery_bombing"));
+        assert!(
+            Run::default_fair().allows("volunteers") && !Run::default_fair().allows("paradrops")
+        );
+        let rp = Run::from_plan(&json!({"_meta": {"tag": "GER"},
+            "_rules": {"roleplay": {"paradrops": true, "volunteers": false, "naval_mines": true},
+                       "multiplayer": {"naval_mines": false}}}));
+        assert!(rp.allows("paradrops"), "a roleplay goal switches drops on");
+        assert!(!rp.allows("volunteers"));
+        assert_eq!(
+            rp.switches["naval_mines"],
+            (false, "multiplayer"),
+            "the multiplayer rules win"
+        );
+        // a guarded rule switched on by a rule set lets its actions through
+        let mines = json!({"mission": "mine_laying"});
+        assert!(check("hoi4_fleet_mission", &mines, &plain, None).is_err());
+        let host = Run::from_plan(&json!({"_rules": {"multiplayer": {"naval_mines": true}}}));
+        assert!(check("hoi4_fleet_mission", &mines, &host, None).is_ok());
+        let msg = check("hoi4_fleet_mission", &mines, &plain, None)
+            .unwrap_err()
+            .to_string();
+        assert!(msg.contains("_rules"), "{msg}");
+        // META allows everything
+        assert!(Run::from_plan(&json!({"_meta": {"mode": "meta"}})).allows("paradrops"));
+    }
     #[test]
     fn mode_comes_from_the_plan_and_defaults_to_fair() {
         assert!(Run::from_plan(&json!({})).fair);
