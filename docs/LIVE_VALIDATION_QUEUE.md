@@ -1091,3 +1091,13 @@ the row: unit_wrong_slot.
 M4 `hoi4_template_edit` changing only `support` on a template with a regimental row: the row is unchanged (read back).
 Stop at once on: a slot clicked that is not the row's, a mismatch error naming regimental, or Save with another layout.
 Pass: M1-M4. Then delete the test template (hoi4_template_delete).
+## Session S27-TRAINROUTE: fresh divisions to their armies by command (in process, family `units`; about 15 game days) -- any time
+What it proves: hoi4_army_detach without `army` moves divisions that stand outside any army into a named army, and the
+executor's training[].armies routing sends a row's fresh divisions to its listed armies, so one row per template suffices.
+T1 a save with a division outside any army (train one, or detach one into a new army and dissolve it): `hoi4_armies` lists
+it under unassigned; `hoi4_army_detach {"divisions":["<id>"],"into":"<an army with room>"}`: Verified; hoi4_armies shows it in
+that army; the army card lists it. A division inside an army without `army`: invalid_target before any post.
+T2 executor on, plan with ONE training row {"template":"<infantry>","queue":4,"batch":2,"armies":["<army A>","<army B>"]}:
+the deployment view shows ONE queue per train action with its lines (no per-state rows); within a day of each deployment
+the digest shows "trainees N <template> -> <army>" and the divisions stand in the army with fewer divisions.
+Pass: T1-T2. Stop on: a division moved twice in a row between the listed armies, a refusal repeated within 7 days.
