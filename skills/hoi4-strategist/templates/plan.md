@@ -172,7 +172,7 @@ Garrison template: <name and count> (section 22).
 | Design or MIO | Family / line | When | XP or PP | Line that switches | plan.json |
 |---|---|---|---|---|---|
 | <design> | tank / plane / ship | <date> | <n> XP [V designs] | <line equipment> | `designs[]` `{"id":"<id>","kind":"tank","base":"<base>","name":"<design>","modules":{"<slot>":"<module>"},"production":"<line equipment>"}` |
-| <organisation> [V mio] | <line> | <date> | traits in order | — | `mio[]` `{"organisation":"<organisation>","traits":[0,2],"policy":"<policy>"}` |
+| <organisation> [V mio] | <line> | <date> | traits in order | — | `mio[]` `{"organisation":"<organisation>","traits":["<trait key>","<trait key>"],"policy":"<policy>"}` |
 
 ## 16. Stability, war support, manpower and balance of power
 
