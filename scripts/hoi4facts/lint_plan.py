@@ -942,8 +942,12 @@ class Lint:
                     continue  # validate_plan reports unknown keys
                 where = f"research_path[{i}]"
                 if year and info["year"] > year:
-                    self.add("error", "research.start_year", where,
-                             f"{t}: start_year {info['year']} is after the block year {year} (ahead-of-time penalty)")
+                    # `ahead`: started ahead of its year on purpose (a one-shot bonus or a computed value in the why)
+                    msg = f"{t}: start_year {info['year']} is after the block year {year} (ahead-of-time penalty)"
+                    if e.get("ahead") is True:
+                        self.add("info", "research.start_year", where, msg + " - planned ahead (`ahead`)")
+                    else:
+                        self.add("error", "research.start_year", where, msg)
                 any_miss = techrule.missing(info, done, "any")
                 all_miss = techrule.missing(info, done, "all")
                 if any_miss:
@@ -6186,6 +6190,8 @@ class Lint:
         __import__((__package__ or "hoi4facts") + ".lint_force", fromlist=["check"]).check(self)
         # supply, trains, radar, special projects, formations (lint_support.py)
         __import__((__package__ or "hoi4facts") + ".lint_support", fromlist=["check"]).check(self)
+        # every entry carries a sourced why; switches agree with sections (lint_trace.py)
+        __import__((__package__ or "hoi4facts") + ".lint_trace", fromlist=["check"]).check(self)
         order = {s: i for i, s in enumerate(SEVERITIES)}
         self.findings.sort(key=lambda f: (order[f["severity"]], f["rule"]))
         return self

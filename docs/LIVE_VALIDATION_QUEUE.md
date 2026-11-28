@@ -1047,3 +1047,60 @@ M6 save + reload; a plain load without the module.
 Stop at once on: a crash, any `unexplained`, a division moving that was not named, a move arrow or march time that
 differs from the right click's, a battle that a right click would not open, or a post the game's check refused.
 Pass -> IPC_LIVE_PASSED entry 23 (move) = 1.
+
+## Session S23-WEATHER: the weather evaluator against the game's own weather (read only; about 10 minutes) -- any time
+What it proves: hoi4_weather's estimate agrees with what the game shows, so the operation step's ground gate
+(`operations[].weather_gate`) holds a declaration only for real mud or snow.
+M1 a 1936 save, paused on 1 January: `hoi4_weather {"states":[<a Moscow-area state>,<a Paris-area state>,<a Libyan
+state>]}`: the Russian region reads ground snow medium/high and an attack factor at or below -0.2, Paris none or light,
+Libya clear. Compare with the weather map mode (screenshot): snow where the tool says ground snow.
+M2 the same states with `"date":"1936.4.15"`: the Russian region in mud (mud_chance >= 0.5) and
+bad_ground_clears_in_days > 0; then let the game run to mid-April (or load a save of that date) and check the map mode
+shows mud there.
+M3 `"date":"1936.7.15"`: no region on bad ground.
+Pass: M1-M3 agree with the map mode on snow/mud regions. A mismatch: record the region, the date and the tool's water /
+snow numbers in the notes (the model's drying or melting rate is then off).
+## Session S21-ARMYHQ: army headquarters, whether the mechanic is in force (read only; about 2 minutes) -- any time
+What it proves: `hoi4_army_hq` reads the install's DLC state and the defines the way the game loads them.
+M1 any save, paused: `hoi4_army_hq {}`. On an install without Thunder at Our Gates (the owner's: 10 DLCs, none of
+them TaoG): `active` false, `why` names the DLC and "returns 1.0"; `worth.with_hq` close 0.95 / medium 0.9 / far 0.85
+for planning cap and speed, `without_hq` 0.8; `hq_battalion_dlcs` ["Thunder at Our Gates"]. Cross-check in game: an
+army's planning tooltip shows no HQ line and no deploy button exists on the army card.
+M2 (only on an install with the DLC): `active` true; the army card shows the deploy button; the planning tooltip of an
+army without a deployed HQ shows the x0.8 line. Record both and the deploy days of the default HQ template.
+Pass: M1 as stated (M2 when the DLC is present). Nothing is posted; no family to switch on.
+## Session S24-ABILITIES: the ability catalogue against the army card (read only; about 5 minutes) -- any time
+What it proves: hoi4_army_abilities lists what the game offers and its cost reading is right, before the order
+(CTriggerAbilityCommand, module family to come) is built on it.
+M1 any save with a general on an army: `hoi4_army_abilities {}`: 14 generic abilities (1.20.1.0) plus the country's
+own; command_power equals the top bar. Open the army card's ability list: the same keys; hover staff_office_plan: the
+tooltip's "Base cost 0.12 (each for N battalions)" -- write N into the notes (the battalion group the cost is per).
+M2 the daily cost the tooltip shows for that army = 0.12 x (its battalions / N), rounded as the game rounds.
+Pass: M1-M2. The order itself is a later session.
+## Session S22-REGIMENTAL: the Division Designer's regimental support row (mouse; about 15 minutes) -- any time
+What it proves: hoi4_template_create / hoi4_template_edit fill `regiment_support_grid` and read the row back from the
+template data (support array + 0x20, read from the executable, not yet seen live).
+M1 a save with army experience >= 60 (Germany 1936 has 40-ish: use 1938+), paused: `hoi4_template_create {"name":"Test
+Regimental","regiments":[["infantry","infantry","infantry"],["infantry","infantry","infantry"]],"regimental_support":
+["<a company the designer offers, e.g. field_guns or heavy_weapons_company>"]}`: Verified; `template_before` absent;
+open the designer on "Test Regimental": the company stands under column 0, column 1's slot is empty.
+M2 `hoi4_template_edit {"template":"Test Regimental","regimental_support":["","<same company>"]}`: Verified; the company
+moved under column 1 (removed from 0). A second identical call: nothing_to_change.
+M3 refusals before input: a column of 2 battalions with a company under it: regimental_slot_closed; a battalion key in
+the row: unit_wrong_slot.
+M4 `hoi4_template_edit` changing only `support` on a template with a regimental row: the row is unchanged (read back).
+Stop at once on: a slot clicked that is not the row's, a mismatch error naming regimental, or Save with another layout.
+Pass: M1-M4. Then delete the test template (hoi4_template_delete).
+## Session S25-MIOKEY: organisation traits by key (in process, family `mio`; about 5 minutes) -- any time
+What it proves: hoi4_mio_trait `trait` / `traits` resolve the scripts' trait keys to the tree through the module's
+organisations read, and the executor's `mio[].traits` keys reach the game.
+K1 Germany 1936, paused, `HOI4_BACKEND=auto` (mio passed live): `hoi4_mio_trait {"organization":"GER_henschel_organization",
+"list":true}`: write the first five entries' `trait` keys. Then `hoi4_mio_trait {"organization":"GER_henschel_organization",
+"trait":"<the key of an entry with unlockable_now true>"}`: Verified; the tree window shows that trait (by its icon and
+tooltip name) unlocked or queued, the index in the receipt is the entry's index from the listing.
+K2 `{"traits":["<two keys not held>","<one key already queued>"]}`: Verified, the held one counted as reached.
+K3 refusals before input: `{"trait":"GER_mio_trait_nope"}` -> trait_unknown naming Henschel's keys; with
+`HOI4_BACKEND=gui` -> trait_key_unresolved; nothing posted in either case.
+K4 the window's ORDER: hover the tree icon the listing calls index 0 and index 3: their tooltip names match the keys'
+localisation (this settles whether the mouse path's indices equal the module's; record it either way).
+Pass: K1-K3 (K4 recorded). Then the plan's `mio[].traits` may carry keys.

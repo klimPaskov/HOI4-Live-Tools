@@ -5,6 +5,283 @@
   "description": "plan.json for the standing-plan executor (native/src/plan_run.rs) and the player. Every top-level key carries x-owner: executor (the executor reads it today) or player (the player acts on it from the brief). Inside an executor-owned key every key has one reader too: executor (inherited when unmarked), lint (only the planning tools read it: it shapes estimates, the executor does not act on it), text (for people; why and note are text unmarked) or, with x-executor-planned, a key whose executor step is still to come. scripts/hoi4facts/plan_keys.py check fails when a key has no reader. x-executor-planned names the build item (coverage audit section 6, W1-n / W2-n) whose executor step takes a player key over; the owner flips to executor when that step lands (x-planned-owner is the older marker). Unknown top-level keys are errors except _-prefixed ones. tests/test_plan_schema.py keeps this file in step with plan_run.rs.",
   "type": "object",
   "properties": {
+    "_rules": {
+      "x-owner": "executor",
+      "type": "object",
+      "properties": {
+        "multiplayer": {
+          "x-owner": "lint",
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "description": "the multiplayer game's rules: switch -> allowed; wins over roleplay and the FAIR defaults in the lint, the guard and the run result"
+        },
+        "roleplay": {
+          "x-owner": "lint",
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "description": "a roleplay instruction's switches: switch -> allowed; wins over the FAIR defaults, loses to multiplayer, in the lint, the guard and the run result"
+        }
+      },
+      "additionalProperties": false,
+      "description": "rule-set switches, read by the FAIR plan lint, by the server's FAIR guard on every action (native/src/fair_guard.rs) and reported in the run result (`rules`), layered: a multiplayer game's rules win over a roleplay instruction, which wins over the FAIR defaults (native/src/fair_guard.rs FAIR_DEFAULTS). Guarded rules (naval_mines, access, factions, timing, space_marines, paratroopers, submarines) are off by default: true lifts the guard. Allowances: collaboration, volunteers, air_volunteers, lend_lease, attaches, eben_emael_raid, propaganda, strategic_bombing_war_support on by default; paradrops and refinery_bombing off by default (a roleplay goal or META turns them on)"
+    },
+    "goals": {
+      "type": "array",
+      "x-owner": "player",
+      "description": "what this run is for, in order: the human's roleplay goals first (they override FAIR rules), then the campaign aims; the generator of a plan family reads it and the trace lint (scripts/hoi4facts/lint_trace.py) checks that each goal has a source and that `constraints` agrees with it",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "why"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "multiplayer",
+              "roleplay",
+              "owner",
+              "fair",
+              "meta",
+              "computed",
+              "default"
+            ],
+            "description": "who set it: a roleplay goal outranks FAIR"
+          },
+          "aim": {
+            "type": "string",
+            "description": "the goal in words"
+          },
+          "done": {
+            "$ref": "#/definitions/predicate",
+            "description": "holds once the goal is met"
+          },
+          "by": {
+            "type": "string",
+            "description": "latest date Y.M.D"
+          },
+          "why": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "x-owner": "player",
+      "description": "the switches a plan family is generated from (FAIR, META, a roleplay variant): name -> {value, default, source, why}; the generator applies them to the sections, the trace lint reports a section that disagrees with a switch. Rule switches are named rule.<name> (rule.collaboration_sov, rule.paratroop_drops, rule.volunteers, rule.lend_lease, ...); precedence by source: a multiplayer game's rules > a player's roleplay instruction > the FAIR defaults (owner, 28 Nov); the generator writes the switches set by multiplayer or roleplay into _rules, which the guard and lint_fair read",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "value",
+          "why"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "value": {},
+          "default": {},
+          "source": {
+            "type": "string",
+            "enum": [
+              "multiplayer",
+              "roleplay",
+              "owner",
+              "fair",
+              "meta",
+              "computed",
+              "default"
+            ]
+          },
+          "owner_question": {
+            "type": "boolean",
+            "description": "true: a default the owner may change (PLAN changes file lists it)"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "plan sections the switch changes"
+          },
+          "why": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "volunteers": {
+      "type": "array",
+      "x-owner": "player",
+      "description": "volunteer forces to send: land divisions or air wings to a country at war. Cap (defines): 0.05 x the receiver's provinces + 0.05 x own divisions, at least 30 own divisions (VOLUNTEERS_DIVISIONS_REQUIRED), recall locked 180 days after arrival; air volunteers up to 20% of own planes and 10% of the receiver's air-base capacity. No executor reads it yet, and sending is a gap (register lendlease.send_volunteers: the send_volunteers dialog needs a division group choice); lint_fair checks the side rules",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "target",
+          "kind",
+          "why"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]{2}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "land",
+              "air"
+            ]
+          },
+          "divisions": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "template": {
+            "type": "string"
+          },
+          "planes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "airframe": {
+            "type": "string"
+          },
+          "when": {
+            "$ref": "#/definitions/predicate"
+          },
+          "until": {
+            "$ref": "#/definitions/predicate"
+          },
+          "why": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "airborne": {
+      "type": "object",
+      "x-owner": "player",
+      "description": "paratroop drops and airborne raids. Owner, 28 Nov: drops are off by default in FAIR (\"paratroopers yes, aren't considered for fair play\"), META may use them, a roleplay goal switches them on. enabled false keeps every drop and raid row inert; the trace lint reports paratrooper templates or drops while it is false",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "switch": {
+          "type": "string",
+          "description": "the constraints key that sets enabled"
+        },
+        "drops": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "why"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "target_state": {
+                "type": "integer"
+              },
+              "target_province": {
+                "type": "integer"
+              },
+              "divisions": {
+                "type": "integer"
+              },
+              "transports": {
+                "type": "integer"
+              },
+              "air_superiority": {
+                "type": "number"
+              },
+              "when": {
+                "$ref": "#/definitions/predicate"
+              },
+              "why": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "raids": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "why"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "raid": {
+                "type": "string"
+              },
+              "target_province": {
+                "type": "integer"
+              },
+              "transports": {
+                "type": "integer"
+              },
+              "battalions": {
+                "type": "integer"
+              },
+              "when": {
+                "$ref": "#/definitions/predicate"
+              },
+              "switch": {
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "why": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
     "_meta": {
       "type": "object",
       "properties": {
@@ -355,6 +632,72 @@
       "x-owner": "executor",
       "description": "false: stop acting at stop_on_date but never pause"
     },
+    "air_situation": {
+      "type": "object",
+      "x-owner": "executor",
+      "description": "the air plan by situation (plan_air.rs): every every_days at war, fighters go to the regions of our battles sized to fighter_ratio times the enemy's fighters the region window shows (or stay out where they cannot win, stay_out), CAS only over regions not lost, wings rebased forward when their coverage of the region is below min_coverage; wings air_plan names, attached and carrier wings are never touched. {} turns it on with the defaults; enabled:false (a roleplay goal) turns it off.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "fighter_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1.5,
+          "description": "our fighters per enemy fighter shown over a region before we contest it"
+        },
+        "min_coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5,
+          "description": "least share of the region within the wing's range from its base; below it the wing rebases forward"
+        },
+        "every_days": {
+          "type": "number",
+          "minimum": 1,
+          "default": 3
+        },
+        "probe_regions": {
+          "type": "number",
+          "minimum": 0,
+          "default": 2,
+          "description": "region windows opened a turn to read the enemy's air"
+        },
+        "probe_days": {
+          "type": "number",
+          "minimum": 1,
+          "default": 7,
+          "description": "days a region read is kept"
+        },
+        "stay_out": {
+          "type": "boolean",
+          "default": true,
+          "description": "false: fly into regions we cannot win too"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "fighter",
+              "cas"
+            ]
+          },
+          "description": "roles the rule manages (default both)"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false
+    },
     "stop_on_failure": {
       "type": "boolean",
       "x-owner": "executor"
@@ -455,6 +798,11 @@
           "year": {
             "type": "integer",
             "x-owner": "executor"
+          },
+          "ahead": {
+            "type": "boolean",
+            "x-owner": "lint",
+            "description": "true: the block's techs start ahead of their year on purpose (a one-shot research bonus, or a value computed in the why: days saved against the penalty BASE_YEAR_AHEAD_PENALTY_FACTOR); lint research.start_year reports them as info instead of an error"
           },
           "not_before": {
             "$ref": "#/definitions/date",
@@ -3026,6 +3374,20 @@
             },
             "additionalProperties": false,
             "description": "the operation reads as ready (its declaration goes out) only once the attacking armies' planning bonus, weighted by divisions, reaches share (0.9) of cap (0.3, PLANNING_MAX) or has stopped growing for two game days; a dated declaration waits for it at most max_wait_days (7) past its date"
+          },
+          "weather_gate": {
+            "type": [
+              "boolean",
+              "object"
+            ],
+            "properties": {
+              "max_wait_days": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "description": "on unless false: before the declaration, the attack's regions (the units' lines and the offensive's target) are read with hoi4_weather; when most of them are on bad ground (mud more likely than not, or medium/high ground snow) that clears within max_wait_days (default: planning_gate's, else 7) past the date, the declaration waits; otherwise the attack goes on and the operation's notes carry the expected attack factor"
           },
           "spear_pockets": {
             "type": "boolean",
@@ -6109,10 +6471,15 @@
                 {
                   "type": "string",
                   "pattern": "^[0-9]+$"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                  "maxLength": 128
                 }
               ]
             },
-            "description": "0-based trait_index values in queue order, as hoi4_mio_trait list:true numbers the tree (trait entries carry no text)"
+            "description": "traits in queue order: each a trait key (the scripts' trait token, e.g. GER_mio_trait_technical_superiority; hoi4_mio_trait resolves it through the in-process organisations read) or a 0-based trait_index as hoi4_mio_trait list:true numbers the tree"
           },
           "when": {
             "$ref": "#/definitions/predicate"

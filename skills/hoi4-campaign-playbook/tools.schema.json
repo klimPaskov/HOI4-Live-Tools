@@ -429,6 +429,15 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_army_abilities": {
+   "description": "Read-only, no input: the commander abilities of the running game (common/abilities, mods included): per ability its command power cost per day (for each battalion group the game's tooltip names), duration, cooldown, whether a field marshal may use it, its unit modifiers, and its worth in each situation (prepare_attack: planning speed; reinforce: reinforce rate; attack, attack_river, attack_fort: attack and breakthrough plus the river's or fort's own bonus; defend: defence and dig-in; short_supply: days without supply), with the drawback named (more strength lost, no retreat, less attack); best_by_situation picks the highest gain per command power without a drawback; the current command power from the top bar. The order itself is not built yet (issue).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_army_area_defense": {
    "description": "Give an own army an area defence order over own states (the army spreads over them and holds what the order covers): army card, area defence (V), one right-click on each state (Find view first). Verified by new battle-plan orders on the army. Refused before input with no_commander when the army has no general (the game takes battle-plan orders only from a led army). `settings` (the order window's toggles: victory_points, ports, coastlines, airbases, borders, forts, rail, facility) is not yet built: refused with not_yet_built; the game's defaults apply.",
    "inputSchema": {
@@ -896,6 +905,15 @@
      "request_id",
      "lease_token"
     ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_hq": {
+   "description": "Read-only, no input (files of the running game only): whether army headquarters (deployable generals, 1.20) are in force in this game and what they are worth. active:false when the DLC the executable gates the mechanic on (engine_gate_dlc, Thunder at Our Gates) is not enabled: the game then scales no army's planning for want of an HQ and no HQ can be deployed, so there is nothing to do. With the DLC: worth.with_hq per proximity setting (close/medium/far = provinces behind the front) and worth.without_hq give the planning cap, planning speed, leader-modifier and ability scaling from the defines (1.20.1.0: 0.95/0.9/0.85 vs 0.8 for planning, leader modifiers x1.04 at close); deploy and withdraw days from the HQ template's manpower; the HQ battalions and their command-power cost. Every number is read from common/defines and common/units at call time (a mod's override wins), never assumed.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
     "type": "object"
    },
    "source": "--list-tools"
@@ -5796,6 +5814,51 @@
       "maximum": 1100,
       "minimum": 1,
       "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_weather": {
+   "description": "Read-only, no input (the game's files; the date from memory unless given): the weather and ground an offensive or an air mission meets, per strategic region, as the map's own weather tables make it likely on a day of the year (an estimate, not the live weather of a province). Name `regions` (strategic region ids, as hoi4_air_regions lists them), `states` or `provinces` (mapped to their region); optional `date` (Y.M.D) or `day_of_year`, and `days` (horizon, default 30). Per region: mud chance, ground snow (none/medium/high), phenomenon chances, temperature bands, the expected modifiers (army_attack_factor, army_speed_factor, army_attack_speed_factor, breakthrough_factor, supply_factor, attrition, winter_attrition, air_mission_efficiency ...), the worst attack factor in the horizon, and when bad ground (mud more likely than not, or medium/high ground snow) clears or starts. Every number comes from map/strategicregions, common/weather.txt and the weather_* static modifiers of the running game (a mod's files win).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "date": {
+      "maxLength": 12,
+      "type": "string"
+     },
+     "day_of_year": {
+      "maximum": 364,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "days": {
+      "maximum": 120,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "provinces": {
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 64,
+      "type": "array"
+     },
+     "regions": {
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 64,
+      "type": "array"
+     },
+     "states": {
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 64,
+      "type": "array"
      }
     },
     "type": "object"

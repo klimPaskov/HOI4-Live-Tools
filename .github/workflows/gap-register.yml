@@ -25,3 +25,8 @@ jobs:
       - run: python scripts/hoi4facts/gap_register.py check
       # Every plan key has a reader; a key whose executor step is not built is an open register row.
       - run: python scripts/hoi4facts/plan_keys.py check
+      # The whole-game coverage matrix against the committed 1.20.1.0 inventory (scripts/coverage/baseline.json):
+      # the checks that passed when the baseline was written are strict (alerts owned, no new mechanics, every
+      # high-impact row a country plan fixes names its general decider); the failing ones only report. Rewrite the
+      # baseline with --game GAME_DIR --write-baseline after a game update or when a failing check passes.
+      - run: python scripts/coverage/coverage_matrix.py --inventory scripts/coverage/baseline.json --repo . --baseline scripts/coverage/baseline.json --strict

@@ -41,6 +41,11 @@ def hoi4_status(session, args):
         "tools": len(all_tools()),
         "planned_tools": PLANNED,
     }
+    try:
+        from ..perception import uiprofile
+        data["ui_profile"] = uiprofile.summary()
+    except Exception:
+        pass
     data["logs_note"] = "seconds since last write"
     identity = getattr(session, "launched_identity", None)
     data["owned_launch"] = ({"pid": identity.pid, "creation_time": identity.creation_time,
@@ -219,11 +224,31 @@ def _wait_game_gone(session, pid, timeout):
     return process.wait_gone(pid, created, session.cfg["window"]["process_name"], timeout)
 
 
+# A launch with a mod profile whose screen settled (the setup log idle this long) and reads as something other than
+# a main menu on this many polls in a row stops with `main_menu_unrecognised` instead of waiting for the timeout (a
+# mod's own main menu). Vanilla launches wait to the timeout.
+MENU_UNRECOGNISED_IDLE_S = 45
+MENU_UNRECOGNISED_POLLS = 6
+
+
+def _ui_profile(session):
+    """Resolve the interface profile (uiprofile) for the playset; an invalid profile stops the launch."""
+    from ..perception import uiprofile
+    prof = uiprofile.ensure(session)
+    if prof.errors:
+        raise ToolError("the interface profile is invalid: " + "; ".join(prof.errors),
+                        {"error": "ui_profile_invalid", "errors": list(prof.errors)})
+    return prof
+
+
 @tool("hoi4_launch",
       "Start Hearts of Iron IV (normal, or -debug) with the current playset and wait for the main menu. If the game "
       "already runs it is left alone (restart=true quits it through its own menu first). The playset and settings "
       "are never changed. A -debug launch fails at once when the game reports a MAP_ERROR (it waits on an OK "
-      "dialog), with the error lines and a screenshot; a normal launch lists them as map_errors.",
+      "dialog), with the error lines and a screenshot; a normal launch lists them as map_errors. An overhaul mod's "
+      "main menu, month names and window titles come from its own interface and localisation files, or from a "
+      "hoi4_live_profile.json; a screen that settles without any main-menu anchor fails with "
+      "main_menu_unrecognised and the anchors it looked for, instead of waiting for the timeout.",
       {"properties": {
           "debug": {"type": "boolean", "default": False, "description": "launch with -debug"},
           "wait_menu": {"type": "boolean", "default": True},
@@ -239,6 +264,7 @@ def _wait_game_gone(session, pid, timeout):
 def hoi4_launch(session, args):
     apply_mode(session, args)
     cfg = session.cfg
+    prof = _ui_profile(session)
     if process.running_pids(cfg["window"]["process_name"]) and not session.window.find():
         raise ToolError("a game process is already running without a usable owned window; not launching another",
                         {"error": "existing_process"})
@@ -294,6 +320,7 @@ def hoi4_launch(session, args):
     session._telemetry = None
     session.date_uncertain = True
     data = {"pid": pid, "args": launch_args, "debug": args["debug"], "dlc_prepare": dlc,
+            "ui_profile": "vanilla" if prof.is_vanilla else prof.summary(),
             "owned_launch": {"pid": pid, "creation_time": session.launched_identity.creation_time,
                              "executable_path": session.launched_identity.executable_path}}
     # window
@@ -312,6 +339,7 @@ def hoi4_launch(session, args):
     if args["wait_menu"]:
         # loading: logs move; the menu is up when they settle and OCR finds the main-menu buttons
         session.sleep(20)
+        unrecognised = 0
         while time.time() < deadline:
             session.check_cancel()
             _check_launch_alive(session, pid, crashes_before)   # first: it names the exit code, dialog and log lines
@@ -330,6 +358,14 @@ def hoi4_launch(session, args):
                 launch_errors.check(session, args["debug"], texts)
                 if ok:
                     break
+                # a mod profile's settled screen that reads as something else: name what is missing. A vanilla
+                # launch, or a garbled read of a main-menu label, keeps waiting to the timeout (a slow vanilla load
+                # with text on screen, or an OCR that misreads "Single Player", is not a mod's own menu)
+                other = (not prof.is_vanilla and bool(texts) and idle > MENU_UNRECOGNISED_IDLE_S
+                         and not menu.near_main_menu(texts))
+                unrecognised = unrecognised + 1 if other else 0
+                if unrecognised >= MENU_UNRECOGNISED_POLLS:
+                    raise menu.main_menu_unrecognised(texts, data)
             session.report(f"loading ({int(time.time() - t0)} s)")
             session.sleep(4)
         else:

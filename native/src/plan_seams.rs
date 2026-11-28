@@ -440,7 +440,7 @@ fn cp_spend_step(
         note(
             state,
             key,
-            format!("command power {cp:.0} of {max:.0} unspent: no general has an enabled trait in peace ({why}); promotions go with the army groups, preferred tactics and army HQ have no tool yet"),
+            format!("command power {cp:.0} of {max:.0} unspent: no general has an enabled trait in peace ({why}); promotions go with the army groups, preferred tactics have no tool yet, army HQ need the Thunder at Our Gates DLC (hoi4_army_hq)"),
         );
         return Ok(None);
     }

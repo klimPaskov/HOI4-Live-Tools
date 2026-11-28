@@ -259,8 +259,7 @@ this way. Everything in the journal stays under `artifacts/dlc_backups/`.
 
 ## Native Rust preview
 
-The native runtime builds on [Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP).
-It reads structured state directly from the owned game process. Reads do not
+The native runtime reads structured state directly from the owned game process. Reads do not
 pause, take screenshots or move the cursor. Inputs use ordinary player controls
 and fresh state checks; unknown builds and unsupported operations refuse explicitly.
 The primary live path does not depend on save parsing or screenshot polling.
@@ -447,8 +446,7 @@ remains Linux-only.
 
 All nine CI jobs passed on the preceding placement checkpoint (`0b963fb`) across
 Linux, Windows and macOS. Offline tests do not prove native game behavior.
-For measurements, retained failures and the next gate, use
-[the comparison](docs/CLAUSEWITZ_COMPARISON.md),
+For measurements, retained failures and the next gate, use the
 [validation record](docs/CLAUSEWITZ_VALIDATION.md) and
 [current handoff](docs/LINUX_RUST_HANDOFF.md).
 
@@ -480,6 +478,13 @@ Passing tests or listing a tool does not mean live play works. Only recorded liv
 runs count, and failures are kept in the record. See the [changelog](CHANGELOG.md)
 for every run.
 
+## A roleplay companion (in development)
+
+A roleplay companion built on this MCP server is in development: an AI that plays
+its own country beside you, with personas, voice, and goals you set in plain words
+("no war with Britain", "navy first"). It uses the same engine and tools as the
+campaigns described here. It is not released yet.
+
 ## Contributing
 
 Bug reports and ideas are welcome in [Issues](https://github.com/klimPaskov/HOI4-Live-Tools/issues).
@@ -495,16 +500,7 @@ repository.
 
 ## License
 
-Project code is licensed under [Apache-2.0](LICENSE). Imported and derived
-Clausewitz-MCP components keep their MIT notices, license and provenance in
-[NOTICE](NOTICE) and [the upstream manifest](third_party/clausewitz_mcp/UPSTREAM.json).
+Project code is licensed under [Apache-2.0](LICENSE). Third-party components keep
+their own license notices; see [NOTICE](NOTICE).
 HOI4 is a trademark of Paradox Interactive AB. This independent project is not
 affiliated with or endorsed by Paradox.
-
-## Acknowledgements
-
-This project builds on [smerss/Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP),
-Copyright (c) 2026 smerss, licensed under MIT. Its structured game model, process
-interface, player-command research and event-driven automation form the foundation
-of the native runtime. We keep the [original MIT license](third_party/clausewitz_mcp/LICENSE)
-and [file-level provenance](third_party/clausewitz_mcp/UPSTREAM.json).

@@ -93,7 +93,7 @@
 //!   faction                {"join"?,"create"?:{"name","template"?,"invite"?},"when"?} (plan_affairs.rs)
 //!   intelligence           {"agency","upgrades":[ordered],"operatives"?} agency, next upgrade when none runs
 //!                          (plan_affairs.rs)
-//!   mio                    [{"organisation","traits":[trait_index..],"when"?,"design_team"?,"policy"?}] (plan_affairs.rs)
+//!   mio                    [{"organisation","traits":[trait key|trait_index..],"when"?,"design_team"?,"policy"?}] (plan_affairs.rs)
 //!   trade                  [{"resource","amount","from"?,"when"?}] manual purchases once each (plan_affairs.rs)
 //!   research_bonuses       {"<bonus category or name>":[techs]} or true: an active research bonus puts its
 //!                          techs first in the research step (plan_affairs.rs)
@@ -287,6 +287,10 @@ use std::{
     time::Duration,
 };
 
+/// The air war by situation (`air_situation`): fighters sized to win or stay out, CAS over our
+/// battles, reach by range and base.
+#[path = "plan_air.rs"]
+mod plan_air;
 /// Concentrated command: formations and their tasks, a general for every army, the army group.
 #[path = "plan_formations.rs"]
 mod plan_formations;
@@ -388,9 +392,6 @@ pub const UNBUILT_ARGS: &[(&str, &str)] = &[
     // the law of one occupied state (gap register occupation.per_state_law): the tool sets the
     // default law only
     ("hoi4_occupation_law", "state"),
-    // the Division Designer's regimental support row (gap register templates.regimental_support)
-    ("hoi4_template_create", "regimental_support"),
-    ("hoi4_template_edit", "regimental_support"),
     // swapping a chosen doctrine (gap register doctrines.replace_doctrine)
     ("hoi4_doctrine_adopt", "replace"),
     // the peace conference's force-government demand (gap register peace.force_government)
@@ -2936,9 +2937,26 @@ fn tick_inner(
                 continue;
             }
             let (ok, why) = state.act(tools, lease, "hoi4_event_choose", args, "ev")?;
-            return Ok(Tick::Acted(format!(
-                "event {key} option {option}{how}: {ok} {why}"
-            )));
+            let line = format!("event {key} option {option}{how}: {ok} {why}");
+            // At war a failed answer never takes the tick: the war's lanes get their turn after
+            // it in the same tick. The answer goes again within hours (EVENT_WAR_REST), but each
+            // failure ended the run, so the run that came due next tried the event first again
+            // and nothing else (p101c, 28 Nov 2026: news.234 failed its read-back five times,
+            // 14 s each, from W+9.6 to W+17.5; no lane ticked for 9.1 game days of Poland's war:
+            // no war step, no re-aim, no air).
+            if !ok && (state.war_active || state.op_events_now) {
+                if let Some(step) = plan_manage::day0_step(state, tools, plan, lease, now)? {
+                    return Ok(Tick::Acted(format!("{step}; {line}")));
+                }
+                return Ok(match lanes_turns(state, tools, plan, lease, now)? {
+                    Tick::Acted(what) => {
+                        state.sched.more.push(line);
+                        Tick::Acted(what)
+                    }
+                    _ => Tick::Acted(line),
+                });
+            }
+            return Ok(Tick::Acted(line));
         }
         waiting.get_or_insert((key, new));
     }
@@ -14168,6 +14186,16 @@ pub fn run(
         .take(8)
         .map(|(k, n, ms)| format!("{k} x{n} {ms}"))
         .collect::<Vec<_>>());
+    // the rule set in force where it differs from the FAIR defaults (`_rules`: multiplayer >
+    // roleplay > FAIR; the guard applies it to every action), so the player reads which rules hold
+    if plan["_rules"].is_object() {
+        let changed: Vec<String> = crate::fair_guard::switches(&plan)
+            .into_iter()
+            .filter(|(_, (_, layer))| *layer != "fair")
+            .map(|(k, (on, layer))| format!("{k} {} ({layer})", if on { "on" } else { "off" }))
+            .collect();
+        result["rules"] = json!(changed);
+    }
     if let Some(digest) = construction {
         result["construction"] = json!(digest);
     }
@@ -15722,6 +15750,47 @@ mod tests {
             matches!(&step, Tick::Acted(s) if s.starts_with("event AAT_norway_news.2 option 0")),
             "{step:?}"
         );
+    }
+
+    #[test]
+    fn at_war_a_failed_event_answer_gives_the_same_tick_to_the_lanes() {
+        // p101c (28 Nov 2026): news.234 failed its read-back five times from W+9.6 to W+17.5,
+        // 14 s each; every failure ended the run and the next run tried it first again: no lane
+        // ticked for 9.1 game days of Poland's war
+        let events = json!({"events": [{"event": "news.234", "options": ["ok"]}]});
+        let tools = fake(vec![("hoi4_events", events.clone())]);
+        tools.refuse_with(
+            "hoi4_event_choose",
+            "input_readback_failed",
+            "event answered: expected game change not observed",
+        );
+        let mut war = State {
+            war_active: true,
+            ..State::default()
+        };
+        let step = tick(&mut war, &tools, &json!({}), "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.contains("event news.234 option 0: false")),
+            "{step:?}"
+        );
+        assert_eq!(
+            war.sched.ticks, 1,
+            "the lanes ticked after the failed answer"
+        );
+        // in peace the failed answer still ends the tick (nothing waits on the war's lanes)
+        let tools = fake(vec![("hoi4_events", events)]);
+        tools.refuse_with(
+            "hoi4_event_choose",
+            "input_readback_failed",
+            "event answered: expected game change not observed",
+        );
+        let mut peace = State::default();
+        let step = tick(&mut peace, &tools, &json!({}), "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.contains("false")),
+            "{step:?}"
+        );
+        assert_eq!(peace.sched.ticks, 0);
     }
 
     #[test]

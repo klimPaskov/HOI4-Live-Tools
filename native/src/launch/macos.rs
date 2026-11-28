@@ -10,10 +10,12 @@ mod agency_act;
 mod air;
 mod airact;
 mod airattach;
+mod aircover;
 mod airread;
 mod airui;
 mod alerts;
 mod armies;
+mod army_hq;
 mod army_roles;
 mod bop;
 mod command_limit;
@@ -45,6 +47,7 @@ mod construction_find_open;
 mod construction_cancel;
 mod construction_open;
 // Default-off one-action qualification; full campaign acceptance remains false.
+mod abilities;
 mod construction_place;
 mod construction_select;
 mod controller_epoch;
@@ -67,6 +70,7 @@ mod events;
 mod faction;
 mod fleetmem;
 mod fleetops;
+mod weather;
 // The input probe is used by the macOS main loop only.
 #[cfg_attr(target_os = "linux", allow(dead_code, unused_imports))]
 mod focus;
@@ -905,6 +909,8 @@ pub fn mac_tool_list() -> Vec<Value> {
     ])
     .chain(fleetops::tools())
     .chain(std::iter::once(invasion::tool()))
+    .chain(std::iter::once(weather::tool()))
+    .chain(std::iter::once(abilities::tool()))
     .chain(faction::tools())
     .chain(agency_act::tools())
     .chain(operation_act::tools())
@@ -912,6 +918,7 @@ pub fn mac_tool_list() -> Vec<Value> {
     .chain(leader_act::tools())
     .chain(learn_tools::tools())
     .chain(std::iter::once(doctrine_act::officer_tool()))
+    .chain(std::iter::once(army_hq::tool()))
     .collect()
 }
 
@@ -930,6 +937,9 @@ impl Commands for MacClock {
             || name == learn_tools::RUN
             || faction::handles(name)
             || name == invasion::TOOL
+            || name == weather::TOOL
+            || name == army_hq::TOOL
+            || name == abilities::TOOL
             || matches!(
                 name,
                 "hoi4_daily_governor"
@@ -1487,15 +1497,6 @@ fn not_applied_is_error(value: Value) -> Result<Value> {
 /// (countrystateview.gui `law_and_template_container`); the tool drives the default-law button
 /// only today, so the argument is refused the same way (gap register occupation.per_state_law).
 ///
-/// `regimental_support` on hoi4_template_create / hoi4_template_edit: the regimental support row
-/// of the Division Designer (divisiondesignerview.gui `regiment_support_grid` under
-/// `regimental_support_header_label`), one company per regiment column up to
-/// NDefines.NMilitary.MAX_REGIMENTAL_SUPPORT_WIDTH, a column taking one only with
-/// REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS battalions, at REGIMENTAL_SUPPORT_SLOT_COST_MULTIPLIER of
-/// a support slot's cost; a company whose common/units entry says `regimental = no` cannot go
-/// there. The tools fill the battalion grid and the division support column only, so the
-/// argument is refused (gap register templates.regimental_support).
-///
 /// `replace` on hoi4_doctrine_adopt: swapping the folder's grand doctrine or a track's chosen
 /// subdoctrine for another (the officer corps view's slot, picked again while filled). The tool
 /// adopts into empty slots only and refuses a filled one before input (grand_doctrine_set,
@@ -1517,7 +1518,6 @@ pub(super) fn refuse_unbuilt_args(tool: &str, args: &serde_json::Map<String, Val
         let what = match *arg {
             "organization" => "choosing the military-industrial organisation (the line gets none)",
             "state" => "setting the law of one state (only the default law is set)",
-            "regimental_support" => "filling the regimental support row (the template gets none)",
             "replace" => "replacing a chosen doctrine (an occupied slot is refused)",
             "settings" => "the area order's settings toggles (the game's defaults apply)",
             "force_government" => {
@@ -1749,6 +1749,15 @@ impl MacClock {
                 ));
             }
             return mios::mios(process, tag, mgmt::flag(args, "include_all")?);
+        }
+        if name == weather::TOOL {
+            return weather::call(process, args);
+        }
+        if name == army_hq::TOOL {
+            return army_hq::call(process, args);
+        }
+        if name == abilities::TOOL {
+            return abilities::call(process, args);
         }
         if name == "hoi4_intelligence" {
             allowed(args, &["include_operations"])?;
@@ -3030,6 +3039,17 @@ impl MacClock {
                     None if kind == "create" => Some(Vec::new()),
                     None => None,
                 },
+                regimental: args
+                    .get("regimental_support")
+                    .map(template_edit::parse_regimental)
+                    .transpose()?,
+                regimental_min: args
+                    .get("regimental_support")
+                    .and_then(|_| mgmt::game_dir(process).ok())
+                    .and_then(|d| {
+                        std::fs::read_to_string(d.join("common/defines/00_defines.lua")).ok()
+                    })
+                    .and_then(|t| template_edit::regimental_required(&t)),
                 priority: template_edit::priority_arg(args.get("priority"))?,
                 allow_in_use: args
                     .get("allow_in_use")

@@ -19,9 +19,10 @@ Rules (error unless marked; every message ends with the rule in plain words):
   fair.special_forces   special forces battalions added to a template whose fielded divisions are reorganised
                         (upgrade_fielded: a cap bypass); (warning) planned special forces battalions above the
                         cap estimate (SPECIAL_FORCES_CAP_MIN, SPECIAL_FORCES_CAP_BASE x other battalions)
-  fair.submarines       research (path, priority, fallback), a special project, production, a design or a call
-                        for a submarine above Submarine II or an AIP or coating module; a start fleet of only
-                        submarines below 5 given a mission
+  fair.submarines       (only under a rule set with `submarines: false`; info otherwise) research (path,
+                        priority, fallback), a special project, production, a design or a call for a submarine
+                        above Submarine II or an AIP or coating module
+  fair.submarine_fleets a start fleet of only submarines below 5 given a mission
   fair.naval_mines      mine_laying fleet missions, naval_mines air missions; (warning) mine-laying modules
   fair.access           military access, docking rights or airbase access asked or offered; (warning) the
                         European Axis with Japan, or the Allies with the Soviet Union (allowed once the Iran
@@ -45,8 +46,9 @@ Rules (error unless marked; every message ends with the rule in plain words):
                         the Axis before France falls; Finland joining the Axis in the Winter War (warning); the
                         Netherlands or Belgium joining the Allies unprovoked; a manual justification where the
                         rules require the focus; the USA trading with the UK or France before Danzig
-  fair.invasions        an invasion before its prerequisites: Sea Lion (2 of Gibraltar, Malta, Suez; 1 once at
-                        war with the Soviet Union), Japan's side into Australia or New Zealand (Papua New
+  fair.invasions        an invasion before its prerequisites: Sea Lion (owner, 28 Nov: "after barbarossa or
+                        during barbarossa. USA has to be in the allies": at war with the Soviet Union and the
+                        USA), Japan's side into Australia or New Zealand (Papua New
                         Guinea) or mainland North America (Hawaii and the Philippines; Alaska excepted), the
                         Allies into mainland Japan (Iwo Jima, Taiwan, Okinawa) or the core Italian mainland
                         (North Africa, or Italy capitulated), Allies from outside mainland Europe into it
@@ -55,6 +57,12 @@ Rules (error unless marked; every message ends with the rule in plain words):
   fair.france           France before capitulation: ports or air bases built in France, troops sent outside
                         mainland Europe (training, sea transfers, invasions; warning for army_layout), lend-
                         lease except to Spain
+
+  fair.collaboration    a collaboration-government operation while the plan's rule set switches it off
+                        (_rules multiplayer or roleplay `collaboration: false`; single-player FAIR allows it,
+                        owner 28 Nov)
+  fair.rules            a `constraints` rule.<name> switch whose source is not multiplayer, roleplay, owner,
+                        fair, meta, computed or default
 
 Executor guards: rules the executor must refuse at action time in FAIR mode (the plan lint cannot see them).
 native/src/fair_guard.rs refuses (error fair_rule_refused, message starting with the rule id) the ones the
@@ -96,6 +104,9 @@ module doc lists what it guards and what is not guarded yet (needs live state):
 Stdlib only, Python 3.9+.
 """
 import re
+
+# Who set a rule switch, strongest first: a multiplayer game's rules > a player's roleplay instruction > the FAIR defaults.
+RULE_SOURCES = ("multiplayer", "roleplay", "owner", "fair", "meta", "computed", "default")
 from collections import Counter, defaultdict, deque
 
 from . import derive
@@ -126,8 +137,9 @@ RULES = {
                           "division (tank support companies are fine)",
     "fair.paratroopers": "paratrooper divisions are at least 20 width and a nation has at most 18 of them",
     "fair.special_forces": "no intentional bypass of the special forces division limit",
-    "fair.submarines": "submarines: nothing above Submarine II, no special submarine modules (AIP, coating), at "
-                       "least 5 per submarine fleet, no always engage",
+    "fair.submarines": "submarines (multiplayer rule set only): nothing above Submarine II, no special submarine "
+                       "modules (AIP, coating)",
+    "fair.submarine_fleets": "at least 5 per submarine fleet, no always engage",
     "fair.naval_mines": "naval mining is banned",
     "fair.access": "no military access, docking rights or airbase access (only for civil-war supplies)",
     "fair.factions": "no disbanding factions; Japan's side never joins the Axis and no European Axis nation "
@@ -140,6 +152,10 @@ RULES = {
     "fair.licence": "no changing the type or role of licensed aircraft, nor any way around licence penalties",
     "fair.timing": "the nation rules on when a war, a faction join or a justification may happen",
     "fair.invasions": "the nation rules on what must be taken before an invasion",
+    "fair.collaboration": "a collaboration government only while the rule set allows it "
+                          "(single-player FAIR: allowed; a multiplayer game's rules or a roleplay instruction may "
+                          "forbid it; owner, 28 Nov)",
+    "fair.rules": "a rule switch names its source: multiplayer > roleplay > the FAIR defaults (owner, 28 Nov)",
     "fair.france": "France before capitulation: no building or upgrading ports or air bases in France, all "
                    "troops in mainland Europe",
 }
@@ -397,6 +413,23 @@ class Fair:
         fair = self.plan.get("_fair") if isinstance(self.plan.get("_fair"), dict) else {}
         exc = fair.get("exceptions") if isinstance(fair.get("exceptions"), dict) else {}
         self.exceptions = {k: str(v) for k, v in exc.items() if isinstance(k, str)}
+        # rule sets (the owner, 28 Nov): a multiplayer game's rules > a roleplay instruction > the FAIR
+        # defaults; a guarded rule's switch set true lifts it like a host exception
+        rules = self.plan.get("_rules") if isinstance(self.plan.get("_rules"), dict) else {}
+        sw = {}
+        for layer in ("roleplay", "multiplayer"):
+            vals = rules.get(layer) if isinstance(rules.get(layer), dict) else {}
+            for k, v in vals.items():
+                if isinstance(v, bool):
+                    sw[str(k).strip().lower()] = (v, layer)
+        for k, (v, layer) in sw.items():
+            if v:
+                self.exceptions.setdefault("fair." + k, "%s rule set" % layer)
+        # the submarine limit (nothing above Submarine II, no AIP or coating) is a multiplayer rule only
+        # (the owner, 28 Nov: "do whatever is best"); a rule set turns it on with `submarines: false`
+        if sw.get("submarines", (True, ""))[0]:
+            self.exceptions.setdefault("fair.submarines", "no submarine limit in single-player FAIR; a multiplayer "
+                                       "rule set turns it on with _rules {\"multiplayer\": {\"submarines\": false}}")
         self.phases = {str(p.get("id")): p for p in lint.list_of("phases")}
         self.calls = list(calls(self.plan))
         self._cache = {}
@@ -795,7 +828,7 @@ class Fair:
                 n = sum(ships.values())
                 if ships and all("submarine" in types.get(k, set()) for k in ships) and n < SUB_FLEET_MIN:
                     reported.add(fleet)
-                    self.add("error", "fair.submarines", where,
+                    self.add("error", "fair.submarine_fleets", where,
                              f"fleet {fleet!r} has {n} submarines (at least {SUB_FLEET_MIN} per submarine fleet)")
         for where, entry, missions in self.air_entries():
             ms = {m.lower() for m in missions}
@@ -1027,11 +1060,14 @@ class Fair:
         europe = mainland(self.game, "europe")
         for where, sid, when, kind in landings:
             if kind == "invasion" and me in EURO_AXIS and sid in self.home("ENG"):
-                keys = self.named({"Gibraltar", "Malta", "Suez"}, owner="ENG")
-                enough = 1 if self.at_war_req(when, {"SOV"}) else 2
-                if keys:
-                    self.need(where, sid, when, keys, "is Sea Lion" + (" (Barbarossa running)" if enough == 1 else ""),
-                              enough)
+                # owner, 28 Nov: "after barbarossa or during barbarossa. USA has to be in the allies. Otherwise
+                # capitulating britain would end the allies, if us is not in the faction."
+                missing = [t for t in ("SOV", "USA") if not self.at_war_req(when, {t})]
+                if missing:
+                    self.add("error", "fair.invasions", where,
+                             f"landing in state {sid} is Sea Lion: `when` must hold "
+                             + " and ".join(f"at_war_with:{t}" for t in missing)
+                             + " (during or after Barbarossa, with the USA in the Allies)")
             if kind == "invasion" and me in JAPAN_SIDE:
                 png = self.named(set(), owner="AST", pattern=r"papua|new guinea")
                 if own.get(sid) in ("AST", "NZL") and sid not in png and png:
@@ -1145,9 +1181,35 @@ class Fair:
                          f"plane design on {base}, which the plan only has by licence")
 
     # ------------------------------------------------------------------
+    def rule_switches(self):
+        """The plan's rule set: `_rules` {multiplayer: {switch: bool}, roleplay: {...}} layered over the FAIR defaults
+        (owner, 28 Nov: "Multiplayer rules always override the fair rules. Collaboration governments are allowed in
+        singleplayer in fair play, however, if some multiplayer game doesn't allow that or player in roleplay said to
+        not do it, then yes, no collaboration government"). `collaboration` false: no collaboration-government
+        operation. A plan family's `constraints` rule.<name> switches name their source."""
+        rules = self.plan.get("_rules") if isinstance(self.plan.get("_rules"), dict) else {}
+        off = None
+        for layer in ("roleplay", "multiplayer"):
+            vals = rules.get(layer) if isinstance(rules.get(layer), dict) else {}
+            if isinstance(vals.get("collaboration"), bool):
+                off = layer if vals["collaboration"] is False else None
+        cons = self.plan.get("constraints") if isinstance(self.plan.get("constraints"), dict) else {}
+        for k, c in sorted(cons.items()):
+            if k.startswith("rule.") and isinstance(c, dict) and c.get("source") not in (None, *RULE_SOURCES):
+                self.add("warning", "fair.rules", f"constraints.{k}", f"source {c.get('source')!r} is not one of "
+                         + ", ".join(RULE_SOURCES))
+        if off is None:
+            return
+        intel = self.plan.get("intelligence") if isinstance(self.plan.get("intelligence"), dict) else {}
+        for i, op in enumerate(intel.get("operations") or []):
+            if isinstance(op, dict) and "collaboration" in str(op.get("operation")):
+                self.add("error", "fair.collaboration", f"intelligence.operations[{i}]",
+                         f"collaboration government in {op.get('target')} while the {off} rule set switches "
+                         "collaboration off (_rules)")
+
     def run(self):
         for step in (self.templates, self.navy, self.submarines, self.diplomacy_rules, self.invasions, self.france,
-                     self.deletion, self.licence):
+                     self.deletion, self.licence, self.rule_switches):
             step()
         self.lt.facts["fair"] = {"mode": "fair", "at_war_at_start": sorted(self.start_wars()),
                                  "war_planned": self.war_planned(), "exceptions": sorted(self.exceptions)}

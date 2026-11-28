@@ -1,7 +1,6 @@
 # Native Rust development preview
 
-Linux-first HOI4 process observations and ordinary controls, based on
-Clausewitz-MCP. This is development source; there is no Rust release or completed
+Linux-first HOI4 process observations and ordinary controls. This is development source; there is no Rust release or completed
 campaign acceptance yet.
 
 The primary path uses fresh process state and compact stdio MCP JSON. Reads and
@@ -1059,9 +1058,8 @@ Printable-character admission and typed construction handoffs remain distinct
 from full campaign acceptance. `ConstructionQueue` plan entries express a queued
 minimum; execution is explicitly unsupported until the composite adapter passes.
 
-## Provenance and acknowledgements
+## Provenance
 
-This foundation builds on [smerss/Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP),
-Copyright (c) 2026 smerss, MIT licensed. [PROVENANCE.md](PROVENANCE.md) identifies
-derived files and independently recovered layouts. The complete upstream notice
-is retained in [LICENSE.clausewitz](LICENSE.clausewitz) and [NOTICE](../NOTICE).
+[PROVENANCE.md](PROVENANCE.md) identifies derived files and independently recovered
+layouts. Third-party license notices are retained in [LICENSE.clausewitz](LICENSE.clausewitz)
+and [NOTICE](../NOTICE).

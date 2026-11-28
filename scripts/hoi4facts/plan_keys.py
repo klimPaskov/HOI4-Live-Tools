@@ -55,7 +55,7 @@ EXECUTOR_SOURCES = [PLAN_RUN] + [os.path.join(ROOT, "native", "src", name)
                                               "plan_affairs.rs", "plan_war.rs", "plan_route.rs",
                                               "plan_seams.rs", "plan_encircle.rs", "plan_strike.rs", "plan_operation.rs",
                                               "plan_ship.rs", "plan_speed.rs", "plan_omissions.rs",
-                                              "plan_divisions.rs", "plan_logistics.rs")]
+                                              "plan_divisions.rs", "plan_logistics.rs", "plan_air.rs")]
 # Sources searched for a key's name when no read pattern finds it (helpers with their own variables).
 LITERAL_SOURCES = EXECUTOR_SOURCES + [os.path.join(ROOT, "native", "src", name)
                                       for name in ("plan_formations.rs", "alarms.rs", "watch.rs",
@@ -66,7 +66,7 @@ LITERAL_SOURCES = EXECUTOR_SOURCES + [os.path.join(ROOT, "native", "src", name)
 # The planning tools: what reads a lint key.
 TOOL_SOURCES = [os.path.join(ROOT, "scripts", *parts) for parts in (
     ("hoi4facts", "lint_plan.py"), ("hoi4facts", "lint_fair.py"), ("hoi4facts", "lint_horizons.py"), ("hoi4facts", "lint_conditions.py"),
-    ("hoi4facts", "conditions.py"), ("hoi4facts", "lint_manage.py"), ("hoi4facts", "lint_economy.py"), ("hoi4facts", "lint_force.py"), ("hoi4facts", "lint_force_air.py"), ("hoi4facts", "lint_war_shape.py"), ("hoi4facts", "lint_operations.py"), ("hoi4facts", "force.py"), ("hoi4facts", "manage_inventory.py"), ("hoi4facts", "validate.py"),
+    ("hoi4facts", "conditions.py"), ("hoi4facts", "lint_manage.py"), ("hoi4facts", "lint_economy.py"), ("hoi4facts", "lint_force.py"), ("hoi4facts", "lint_force_air.py"), ("hoi4facts", "lint_war_shape.py"), ("hoi4facts", "lint_operations.py"), ("hoi4facts", "lint_trace.py"), ("hoi4facts", "force.py"), ("hoi4facts", "manage_inventory.py"), ("hoi4facts", "validate.py"),
     ("hoi4facts", "plan_gates.py"), ("hoi4facts", "check_calls.py"), ("strategist", "eval_plan.py"),
     ("validate_plan.py",))] + [os.path.join(ROOT, "hoi4_live", "play", "reconcile.py")]
 # The rolling planner: what reads a planner key.

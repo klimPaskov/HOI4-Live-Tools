@@ -3854,11 +3854,10 @@
     "hoi4_template_create",
     "hoi4_template_edit"
    ],
-   "blocked": "hoi4_template_create/edit refuse `regimental_support` with not_yet_built (held back in plan_run::UNBUILT_ARGS); the template step makes the template without the row and says so",
    "payoff": "medium",
    "why": "AT/AA batteries against armour and CAS without extra width",
-   "closing": "both",
-   "owner": "offline done: the argument in both tool schemas (refused before input), template step sends it once built, validate_plan checks the companies against common/units (regimental = no, 3-battalion columns); live: fill the designer's regiment_support_grid, read it back in hoi4_template_get, drop the UNBUILT_ARGS rows, then live-verify"
+   "closing": "live",
+   "owner": "offline done (engineer 110, 28 Nov): hoi4_template_create/edit fill the designer's regiment_support_grid (one company per column, regimental_slot_closed below REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS from the defines), Verified from the template data's regimental row (support array + 0x20, read from the executable); the template step sends the plan's row; live: S22-REGIMENTAL"
   },
   {
    "id": "templates.reinforcement_priority",

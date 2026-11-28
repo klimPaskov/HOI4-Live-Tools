@@ -83,8 +83,11 @@ the strongest legitimate route; no message, lint or note treats a goal as doubtf
 **Navy**
 * No naval blockade in peacetime.
 * No naval mining.
-* Submarines: no always engage, at least 5 per submarine fleet, no special submarine modules (AIP,
-  coating), and nothing above Submarine II (no research, design or production of later hulls).
+* Submarines: no always engage and at least 5 per submarine fleet. Single-player FAIR has no
+  submarine tier limit (the owner's decision of 28 Nov 2026). A multiplayer game whose rules say
+  "nothing above Submarine II, no special submarine modules (AIP, coating)" writes
+  `_rules {"multiplayer": {"submarines": false}}`, and the guard and the lint then refuse later
+  hulls and those modules.
 
 **Air**
 * Strategic bombing may not target refineries specifically.
@@ -96,18 +99,49 @@ the strongest legitimate route; no message, lint or note treats a goal as doubtf
 * No deleting stockpiles, factories or research facilities. Dockyards may go only when the state is out of
   slots.
 
+## Rule sets: multiplayer > roleplay > FAIR defaults
+
+The owner's order (28 Nov 2026): a multiplayer game's rules win over a roleplay instruction, which wins over the FAIR
+defaults. The plan carries them as `_rules` {"multiplayer": {switch: true|false}, "roleplay": {switch: true|false}}; per
+switch the first layer that names it decides. The plan lint, the server's guard (every action) and the run result
+(`rules`) apply the same layering.
+
+| switch | FAIR default | what it allows |
+|---|---|---|
+| collaboration | on | the collaboration-government operation (the Soviet one included) |
+| volunteers, air_volunteers | on | volunteer divisions and air volunteers |
+| lend_lease | on | lend-lease |
+| attaches | on | attachés |
+| paradrops | off | paratroop drops (a roleplay goal or META turns them on) |
+| eben_emael_raid | on | the Eben-Emael raid (the owner, 28 Nov midday) |
+| propaganda | on | propaganda operations against an enemy's war support (the Soviet one included) |
+| strategic_bombing_war_support | on | strategic bombing for war support |
+| refinery_bombing | off | strategic bombing of refineries |
+| naval_mines, access, factions, timing, space_marines, paratroopers | off (guarded) | true lifts that guard |
+| submarines | on (no tier limit) | false turns on the Submarine II and AIP/coating limit (a multiplayer rule set) |
+
 ## Owner's decisions (28 Nov 2026): allowed under FAIR
 
 * On the agent's own initiative: volunteer divisions, air volunteers, lend-lease and attaches, wherever the
   game allows them. The multiplayer limits on volunteers and lend-lease below no longer bind.
-* The collaboration-government operation on the Soviet Union is allowed.
+* The collaboration-government operation on the Soviet Union is allowed in single player. His words: "Multiplayer
+  rules always override the fair rules. Collaboration governments are allowed in singleplayer in fair play,
+  however, if some multiplayer game doesn't allow that or player in roleplay said to not do it, then yes, no
+  collaboration government."
 * Paratroop drops are not used by default under FAIR; META may use them, and a roleplay request is honoured.
+* 28 Nov midday: FAIR may use the Eben-Emael raid, propaganda against Soviet war support, and strategic bombing
+  for war support (never refineries).
+* A plan family generated from switches names each rule it depends on in `constraints` (`rule.<name>`, with
+  its source: multiplayer, roleplay, owner, fair); the switches a multiplayer game or a roleplay instruction set
+  go into `_rules` (above), which the guard and `lint_fair.py` read (`fair.collaboration`, `fair.rules`).
 
 ## Axis rules
 
 * Military and docking access between the European Axis and Japan only once the Iran corridor is secured.
-* Sea Lion (invading Great Britain): the European Axis first holds 2 of Gibraltar, Malta and Suez; 1 is
-  enough once Barbarossa has started.
+* Sea Lion (invading Great Britain), the owner's decision of 28 Nov, which replaced the Gibraltar, Malta and
+  Suez rule: "after barbarossa or during barbarossa. USA has to be in the allies. Otherwise capitulating
+  britain would end the allies, if us is not in the faction." So never before the war with the Soviet Union,
+  and only once the USA is in the Allies (`when` holds `at_war_with:SOV` and `at_war_with:USA`).
 * Win condition: the Soviet Union capitulated and no Allied foothold in Europe.
 * Japan and its co-prosperity sphere never join the Axis; no European Axis nation joins the co-prosperity
   sphere.
@@ -239,7 +273,8 @@ as unknown. Preserve the mode and profile revision in the run manifest and revie
 evidence before calling a showcase FAIR.
 
 Where another playbook file marks a tactic FAIR that these rules ban (for example always-engage
-submarines, improved or advanced submarine hulls, anechoic tiles, naval mines, military access), the rules
+submarines, naval mines, military access; later submarine hulls and anechoic tiles only under a
+multiplayer rule set with `submarines: false`), the rules
 here win and the tactic is META-only.
 
 ## META-only, banned and patched tricks
