@@ -3960,7 +3960,10 @@ fn research_lane(
             .enumerate()
             .position(|(i, s)| s.is_none() && !held.iter().any(|h| h.slot == i))
         else {
-            let h = &held[0];
+            // the idle held slot (a filled one runs its filler and is not this branch's)
+            let Some(h) = held.iter().find(|h| !h.filled) else {
+                return Ok(None);
+            };
             if let Some(tech) = h
                 .tech
                 .as_ref()
