@@ -117,9 +117,11 @@ pub(super) fn pick_drop(
     (None, why)
 }
 
-/// Whether the rule may drop: always in META; in FAIR only on the player's request (`roleplay_request`).
-pub(super) fn drops_allowed(fair: bool, cfg: &Value) -> bool {
-    !fair || cfg["roleplay_request"].as_bool() == Some(true)
+/// Whether the rule may drop: the plan's rule sets decide (fair_guard `paradrops`: off by default in FAIR, on in META,
+/// on when `_rules.roleplay.paradrops` is true and the multiplayer rules do not forbid it); `roleplay_request` on the
+/// rule itself also turns drops on in FAIR.
+pub(super) fn drops_allowed(run: &crate::fair_guard::Run, cfg: &Value) -> bool {
+    run.allows("paradrops") || cfg["roleplay_request"].as_bool() == Some(true)
 }
 
 /// Transport planes a drop of `divisions` needs: the game's minimum, else the weight of each division.
@@ -141,7 +143,7 @@ pub(super) fn airborne_step(
     }
     // the owner's rule (28 Nov): drops are off by default in FAIR, on in META, and on in FAIR when the player asks for
     // them (a roleplay request: `roleplay_request`)
-    if !drops_allowed(crate::fair_guard::Run::from_plan(plan).fair, cfg) {
+    if !drops_allowed(&crate::fair_guard::Run::from_plan(plan), cfg) {
         return Ok(None);
     }
     let army = text(&cfg["army"]).to_string();
@@ -379,9 +381,16 @@ mod tests {
 
     #[test]
     fn drops_are_off_in_fair_unless_the_player_asks() {
-        assert!(drops_allowed(false, &json!({})));
-        assert!(!drops_allowed(true, &json!({})));
-        assert!(drops_allowed(true, &json!({"roleplay_request": true})));
+        use crate::fair_guard::Run;
+        let meta = Run::from_plan(&json!({"_meta": {"mode": "meta"}}));
+        assert!(drops_allowed(&meta, &json!({})));
+        assert!(!drops_allowed(&Run::default_fair(), &json!({})));
+        assert!(drops_allowed(
+            &Run::default_fair(),
+            &json!({"roleplay_request": true})
+        ));
+        let rp = Run::from_plan(&json!({"_rules": {"roleplay": {"paradrops": true}}}));
+        assert!(drops_allowed(&rp, &json!({})));
     }
 
     #[test]
