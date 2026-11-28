@@ -5152,6 +5152,24 @@ mod tests {
     }
 
     #[test]
+    fn a_justification_by_the_games_war_goal_key_passes_the_key_and_the_state_ids() {
+        let tools = fake(vec![(
+            "hoi4_diplomacy_state",
+            json!({"own_war_goals": [], "world_tension": {"value": 0.1}}),
+        )]);
+        let plan = json!({"diplomacy": [
+            {"id": "wg", "action": "justify", "target": "ETH", "war_goal_key": "take_state",
+                "state_ids": [271, 272]}]});
+        let mut state = State::default();
+        step(&mut state, &tools, &plan, "l", START).unwrap();
+        let sent = actions(&tools);
+        assert_eq!(sent[0].1["action"], "justify_war_goal");
+        assert_eq!(sent[0].1["war_goal_key"], "take_state");
+        assert_eq!(sent[0].1["state_ids"], json!([271, 272]));
+        assert!(sent[0].1.get("war_goal").is_none());
+    }
+
+    #[test]
     fn justify_once_then_declare_when_complete_and_the_war_stays_narrow() {
         let tools = fake(vec![
             (
