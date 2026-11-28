@@ -143,6 +143,65 @@ pub(super) fn act(ch: &mut Channel, op: &str, tag_index: i32) -> Routed {
     }
 }
 
+/// engineer 125: the module request that justifies a war goal: vals = the receiver's tag index, then the war goal
+/// type's key (the game's own key from common/wargoals, e.g. take_state) as character codes; provs = the states the goal
+/// names (take-state goals; none for a goal on the whole country). The module finds the type in the game's own war goal
+/// database by that key, builds the action with its own constructor and asks the game's check before posting.
+pub(super) fn justify_request(tag_index: i32, war_goal_key: &str, states: &[i32]) -> Result<Value> {
+    use crate::error::Error;
+    if tag_index <= 0 {
+        return Err(Error::new(
+            "invalid_target",
+            "the receiver has no tag index",
+        ));
+    }
+    if war_goal_key.is_empty()
+        || war_goal_key.len() > 39
+        || !war_goal_key
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    {
+        return Err(Error::new(
+            "invalid_arguments",
+            "war_goal_key: the game's war goal key (letters, digits, _; 1..39), e.g. take_state",
+        ));
+    }
+    if states.len() > 64 || states.iter().any(|s| !(1..=100_000).contains(s)) {
+        return Err(Error::new(
+            "invalid_arguments",
+            "state_ids: 0..64 state ids",
+        ));
+    }
+    let mut vals = vec![i64::from(tag_index)];
+    vals.extend(war_goal_key.bytes().map(i64::from));
+    let mut r = request(JUSTIFY_OP, &[0], &[], &vals, None)?;
+    if !states.is_empty() {
+        r["provs"] = json!(states
+            .iter()
+            .map(i32::to_string)
+            .collect::<Vec<_>>()
+            .join(","));
+    }
+    Ok(r)
+}
+
+/// The module op that justifies a war goal (the catalog's generate_war_goal row, shape war_goal_type).
+pub(super) const JUSTIFY_OP: &str = "diplomacy2.generate_war_goal";
+
+/// engineer 125: post one justification; the module's reply on success. The game's own check refusing it (no such goal
+/// toward that country now, not enough political power, a goal already justified ...) is the answer.
+pub(super) fn justify(
+    ch: &mut Channel,
+    tag_index: i32,
+    war_goal_key: &str,
+    states: &[i32],
+) -> Routed {
+    match justify_request(tag_index, war_goal_key, states).and_then(|r| ch.post_raw(r)) {
+        Ok(reply) => routed(reply, "this war goal justification now"),
+        Err(_) => Routed::Gui,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,6 +227,26 @@ mod tests {
                 "{k} needs the dialog's choices: the mouse path"
             );
         }
+    }
+
+    #[test]
+    fn a_justification_carries_the_war_goal_key_as_codes_and_the_states_as_provinces() {
+        let r = justify_request(7, "take_state", &[64, 65]).unwrap();
+        assert_eq!(r["cmd"], JUSTIFY_OP);
+        assert_eq!(r["vals"], "7,116,97,107,101,95,115,116,97,116,101");
+        assert_eq!(r["provs"], "64,65");
+        assert!(justify_request(7, "annex_everything", &[])
+            .unwrap()
+            .get("provs")
+            .is_none());
+        assert_eq!(
+            justify_request(7, "Conquer!", &[]).unwrap_err().code,
+            "invalid_arguments"
+        );
+        assert_eq!(
+            justify_request(0, "take_state", &[]).unwrap_err().code,
+            "invalid_target"
+        );
     }
 
     fn cat() -> Value {

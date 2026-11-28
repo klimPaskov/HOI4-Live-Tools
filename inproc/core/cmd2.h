@@ -93,7 +93,18 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
         * const tag *receiver, const CDate *) and also builds a division handle list (CPdxArray with an inline buffer:
         * {data -> inline, capacity, count} and its allocator) that the diplomacy view's dialog fills with the chosen
         * divisions: send (CSendVolunteerAction) and recall (CRecallVolunteerAction) */
-       CTOR_VOLUNTEER = 25 };
+       CTOR_VOLUNTEER = 25,
+       /* engineer 125 (28 Nov): justify a war goal (CGenerateWarGoalAction). Its player constructor is (action, const tag
+        * *sender, const tag *receiver, CWarGoalType *, const CDate *): the type pointer is stored at act_goal_off, an empty
+        * state id list (CPdxArray<int> {data, capacity, size} and its allocator) at act_units_off, and the constructor
+        * sets byte +0xe. The type comes from the game's war goal type database by its key (each type's token named
+        * through the game's own token-to-name function); the states (for take-state goals) are filled through the
+        * list's own allocator, as the battle-plan province lists are */
+       CTOR_DIPLO_JUSTIFY = 26,
+       /* engineer 125: an action with the SIMPLE signature whose division handle list has NO inline places (the
+        * expeditionary force: CSendExpeditionaryForceAction, list +0x70, allocator +0x80); the divisions are filled
+        * through the list's own allocator */
+       CTOR_DIPLO_DIVLIST = 27 };
 /* engineer 74: BUILD_FIELDS also fills CPdxArray fields (a division handle list, a province list): the fresh object's
  * array is empty ({data 0, capacity 0, size 0} and its allocator set by the factory); the module allocates the
  * elements through THAT allocator's own allocate slot (read from the game's array growth code), so the command's
@@ -251,6 +262,12 @@ typedef struct {
     uint32_t date_off, act_date_off;
     uint64_t country_of;
     uint32_t wg_holder_off, wg_list_off, wg_count_off, wg_target_off;
+    /* engineer 125: the war goal type database the justify action's own reader resolves a type through (its slot +0x28:
+     * mov rax,[rip+GOT]; mov rdi,[rax]; ...; call lookup; mov [rbx+TYPE],rax): the GOT slot holding the database
+     * pointer's address, and from the lookup function the type list (data +wgt_arr_off, count +wgt_cnt_off; entry 0 is
+     * the default the lookup falls back to) and a type's token (+wgt_tok_off) */
+    uint64_t wgt_got;
+    uint32_t wgt_arr_off, wgt_cnt_off, wgt_tok_off;
     char evidence[300];
 } diplo_facts;
 

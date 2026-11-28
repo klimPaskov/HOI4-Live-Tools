@@ -1254,9 +1254,10 @@ content's scripted actions, each with its shape and the game's own "can do" towa
 `hoi4_diplomacy_act` posts a catalog key the module builds (family `diplomacy2`) only when the game's check passes.
 Launch with `HOI4_BACKEND=inprocess` and the opt-in naming `diplomacy` and `diplomacy2` (HOI4_INPROC_POST=...,diplomacy,diplomacy2).
 Bed: the 1939 bookmark as Germany (w92b or the game's own 1939 start), paused; Spain or a minor at peace as a neutral target.
-D0 hello: family `diplomacy2` on, 12 types on (embargo, docking_rights, offer_docking_rights, air_base_access,
+D0 hello: family `diplomacy2` on, 14 types on (embargo, docking_rights, offer_docking_rights, air_base_access,
 offer_air_base_access, naval_blockade, peace_proposal, reduce_autonomy, increase_autonomy,
-request_access_to_license_production, cancel_licensed_production, return_all_expeditionary_forces).
+request_access_to_license_production, cancel_licensed_production, return_all_expeditionary_forces, generate_war_goal,
+send_expeditionary_force).
 D1 catalog read: `hoi4_diplomacy {catalog:true, country:"SPR"}` (or the neutral tag): 43 rows (+ scripted rows if a mod adds
 any), every row has shape and route; rows whose shape is unsupported are present (justify_war_goal constructor_args_1,
 stage_coup dialog_fields, scripted_diplomatic scripted_type ...). Open the diplomacy view on the same country (read only,
@@ -1270,12 +1271,45 @@ embargo silently: record whether the tool refuses (nothing_to_change) or the gam
 `embargo` mapping in inproc_diplomacy::op_of must be removed before this family is switched on (report it).
 D5 docking rights: `{action:"ask_docking_rights", country:<an ally or friendly minor>}`: posted only when can_do is true;
 the AI answers when the game runs (Diverged until then); record the answer after 2 game days.
-D6 a key the module cannot build: `{action:"justify_war_goal" ...}` keeps the mouse path (the view's dialog); a catalog key
-with an unsupported shape and no view row (e.g. `{action:"request_foreign_manpower", country:...}`) is refused
-dialog_unsupported and nothing is sent.
+D6 a key the module cannot build: `{action:"justify_war_goal", war_goal:..., states:[...]}` (no war_goal_key) keeps the
+mouse path (the view's dialog); a catalog key with an unsupported shape and no view row (e.g.
+`{action:"request_foreign_manpower", country:...}`) is refused dialog_unsupported and nothing is sent.
+D7 justify by key (engineer 125; written, module catalog row generate_war_goal, shape war_goal_type): D1's catalog shows
+generate_war_goal with shape war_goal_type and `war_goal_types:true` in the module's hello. Against a neutral minor we have
+no goal on (e.g. LIT or a minor the 1939 bed offers): `{action:"justify_war_goal", country:<tag>, war_goal_key:"take_state",
+state_ids:[<one of its states>]}`: the reply shows 1 posted; the view's war goal list (or hoi4_diplomacy_state
+own_war_goals) shows the justification in progress toward that country with that state; record PP and world tension
+before and after, and the justification days the view shows. Then `war_goal_key:"no_such_goal"`: refused, nothing posted
+(the module answers "no war goal type of that key"). Then `war_goal_key:"annex_everything"` with no state_ids against a
+country where the view offers no such goal: refused_by_game, nothing posted. Stop at once if the justification names a
+different goal type or state than asked.
+D8 an expeditionary force (engineer 125; written, catalog row send_expeditionary_force, shape division_list): only on a
+bed where an ally at war accepts expeditions (Germany and Italy at war, Italy in our faction; else Japan-China with a
+faction ally): `{action:"expeditionary_force", country:<the ally>, army:<an army of 1-2 divisions>}`: the reply shows the
+divisions posted; the divisions turn to the ally's control (the army card's flag, or hoi4_units owner); then
+`{action:"return_expeditions", country:<the ally>}` returns them. Not at war or no ally: refused_by_game, nothing posted.
+Record the division count before and after.
 Stop at once on: any post while the view greys the button, any change after D1/D2, a module `unexplained` result, a
 toggle that removed a relation we had.
-Pass: D0-D4, D6 (D5 recorded). Then set the `diplomacy2` entry of IPC_LIVE_PASSED in inproc/core/ipc.c to 1 with the numbers.
+Pass: D0-D4, D6, D7 (D5 and D8 recorded; D8 when the bed allows it). Then set the `diplomacy2` entry of IPC_LIVE_PASSED in
+inproc/core/ipc.c to 1 with the numbers. D0's type count is 14 with engineer 125's module (generate_war_goal and
+send_expeditionary_force added).
+
+## Capture C-LICENCE: what the licence request action carries (read only plus one licence request; about 15 minutes) -- with the diplomacy session
+Not pass/fail: it gives the offline engineer the meaning of CRequestLicensedProductionAction's two equipment lists
+(+0x70 and +0x88) and its byte +0xa0, which the binary alone left open (one list is executed with 100000, the other with 0).
+Server env: `HOI4_BACKEND=inprocess HOI4_TRACE=1`, module log on. Bed: 1939 Germany or 1936 Germany, paused; a country with
+a licensable design we lack (Italy, Japan, the USA: the view's Request licence row).
+L1 open the diplomacy view on that country, Request licence production: the dialog lists equipment; screenshot it.
+L2 choose ONE equipment (record its name and version as shown) and send; then save the game (licence-before/after saves
+are not needed in Git: keep them under the run folder).
+L3 the module's `diplomacy2` catalog read toward the same country before and after (`hoi4_diplomacy {catalog:true,
+country:<tag>}`): request_licensed_production row's can_do both times.
+L4 the module log's last posted command trace for the action (the game builds it itself here, so ask the module for a dump
+of the last action of type 0x37bf if the log has it; else note "not traced").
+L5 record: equipment chosen, the AI's answer after 2 game days, the licence line in the production view (cost, whether the
+licence shows under the equipment).
+Hand the folder to the diplomacy engineer.
 
 ## Capture C-DESIGNER: why the designer base reads fail (read only, mouse opens and closes the designer; about 15 minutes) -- any time, before the next designer session
 Not a pass/fail session: it records what an offline engineer needs. s115b (28 Nov) failed `hoi4_design_options` with a base:
