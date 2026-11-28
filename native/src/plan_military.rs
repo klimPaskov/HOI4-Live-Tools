@@ -204,6 +204,8 @@ pub(super) struct Memory {
     /// Enemy fighters active per strategic region as the region window last showed them, with the
     /// game hour of the read (plan_air: the air war by situation).
     pub(super) air_seen: HashMap<i64, (f64, GameHour)>,
+    /// (wing, mission) pairs the game refused (plan_air mission entries leave them out a while) -> when.
+    pub(super) air_refused: HashMap<(String, String), GameHour>,
     /// The enemy's share of the air per region as the region window estimated it, with the hour (plan_airborne).
     pub(super) air_share: HashMap<i64, (f64, GameHour)>,
     /// Wake alarms raised since the last run result.

@@ -1092,9 +1092,32 @@ Pass -> set `LIVE_PASSED` true in native/src/launch/macos/paradrop.rs (auto then
   owner unconfirmed. Confirm against the region window for 2 regions, then the probe can be replaced.
 - air-situation (plan key `air_situation`): a war save; record each executor turn's orders against the region window
   (fighters sized to the ratio or kept out; CAS only over regions not lost; one forward rebase when out of range).
+  Mission entries (engineer 125, written): `air_situation.missions:[{"id":"ls","mission":"logistics_strike","region":<a
+  region of our battles>,"wings":2},{"id":"rc","mission":"recon","region":<same>,"wings":1}]`: the two CAS wings nearest are
+  sent on logistics strike and the scout wing on recon before the fighters and CAS take the rest; with the enemy's fighters
+  seen there above ours / fighter_ratio the strike waits (the note says so); a wing the game refuses for the mission is
+  left out of it for 10 turns. Record each order and the region window.
 - designs: `scripts/hoi4facts/facts.py design-best GER --role fighter --need air_range=1100` and the owner's Fw 190
   (1235 km): the designer's shown range, agility, attack and cost against the computed numbers for the same modules.
 - S18-DOCTRINE also adopts a special-forces grand doctrine (D2): the paratrooper line needs it.
+
+## Session S28-AIRTRAIN: air training that pays, and its stop (mouse; about 20 minutes plus a 40-day soak at speed 5) -- any time
+Engineer 125 (written, not run): g115a's wings gained 6 air XP in four months because training (pilot exercises) has no
+region, so the fuel cut never saw the training wings (fuel fell to 10%) and hoi4_air_hold refused them; and training past
+the game's cap (AIR_WING_XP_TRAINING_MAX / AIR_WING_XP_TRAINING_MISSION_GAIN_DAILY: 42.9 days on 1.20.1,
+`scripts/hoi4facts/facts.py air-training`) gives a wing nothing more. Bed: the 1936 Germany start, paused.
+T1 `hoi4_air_mission {wings:[2 fighter wings], mission:"training"}` (no region): both Verified, mask has frame 12, region 0.
+Record fuel, country air XP and each wing's experience (the wing card) at the start.
+T2 `hoi4_air_hold {wing:<one of them>}`: the reply `training_stopped:true`; the wing card shows no mission; the other wing
+still trains. Record whether the game took the click as a toggle (training off) or opened a mission picker.
+T3 `hoi4_air_mission` training for the held wing again; run 10 game days at speed 5 with fuel above the plan's floor: record
+air XP per day and fuel per day against g115a's 0.047 air XP a day.
+T4 plan executor: a plan with `manage.air_training_days` set to the facts value (or 10 for a quick check) and the wings
+on training: after that many game days the executor posts hoi4_air_hold for each with the note "trained N days, the
+game's training cap"; a wing is re-trained only when its aircraft count rose (new planes). Record the days each stopped.
+T5 a refused wing: LG Greifswald (g115a issue I0002, refused_by_game_check on training): its plane type, its base and
+the mission button's tooltip, so the refusal can be named.
+Pass: T1-T4. Then the air training rule may be turned on in the strategist's default (`manage.air_training_days`).
 
 ## Session S23-WEATHER: the weather evaluator against the game's own weather (read only; about 10 minutes) -- any time
 What it proves: hoi4_weather's estimate agrees with what the game shows, so the operation step's ground gate
