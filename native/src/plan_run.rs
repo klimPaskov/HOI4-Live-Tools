@@ -2933,9 +2933,26 @@ fn tick_inner(
                 continue;
             }
             let (ok, why) = state.act(tools, lease, "hoi4_event_choose", args, "ev")?;
-            return Ok(Tick::Acted(format!(
-                "event {key} option {option}{how}: {ok} {why}"
-            )));
+            let line = format!("event {key} option {option}{how}: {ok} {why}");
+            // At war a failed answer never takes the tick: the war's lanes get their turn after
+            // it in the same tick. The answer goes again within hours (EVENT_WAR_REST), but each
+            // failure ended the run, so the run that came due next tried the event first again
+            // and nothing else (p101c, 28 Nov 2026: news.234 failed its read-back five times,
+            // 14 s each, from W+9.6 to W+17.5; no lane ticked for 9.1 game days of Poland's war:
+            // no war step, no re-aim, no air).
+            if !ok && (state.war_active || state.op_events_now) {
+                if let Some(step) = plan_manage::day0_step(state, tools, plan, lease, now)? {
+                    return Ok(Tick::Acted(format!("{step}; {line}")));
+                }
+                return Ok(match lanes_turns(state, tools, plan, lease, now)? {
+                    Tick::Acted(what) => {
+                        state.sched.more.push(line);
+                        Tick::Acted(what)
+                    }
+                    _ => Tick::Acted(line),
+                });
+            }
+            return Ok(Tick::Acted(line));
         }
         waiting.get_or_insert((key, new));
     }
@@ -15719,6 +15736,47 @@ mod tests {
             matches!(&step, Tick::Acted(s) if s.starts_with("event AAT_norway_news.2 option 0")),
             "{step:?}"
         );
+    }
+
+    #[test]
+    fn at_war_a_failed_event_answer_gives_the_same_tick_to_the_lanes() {
+        // p101c (28 Nov 2026): news.234 failed its read-back five times from W+9.6 to W+17.5,
+        // 14 s each; every failure ended the run and the next run tried it first again: no lane
+        // ticked for 9.1 game days of Poland's war
+        let events = json!({"events": [{"event": "news.234", "options": ["ok"]}]});
+        let tools = fake(vec![("hoi4_events", events.clone())]);
+        tools.refuse_with(
+            "hoi4_event_choose",
+            "input_readback_failed",
+            "event answered: expected game change not observed",
+        );
+        let mut war = State {
+            war_active: true,
+            ..State::default()
+        };
+        let step = tick(&mut war, &tools, &json!({}), "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.contains("event news.234 option 0: false")),
+            "{step:?}"
+        );
+        assert_eq!(
+            war.sched.ticks, 1,
+            "the lanes ticked after the failed answer"
+        );
+        // in peace the failed answer still ends the tick (nothing waits on the war's lanes)
+        let tools = fake(vec![("hoi4_events", events)]);
+        tools.refuse_with(
+            "hoi4_event_choose",
+            "input_readback_failed",
+            "event answered: expected game change not observed",
+        );
+        let mut peace = State::default();
+        let step = tick(&mut peace, &tools, &json!({}), "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.contains("false")),
+            "{step:?}"
+        );
+        assert_eq!(peace.sched.ticks, 0);
     }
 
     #[test]
