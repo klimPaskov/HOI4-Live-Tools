@@ -240,6 +240,13 @@ pub(super) struct Memory {
     /// trains again only when new aircraft, new pilots, joined it).
     training_since: HashMap<String, GameHour>,
     training_done: HashMap<String, i64>,
+    /// engineer 134: the training fuel budget's window: (game hour, fuel stock) since the planes on training last
+    /// changed, that plane count, the (planes, net fuel per day) of earlier windows, and the burn per training plane
+    /// a day learned from two windows with different loads (the game stores no burn).
+    train_window: Vec<(GameHour, f64)>,
+    train_window_planes: i64,
+    train_rates: Vec<(i64, f64)>,
+    train_burn: Option<f64>,
     /// `xp_budget` entries the pool could already pay, by id -> since when (plan_xp.rs: a hold
     /// for a spend its lane does not make stops holding the other spends back).
     pub(super) xp_payable_since: HashMap<String, GameHour>,
@@ -5214,6 +5221,128 @@ fn flies(wing: &Value, mission: &str) -> bool {
         && strings(wing, "missions").iter().any(|m| m == mission)
 }
 
+/// engineer 134 (live 129, g126b: thirteen training wings drained the whole fuel stock by June 1936; s129c: training
+/// at zero fuel gave 0.0067 air XP a day): the training load sized by fuel income against the fuel floor. Every
+/// number is read: the stock and capacity (hoi4_resources), the net fuel per day measured over the current training
+/// load (the game stores no gain or burn), the planes on training (hoi4_air), the horizon `manage.air_training_days`
+/// (the game's training cap from its defines: past it training pays nothing) and the floor `manage.air_training_fuel`
+/// (a share of capacity the plan computes: the stock its first war days need). Pure.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct TrainBudget {
+    pub stock: f64,
+    pub capacity: f64,
+    pub floor: f64,
+    /// Net fuel per day over the current load, None until two game days are sampled.
+    pub rate: Option<f64>,
+    pub horizon_days: f64,
+    pub planes_training: i64,
+    /// Fuel per training plane a day, learned from two loads; None until then.
+    pub burn: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum TrainVerdict {
+    /// Take one wing off training: the stock would end the horizon under the floor.
+    Hold(String),
+    /// A wing of this many planes may start training.
+    Add(String),
+    /// Neither: the reason.
+    Keep(String),
+}
+
+pub(super) fn training_verdict(b: &TrainBudget, next_planes: i64) -> TrainVerdict {
+    let floor = b.floor * b.capacity;
+    let full = b.capacity > 0.0 && b.stock >= b.capacity;
+    let Some(rate) = b.rate else {
+        // nothing measured yet: the first wing starts the measurement, more wait for it
+        return if b.planes_training == 0 && b.stock >= floor {
+            TrainVerdict::Add(format!(
+                "fuel {:.0} over the floor {floor:.0}; the first wing measures the burn",
+                b.stock
+            ))
+        } else {
+            TrainVerdict::Keep(format!(
+                "fuel budget: measuring the net fuel of {} planes on training (two game days)",
+                b.planes_training
+            ))
+        };
+    };
+    let projected = b.stock + rate * b.horizon_days;
+    if b.planes_training > 0 && !full && projected < floor {
+        return TrainVerdict::Hold(format!(
+            "fuel {:.0} at {rate:+.0}/day with {} planes training ends the {:.1}-day training under the floor {floor:.0} ({projected:.0})",
+            b.stock, b.planes_training, b.horizon_days
+        ));
+    }
+    if b.stock < floor {
+        return TrainVerdict::Keep(format!("fuel {:.0} under the floor {floor:.0}", b.stock));
+    }
+    match b.burn {
+        Some(burn) => {
+            let after = b.stock + (rate - burn * next_planes as f64) * b.horizon_days;
+            if after >= floor || (full && rate - burn * (next_planes as f64) >= 0.0) {
+                TrainVerdict::Add(format!(
+                    "fuel {:.0} at {rate:+.0}/day; {next_planes} more planes at {burn:.2}/plane/day end the {:.1} days at {after:.0} (floor {floor:.0})",
+                    b.stock, b.horizon_days
+                ))
+            } else {
+                TrainVerdict::Keep(format!(
+                    "fuel budget: {next_planes} more planes at {burn:.2}/plane/day would end the {:.1} days at {after:.0}, under the floor {floor:.0}",
+                    b.horizon_days
+                ))
+            }
+        }
+        // the burn is not known yet: another wing only while the stock still rises (or sits full)
+        None if rate > 0.0 || full => TrainVerdict::Add(format!(
+            "fuel {:.0} rising {rate:+.0}/day with {} planes training",
+            b.stock, b.planes_training
+        )),
+        None => TrainVerdict::Keep(format!(
+            "fuel budget: {rate:+.0}/day with {} planes training; no more until the burn per plane is measured",
+            b.planes_training
+        )),
+    }
+}
+
+/// The training budget's sample: a new window when the planes on training changed (the old window's rate is kept
+/// with its load, and two loads give the burn per plane), else one more sample. Returns the current window's net
+/// fuel per day once it spans two game days.
+fn train_sample(state: &mut State, now: GameHour, stock: f64, planes: i64) -> Option<f64> {
+    let m = &mut state.manage;
+    let rate_of = |w: &[(GameHour, f64)]| {
+        let (&(a, first), &(b, last)) = (w.first()?, w.last()?);
+        let days = (b - a) as f64 / DAY as f64;
+        (days >= 2.0).then(|| (last - first) / days)
+    };
+    if planes != m.train_window_planes || m.train_window.is_empty() {
+        if let Some(r) = rate_of(&m.train_window) {
+            m.train_rates.retain(|(p, _)| *p != m.train_window_planes);
+            m.train_rates.push((m.train_window_planes, r));
+            if m.train_rates.len() > 8 {
+                m.train_rates.remove(0);
+            }
+        }
+        m.train_window = vec![(now, stock)];
+        m.train_window_planes = planes;
+        return None;
+    }
+    if m.train_window.last().is_some_and(|(at, _)| *at < now) {
+        m.train_window.push((now, stock));
+        if m.train_window.len() > 64 {
+            m.train_window.remove(1);
+        }
+    }
+    let r = rate_of(&m.train_window)?;
+    // two loads: the burn per training plane a day (positive only; noise and a full stock give none)
+    if let Some(&(p0, r0)) = m.train_rates.iter().rev().find(|(p, _)| *p != planes) {
+        let b = (r0 - r) / (planes - p0) as f64;
+        if b > 0.0 && b.is_finite() {
+            m.train_burn = Some(b);
+        }
+    }
+    Some(r)
+}
+
 /// W: air.training_xp, air.idle_wings, air.fuel_mission_cutback. Every 3 game days, at most one
 /// action (needs a `manage` object; `manage.off` "air_idle" turns it off):
 /// - fuel below `manage.air_training_fuel` (0.5 of capacity): a training wing is held;
@@ -5250,10 +5379,8 @@ fn air_idle_step(
         note(state, "air_idle", "no wings");
         return Ok(None);
     }
-    let fuel = tools
-        .call("hoi4_resources", &json!({}))
-        .ok()
-        .and_then(|r| r["fuel"]["ratio"].as_f64());
+    let res = tools.call("hoi4_resources", &json!({})).ok();
+    let fuel = res.as_ref().and_then(|r| r["fuel"]["ratio"].as_f64());
     let war = at_war(state, tools, plan, now);
     let train_floor = fraction(&m["air_training_fuel"], 0.5);
     let floor = fraction(&m["fuel_floor"], 0.25);
@@ -5325,6 +5452,59 @@ fn air_idle_step(
             )));
         }
     }
+    // engineer 134: the training load sized by fuel income against the floor (needs the capacity and the plan's
+    // horizon; without them the ratio floor above is the only fuel rule)
+    let mut budget_gate: Option<TrainVerdict> = None;
+    let stock = res.as_ref().and_then(|r| r["fuel"]["stock"].as_f64());
+    let capacity = res
+        .as_ref()
+        .and_then(|r| r["fuel"]["capacity"].as_f64())
+        .filter(|c| *c > 0.0);
+    let horizon = m["air_training_days"].as_f64().filter(|d| *d > 0.0);
+    if let (Some(stock), Some(capacity), Some(horizon)) = (stock, capacity, horizon) {
+        let planes: i64 = wings
+            .iter()
+            .filter(|w| flies(w, "training"))
+            .map(|w| w["aircraft"].as_i64().unwrap_or(0))
+            .sum();
+        let rate = train_sample(state, now, stock, planes);
+        let b = TrainBudget {
+            stock,
+            capacity,
+            floor: train_floor,
+            rate,
+            horizon_days: horizon,
+            planes_training: planes,
+            burn: state.manage.train_burn,
+        };
+        let next = wings
+            .iter()
+            .filter(|w| !w["region"].is_object() && !flies(w, "training"))
+            .filter_map(|w| w["aircraft"].as_i64())
+            .max()
+            .unwrap_or(0);
+        let verdict = training_verdict(&b, next);
+        if let TrainVerdict::Hold(why) = &verdict {
+            // the wing trained longest goes first (its pilots are nearest the cap)
+            let longest = trained
+                .iter()
+                .filter(|n| !state.skipped(now, "airidle", n))
+                .min_by_key(|n| state.manage.training_since.get(*n).copied().unwrap_or(now))
+                .cloned();
+            if let Some(name) = longest {
+                let (ok, res) =
+                    state.act(tools, lease, "hoi4_air_hold", json!({"wing": name}), "ah")?;
+                state.skip(now, "airidle", &name, if ok { 30 * DAY } else { 7 * DAY });
+                if ok {
+                    state.manage.training_since.remove(&name);
+                }
+                return Ok(Some(format!(
+                    "air fuel budget: {why}: {name} off training: {ok} {res}"
+                )));
+            }
+        }
+        budget_gate = Some(verdict);
+    }
     let idle: Vec<&Value> = wings.iter().filter(|w| !w["region"].is_object()).collect();
     let why = if m["air_training"] == json!(false) {
         format!(
@@ -5337,6 +5517,10 @@ fn air_idle_step(
             Some(f) if f < train_floor => {
                 format!("fuel {f:.2} below the training floor {train_floor}")
             }
+            Some(_) if matches!(budget_gate, Some(TrainVerdict::Keep(_))) => match &budget_gate {
+                Some(TrainVerdict::Keep(why)) => why.clone(),
+                _ => String::new(),
+            },
             Some(_) => {
                 // a wing already training reads region null too: it is not idle (sk27a, 18 Nov
                 // 2026: 17 wings were sent "training" again every 30 days, 4 times each)
@@ -12181,6 +12365,79 @@ mod tests {
 
     fn peace_plan() -> Value {
         json!({"manage": {"fuel_floor": 0.3}, "war": {"enemies": ["POL"]}})
+    }
+
+    #[test]
+    fn the_training_load_is_sized_by_fuel_income_against_the_floor() {
+        // g126b: 13 wings drained 121,733 capacity to 0 by June 1936; the horizon is the game's cap (42.9 days)
+        let b = TrainBudget {
+            stock: 40_000.0,
+            capacity: 121_733.0,
+            floor: 0.25,
+            rate: Some(-400.0),
+            horizon_days: 42.9,
+            planes_training: 1_000,
+            burn: Some(0.5),
+        };
+        // 40,000 - 400 x 42.9 = 22,840 < 30,433: one wing comes off
+        assert!(matches!(training_verdict(&b, 100), TrainVerdict::Hold(_)));
+        // rising 100/day: 100 more planes at 0.5 burn 50/day: still rising, start
+        let up = TrainBudget { rate: Some(100.0), ..b };
+        assert!(matches!(training_verdict(&up, 100), TrainVerdict::Add(_)));
+        // 1,000 more planes would cost 500/day: 40,000 - 400 x 42.9 under the floor: keep
+        assert!(matches!(training_verdict(&up, 1_000), TrainVerdict::Keep(_)));
+        // nothing measured: only the first wing, only above the floor
+        let fresh = TrainBudget { rate: None, planes_training: 0, burn: None, ..b };
+        assert!(matches!(training_verdict(&fresh, 100), TrainVerdict::Add(_)));
+        let low = TrainBudget { stock: 20_000.0, ..fresh };
+        assert!(matches!(training_verdict(&low, 100), TrainVerdict::Keep(_)));
+        // a full stock reads no gain (cut at the cap): it does not stop training
+        let full = TrainBudget { stock: 121_733.0, rate: Some(0.0), burn: None, ..b };
+        assert!(matches!(training_verdict(&full, 100), TrainVerdict::Add(_)));
+    }
+
+    #[test]
+    fn two_training_loads_give_the_burn_per_plane() {
+        let mut state = State::default();
+        // 0 planes: +200/day over 3 days
+        assert_eq!(train_sample(&mut state, START, 30_000.0, 0), None);
+        train_sample(&mut state, START + DAY, 30_200.0, 0);
+        train_sample(&mut state, START + 3 * DAY, 30_600.0, 0);
+        // 500 planes on training: -100/day, so 300/day for 500 planes = 0.6 per plane
+        assert_eq!(train_sample(&mut state, START + 3 * DAY + 1, 30_600.0, 500), None);
+        train_sample(&mut state, START + 4 * DAY, 30_500.0, 500);
+        let r = train_sample(&mut state, START + 6 * DAY, 30_300.0, 500).unwrap();
+        assert!((r + 100.0).abs() < 1.0, "{r}");
+        let burn = state.manage.train_burn.unwrap();
+        assert!((burn - 0.6).abs() < 0.01, "{burn}");
+    }
+
+    #[test]
+    fn the_fuel_budget_holds_the_longest_training_wing_when_the_stock_would_end_under_the_floor() {
+        let mut read = air_read();
+        for w in read["wings"].as_array_mut().unwrap() {
+            w["missions"] = json!(["training"]);
+            w["aircraft"] = json!(100);
+        }
+        let tools = fake(vec![
+            ("hoi4_air", read),
+            (
+                "hoi4_resources",
+                json!({"fuel": {"ratio": 0.6, "stock": 73_000.0, "capacity": 121_733.0}}),
+            ),
+        ]);
+        let plan = json!({"manage": {"fuel_floor": 0.25, "air_training_fuel": 0.5, "air_training_days": 42.9}, "war": {"enemies": ["POL"]}});
+        let mut state = State::default();
+        // falling 1,000 a day for two days: 71,000 - 1,000 x 42.9 = 28,100 < 60,866
+        air_idle_step(&mut state, &tools, &plan, "l", START).unwrap();
+        tools.replies.borrow_mut().insert(
+            "hoi4_resources".into(),
+            json!({"fuel": {"ratio": 0.58, "stock": 71_000.0, "capacity": 121_733.0}}),
+        );
+        state.manage.notes.clear();
+        let out = air_idle_step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap();
+        assert!(out.as_deref().unwrap_or("").starts_with("air fuel budget:"), "{out:?}");
+        assert!(actions(&tools).iter().any(|(n, _)| n == "hoi4_air_hold"));
     }
 
     #[test]

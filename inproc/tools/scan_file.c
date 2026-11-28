@@ -111,6 +111,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "diplo_ok")) { got = (uint64_t)t.st2.diplo.ok; fprintf(stderr, "diplo: %s\n", t.st2.diplo.evidence); }
         else if (!strcmp(argv[a], "diplo_war_ok")) got = (uint64_t)t.st2.diplo.war_ok;
         else if (!strcmp(argv[a], "diplo_make_cmd")) got = t.st2.diplo.make_cmd;
+        else if (!strcmp(argv[a], "diplo_accept_fn")) got = t.st2.diplo.accept_fn; /* engineer 134 */
+        else if (!strcmp(argv[a], "diplo_accept_slot")) got = t.st2.diplo.accept_slot;
         else if (!strcmp(argv[a], "diplo_date_off")) got = t.st2.diplo.date_off;
         else if (!strcmp(argv[a], "diplo_act_date_off")) got = t.st2.diplo.act_date_off;
         else if (!strcmp(argv[a], "diplo_date_vt")) got = t.st2.diplo.date_vt;

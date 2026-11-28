@@ -1398,6 +1398,16 @@ static void scan_diplo_facts(const scan_image *im, const stage2_table *t, diplo_
     if (d < 0) { snprintf(o->evidence, sizeof o->evidence, "date layout not found in the action constructor"); return; }
     o->date_vt = any->act_ctor + (uint64_t)d + 7 + (int64_t)(int32_t)c[0];
     o->ok = 1;
+    /* engineer 134: the acceptance wrapper: mov r13d,ecx; mov r14d,edx; mov r12,rsi; mov r15,rdi; mov rax,[rdi];
+     * call [rax+SLOT] (one function in 1.19.4.1, 1.20.0.0 and 1.20.1.0: 0x100f8ab04 / 0x100f8ddd4 / 0x100f8ddd4) */
+    {
+        uint32_t a[2]; unsigned am = 0;
+        long w = pfind_at(im, im->text_addr, im->text_size, "41 89 cd 41 89 d6 49 89 f4 49 89 ff 48 8b 07 ff 90 D", a, 2, &am);
+        uint64_t fs = (w >= 0 && am == 1) ? fn_start(im, im->text_addr + (uint64_t)w) : 0;
+        if (fs && a[0] % 8 == 0 && a[0] >= 0x100 && a[0] < 0x800 && im->text_addr + (uint64_t)w - fs < 0x40) {
+            o->accept_fn = fs; o->accept_slot = a[0]; o->accept_ok = 1;
+        }
+    }
     /* the player's war goals as the declare-war dialog lists them: add rdi,0x10 (the action's sender); call country_of;
      * mov rbx,[rax+HOLDER]; mov eax,[rbx+COUNT] ... mov rax,[rax+HOLDER]; mov [rbp-X],rax; mov r15,[rbx+LIST] ... per goal
      * mov rdi,[r15]; mov eax,[rdi+TARGET]; and the handler writes the chosen goal's handle to the war action's field */
@@ -1430,10 +1440,11 @@ static void scan_diplo_facts(const scan_image *im, const stage2_table *t, diplo_
         }
         o->war_ok = votes >= 1 && votes < 99 && o->wg_list_off < o->wg_count_off && o->wg_target_off < 0x200;
     }
-    snprintf(o->evidence, sizeof o->evidence, "make_cmd 0x%llx (helper 0x%llx), date +0x%x -> action +0x%x, date vt 0x%llx; war goals %s: country_of 0x%llx holder +0x%x list +0x%x count +0x%x target +0x%x",
+    snprintf(o->evidence, sizeof o->evidence, "make_cmd 0x%llx (helper 0x%llx), date +0x%x -> action +0x%x, date vt 0x%llx; war goals %s: country_of 0x%llx holder +0x%x list +0x%x count +0x%x target +0x%x; acceptance %s 0x%llx slot +0x%x",
              (unsigned long long)o->make_cmd, (unsigned long long)o->make_unique, o->date_off, o->act_date_off,
              (unsigned long long)o->date_vt, o->war_ok ? "ok" : "NOT found", (unsigned long long)o->country_of,
-             o->wg_holder_off, o->wg_list_off, o->wg_count_off, o->wg_target_off);
+             o->wg_holder_off, o->wg_list_off, o->wg_count_off, o->wg_target_off, o->accept_ok ? "ok" : "NOT found",
+             (unsigned long long)o->accept_fn, o->accept_slot);
 }
 
 /* engineer 79: the area-defence order facts (see holds_facts in cmd2.h), from the state click's own execution (vtable

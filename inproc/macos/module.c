@@ -447,6 +447,11 @@ typedef struct {
     /* mio (engineer 84): the player's organisation manager, the token the command carries (a trait, a policy or the
      * empty token = detach), the before-state the read-back compares, the organisation's handle (line) */
     uint64_t mio_mgr, mio_h2; int32_t mio_tok, mio_before;
+    /* engineer 134: a volunteer send: the list's places per action and the divisions the one posted action carries (the
+     * next group waits until the receiver has taken this one: the game's check counts volunteers only once they left);
+     * flag 3: the acceptance the view shows (total, the parts' values and their texts) */
+    int vol_places, vol_sent;
+    int acc_done, acc_n; int32_t acc_total, acc_val[16]; char acc_txt[16][64];
     long long ran_us, post_us;
     char reason[200], queue_type[64], server_type[64];
     dispatch_semaphore_t done;
@@ -866,6 +871,51 @@ static uint64_t war_goal_type(const char *key) {
 }
 typedef void **(*make_cmd_fn)(void **, void **);
 typedef void *(*new_fn)(size_t);
+/* engineer 134: the acceptance of one built action, as the diplomacy view computes it for its red cross and tooltip (the
+ * receiver's AI takes the request when the total is above 0): the game's wrapper (action, list, with_text 1, flag 1).
+ * The list is the module's own: 64 places on the stack, so the game's add never grows it (it grows only when the count
+ * reaches the capacity) and no allocator is needed; the parts' texts (libc++ strings) are copied printable-only and
+ * freed by the game's own operator delete. Main thread, between frames, like every post. */
+typedef int32_t (*accept_fn)(void *, void *, int32_t, int32_t);
+typedef void (*opdel_fn)(void *);
+static void diplo_acceptance(job2_t *j, void *act) {
+    const diplo_facts *d = &g_t.st2.diplo;
+    uint64_t f = d->accept_fn + (uint64_t)g_slide;
+    if (!d->accept_ok || !code_ptr(f)) return;
+    enum { PLACES = 64, ESZ = 0x20 };
+    _Alignas(16) uint8_t places[PLACES * ESZ];
+    _Alignas(16) uint8_t list[0x40];
+    memset(places, 0, sizeof places); memset(list, 0, sizeof list);
+    uint64_t data = (uint64_t)(uintptr_t)places; int32_t cap = PLACES;
+    memcpy(list, &data, 8); memcpy(list + 8, &cap, 4); /* count +0xc = 0, allocator +0x10 = none (never used) */
+    int32_t total = ((accept_fn)(uintptr_t)f)(act, list, 1, 1);
+    int32_t cnt = 0; uint64_t data2 = 0;
+    memcpy(&cnt, list + 0xc, 4); memcpy(&data2, list, 8);
+    j->acc_done = 1; j->acc_total = total;
+    if (data2 != data || cnt < 0 || cnt > PLACES) { j->acc_n = -1; return; } /* the game grew it: nothing to read safely */
+    static opdel_fn del;
+    if (!del) del = (opdel_fn)dlsym(RTLD_DEFAULT, "_ZdlPv");
+    for (int32_t e = 0; e < cnt; e++) {
+        uint8_t *en = places + (size_t)e * ESZ;
+        int lng = en[0] & 1;
+        const char *txt = lng ? *(const char **)(void *)(en + 0x10) : (const char *)(en + 1);
+        size_t len = lng ? *(const size_t *)(void *)(en + 8) : (size_t)(en[0] >> 1);
+        if (e < 16) {
+            int32_t v = 0; memcpy(&v, en + 0x18, 4);
+            j->acc_val[e] = v;
+            size_t o = 0;
+            for (size_t i = 0; txt && i < len && o + 1 < sizeof j->acc_txt[e]; i++) {
+                unsigned char ch = (unsigned char)txt[i];
+                if (ch == 0xc2 && i + 2 < len && (unsigned char)txt[i + 1] == 0xa7) { i += 2; continue; } /* a colour code and its letter */
+                if (ch >= 32 && ch < 127 && ch != '"' && ch != '\\') j->acc_txt[e][o++] = (char)ch;
+            }
+            j->acc_txt[e][o] = 0;
+            j->acc_n = e + 1;
+        }
+        if (lng && del) del(*(void **)(void *)(en + 0x10));
+    }
+}
+
 static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint64_t q, uint64_t post) {
     const diplo_facts *d = &g_t.st2.diplo;
     const stage2_common *c = &g_t.st2.common;
@@ -912,8 +962,15 @@ static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint6
         nact = (j->ndivh + per - 1) / per;
         if (nact > J2_MAX) { j->res[0] = R_BAD_OBJ; return "too many divisions for one request"; }
         j->n = nact;
+        j->vol_places = per;
     }
+    /* engineer 134 (s129e V3/V4): the game's check passes every action of one request against the same state and the
+     * volunteer count rises only once the receiver has taken a group, so a send posts its FIRST group only; the rest are
+     * skipped and the tool sends them after this group left the army, each checked against the new count. A recall
+     * posts every group (no cap) */
+    int send_once = vol && !strcmp(ct->spec->op, "diplomacy.send_volunteers") && j->flag == 0;
     for (int k = 0; k < nact; k++) {
+    if (send_once && j->posted > 0) { j->res[k] = R_SKIPPED; continue; }
     char *act = (char *)nw(ct->act_size);
     if (!act) { j->unexplained = 1; return "allocation failed"; }
     memset(act, 0, ct->act_size);
@@ -978,14 +1035,18 @@ static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint6
     }
     void **vt = *(void ***)cmd;
     if (!((valid_fn2)vt[c->valid_slot / 8])(cmd, 0)) { ((delete_fn2)vt[c->delete_slot / 8])(cmd); j->res[k] = R_INVALID; j->refused++; continue; }
+    /* engineer 134: flag 3: the acceptance the view shows, by the game's own wrapper (the action's acceptance slot plus
+     * the scripted modifiers), on the action the command holds; asked once, nothing is posted */
+    if (j->flag == 3 && !j->acc_done) diplo_acceptance(j, act);
     /* engineer 122: check only (flag 2): the game's own answer is the result; the command and its action are freed by the
      * game's own destructor, nothing is posted */
-    if (j->flag == 2) { ((delete_fn2)vt[c->delete_slot / 8])(cmd); j->res[k] = R_CAN_DO; j->checked++; continue; }
+    if (j->flag == 2 || j->flag == 3) { ((delete_fn2)vt[c->delete_slot / 8])(cmd); j->res[k] = R_CAN_DO; j->checked++; continue; }
     long long t0 = mono_us();
     unsigned char r = ((post_fn)(uintptr_t)post)((void *)(uintptr_t)q, cmd, 0);
     j->post_us += mono_us() - t0;
     if (!r) { j->res[k] = R_DROPPED; j->unexplained = 1; return "Post dropped a command every check passed"; }
     j->res[k] = R_POSTED; j->posted++;
+    if (vol) { int first = k * per; j->vol_sent += j->ndivh - first < per ? j->ndivh - first : per; }
     }
     return NULL;
 }
@@ -1720,7 +1781,8 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         else if (!jus && !tgl && (nv != 1 || j->val[0] < 1 || j->val[0] > 100000)) why = "vals: the receiving country's tag id";
         else if (jus && (nv < 2 || nv - 1 >= (int)sizeof j->wgkey || j->val[0] < 1 || j->val[0] > 100000))
             why = "vals: the receiving country's tag id, then the war goal type's key as character codes (1..39)";
-        else if ((flag != 0 && flag != 2) || (obj2 && *obj2) || (!jus && provs && *provs)) why = "diplomacy ops take flag 0 (post) or 2 (check only) and no obj2 or provs";
+        else if ((flag != 0 && flag != 2 && flag != 3) || (obj2 && *obj2) || (!jus && provs && *provs)) why = "diplomacy ops take flag 0 (post), 2 (check only) or 3 (check and the acceptance) and no obj2 or provs";
+        else if (flag == 3 && !g_t.st2.diplo.accept_ok) why = "the acceptance function was not found on this build";
         else if (!wants_divs && divs && *divs) why = "this diplomatic action takes no divs";
         else if (lic && ((j->ndiv = parse_list_u64(divs ? divs : "", j->divs, 16)) < 1)) why = "divs: 1 to 16 comma-separated design (CEquipmentVariant) addresses of the licensor";
         else if (!lic && wants_divs && ((j->ndiv = parse_list_u64(divs ? divs : "", j->divs, 64)) < 1)) why = "divs: 1 to 64 comma-separated division addresses";
@@ -2150,7 +2212,7 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         }
     }
     /* orders: the module reads back the order tree itself (the same facts as the reader), within 3 s, paused-aware */
-    char rbx[600] = "";
+    char rbx[2000] = "";
     if (!strncmp(op, "orders.", 7) && j->posted) {
         const orders_facts *of = &g_t.st2.orders;
         uint64_t vt = of->vt_order + (uint64_t)g_slide;
@@ -2373,6 +2435,17 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         }
     }
     *unexplained = j->unexplained;
+    if (ct->spec->auth_kind == AUTH_DIPLO) { /* engineer 134: a volunteer send's group, the acceptance parts */
+        size_t r0 = strlen(rbx);
+        if (j->vol_places && r0 < sizeof rbx)
+            r0 += (size_t)snprintf(rbx + r0, sizeof rbx - r0, ",\"places\":%d,\"divisions_posted\":%d", j->vol_places, j->vol_sent);
+        if (j->acc_done && r0 < sizeof rbx) {
+            r0 += (size_t)snprintf(rbx + r0, sizeof rbx - r0, ",\"acceptance\":%d,\"acceptance_parts\":[", j->acc_total);
+            for (int e = 0; e < j->acc_n && r0 < sizeof rbx; e++)
+                r0 += (size_t)snprintf(rbx + r0, sizeof rbx - r0, "%s{\"value\":%d,\"text\":\"%s\"}", e ? "," : "", j->acc_val[e], j->acc_txt[e]);
+            if (r0 < sizeof rbx) snprintf(rbx + r0, sizeof rbx - r0, "]");
+        }
+    }
     size_t at = (size_t)snprintf(out, n, "\"op\":\"%s\",\"type_id\":%u,\"objects\":%d,\"posted\":%d,\"refused\":%d,\"executed\":%d,"
                                  "\"result\":\"%s\",\"reason\":\"%s\",\"main_wait_ms\":%.2f,\"requeues\":%d,\"forbid\":%d,"
                                  "\"post_us_total\":%lld,\"readback_ms\":%.2f,\"total_ms\":%.2f,\"player_tag_id\":%d,\"per_object\":[",
@@ -2387,7 +2460,7 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
     if (at < n) at += (size_t)snprintf(out + at, n - at, "]%s", rbx);
     logj("\"event\":\"post2\",\"id\":%ld,%s", id, out);
     int ok = j->ran && !j->unexplained && j->refused == 0 && j->posted == j->n && (pending == 0);
-    if (j->flag == 2 && ct->spec->auth_kind == AUTH_DIPLO) ok = j->ran && !j->unexplained; /* a check's answer, either way */
+    if ((j->flag == 2 || j->flag == 3) && ct->spec->auth_kind == AUTH_DIPLO) ok = j->ran && !j->unexplained; /* a check's answer, either way */
     job2_release(j);
     return ok;
 }
