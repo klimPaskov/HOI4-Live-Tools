@@ -6371,6 +6371,109 @@
             "type": "string",
             "description": "Free text for people and the player; never read by the executor."
           },
+          "refresh": {
+            "type": "object",
+            "x-owner": "executor",
+            "description": "the design follows the technology: after the item's design is made, a new version is made whenever a better candidate becomes available (its tech researched, its when holding); the item's production line moves to each new version. Candidate lists come from the designer evaluator (facts.py design-refresh), best first",
+            "properties": {
+              "slots": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "module": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "base": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "tech": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "when": {
+                            "$ref": "#/definitions/predicate"
+                          },
+                          "why": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "description": "slot -> candidate modules, best first: a module key or {module, tech?, when?}"
+              },
+              "bases": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "module": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "base": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "tech": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "when": {
+                          "$ref": "#/definitions/predicate"
+                        },
+                        "why": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "minItems": 1,
+                "description": "candidate bases (equipment type keys), best first: a key or {base, tech?, when?}; a better available base makes the next version from that type with every wanted slot"
+              },
+              "xp": {
+                "type": "number",
+                "minimum": 0,
+                "description": "held experience of the kind's branch needed for a version (default 5 per changed slot)"
+              },
+              "names": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                },
+                "description": "names of versions 2, 3, ..; else '<name> <n>'"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false
+          },
           "switch_mature": {
             "type": "boolean",
             "default": false,

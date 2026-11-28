@@ -182,6 +182,28 @@ class DesignerTest(unittest.TestCase):
         self.assertIn("computed:", row["why"])
 
 
+    def test_plan_fragment_refresh_follows_the_techs(self):
+        tech_year = {"early_fighter": 1936, "better_fighter": 1940}
+        dated = designer.plan_fragment(self.cat, "GER", {"early_fighter"}, [1936, 1940], ["fighter"], tech_year,
+                                        objective="value")
+        self.assertEqual(len(dated["designs"]), 2)
+        frag = designer.plan_fragment(self.cat, "GER", {"early_fighter"}, [1936, 1940], ["fighter"], tech_year,
+                                      objective="value", refresh=True)
+        self.assertEqual(len(frag["designs"]), 1)
+        row = frag["designs"][0]
+        self.assertEqual(row["base"], "small_plane_airframe_1")
+        r = row["refresh"]
+        # the later year's base first, gated by the tech that unlocks it; the start base needs no tech
+        self.assertEqual(r["bases"][0], {"base": "small_plane_airframe_2", "tech": "better_fighter"})
+        self.assertEqual(r["bases"][-1], "small_plane_airframe_1")
+        # every slot of the first design has candidates; a later module carries its tech
+        for slot in row["modules"]:
+            self.assertIn(slot, r["slots"])
+        later = [c for cands in r["slots"].values() for c in cands if isinstance(c, dict)]
+        self.assertTrue(later)
+        self.assertTrue(all(c["tech"] == "better_fighter" for c in later))
+        self.assertIn("refresh:", row["why"])
+
     def test_mio_bonus_and_rank(self):
         orgs = [{"id": "range_co", "equipment_type": ["mio_cat_small"],
                  "initial_trait": {"equipment_bonus": {"air_range": 0.5}},
