@@ -706,6 +706,22 @@ class LaneTurnsAtTheGate(unittest.TestCase):
         self.assertNotIn("(ticks) 120", line)
         self.assertEqual([r["lane"] for r in E.starved_lanes(snap)], ["decisions"])
 
+    def test_a_war_step_idle_past_its_limit_is_a_fail_line_with_what_ran_instead(self):
+        # p101b (28 Nov 2026): 353 game hours between two war turns of op_poland
+        from hoi4_live.observe import escalation as E
+        snap = {"lane_turns": [
+            {"lane": "production", "turns": 3, "days_since": 0, "silent": False},
+            {"kind": "war_idle", "lane": "(war)", "limit_hours": 24, "over": 2, "longest_hours": 353,
+             "from": 60791653, "to": 60792006, "instead": "fair mio_lines 3.9 s, fast factories 3.2 s",
+             "longest_acted_hours": 353}]}
+        line = E.war_idle_line(snap)
+        self.assertTrue(line.startswith(
+            "War step idle more than 24 game hours during an executing operation (FAIL while any): 2"), line)
+        self.assertIn("longest 353 h", line)
+        self.assertIn("fair mio_lines 3.9 s", line)
+        self.assertNotIn("(war)", E.lane_turns_line(snap))
+        self.assertEqual(E.war_idle_line({"lane_turns": []}), "")
+
 
 if __name__ == "__main__":
     unittest.main()

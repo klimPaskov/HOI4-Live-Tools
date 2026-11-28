@@ -348,7 +348,7 @@ def lane_turns_line(snap):
     (t1939o, 27 Nov 2026: decisions, resources and intelligence had no turn in 56 days; w92b: one
     lane per tick, about two ticks a game day)."""
     all_rows = [r for r in snap.get("lane_turns") or [] if isinstance(r, dict) and r.get("lane")]
-    rows = [r for r in all_rows if r.get("kind") != "ticks"]
+    rows = [r for r in all_rows if r.get("kind") not in ("ticks", "war_idle")]
     pace = next((r for r in all_rows if r.get("kind") == "ticks"), None)
     if not rows and not pace:
         return ""
@@ -368,6 +368,25 @@ def lane_turns_line(snap):
         head = (f"Executor pace: {pace.get('ticks_per_day')} ticks and {pace.get('lane_turns_per_day')} lane turns "
                 f"per game day ({pace.get('ticks')} ticks, {pace.get('lane_turns')} turns). ")
     return head + "Turns per lane (turns, last, per game day): " + "; ".join(parts)
+
+
+def war_idle_line(snap):
+    """The war step's watchdog as the executor reports it (its `war_idle` row in `lane_turns`): the
+    longest stretch in game hours between two offers of the war's turn while an operation executes,
+    what ran instead, and how many stretches passed the limit; a FAIL while any did (p101b, 28 Nov
+    2026: 353 game hours between two war turns of the Polish operation while fast lanes and the
+    fairness took five ticks). Empty when no operation executed."""
+    row = next((r for r in snap.get("lane_turns") or []
+                if isinstance(r, dict) and r.get("kind") == "war_idle"), None)
+    if not row:
+        return ""
+    over = int(row.get("over") or 0)
+    limit = row.get("limit_hours")
+    head = (f"War step idle more than {limit} game hours during an executing operation "
+            f"(FAIL while any): {over}")
+    return (head + f"; longest {row.get('longest_hours')} h (hours {row.get('from')}-{row.get('to')}), "
+            f"what ran instead: {row.get('instead') or '-'}; longest between acting war turns "
+            f"{row.get('longest_acted_hours')} h")
 
 
 def starved_lanes(snap):
@@ -440,6 +459,9 @@ def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", 
     if snap.get("lane_turns"):
         lines.append(f"Starved lanes, no turn past the longest wait (FAIL while any): {len(starved)}"
                      + (": " + ", ".join(f"{r['lane']} ({r.get('days_since')}d)" for r in starved[:12]) if starved else ""))
+    war_idle = war_idle_line(snap)
+    if war_idle:
+        lines.append(war_idle)
     turns = lane_turns_line(snap)
     if turns:
         lines.append(turns)

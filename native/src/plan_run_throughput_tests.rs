@@ -410,3 +410,239 @@ fn war_turns_by_command_take_none_of_the_lanes_input_share() {
     round.war_acted(1, false);
     assert!(round.lanes_owed(DAY));
 }
+
+/// An executing operation (the done-memory keys `plan_operation` reads).
+fn executing(state: &mut State) {
+    state.done.insert("op:op_x:prep".into(), START);
+    state.done.insert("op:op_x:ready".into(), START);
+    state.done.insert("op:op_x:exec".into(), START);
+}
+
+#[test]
+fn while_an_operation_executes_the_war_is_offered_in_every_tick_even_when_the_lanes_are_owed() {
+    // w101b, w101c, p101b (28 Nov 2026): a tick at war lasts 0.7-0.8 game days, so the lanes were
+    // owed after every input tick and the war had at best every other tick (0.27-0.43 acting war
+    // ticks a war day)
+    let game = Game::new(false);
+    let mut state = State::default();
+    executing(&mut state);
+    state.round.lanes_turn(START - 2 * DAY);
+    assert!(state.round.lanes_owed(START));
+    let mut plan = two_picks();
+    plan["war"] = json!({"enabled": true});
+    tick(&mut state, &game, &plan, "l", START).unwrap();
+    assert_eq!(
+        state.sched.war_tick,
+        Some(state.sched.tick_no),
+        "the war was offered although the lanes were owed"
+    );
+    assert_eq!(
+        game.count("hoi4_politics_choose"),
+        1,
+        "the lanes still have the tick's input"
+    );
+}
+
+#[test]
+fn a_fast_lane_s_input_turn_is_the_lanes_tick_so_the_war_has_the_input_next() {
+    // p101b (28 Nov 2026): the fast lanes and the fairness returned before the pass's own
+    // `lanes_turn`, the lanes stayed owed and five ticks went by without a war turn (353 h)
+    let game = Game::new(false);
+    let mut state = State::default();
+    executing(&mut state);
+    state.round.lanes_turn(START - 2 * DAY);
+    let mut plan = two_picks();
+    plan["war"] = json!({"enabled": true});
+    tick(&mut state, &game, &plan, "l", START).unwrap();
+    assert_eq!(game.count("hoi4_politics_choose"), 1);
+    assert!(
+        !state.round.lanes_owed(START),
+        "the fast lane's mouse order was the lanes' tick"
+    );
+}
+
+#[test]
+fn by_command_alone_the_war_s_mouse_orders_wait_and_its_orders_by_command_go() {
+    let game = Game::new(false);
+    let metered = Metered { inner: &game };
+    let mut state = State::default();
+    let args = json!({"category": "government", "slot": 0, "idea": "idea_a"});
+    note_tool_input("hoi4_politics_choose", true);
+    state.sched.input_yield = true;
+    let (ok, why) = state
+        .act(&metered, "l", "hoi4_politics_choose", args.clone(), "t")
+        .unwrap();
+    assert!(!ok);
+    assert!(
+        why.starts_with("deferred: the lanes have this tick's input"),
+        "{why}"
+    );
+    assert_eq!(game.orders(), 0, "nothing was sent");
+    assert!(state.failures.is_empty(), "a deferral is no failure");
+    assert_eq!(state.sched.yielded, 1);
+    // a tool whose last order went by command is sent at once
+    note_tool_input("hoi4_politics_choose", false);
+    let (ok, _) = state
+        .act(&metered, "l", "hoi4_politics_choose", args.clone(), "t")
+        .unwrap();
+    assert!(ok);
+    assert_eq!(game.orders(), 1);
+    // the meter records what the order cost: by mouse here
+    assert_eq!(tool_last_input("hoi4_politics_choose"), Some(true));
+    // outside the yield the mouse order goes
+    state.sched.input_yield = false;
+    let (ok, _) = state
+        .act(&metered, "l", "hoi4_politics_choose", args, "t2")
+        .unwrap();
+    assert!(ok);
+    assert_eq!(game.orders(), 2);
+}
+
+#[test]
+fn a_slow_panel_read_stands_for_its_span_at_war_and_an_order_of_its_family_forgets_it() {
+    let game = Game::new(false);
+    let cache = std::cell::RefCell::new(SlowCache::new());
+    let read = |now: GameHour, args: Value| {
+        SlowReads {
+            inner: &game,
+            cache: &cache,
+            now,
+            on: true,
+        }
+        .call("hoi4_politics_options", &args)
+        .unwrap();
+    };
+    let seat = json!({"category": "government", "slot": 0, "lease_token": "l"});
+    let day0 = (START / DAY) * DAY;
+    read(day0 + 1, seat.clone());
+    read(
+        day0 + 20,
+        json!({"category": "government", "slot": 0, "lease_token": "other"}),
+    );
+    assert_eq!(
+        game.count("hoi4_politics_options"),
+        1,
+        "one read a game day"
+    );
+    read(
+        day0 + 20,
+        json!({"category": "government", "slot": 1, "lease_token": "l"}),
+    );
+    assert_eq!(
+        game.count("hoi4_politics_options"),
+        2,
+        "another seat is another read"
+    );
+    read(day0 + DAY, seat.clone());
+    assert_eq!(
+        game.count("hoi4_politics_options"),
+        3,
+        "a new game day reads again"
+    );
+    // a politics order forgets the seats' answers
+    SlowReads {
+        inner: &game,
+        cache: &cache,
+        now: day0 + DAY + 1,
+        on: true,
+    }
+    .call("hoi4_politics_choose", &json!({"request_id": "r"}))
+    .unwrap();
+    read(day0 + DAY + 2, seat.clone());
+    assert_eq!(game.count("hoi4_politics_options"), 4);
+    // the diplomacy view stands a quarter day: a declaration reads it by the hour it is due
+    assert!(slow_fresh(day0, day0 + 5, DAY / 4));
+    assert!(!slow_fresh(day0, day0 + DAY / 4, DAY / 4));
+    // off (peace, or scheduler.slow_reads false): every read is fresh
+    SlowReads {
+        inner: &game,
+        cache: &cache,
+        now: day0 + DAY + 3,
+        on: false,
+    }
+    .call("hoi4_politics_options", &seat)
+    .unwrap();
+    assert_eq!(game.count("hoi4_politics_options"), 5);
+    // a memory read is not one of them
+    assert!(slow_key("hoi4_states", &json!({})).is_none());
+}
+
+#[test]
+fn the_watchdog_names_the_war_step_s_longest_wait_and_what_ran_instead() {
+    let mut watch = WarWatch::default();
+    watch.offered(START, true, DAY);
+    watch.acted(START);
+    watch.spent("fast factories", 3.2);
+    watch.spent("fair mio_lines", 3.9);
+    watch.offered(START + 10, true, DAY);
+    assert_eq!(watch.over, 0);
+    watch.spent("issue production", 13.1);
+    watch.offered(START + 10 + 353, true, DAY);
+    watch.acted(START + 10 + 353);
+    let row = watch.row().unwrap();
+    assert_eq!(row["kind"], "war_idle");
+    assert_eq!(row["over"], 1);
+    assert_eq!(row["longest_hours"], 353);
+    assert_eq!(row["limit_hours"], DAY);
+    assert!(
+        row["instead"]
+            .as_str()
+            .unwrap()
+            .starts_with("issue production 13.1 s"),
+        "{row}"
+    );
+    assert_eq!(row["longest_acted_hours"], 363);
+    // outside an executing operation nothing is counted
+    watch.offered(START + 2000, false, DAY);
+    watch.offered(START + 4000, true, DAY);
+    assert_eq!(watch.row().unwrap()["over"], 1);
+    // the gate reads it in lane_turns
+    let mut state = State::default();
+    state.sched.war_watch = watch;
+    let rows = lane_turns(&state, START + 4000);
+    assert!(rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["kind"] == "war_idle" && r["over"] == 1));
+}
+
+/// A war step whose every call is one order that takes 0.6 s.
+fn slow_order_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    _plan: &Value,
+    lease: &str,
+    _now: GameHour,
+) -> Result<Option<String>> {
+    std::thread::sleep(Duration::from_millis(600));
+    let n = state.seq;
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_politics_choose",
+        json!({"category": "government", "slot": n, "idea": format!("idea_{n}")}),
+        "w",
+    )?;
+    Ok(Some(format!("order {n}: {ok} {why}")))
+}
+
+#[test]
+fn a_war_burst_of_mouse_orders_gives_the_tick_back_once_half_a_game_day_has_passed() {
+    // w101b (28 Nov 2026): one 84-second war burst ran 164 game hours
+    let mut game = Game::new(false);
+    game.step = 7;
+    let mut state = State {
+        last_hour: START,
+        ..Default::default()
+    };
+    let plan = json!({"war": {"enabled": true}});
+    let out = war_burst_for(&mut state, &game, &plan, "l", START, slow_order_step, 30)
+        .unwrap()
+        .unwrap();
+    assert!(
+        (2..16).contains(&game.orders()),
+        "{} orders: {out}",
+        game.orders()
+    );
+}
