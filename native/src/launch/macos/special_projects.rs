@@ -488,14 +488,47 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
 /// CPrototypeProjectState inside the machine while the project is idle or
 /// running, a CSimpleProjectState (name "STOPPING_STATE", days at +0x48) while
 /// a stop is in progress. Mapped live on 26 October 2026 by stopping a project.
+///
+/// The game has more than one simple state (PROTOTYPE_STATE, STOPPING_STATE, STOPPED_STATE in the
+/// 1.20 strings): a simple state counts as stopping only when its name is STOPPING_STATE (live 115,
+/// 28 Nov 2026: three facilities read "stopping, 0 days" for 5 game days). The name is looked for
+/// in the state object (an inline short string) or behind one of its pointers; a state whose name
+/// is found and is another one is not stopping; one whose name is not found keeps the old reading.
 fn stopping_days(r: &Reader<'_>, image: u64, project: u64) -> Result<Option<i32>> {
     let machine = r.u64(project + at(r, &PROJECT, 0x28)?)?;
     typed(r, image, machine, VT_STATE_MACHINE, "project state machine")?;
     let state = r.u64(machine + at(r, &MACHINE, 8)?)?;
     if state != 0 && r.u64(state)? == vt(r, image, VT_SIMPLE_STATE)? {
-        return Ok(Some(r.i32(state + at(r, &SIMPLE_STATE, 0x48)?)?));
+        let days_at = at(r, &SIMPLE_STATE, 0x48)?;
+        let raw = r.read(state, days_at as usize).unwrap_or_default();
+        let mut texts = vec![raw.clone()];
+        for word in raw.chunks_exact(8).skip(1) {
+            let p = u64::from_le_bytes(word.try_into().unwrap());
+            if (0x10000..=0x7fff_ffff_0000).contains(&p) {
+                if let Ok(t) = r.read(p, 32) {
+                    texts.push(t);
+                }
+            }
+        }
+        if let Some(name) = state_name(&texts) {
+            if name != "STOPPING_STATE" {
+                return Ok(None);
+            }
+        }
+        return Ok(Some(r.i32(state + days_at)?));
     }
     Ok(None)
+}
+
+/// The first project state name (PROTOTYPE_STATE, STOPPING_STATE, STOPPED_STATE) found in `texts`.
+fn state_name(texts: &[Vec<u8>]) -> Option<&'static str> {
+    const NAMES: [&str; 3] = ["STOPPING_STATE", "STOPPED_STATE", "PROTOTYPE_STATE"];
+    texts.iter().find_map(|t| {
+        NAMES
+            .iter()
+            .find(|n| t.windows(n.len()).any(|w| w == n.as_bytes()))
+            .copied()
+    })
 }
 /// A project's template: its pointer at +0x20 addresses the template's
 /// embedded base at +0x10.
@@ -2401,5 +2434,24 @@ mod tests {
             plain("\u{11}RRequires a \u{11}! \u{11}YScientist\u{11}! \u{11}Rto start\u{11}!"),
             "Requires a Scientist to start"
         );
+    }
+
+    #[test]
+    fn only_the_stopping_state_is_a_stop() {
+        let inline = |t: &str| {
+            let mut v = vec![0u8; 8];
+            v.push((t.len() * 2) as u8);
+            v.extend(t.as_bytes());
+            v
+        };
+        assert_eq!(
+            state_name(&[inline("STOPPING_STATE")]),
+            Some("STOPPING_STATE")
+        );
+        assert_eq!(
+            state_name(&[vec![0; 16], inline("STOPPED_STATE")]),
+            Some("STOPPED_STATE")
+        );
+        assert_eq!(state_name(&[vec![1, 2, 3]]), None);
     }
 }

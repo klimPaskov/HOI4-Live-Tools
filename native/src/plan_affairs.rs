@@ -3582,6 +3582,8 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
                     }
                 }
             }
+            // the plan names this operative's mission: it may end the one running
+            args["replace"] = json!(true);
             let (ok, why) = state.act(tools, run.lease, "hoi4_operative_assign", args, "io")?;
             let c = code(&why);
             if ok || c == "operative_busy" {
@@ -3782,6 +3784,10 @@ fn intel_networks(
             continue;
         };
         let mut args = json!({"operative": i, "mission": "build_intel_network"});
+        if net["operative"].is_u64() {
+            // the plan named the operative: its running mission may end
+            args["replace"] = json!(true);
+        }
         match net["state_id"].as_u64() {
             Some(id) => args["state_id"] = json!(id),
             None => args["country"] = json!(target),
