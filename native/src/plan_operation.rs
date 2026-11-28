@@ -218,6 +218,18 @@ fn op_id(op: &Value, index: usize) -> String {
     item_id(op).unwrap_or_else(|| format!("#{index}"))
 }
 
+/// Whether a started operation sizes `army` (it owns the army and its prepare began): its
+/// opening, choke cap, feed-forward and refinements move divisions in and out of it, so the
+/// layout's top-up neither refills it nor takes from it. w126a (28 Nov 2026): the choke cap
+/// took 3 divisions off Armee West Süd, the opening sent them on to Army 7, and the layout's
+/// top-up of West Süd's role took the same 3 back out of Army 7 in the next steps.
+pub(super) fn sizes_army(state: &State, army: &str) -> bool {
+    state
+        .op_owned
+        .get(army)
+        .is_some_and(|id| started(state, id))
+}
+
 fn started(state: &State, id: &str) -> bool {
     state.done.contains_key(&key(id, "prep")) && !state.done.contains_key(&key(id, "end"))
 }
@@ -1723,24 +1735,106 @@ fn note_not_executing(
     now: GameHour,
 ) {
     let k = key(id, &format!("notexec:{}", u.name));
+    let tk = key(id, &format!("notexectry:{}", u.name));
     let nk = format!("{id}:notexec:{}", u.name);
     if !stands || !at_war.contains(&u.enemy) {
         state.done.remove(&k);
+        state.done.remove(&tk);
         state.op_notes.remove(&nk);
         return;
     }
     let since = *state.done.entry(k).or_insert(now);
     if now - since >= DAY {
+        // what was sent, never "executed again": w126a (28 Nov 2026) said so for 17.6 days while
+        // every execute read back on the army's fronts and its arrow stayed unexecuted
+        let tries = state.done.get(&tk).copied().unwrap_or(0);
         state.op_notes.insert(
             nk,
             format!(
-                "{}: NOT EXECUTING for {:.1} days at war against {} (an arrow stands unexecuted): executed again",
+                "{}: NOT EXECUTING for {:.1} days at war against {} (an arrow stands unexecuted): {tries} execute order(s) taken since, the arrow still reads unexecuted",
                 u.name,
                 (now - since) as f64 / DAY as f64,
                 u.enemy
             ),
         );
     }
+}
+
+/// A unit's divisions: its army row's count, for a group the sum of its member armies'; pure.
+fn unit_division_count(roster: &Value, u: &Unit) -> i64 {
+    if u.role != Role::Group {
+        return army_row(roster, &u.name)
+            .and_then(|r| r["division_count"].as_i64())
+            .unwrap_or(0);
+    }
+    list(roster, "armies")
+        .iter()
+        .filter(|r| {
+            r["army_group"].as_str() == Some(u.name.as_str())
+                || u.members.iter().any(|m| m == text(&r["army"]))
+        })
+        .filter_map(|r| r["division_count"].as_i64())
+        .sum()
+}
+
+/// The member army of group `u` with most divisions standing on the front `ours` (its line's
+/// provinces; ties by name), else the member with most divisions; None without members. Pure.
+fn choke_donor(supply: &Value, roster: &Value, u: &Unit, ours: &HashSet<i64>) -> Option<String> {
+    let members: Vec<(String, i64)> = list(roster, "armies")
+        .iter()
+        .filter(|r| {
+            r["army_group"].as_str() == Some(u.name.as_str())
+                || u.members.iter().any(|m| m == text(&r["army"]))
+        })
+        .map(|r| {
+            (
+                text(&r["army"]).to_string(),
+                r["division_count"].as_i64().unwrap_or(0),
+            )
+        })
+        .collect();
+    let on_front = |army: &str| {
+        list(supply, "divisions")
+            .iter()
+            .filter(|d| {
+                text(&d["army"]) == army
+                    && d["province_id"].as_i64().is_some_and(|p| ours.contains(&p))
+            })
+            .count()
+    };
+    members
+        .iter()
+        .max_by(|a, b| {
+            on_front(&a.0)
+                .cmp(&on_front(&b.0))
+                .then(a.1.cmp(&b.1))
+                .then(b.0.cmp(&a.0))
+        })
+        .map(|(n, _)| n.clone())
+}
+
+/// Whether an army whose line's restarts (REDRAWS) are spent may be stopped and executed once
+/// more: its arrow has read unexecuted a game day since the last restart (or since it was first
+/// seen so, when no restart of this line is recorded). A plain execute leaves an arrow drawn on
+/// an executing front unexecuted, so without a renewed restart the arrow stood for the rest of
+/// the war; once a day at most keeps the planning a stop costs bounded. Pure but for the reads.
+fn restart_renewed(state: &State, id: &str, army: &str, line: i64, now: GameHour) -> bool {
+    let last = state
+        .done
+        .get(&key(id, &format!("restartat:{army}:{line}")))
+        .copied();
+    let since = state
+        .done
+        .get(&key(id, &format!("notexec:{army}")))
+        .copied();
+    let from = match (last, since) {
+        (Some(a), Some(b)) => a.max(b),
+        (a, b) => match a.or(b) {
+            Some(t) => t,
+            None => return false,
+        },
+    };
+    now.saturating_sub(from) >= DAY
 }
 
 fn executing(roster: &Value, name: &str) -> bool {
@@ -2014,7 +2108,9 @@ fn order(
         // it at once (o1g: germany_mefo_bills.1 in the declaration tick held the attack 7 days)
         state.op_events_now = true;
     }
-    if let Some((kind, army, n)) = moved {
+    // a deferred order was not sent: it is no refinement and no refusal (p126a, 28 Nov 2026: the
+    // ledger's "detach 14 orders, 12 refused" were deferrals for want of the input)
+    if let Some((kind, army, n)) = moved.filter(|_| !why.starts_with("deferred")) {
         ledger(state, id, kind, &army, n, ok, what, &why);
     }
     let line = format!("operation {id}: {what}: {ok} {why}");
@@ -8016,11 +8112,10 @@ fn advance(
                 .done
                 .get(&sk)
                 .is_some_and(|t| now.saturating_sub(*t) <= 1);
-            let stop_first = executing(roster, &u.name) && restarts < REDRAWS && !just_stopped;
-            if stop_first {
-                state.done.insert(rk, restarts + 1);
-                state.done.insert(sk, now);
-            } else {
+            let stop_first = executing(roster, &u.name)
+                && !just_stopped
+                && (restarts < REDRAWS || restart_renewed(state, id, &u.name, k, now));
+            if !stop_first {
                 state.done.remove(&sk);
             }
             let line = order(
@@ -8039,8 +8134,29 @@ fn advance(
                 "hoi4_army_plan",
                 json!({"army": u.name, "execute": !stop_first}),
             )?;
-            if stop_first {
-                // the execute follows in the next call
+            let took = state.last_ok == Some(true);
+            if took {
+                *state
+                    .done
+                    .entry(key(id, &format!("notexectry:{}", u.name)))
+                    .or_insert(0) += 1;
+            }
+            // A restart counts only when its stop went: a stop deferred for want of the input or
+            // refused spent the line's restarts without one being sent, and from then on only the
+            // plain execute went, which leaves an arrow drawn on an executing front unexecuted
+            // (w126a, 28 Nov 2026: Army 7's restarts of op_lowlands' line were spent before its
+            // arrow into Luxembourg could be drawn; the arrow stood unexecuted 17.6 days while
+            // seven executes read back Verified on its fronts).
+            if stop_first && took {
+                state.done.insert(rk, restarts + 1);
+                state
+                    .done
+                    .insert(key(id, &format!("restartat:{}:{k}", u.name)), now);
+                state.done.insert(sk, now);
+            }
+            if (stop_first && took) || line.contains(": false deferred") {
+                // the execute follows in the next call; a deferred order goes in the war's next
+                // input turn, not a quarter day later
                 state.bad.remove(&super::skip_key("opexec", &u.name));
             }
             return Ok(Some(line));
@@ -9377,20 +9493,31 @@ fn choke_step(
                     );
                 }
                 ArrowGround::Cap(_, carries) => {
-                    let count = army_row(roster, &u.name)
-                        .and_then(|r| r["division_count"].as_i64())
-                        .unwrap_or(0);
+                    // what goes through the choke is the arrow's own divisions (the read-back's
+                    // count), else the unit's: a group has no army row, and its count read 0
+                    // (w126a, 28 Nov 2026: "Army Group 2's arrow 51 ... carries 11 of 0" for
+                    // 75 lines while 16 of its divisions stood on that arrow, never capped)
+                    let count = o["divisions"]
+                        .as_i64()
+                        .unwrap_or_else(|| unit_division_count(roster, u));
                     let surplus = count - carries;
+                    // the army whose divisions leave: the unit, or for a group the member with
+                    // most divisions on this arrow's front
+                    let donor = if u.role == Role::Group {
+                        choke_donor(&supply, roster, u, &ours)
+                    } else {
+                        Some(u.name.clone())
+                    };
                     let note = format!(
                         "{}'s arrow {oid} runs through the rough-ground choke {entry} ({terrain}) with no open way in from its front: it carries {carries} of {count}",
                         u.name
                     );
-                    if u.role == Role::Group || surplus < min {
+                    let Some(donor) = donor.filter(|_| surplus >= min) else {
                         state
                             .op_notes
                             .insert(format!("{id}:choke:{}", u.name), note);
                         continue;
-                    }
+                    };
                     // the reserve stands behind the line army with the fewest divisions
                     let src = units
                         .iter()
@@ -9426,7 +9553,7 @@ fn choke_step(
                         .unwrap_or_default();
                     let mut rows: Vec<(bool, String)> = list(&supply, "divisions")
                         .iter()
-                        .filter(|d| text(&d["army"]) == u.name)
+                        .filter(|d| text(&d["army"]) == donor)
                         .filter_map(|d| {
                             Some((
                                 d["province_id"].as_i64().is_some_and(|p| near.contains(&p)),
@@ -9450,17 +9577,22 @@ fn choke_step(
                         .iter()
                         .map(|a| text(&a["army"]).to_string())
                         .collect();
-                    let mut args = json!({"army": u.name, "divisions": ids});
+                    let mut args = json!({"army": donor, "divisions": ids});
                     if let Some(e) = &into {
                         args["into"] = json!(e);
                     }
                     let n = ids.len();
+                    let from = if donor == u.name {
+                        String::new()
+                    } else {
+                        format!(" (out of {donor})")
+                    };
                     let line = order(
                         state,
                         tools,
                         lease,
                         id,
-                        &format!("{note}: {n} go to the reserve behind {src}"),
+                        &format!("{note}: {n} go to the reserve behind {src}{from}"),
                         "hoi4_army_detach",
                         args,
                     )?;
@@ -11770,8 +11902,6 @@ fn opening_tags(
             continue;
         }
         state.skip(now, "opopen", tag, DAY);
-        state.done.insert(rk, sent + 1);
-        refined(state, id, &target, now);
         let why = if overdue {
             format!("{tag} still in the war on day {day} of {days}")
         } else if prewar {
@@ -11794,6 +11924,7 @@ fn opening_tags(
             if state.last_ok == Some(true) {
                 state.layout.remove(&format!("echelon:{id}:{src}"));
             }
+            opening_sent(state, id, tag, &rk, sent, &target, &line, now);
             return Ok(Some(line));
         }
         let Ok(read) = tools.call("hoi4_supply", &json!({})) else {
@@ -11830,9 +11961,46 @@ fn opening_tags(
             "hoi4_army_detach",
             json!({"army": e, "divisions": ids, "into": target}),
         )?;
+        opening_sent(state, id, tag, &rk, sent, &target, &line, now);
         return Ok(Some(line));
     }
     Ok(None)
+}
+
+/// After an opening fill's order: only an order that took counts as sent and marks its target
+/// refined. A deferred one (the war's next input turn) goes again in the next tick; a refused
+/// one rests in the failure ledger and its reason stands in the enemy's opening note. Before,
+/// both were counted and the target marked refined before the order went, so the next look at
+/// the enemy found no target and wrote "every army facing it stands full for width" (w126a,
+/// 28 Nov 2026: Luxembourg's fill of 16 from Army 1 deferred once, then that note for 5 months
+/// and the 16 joined only after the declaration; p126a: Panzergruppe Nord's assembly the same).
+#[allow(clippy::too_many_arguments)]
+fn opening_sent(
+    state: &mut State,
+    id: &str,
+    tag: &str,
+    rk: &str,
+    sent: i64,
+    target: &str,
+    line: &str,
+    now: GameHour,
+) {
+    if state.last_ok == Some(true) {
+        state.done.insert(rk.to_string(), sent + 1);
+        refined(state, id, target, now);
+        return;
+    }
+    if line.contains(": false deferred") {
+        state.bad.remove(&super::skip_key("opopen", tag));
+        return;
+    }
+    let nk = format!("{id}:opening:{tag}");
+    let note = state.op_notes.get(&nk).cloned().unwrap_or_default();
+    let note = note.split(" | refused: ").next().unwrap_or("").to_string();
+    let why = line.split(": false ").nth(1).unwrap_or(line);
+    state
+        .op_notes
+        .insert(nk, format!("{note} | refused: {target}'s fill: {why}"));
 }
 
 /// The operations' status lines for the digest.
