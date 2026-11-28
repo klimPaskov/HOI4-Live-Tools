@@ -2815,7 +2815,8 @@ fn one(
             state, tools, plan, op, &mut units, roster, &enemies, &at_war, now,
         )?;
         // THE STUCK POINT: a battle not won for days with idle fit divisions on its unused sides
-        if let Some(line) = stuck_push_step(state, tools, id, op, &units, roster, lease, now)? {
+        if let Some(line) = stuck_push_step(state, tools, id, op, &units, roster, wars, lease, now)?
+        {
             return Ok(Some(line));
         }
         // the strike formations first: their orders are quick whole-army moves, and behind the
@@ -7745,6 +7746,7 @@ fn stuck_push_step(
     op: &Value,
     units: &[Unit],
     roster: &Value,
+    wars: &Value,
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
@@ -7756,15 +7758,31 @@ fn stuck_push_step(
     let Ok(battles) = tools.call("hoi4_battles", &json!({"divisions": true})) else {
         return Ok(None);
     };
+    // the enemies at war this operation fights, their border states and ours facing them
+    let at_war = war_tags(wars);
+    let tags: Vec<String> = strings(op, "enemies")
+        .into_iter()
+        .filter(|t| at_war.contains(t))
+        .collect();
+    let mut enemy_states: Vec<i64> = Vec::new();
+    let mut own_front: Vec<i64> = Vec::new();
+    for b in list(wars, "borders") {
+        if tags.iter().any(|t| t == text(&b["neighbour_tag"])) {
+            enemy_states.extend(ints(&b["neighbour_states"]));
+            own_front.extend(ints(&b["own_border_states"]));
+        }
+    }
     let states: Vec<i64> = {
         let mut v: Vec<i64> = list(&battles, "list")
             .iter()
             .filter(|b| text(&b["our_side"]) == "attacker")
             .filter_map(|b| b["state"].as_i64())
             .collect();
-        v.sort_unstable();
-        v.dedup();
-        v.truncate(64);
+        v.extend(enemy_states.iter().copied());
+        v.extend(own_front.iter().copied());
+        let mut seen = HashSet::new();
+        v.retain(|s| seen.insert(*s));
+        v.truncate(128);
         v
     };
     if states.is_empty() {
@@ -7797,7 +7815,19 @@ fn stuck_push_step(
             .unwrap_or(6) as usize,
         &pushed,
     ) else {
-        return Ok(None);
+        return shed_step(
+            state,
+            tools,
+            id,
+            op,
+            &battles,
+            &g,
+            &read,
+            &armies,
+            &enemy_states,
+            lease,
+            now,
+        );
     };
     state
         .done
@@ -7810,6 +7840,103 @@ fn stuck_push_step(
         push.sides,
         push.divisions.len(),
         push.army,
+        push.from
+    );
+    state
+        .op_notes
+        .insert(format!("{id}:push"), format!("operation {id}: {what}"));
+    Ok(Some(order(
+        state,
+        tools,
+        lease,
+        id,
+        &what,
+        "hoi4_army_move",
+        json!({"army": push.army, "divisions": push.divisions, "province_id": push.province, "state_id": push.state}),
+    )?))
+}
+
+/// SHED TO THE UNATTACKED (`push.shed`, on unless `false`): with no stuck battle to push, the
+/// divisions that wait where they cannot fight (a full battle's reserve, the fit idle ones on the
+/// line) attack the enemy province beside them that no battle of ours attacks (`capacity::shed`),
+/// by a direct order of the one army with most of them, within its refinement cool-down; one
+/// province in `push.days`. w101a (28 Nov 2026, W+10): 3488 held 21 for a width of 7, 4 of the 7
+/// enemy provinces in reach were attacked, and no push went out in ten war days.
+#[allow(clippy::too_many_arguments)]
+fn shed_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    op: &Value,
+    battles: &Value,
+    g: &HashMap<i64, ground::Prov>,
+    read: &Value,
+    armies: &HashSet<String>,
+    enemy_states: &[i64],
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let cfg = &op["push"];
+    if cfg["shed"] == json!(false) || enemy_states.is_empty() {
+        return Ok(None);
+    }
+    let due: HashSet<String> = armies
+        .iter()
+        .filter(|a| refine_due(state, id, op, a, now))
+        .cloned()
+        .collect();
+    if due.is_empty() {
+        return Ok(None);
+    }
+    let ours: HashSet<i64> = list(read, "divisions")
+        .iter()
+        .filter_map(|d| d["province_id"].as_i64())
+        .collect();
+    // the enemy's border states and the states its battles stand in (deeper as the front moves)
+    let mut theirs: HashSet<i64> = enemy_states.iter().copied().collect();
+    theirs.extend(
+        list(battles, "list")
+            .iter()
+            .filter(|b| text(&b["our_side"]) == "attacker")
+            .filter_map(|b| b["state"].as_i64()),
+    );
+    let enemy = ground::enemy_provinces(g, &theirs, &ours, &HashSet::new());
+    // the mean width of the divisions that may go
+    let widths = template_widths(state, tools, now);
+    let ws: Vec<f64> = list(read, "divisions")
+        .iter()
+        .filter(|d| due.contains(text(&d["army"])))
+        .filter_map(|d| widths.get(text(&d["template"])).copied())
+        .collect();
+    let width = if ws.is_empty() {
+        ground::WIDTH_UNKNOWN
+    } else {
+        ws.iter().sum::<f64>() / ws.len() as f64
+    };
+    let days = cfg["days"].as_i64().filter(|d| *d >= 1).unwrap_or(5);
+    let pushed = |p: i64| {
+        state
+            .done
+            .get(&key(id, &format!("push:{p}")))
+            .is_some_and(|t| now.saturating_sub(*t) < days * DAY)
+    };
+    let most = cfg["divisions"]
+        .as_u64()
+        .filter(|n| (1..=48).contains(n))
+        .unwrap_or(6) as usize;
+    let Some(push) = capacity::shed(battles, g, read, &due, &enemy, width, most, &pushed) else {
+        return Ok(None);
+    };
+    state
+        .done
+        .insert(key(id, &format!("push:{}", push.province)), now);
+    refined(state, id, &push.army, now);
+    let what = format!(
+        "shed: {} of {} waiting where they cannot fight attack the unattacked province {} (state {}) from {:?}",
+        push.divisions.len(),
+        push.army,
+        push.province,
+        push.state,
         push.from
     );
     state
