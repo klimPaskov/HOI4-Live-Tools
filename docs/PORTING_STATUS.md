@@ -24,7 +24,7 @@ a table keyed otherwise). The tool catalogue has 189 `hoi4_*` names (about
 | Tools in the build | all | all (the same modules) | all compiled and unit-tested; none reachable (no Windows game attachment or input yet) |
 | Compiles in CI | yes | yes (x86_64 and aarch64) | yes (the code compiled there) |
 | Memory layout | 1.19.4.1, native (the canonical values) | 1.20.0.0: 93 of 94 image keys, 556 of 618 field keys the sources use (the generated table, the 1.19.4.1 table moved by matched code, and live entries) | 1.20.0.0: vtables by RTTI (181 of 182); core game and army layouts read live; no other globals or fields |
-| Input | CGEvent | X11 XTEST | none in the native runtime |
+| Input | CGEvent | X11 XTEST | `SendInput` backend written and unit-tested, not bound or live-tested |
 | Last proven live | continuously | 5 November 2026: 104 tools verified, 11 refusal-only, 8 not reached | native: never; the separate Python runtime: November 2026 on 1.19.4.2 |
 
 ## Linux
@@ -107,7 +107,7 @@ Two runtimes exist:
   November 2026: `hoi4_overview` and `hoi4_army` on a paused game). The division province and the
   production members are not measured yet and fail with `read_bound`. Every read batch runs the full
   ownership census (tens of milliseconds), so a multi-read snapshot of a running game tears
-  (`torn_read`); reads of a paused game work. It sends no input: a
+  (`torn_read`); reads of a paused game work. Its input backend (step 4) is bound to nothing yet. A
   development build (`--features dev-table`) reads a table from `HOI4_LIVE_DEV_TABLE` and accepts
   the executable named by `HOI4_LIVE_DEV_WINDOWS_SHA256`; release builds attach to nothing.
   The management tools are compiled and unit-tested on Windows, but nothing binds them there yet.
@@ -121,8 +121,22 @@ Steps to finish, in order:
    instead of POSIX modes.
 3. Done (not yet run against the game): a `Process` for an owned Windows game and a launcher that
    starts it without Steam variables in a private user folder, like the Linux launcher.
-4. A `GameInput` for Windows (`SendInput` to the owned, foreground window; client geometry, DPI,
-   keyboard layout), with the modifier timing the Linux backend needed.
+4. Written, not live-tested: `WinInput` (`native/src/platform/windows/input.rs`), the Windows
+   `GameInput`. It binds a top-level window that belongs to the owned game PID, is visible, not
+   minimised, at 100% scaling (`GetDpiForWindow` 96; this process does not change its DPI
+   awareness) and has exactly the bound client size, and re-checks all of that plus "is the
+   foreground window" before every input (`input_target_not_frontmost` otherwise; it never calls
+   `SetForegroundWindow`). Before a press, `WindowFromPoint` at the target must be the owned window
+   (`input_point_occluded`), and no key or button may be held (`input_busy`). Input is `SendInput`:
+   absolute moves normalised over the virtual desktop to the pixel centre, buttons, wheel (one
+   notch of 120 per 120 pixels), and keys as scan codes (`KEYEVENTF_SCANCODE`, US layout, `wVk`
+   filled too) as the Python runtime drove the game. Modifiers are held 150 ms around a key or
+   click and presses last 60 ms, as on Linux; Ctrl+click, path drags and Alt (`press_option`, no
+   dead keys on Windows) are built, Command+click refuses, and shell chords (Alt+F4, Alt+Tab,
+   Alt+Space, Alt+Escape, Alt+Return, Ctrl+Escape) are refused. Capture is
+   `PrintWindow(PW_CLIENTONLY | PW_RENDERFULLCONTENT)` with a `BitBlt` fallback; a black frame is
+   refused. The key table, coordinate maths and event sequences are unit-tested as data; nothing
+   has sent input to the game, and no launcher binds it yet.
 5. A layout table for the Windows build. Started: `scripts/pe_rtti_map.py MACHO PE` maps every
    vtable key the sources use (the `Class` tags, the `img()` vtables and the `*vtable*` values of
    the hand-written core layouts) to the PE by RTTI name: the Itanium typeinfo name of the macOS
