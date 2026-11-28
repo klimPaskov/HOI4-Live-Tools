@@ -5275,8 +5275,9 @@ mod tests {
             {"id": "lic", "action": "licence", "target": "ITA", "equipment": ["Ba.88 Lince"]},
             {"id": "cta", "action": "call_to_arms", "target": "HUN", "enemy": "POL"}]});
         let mut state = State::default();
-        step(&mut state, &tools, &plan, "l", START).unwrap();
-        step(&mut state, &tools, &plan, "l", START + DAY).unwrap();
+        for d in 0..8 {
+            step(&mut state, &tools, &plan, "l", START + d * DAY).unwrap();
+        }
         let sent: Vec<Value> = actions(&tools)
             .into_iter()
             .filter(|(n, _)| n == "hoi4_diplomacy_act")

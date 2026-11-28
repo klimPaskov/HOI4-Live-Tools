@@ -4071,8 +4071,9 @@ impl MacClock {
             }
             let licence = inproc_diplomacy::tag_list_op(&key).is_none();
             let wanted: Vec<String> = if licence {
-                let w: Vec<String> = args["equipment"]
-                    .as_array()
+                let w: Vec<String> = args
+                    .get("equipment")
+                    .and_then(Value::as_array)
                     .map(|a| {
                         a.iter()
                             .filter_map(|x| x.as_str().map(str::to_string))
