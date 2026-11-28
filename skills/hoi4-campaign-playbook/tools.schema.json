@@ -920,6 +920,15 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_army_hq": {
+   "description": "Read-only, no input (files of the running game only): whether army headquarters (deployable generals, 1.20) are in force in this game and what they are worth. active:false when the DLC the executable gates the mechanic on (engine_gate_dlc, Thunder at Our Gates) is not enabled: the game then scales no army's planning for want of an HQ and no HQ can be deployed, so there is nothing to do. With the DLC: worth.with_hq per proximity setting (close/medium/far = provinces behind the front) and worth.without_hq give the planning cap, planning speed, leader-modifier and ability scaling from the defines (1.20.1.0: 0.95/0.9/0.85 vs 0.8 for planning, leader modifiers x1.04 at close); deploy and withdraw days from the HQ template's manpower; the HQ battalions and their command-power cost. Every number is read from common/defines and common/units at call time (a mod's override wins), never assumed.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_army_merge": {
    "description": "Move every division of army `source` into army `target` with the game's own controls: a left click on the source's card selects exactly its divisions, a right click on the target's card transfers them (the empty source army disappears). Use it to fold many small armies into a few full ones (24 divisions each, one general each). Refused before input when either army is unknown, they are the same, or the merged army would exceed 24 divisions (split first). Verified from division membership.",
    "inputSchema": {

@@ -126,7 +126,81 @@ def cmd_refresh(a, sit):
     return {"tech": a.tech, "roles": roles}, [f"REFRESH after {a.tech}: re-run design for {', '.join(roles) or 'none'}"]
 
 
-COMMANDS = {"design": cmd_design, "refresh": cmd_refresh}
+def text_template(r):
+    out = [f"TEMPLATE {r['role']} for {r.get('country', '')} at {r.get('date', '')}; techs: {r['techs']}",
+           f"  widths: {r['width_why']}", f"  chosen width {r.get('chosen_width')}: the widest of the equal fills "
+           f"({r.get('command_rule')}: frontage per commander grows with width)",
+           f"  against: {r['enemy_template']}: " + _fmt_stats(r["enemy_template_stats"])]
+    for arch, d in (r.get("designs_used") or {}).items():
+        out.append(f"  design for {arch}: {d['base']} " + ", ".join(sorted(d["modules"].values())))
+    for i, t in enumerate(r["templates"], 1):
+        bats = ", ".join(f"{n} {k}" for k, n in t["battalions"].items())
+        out.append(f"  #{i} width {t['width']:g}: {bats}; regimental {t['regimental'] or '-'} "
+                   f"({t.get('regimental_slots', 0)} slots); support {t['support'] or '-'}")
+        out.append("     stats: " + _fmt_stats(t["stats"]))
+        out.append(f"     cost: {t['ic']:g} IC, {t['manpower']:g} manpower; equipment " +
+                   ", ".join(f"{k} {v:g}" for k, v in t["equipment"].items()))
+        p = t["parts"]
+        if "R" in p:
+            out.append(f"     why: R {p['R']:g} = our endurance {p['our_hours']:g} h / theirs {p['their_hours']:g} h "
+                       f"(attacks per width ours {p['our_attacks_per_width']:g}, theirs {p['their_attacks_per_width']:g});"
+                       f" score {t['score']:g} = R x sqrt(width / IC)")
+        else:
+            out.append(f"     why: {p}; score {t['score']:g}")
+    for t in r.get("other_widths") or []:
+        out.append(f"  best at width {t['target_width']}: " + ", ".join(f"{n} {k}" for k, n in t["battalions"].items())
+                   + f"; support {t['support']}; score {t['score']:g}")
+    if r.get("special_forces_cap"):
+        c = r["special_forces_cap"]
+        out.append(f"  special forces cap {c['cap']:g} battalions = max({c['min']:g}, {c['factor']:g} x "
+                   f"{c['non_sf_battalions']} other battalions)")
+    out.append("  rules: " + "; ".join(r["rules"]))
+    return out
+
+
+def cmd_template(a, sit):
+    from hoi4facts.evaluators import template
+    r = template.best(sit, a.role, width=a.width, enemies=a.enemy or None)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_template(r)
+
+
+def text_construction(r):
+    out = [f"CONSTRUCTION for {r.get('country', '')} at {r.get('date', '')}: {r['factories']['civilian']:g} civilian, "
+           f"{r['factories']['military']:g} military, {r['factories']['naval']:g} naval ({r['factories']['source']})"]
+    out.append(f"  buildings: civilian = {r['civilian_building']} ({r['cost_civ']:g}), military = "
+               f"{r['military_building']} ({r['cost_mil']:g}) from common/buildings")
+    for name, total, terms in (("civilian", r["b_civ"], r["terms_civ"]), ("military", r["b_mil"], r["terms_mil"]),
+                               ("consumer goods", r["consumer_goods"], r["terms_cg"])):
+        out.append(f"  {name} {total:+g}: " + ("; ".join(f"{k} {v:+g} ({src})" for src, k, v in terms) or "none"))
+    out.append(f"  k = ({r['cost_civ']:g}/(1{r['b_civ']:+g})) / ({r['cost_mil']:g}/(1{r['b_mil']:+g})) = {r['k']:g} "
+               f"military factories per civilian factory (one shared bonus would give {r['k_single_bonus']:g})")
+    out.append(f"  P0 = {r['cost_mil']:g} / ({r['cp_per_civ']:g} x (1{r['b_mil']:+g}) x (1 + 0.2 x {r['infrastructure']:g}"
+               f" infrastructure)) = {r['P0_days']:g} days per military factory from one civilian factory")
+    out.append(f"  a civilian factory pays when more than {r['standing_days']:g} days remain (factories standing) or "
+               f"{r['output_days']:g} days (output to the horizon)")
+    if r.get("decision"):
+        out.append(f"  decision for war on {r['war_date']}: {r['decision']}")
+    for g in r["gates"][:6]:
+        out.append(f"  gate: {g['focus']} needs {g['needs']} (a separate purchase)")
+    out.append("  build in: " + "; ".join(f"{w['name']} ({w['free_slots']} free, infrastructure {w['infrastructure']})"
+                                          for w in r["where"]))
+    if r.get("conversion"):
+        out.append(f"  conversion to {r['conversion']['building']}: {r['conversion']['conversion_cost']:g}")
+    out.append("  constants: " + "; ".join(f"{k} {v['v']:g} ({v['src']})" for k, v in r["constants"].items()
+                                          if isinstance(v, dict) and isinstance(v.get("v"), (int, float))))
+    return out
+
+
+def cmd_construction(a, sit):
+    from hoi4facts.evaluators import construction
+    r = construction.evaluate(sit, a.war_date, a.war_years)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_construction(r)
+
+
+COMMANDS = {"design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
+            "construction": cmd_construction}
 
 
 def parser():
@@ -156,6 +230,11 @@ def parser():
     p = add("design", "role")
     p.add_argument("--family", action="append", default=[], help="only these chassis families")
     add("refresh", "tech")
+    p = add("template", "role")
+    p.add_argument("--width", type=int, default=None, help="a width target instead of the theatre's terrain")
+    p = add("construction")
+    p.add_argument("--war-date", default=None, help="the planned war date (the 'standing' horizon)")
+    p.add_argument("--war-years", type=float, default=2.0, help="the war's planned length (the 'output' horizon)")
     return ap
 
 

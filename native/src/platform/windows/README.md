@@ -25,10 +25,14 @@ process launch or input interface is present in the native adapter. Process,
 token, snapshot and executable handles use RAII. Executable files are opened for
 read with FILE_SHARE_READ and kept open; no write/delete sharing is requested.
 
-Reads validate every range before API access. A batch performs exactly one full
-ownership/mapping check before and after its transfers; cheap retained-handle
-PID/creation/liveness checks run around each transfer, together with an optional
-original caller cancellation/deadline checkpoint. Scalars use a one-item batch.
+Reads validate every range before API access. The full ownership/mapping census
+(owner, parent, executable files, module list) runs at the snapshot boundaries
+(`Process::begin_snapshot` and the closing `check`), not per batch. Around each
+transfer the retained handles are checked: the zero-timeout wait must still time out
+(the process has not exited; this is what detects an exit, since a held handle keeps
+reporting its original PID and creation time after the process ends) and the PID and
+creation time must equal the pinned ones; an optional original caller
+cancellation/deadline checkpoint runs with them. Scalars use a one-item batch.
 Transfers require exact byte counts and reject guard/uncommitted/unreadable or
 cross-region spans. Changed region metadata discards the result. Lifetime/read
 failures are sticky. Batches return all results in order or an error; they expose
@@ -41,9 +45,10 @@ non-reparse regular executable, unelevated caller and processes, nonzero file
 IDs, at most 512 MiB executable, 64 KiB PE headers, 96 ordered sections,
 1 GiB virtual image, single readable region per read, 1 MiB per transfer,
 32 MiB / 65,536 requests per batch, 4,096 modules and 65,536 process metadata
-entries. Full process/module censuses are O(1) per batch, not per field. Per-scalar
-calls still pay the full bracket and no Windows timing is qualified; a future
-snapshot adapter must use real batches and supply its original deadline. These are supported-subset limits, not Windows or engine maxima.
+entries. Full process/module censuses run once per snapshot boundary, not per batch
+or field; between boundaries a read costs the handle checks and the transfer (an
+overview measured about 50 ms on Windows 1.20.0.0, against 4-5 s with a census per
+batch). A snapshot adapter must still supply its original deadline. These are supported-subset limits, not Windows or engine maxima.
 `IsWow64Process2` is resolved by its fixed name from resident kernel32; missing
 support refuses rather than adding a new mandatory loader import.
 

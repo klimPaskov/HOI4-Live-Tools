@@ -193,6 +193,9 @@ class Situation:
                         v = var.get(raw)
                     if v is not None:
                         rows.append((f"dynamic modifier {dm}" + (f" ({raw})" if _num(raw) is None else ""), k, v))
+            for tech, mods_t in self.tech_modifiers().items():
+                for k, v in mods_t.items():
+                    rows.append((f"tech {tech}", k, v))
             for k, v in (self.state.get("modifiers") or {}).items():
                 if isinstance(v, NUMBER):
                     rows.append(("live read", k, float(v)))
@@ -201,6 +204,13 @@ class Situation:
                 total[k] = total.get(k, 0.0) + v
             return total, rows
         return self.cached("modifiers", build)
+
+    def tech_modifiers(self):
+        """{tech: {modifier: value}} of the researched technologies: the country-wide numeric keys at a
+        technology's top level (production_factory_max_efficiency_factor, research_speed_factor, ...). Unit and
+        category blocks are the divisions' (divstats), not country modifiers."""
+        table = tech_country_modifiers(self.game)
+        return {t: table[t] for t in sorted(self.techs()) if table.get(t)}
 
     def modifier(self, key):
         return self.modifiers()[0].get(key, 0.0)
@@ -275,6 +285,35 @@ def production_buildings(game):
                             out[name] = kind
         return out
     return game.cached("eval:prodbuildings", load)
+
+
+TECH_FIELDS = {"research_cost", "start_year", "folder", "position", "xp_research_type", "xp_research_bonus",
+               "xp_boost_cost", "xp_research_cost", "doctrine", "show_effect_as_desc", "force_use_small_tech_layout",
+               "desc", "sub_technologies", "dependencies", "path", "categories", "ai_will_do", "allow", "allow_branch",
+               "on_research_complete", "enable_equipments", "enable_equipment_modules", "enable_subunits",
+               "enable_building", "enable_tactic", "special_project_specialization", "doctrine_name", "is_special_project",
+               "XOR", "xor", "research_cost_coeff", "leads_to_tech"}
+
+
+def tech_country_modifiers(game):
+    def load():
+        from ..script import parse_file
+        out = {}
+        for p in game.files("common/technologies"):
+            for k, v in parse_file(p):
+                if k != "technologies" or not isinstance(v, list):
+                    continue
+                for name, body in v:
+                    if not name or not isinstance(body, list) or name.startswith("@"):
+                        continue
+                    mods = {}
+                    for a, b in body:
+                        if a and a not in TECH_FIELDS and isinstance(b, str) and _num(b) is not None:
+                            mods[a] = mods.get(a, 0.0) + float(b)
+                    if mods:
+                        out[name] = mods
+        return out
+    return game.cached("eval:techmods", load)
 
 
 def game_dir_default():

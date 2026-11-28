@@ -72,6 +72,8 @@ technologies = {
         enable_equipments = { mt_chassis_2 }
         enable_equipment_modules = { e_turret_big e_cannon e_howitzer e_engine_diesel e_plate }
         categories = { armor } }
+    e_inf = { start_year = 1936 research_cost = 1 enable_subunits = { infantry artillery field_guns }
+        enable_equipments = { infantry_equipment_1 artillery_equipment_1 } categories = { infantry_weapons } }
     e_armor_tech = { start_year = 1938 research_cost = 1 categories = { armor } }
     e_engine_tech = { start_year = 1938 research_cost = 1 categories = { armor } }
 }
