@@ -5232,14 +5232,28 @@ fn declare_first(
     // the declaration opens no longer hold it (s7n, 24 Nov 2026: declared on 1 September, the
     // execute came on the 4th behind germany_mefo_bills). Once per declaration (a day).
     let mut pre: Option<String> = None;
+    // a pass that left an attacker not executing runs again in the next tick, within PRE_HOLD of
+    // the first (p101a, 28 Nov 2026: the East Prussian wing's 23 divisions were not executed in
+    // the burst and waited for the first war turn at W+3)
+    let within_hold = |state: &State| {
+        state
+            .done
+            .get("preexec0")
+            .is_some_and(|t0| now >= *t0 && now - *t0 <= plan_operation::PRE_HOLD)
+    };
+    let rerun = !plan_operation::pre_pending(state, now).is_empty() && within_hold(state);
     if plan_operation::awaiting_war(state)
         && !plan_operation::executing_any(state)
-        && !state
-            .done
-            .get("preexec")
-            .is_some_and(|at| now >= *at && now - *at < DAY)
+        && (rerun
+            || !state
+                .done
+                .get("preexec")
+                .is_some_and(|at| now >= *at && now - *at < DAY))
         && plan_affairs::declaration_near(state, tools, plan, now, 0)
     {
+        if !rerun {
+            state.done.insert("preexec0".to_string(), now);
+        }
         state.done.insert("preexec".to_string(), now);
         pre = war_burst_for(
             state,
@@ -5251,6 +5265,16 @@ fn declare_first(
             BETWEEN_DECLARATIONS_SECONDS,
         )?;
         state.last_ok = None;
+    }
+    // VERIFIED BEFORE THE DECLARATION: an attacker the roster does not read executing holds the
+    // declaration for PRE_HOLD game hours at most (then it goes out: the date counts more)
+    let pending = plan_operation::pre_pending(state, now);
+    if !pending.is_empty() && within_hold(state) {
+        return Ok(Some(format!(
+            "the declaration waits for the attack to execute ({}){}",
+            pending.join("; "),
+            pre.map(|p| format!(": {p}")).unwrap_or_default()
+        )));
     }
     let declared = plan_affairs::declare_due_step(state, tools, plan, lease, now)?;
     let declared = match (pre, declared) {
