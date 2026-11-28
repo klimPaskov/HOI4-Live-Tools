@@ -209,7 +209,9 @@ class Vehicles:
         return c[-1] if c else e
 
     def slots(self, e):
-        return self.inherited(e, "slots") or self.cat.slots(e)
+        found = [self.equip[x]["slots"] for x in self.chain(e) if self.equip[x].get("slots")]
+        cat = self.cat.slots(e)
+        return designer.resolve_slots(found + ([cat] if cat else [])) or cat
 
     def limits(self, e):
         out = []
