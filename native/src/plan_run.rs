@@ -2948,7 +2948,12 @@ fn lanes_tick_inner(
     let op_war = plan_operation::executing_any(state)
         || (state.war_active && plan_operation::active(state))
         || plan_operation::preparing(state);
-    if !due {
+    // THE OPERATION LEADS (engineer 95): while an operation prepares or executes, the war's turn
+    // comes before the fast lanes and the fairness, so its mouse work is first in urgency and its
+    // orders by command are never left behind a fast lane's mouse order, which ends the tick's
+    // rounds (w92c, 28 Nov 2026: 11 operation turns in 33 war days)
+    let war_leads = war_first && op_war && !due;
+    if !due && !war_leads {
         if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(line));
         }
@@ -2968,8 +2973,9 @@ fn lanes_tick_inner(
         && operation_roles_missing(state, plan)
     {
         state.sched.tick_turned.insert("layoutfirst");
+        let before = input_calls();
         if let Some(line) = layout_step(state, tools, plan, lease, now)? {
-            state.round.war_acted(now);
+            state.round.war_acted(now, input_calls() != before);
             trace_lanes(now, "layoutfirst");
             return Ok(Tick::Acted(line));
         }
@@ -2996,8 +3002,9 @@ fn lanes_tick_inner(
                 && plan_affairs::declaration_near(state, tools, plan, now, 0)))
     {
         state.sched.war_tick = Some(state.sched.tick_no);
+        let before = input_calls();
         if let Some(line) = declare_first(state, tools, plan, lease, now)? {
-            state.round.war_acted(now);
+            state.round.war_acted(now, input_calls() != before);
             trace_lanes(now, "declare_first");
             return Ok(Tick::Acted(line));
         }
@@ -3022,10 +3029,23 @@ fn lanes_tick_inner(
                     || plan["scheduler"]["war_every_tick"] == json!(true))));
     if war_turn {
         state.sched.war_tick = Some(state.sched.tick_no);
+        let before = input_calls();
         if let Some(line) = war_lane(state, tools, plan, lease, now)? {
-            state.round.war_acted(now);
+            state.round.war_acted(now, input_calls() != before);
             trace_lanes(now, "war_turn");
             return Ok(Tick::Acted(line));
+        }
+    }
+    // the operation led: the fast lanes and the fairness come right after its turn (a tick the
+    // lanes are owed reaches them here too)
+    if war_leads && !declaring {
+        if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(line));
+        }
+        if fair_turn_open(&state.sched, true, now) {
+            if let Some(line) = overdue_turns(state, tools, plan, lease, now, &lanes)? {
+                return Ok(Tick::Acted(line));
+            }
         }
     }
     if declaring {
@@ -3149,8 +3169,9 @@ fn lanes_tick_inner(
     // every lane is quiet: the war takes the turn it left to them
     if war_first && !war_turn {
         state.sched.war_tick = Some(state.sched.tick_no);
+        let before = input_calls();
         if let Some(line) = war_lane(state, tools, plan, lease, now)? {
-            state.round.war_acted(now);
+            state.round.war_acted(now, input_calls() != before);
             return Ok(Tick::Acted(line));
         }
     }
@@ -4633,12 +4654,17 @@ struct Round {
 }
 
 impl Round {
-    /// The war lane acted this tick.
-    fn war_acted(&mut self, now: GameHour) {
+    /// The war lane acted this tick; `input`: its turn needed the input (a mouse order, a panel
+    /// read). Only those count toward WAR_SHARE: the share keeps the lanes' input ticks, and a war
+    /// turn by command (milliseconds, no input) takes none of them (engineer 95: orders by command
+    /// counted as input ticks rationed the operation to a few turns a week).
+    fn war_acted(&mut self, now: GameHour, input: bool) {
         self.war_last = true;
         self.acted_at = Some(now);
         self.heavy_day(now);
-        self.war_streak += 1;
+        if input {
+            self.war_streak += 1;
+        }
         self.lanes_at.get_or_insert(now);
     }
 
@@ -14238,7 +14264,7 @@ mod tests {
                 gap = gap.max(now - last);
                 last = now;
             } else {
-                round.war_acted(now);
+                round.war_acted(now, true);
                 war += 1;
             }
             now += 2;
@@ -14247,7 +14273,7 @@ mod tests {
         assert!(war >= 3 * lanes - 3, "{war} {lanes}");
         // a lane-free hour: the lanes are owed after a day even inside the share
         let mut round = super::Round::default();
-        round.war_acted(0);
+        round.war_acted(0, true);
         assert!(!round.lanes_owed(DAY - 1));
         assert!(round.lanes_owed(DAY));
     }

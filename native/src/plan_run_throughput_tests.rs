@@ -356,3 +356,57 @@ fn the_gate_shows_ticks_and_lane_turns_per_game_day() {
     assert!(politics["per_day"].is_number(), "{politics}");
     assert_eq!(politics["starved"], false);
 }
+
+#[test]
+fn while_an_operation_runs_the_war_is_offered_before_a_fast_lanes_mouse_order() {
+    // w92c (28 Nov 2026): 11 operation turns in 33 war days; a fast lane's mouse order ends the
+    // tick's rounds, so it must not come before the operation's turn
+    let game = Game::new(false);
+    let mut state = State::default();
+    state.done.insert("op:op_x:prep".into(), START);
+    state.done.insert("op:op_x:ready".into(), START);
+    state.done.insert("op:op_x:exec".into(), START);
+    let mut plan = two_picks();
+    plan["war"] = json!({"enabled": true});
+    tick(&mut state, &game, &plan, "l", START).unwrap();
+    assert_eq!(
+        game.count("hoi4_politics_choose"),
+        1,
+        "the fast lane still acts"
+    );
+    assert_eq!(
+        state.sched.war_tick,
+        Some(state.sched.tick_no),
+        "the war was offered in the round the mouse order ended"
+    );
+    // without an operation the fast lanes keep their place ahead of the war
+    let game = Game::new(false);
+    let mut state = State::default();
+    tick(&mut state, &game, &plan, "l", START).unwrap();
+    assert_eq!(game.count("hoi4_politics_choose"), 1);
+    assert_ne!(state.sched.war_tick, Some(state.sched.tick_no));
+}
+
+#[test]
+fn war_turns_by_command_take_none_of_the_lanes_input_share() {
+    let mut round = super::Round::default();
+    for h in 0..10 {
+        round.war_acted(h, false);
+    }
+    assert!(
+        !round.lanes_owed(10),
+        "ten war turns by command, no input tick taken"
+    );
+    for h in 10..10 + WAR_SHARE as GameHour {
+        round.war_acted(h, true);
+    }
+    assert!(
+        round.lanes_owed(20),
+        "the input turns still have their share"
+    );
+    // the day's bound holds whatever the war's turns were
+    let mut round = super::Round::default();
+    round.lanes_turn(0);
+    round.war_acted(1, false);
+    assert!(round.lanes_owed(DAY));
+}

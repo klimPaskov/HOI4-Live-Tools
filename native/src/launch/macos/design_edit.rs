@@ -2001,12 +2001,14 @@ mod tests {
         a[3].lines = vec![(77, 1)]; // design 1335 builds line 77
         let lines = vec![
             OwnLine {
+                address: 0,
                 handle: 77,
                 naval: false,
                 key: Some("light_tank_equipment_2".into()),
                 requested: 1,
             },
             OwnLine {
+                address: 0,
                 handle: 88,
                 naval: true,
                 key: Some("ship_hull_cruiser_2".into()),

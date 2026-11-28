@@ -90,3 +90,73 @@ pub(super) fn attach(
     }
     Ok(json!({"army": army, "attached": attached, "of": wings.len(), "wings": rows_out}))
 }
+
+/// Attach in process (family airwing): one Attach(wing, army) command per wing not yet linked to the army, then the
+/// same read-back as the GUI path (each wing's army link equals the army's object). None hands the call to the GUI
+/// path (a wing or the army not known by address, or the module did not post); a game-check refusal is the answer.
+pub(super) fn attach_inprocess(
+    process: &dyn Process,
+    ch: &mut super::inproc::Channel,
+    wings: &[String],
+    army: &str,
+) -> Result<Option<Value>> {
+    let target = super::armies::army_address(process, army)?;
+    let (_, own) = super::airact::own(process)?;
+    let mut rows_out = Vec::new();
+    let mut post = Vec::new();
+    for wing in wings {
+        if link(process, wing)? == target {
+            rows_out.push(json!({"wing": wing, "attached": true, "already": true}));
+            continue;
+        }
+        match super::inproc::wing_address(&own, wing) {
+            Some(a) => post.push((wing.clone(), a)),
+            None => return Ok(None),
+        }
+    }
+    let started = Instant::now();
+    if !post.is_empty() {
+        let objs: Vec<u64> = post.iter().map(|(_, a)| *a).collect();
+        let Ok(r) = ch.post("airwing.attach", &objs, &[], Some(target), None) else {
+            return Ok(None);
+        };
+        if super::inproc::game_refused(&r) {
+            return Err(super::inproc::refused_error(
+                "attaching these wings to the army",
+            ));
+        }
+        if !super::inproc::all_posted(&r) {
+            return Ok(None);
+        }
+        let deadline = Instant::now() + ATTACH_WAIT;
+        let mut pending: Vec<String> = post.iter().map(|(w, _)| w.clone()).collect();
+        while !pending.is_empty() && Instant::now() < deadline {
+            pending.retain(|w| link(process, w).map(|l| l != target).unwrap_or(true));
+            if !pending.is_empty() {
+                crate::phase::sleep(Duration::from_millis(15));
+            }
+        }
+        for (w, _) in &post {
+            rows_out.push(
+                json!({"wing": w, "attached": !pending.contains(w), "backend": "inprocess",
+                "ms": started.elapsed().as_millis() as u64}),
+            );
+        }
+    }
+    let attached = rows_out
+        .iter()
+        .filter(|r| r["attached"] == json!(true))
+        .count();
+    if attached == 0 {
+        return Err(Error::new(
+            "input_readback_failed",
+            format!(
+                "No wing is attached to {army} after the in-process attach (the game refuses wings in pilot exercises, naval and strategic bombers): {}",
+                serde_json::to_string(&rows_out).unwrap_or_default()
+            ),
+        ));
+    }
+    Ok(Some(
+        json!({"army": army, "attached": attached, "of": wings.len(), "wings": rows_out, "backend": "inprocess"}),
+    ))
+}
