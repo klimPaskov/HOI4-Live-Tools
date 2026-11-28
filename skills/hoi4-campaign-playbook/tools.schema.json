@@ -5604,6 +5604,52 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_volunteers": {
+   "description": "Send or recall volunteer divisions, or send an attache, by the diplomacy view's own actions through the in-process module (family volunteers; HOI4_BACKEND=inprocess until S24-VOLUNTEERS passes). The game's own legality decides (the volunteer cap from the defines, the divisions-required floor, the recall lock, war and ideology gates); a refusal posts nothing. Divisions: an army's divisions, or division_ids within it. Air volunteers are a rebase of wings to an air base of the receiver (hoi4_air_rebase), not this tool.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "enum": [
+       "send",
+       "recall",
+       "attache"
+      ],
+      "type": "string"
+     },
+     "army": {
+      "description": "send / recall: the army whose divisions go (all of them unless division_ids)",
+      "type": "string"
+     },
+     "country": {
+      "description": "the receiving country's tag (the country at war; for recall the country the volunteers serve in)",
+      "type": "string"
+     },
+     "division_ids": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "action",
+     "country",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_wait_change": {
    "description": "Block until a change after `since` arrives (optionally only given kinds or urgent ones), or until timeout_seconds (1-30) pass; then reply like hoi4_observe with woke_because change|timeout. `now.omissions` lists what the game marks actionable and is still open (item, days_open, the game's todo, the executor rule that owns it, that rule's dated note, note_contradicts_read), longest open first, so a wake needs no alert read. Use it instead of polling: the reply comes within a few hundred milliseconds of the change. Pure read; never pauses.",
    "inputSchema": {

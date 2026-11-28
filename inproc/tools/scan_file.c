@@ -120,6 +120,11 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "wg_target_off")) got = t.st2.diplo.wg_target_off;
         else if (!strncmp(argv[a], "act_size:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_size : 0; }
         else if (!strncmp(argv[a], "act_type:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_type : 0; }
+        /* engineer 118: a volunteer action's division list, packed as list offset, inline buffer, inline places */
+        else if (!strncmp(argv[a], "act_units:", 10)) {
+            const cmd_type *x = stage2_find(&t.st2, argv[a] + 10);
+            got = x ? ((uint64_t)x->act_units_off << 16) | ((uint64_t)x->act_units_inline << 8) | x->act_units_cap : 0;
+        }
         else if (!strncmp(argv[a], "act_goal_off:", 13)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 13); got = x ? x->act_goal_off : 0; }
         /* engineer 105: a unit action's facts (move.division): its province constructor, and its offsets packed as
          * handle, path data, path count, second array, first flag byte (one byte each, high to low) */

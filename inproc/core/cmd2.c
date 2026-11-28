@@ -213,6 +213,21 @@ const cmd_spec CMD2_SPECS[] = {
      * whose target is the receiver (the list the dialog shows) */
     {"diplomacy", "diplomacy.declare_war", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_DIPLO_WAR, 0, 0x28,
      "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "17CDeclareWarAction"},
+    /* ---- volunteers (engineer 118, 28 Nov): the diplomacy view's volunteer and attache actions, one CDiplomaticActionCommand
+     * each, built as the family diplomacy builds its actions (read from 1.20.0.0). send: CSendVolunteerAction (type 0x3415,
+     * its list of division handles at +0x70 with 2 inline places; the dialog's Send fills the list with the chosen
+     * divisions through the action's own setter, which stores each division's handle) and a byte +0xa8 (serialized 0x3866,
+     * the dialog's check box; the constructor's 0 is kept). recall: CRecallVolunteerAction (0x2e3a; the same list with 4
+     * inline places; its legality refuses an empty list). attache: CSendAttacheAction (0x38d9), the SIMPLE shape with one
+     * flag byte of its own (as improve relations). The module fills at most the inline places per action and posts one
+     * action per group of divisions, so it never allocates inside a game object. A family of its own: OFF in auto until
+     * its live session (S24-VOLUNTEERS) passes. */
+    {"volunteers", "volunteers.send", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_VOLUNTEER, 0, 0x28,
+     "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "20CSendVolunteerAction"},
+    {"volunteers", "volunteers.recall", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_VOLUNTEER, 0, 0x28,
+     "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "22CRecallVolunteerAction"},
+    {"volunteers", "volunteers.attache", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_DIPLO_SIMPLE, 0, 0x28,
+     "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "18CSendAttacheAction"},
     /* ---- holds (engineer 79, 24 Nov): the AREA DEFENCE order, as the battle-plan map tool posts it. Read from 1.20.0.0
      * and 1.19.4.1 (identical layout and code). The area button only arms the tool; each left click on a state posts
      * EditAreaDefenseState(group, order id, the state's id, settings) through the tool's own constructor (1.20 0x10094a330,
@@ -994,13 +1009,28 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
                 int simple = s->ctor == CTOR_DIPLO_SIMPLE && cmd_pmatch(fb, 15, "55 48 89 e5 53 48 83 ec 28 48 89 fb 8b 41 08", c, 6);
                 int war = s->ctor == CTOR_DIPLO_WAR &&
                           cmd_pmatch(fb, 26, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 44 89 c3 49 89 cf 49 89 fe 41 8b 41 08", c, 6);
-                if (!simple && !war) continue;
+                int vol = s->ctor == CTOR_VOLUNTEER &&
+                          cmd_pmatch(fb, 19, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 48 89 fb 8b 41 08", c, 6);
+                if (!simple && !war && !vol) continue;
                 unsigned m = 0;
                 long b = pfind_at(im, fs, 0xa0, "c7 04 24 01 00 00 00 48 8d 4d B 45 31 c0 41 b9 ff ff ff ff e8 D 48 8d 05 D", c, 6, &m);
                 if (b < 0 || m != 1) continue;
                 uint64_t at = fs + (uint64_t)b, base = at + 25 + (int64_t)(int32_t)c[1], vt = at + 32 + (int64_t)(int32_t)c[2];
                 if (vt != o->vt_obj || !in_text(im, base)) continue;
+                uint32_t u_off = 0, u_inl = 0, u_cap = 0;
+                if (vol) {
+                    /* the list: lea r15,[rbx+L]; lea rax,[rbx+A]; xorps; movups [rbx+L],xmm0 ... then
+                     * lea rax,[rbx+I]; mov [rbx+L],rax; mov dword [rbx+L+8],CAP (the inline buffer and its places) */
+                    uint32_t v[8]; unsigned mv = 0;
+                    if (pfind_at(im, fs, 0xc0, "4c 8d 7b B 48 8d 83 D 0f 57 c0 0f 11 43 B", v, 8, &mv) < 0 || mv != 1 || v[2] != v[0]) continue;
+                    u_off = v[0];
+                    if (pfind_at(im, fs, 0xe0, "48 8d 83 D 48 89 43 B c7 43 B D", v, 8, &mv) < 0 || mv != 1 || v[1] != u_off ||
+                        v[2] != u_off + 8 || v[3] < 1 || v[3] > 8 || v[0] <= u_off + 0x10)
+                        continue;
+                    u_inl = v[0]; u_cap = v[3];
+                }
                 long t2 = simple ? pfind_at(im, fs, 0xa0, "48 89 03 48 89 df be D", c + 3, 3, &m)
+                        : vol    ? pfind_at(im, fs, 0xe0, "48 89 df be D e8 D", c + 3, 3, &m)
                                  : pfind_at(im, fs, 0xe0, "41 88 5e B 4c 89 f7 be D", c + 3, 3, &m);
                 if (simple && t2 < 0) { /* improve relations: the constructor also sets one byte flag of its own first */
                     uint32_t e[3];
@@ -1015,8 +1045,10 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
                     goal_off = g[0];
                 }
                 /* the complete- and base-object constructors are identical copies: every match must agree */
-                if (found && (o->act_base != base || o->act_type != typ || o->act_goal_off != goal_off || o->act_flag_off != flag_off)) { found = 99; break; }
-                if (!found) { o->act_ctor = fs; o->act_base = base; o->act_type = typ; o->act_goal_off = goal_off; o->act_flag_off = flag_off; }
+                if (found && (o->act_base != base || o->act_type != typ || o->act_goal_off != goal_off || o->act_flag_off != flag_off ||
+                              o->act_units_off != u_off || o->act_units_inline != u_inl || o->act_units_cap != u_cap)) { found = 99; break; }
+                if (!found) { o->act_ctor = fs; o->act_base = base; o->act_type = typ; o->act_goal_off = goal_off; o->act_flag_off = flag_off;
+                              o->act_units_off = u_off; o->act_units_inline = u_inl; o->act_units_cap = u_cap; }
                 found = 1;
             }
             /* the class's own Clone (vtable +0xd0, the slot the command's copy constructor calls): new(size) first */

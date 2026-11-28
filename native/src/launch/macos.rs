@@ -40,6 +40,7 @@ mod inproc_research;
 mod inproc_training;
 mod inproc_units;
 mod operation_act;
+mod volunteers;
 mod railway;
 // Internal prospective click opener; no tool/configuration registration.
 mod construction_find_open;
@@ -796,6 +797,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         stockpile::tool(),
         airread::schema(),
         designs::schema(),
+        volunteers::schema(),
         doctrines::tool(),
         mios::tool(),
         intelligence::tool(),
@@ -1020,6 +1022,7 @@ impl Commands for MacClock {
                     | "hoi4_army_fallback"
                     | "hoi4_army_area_defense"
                     | "hoi4_army_exercise"
+                    | "hoi4_volunteers"
                     | "hoi4_army_move"
                     | "hoi4_army_commander"
                     | "hoi4_commanders"
@@ -6685,6 +6688,123 @@ impl MacClock {
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(with_inproc(receipt, units_reply));
+        }
+        if name == "hoi4_volunteers" {
+            // engineer 118: volunteers and the attache by the diplomacy view's own actions through the module (family
+            // volunteers; off in auto until S24-VOLUNTEERS); no mouse path (the dialog is not driven)
+            allowed(
+                args,
+                &[
+                    "action",
+                    "country",
+                    "army",
+                    "division_ids",
+                    "request_id",
+                    "lease_token",
+                ],
+            )?;
+            volunteers::allowed_mode(inproc::mode())?;
+            let action = volunteers::Action::parse(&string(args, "action")?)?;
+            let country = string(args, "country")?;
+            if !volunteers::valid_tag(&country) {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "country must be a country tag such as SPR",
+                ));
+            }
+            let army = args.get("army").and_then(Value::as_str).map(str::to_string);
+            let ids: Option<Vec<String>> = match args.get("division_ids") {
+                None | Some(Value::Null) => None,
+                Some(v) => Some(
+                    v.as_array()
+                        .filter(|a| (1..=volunteers::MAX_DIVISIONS).contains(&a.len()))
+                        .and_then(|a| {
+                            a.iter()
+                                .map(|x| {
+                                    x.as_str()
+                                        .filter(|s| !s.is_empty() && s.len() <= 64)
+                                        .map(String::from)
+                                })
+                                .collect::<Option<Vec<String>>>()
+                        })
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", "division_ids: 1..64 division ids")
+                        })?,
+                ),
+            };
+            if action.takes_divisions() == army.is_none() {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "send and recall name the army whose divisions go; the attache names no army",
+                ));
+            }
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let observed = guard.observe(process)?;
+            let epoch = observed.epoch;
+            authority.authorize(token, &epoch)?;
+            let mut route = inproc::route("volunteers");
+            if route.is_none() {
+                return Err(Error::new(
+                    "in_process_unavailable",
+                    "the in-process module's volunteers family is not serving: nothing was posted",
+                ));
+            }
+            let tag_index = ui::read(process, |r, i| {
+                diplomacy_state::tag_index_of(r, i, &country)
+            })?;
+            let divisions = match &army {
+                None => Vec::new(),
+                Some(army) => {
+                    if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
+                        return Err(Error::new("invalid_arguments", "Invalid army name"));
+                    }
+                    let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+                    let in_group =
+                        ui::read(process, |r, i| armies::group_division_ptrs(r, i, group))?;
+                    match &ids {
+                        Some(ids) => {
+                            let ptrs = ui::read(process, |r, i| armies::division_ptrs(r, i, ids))?;
+                            if let Some(k) = ptrs.iter().position(|p| !in_group.contains(p)) {
+                                return Err(Error::new(
+                                    "invalid_arguments",
+                                    format!("division {} is not in {army}", ids[k]),
+                                ));
+                            }
+                            ptrs
+                        }
+                        None => in_group,
+                    }
+                }
+            };
+            if action.takes_divisions()
+                && (divisions.is_empty() || divisions.len() > volunteers::MAX_DIVISIONS)
+            {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    format!(
+                        "1..{} divisions per call (found {})",
+                        volunteers::MAX_DIVISIONS,
+                        divisions.len()
+                    ),
+                ));
+            }
+            let what = json!({"kind":"volunteers","action":action.op(),"country":country,"army":army,
+                "divisions":divisions.len()});
+            let mut reply = Value::Null;
+            // the read-back of volunteers abroad is mapped by S24-VOLUNTEERS; until then the module's posted count is
+            // the verdict
+            let mut settle = || Ok(journal::Outcome::Unobservable);
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let ch = route
+                    .as_mut()
+                    .ok_or_else(|| Error::new("in_process_unavailable", "no channel"))?;
+                reply = volunteers::post(ch, action, tag_index, &divisions)?;
+                Ok(())
+            };
+            let receipt = actions.execute(id, &epoch, what, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt,"in_process":reply}));
         }
         if name == "hoi4_army_exercise" {
             allowed(
