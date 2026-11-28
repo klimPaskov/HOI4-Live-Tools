@@ -291,14 +291,22 @@ def text_doctrine(r):
     out = [f"DOCTRINE (land grand doctrines) for {r.get('country', '')} at {r.get('date', '')}: held {r['held']}; "
            f"R against {r['enemy_template']} for our line and armour templates (base / with every milestone)"]
     for x in r["rows"]:
-        out.append(f"  {x['doctrine']}{' (held)' if x['held'] else ''}: line {x.get('line')}, armour {x.get('armour')};"
-                   f" planning {x['planning']} + milestones {x['planning_milestones']}; other {x['other']} ({x['src']})")
+        out.append(f"  {x['doctrine']}{' (held)' if x['held'] else ''}: line {x.get('line')}, attacker "
+                   f"{x.get('attacker')}, armour {x.get('armour')}; planning {x['planning']} + milestones "
+                   f"{x['planning_milestones']}; other {x['other']} ({x['src']})")
+        for role, by in (x.get("attack") or {}).items():
+            out.append(f"      {role} attacking with planning (mean over the first T days): " + "; ".join(
+                f"{label}: " + ", ".join(f"{t} R {v['R']:g} (planning {v['planning']:g})" for t, v in d.items())
+                for label, d in by.items()))
+        out.append(f"      not valued: {x.get('unvalued', {}).get('all milestones')}")
+    out.append(f"  planning: {'; '.join(r.get('planning_defines') or [])}; subdoctrine tracks are the same under "
+               "every grand doctrine (not compared)")
     return out
 
 
 def cmd_doctrine(a, sit):
     from hoi4facts.evaluators import force
-    r = force.doctrines(sit, a.enemy or None)
+    r = force.doctrines(sit, a.enemy or None, planning_days=tuple(a.planning_days))
     r["country"], r["date"] = sit.tag, sit.date
     return r, text_doctrine(r)
 
@@ -339,7 +347,9 @@ def parser():
     p = add("force")
     p.add_argument("--war-date", default=None, help="the enemy grows by its factories to this date")
     p.add_argument("--axes", type=int, default=None, help="attack axes (default: the enemy's border states)")
-    add("doctrine")
+    p = add("doctrine")
+    p.add_argument("--planning-days", type=int, nargs="+", default=[14, 30],
+                   help="offensive lengths the planning bonus is averaged over")
     p = add("production")
     p.add_argument("--need-date", required=True, help="the date the equipment must be in the stockpile")
     p.add_argument("--add", action="append", default=[], help="ROLE=N divisions to add (templates from evaluator 2)")

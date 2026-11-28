@@ -141,34 +141,70 @@ def grand_doctrines(sit, folder="land"):
     return sit.game.cached("eval:grand:" + folder, load)
 
 
-def doctrines(sit, enemies=None, folder="land"):
-    """Each grand doctrine: R of our line and armour templates with it (base, and with every milestone)."""
+VALUED_DOCTRINE_KEYS = {"max_planning", "planning_decay_rate_factor"}
+
+
+def doctrines(sit, enemies=None, folder="land", planning_days=(14, 30)):
+    """Each grand doctrine: R of our line (defending), attacker and armour templates with it, base and with every
+    milestone. Attacks carry the planning bonus: PLANNING_MAX + the doctrine's max_planning, falling PLANNING_DECAY a
+    day (x (1 + planning_decay_rate_factor)) once the attack starts; the mean over the first T days of an offensive
+    multiplies soft and hard attack [?: which stats the planning bonus lifts is not read from the files]. The
+    subdoctrine tracks are not compared: every land subdoctrine is open under every grand doctrine (their `available`
+    names no grand doctrine) and all grand doctrines have the same tracks, so they add the same to each; only a
+    track's milestone differs (counted under "all milestones"). Keys not valued are listed per doctrine."""
     tags, _ = sit.enemies(enemies)
     b = template.Builder(sit, None, tags, designs=True)
     est, ewhy = template.enemy_division(b)
     roles = {}
-    for role in ("line", "armour"):
-        r = template.best(sit, role, enemies=tags)
+    for role in ("line", "attacker", "armour"):
+        try:
+            r = template.best(sit, role, enemies=tags)
+        except Exception:  # noqa: BLE001 - a role with no fieldable template: left out
+            continue
         if r["templates"]:
             t = r["templates"][0]
             roles[role] = ([k for k, n in t["battalions"].items() for _ in range(n)], t["support"] + t["regimental"])
     held = [d for d in sit.doctrines() if d in grand_doctrines(sit, folder)]
     others = [d for d in sit.doctrines() if d not in held]
     base_mods = divstats.factors(b.data, sit.techs(), others)
+    pmax = float(_first(sit.define("PLANNING_MAX"), 0.0))
+    decay = float(_first(sit.define("PLANNING_DECAY"), 0.0))
     rows = []
     for name, g in sorted(grand_doctrines(sit, folder).items()):
         row = {"doctrine": name, "held": name in held, "planning": {k: v for k, v in
                g["modifiers"].items() if "planning" in k}, "planning_milestones": {k: v for k, v in
                g["milestone_modifiers"].items() if "planning" in k}, "other": {k: v for k, v in g["modifiers"].items()
-               if "planning" not in k}, "src": g["src"]}
-        for role, (bats, sup) in roles.items():
-            for label, extra in (("base", g["units"]), ("all milestones", g["units"] + g["milestone_units"])):
+               if "planning" not in k}, "src": g["src"], "attack": {}}
+        for label, extra, mods in (("base", g["units"], g["modifiers"]),
+                                   ("all milestones", g["units"] + g["milestone_units"],
+                                    _sum(g["modifiers"], g["milestone_modifiers"]))):
+            row.setdefault("unvalued", {})[label] = sorted(k for k in mods if k not in VALUED_DOCTRINE_KEYS
+                                                           and k != "enable_tactic")
+            for role, (bats, sup) in roles.items():
                 div = divstats.division(b.data, bats, sup, b.equipment, base_mods + extra)
                 if est is None or not div:
                     continue
                 attacking = role != "line"
                 r, _ = template.battle(b.rules, div, est, attacking, b.prof)
                 row.setdefault(role, {})[label] = round(r, 3)
+                if not attacking:
+                    continue
+                cap = pmax + mods.get("max_planning", 0.0)
+                dec = decay * (1 + mods.get("planning_decay_rate_factor", 0.0))
+                for T in planning_days:
+                    p = max(0.0, cap - dec * T / 2.0)
+                    d2 = dict(div, soft_attack=div["soft_attack"] * (1 + p), hard_attack=div["hard_attack"] * (1 + p))
+                    rp, _ = template.battle(b.rules, d2, est, True, b.prof)
+                    row["attack"].setdefault(role, {}).setdefault(label, {})[f"T{T}"] = {
+                        "planning": round(p, 3), "R": round(rp, 3)}
         rows.append(row)
     return {"rows": rows, "enemy_template": ewhy, "roles": {k: v[0][:1] + [len(v[0])] for k, v in roles.items()},
-            "held": held}
+            "held": held, "planning_days": list(planning_days),
+            "planning_defines": [sit.define_src(k) for k in ("PLANNING_MAX", "PLANNING_DECAY")]}
+
+
+def _sum(a, b):
+    out = dict(a)
+    for k, v in b.items():
+        out[k] = out.get(k, 0.0) + v
+    return out

@@ -22,6 +22,12 @@ class ForceRealGameTest(unittest.TestCase):
         names = {x["doctrine"] for x in d["rows"]}
         self.assertTrue({"new_mobile_warfare", "superior_firepower", "grand_battleplan", "mass_assault"} <= names)
         self.assertEqual(d["held"], ["new_mobile_warfare"])
+        rows = {x["doctrine"]: x for x in d["rows"]}
+        gbp = rows["grand_battleplan"]["attack"]["attacker"]["base"]["T14"]
+        nmw = rows["new_mobile_warfare"]["attack"]["attacker"]["base"]["T14"]
+        self.assertAlmostEqual(gbp["planning"], 0.3 + 0.1 - 0.01 * 14 / 2)      # PLANNING_MAX + max_planning - decay
+        self.assertGreater(gbp["R"], nmw["R"])                                   # the higher cap, before milestones
+        self.assertIn("coordination_bonus", rows["grand_battleplan"]["unvalued"]["all milestones"])
 
     def test_force_minor(self):
         r = force.needed(fx.real_situation("HUN"), "CZE", "1938.1.1")
