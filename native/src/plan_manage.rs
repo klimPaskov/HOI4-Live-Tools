@@ -5590,6 +5590,26 @@ fn country_rules(
         );
         return Ok(None);
     };
+    // the law's price as the game's scripts set it (the options read's `cost`): a law the power
+    // cannot pay waits with both numbers instead of a click the game refuses
+    let price = options.as_ref().and_then(|o| {
+        list(o, "options")
+            .iter()
+            .find(|i| text(&i["idea"]) == law)
+            .and_then(|i| i["cost"].as_f64())
+    });
+    if let (Some(price), Some(pp)) = (price, political_power(tools)) {
+        if pp + 1e-6 < price {
+            note(
+                state,
+                "manpower",
+                format!(
+                    "waiting: {free} free < {need}; {law} costs {price:.0} political power, {pp:.0} held"
+                ),
+            );
+            return Ok(None);
+        }
+    }
     let (ok, why) = state.act(
         tools,
         lease,
@@ -12933,6 +12953,35 @@ mod tests {
             step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap(),
             None
         );
+        // the law's price from the game's scripts (the options read's cost) above the power held:
+        // it waits with both numbers, no click
+        let options = tools.replies.borrow()["hoi4_politics_options"].clone();
+        tools.replies.borrow_mut().insert(
+            "hoi4_politics_options".into(),
+            json!({"current": "volunteer_only", "options": [
+                {"idea": "limited_conscription", "enabled": true, "cost": 150.0},
+                {"idea": "extensive_conscription", "enabled": false}]}),
+        );
+        tools.replies.borrow_mut().insert(
+            "hoi4_economy".into(),
+            json!({"political_power": {"raw_signed": 5_000_000}}),
+        );
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 9 * DAY).unwrap(),
+            None
+        );
+        assert!(
+            state.manage.notes["manpower"]
+                .contains("limited_conscription costs 150 political power, 50 held"),
+            "{}",
+            state.manage.notes["manpower"]
+        );
+        assert!(actions(&tools).is_empty());
+        tools
+            .replies
+            .borrow_mut()
+            .insert("hoi4_politics_options".into(), options);
+        tools.replies.borrow_mut().remove("hoi4_economy");
         let out = step(&mut state, &tools, &plan, "l", START + 10 * DAY).unwrap();
         assert_eq!(
             out.as_deref(),
