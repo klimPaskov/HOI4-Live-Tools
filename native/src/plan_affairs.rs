@@ -3139,6 +3139,24 @@ fn mio_refused(state: &mut State, now: GameHour, kind: &str, org: &str, why: &st
             note(state, "mio", format!("{org}: {why}"));
             14
         }
+        // the policy window's gate refuses it now (cooldown, political power, its conditions):
+        // nothing was sent; the organisation's traits go meanwhile and the policy is asked again
+        // after a wait as long as it has been refused so far (at least 3 days), so a policy the
+        // gate never opens for is asked ever more rarely (w126a: one policy refused every 3 days,
+        // 12 times)
+        "policy_not_allowed_now" => {
+            let first = *state
+                .done
+                .entry(format!("miopolfirst:{org}"))
+                .or_insert(now);
+            let waited = now.saturating_sub(first) / DAY;
+            note(
+                state,
+                "mio",
+                format!("{org}: {why} (refused for {waited} days)"),
+            );
+            waited.max(3)
+        }
         _ => 3,
     };
     state.skip(now, kind, org, days * DAY);
@@ -3245,6 +3263,7 @@ fn mio_plan(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             let (ok, why) = state.act(tools, run.lease, "hoi4_mio_policy", args, "mp")?;
             if ok {
                 state.done.insert(policy_key, now);
+                state.done.remove(&format!("miopolfirst:{org}"));
             } else if why.starts_with("Diverged") {
                 // the click went through but the window shows no readable mark of an attached
                 // policy (receipt "unverified"): sending it again only repeats the same clicks
@@ -6306,6 +6325,36 @@ mod tests {
                 == 1),
             Some(2)
         );
+    }
+
+    #[test]
+    fn a_policy_the_gate_refuses_is_asked_ever_more_rarely() {
+        // w126a: the policy window's gate refused one policy every 3 days, 12 times
+        let tools = fake(vec![]);
+        tools.refuse("hoi4_mio_policy", "policy_not_allowed_now");
+        let plan = json!({"mio": [{"organisation": "GER_henschel_organization",
+            "policy": "mio_policy_land_cutting_corners"}]});
+        let mut state = State::default();
+        let asks = |t: &Fake| {
+            actions(t)
+                .iter()
+                .filter(|(n, _)| n == "hoi4_mio_policy")
+                .count()
+        };
+        let mut hour = START;
+        while hour < START + 60 * DAY {
+            step(&mut state, &tools, &plan, "l", hour).unwrap();
+            hour += 6;
+        }
+        // 3-day waits would ask 20 times in 60 days; waits as long as the refusal grow
+        let n = asks(&tools);
+        assert!((3..=7).contains(&n), "{n} asks");
+        // once allowed and attached, the refusal history is cleared
+        tools.accept("hoi4_mio_policy");
+        step(&mut state, &tools, &plan, "l", START + 200 * DAY).unwrap();
+        assert!(!state
+            .done
+            .contains_key("miopolfirst:GER_henschel_organization"));
     }
 
     #[test]

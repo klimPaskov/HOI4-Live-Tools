@@ -8584,6 +8584,39 @@ fn construction_plan_step(
         } else {
             state.skip(now, "cplan", &key, 2 * DAY);
             item_failed(state, item, &key, &label, &why, now);
+            // the other items of the order share the leader's verdict whatever it was: its rest,
+            // its tries and its give-up, so they stay one order and one try is one order (w126a:
+            // three refinery items of one state rested two days each while the leader rested a
+            // week, split off, and the game's refusal was met nine times instead of three)
+            let blocked = state.plan_blocked.get(&key).cloned();
+            let tries = state.plan_tries.get(&key).cloned();
+            let lead = skip_key("cplan", &key);
+            let until = state.bad.get(&lead).copied();
+            let set = state.bad_set.get(&lead).copied();
+            for k in &siblings {
+                if let Some(b) = &blocked {
+                    // the row keeps the sibling's own item: a row naming the leader's item reads
+                    // as "the plan revised it" on the next tick and the sibling came back at once
+                    let mut row = b.clone();
+                    if let Some(own) = items.iter().find(|i| key_of(i) == *k) {
+                        row["item"] = own.clone();
+                    }
+                    state.plan_blocked.insert(k.clone(), row);
+                    state.plan_tries.remove(k);
+                    continue;
+                }
+                match &tries {
+                    Some(t) => state.plan_tries.insert(k.clone(), t.clone()),
+                    None => state.plan_tries.remove(k),
+                };
+                let mine = skip_key("cplan", k);
+                if let Some(u) = until {
+                    state.bad.insert(mine.clone(), u);
+                }
+                if let Some(at) = set {
+                    state.bad_set.insert(mine, at);
+                }
+            }
         }
         return Ok(Some(format!(
             "construction plan {label} {building} in {home}: {ok} {why}"
@@ -9123,7 +9156,13 @@ enum Refusal {
     Transient,
 }
 fn refusal(why: &str) -> Refusal {
-    if why.contains("no_free_slot_or_not_allowed") || why.starts_with("NotApplied") {
+    // the in-process path answers with the game's own construction check (refused_by_game_check):
+    // the same verdict as the mouse path's disabled slot, so the same rest (w126a: 23 refusals
+    // read as transient and asked again every 6 hours)
+    if why.contains("no_free_slot_or_not_allowed")
+        || why.starts_with("NotApplied")
+        || why.starts_with("refused_by_game_check")
+    {
         Refusal::Full
     } else if why.starts_with("Diverged") {
         Refusal::Partial
@@ -21135,6 +21174,44 @@ mod tests {
                 None,
                 "{when}"
             );
+        }
+    }
+
+    #[test]
+    fn items_of_one_building_in_one_state_share_the_games_refusal() {
+        // w126a: three refinery items of one state each spent their own tries on the refusal
+        struct Refuse(RefCell<u32>);
+        impl Tools for Refuse {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                Ok(match name {
+                    "hoi4_overview" => json!({"player": "GER"}),
+                    "hoi4_construction_add" => {
+                        *self.0.borrow_mut() += 1;
+                        return Err(Error::new("refused_by_game_check", "no free slot"));
+                    }
+                    _ if args.get("request_id").is_some() => {
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let plan = json!({"construction_plan": [
+            {"id": "ref1", "building": "synthetic_refinery", "state": 42, "when": ""},
+            {"id": "ref2", "building": "synthetic_refinery", "state": 42, "when": ""},
+            {"id": "ref3", "building": "synthetic_refinery", "state": 42, "when": ""}]});
+        let tools = Refuse(RefCell::new(0));
+        let mut state = State::default();
+        let mut now = START;
+        for _ in 0..40 {
+            construction_plan_step(&mut state, &tools, &plan, "l", now).unwrap();
+            state.failures.clear(); // the ledger's own back-off is not under test here
+            now += DAY;
+        }
+        // one order per try for the three items (they go together), not three tries each
+        assert_eq!(*tools.0.borrow(), PLAN_ITEM_TRIES);
+        for k in ["id:ref1", "id:ref2", "id:ref3"] {
+            assert!(state.plan_blocked.contains_key(k), "{k}");
         }
     }
 

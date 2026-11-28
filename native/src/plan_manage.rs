@@ -253,6 +253,9 @@ pub(super) struct Memory {
     pp_idle_since: Option<GameHour>,
     /// `politics_auto`: what the last options read of each order slot found.
     pp_reads: HashMap<String, SlotRead>,
+    /// `politics_auto`: ideas the game refused at an order slot, until when they are passed over
+    /// there (the slot's next choice is the next idea of its order, not the refused one again).
+    pp_refused: HashMap<String, Vec<(String, GameHour)>>,
     /// `politics_auto`: per category, when its seats were last listed and the vacant ones.
     pp_vacant: HashMap<String, (GameHour, Vec<i64>)>,
     /// Since when the fuel stock has been below `manage.fuel_floor`.
@@ -6537,7 +6540,23 @@ pub(super) fn politics_auto_step(
             could_buy = true;
         }
         let mut slot = slot.clone();
-        let mut choice = politics_auto_choice(entry, &current, &offered, &never, &conscription);
+        // ideas the game refused at this slot lately are passed over: the next of the order goes
+        let never_here: Vec<String> = never
+            .iter()
+            .cloned()
+            .chain(
+                state
+                    .manage
+                    .pp_refused
+                    .get(&slot_key)
+                    .into_iter()
+                    .flatten()
+                    .filter(|(_, until)| *until > now)
+                    .map(|(idea, _)| idea.clone()),
+            )
+            .collect();
+        let mut choice =
+            politics_auto_choice(entry, &current, &offered, &never_here, &conscription);
         // The order names advisors, not seats: an entry whose seat holds what the order does not
         // rank (or holds anything, for a vacancy fill) takes its idea at another vacant seat of
         // the category that offers it (gr3 16 Nov 2026: Ribbentrop held seat 4, the order's
@@ -6559,7 +6578,8 @@ pub(super) fn politics_auto_step(
                 let offered = offered_in_order(&other, fill, &mut value_ctx, tools, plan);
                 let mut moved = entry.clone();
                 moved["slot"] = json!(seat);
-                if let Ok(idea) = politics_auto_choice(&moved, "", &offered, &never, &conscription)
+                if let Ok(idea) =
+                    politics_auto_choice(&moved, "", &offered, &never_here, &conscription)
                 {
                     slot = json!(seat);
                     current.clear();
@@ -6600,7 +6620,20 @@ pub(super) fn politics_auto_step(
             // the seat is no longer vacant: the default order reads the seats again
             state.manage.pp_vacant.remove(&category);
         } else {
-            state.skip(now, "pauto", &slot_key, 7 * DAY);
+            // w126a: free_trade and one advisor were refused by the game's own check four and
+            // three times, a week apart. A refusal by the game (its check, or a click that changed
+            // nothing) passes the idea over at this slot for the read cadence and lets the slot's
+            // next idea go the next day; other failures (the tool's own) wait a week as before.
+            let by_game = matches!(
+                why.split(':').next().unwrap_or("").trim(),
+                "refused_by_game_check" | "NotApplied" | "invalid_target"
+            );
+            if by_game {
+                let list = state.manage.pp_refused.entry(slot_key.clone()).or_default();
+                list.retain(|(i, until)| *i != idea && *until > now);
+                list.push((idea.clone(), now + recheck));
+            }
+            state.skip(now, "pauto", &slot_key, if by_game { DAY } else { 7 * DAY });
             state.manage.pp_reads.insert(
                 slot_key.clone(),
                 SlotRead {
@@ -13253,6 +13286,38 @@ mod tests {
             Ok("GER_erwin_rommel".into())
         );
         assert!(politics_auto_choice(&seat, "GER_erwin_rommel", &offered, &none, &none).is_err());
+    }
+
+    #[test]
+    fn an_idea_the_game_refuses_is_passed_over_and_the_next_of_the_order_goes() {
+        // w126a: free_trade refused by the game four times, a week apart, the slot's next law never
+        let tools = fake(vec![
+            ("hoi4_economy", pp(300.0)),
+            (
+                "hoi4_politics_options",
+                json!({"current": "limited_exports", "options": [
+                    {"idea": "free_trade", "enabled": true}, {"idea": "export_focus", "enabled": true},
+                    {"idea": "limited_exports", "enabled": true}]}),
+            ),
+        ]);
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_politics_choose".into(), "refused_by_game_check");
+        let plan = json!({"politics_auto": {"threshold": 0, "fill_vacant": false, "order": [
+            {"category": "government", "slot": 1,
+             "ideas": ["free_trade", "export_focus", "limited_exports"], "cost": 150}]}});
+        let mut state = State::default();
+        politics_auto_step(&mut state, &tools, &plan, "l", START).unwrap();
+        politics_auto_step(&mut state, &tools, &plan, "l", START + DAY + 1).unwrap();
+        let ideas: Vec<String> = actions(&tools)
+            .iter()
+            .map(|(_, a)| text(&a["idea"]).to_string())
+            .collect();
+        assert_eq!(ideas, vec!["free_trade", "export_focus"]);
+        // both refused: nothing better than the held law is left to ask until the read cadence
+        politics_auto_step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap();
+        assert_eq!(actions(&tools).len(), 2);
     }
 
     #[test]

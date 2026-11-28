@@ -2014,6 +2014,17 @@ pub(super) fn call(
             if !actions.receipt_exists(id) {
                 if let Some((ch, m)) = mio_route(organization) {
                     if let (Some(org), Some(tok)) = (m.org(organization), m.policy(policy_key)) {
+                        // tools 131 (w126a: one policy refused 12 times by the window's gate): the module's read
+                        // carries the tokens the policy window's gate allows for this organisation now; a policy
+                        // outside them is answered before any post, so the caller's next decision is a wait
+                        if org.policy != tok {
+                            super::inproc_mio::policy_allowed_now(
+                                org,
+                                tok,
+                                organization,
+                                policy_key,
+                            )?;
+                        }
                         let posts = if org.policy == tok {
                             Vec::new()
                         } else {

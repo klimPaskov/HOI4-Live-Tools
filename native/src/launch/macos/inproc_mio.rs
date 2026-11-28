@@ -265,6 +265,26 @@ pub(super) fn trait_held(m: &Mios, org_key: &str, token: i64) -> Option<bool> {
     Some(t.state == 'q' || t.state == 'u')
 }
 
+/// Before a post: the policy window's gate allows `token` for this organisation now (the module's read lists the tokens
+/// it allows); otherwise the typed refusal policy_not_allowed_now, and nothing is posted.
+pub(super) fn policy_allowed_now(
+    org: &Org,
+    token: i64,
+    org_key: &str,
+    policy_key: &str,
+) -> Result<()> {
+    if org.allowed.contains(&token) {
+        return Ok(());
+    }
+    Err(Error::new(
+        "policy_not_allowed_now",
+        format!(
+            "The policy window does not allow {policy_key} for {org_key} now (its cooldown, political power or the \
+             policy's own conditions; the game's own gate); nothing was sent"
+        ),
+    ))
+}
+
 /// Read-back: the organisation's attached policy is the one asked (attach) or none (detach of `token`).
 pub(super) fn policy_held(m: &Mios, org_key: &str, token: i64, detach: bool) -> Option<bool> {
     let o = m.org(org_key)?;
@@ -323,6 +343,9 @@ mod tests {
         let o = m.org("ITA_ansaldo_organization").unwrap();
         assert_eq!(o.address, 0x6000f60);
         assert_eq!((o.points, o.policy, o.allowed.clone()), (1, 141, vec![140]));
+        assert!(policy_allowed_now(o, 140, "org", "mio_policy_cost_reduction").is_ok());
+        let e = policy_allowed_now(o, 141, "org", "mio_policy_quality").unwrap_err();
+        assert_eq!(e.code, "policy_not_allowed_now");
         assert_eq!(
             o.traits[2],
             Trait {
