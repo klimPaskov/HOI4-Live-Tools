@@ -373,7 +373,12 @@ pub(super) struct Template {
     /// `columns[x][y]` = sub-unit key of the regiment at column x row y.
     pub columns: Vec<Vec<Option<String>>>,
     pub support: Vec<String>,
+    /// The regimental support row: `regimental[x]` is the company under regiment column x ("" =
+    /// none, trailing empties dropped).
+    pub regimental: Vec<String>,
     pub subunits: Vec<SubUnit>,
+    /// The support companies and the regimental row's companies: what the template fields beside
+    /// its battalions (manpower, equipment need and width count both).
     pub support_units: Vec<SubUnit>,
     /// 0 reserve, 1 regular, 2 elite (the designer's three priority buttons).
     pub priority: i32,
@@ -733,11 +738,33 @@ pub(super) fn templates(r: &Reader<'_>, image: u64) -> Result<Vec<Template>> {
                 support_units.push(u);
             }
         }
+        // the regimental row (S22-REGIMENTAL, s126a: placed and read back through the template
+        // data; this read left it out, so a field-gun row showed neither in the composition nor in
+        // the artillery and manpower it needs). Read leniently, as the layout read does.
+        let mut regimental = Vec::new();
+        let at = t + l.data_in_template + l.data_support + REGIMENTAL_AFTER_SUPPORT;
+        if let Ok(cells) = r.pointer_array(at) {
+            if cells.len() <= 5 {
+                for cell in cells {
+                    match load(cell) {
+                        Ok(Some(u)) => {
+                            regimental.push(u.key.clone());
+                            support_units.push(u);
+                        }
+                        _ => regimental.push(String::new()),
+                    }
+                }
+            }
+        }
+        while regimental.last().is_some_and(String::is_empty) {
+            regimental.pop();
+        }
         out.push(Template {
             address: t,
             name: r.string_bounded(t + l.template_name, 128)?,
             columns,
             support,
+            regimental,
             subunits,
             support_units,
             priority: r.i32(t + l.data_in_template + l.data_priority)?,

@@ -2970,7 +2970,8 @@ impl MacClock {
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
             self.keys.preflight()?;
-            return template_edit::options(process, &self.keys);
+            let content = mapdata::game_dir(&epoch.game.exe).ok();
+            return template_edit::options(process, &self.keys, content.as_deref());
         }
         if matches!(
             name,

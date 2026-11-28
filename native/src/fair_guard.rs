@@ -110,6 +110,9 @@ fn rule_text(rule: &str) -> &'static str {
         "fair.paratroopers" => {
             "paratrooper divisions are at least 20 width and a nation has at most 18 of them"
         }
+        "fair.paradrops" => {
+            "paratroop drops are off by default in FAIR (the owner, 28 Nov); META, a roleplay request (_rules.roleplay.paradrops or airborne.roleplay_request) or a multiplayer rule set turns them on"
+        }
         "fair.submarines" => {
             "submarines (a multiplayer rule set with submarines: false): nothing above Submarine II, no special submarine modules (AIP, coating)"
         }
@@ -165,6 +168,11 @@ pub fn switches(plan: &Value) -> BTreeMap<String, (bool, &'static str)> {
         .map(|(k, v)| (k.to_string(), (*v, "fair")))
         .collect();
     for layer in ["roleplay", "multiplayer"] {
+        if layer == "multiplayer" && plan["airborne"]["roleplay_request"].as_bool() == Some(true) {
+            // the player asked for drops (the airborne rule's own roleplay request): a roleplay
+            // layer switch, which a multiplayer rule set still overrides
+            out.insert("paradrops".to_string(), (true, "roleplay"));
+        }
         if let Some(o) = plan["_rules"][layer].as_object() {
             for (k, v) in o {
                 if let Some(b) = v.as_bool() {
@@ -381,10 +389,18 @@ fn breach(
         "hoi4_diplomacy_act" => diplomacy(args, run),
         "hoi4_paradrop" => {
             let n = args["division_ids"].as_array().map_or(0, Vec::len);
-            (n > PARA_MAX).then(|| {
-                (
+            if n > PARA_MAX {
+                return Some((
                     "fair.paratroopers",
                     format!("{n} divisions in one drop (at most {PARA_MAX})"),
+                ));
+            }
+            // the owner (28 Nov): drops are off by default in FAIR; refused here, before any
+            // backend check (s126a: in_process_unavailable answered first)
+            (!run.allows("paradrops")).then(|| {
+                (
+                    "fair.paradrops",
+                    "a paratroop drop while the rule sets leave drops off".to_string(),
                 )
             })
         }
@@ -623,12 +639,27 @@ mod tests {
         )
         .unwrap_err();
         assert!(e.message.contains("fair.paratroopers"));
+        // drops are off by default in FAIR: refused before any backend (s126a)
+        let e = check(
+            "hoi4_paradrop",
+            &json!({"army": "A"}),
+            &fair,
+            Some(&facts()),
+        )
+        .unwrap_err();
+        assert!(e.message.contains("fair.paradrops"), "{}", e.message);
+        // a roleplay request (either form) turns them on; a multiplayer rule set still forbids
+        let asked = Run::from_plan(&json!({"airborne": {"roleplay_request": true}}));
         allowed(
             "hoi4_paradrop",
             json!({"army": "A", "division_ids": &ids[..18]}),
-            &fair,
+            &asked,
         );
-        allowed("hoi4_paradrop", json!({"army": "A"}), &fair);
+        let rp = Run::from_plan(&json!({"_rules": {"roleplay": {"paradrops": true}}}));
+        allowed("hoi4_paradrop", json!({"army": "A"}), &rp);
+        let mp = Run::from_plan(&json!({"airborne": {"roleplay_request": true},
+            "_rules": {"multiplayer": {"paradrops": false}}}));
+        assert!(check("hoi4_paradrop", &json!({"army": "A"}), &mp, Some(&facts())).is_err());
     }
 
     #[test]

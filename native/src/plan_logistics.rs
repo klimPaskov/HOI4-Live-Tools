@@ -227,9 +227,7 @@ fn train_line_step(
     // reply does not have, opened a second one in the same tick).
     let economy = tools.call("hoi4_economy", &json!({}))?;
     let (military, idle) = super::plan_manage::military_lines(tools, &economy)?;
-    let listed = military
-        .iter()
-        .any(|m| m.1.starts_with("train_equipment"));
+    let listed = military.iter().any(|m| m.1.starts_with("train_equipment"));
     if row["production_lines"].as_u64().unwrap_or(0) > 0 || listed {
         super::plan_manage::note(
             state,

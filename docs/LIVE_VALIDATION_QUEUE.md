@@ -1394,3 +1394,31 @@ into that slot; the filler's progress is still shown when it resumes later (the 
 P1 hoi4_special_projects on an idle facility that once ran a project: project none, `stopped` true on that project;
 hoi4_special_project_assign of an available project: Verified (rerun S19 P1-P5).
 Pass: D1, D2, J1, P1.
+
+## Session S30-FAULTS: the g126b, p126a and s126a faults at their roots (read and mouse; about 30 minutes plus 20 game days) -- any time
+Build: e127 (tools 127). Any 1936 save of a country with operatives, trade partners and a few templates. Nothing new is posted
+in process; every step is a tool call or an executor run.
+F1 operative replace: hoi4_operative_assign {operative, mission, ..., replace: true} on an operative on a mission. Expect it
+accepted by the argument check (it was invalid_arguments) and settled. The same call without replace on an operative the
+save gave a real mission (not counter-intelligence at home, not idle): refused mission_running, nothing clicked.
+F2 trade row below the list: hoi4_trade_set for a partner whose row is below the visible list (the 10th or later). Expect
+the list wheeled until the row is inside the band, then the click; refused partner_row_offscreen if the list does not move.
+It was "Point outside the owned game client area".
+F3 one training queue: hoi4_train twice for the same template and province (2 then 6). Expect ONE deployment queue of 8
+lines; the second reply has reused_queue and lines_before 2. A queue at another province is not reused.
+F4 train line: a day-one executor run with a train production line already open: no second train line (note
+"train line open"). Read hoi4_economy production_lines in the reply.
+F5 focus refusal kept: a focus whose available block the files cannot judge (Germany: Anschluss before the army ratio) is
+refused once; when another focus completes, it is NOT retried at once (it was retried after every completion).
+F6 reconcile: a plan whose production names equipment that exists in the files but is not researched yet. Expect it in
+research.production_not_yet_available, not in unresolved, and the run starts.
+F7 operation ledger: a refused refinement in an operation shows "refused [<the tool's answer>]: <what>" in the ledger.
+F8 paradrop guard: hoi4_paradrop under FAIR without roleplay: refused fair.paradrops BEFORE any in-process check (it was
+in_process_unavailable first). With plan airborne.roleplay_request true: passes the guard. Under multiplayer rules: refused.
+F9 template regimental row: hoi4_template_get on a template with field guns or another regimental company: regimental_support
+lists them (compare the designer's row by eye). hoi4_template_options: regimental_companies lists the unit files' regimental
+companies with unlocked matching the designer (a researched company unlocked true).
+F10 abilities: hoi4_abilities: a country-limited ability shows its full requirement text (OR blocks included), no null keys.
+F11 weather: hoi4_weather on a state in mud: clears_in_days a number, or bad_ground_clears_beyond_horizon true with the date;
+bad_ground_all_year true only for a state whose files give bad ground the whole year.
+Pass: F1-F11. Open (not built): the weather map mode; army_move by mouse in auto (needs S20 M6).

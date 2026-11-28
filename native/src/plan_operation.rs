@@ -2102,8 +2102,20 @@ fn refinement(what: &str, tool: &str, args: &Value) -> Option<(&'static str, Str
 /// the tool's answer in front, so the reason survives the cut (w126a: "peace opening Army 1 16
 /// refused: opening: 16 of echelon Army 1 join Army 7 (before the war: 10 against " every step,
 /// the refusal itself never shown); pure.
-fn ledger_entry(day: &str, kind: &str, army: &str, n: usize, ok: bool, what: &str, why: &str) -> String {
-    let count = if n > 0 { format!(" {n}") } else { String::new() };
+fn ledger_entry(
+    day: &str,
+    kind: &str,
+    army: &str,
+    n: usize,
+    ok: bool,
+    what: &str,
+    why: &str,
+) -> String {
+    let count = if n > 0 {
+        format!(" {n}")
+    } else {
+        String::new()
+    };
     let short = |text: &str, max: usize| -> String {
         let t: String = text.chars().take(max).collect();
         if text.chars().count() > max {
@@ -2118,7 +2130,14 @@ fn ledger_entry(day: &str, kind: &str, army: &str, n: usize, ok: bool, what: &st
     let answer = why.trim().trim_start_matches("false").trim();
     format!(
         "{day} {kind} {army}{count} refused [{}]: {}",
-        short(if answer.is_empty() { "no answer given" } else { answer }, 160),
+        short(
+            if answer.is_empty() {
+                "no answer given"
+            } else {
+                answer
+            },
+            160
+        ),
         short(what, 50)
     )
 }

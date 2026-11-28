@@ -396,6 +396,21 @@ pub(super) fn recruit_check(
     Ok(())
 }
 
+/// Free for a new mission without replace: no mission, or counter-intelligence at home (the
+/// target, when read, is one of the operative's own nationalities). An unread mission is not free.
+fn home_default(o: &intel_live::Operative) -> bool {
+    match o.mission.as_deref() {
+        Some("no_mission") => true,
+        Some("counter_intelligence") => {
+            o.mission_state.is_none()
+                && o.mission_target
+                    .as_ref()
+                    .is_none_or(|t| o.nationalities.contains(t))
+        }
+        _ => false,
+    }
+}
+
 /// Refusals of `hoi4_operative_assign` from memory.
 /// `replace`: the caller means to end the operative's running mission (live 115, 28 Nov 2026: a
 /// running mission was replaced silently). Without it, an operative on any mission other than the
@@ -438,15 +453,7 @@ pub(super) fn assign_check(a: &intel_live::Agency, plan: &AssignPlan, replace: b
         ));
     }
     if let Some(running) = o.mission.as_deref() {
-        // free: no mission, or counter-intelligence at home (the target, when read, is one of
-        // the operative's own nationalities)
-        let home_default = running == "no_mission"
-            || (running == "counter_intelligence"
-                && o.mission_state.is_none()
-                && o.mission_target
-                    .as_ref()
-                    .is_none_or(|t| o.nationalities.contains(t)));
-        if !replace && !home_default {
+        if !replace && !home_default(o) {
             let at = o
                 .mission_target
                 .clone()
@@ -992,6 +999,7 @@ fn assign(
     keys: &dyn GameInput,
     plan: &AssignPlan,
     state: Option<i32>,
+    replace: bool,
 ) -> Driven {
     clear_notices(process, keys)?;
     let result: Driven = (|| {
@@ -1019,9 +1027,26 @@ fn assign(
                 ),
             ));
         };
-        // A new operative starts on counter-intelligence at home; the game lets the order bar
-        // switch any operative to another mission, so a running mission is no refusal.
+        // A new operative starts on counter-intelligence at home; any other mission the bar shows
+        // running is ended only on replace:true. The memory check before input names the missions
+        // it reads; one it could not read but the bar shows is refused here (s126a: a mission the
+        // bed's save gave the operative was replaced silently, observed replaced_running_mission).
         let was_on_mission = slot.on_mission;
+        if was_on_mission && !replace {
+            let free = mem(process)?
+                .operatives
+                .get(plan.operative)
+                .is_some_and(home_default);
+            if !free {
+                return Err(refuse(
+                    "mission_running",
+                    format!(
+                        "The operative bar shows operative {} on a mission the memory read does not name as counter-intelligence at home; pass replace:true to end it for {}; nothing was clicked",
+                        plan.operative, plan.mission
+                    ),
+                ));
+            }
+        }
         let position = plan.operative;
         pk::click(process, keys, "operative portrait", |r, i| {
             let slot = bar_slots(r, i)?
@@ -1338,7 +1363,9 @@ pub(super) fn call(
                     }
                     Ok(())
                 }),
-                dispatch: Box::new(|process, keys| assign(process, keys, &plan, *chosen.borrow())),
+                dispatch: Box::new(|process, keys| {
+                    assign(process, keys, &plan, *chosen.borrow(), replace)
+                }),
                 settle: Box::new(|process, _| {
                     let a = mem(process)?;
                     let Some(o) = a.operatives.get(plan.operative) else {
@@ -1407,6 +1434,42 @@ mod tests {
             upgrading: upgrading.map(str::to_string),
             recruiting: false,
         }
+    }
+
+    #[test]
+    fn only_a_read_home_default_mission_is_free_without_replace() {
+        let op = |mission: Option<&str>, state: Option<i32>, target: Option<&str>| {
+            intel_live::Operative {
+                name: "x".into(),
+                codename: String::new(),
+                nationalities: vec!["GER".into()],
+                mission: mission.map(str::to_string),
+                mission_target: target.map(str::to_string),
+                mission_state: state,
+                address: 0,
+                id: 0,
+                operation: None,
+                operation_id: None,
+            }
+        };
+        assert!(home_default(&op(Some("no_mission"), None, None)));
+        assert!(home_default(&op(
+            Some("counter_intelligence"),
+            None,
+            Some("GER")
+        )));
+        assert!(!home_default(&op(
+            Some("counter_intelligence"),
+            None,
+            Some("HOL")
+        )));
+        assert!(!home_default(&op(
+            Some("build_intel_network"),
+            Some(7),
+            None
+        )));
+        // s126a: a mission the save gave the operative and memory did not name is no free slot
+        assert!(!home_default(&op(None, None, None)));
     }
 
     #[test]

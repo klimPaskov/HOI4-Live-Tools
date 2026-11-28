@@ -6266,7 +6266,15 @@ fn a_refused_refinement_keeps_its_reason_in_the_ledger() {
         "{line}"
     );
     assert!(line.ends_with("..."), "{line}");
-    let ok = ledger_entry("W+1.0", "shed", "Mitte", 3, true, "shed: 3", "true Verified");
+    let ok = ledger_entry(
+        "W+1.0",
+        "shed",
+        "Mitte",
+        3,
+        true,
+        "shed: 3",
+        "true Verified",
+    );
     assert_eq!(ok, "W+1.0 shed Mitte 3 ok: shed: 3");
 }
 
