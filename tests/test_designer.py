@@ -311,6 +311,15 @@ class Golden(unittest.TestCase):
         self.assertNotIn("CAS_equipment_2", bases)
         self.assertNotIn("fighter_equipment_2", bases)
 
+    def test_recon_role_puts_the_camera_on_a_small_airframe(self):
+        # G250: the scout plane is a small airframe with the recon camera (it adds the scout_plane type); its weapon
+        # slots keep their own weapons
+        bases, _ = designer.available(self.cat, {"basic_small_airframe"})
+        out = designer.best(self.cat, "recon", bases, set(self.cat.modules), top=1)
+        self.assertTrue(out["designs"], out.get("rejected_by"))
+        self.assertIn("recon_camera", out["designs"][0]["modules"].values())
+        self.assertIn("scout_plane", out["designs"][0]["types"])
+
     def test_turret_opens_the_main_armament_and_duplicates_evaluate(self):
         # the three-man turret adds tank_medium_main_armament to main_armament_slot; the tank-destroyer chassis is a
         # duplicate archetype whose type is a block (type = { anti_tank armor })
