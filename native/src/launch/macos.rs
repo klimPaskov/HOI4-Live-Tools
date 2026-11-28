@@ -884,7 +884,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         doctrine_act::tool(),
         json!({"name":"hoi4_army_commander","description":"Assign a general (by the full name hoi4_commanders lists, a part of it that names one commander only such as the surname, or the character id) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list. Verified when the army's commander is that general. Refused before any click with army_unknown (lists valid armies/groups), unknown_commander (5 closest names) or commander_unavailable (already leads another army/group; pass reassign: true to move them).","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"general":{"type":"string"},"reassign":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","general","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wings","description":"Own air wings with air base, assigned region and missions, from the Air Forces Overview (opens it). Changes nothing in the game.","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_air_mission","description":"Give an own air wing (exact name) a mission over a strategic air region with the game's ordinary controls: wing row of the Air Forces Overview (L), the mission button, the Find view centres `state_id` (any state inside the wanted region) and a right click assigns. Pass `region` (region id or display name, e.g. 'Eastern Germany') instead of or with `state_id`: the state is then chosen from the game's files and the result is verified to be that region; a sea region (no state in it, e.g. 'English Channel') is reached by centring the nearest state and clicking the region's own sea provinces on screen. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (unknown mission), region_unknown, region_state_mismatch; the game's own disabling (mission not offered / needs more planes) surfaces as invalid_target. Verified from the wing's mission mask and region id in memory (hoi4_air). No percent or intensity control exists in the game's air UI; aggressiveness and day/night are per-wing cycle buttons not driven by this tool.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) given the same mission over the same region in one input sequence: selected together in the overview (a click, then Shift+clicks), one mission click, one region click; a wing the selection does not take is ordered alone. The receipt is Verified when all fly it, Diverged when some do (detail.wings names each, result.failed says why)"},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"anyOf":[{"type":"string","maxLength":96},{"type":"integer","minimum":1,"maximum":4095}]},"bulk":{"type":"boolean","description":"With wings: the bases whose every wing is listed are ordered by one click on the base circle (it selects all its wings), one mission or rebase order for all, read back at the end; the other wings and any the base order missed take the single path in the same call. Off until its live probe passes."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["mission","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_air_mission","description":"Give an own air wing (exact name) a mission over a strategic air region with the game's ordinary controls: wing row of the Air Forces Overview (L), the mission button, the Find view centres `state_id` (any state inside the wanted region) and a right click assigns. Pass `region` (region id or display name, e.g. 'Eastern Germany') instead of or with `state_id`: the state is then chosen from the game's files and the result is verified to be that region; a sea region (no state in it, e.g. 'English Channel') is reached by centring the nearest state and clicking the region's own sea provinces on screen. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. training has no region: state_id and region may be left out (the wing's own base state is used). Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (unknown mission), region_unknown, region_state_mismatch; the game's own disabling (mission not offered / needs more planes) surfaces as invalid_target. Verified from the wing's mission mask and region id in memory (hoi4_air). No percent or intensity control exists in the game's air UI; aggressiveness and day/night are per-wing cycle buttons not driven by this tool.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) given the same mission over the same region in one input sequence: selected together in the overview (a click, then Shift+clicks), one mission click, one region click; a wing the selection does not take is ordered alone. The receipt is Verified when all fly it, Diverged when some do (detail.wings names each, result.failed says why)"},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"anyOf":[{"type":"string","maxLength":96},{"type":"integer","minimum":1,"maximum":4095}]},"bulk":{"type":"boolean","description":"With wings: the bases whose every wing is listed are ordered by one click on the base circle (it selects all its wings), one mission or rebase order for all, read back at the end; the other wings and any the base order missed take the single path in the same call. Off until its live probe passes."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["mission","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_rebase","description":"Rebase one own air wing to the air base of a state with ordinary input: strategic air map (F3), the wing's row of the Air Forces Overview, the Find view centres `state_id`, the base's circle is located from the game's own map icon objects and right clicked. The wing flies a transfer (status 'To <base>'); verified from the wing's transfer destination in memory (hoi4_air `transfer_to_base_id`), the base id changes on arrival. Typed refusals before any input: wing_unknown, wing_ambiguous, air_base_unknown (state without an own air base; lists own base states), nothing_to_change (already based or already flying there), air_base_full (capacity minus wings stationed or incoming). The game set no range limit on a transfer in the test (a 570 km fighter wing was accepted 207 map units away); if it refuses anyway the tool reports rebase_refused. Map mode is restored afterwards.","inputSchema":{"type":"object","properties":{"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) to the same base in one call: one air mode, each selected and right-clicked onto the base in turn (the camera stays on the base). Verified when all transfer, Diverged when some do (detail.wings, result.failed)"},"wing":{"type":"string","maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"bulk":{"type":"boolean","description":"With wings: the bases whose every wing is listed are ordered by one click on the base circle (it selects all its wings), one mission or rebase order for all, read back at the end; the other wings and any the base order missed take the single path in the same call. Off until its live probe passes."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_create","description":"Found a new air wing from reserve aircraft at an own air base: strategic air map, Find view centres `state_id`, left click on the base circle, the N shortcut ('Add new Air Wing'), the reserve row of `aircraft` (variant name such as 'Ju 86' or class name such as 'Inter-War Fighter', case-insensitive) moves up to 100 planes of that variant into the wing (the game's own limit per click), Ok. Reserve aircraft come from production or from disbanding a wing. Typed refusals: air_base_unknown, air_base_full (before input); no_reserve_aircraft (the game refuses the window when the reserve is empty), aircraft_not_in_reserve (lists what is in reserve), aircraft_ambiguous, create_unavailable (Ok disabled, e.g. no manpower) while driving; nothing is created in those cases. Verified from the new wing's name appearing at that base in memory (hoi4_air). The wing gets the game's default name and 'Deploying from Reserves' status.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"aircraft":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","aircraft","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_disband","description":"Disband one own air wing (row of the Air Forces Overview, toolbar Disband, OK of the confirmation); all its equipment returns to the reserve. Typed refusals before input: wing_unknown, wing_ambiguous; disband_unavailable if the game disables the button. Verified from the wing's absence in memory (hoi4_air).","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","request_id","lease_token"],"additionalProperties":false}}),
@@ -3798,10 +3798,13 @@ impl MacClock {
                         })?,
                 ),
             };
-            if action.takes_divisions() == army.is_none() {
+            // engineer 134 (s129e V5): volunteers abroad are no longer in the army they left; a recall names them by
+            // division_ids alone (own divisions wherever they stand) or by the army they serve in now
+            let recall_by_ids = action == volunteers::Action::Recall && army.is_none() && ids.is_some();
+            if action.takes_divisions() && army.is_none() && !recall_by_ids {
                 return Err(Error::new(
                     "invalid_arguments",
-                    "send_volunteers, recall_volunteers and expeditionary_force name the army whose divisions go",
+                    "send_volunteers and expeditionary_force name the army whose divisions go; recall_volunteers names the volunteers by division_ids (or the army they serve in)",
                 ));
             }
             let id = string(args, "request_id")?;
@@ -3821,6 +3824,19 @@ impl MacClock {
             }
             let tag_index = ui::read(process, |r, i| diplomacy_state::tag_index_of(r, i, country))?;
             let divisions = match &army {
+                None if recall_by_ids => {
+                    let ids = ids.as_deref().unwrap_or_default();
+                    ui::read(process, |r, i| armies::division_ptrs(r, i, ids)).map_err(|e| {
+                        if e.code == "unknown_division" {
+                            Error::new(
+                                "unknown_division",
+                                format!("{}: volunteers in transit are off the map (the game moves them for its transfer days) and are not our divisions to name until they arrive; read hoi4_armies after arrival", e.message),
+                            )
+                        } else {
+                            e
+                        }
+                    })?
+                }
                 None => Vec::new(),
                 Some(army) => {
                     if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
@@ -3858,6 +3874,18 @@ impl MacClock {
             }
             let what = json!({"kind":"volunteers","action":action.op(),"country":country,"army":army,
                 "divisions":divisions.len()});
+            // engineer 134: the ids of the divisions asked (the not-sent ones are named back), and the game's own rules
+            let asked_ids: Vec<String> = ui::read(process, |r, _| {
+                divisions
+                    .iter()
+                    .map(|d| armies::division_id_of(r, *d))
+                    .collect::<Result<Vec<_>>>()
+            })
+            .unwrap_or_default();
+            let rules = mgmt::game_dir(process)
+                .map(|d| volunteers::rules(&volunteers::define_texts(&d)))
+                .unwrap_or(Value::Null);
+            let posted_n = std::cell::Cell::new(divisions.len());
             let mut reply = Value::Null;
             // engineer 125 (live 126, S27 D3): a refusal by the game's check closes as refused, not unconfirmed
             let refused = std::cell::Cell::new(false);
@@ -3886,22 +3914,43 @@ impl MacClock {
                     return Ok(journal::Outcome::Unknown);
                 };
                 let gone = divisions.iter().filter(|d| !still.contains(d)).count();
-                Ok(volunteers::transfer_outcome(gone, divisions.len()))
+                let posted = posted_n.get().min(divisions.len());
+                let not_sent: Vec<String> = asked_ids.iter().skip(posted).cloned().collect();
+                Ok(volunteers::transfer_outcome(gone, posted, divisions.len(), &not_sent))
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 let ch = route
                     .as_mut()
                     .ok_or_else(|| Error::new("in_process_unavailable", "no channel"))?;
-                reply = volunteers::post(ch, action, tag_index, &divisions).inspect_err(|e| {
+                let mut res = volunteers::post(ch, action, tag_index, &divisions);
+                // engineer 134: a first group the cap no longer fits whole: the game's check on one division decides
+                if action == volunteers::Action::Send
+                    && divisions.len() > 1
+                    && matches!(&res, Err(e) if e.code == "refused_by_game")
+                {
+                    res = volunteers::post(ch, action, tag_index, &divisions[..1]);
+                    if res.is_ok() {
+                        posted_n.set(1);
+                    }
+                }
+                reply = res.map_err(|e| {
                     if e.code == "refused_by_game" {
                         refused.set(true);
+                        Error::new("refused_by_game", volunteers::refusal(action, &rules))
+                    } else {
+                        e
                     }
                 })?;
+                if action == volunteers::Action::Send && posted_n.get() > 1 {
+                    if let Some(n) = volunteers::divisions_posted(&reply) {
+                        posted_n.set(n);
+                    }
+                }
                 Ok(())
             };
             let receipt = actions.execute(id, &epoch, what, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt,"in_process":reply}));
+            return Ok(json!({"receipt":receipt,"in_process":reply,"rules":rules}));
         }
         if name == "hoi4_diplomacy" && args.get("catalog").and_then(Value::as_bool) == Some(true) {
             // engineer 122 (the owner's rule: one dynamic diplomacy tool): every diplomatic action the game has, from the
@@ -4471,8 +4520,10 @@ impl MacClock {
             let keys = &self.keys;
             // engineer 78: an action the module sends as the view does (no view opened), for a country target; the
             // relation snapshot before it is the same read-back the mouse path uses. Off under `auto` until passed live.
+            // engineer 134 (s129e: send_attache ETH named by a state went to the mouse): a state target is its owner's
+            // tag, the same country the view's map click names, so it goes in process too
             let inproc_op = match &target {
-                diplomacy::Target::Country(_) if !retry => diplomacy_keys::spec_of_key(action_name)
+                _ if !retry => diplomacy_keys::spec_of_key(action_name)
                     .or_else(|| diplomacy_keys::spec_of_row(action_name))
                     .and_then(|s| inproc_diplomacy::op_of(s.key)),
                 _ => None,
@@ -4569,6 +4620,23 @@ impl MacClock {
                 authority.authorize(token, &epoch)?;
                 if let (Some(op), Some(ch)) = (inproc_op, diplo_route.borrow_mut().as_mut()) {
                     let idx = ui::read(process, |r, i| diplomacy_state::tag_index_of(r, i, &tag))?;
+                    // engineer 134 (s129e V7: the attache after volunteers passed the check and the AI dropped it): an
+                    // AI-decided request is asked for the acceptance the view shows first; at or below 0 the AI refuses,
+                    // named with its parts, and nothing is sent (try_anyway sends it anyway)
+                    if spec.is_some_and(|s| s.ai_decides) {
+                        if let Some((total, parts)) = inproc_diplomacy::acceptance(ch, op, idx)
+                            .ok()
+                            .as_ref()
+                            .and_then(inproc_diplomacy::acceptance_of)
+                        {
+                            *dialog.borrow_mut() = json!({"acceptance":total,"acceptance_parts":parts});
+                            if let (false, Some(why)) =
+                                (try_anyway, inproc_diplomacy::would_refuse(total, &parts))
+                            {
+                                return Err(Error::new("ai_would_refuse", why));
+                            }
+                        }
+                    }
                     let pp_before = decisions::political_power(process).ok();
                     match inproc_diplomacy::act(ch, op, idx) {
                         inproc::Routed::Done(body) => {
@@ -4594,6 +4662,12 @@ impl MacClock {
                                 crate::phase::sleep(std::time::Duration::from_millis(80));
                             }
                             inproc_ai_sent.set(spec.is_some_and(|s| s.ai_decides));
+                            let acc = dialog.borrow().clone();
+                            let mut body = body;
+                            if acc.get("acceptance").is_some() {
+                                body["acceptance"] = acc["acceptance"].clone();
+                                body["acceptance_parts"] = acc["acceptance_parts"].clone();
+                            }
                             *dialog.borrow_mut() = body;
                             return Ok(());
                         }
@@ -5994,15 +6068,39 @@ impl MacClock {
                             ),
                         ));
                     };
-                    let (state, region) = airact::resolve_region(
-                        process,
-                        args.get("state_id")
-                            .map(|_| airact::state_arg(args, "state_id"))
-                            .transpose()?,
-                        args.get("region")
-                            .map(|_| airact::region_arg(args))
-                            .transpose()?,
-                    )?;
+                    let state_given = args
+                        .get("state_id")
+                        .map(|_| airact::state_arg(args, "state_id"))
+                        .transpose()?;
+                    let region_given = args
+                        .get("region")
+                        .map(|_| airact::region_arg(args))
+                        .transpose()?;
+                    // engineer 134 (s129c T1): training has no region; without state_id or region the first wing's
+                    // own base state stands in (the mouse path centres there; memory carries no region for training)
+                    let state_given = match (mission == "training", state_given, &region_given) {
+                        (true, None, None) => {
+                            let (_, own_wings) = airact::own(process)?;
+                            let w = own_wings
+                                .iter()
+                                .find(|w| w.name == wings[0])
+                                .ok_or_else(|| {
+                                    Error::new(
+                                        "wing_unknown",
+                                        format!("No own wing named {}", wings[0]),
+                                    )
+                                })?;
+                            Some(w.base_state.ok_or_else(|| {
+                                Error::new(
+                                    "invalid_state",
+                                    "the wing's base state is unread: give state_id",
+                                )
+                            })?)
+                        }
+                        (_, s, _) => s,
+                    };
+                    let (state, region) =
+                        airact::resolve_region(process, state_given, region_given)?;
                     Air::Mission {
                         wings,
                         // training has no region in memory (air::assign)

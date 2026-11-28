@@ -282,6 +282,13 @@ typedef struct {
      * the default the lookup falls back to) and a type's token (+wgt_tok_off) */
     uint64_t wgt_got;
     uint32_t wgt_arr_off, wgt_cnt_off, wgt_tok_off;
+    /* engineer 134: the acceptance the diplomacy view shows (its red cross and tooltip) and the receiver's AI answers by:
+     * the common wrapper (action, acceptance list, with_text, flag) that calls the action's own acceptance slot and adds
+     * the scripted modifiers; it returns the total (the AI accepts above 0). The list is {data, capacity, count, allocator}
+     * of 0x20-byte entries {CString text, int value +0x18, flags +0x1c}. accept_ok = 0 when the wrapper is not unique. */
+    int accept_ok;
+    uint64_t accept_fn;
+    uint32_t accept_slot;
     char evidence[300];
 } diplo_facts;
 

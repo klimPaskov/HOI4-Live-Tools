@@ -74,6 +74,42 @@ pub(super) fn check(ch: &mut Channel, op: &str, tag_index: i32) -> Result<Value>
     ch.post_raw(r)
 }
 
+/// engineer 134: the game's own check and the acceptance the diplomacy view shows (flag 3: the module builds the action,
+/// asks the command's check, then the game's acceptance wrapper on the action: the total the receiver's AI answers by
+/// and its parts with their texts), without posting.
+pub(super) fn acceptance(ch: &mut Channel, op: &str, tag_index: i32) -> Result<Value> {
+    let mut r = request(op, &[0], &[], &[i64::from(tag_index)], None)?;
+    r["flag"] = json!(3);
+    ch.post_raw(r)
+}
+
+/// The acceptance total and parts of a flag-3 reply, when the game's check passed and the module asked it.
+pub(super) fn acceptance_of(reply: &Value) -> Option<(i64, Value)> {
+    let total = reply["acceptance"].as_i64()?;
+    Some((total, reply["acceptance_parts"].clone()))
+}
+
+/// The refusal an AI-decided request meets when the acceptance is not above 0 (the game's own test after its
+/// acceptance wrapper): the parts name why (opinion, the base welcome, puppet relations ...).
+pub(super) fn would_refuse(total: i64, parts: &Value) -> Option<String> {
+    (total <= 0).then(|| {
+        let why: Vec<String> = parts
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| {
+                let v = p["value"].as_i64()?;
+                let t = p["text"].as_str().unwrap_or("").trim().trim_end_matches(':');
+                Some(format!("{t} {v:+}"))
+            })
+            .collect();
+        format!(
+            "the receiver's AI would refuse: acceptance {total} (it takes the request only above 0): {}; nothing was sent (pass try_anyway:true to send anyway)",
+            if why.is_empty() { "no parts read".to_string() } else { why.join(", ") }
+        )
+    })
+}
+
 /// The catalog entry for a key (catalog or canonical), if any.
 pub(super) fn entry<'a>(catalog: &'a Value, key: &str) -> Option<&'a Value> {
     catalog["actions"].as_array()?.iter().find(|a| {
@@ -407,6 +443,18 @@ mod tests {
         assert_eq!(l["actions"][0]["can_do"], false);
         assert_eq!(l["actions"][0]["game_answer"], "refused_by_game_check");
         assert_eq!(l["actions"][2]["route"], "not postable yet");
+    }
+
+    #[test]
+    fn an_acceptance_at_or_below_zero_is_named_as_the_ais_refusal() {
+        // s129e V7: the attache to Nationalist Spain: the base welcome and the low-opinion penalty
+        let reply = json!({"posted":0,"acceptance":-38,"acceptance_parts":[
+            {"value":50,"text":"The help is welcome: "},{"value":-100,"text":"Too low opinion about us: "},{"value":12,"text":"Opinion"}]});
+        let (total, parts) = acceptance_of(&reply).unwrap();
+        let why = would_refuse(total, &parts).unwrap();
+        assert!(why.contains("acceptance -38") && why.contains("Too low opinion about us -100"));
+        assert!(would_refuse(25, &parts).is_none());
+        assert!(acceptance_of(&json!({"posted":0})).is_none());
     }
 
     #[test]

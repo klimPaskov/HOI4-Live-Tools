@@ -2611,6 +2611,16 @@ pub(super) fn division_ptrs(r: &Reader<'_>, image: u64, ids: &[String]) -> Resul
         .collect()
 }
 
+/// engineer 134: a division's id (`TYPE:TOKEN`, as hoi4_armies lists them) from its address.
+pub(super) fn division_id_of(r: &Reader<'_>, division: u64) -> Result<String> {
+    let handle = r.read(division + ui(r)?.division_handle, 8)?;
+    Ok(format!(
+        "{:08x}:{:08x}",
+        u32::from_le_bytes(handle[..4].try_into().unwrap()),
+        u32::from_le_bytes(handle[4..].try_into().unwrap())
+    ))
+}
+
 fn group_named(r: &Reader<'_>, image: u64, army: &str) -> Result<u64> {
     let mut groups: BTreeSet<u64> = membership(r, image)?
         .into_values()
