@@ -13,7 +13,8 @@ Fighters per front = enemy fighters x (their air_superiority per plane / ours) x
                         fighter); quality acts through losses: the duel exchange (kills per loss) is reported
   fighter_ratio         the plan's `air_situation.fighter_ratio` (the executor flies wings until ours are that many
                         times theirs); when the plan gives none: parity (1.0), said in the answer
-CAS per front (the most that can still join the battles) = LAND_AIR_COMBAT_MAX_PLANES_PER_ENEMY_WIDTH x the enemy width in one battle x attack axes: the planes
+CAS per front (the most that can still join the battles) = LAND_AIR_COMBAT_MAX_PLANES_PER_ENEMY_WIDTH x the enemy
+  width in one battle x attack axes: the planes
   that can still join (more do not enter the combat). Enemy width in a battle = the front's terrain battle width
   (common/terrain combat_width, one attack direction, weighted by the front's terrain mix); no map: plains.
   CAS flies where the fighters win the air: none required while fighters fall short (the answer says so).
