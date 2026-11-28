@@ -5595,19 +5595,19 @@
    "owner": "Decide whether carrier wings need orders (game assigns them to the carrier); map carrier wings in hoi4_air"
   },
   {
-   "id": "air.paradrop_and_raids",
+   "id": "air.raids",
    "domain": "air",
-   "capability": "Paratrooper drops and Gotterdammerung raids (lock, dam, oilfield bombing; paratrooper sabotage)",
+   "capability": "Gotterdammerung raids: list the raids a country may run (common/raids), plan their prerequisites, prepare and launch them (Eben-Emael before the West, pathfinder before a landing, facility and oilfield raids)",
    "playbook": [
     "exploits.md#paradrop rows (META only)"
    ],
    "plan": [],
    "tools": [],
-   "blocked": "hoi4_air_mission has no paradrop mission (MISSIONS lacks it, unknown mission -> invalid_arguments); no tool for raids; playbook does not know raids (common/raids, Gotterdammerung active)",
-   "payoff": "low",
-   "why": "Niche in FAIR play; raids are an extra lever for majors with bombers",
+   "blocked": "no tool: the raid list, the prerequisites and the success chance are computed offline (facts.py raids TAG: raids.py, any country and mod), but no command path is built. CCreateRaidCommand (1.20.0.0, type 19192, 0xa8 bytes, vtable 0x1035937f8, full constructor 0x1014d0740) holds: +0x24 tag (0x289a), +0x28 the raid type pointer (0xe1, serialised by name through the raid database), +0x30 the starting point (0x6b, 40 bytes: +0 type 0x284f, +8 province 0x2840, +0x10 0x1b7, +0x18 a unit or fleet handle 0x28b7, +0x20 0x41cc), +0x58 the target (0x288f, 0x34 bytes with an inline array object at +0x78), +0x90 the units (0x28a3), +0xa0 an int the AI caller sets to 1 (0x4afc), +0xa4 a bool (0x27ab). The AI's creator is at 0x1014db680. CExecuteRaidCommand, CCancelRaidCommand, CSetRaidRiskLevelCommand layouts are not read; no read of the raid instances (NRaids::CRaidInstance)",
+   "payoff": "high",
+   "why": "Belgium is where the West loses most days: Eben-Emael (FAIR allowed) removes 4-6 bunker levels at Liege and gives -25% river crossing against Belgium for 180 days; raids are a general system for any country (custom raids first)",
    "closing": "both",
-   "owner": "Playbook: assess common/raids/air_raids.txt for FAIR value; tool only if worth it"
+   "owner": "engineer 106: in-process raid family (a builder for the starting point and target structs, the raid type by name), a read of available raids and instances, hoi4_raid (list, prepare, launch, read), the raids plan key and the operation step; live session S22-RAID"
   },
   {
    "id": "navy.patrol_dominance",
