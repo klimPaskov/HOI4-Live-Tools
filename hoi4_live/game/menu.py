@@ -469,6 +469,29 @@ def main_menu_anchor_labels():
     return out
 
 
+def near_main_menu(texts):
+    """Whether a line reads like a main-menu label, misread: a garbled "Single Player" (or a mod anchor) is not a
+    screen positively read as something else. Each line is compared with each label, whole and word by word."""
+    from difflib import SequenceMatcher
+
+    def norm(t):
+        return re.sub(r"[^a-z0-9 ]+", "", t.lower()).strip()
+
+    labels = [norm(a) for a in main_menu_anchor_labels()]
+    for t in texts:
+        line = norm(t)
+        if not line:
+            continue
+        words = line.split()
+        for label in labels:
+            if label and SequenceMatcher(None, line, label).ratio() >= 0.6:
+                return True
+            for w in label.split():
+                if len(w) >= 4 and any(SequenceMatcher(None, x, w).ratio() >= 0.75 for x in words):
+                    return True
+    return False
+
+
 def main_menu_unrecognised(texts, data=None):
     """The ToolError of a launch whose screen settled without any main-menu anchor (a mod's own main menu)."""
     anchors = main_menu_anchor_labels()

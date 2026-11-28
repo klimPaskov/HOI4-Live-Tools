@@ -224,8 +224,9 @@ def _wait_game_gone(session, pid, timeout):
     return process.wait_gone(pid, created, session.cfg["window"]["process_name"], timeout)
 
 
-# A launch whose screen settled (the setup log idle this long) and still shows no main-menu anchor on this many polls
-# in a row stops with `main_menu_unrecognised` instead of waiting for the timeout (a mod's own main menu).
+# A launch with a mod profile whose screen settled (the setup log idle this long) and reads as something other than
+# a main menu on this many polls in a row stops with `main_menu_unrecognised` instead of waiting for the timeout (a
+# mod's own main menu). Vanilla launches wait to the timeout.
 MENU_UNRECOGNISED_IDLE_S = 45
 MENU_UNRECOGNISED_POLLS = 6
 
@@ -357,8 +358,12 @@ def hoi4_launch(session, args):
                 launch_errors.check(session, args["debug"], texts)
                 if ok:
                     break
-                # the screen settled with text on it and none of it is a main-menu anchor: name what is missing
-                unrecognised = unrecognised + 1 if texts and idle > MENU_UNRECOGNISED_IDLE_S else 0
+                # a mod profile's settled screen that reads as something else: name what is missing. A vanilla
+                # launch, or a garbled read of a main-menu label, keeps waiting to the timeout (a slow vanilla load
+                # with text on screen, or an OCR that misreads "Single Player", is not a mod's own menu)
+                other = (not prof.is_vanilla and bool(texts) and idle > MENU_UNRECOGNISED_IDLE_S
+                         and not menu.near_main_menu(texts))
+                unrecognised = unrecognised + 1 if other else 0
                 if unrecognised >= MENU_UNRECOGNISED_POLLS:
                     raise menu.main_menu_unrecognised(texts, data)
             session.report(f"loading ({int(time.time() - t0)} s)")
