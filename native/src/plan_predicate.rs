@@ -70,6 +70,10 @@
 //!                               has measured a trend (net_per_day null)            readable
 //!   divisions:<template>        own deployed divisions of the template of that exact name
 //!                               (hoi4_supply divisions[].template)                   readable
+//!   mastery:<track>             a doctrine track's mastery / banked mastery (the grand doctrine's
+//!   banked_mastery:<track>      track key, or the subdoctrine it holds): hoi4_doctrines
+//!                               folders[].tracks[] (validated:false until a track is seen
+//!                               holding a subdoctrine on screen)                    readable
 //!   project_done:<key>          special project <key> completed: true once the special-project
 //!                               step saw it leave its facility unstopped and leave the visible
 //!                               pool (Ctx::projects_done, from the done-memory); false while a
@@ -245,6 +249,8 @@ const ATOMS: &[(&str, Kind, bool)] = &[
     ("xp", Kind::Number, true),
     ("stockpile_days", Kind::Number, true),
     ("divisions", Kind::Number, true),
+    ("mastery", Kind::Number, true),
+    ("banked_mastery", Kind::Number, true),
     ("var", Kind::Number, true),
     ("bop", Kind::Number, true),
     ("mission_days", Kind::Number, true),
@@ -280,6 +286,29 @@ pub(crate) fn divisions_of(supply: &Value, template: &str) -> std::result::Resul
         .iter()
         .filter(|d| d["template"].as_str().map(str::trim) == Some(template))
         .count() as f64)
+}
+
+/// A doctrine track's `field` (mastery or banked_mastery) in a hoi4_doctrines read: the track
+/// named `track` (the grand doctrine's track key) or holding the subdoctrine `track`, in any
+/// folder. Unknown when no track matches or the field is not read.
+pub(crate) fn track_mastery(
+    read: &Value,
+    track: &str,
+    field: &str,
+) -> std::result::Result<f64, String> {
+    let folders = read["folders"]
+        .as_array()
+        .ok_or("hoi4_doctrines lists no folders")?;
+    let row = folders
+        .iter()
+        .flat_map(|f| f["tracks"].as_array().into_iter().flatten())
+        .find(|t| {
+            t["track"].as_str() == Some(track) || t["subdoctrine"]["id"].as_str() == Some(track)
+        })
+        .ok_or_else(|| format!("no doctrine track or subdoctrine {track} in hoi4_doctrines"))?;
+    row[field]
+        .as_f64()
+        .ok_or_else(|| format!("{track}: {field} not read"))
 }
 
 /// Whether special project `key` is still open in a hoi4_special_projects read: Ok(true) when a
@@ -1299,6 +1328,15 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
                 .ok_or("hoi4_supply unreadable")?;
             divisions_of(read, arg).map(Reading::Number)
         }
+        "mastery" | "banked_mastery" => {
+            if arg.is_empty() {
+                return Err(format!("{} needs a doctrine track", atom.name));
+            }
+            let read = ctx
+                .read("hoi4_doctrines", &json!({}))
+                .ok_or("hoi4_doctrines unreadable")?;
+            track_mastery(read, arg, &atom.name).map(Reading::Number)
+        }
         "var" => Err("no tool reads scenario variables (audit W1-18)".into()),
         "bop" => {
             let read = ctx
@@ -1686,6 +1724,25 @@ mod tests {
             check(&json!("project_done:sp_land_land_cruiser"), &mut ctx),
             Truth::True
         );
+    }
+
+    #[test]
+    fn mastery_is_read_per_track_or_subdoctrine() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_doctrines",
+            json!({"folders": [{"folder": "land", "tracks": [
+                {"track": "infantry", "subdoctrine": {"id": "irregulars"}, "mastery": 210.5, "banked_mastery": 120.0},
+                {"track": "armor", "subdoctrine": null, "mastery": null, "banked_mastery": 40.0}]}]}),
+        );
+        assert_eq!(eval(&f, json!("mastery:infantry >= 200")), Truth::True);
+        assert_eq!(
+            eval(&f, json!("banked_mastery:irregulars >= 200")),
+            Truth::False
+        );
+        assert_eq!(eval(&f, json!("banked_mastery:armor > 0")), Truth::True);
+        assert_eq!(eval(&f, json!("mastery:armor > 0")), Truth::Unknown);
+        assert_eq!(eval(&f, json!("mastery:naval_x > 0")), Truth::Unknown);
     }
 
     #[test]

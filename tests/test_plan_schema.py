@@ -233,7 +233,7 @@ class Validator(unittest.TestCase):
 
 
 PRED_OK = [
-    "divisions:Infanterie-Division >= 92", "divisions:Panzer Division (M) > 0", "project_done:sp_land_flamethrower_tank",
+    "mastery:infantry >= 200", "banked_mastery:irregulars > 150", "divisions:Infanterie-Division >= 92", "divisions:Panzer Division (M) > 0", "project_done:sp_land_flamethrower_tank",
     "1936.05.01", "date >= 1936.5.1", "date<1937.01.01", "province_controlled:2072", "state_fully_controlled:842",
     "owner:908=ITA", "owner:908 == ITA", "state_controller:271!=ETH", "province_controller:13250=ETH",
     "at_war:ETH", "not_at_war:ETH", "capitulated:ETH", "exists:AFA", "not_exists:AFA",
