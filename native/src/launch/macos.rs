@@ -46,6 +46,7 @@ mod construction_find_open;
 mod construction_cancel;
 mod construction_open;
 // Default-off one-action qualification; full campaign acceptance remains false.
+mod abilities;
 mod construction_place;
 mod construction_select;
 mod controller_epoch;
@@ -908,6 +909,7 @@ pub fn mac_tool_list() -> Vec<Value> {
     .chain(fleetops::tools())
     .chain(std::iter::once(invasion::tool()))
     .chain(std::iter::once(weather::tool()))
+    .chain(std::iter::once(abilities::tool()))
     .chain(faction::tools())
     .chain(agency_act::tools())
     .chain(operation_act::tools())
@@ -934,6 +936,7 @@ impl Commands for MacClock {
             || faction::handles(name)
             || name == invasion::TOOL
             || name == weather::TOOL
+            || name == abilities::TOOL
             || matches!(
                 name,
                 "hoi4_daily_governor"
@@ -1746,6 +1749,9 @@ impl MacClock {
         }
         if name == weather::TOOL {
             return weather::call(process, args);
+        }
+        if name == abilities::TOOL {
+            return abilities::call(process, args);
         }
         if name == "hoi4_intelligence" {
             allowed(args, &["include_operations"])?;

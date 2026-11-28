@@ -1060,6 +1060,14 @@ shows mud there.
 M3 `"date":"1936.7.15"`: no region on bad ground.
 Pass: M1-M3 agree with the map mode on snow/mud regions. A mismatch: record the region, the date and the tool's water /
 snow numbers in the notes (the model's drying or melting rate is then off).
+## Session S24-ABILITIES: the ability catalogue against the army card (read only; about 5 minutes) -- any time
+What it proves: hoi4_army_abilities lists what the game offers and its cost reading is right, before the order
+(CTriggerAbilityCommand, module family to come) is built on it.
+M1 any save with a general on an army: `hoi4_army_abilities {}`: 14 generic abilities (1.20.1.0) plus the country's
+own; command_power equals the top bar. Open the army card's ability list: the same keys; hover staff_office_plan: the
+tooltip's "Base cost 0.12 (each for N battalions)" -- write N into the notes (the battalion group the cost is per).
+M2 the daily cost the tooltip shows for that army = 0.12 x (its battalions / N), rounded as the game rounds.
+Pass: M1-M2. The order itself is a later session.
 ## Session S22-REGIMENTAL: the Division Designer's regimental support row (mouse; about 15 minutes) -- any time
 What it proves: hoi4_template_create / hoi4_template_edit fill `regiment_support_grid` and read the row back from the
 template data (support array + 0x20, read from the executable, not yet seen live).
