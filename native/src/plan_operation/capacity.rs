@@ -333,8 +333,9 @@ pub(super) fn overstacked(
 /// A direct attack on a stuck battle from a side the plan leaves unused.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Push {
-    /// the enemy province of the battle
+    /// the enemy province of the battle, and its state (the move tool takes both)
     pub province: i64,
+    pub state: i64,
     pub army: String,
     pub divisions: Vec<String>,
     /// the own provinces the new attackers stand in
@@ -475,6 +476,7 @@ pub(super) fn stuck_push(
         from_q.dedup();
         let push = Push {
             province: p,
+            state: b["state"].as_i64().unwrap_or(0),
             army,
             divisions: pick.into_iter().map(|(id, _)| id).collect(),
             from: from_q,
@@ -844,7 +846,7 @@ mod tests {
             d("tired", "A", 2, 20.0), d("y1", "B", 3, 60.0), d("other", "Z", 2, 60.0)]});
         let armies: HashSet<String> = ["A", "B"].iter().map(|s| s.to_string()).collect();
         let p = stuck_push(&battles, &g, &read, &armies, 72, 6, &|_| false).unwrap();
-        assert_eq!(p.province, 10);
+        assert_eq!((p.province, p.state), (10, 5));
         assert_eq!(p.army, "A");
         // the spare width (45 - 26) / 10 takes one division... at least one; here 1
         assert_eq!(p.divisions.len(), 1);

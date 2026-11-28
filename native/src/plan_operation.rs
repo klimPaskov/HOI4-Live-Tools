@@ -3368,11 +3368,21 @@ fn pocket_step_with(
             Some((n.clone(), state.centers.get(&(s as i32)).copied()?))
         })
         .collect();
+    // what the scan saw, in the operation's notes when no pocket is taken (w96d, 28 Nov 2026: a
+    // scan every few days and no pocket note in ten war days: which condition failed was unread)
+    let (mut cut, mut unready, mut capital, mut necks_n, mut tried, mut far) = (0, 0, 0, 0, 0, 0);
+    let seen = list(&read, "pockets").len();
     for pk in list(&read, "pockets") {
-        if pk["already_cut_off"] == json!(true)
-            || pk["pincer_ready"] != json!(true)
-            || pk["capital_inside"] == json!(true)
-        {
+        if pk["already_cut_off"] == json!(true) {
+            cut += 1;
+            continue;
+        }
+        if pk["pincer_ready"] != json!(true) {
+            unready += 1;
+            continue;
+        }
+        if pk["capital_inside"] == json!(true) {
+            capital += 1;
             continue;
         }
         let necks: Vec<i64> = list(pk, "neck_states")
@@ -3380,6 +3390,7 @@ fn pocket_step_with(
             .filter_map(|n| n["state_id"].as_i64())
             .collect();
         let [neck] = necks.as_slice() else {
+            necks_n += 1;
             continue;
         };
         let neck = *neck;
@@ -3388,6 +3399,7 @@ fn pocket_step_with(
             .get(&format!("pocket:tried:{neck}"))
             .is_some_and(|t| now - t < POCKET_RETRY_DAYS * DAY)
         {
+            tried += 1;
             continue;
         }
         let province = match best.get(&neck).copied() {
@@ -3408,6 +3420,7 @@ fn pocket_step_with(
             .collect();
         near.sort_by(|a, b| a.0.total_cmp(&b.0));
         if near.len() < 2 {
+            far += 1;
             continue;
         }
         let inside: Vec<i64> = list(pk, "pocket_states")
@@ -3438,6 +3451,13 @@ fn pocket_step_with(
             closed: false,
         }));
     }
+    state.op_notes.insert(
+        "pocket".into(),
+        format!(
+            "pocket scan: {seen} candidate(s) against {}: {cut} already cut off, {unready} not pincer-ready, {capital} with the capital inside, {necks_n} with more than one neck state, {tried} tried lately, {far} without two strike formations placed; no pocket taken",
+            tags.iter().map(|t| t.as_str()).collect::<Vec<_>>().join(", ")
+        ),
+    );
     Ok(None)
 }
 
@@ -7406,7 +7426,7 @@ fn stuck_push_step(
         id,
         &what,
         "hoi4_army_move",
-        json!({"army": push.army, "divisions": push.divisions, "province_id": push.province}),
+        json!({"army": push.army, "divisions": push.divisions, "province_id": push.province, "state_id": push.state}),
     )?))
 }
 

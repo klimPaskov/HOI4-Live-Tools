@@ -5271,6 +5271,8 @@ fn a_battle_stuck_for_days_is_attacked_by_the_idle_divisions_on_its_unused_side(
         .find(|(n, _)| n == "hoi4_army_move")
         .unwrap();
     assert_eq!(mv.1["province_id"], json!(6583));
+    // the move tool takes the state with the province (w96d: invalid_arguments without it)
+    assert_eq!(mv.1["state_id"], json!(8));
     assert_eq!(mv.1["divisions"], json!(["m3", "m4", "m5"]));
     // once a day; the same battle not again within 5 days; off by the plan
     assert!(stuck_push_step(
