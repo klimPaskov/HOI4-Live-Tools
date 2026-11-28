@@ -336,6 +336,11 @@ def check_focus(game, plan, meta, rep):
             for b in info["prereq"]
         ):
             rep.warn(f"focus_fallback[{i}] {k}: a prerequisite is neither in focus_path nor fallback")
+    windows = plan.get("focus_when") if isinstance(plan.get("focus_when"), dict) else {}
+    for k in sorted(windows):
+        if k not in listed and k not in set(fallback):
+            rep.error(f"focus_when.{k}: {k} is in neither focus_path nor focus_fallback (only a listed focus "
+                      f"is started, so its window holds nothing)")
 
 
 def check_production(game, plan, rep):

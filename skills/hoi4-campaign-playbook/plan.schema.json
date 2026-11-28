@@ -868,6 +868,14 @@
       "type": "boolean",
       "x-owner": "executor"
     },
+    "focus_when": {
+      "type": "object",
+      "x-owner": "executor",
+      "description": "{focus key: predicate}: the focus is kept for its window (a one-shot benefit taken when it pays): not started while the predicate does not hold (false or unknown); the focus_path keys after it go on meanwhile; the digest's focus line names the keys kept and why",
+      "additionalProperties": {
+        "$ref": "#/definitions/predicate"
+      }
+    },
     "focus_path": {
       "type": "array",
       "items": {
