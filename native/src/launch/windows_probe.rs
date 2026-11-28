@@ -70,7 +70,10 @@ extern "system" fn each(window: isize, data: isize) -> i32 {
         if GetClientRect(window, &mut r) == 0 {
             return 1;
         }
-        let size = ((r.right - r.left).max(0) as u32, (r.bottom - r.top).max(0) as u32);
+        let size = (
+            (r.right - r.left).max(0) as u32,
+            (r.bottom - r.top).max(0) as u32,
+        );
         let area = u64::from(size.0) * u64::from(size.1);
         if area > 0
             && search
@@ -86,9 +89,12 @@ fn game_window(pid: u32) -> Result<(isize, (u32, u32))> {
     let mut search = Search { pid, best: None };
     // SAFETY: the callback only touches `search`, which outlives the call.
     unsafe { EnumWindows(each, &mut search as *mut Search as isize) };
-    search
-        .best
-        .ok_or_else(|| Error::new("input_unavailable", "The owned game has no visible window yet"))
+    search.best.ok_or_else(|| {
+        Error::new(
+            "input_unavailable",
+            "The owned game has no visible window yet",
+        )
+    })
 }
 
 fn key_code(name: &str) -> Result<u16> {
@@ -143,7 +149,10 @@ fn run_op(
     let kind = op["op"].as_str().unwrap_or("");
     if kind == "bind" {
         if bound.is_some() {
-            return Err(Error::new("input_already_bound", "Probe input is already bound"));
+            return Err(Error::new(
+                "input_already_bound",
+                "Probe input is already bound",
+            ));
         }
         let (window, client) = game_window(pid)?;
         let input = WinInput::open_owned(process.clone(), window, pid, client)?;
@@ -173,8 +182,14 @@ fn run_op(
     match kind {
         "capture" => {
             let name = op["name"].as_str().unwrap_or("capture");
-            if !name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_') {
-                return Err(Error::new("invalid_arguments", "Plain capture name required"));
+            if !name
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+            {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "Plain capture name required",
+                ));
             }
             let c = b.input.capture(game)?;
             let lit = c

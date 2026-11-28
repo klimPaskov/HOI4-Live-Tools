@@ -923,7 +923,8 @@ fn capture_client(window: Hwnd, width: u32, height: u32) -> Result<Vec<u8>> {
     // PrintWindow first; a frame it reports drawn can still be black (a DirectX surface it did
     // not reach), so BitBlt from the client DC is tried before a black frame is refused.
     // SAFETY: the memory DC holds a w x h bitmap; PrintWindow only draws into it.
-    let printed = unsafe { PrintWindow(window, gdi.memory_dc, PW_CLIENTONLY | PW_RENDERFULLCONTENT) != 0 };
+    let printed =
+        unsafe { PrintWindow(window, gdi.memory_dc, PW_CLIENTONLY | PW_RENDERFULLCONTENT) != 0 };
     if printed {
         let data = read_bitmap(&mut gdi, width, height)?;
         if !all_black(&data) {
@@ -1209,7 +1210,12 @@ impl WinInput<'_> {
         before_down: &dyn Fn() -> Result<()>,
         origin: Option<(i32, i32)>,
     ) -> Result<()> {
-        run(plan, |f| self.fence(f, before_down, origin), send_event, sleep)
+        run(
+            plan,
+            |f| self.fence(f, before_down, origin),
+            send_event,
+            sleep,
+        )
     }
     fn tap(&self, code: u16, modifier: Option<KeyCode>) -> Result<()> {
         refuse_chord(modifier, code)?;

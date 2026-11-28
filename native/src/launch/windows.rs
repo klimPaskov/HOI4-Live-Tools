@@ -259,7 +259,8 @@ fn run(config: &Config, exe: &Path) -> Result<()> {
     let (process, unavailable) =
         match crate::platform::windows::process::WindowsProcess::open(session) {
             Ok(p) => (
-                Some(std::sync::Arc::new(p) as std::sync::Arc<dyn crate::platform::Process + Send + Sync>),
+                Some(std::sync::Arc::new(p)
+                    as std::sync::Arc<dyn crate::platform::Process + Send + Sync>),
                 None,
             ),
             Err(e) => {
