@@ -2376,7 +2376,7 @@
                   },
                   "shed": {
                     "type": "boolean",
-                    "description": "with no stuck battle to push, the divisions waiting where they cannot fight (the reserve of a full or over-reserved battle, the fit idle ones on the line) attack the unattacked enemy province beside them, within the army's refinement cool-down; default true"
+                    "description": "with no stuck battle to push, the divisions waiting where they cannot fight (the reserve of a full or over-reserved battle, the fit idle ones on the line) attack the unattacked enemy province beside them, within the army's refinement cool-down, after the opening's own orders (every attacker executing, its mode read); default false (off until a leg proves it raises the engaged share)"
                   }
                 },
                 "additionalProperties": false

@@ -1328,6 +1328,11 @@ fn diplomacy_items(
     // that executed its own armies and Luxembourg behind two days of a failed view read)
     let mut declared: Vec<String> = Vec::new();
     let mut opening: HashSet<String> = HashSet::new();
+    // COLLECT, THEN POST (engineer 104): every declaration of the opening is checked first (its
+    // gates, the target's diplomacy view, who would join), then all are posted back to back with
+    // no read between, then verified (w101c, 28 Nov 2026: Luxembourg's view read of 1.6 s and its
+    // checks came between Belgium's post and its own, five game hours at speed 2)
+    let mut ready: Vec<(String, String, Value)> = Vec::new();
     for item in items {
         let Some(action) = dip_action(text(&item["action"])) else {
             continue;
@@ -1336,7 +1341,8 @@ fn diplomacy_items(
             continue;
         }
         let target = dip_target(item);
-        if !declared.is_empty() && (action != "declare_war" || !opening.contains(&target)) {
+        let gathering = !declared.is_empty() || !ready.is_empty();
+        if gathering && (action != "declare_war" || !opening.contains(&target)) {
             continue;
         }
         let key = dip_key(item, &action, &target);
@@ -1359,7 +1365,7 @@ fn diplomacy_items(
         if action == "declare_war" {
             expiry_watch(state, plan, now, item, &key, &target);
             if let Some(line) = war_goal_watch(state, run, item, &key, &target)? {
-                if declared.is_empty() {
+                if declared.is_empty() && ready.is_empty() {
                     return Ok(Some(line));
                 }
                 declared.push(line);
@@ -1425,7 +1431,7 @@ fn diplomacy_items(
         }
         // the opening's other declarations hold this one while their own conditions do not
         // hold yet (at most OP_DECLARE_WAIT from its due day): one gate for the opening
-        if action == "declare_war" && declared.is_empty() {
+        if action == "declare_war" && declared.is_empty() && ready.is_empty() {
             let behind = opening_members(plan, &target)
                 .into_iter()
                 .filter(|t| *t != target)
@@ -1449,6 +1455,19 @@ fn diplomacy_items(
                 }
             }
         }
+        if action == "declare_war" && declarations_only {
+            if let Some(args) = declare_check(state, run, item, &key, &target, &mut waits)? {
+                if ready.is_empty() && declared.is_empty() {
+                    opening = opening_members(plan, &target);
+                }
+                ready.push((key, target, args));
+                if opening.len() > 1 {
+                    continue;
+                }
+                break;
+            }
+            continue;
+        }
         let acted = match action.as_str() {
             "justify_war_goal" => justify(state, run, item, &key, &target, &mut waits)?,
             "declare_war" => declare(state, run, item, &key, &target, &mut waits)?,
@@ -1468,6 +1487,39 @@ fn diplomacy_items(
                 break;
             }
             return Ok(Some(line));
+        }
+    }
+    if !ready.is_empty() {
+        // back to back: nothing is read between the posts
+        let mut posted: Vec<(String, String, bool)> = Vec::new();
+        for (key, target, args) in ready {
+            let (ok, line) = declare_post(state, run, &key, &target, args)?;
+            posted.push((key, target, ok));
+            declared.push(line);
+        }
+        // then verified: a posted declaration whose war does not read is due again within the
+        // day (the act's own receipt said Verified; the war list is the game's word)
+        if posted.len() > 1 {
+            state.pcache = None;
+            let mut missing: Vec<String> = Vec::new();
+            for (k, t, ok) in &posted {
+                let war = json!(format!("at_war_with:{t}"));
+                if *ok && super::judge(state, tools, &war, now) == Truth::False {
+                    state.done.remove(k);
+                    state.skip(now, "dip", k, DAY / 4);
+                    missing.push(t.clone());
+                }
+            }
+            let at_war = posted.iter().filter(|(_, _, ok)| *ok).count() - missing.len();
+            declared.push(if missing.is_empty() {
+                format!("declared back to back: {at_war} war(s) read")
+            } else {
+                format!(
+                    "declared back to back: {at_war} war(s) read, {} not read yet ({}): again within the day",
+                    missing.len(),
+                    missing.join(", ")
+                )
+            });
         }
     }
     if !declared.is_empty() {
@@ -1887,6 +1939,22 @@ fn declare(
     target: &str,
     waits: &mut Vec<String>,
 ) -> Result<Option<String>> {
+    match declare_check(state, run, item, key, target, waits)? {
+        Some(args) => Ok(Some(declare_post(state, run, key, target, args)?.1)),
+        None => Ok(None),
+    }
+}
+
+/// Every check of a declaration (the justification, the target's view, who would join): the
+/// act's arguments when it may go out now, else None with the wait in `waits`.
+fn declare_check(
+    state: &mut State,
+    run: &Run<'_>,
+    item: &Value,
+    key: &str,
+    target: &str,
+    waits: &mut Vec<String>,
+) -> Result<Option<Value>> {
     let (plan, now) = (run.plan, run.now);
     let label = item_id(item).unwrap_or_else(|| format!("declare {target}"));
     // the plan's own justification for this target comes first
@@ -2011,6 +2079,19 @@ fn declare(
     if item["accept_widening"] == json!(true) {
         args["accept_widening"] = json!(true);
     }
+    Ok(Some(args))
+}
+
+/// The declaration's post (its arguments from `declare_check`) and its done-record: (ok, line).
+fn declare_post(
+    state: &mut State,
+    run: &Run<'_>,
+    key: &str,
+    target: &str,
+    args: Value,
+) -> Result<(bool, String)> {
+    let now = run.now;
+    let ready_key = format!("dipready:{key}");
     let (ok, why) = state.act(run.tools, run.lease, "hoi4_diplomacy_act", args, "dp")?;
     if ok {
         state.done.insert(key.to_string(), now);
@@ -2030,7 +2111,7 @@ fn declare(
         };
         state.skip(now, "dip", key, wait);
     }
-    Ok(Some(format!("diplomacy declare_war {target}: {ok} {why}")))
+    Ok((ok, format!("diplomacy declare_war {target}: {ok} {why}")))
 }
 
 fn relation(
@@ -4736,6 +4817,67 @@ mod tests {
             .collect();
         assert_eq!(sent, vec!["HOL", "BEL", "LUX"], "{out}");
         assert_eq!(out.matches("declare_war").count(), 3, "{out}");
+        // BACK TO BACK (w101c, 28 Nov 2026: Luxembourg's 1.6 s view read came between Belgium's
+        // post and its own, five game hours): every check and read first, then the three posts
+        // with no call between them, then the war list read once
+        let calls: Vec<String> = tools
+            .calls
+            .borrow()
+            .iter()
+            .map(|(n, _)| n.clone())
+            .collect();
+        let first = calls
+            .iter()
+            .position(|n| n == "hoi4_diplomacy_act")
+            .unwrap();
+        assert_eq!(
+            &calls[first..first + 3],
+            &["hoi4_diplomacy_act"; 3],
+            "{calls:?}"
+        );
+        assert!(
+            calls[first + 3..].iter().all(|n| n != "hoi4_diplomacy"),
+            "{calls:?}"
+        );
+        assert!(out.contains("declared back to back"), "{out}");
+    }
+
+    #[test]
+    fn a_declaration_posted_with_others_whose_war_does_not_read_goes_again_within_the_day() {
+        let tools = fake(vec![
+            ("hoi4_diplomacy", declare_rows(true)),
+            (
+                "hoi4_war_risk",
+                json!({"country": "HOL", "would_join": [], "borders_not_held": []}),
+            ),
+            ("hoi4_wars", json!({"wars": {"enemies": []}})),
+        ]);
+        let plan = json!({"operations": [{"id": "op", "enemies": ["HOL", "BEL", "LUX"]}],
+            "diplomacy": [
+                {"id": "dow_hol", "action": "declare", "target": "HOL", "accept_widening": true},
+                {"id": "dow_bel", "action": "declare", "target": "BEL", "accept_widening": true},
+                {"id": "dow_lux", "action": "declare", "target": "LUX", "accept_widening": true}]});
+        let mut state = State::default();
+        let out = declare_due_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        // posted back to back; the war list read after the posts shows none of them: each goes
+        // again within the day
+        assert_eq!(actions(&tools).len(), 3, "{out}");
+        assert!(out.contains("not read yet"), "{out}");
+        assert!(state.skipped(START + DAY / 8, "dip", "dip:id:dow_lux"));
+        assert!(!state.done.contains_key("dip:id:dow_lux"));
+        // the war list now reads Holland and Belgium: Luxembourg alone goes again
+        tools.reply("hoi4_wars", json!({"wars": {"enemies": ["HOL", "BEL"]}}));
+        let out = declare_due_step(&mut state, &tools, &plan, "l", START + DAY / 2)
+            .unwrap()
+            .unwrap();
+        let again: Vec<String> = actions(&tools)
+            .iter()
+            .skip(3)
+            .map(|(_, a)| text(&a["country"]).to_string())
+            .collect();
+        assert_eq!(again, vec!["LUX"], "{out}");
     }
 
     #[test]
