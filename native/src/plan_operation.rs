@@ -9455,6 +9455,22 @@ fn capacity_turn(
     // 10 divisions in 9522 for 4, 9 in 11470 for 2)
     let mut piles =
         capacity::dead_fronts(&read_cap.read, rooms, &|p| root_of.get(&p).copied(), &ours);
+    // a front over its cap gives its surplus too, once the opening's first days are past (its
+    // first war turns belong to the attack's own orders); `capacity.over_cap: false` switches it
+    // off
+    let opened = state
+        .done
+        .get(&key(id, &format!("war0:{}", u.enemy)))
+        .is_some_and(|t| now.saturating_sub(*t) >= OPENING_FIRST);
+    if opened && op["capacity"]["over_cap"] != json!(false) {
+        piles.extend(capacity::over_rooms(
+            &read_cap.read,
+            rooms,
+            &|p| root_of.get(&p).copied(),
+            &ours,
+            capacity_slack(op, rooms),
+        ));
+    }
     piles.extend(capacity::piles(&battles, &ours));
     piles.extend(capacity::overstacked(&read_cap.read, &read_cap.caps, &ours));
     // the breadth of the attack: enemy provinces in reach, attacked, attacked from too few sides
