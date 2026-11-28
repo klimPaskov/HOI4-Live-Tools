@@ -51,10 +51,14 @@ LAND_ROLES = {
     "tank_garrison": {"type": "armor", "value": "hardness"},
 }
 SHIP_ROLES = {
-    "ship_screen": {"value": {"sub_attack": 1.0, "lg_attack": 0.7, "torpedo_attack": 0.3, "anti_air_attack": 0.3}},
-    "ship_cruiser": {"value": {"lg_attack": 1.0, "armor_value": 0.3, "anti_air_attack": 0.3}},
-    "ship_capital": {"value": {"hg_attack": 1.0, "armor_value": 0.5, "anti_air_attack": 0.2}},
-    "ship_submarine": {"value": {"torpedo_attack": 1.0, "naval_range": 0.002}},
+    # value: provisional stat weights (not a naval combat model); types: the hull archetype's `type` in
+    # common/units/equipment that may serve the role (cruiser hulls are screen_ship in the files, so the weights tell
+    # a screen from a cruiser)
+    "ship_screen": {"value": {"sub_attack": 1.0, "lg_attack": 0.7, "torpedo_attack": 0.3, "anti_air_attack": 0.3},
+                    "types": {"screen_ship"}},
+    "ship_cruiser": {"value": {"lg_attack": 1.0, "armor_value": 0.3, "anti_air_attack": 0.3}, "types": {"screen_ship"}},
+    "ship_capital": {"value": {"hg_attack": 1.0, "armor_value": 0.5, "anti_air_attack": 0.2}, "types": {"capital_ship"}},
+    "ship_submarine": {"value": {"torpedo_attack": 1.0, "naval_range": 0.002}, "types": {"submarine"}},
 }
 ATTACK_STATS = ("soft_attack", "hard_attack", "air_attack")
 
@@ -537,37 +541,45 @@ def _role_bases(v, bases, role_type, families=None):
 
 
 def _upgrade_grid(v, base, techs, mods, floor, role, prof, combat, objective):
+    return _upgrade_grids(v, base, techs, mods, [floor], role, prof, combat, objective)[floor]
+
+
+def _upgrade_grids(v, base, techs, mods, floors, role, prof, combat, objective):
+    """{floor: (score, value, upgrades, stats, parts) or None}: for every level combination of the non-engine
+    upgrades, the least engine level that meets each speed floor, scored; the best per floor."""
     caps = v.upgrade_caps(base, techs)
     names = sorted(caps)
     eng = next((u for u in names if v.upgrades[u]["add"].get("maximum_speed", 0) > 0), None)
     others = [u for u in names if u != eng]
-    best = None
+    best = {fl: None for fl in floors}
     ranges = [range(0, caps[u] + 1) for u in others]
     for combo in itertools.product(*ranges) if others else [()]:
         ups = dict(zip(others, combo))
-        lo = 0
+        todo = sorted(floors)
         for e in range(0, (caps[eng] if eng else 0) + 1):
+            if not todo:
+                break
             if eng:
                 ups[eng] = e
             st = stats(v, base, mods, ups)
-            if st.get("maximum_speed", 0.0) + 1e-9 >= floor or role == "tank_garrison":
-                lo = e
-                break
-        else:
-            continue
-        if eng:
-            ups[eng] = lo
-        st = stats(v, base, mods, ups)
-        val, parts = value(st, role, prof, combat)
-        sc = val / max(st.get("build_cost_ic", 1.0), 1.0) ** (0.5 if objective == "per_ic" else 1.0) \
-            if objective != "value" else val
-        if best is None or sc > best[0]:
-            best = (sc, val, dict(ups), st, parts)
+            met = [fl for fl in todo if st.get("maximum_speed", 0.0) + 1e-9 >= fl or role == "tank_garrison"]
+            if not met:
+                continue
+            val, parts = value(st, role, prof, combat)
+            sc = val / max(st.get("build_cost_ic", 1.0), 1.0) ** (0.5 if objective == "per_ic" else 1.0) \
+                if objective != "value" else val
+            for fl in met:
+                if best[fl] is None or sc > best[fl][0]:
+                    best[fl] = (sc, val, dict(ups), st, parts)
+            todo = [fl for fl in todo if fl not in met]
     return best
 
 
-def best_land(sit, role, enemies=None, families=None, top=3, beam=40, objective=None, techs=None, prof=None):
-    """Top designs for a land role (LAND_ROLES) with what the country has at the date."""
+def best_land(sit, role, enemies=None, families=None, top=3, beam=40, objective=None, techs=None, prof=None,
+              floor=None):
+    """Top designs for a land role (LAND_ROLES) with what the country has at the date. floor: a speed floor in km/h
+    instead of the infantry's, or a list of floors (the armour template weighs speed itself): the module search runs
+    once and the upgrade grid once per floor, and `by_floor` lists [(floor, designs)]."""
     v = Vehicles.of(sit.game)
     combat = Combat(sit)
     techs = set(techs if techs is not None else sit.techs())
@@ -575,9 +587,15 @@ def best_land(sit, role, enemies=None, families=None, top=3, beam=40, objective=
     prof = prof or enemy_profile(sit, enemies)
     role_type = LAND_ROLES[role]["type"]
     objective = objective or ("per_ic_linear" if role == "tank_garrison" else "per_ic")
-    floor, floor_src = floor_speed(sit)
+    if floor is None:
+        f0, floor_src = floor_speed(sit)
+        floors = [f0]
+    else:
+        floors = [float(x) for x in (floor if isinstance(floor, (list, tuple)) else [floor])]
+        floor_src = "asked by the caller"
     dlcs = sit.world.dlcs
-    out, rejected = [], {}
+    outs = {fl: [] for fl in floors}
+    rejected = {}
     for base in _role_bases(v, bases, role_type, families):
         slots = sorted(v.slots(base), key=lambda s: (s["slot"] != "turret_type_slot",
                                                      s["slot"] != "main_armament_slot", s["slot"]))
@@ -614,23 +632,35 @@ def best_land(sit, role, enemies=None, families=None, top=3, beam=40, objective=
                 for p in probs:
                     rejected[p.split(" ")[0]] = rejected.get(p.split(" ")[0], 0) + 1
                 continue
-            g = _upgrade_grid(v, base, techs, q, floor, role, prof, combat, objective)
-            if not g:
-                rejected["speed"] = rejected.get("speed", 0) + 1
-                continue
-            sc, val, ups, st, parts = g
-            out.append({"base": base, "modules": q, "upgrades": ups, "stats": _show(st), "value": round(val, 2),
-                        "score": round(sc, 3), "parts": parts, "role": role, "type": role_type})
-    out.sort(key=lambda d: -d["score"])
-    seen, uniq = set(), []
-    for d in out:
-        key = (d["base"], tuple(sorted(d["modules"].values())))  # the same modules in other free slots: one design
-        if key not in seen:
-            seen.add(key)
-            uniq.append(d)
-    return {"role": role, "designs": uniq[:top], "rejected_by": rejected, "enemy": prof,
-            "speed_floor": floor, "speed_floor_from": floor_src, "combat_defines": combat.src,
-            "techs": sit.techs_source(), "objective": objective}
+            grids = _upgrade_grids(v, base, techs, q, floors, role, prof, combat, objective)
+            for fl in floors:
+                g = grids[fl]
+                if not g:
+                    if fl == floors[0]:
+                        rejected["speed"] = rejected.get("speed", 0) + 1
+                    continue
+                sc, val, ups, st, parts = g
+                outs[fl].append({"base": base, "modules": q, "upgrades": ups, "stats": _show(st),
+                                 "value": round(val, 2), "score": round(sc, 3), "parts": parts, "role": role,
+                                 "type": role_type})
+
+    def uniq(out):
+        out.sort(key=lambda d: -d["score"])
+        seen, res = set(), []
+        for d in out:
+            key = (d["base"], tuple(sorted(d["modules"].values())))  # the same modules in other free slots: one design
+            if key not in seen:
+                seen.add(key)
+                res.append(d)
+        return res[:top]
+
+    by_floor = [(fl, uniq(outs[fl])) for fl in floors]
+    res = {"role": role, "designs": by_floor[0][1], "rejected_by": rejected, "enemy": prof,
+           "speed_floor": floors[0], "speed_floor_from": floor_src, "combat_defines": combat.src,
+           "techs": sit.techs_source(), "objective": objective}
+    if isinstance(floor, (list, tuple)):
+        res["by_floor"] = by_floor
+    return res
 
 
 def _show(st):
@@ -675,9 +705,8 @@ def best_ship(sit, role, top=3, beam=30):
     dlcs = sit.world.dlcs
     usable = {m for m in mods if m in v.modules and (not v.modules[m]["dlcs"] or v.modules[m]["dlcs"] & set(dlcs))}
     out, blocked = [], []
-    hulls = [b for b in bases if "ship" in v.family(b) or any(t.endswith("ship") or t in (
-        "destroyer", "cruiser", "submarine", "capital_ship", "screen_ship", "carrier") for t in
-        v.equip.get(v.family(b), {}).get("type") or ())]
+    want = SHIP_ROLES[role].get("types") or set()
+    hulls = [b for b in bases if set(v.equip.get(v.family(b), {}).get("type") or ()) & want]
     for base in hulls:
         slots = v.slots(base)
         if not slots:
@@ -712,7 +741,14 @@ def best_ship(sit, role, top=3, beam=30):
                                                                                         "reliability")},
                         "value": round(val, 2), "score": round(val / max(st.get("build_cost_ic", 1.0), 1.0) ** 0.5, 3)})
     out.sort(key=lambda d: -d["score"])
-    return {"role": role, "designs": out[:top], "blocked_hulls": sorted(blocked),
+    seen, uniq = set(), []
+    for d in out:  # the same modules in other free slots: one design
+        key = (d["base"], tuple(sorted(d["modules"].values())))
+        if key not in seen:
+            seen.add(key)
+            uniq.append(d)
+    return {"role": role, "designs": uniq[:top], "blocked_hulls": sorted(blocked),
+            "dlcs": list(dlcs or ()), "hull_types": sorted(want),
             "note": "ship weights are provisional (stat shares, not a naval combat model)" if out else
             "no designable hull: the modules need a DLC that is not active; build the base equipment"}
 
