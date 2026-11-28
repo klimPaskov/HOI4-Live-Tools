@@ -9092,6 +9092,46 @@ fn sp_stopped(state: &State, key: &str) -> Option<i64> {
         .find_map(|k| k.strip_prefix(&prefix).and_then(|id| id.parse().ok()))
 }
 
+/// Completions seen between two special-project reads (the `project_done:<key>` atom): a project
+/// that ran unstopped in a facility at the last read (`sprun:<key>`) and now runs nowhere is done
+/// (`spdone:<key>`) when the visible pool no longer lists it; one still listed went back to the
+/// pool (stopped, or its facility lost) and is not counted. A project that is stopping is not
+/// remembered as running.
+fn sp_completions(state: &mut State, sp: &Value, now: GameHour) {
+    let running: HashMap<String, bool> = list(sp, "facilities")
+        .iter()
+        .filter_map(|f| {
+            let p = &f["project"];
+            p["key"]
+                .as_str()
+                .map(|k| (k.to_string(), p["stopping"] == json!(true)))
+        })
+        .collect();
+    let listed: HashSet<&str> = list(sp, "projects")
+        .iter()
+        .filter_map(|p| p["key"].as_str())
+        .collect();
+    let was: Vec<String> = state
+        .done
+        .keys()
+        .filter_map(|k| k.strip_prefix("sprun:").map(str::to_string))
+        .collect();
+    for key in was {
+        if running.get(&key) == Some(&false) {
+            continue;
+        }
+        state.done.remove(&format!("sprun:{key}"));
+        if !running.contains_key(&key) && !listed.contains(key.as_str()) {
+            state.done.insert(format!("spdone:{key}"), now);
+        }
+    }
+    for (key, stopping) in running {
+        if !stopping {
+            state.done.entry(format!("sprun:{key}")).or_insert(now);
+        }
+    }
+}
+
 /// Special projects (`special_projects`), read from hoi4_special_projects every 7 game days and
 /// again on the next tick after an action, one action per tick:
 ///   stop           [{"id"?,"project"|"scientist"|"facility_id","when"?,"unassign"?}] first: once
@@ -9127,6 +9167,7 @@ fn special_projects_step(
     }
     state.skip(now, "spcheck", "x", 7 * DAY);
     let sp = tools.call("hoi4_special_projects", &json!({}))?;
+    sp_completions(state, &sp, now);
     // an action is followed by a fresh read on the next tick, not after 7 game days
     let again = |state: &mut State| {
         state.bad.remove(&skip_key("spcheck", "x"));
@@ -12332,6 +12373,13 @@ fn judge(state: &mut State, tools: &dyn Tools, predicate: &Value, now: GameHour)
     };
     let mut ctx = Ctx::with_cache(tools, now, cache);
     ctx.phase = state.strategy.phase_id();
+    if predicate.to_string().contains("project_done") {
+        ctx.projects_done = state
+            .done
+            .keys()
+            .filter_map(|k| k.strip_prefix("spdone:").map(str::to_string))
+            .collect();
+    }
     let truth = crate::plan_predicate::check(predicate, &mut ctx);
     for (atom, why) in ctx.take_unknown() {
         state.strategy.unknown.entry(atom).or_insert(why);
@@ -17134,6 +17182,66 @@ mod tests {
                 (n.clone(), a)
             })
             .collect()
+    }
+
+    #[test]
+    fn a_project_that_leaves_its_facility_and_the_pool_is_recorded_done() {
+        let mut state = State::default();
+        let running = sp_read(
+            &[
+                (1, "land", Some("Ada"), Some(("sp_flame", false))),
+                (2, "land", Some("Bo"), Some(("sp_mev", false))),
+                (3, "land", Some("Cy"), Some(("sp_cruiser", true))),
+            ],
+            &[],
+            &[
+                ("sp_flame", "land"),
+                ("sp_mev", "land"),
+                ("sp_cruiser", "land"),
+            ],
+            0,
+            &[],
+        );
+        sp_completions(&mut state, &running, START);
+        assert!(state.done.contains_key("sprun:sp_flame"));
+        // a stopping project is not remembered as running
+        assert!(!state.done.contains_key("sprun:sp_cruiser"));
+        // a week on: the flame project is gone from facility and pool (done); the MEV went back to
+        // the pool (stopped by hand): not done; the cruiser finished stopping: never counted
+        let later = sp_read(
+            &[
+                (1, "land", Some("Ada"), None),
+                (2, "land", Some("Bo"), None),
+                (3, "land", Some("Cy"), None),
+            ],
+            &[],
+            &[("sp_mev", "land"), ("sp_cruiser", "land")],
+            0,
+            &[],
+        );
+        sp_completions(&mut state, &later, START + 7 * DAY);
+        assert!(state.done.contains_key("spdone:sp_flame"));
+        assert!(!state.done.contains_key("spdone:sp_mev"));
+        assert!(!state.done.contains_key("spdone:sp_cruiser"));
+        assert!(!state.done.keys().any(|k| k.starts_with("sprun:")));
+        // the predicate reads the record through judge
+        let tools = fake(vec![("hoi4_special_projects", later)]);
+        assert!(judge(
+            &mut state,
+            &tools,
+            &json!("project_done:sp_flame"),
+            START + 7 * DAY
+        )
+        .is_true());
+        assert_eq!(
+            judge(
+                &mut state,
+                &tools,
+                &json!("project_done:sp_mev"),
+                START + 7 * DAY
+            ),
+            Truth::False
+        );
     }
 
     #[test]
