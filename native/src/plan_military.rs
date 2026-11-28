@@ -201,6 +201,8 @@ pub(super) type Losses = BTreeMap<String, (f64, f64)>;
 /// What the runner keeps for these rules besides `done` and the skip timers.
 #[derive(Default)]
 pub(super) struct Memory {
+    /// The enemy's share of the air per region as the region window estimated it, with the hour (plan_airborne).
+    pub(super) air_share: HashMap<i64, (f64, GameHour)>,
     /// Wake alarms raised since the last run result.
     alarms: Vec<Value>,
     /// The last status line of each rule (the run result's `military`).
@@ -258,7 +260,7 @@ pub(super) fn digest(state: &State) -> Option<Value> {
 
 /// The military rules as lanes of the pass (plan_run.rs `lanes`): rests that are over, the
 /// running naval invasion, the casualty and air superiority rules, army groups, the navy.
-pub(super) const LANES: [super::Lane; 7] = [
+pub(super) const LANES: [super::Lane; 8] = [
     ("rests", |state, tools, _, lease, now| {
         rest_step(state, tools, lease, now)
     }),
@@ -266,6 +268,7 @@ pub(super) const LANES: [super::Lane; 7] = [
     ("casualties", casualty_rule),
     ("air_superiority", air_superiority_rule),
     ("air_attach", air_attach_rule),
+    ("airborne", super::plan_airborne::airborne_step),
     ("army_groups", army_group_step),
     ("navy", navy_step),
 ];

@@ -355,6 +355,99 @@
       "x-owner": "executor",
       "description": "false: stop acting at stop_on_date but never pause"
     },
+    "airborne": {
+      "type": "object",
+      "x-owner": "executor",
+      "description": "standing opportunity rule for paratroopers (plan_airborne.rs): at war, once a day, the first target whose `when` holds, that a transport wing reaches from one of the air bases, whose region's air is ours by the region window's estimate (min_air_share), and in FAIR mode lies within link_up_km of one of our battles, gets hoi4_paradrop with `army`; then the rule rests cooldown_days. The game's own checks still decide. Absent or enabled:false: off (a roleplay goal switches it off). hoi4_paradrop is off in auto until S21-PARADROP passes.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "army": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the army of paratrooper divisions (hoi4_armies name)"
+        },
+        "from_states": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/state_id"
+          },
+          "description": "air base states to drop from; absent: every own air base"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "province": {
+                "$ref": "#/definitions/province_id"
+              },
+              "state": {
+                "$ref": "#/definitions/state_id"
+              },
+              "when": {
+                "$ref": "#/definitions/predicate"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "required": [
+              "province",
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          "description": "drop targets in order (victory points, ports, air fields from the game files), each dropped once"
+        },
+        "min_air_share": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.7,
+          "description": "our least share of the region's air (1 - the region window's enemy estimate)"
+        },
+        "link_up_km": {
+          "type": "number",
+          "minimum": 0,
+          "default": 300,
+          "description": "FAIR: the most a target lies from our nearest battle (MX12, MX43); META ignores it"
+        },
+        "cooldown_days": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 14
+        },
+        "min_transports": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 50,
+          "description": "the game's MIN_PLANE_COUNT_PARADROP of the game and mod in use"
+        },
+        "transports_per_division": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 45,
+          "description": "the game's BASE_UNIT_WEIGHT_IN_TRANSPORT_PLANES of the game and mod in use"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false
+    },
     "stop_on_failure": {
       "type": "boolean",
       "x-owner": "executor"

@@ -38,6 +38,7 @@
 //!                               equipment key (fair.submarines)
 //!   hoi4_operative_assign, hoi4_operation_start  an Axis collaboration-government operation on
 //!                               the Soviet Union (fair.collaboration)
+//!   hoi4_paradrop               more than 18 divisions named in one drop (fair.paratroopers)
 //!
 //! Not guarded (needs live state the action's arguments do not carry; the player and the plan
 //! lint own them): convoy_raiding at peace and submarine task forces below 5 (hoi4_fleet_mission),
@@ -61,6 +62,8 @@ const ALLIES: &[&str] = &[
 ];
 const SPAIN: &[&str] = &["SPR", "SPA", "SPB", "SPC", "SPD"];
 const PARA_WIDTH: f64 = 20.0;
+/// The most paratrooper divisions a FAIR nation has, so the most one drop names.
+const PARA_MAX: usize = 18;
 
 /// Every tool a guard looks at (reads and the other actions pass untouched).
 pub const GUARDED_TOOLS: &[&str] = &[
@@ -77,6 +80,7 @@ pub const GUARDED_TOOLS: &[&str] = &[
     "hoi4_design_set_production",
     "hoi4_operative_assign",
     "hoi4_operation_start",
+    "hoi4_paradrop",
 ];
 
 /// The rules in plain words (the end of every refusal).
@@ -301,6 +305,15 @@ fn breach(
                 .then(|| ("fair.naval_mines", format!("mission {mission}")))
         }
         "hoi4_diplomacy_act" => diplomacy(args, run),
+        "hoi4_paradrop" => {
+            let n = args["division_ids"].as_array().map_or(0, Vec::len);
+            (n > PARA_MAX).then(|| {
+                (
+                    "fair.paratroopers",
+                    format!("{n} divisions in one drop (at most {PARA_MAX})"),
+                )
+            })
+        }
         "hoi4_faction_leave" => run.leads_faction.then(|| {
             (
                 "fair.factions",
@@ -541,6 +554,26 @@ mod tests {
 
     fn allowed(name: &str, args: Value, run: &Run) {
         check(name, &args, run, Some(&facts())).expect(name);
+    }
+
+    #[test]
+    fn paradrop_names_at_most_eighteen_divisions() {
+        let fair = Run::default_fair();
+        let ids: Vec<String> = (0..19).map(|i| format!("{i:08x}:00000001")).collect();
+        let e = check(
+            "hoi4_paradrop",
+            &json!({"army": "A", "division_ids": ids}),
+            &fair,
+            Some(&facts()),
+        )
+        .unwrap_err();
+        assert!(e.message.contains("fair.paratroopers"));
+        allowed(
+            "hoi4_paradrop",
+            json!({"army": "A", "division_ids": &ids[..18]}),
+            &fair,
+        );
+        allowed("hoi4_paradrop", json!({"army": "A"}), &fair);
     }
 
     #[test]

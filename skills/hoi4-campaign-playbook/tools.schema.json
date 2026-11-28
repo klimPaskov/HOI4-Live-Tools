@@ -721,6 +721,17 @@
      "lease_token": {
       "type": "string"
      },
+     "provinces": {
+      "description": "in-process only (family orders2): the fallback line's own provinces in drawing order, posted as one fallback order; states is then the mouse path's line",
+      "items": {
+       "maximum": 99999,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 1024,
+      "minItems": 1,
+      "type": "array"
+     },
      "request_id": {
       "type": "string"
      },
@@ -1017,9 +1028,17 @@
      "lease_token": {
       "type": "string"
      },
+     "parent_order": {
+      "minimum": 1,
+      "type": "integer"
+     },
      "province_id": {
       "description": "The objective inside the state: the line is drawn at its depth from the army",
       "maximum": 29999,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "replace_order": {
       "minimum": 1,
       "type": "integer"
      },
@@ -1044,6 +1063,17 @@
       },
       "maxItems": 12,
       "minItems": 2,
+      "type": "array"
+     },
+     "target_provinces": {
+      "description": "in-process only: the exact target line in drawing order; with spearhead:true a new spearhead under parent_order (family orders2), with replace_order the new path of that existing order (family orders); a plain new offensive is still drawn by the stroke",
+      "items": {
+       "maximum": 99999,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 1024,
+      "minItems": 1,
       "type": "array"
      }
     },
@@ -1312,7 +1342,7 @@
    "source": "--list-tools"
   },
   "hoi4_commanders": {
-   "description": "Own army commanders: every commander who leads an own army or army group (name, rank, assigned_to) plus, while the army panel's commander list is open, every listed general with available true/false. Every army leader of the country is listed with id, skill, attack, defense, planning, logistics and traits (base values, matched against common/characters for five leaders); while the list is open, leaders it does not show (not recruited, foreign, retired) are only named in not_assignable; with the list closed they appear with listed_in_panel_or_assigned false and available null. Pure memory read: no lease, no input, no cursor. Use the names with hoi4_army_commander; it refuses unknown_commander, commander_unavailable and army_unknown before any click.",
+   "description": "Own army commanders: every commander who leads an own army or army group (name, rank, assigned_to) plus, while the army panel's commander list is open, every listed general with available true/false. Every army leader of the country is listed with id, skill, attack, defense, planning, logistics and traits (base values, matched against common/characters for five leaders); while the list is open, leaders it does not show (not recruited, foreign, retired) are only named in not_assignable; with the list closed they appear with listed_in_panel_or_assigned false and available null. Pure memory read: no lease, no input, no cursor. A leader whose army role the game keeps hidden until a trigger (common/characters `visible`, e.g. a focus) carries visible_when, that trigger as a plan predicate (unreadable triggers as unread_trigger atoms): such a leader is not assignable until it holds (an assignment reads back and the game removes him again). Use the names with hoi4_army_commander; it refuses unknown_commander, commander_unavailable and army_unknown before any click.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},
@@ -3880,6 +3910,55 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_paradrop": {
+   "description": "Drop an own army's paratroopers from an own air base onto a province with the game's own battle-plan commands (in-process module, family orders2): the paradrop tool's source click (a new paradrop order with the divisions; the game removes the army's area-defence orders), its target click, then the plan bar's execute (execute:false leaves the order drawn). `from_state` names the state of the departure air base (an own air base). `division_ids` limits the drop to those divisions of the army (ids as hoi4_armies lists them; default: all its divisions; the game drops only what can drop). The game's own checks decide: paratrooper divisions, transport planes within range of the target, the air superiority the paradrop needs (PARADROP_AIR_SUPERIORITY_RATIO); a refused drop is reported (paradrop_refused). Refused before any post: army_unknown, air_base_unknown, paradrop_unvalidated (off unless HOI4_BACKEND=inprocess until its live session S21-PARADROP passes), in_process_unavailable. Verified when the army has a paradrop order with the read-back order id (executing when asked).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "division_ids": {
+      "items": {
+       "maxLength": 64,
+       "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
+     },
+     "execute": {
+      "type": "boolean"
+     },
+     "from_state": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "target_province": {
+      "maximum": 100000,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "army",
+     "from_state",
+     "target_province",
+     "request_id",
+     "lease_token"
+    ],
     "type": "object"
    },
    "source": "--list-tools"
