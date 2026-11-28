@@ -1807,6 +1807,16 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             else for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a task force is listed twice";
         } else why = "unknown navy op";
         nv = 0;
+    } else if (!strncmp(op, "navyhq.", 7)) {
+        /* engineer 102: a naval headquarters' admiral, as the game's own command (its AI and two UI sites build it).
+         *   admiral: objs = ONE own admiral (CUnitLeader, the auth object); obj2 = the headquarters building item
+         *            (CCustomizableBuildingItem). No read gives a headquarters' address yet: off until S20-NAVYHQ */
+        uint64_t o2[1];
+        if (strcmp(op, "navyhq.admiral")) why = "unknown navyhq op";
+        else if (j->n != 1) why = "exactly one admiral";
+        else if (nv || flag || (provs && *provs) || (divs && *divs)) why = "navyhq.admiral takes no vals, flag, provs or divs";
+        else if (parse_list_u64(obj2 ? obj2 : "", o2, 1) != 1) why = "obj2: one hex address (the headquarters)";
+        else j->obj2 = o2[0];
     } else if (!strncmp(op, "projects.", 9)) {
         /* engineer 85: the experimental facilities tab.
          *   start:    objs = ONE own facility (NProject::CProgram); obj2 = the project (NProject::CProject)

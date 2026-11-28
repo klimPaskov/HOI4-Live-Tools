@@ -2076,6 +2076,7 @@ pub(super) fn step(
     }
     let roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
     let wars = tools.call("hoi4_wars", &json!({}))?;
+    lend_idle(state, plan, ops, &active, &roster, &wars, now);
     if let Some(line) = idle_holds(state, tools, plan, &active, &roster, &wars, lease, now)? {
         return Ok(Some(line));
     }
@@ -2091,6 +2092,235 @@ pub(super) fn step(
     // through `wake`)
     state.skip(now, "opstep", "x", 6);
     Ok(None)
+}
+
+/// Game hours a borrowing operation's width reading stays good for a loan.
+const LEND_FRESH: GameHour = 3 * DAY;
+
+/// LEND THE IDLE (engineer 102, 28 Nov 2026). w96a, w96c and w96d (the West from 1939.12): Army 1
+/// (24 divisions) and Army 10 had no plan formation, Army 6 (16-20) belonged to op_weser, which
+/// waits for op_lowlands, and op_france named no Armee West Süd (18): 58 divisions stood at home
+/// on area defences the whole war while op_france's battles took 103 line divisions and 50 stood
+/// there. The plan's formations are a minimum, not the whole force.
+///
+/// At war, while operations carry the land war, an army with divisions that no running operation
+/// owns, that meets no enemy and that the plan does not keep is lent to the executing operation
+/// whose front has the most room (its last width reading, `stacking.by_width`: what the battles
+/// take beyond what stands there, less the borrower's echelons still behind). It becomes the
+/// echelon of one of the borrower's line armies (the one with the fewest divisions and no echelon
+/// yet) and the operation's own feed-forward sends its divisions to the line. An army that a
+/// later operation names is lent until that operation's prepare starts; the loan also ends when
+/// the borrower ends. Kept: `lend.keep` [{army, why}] (a named reserve or garrison) and the
+/// armies of the plan's `defense_lines` entries. `lend.off: true` (with `lend.why`) lends nothing.
+/// Bookkeeping only (no game order): the loans are `op:<borrower>:lent:<army>` in the
+/// done-memory, and `op_notes["lend"]` names every idle army with what it does and why.
+pub(super) fn lend_idle(
+    state: &mut State,
+    plan: &Value,
+    ops: &[Value],
+    active: &[(String, Value)],
+    roster: &Value,
+    wars: &Value,
+    now: GameHour,
+) {
+    let cfg = &plan["lend"];
+    if super::land_orders(plan) {
+        return;
+    }
+    // the later operation that names an army (its own formations or holds), not yet started
+    let named_by = |state: &State, name: &str, not: &str| -> Option<String> {
+        ops.iter().enumerate().find_map(|(i, op)| {
+            let oid = op_id(op, i);
+            (oid != not
+                && army_hints(op)
+                    .iter()
+                    .any(|h| name_of(state, roster, h) == name))
+            .then_some(oid)
+        })
+    };
+    // 1. loans that end: the borrower ended, or the army's own operation started
+    let loans: Vec<(String, String)> = state
+        .done
+        .keys()
+        .filter_map(|k| {
+            let rest = k.strip_prefix("op:")?;
+            let (b, army) = rest.split_once(":lent:")?;
+            Some((b.to_string(), army.to_string()))
+        })
+        .collect();
+    let mut lines: Vec<String> = Vec::new();
+    for (b, army) in &loans {
+        let owner = named_by(&*state, army, b);
+        let back = !started(state, b) || owner.as_deref().is_some_and(|o| started(state, o));
+        if !back {
+            continue;
+        }
+        state.done.remove(&key(b, &format!("lent:{army}")));
+        let prefix = format!("echelon:{b}:");
+        state
+            .layout
+            .retain(|k, v| !(k.starts_with(&prefix) && v == army));
+        if state.op_owned.get(army).is_some_and(|o| o == b) {
+            state.op_owned.remove(army);
+        }
+        lines.push(match owner.filter(|o| started(state, o)) {
+            Some(o) => format!("{army}: the loan to {b} ends, its own operation {o} has started"),
+            None => format!("{army}: the loan to {b} ends with the operation"),
+        });
+    }
+    if war_tags(wars).is_empty() {
+        if !lines.is_empty() {
+            state.op_notes.insert("lend".into(), lines.join("; "));
+        }
+        return;
+    }
+    if cfg["off"] == json!(true) {
+        let why = text(&cfg["why"]).trim().to_string();
+        state.op_notes.insert(
+            "lend".into(),
+            format!(
+                "no army is lent: {}",
+                if why.is_empty() {
+                    "lend.off without a reason"
+                } else {
+                    why.as_str()
+                }
+            ),
+        );
+        return;
+    }
+    let kept: Vec<(String, String)> = list(cfg, "keep")
+        .iter()
+        .map(|k| {
+            (
+                name_of(state, roster, text(&k["army"])),
+                text(&k["why"]).trim().to_string(),
+            )
+        })
+        .chain(list(plan, "defense_lines").iter().map(|h| {
+            (
+                name_of(state, roster, text(&h["army"])),
+                format!(
+                    "the plan's defence line {}",
+                    item_id(h).unwrap_or_else(|| "entry".into())
+                ),
+            )
+        }))
+        .filter(|(n, _)| !n.is_empty())
+        .collect();
+    // 2. the borrowers: executing, with a fresh width reading and room left
+    let mut rooms: Vec<(String, i64)> = active
+        .iter()
+        .filter(|(id, op)| by_width(op) && state.done.contains_key(&key(id, "exec")))
+        .filter(|(id, _)| {
+            state
+                .done
+                .get(&key(id, "room_at"))
+                .is_some_and(|t| now - *t <= LEND_FRESH)
+        })
+        .map(|(id, _)| {
+            let behind: i64 = echelons(state, id)
+                .iter()
+                .filter_map(|(_, e)| army_row(roster, e)?["division_count"].as_i64())
+                .sum();
+            let room = state.done.get(&key(id, "room")).copied().unwrap_or(0) - behind;
+            (id.clone(), room)
+        })
+        .collect();
+    let mut idle: Vec<&Value> = list(roster, "armies")
+        .iter()
+        .filter(|r| r["division_count"].as_i64().unwrap_or(0) > 0)
+        .filter(|r| {
+            let n = text(&r["army"]);
+            !n.is_empty() && !state.op_owned.contains_key(n)
+        })
+        .collect();
+    idle.sort_by_key(|r| -r["division_count"].as_i64().unwrap_or(0));
+    for row in idle {
+        let name = text(&row["army"]).to_string();
+        let n = row["division_count"].as_i64().unwrap_or(0);
+        // its own operation has started: that operation owns it from the next refresh
+        if named_by(&*state, &name, "").is_some_and(|o| started(state, &o)) {
+            continue;
+        }
+        if let Some((_, why)) = kept.iter().find(|(k, _)| *k == name) {
+            lines.push(format!(
+                "{name} ({n}): kept, {}",
+                if why.is_empty() {
+                    "lend.keep without a reason"
+                } else {
+                    why.as_str()
+                }
+            ));
+            continue;
+        }
+        if in_contact(roster, wars, &name) {
+            lines.push(format!(
+                "{name} ({n}): meets an enemy, holds where it stands"
+            ));
+            continue;
+        }
+        let Some((b, room)) = rooms
+            .iter_mut()
+            .filter(|(_, r)| *r > 0)
+            .max_by_key(|(_, r)| *r)
+        else {
+            let seen: Vec<String> = rooms.iter().map(|(b, r)| format!("{b} {r}")).collect();
+            lines.push(format!(
+                "{name} ({n}): idle, no executing operation has room on its front ({})",
+                if seen.is_empty() {
+                    "no width reading".to_string()
+                } else {
+                    seen.join(", ")
+                }
+            ));
+            continue;
+        };
+        let op = active
+            .iter()
+            .find(|(id, _)| id.as_str() == b.as_str())
+            .map(|(_, op)| op)
+            .expect("a borrower is active");
+        let taken: HashSet<String> = echelons(state, b).into_iter().map(|(s, _)| s).collect();
+        let src = list(op, "formations")
+            .iter()
+            .filter(|f| !matches!(text(&f["role"]), "mobile" | "wing"))
+            .map(|f| name_of(state, roster, text(&f["army"])))
+            .filter(|s| !s.is_empty() && !taken.contains(s))
+            .filter_map(|s| {
+                let d = army_row(roster, &s)?["division_count"].as_i64()?;
+                Some((s, d))
+            })
+            .min_by_key(|(_, d)| *d)
+            .map(|(s, _)| s);
+        let Some(src) = src else {
+            lines.push(format!(
+                "{name} ({n}): idle, every line army of {b} has an echelon already"
+            ));
+            continue;
+        };
+        let later = named_by(&*state, &name, b);
+        state
+            .layout
+            .insert(format!("echelon:{b}:{src}"), name.clone());
+        state
+            .done
+            .entry(key(b, &format!("echmade:{name}")))
+            .or_insert(now);
+        state.done.insert(key(b, &format!("lent:{name}")), now);
+        state.op_owned.insert(name.clone(), b.clone());
+        lines.push(format!(
+            "{name} ({n}): lent to {b} (room {room}) as the echelon of {src}{}",
+            match later {
+                Some(o) => format!(", until {o} starts its prepare"),
+                None => String::new(),
+            }
+        ));
+        *room -= n;
+    }
+    if !lines.is_empty() {
+        state.op_notes.insert("lend".into(), lines.join("; "));
+    }
 }
 
 /// Hold orders an idle army may get before it is left alone.
@@ -8811,6 +9041,9 @@ fn width_caps(
         .iter()
         .map(|p| fg.standing.get(p).copied().unwrap_or(0))
         .sum();
+    // the room the lend rule reads (LEND THE IDLE): what the battles take beyond what stands there
+    state.done.insert(key(id, "room"), total - on);
+    state.done.insert(key(id, "room_at"), now);
     let over: Vec<String> = {
         let mut v: Vec<(i64, i64, i64)> = caps
             .iter()

@@ -461,6 +461,24 @@ fn nudge(state: &mut State, kinds: &[&str]) -> usize {
     before - state.bad.len()
 }
 
+/// How long a refused order rests (engineer 102, 28 Nov 2026: the plain 30 days of the missing
+/// line, the trade pair and the officer corps pick, reviewed). The game's own refusal (a rule, a
+/// requirement, a slot, a relation: `game_rule_refusal`) stands until research, a law, the market
+/// or the relation changes, and the game shows no earlier sign of that change: 30 days, while the
+/// lane's game alert (missing_equipment_production, unfulfilled_import_requests,
+/// modify_officer_corps) still nudges the lane's own cadence every day it is lit. A passing failure
+/// (the screen, a read-back, a timeout: `passing_failure`) is the tool's, not the game's: the next
+/// day. Anything else rests a week, so an unknown fault is not repeated daily.
+fn refusal_rest(why: &str) -> GameHour {
+    if super::game_rule_refusal(why) {
+        30 * DAY
+    } else if why.split(':').map(str::trim).any(super::passing_failure) {
+        DAY
+    } else {
+        7 * DAY
+    }
+}
+
 /// hoi4_supply, read at most once a game day (None when unreadable).
 pub(super) fn supply(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Value> {
     if let Some((at, read)) = &state.manage.supply {
@@ -707,7 +725,7 @@ pub(super) fn missing_line_step(
             "ml",
         )?;
         if !ok {
-            state.skip(now, "mlinee", family(&equipment), 30 * DAY);
+            state.skip(now, "mlinee", family(&equipment), refusal_rest(&why));
         }
         let line = format!(
             "missing equipment: one factory from {donor} ({have} -> {}) for a {equipment} line: {ok} {why}",
@@ -724,7 +742,7 @@ pub(super) fn missing_line_step(
         "ml",
     )?;
     if !ok {
-        state.skip(now, "mlinee", family(&equipment), 30 * DAY);
+        state.skip(now, "mlinee", family(&equipment), refusal_rest(&why));
     }
     let line = format!("missing equipment: a {equipment} line on one factory: {ok} {why}");
     note(state, key, line.clone());
@@ -3343,7 +3361,12 @@ fn trade_judge_rule(
         )?;
         if !ok {
             state.skip(now, "mtradej", "x", DAY);
-            state.skip(now, "tradesell", &format!("{resource}@{country}"), 30 * DAY);
+            state.skip(
+                now,
+                "tradesell",
+                &format!("{resource}@{country}"),
+                refusal_rest(&why),
+            );
         }
         let line = format!(
             "{resource} {deficit:.1} short: {what} {amount} from {country}: {ok}{}",
@@ -5485,7 +5508,7 @@ fn officer_corps_step(
             state.skip(now, "ofc", &key, DAY);
         } else {
             *state.manage.ofc_refused.entry(key.clone()).or_insert(0) += 1;
-            state.skip(now, "ofc", &key, 30 * DAY);
+            state.skip(now, "ofc", &key, refusal_rest(&why));
         }
         let early = past_when.map_or(String::new(), |d| {
             format!(" (its when did not hold; the pick stood open {d} days)")
@@ -14625,6 +14648,24 @@ mod tests {
         assert_eq!(
             nearest_base_to(&bases, (300.0, 0.0), Some(92), 100, &centers),
             None
+        );
+    }
+
+    #[test]
+    fn a_refused_order_rests_by_what_refused_it() {
+        assert_eq!(
+            refusal_rest("not_available: the equipment is not researched"),
+            30 * DAY
+        );
+        assert_eq!(
+            refusal_rest("NotApplied: refused_by_game_check: the game's check"),
+            30 * DAY
+        );
+        assert_eq!(refusal_rest("input_readback_failed: no read-back"), DAY);
+        assert_eq!(refusal_rest("Diverged: gui_timeout"), DAY);
+        assert_eq!(
+            refusal_rest("invalid_arguments: line must be 0..63"),
+            7 * DAY
         );
     }
 }

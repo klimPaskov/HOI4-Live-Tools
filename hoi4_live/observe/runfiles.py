@@ -35,7 +35,7 @@ def operations(done):
             continue
         op, step = parts[1], parts[2]
         o = ops.setdefault(op, {"steps": 0, "fought": [], "ended": False, "executing": False,
-                                "prepared": False})
+                                "prepared": False, "lent": []})
         o["steps"] += 1
         if step == "end":
             o["ended"] = True
@@ -43,6 +43,8 @@ def operations(done):
             o["executing"] = True
         elif step == "fought" and len(parts) > 3:
             o["fought"].append(parts[3])
+        elif step == "lent" and len(parts) > 3:
+            o["lent"].append(":".join(parts[3:]))
         elif step in ("draw", "asm", "fronts", "asmtry", "prep", "prepare"):
             o["prepared"] = True
     for o in ops.values():
