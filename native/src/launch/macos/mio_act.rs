@@ -1882,6 +1882,68 @@ fn run_in_process(
 
 /// The `mio` route and the organisation `key` of the module's read: None = the mouse path (no channel, the family not
 /// usable in this mode, the read failed, or `key` is no own organisation: the mouse path also takes localised names).
+/// `trait` (one key) or `traits` (keys or indices, 1..16, in queue order) as trait_index / trait_indices. The keys are
+/// the scripts' trait tokens; the window draws no text, so they resolve only through the module's read of the
+/// organisation (family `mio` usable): without it the call is refused trait_key_unresolved before any input, and
+/// trait_index from list:true still works. None when the call names no key.
+fn trait_keys_to_indices(
+    args: &serde_json::Map<String, Value>,
+) -> Result<Option<serde_json::Map<String, Value>>> {
+    let one = args.get("trait");
+    let many = args.get("traits");
+    if one.is_none() && many.is_none() {
+        return Ok(None);
+    }
+    if one.is_some() && many.is_some() {
+        return Err(Error::new(
+            "invalid_arguments",
+            "Pass trait (one key) or traits (a list), not both",
+        ));
+    }
+    if args.contains_key("trait_index") || args.contains_key("trait_indices") {
+        return Err(Error::new(
+            "invalid_arguments",
+            "trait/traits name traits by key; leave out trait_index and trait_indices",
+        ));
+    }
+    let asked: Vec<Value> = match (one, many) {
+        (Some(v), _) => {
+            let key = v.as_str().filter(|s| !s.trim().is_empty()).ok_or_else(|| {
+                Error::new("invalid_arguments", "trait must be a trait key (string)")
+            })?;
+            vec![json!(key)]
+        }
+        (_, Some(v)) => v
+            .as_array()
+            .filter(|l| (1..=16).contains(&l.len()))
+            .ok_or_else(|| Error::new("invalid_arguments", "traits must list 1..16 traits"))?
+            .clone(),
+        _ => unreachable!(),
+    };
+    let organization = key_arg(args, "organization")?;
+    let Some((_, m)) = mio_route(organization) else {
+        return Err(Error::new(
+            "trait_key_unresolved",
+            "Trait keys resolve only through the in-process organisations read (family mio): it is not usable \
+             now; nothing was changed. Use trait_index from list:true",
+        ));
+    };
+    let org = m
+        .org(organization)
+        .expect("mio_route checked the organisation");
+    let indices =
+        super::inproc_mio::indices_of(org, &asked).map_err(|(c, msg)| Error::new(c, msg))?;
+    let mut out = args.clone();
+    out.remove("trait");
+    out.remove("traits");
+    if one.is_some() {
+        out.insert("trait_index".into(), json!(indices[0]));
+    } else {
+        out.insert("trait_indices".into(), json!(indices));
+    }
+    Ok(Some(out))
+}
+
 fn mio_route(key: &str) -> Option<(super::inproc::Channel, super::inproc_mio::Mios)> {
     let mut ch = super::inproc::route("mio")?;
     let (m, _) = super::inproc_mio::read(&mut ch).ok()?;
@@ -2009,6 +2071,16 @@ pub(super) fn call(
             ui_action::run_bounded(job, 90, id, token, process, keys, guard, authority, actions)
         }
         "hoi4_mio_trait" => {
+            // traits by key (`trait`, `traits`): resolved to the tree's indices from the module's read of the
+            // organisation (the game's own trait keys in the tree's order), then queued as trait_index(es)
+            let by_key;
+            let args = match trait_keys_to_indices(args)? {
+                Some(a) => {
+                    by_key = a;
+                    &by_key
+                }
+                None => args,
+            };
             super::allowed(
                 args,
                 &[
@@ -2361,7 +2433,7 @@ pub(super) fn tools() -> Vec<Value> {
         json!({"name":"hoi4_mio_design_team","description":"Browse only, assigns nothing (live pp4, 17 Nov 2026): the politics view's organisation slots open a roster to look at; the game assigns an organisation from a task (a production line: hoi4_mio_line; a technology; a design). Kept for older plans: put a military-industrial organisation into a design-team slot of the politics view: Q politics view, the slot's roster button (the `slot`-th shown organisation slot, default 0), the organisation's row in the list (found by its localised name; `organization` is the script key from hoi4_mios, e.g. GER_porsche_organization). Typed refusals: organization_unknown, organization_not_allowed (allowed block rules the tag out) before input; mio_system_absent (the politics view shows no organisation slot: the organisation system is not in use in this game, designers are ideas, use hoi4_politics_choose), slot_unknown, organization_not_offered (lists the rows) found from the windows before the first state-changing click. Verified only by the list closing (political power before/after is recorded): verification gui_only. Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_mio_policy","description":"UNVALIDATED (no live test yet): attach a policy to an organisation: politics view, the slot's roster, the organisation's details button, Open policies, the policy row (by localised name). `organization` and `policy` are script keys (mio_policy_general_ruthless_contracts, ...). Typed refusals: organization_unknown, organization_not_allowed, policy_unknown (before input); mio_system_absent, slot_unknown, organization_not_offered, policy_not_offered (lists the rows) from the windows before the click. Verified from the detail window's attached policy name only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"policy":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","policy","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_mio_line","description":"Attach an organisation to an own production line with ordinary input, or read the line's state. The production line's organisation button (drawn at scale 0.45 in its rect's bottom-left corner) opens the roster of the organisations that make that equipment, under a 'Produce without a Military Industrial Organization' entry; its rows are read from memory (name, organisation or not) before any row click, the list is wheeled to its top, read again, and only an organisation row drawn in full is clicked (live pp14, 17 Nov 2026: Rheinmetall attached to a new anti-air line). The last line, whose button the screen edge cuts, is moved to the top for the roster and back to the bottom after. `organization` (localised name or key) picks the row, else the first organisation offered. A line that has an organisation answers assigned, already_attached without input. list:true opens the roster, answers attached and offered (the organisations' names) and closes it, changing nothing. Verified from the line's own row (has_mio_background). A line costs no political power. The politics view's organisation slots only browse rosters. The line is addressed like hoi4_production_set (line = entry_index from hoi4_production_lines, with its equipment). Typed refusals: invalid_target, organization_unknown, organization_not_allowed (before input); line_takes_no_organization (no organisation makes the equipment: the line shows no button, its button is disabled, or its roster offers only the 'Produce without' row); organization_not_offered (the roster's organisations named); row_not_visible (the row is below the five drawn in full); roster_unreadable (the roster's layout is not the reviewed one).","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"organization":{"type":"string","maxLength":128},"list":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_mio_trait","description":"Live-verified (6 Nov 2026 on 1.19.4 with 10 DLCs: a trait queued, read back by reopening the detail window): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"trait_index":{"type":"integer","minimum":0,"maximum":63},"trait_indices":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"integer","minimum":0,"maximum":63},"description":"several traits queued in order in ONE visit of the tree window (the game's completion queue unlocks them as points come); each read back from its queue number; an already queued trait counts as reached; refused ones are listed in the receipt (unchanged)"},"auto":{"type":"integer","minimum":1,"maximum":5,"description":"in the same visit, queue the first open (enabled, visible, not held) traits until this many enabled traits wait in the queue; with trait_indices they come after those"},"list":{"type":"boolean"},"slot":{"type":"integer","minimum":0,"maximum":15},"bulk":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_mio_trait","description":"Live-verified (6 Nov 2026 on 1.19.4 with 10 DLCs: a trait queued, read back by reopening the detail window): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. By key: `trait` (one trait key, the scripts' token) or `traits` (keys or indices in queue order) resolve to the tree's indices through the in-process organisations read (family mio; refused trait_key_unresolved before input when it is not usable, trait_unknown names the organisation's keys). Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"trait":{"type":"string","minLength":1,"maxLength":128,"description":"one trait by its key (the scripts' trait token), resolved in process"},"traits":{"type":"array","minItems":1,"maxItems":16,"items":{"type":["string","integer"]},"description":"traits by key (or index) in queue order, queued in one visit like trait_indices"},"trait_index":{"type":"integer","minimum":0,"maximum":63},"trait_indices":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"integer","minimum":0,"maximum":63},"description":"several traits queued in order in ONE visit of the tree window (the game's completion queue unlocks them as points come); each read back from its queue number; an already queued trait counts as reached; refused ones are listed in the receipt (unchanged)"},"auto":{"type":"integer","minimum":1,"maximum":5,"description":"in the same visit, queue the first open (enabled, visible, not held) traits until this many enabled traits wait in the queue; with trait_indices they come after those"},"list":{"type":"boolean"},"slot":{"type":"integer","minimum":0,"maximum":15},"bulk":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","request_id","lease_token"],"additionalProperties":false}}),
     ]
 }
 
@@ -2529,6 +2601,44 @@ mod tests {
         assert_eq!(trait_refusal(&entries, 2).unwrap().0, "trait_unavailable");
         assert_eq!(trait_refusal(&entries, 3).unwrap().0, "trait_not_visible");
         assert_eq!(trait_refusal(&entries, 9).unwrap().0, "trait_unknown");
+    }
+
+    #[test]
+    fn trait_keys_are_checked_before_any_read_and_refused_without_the_module() {
+        let map = |v: Value| v.as_object().unwrap().clone();
+        assert!(
+            trait_keys_to_indices(&map(json!({"organization":"GER_x","trait_index":1})))
+                .unwrap()
+                .is_none()
+        );
+        for bad in [
+            json!({"organization":"GER_x","trait":"a","traits":["b"]}),
+            json!({"organization":"GER_x","trait":"a","trait_index":1}),
+            json!({"organization":"GER_x","traits":[]}),
+            json!({"organization":"GER_x","trait":7}),
+        ] {
+            assert_eq!(
+                trait_keys_to_indices(&map(bad.clone())).unwrap_err().code,
+                "invalid_arguments",
+                "{bad}"
+            );
+        }
+        // no module channel in the tests: a key cannot resolve, nothing is guessed
+        std::env::remove_var("HOI4_INPROC_SOCK");
+        assert_eq!(
+            trait_keys_to_indices(&map(
+                json!({"organization":"GER_x","trait":"GER_mio_trait_a"})
+            ))
+            .unwrap_err()
+            .code,
+            "trait_key_unresolved"
+        );
+        let schema = tools()
+            .into_iter()
+            .find(|t| t["name"] == "hoi4_mio_trait")
+            .unwrap();
+        assert!(schema["inputSchema"]["properties"]["trait"].is_object());
+        assert!(schema["inputSchema"]["properties"]["traits"].is_object());
     }
 
     #[test]

@@ -130,7 +130,7 @@ class PlanSchemaCoverage(unittest.TestCase):
     def test_operation_keys_the_executor_reads_are_in_the_schema(self):
         op = _deref(self.schema["properties"]["operations"], self.schema)["items"]["properties"]
         self.assertIn("replace_arrows", op)
-        for k in ("orders_by", "axis_by", "planning_gate", "spear_pockets", "flank_guard", "opening"):
+        for k in ("orders_by", "axis_by", "planning_gate", "weather_gate", "spear_pockets", "flank_guard", "opening"):
             self.assertIn(k, op)
         self.assertEqual(set(op["stacking"]["properties"]) >= {"by_width", "keep", "battle_reserve"}, True)
         self.assertIn("axis_by", op["formations"]["items"]["properties"]["offensive"]["properties"])
@@ -571,7 +571,7 @@ class CoverageKeys(unittest.TestCase):
                                             {"mission": "counter_intelligence", "target": "ETH"},
                                             {"mission": "propaganda", "country": "ETH"}], "when": "1936.6.1",
                              "decryption_target": "ETH"},
-            "mio": [{"organisation": "ITA_ansaldo_organization", "traits": [0, "3"], "when": "1936.2.1", "slot": 1,
+            "mio": [{"organisation": "ITA_ansaldo_organization", "traits": [0, "3", "ITA_mio_trait_x"], "when": "1936.2.1", "slot": 1,
                      "design_team": True, "policy": "mio_policy_x", "line": "infantry_equipment_1"},
                     {"organization": "ITA_fiat_organization", "design_team": 2}],
             "trade": [{"id": "t", "resource": "steel", "amount": "needed", "from": "USA", "when": "1936.1.1"},
