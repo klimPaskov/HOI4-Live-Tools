@@ -31,7 +31,8 @@ pub(super) struct RegionGeometry {
 
 /// Region geometry from the game files (cached per content folder); None when the map is unreadable.
 pub(super) fn geometry(dir: &Path) -> Option<Arc<RegionGeometry>> {
-    static CACHE: OnceLock<Mutex<HashMap<std::path::PathBuf, Arc<RegionGeometry>>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<HashMap<std::path::PathBuf, Arc<RegionGeometry>>>> =
+        OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Some(found) = cache.lock().unwrap().get(dir) {
         return Some(found.clone());
@@ -83,7 +84,10 @@ impl RegionGeometry {
     pub(super) fn coverage(&self, region: i32, base: i32, range_km: f64) -> Option<f64> {
         let from = *self.province.get(&base)?;
         let pts = self.land.get(&region).filter(|p| !p.is_empty())?;
-        let hit = pts.iter().filter(|p| self.km(from, **p) <= range_km).count();
+        let hit = pts
+            .iter()
+            .filter(|p| self.km(from, **p) <= range_km)
+            .count();
         Some((hit as f64 / pts.len() as f64 * 1000.0).round() / 1000.0)
     }
 
@@ -100,7 +104,12 @@ impl RegionGeometry {
 
 /// The coverage row a wing carries: {region_id, share, range_km, range_for_full_km}; Null when
 /// the wing has no region, no range or no position.
-pub(super) fn wing_row(g: &RegionGeometry, region: i32, base_province: i32, range_km: Option<f64>) -> Value {
+pub(super) fn wing_row(
+    g: &RegionGeometry,
+    region: i32,
+    base_province: i32,
+    range_km: Option<f64>,
+) -> Value {
     let Some(range) = range_km.filter(|r| *r > 0.0) else {
         return Value::Null;
     };

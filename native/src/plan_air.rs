@@ -143,7 +143,10 @@ pub(super) fn allocate(
     let mut regions: Vec<&Region> = regions.iter().filter(|r| r.weight > 0.0).collect();
     regions.sort_by(|a, b| b.weight.total_cmp(&a.weight).then(a.id.cmp(&b.id)));
     if regions.is_empty() {
-        return (orders, vec!["no battle of ours: no region to fly over".into()]);
+        return (
+            orders,
+            vec!["no battle of ours: no region to fly over".into()],
+        );
     }
     let total_weight: f64 = regions.iter().map(|r| r.weight).sum();
     let mut used: Vec<bool> = vec![false; wings.len()];
@@ -184,7 +187,15 @@ pub(super) fn allocate(
             if got >= want && got > 0.0 {
                 break;
             }
-            if assign(&wings[i], r, "air_superiority", geo, cfg, &mut orders, &mut notes) {
+            if assign(
+                &wings[i],
+                r,
+                "air_superiority",
+                geo,
+                cfg,
+                &mut orders,
+                &mut notes,
+            ) {
                 got += wings[i].planes;
             }
             used[i] = true;
@@ -199,11 +210,22 @@ pub(super) fn allocate(
             ));
         }
     }
-    if let Some(first) = won.first().and_then(|id| regions.iter().find(|r| r.id == *id)) {
+    if let Some(first) = won
+        .first()
+        .and_then(|id| regions.iter().find(|r| r.id == *id))
+    {
         let rest: Vec<usize> = fighters.iter().copied().filter(|i| !used[*i]).collect();
         for i in rest {
             if reaches(geo, cfg, &wings[i], first) != Some(false) {
-                assign(&wings[i], first, "air_superiority", geo, cfg, &mut orders, &mut notes);
+                assign(
+                    &wings[i],
+                    first,
+                    "air_superiority",
+                    geo,
+                    cfg,
+                    &mut orders,
+                    &mut notes,
+                );
                 used[i] = true;
             }
         }
@@ -482,7 +504,10 @@ pub(super) fn step(
             region,
         } = o
         {
-            groups.entry((mission, *region)).or_default().push(wing.clone());
+            groups
+                .entry((mission, *region))
+                .or_default()
+                .push(wing.clone());
         }
     }
     let Some(((mission, region), mut names)) = groups.into_iter().max_by_key(|(_, v)| v.len())
@@ -526,9 +551,15 @@ mod tests {
 
     fn centers() -> HashMap<i32, (f64, f64)> {
         // states 1..3 bases at x 0, 50, 100; battle states 10 at x 100, 20 at x 300 (1 km per pixel)
-        [(1, (0.0, 0.0)), (2, (50.0, 0.0)), (3, (100.0, 0.0)), (10, (100.0, 0.0)), (20, (300.0, 0.0))]
-            .into_iter()
-            .collect()
+        [
+            (1, (0.0, 0.0)),
+            (2, (50.0, 0.0)),
+            (3, (100.0, 0.0)),
+            (10, (100.0, 0.0)),
+            (20, (300.0, 0.0)),
+        ]
+        .into_iter()
+        .collect()
     }
 
     fn cfg() -> Config {
@@ -564,12 +595,24 @@ mod tests {
         let regions = vec![region(5, 10.0, 10, Some(300.0)), region(6, 5.0, 20, None)];
         let (orders, notes) = allocate(&wings, &regions, &mut geo, &cfg());
         assert!(notes.iter().any(|n| n.contains("stay out")), "{notes:?}");
-        assert!(orders.iter().all(|o| matches!(o, Order::Mission { region: 6, .. })));
+        assert!(orders
+            .iter()
+            .all(|o| matches!(o, Order::Mission { region: 6, .. })));
         assert_eq!(orders.len(), 2);
         // the same sky with 100 enemy fighters: 150 wanted, both wings go to region 5
         let regions = vec![region(5, 10.0, 10, Some(100.0)), region(6, 5.0, 20, None)];
         let (orders, _) = allocate(&wings, &regions, &mut geo, &cfg());
-        assert!(orders.iter().all(|o| matches!(o, Order::Mission { region: 5, mission: "air_superiority", .. })), "{orders:?}");
+        assert!(
+            orders.iter().all(|o| matches!(
+                o,
+                Order::Mission {
+                    region: 5,
+                    mission: "air_superiority",
+                    ..
+                }
+            )),
+            "{orders:?}"
+        );
     }
 
     #[test]
@@ -587,9 +630,14 @@ mod tests {
         ];
         let regions = vec![region(5, 10.0, 20, Some(300.0)), region(6, 5.0, 10, None)];
         let (orders, notes) = allocate(&wings, &regions, &mut geo, &cfg());
-        assert!(!orders
-            .iter()
-            .any(|o| matches!(o, Order::Mission { region: 5, mission: "cas", .. })));
+        assert!(!orders.iter().any(|o| matches!(
+            o,
+            Order::Mission {
+                region: 5,
+                mission: "cas",
+                ..
+            }
+        )));
         assert!(orders.contains(&Order::Rebase {
             wing: "S1".into(),
             state: 3
@@ -623,7 +671,8 @@ mod tests {
     fn config_is_off_unless_named() {
         assert!(cfg_of(&json!({})).is_none());
         assert!(cfg_of(&json!({"air_situation": {"enabled": false}})).is_none());
-        let (c, every, probes, _) = cfg_of(&json!({"air_situation": {"fighter_ratio": 2.0}})).unwrap();
+        let (c, every, probes, _) =
+            cfg_of(&json!({"air_situation": {"fighter_ratio": 2.0}})).unwrap();
         assert_eq!(c.fighter_ratio, 2.0);
         assert_eq!(every, 3 * DAY);
         assert_eq!(probes, 2);

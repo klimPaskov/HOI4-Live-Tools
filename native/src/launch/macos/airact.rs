@@ -1579,9 +1579,11 @@ pub(super) fn regions_view(
     let mut rows: BTreeMap<i32, (Vec<Value>, Vec<Value>)> = BTreeMap::new();
     for w in wings {
         if w.region_id > 0 {
-            let cov = geo.zip(province_of(w.base_id)).map_or(Value::Null, |(g, p)| {
-                super::aircover::wing_row(g, w.region_id, p, w.range_km)
-            });
+            let cov = geo
+                .zip(province_of(w.base_id))
+                .map_or(Value::Null, |(g, p)| {
+                    super::aircover::wing_row(g, w.region_id, p, w.range_km)
+                });
             rows.entry(w.region_id)
                 .or_default()
                 .0
