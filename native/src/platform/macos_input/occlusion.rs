@@ -61,15 +61,22 @@ unsafe fn integer(dict: CFTypeRef, key: CFTypeRef) -> Result<i32> {
     }
     Ok(result)
 }
+/// The longest window label decoded, in UTF-16 units. A window at the point may carry a long title (a terminal's
+/// title holds its whole command line: 259 units on 28 Nov ended every click with input_window_metadata); the bound
+/// keeps the read finite, and the buffer holds it in UTF-8 (at most 4 bytes a unit) with its terminator.
+const LABEL_UNITS: isize = 1024;
 unsafe fn optional_text(dict: CFTypeRef, key: CFTypeRef) -> Result<Option<String>> {
     let value = super::CFDictionaryGetValue(dict, key);
     if value.is_null() {
         return Ok(None);
     }
-    if CFGetTypeID(value) != CFStringGetTypeID() || !(0..=256).contains(&CFStringGetLength(value)) {
+    label(value).map(Some)
+}
+unsafe fn label(value: CFTypeRef) -> Result<String> {
+    if CFGetTypeID(value) != CFStringGetTypeID() || !(0..=LABEL_UNITS).contains(&CFStringGetLength(value)) {
         return Err(invalid());
     }
-    let mut buffer = [0u8; 1025];
+    let mut buffer = vec![0u8; LABEL_UNITS as usize * 4 + 1];
     if !CFStringGetCString(
         value,
         buffer.as_mut_ptr(),
@@ -79,11 +86,9 @@ unsafe fn optional_text(dict: CFTypeRef, key: CFTypeRef) -> Result<Option<String
         return Err(invalid());
     }
     let end = buffer.iter().position(|b| *b == 0).ok_or_else(invalid)?;
-    Ok(Some(
-        std::str::from_utf8(&buffer[..end])
-            .map_err(|_| invalid())?
-            .into(),
-    ))
+    Ok(std::str::from_utf8(&buffer[..end])
+        .map_err(|_| invalid())?
+        .into())
 }
 fn cursor_point() -> Result<[f64; 2]> {
     let event = Owned(unsafe { super::CGEventCreate(std::ptr::null()) });

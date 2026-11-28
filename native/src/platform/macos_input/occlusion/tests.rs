@@ -149,3 +149,27 @@ fn the_dock_counts_as_shown_only_on_screen_at_the_dock_level() {
         20
     ));
 }
+
+#[link(name = "CoreFoundation", kind = "framework")]
+extern "C" {
+    fn CFStringCreateWithCString(alloc: CFTypeRef, text: *const u8, encoding: u32) -> CFTypeRef;
+}
+fn cf_string(text: &str) -> Owned {
+    let c = std::ffi::CString::new(text).unwrap();
+    Owned(unsafe { CFStringCreateWithCString(std::ptr::null(), c.as_ptr().cast(), 0x08000100) })
+}
+#[test]
+fn a_long_window_title_at_the_point_is_read_not_refused() {
+    // a terminal's title of 259 units refused every click on 28 Nov (input_window_metadata)
+    let title = format!("{} \u{2014} zsh", "x".repeat(250));
+    let s = cf_string(&title);
+    assert_eq!(unsafe { label(s.0) }.unwrap(), title);
+    let wide = "\u{4e16}".repeat(LABEL_UNITS as usize);
+    let s = cf_string(&wide);
+    assert_eq!(unsafe { label(s.0) }.unwrap(), wide);
+}
+#[test]
+fn a_label_beyond_the_bound_is_still_refused() {
+    let s = cf_string(&"x".repeat(LABEL_UNITS as usize + 1));
+    assert_eq!(unsafe { label(s.0) }.unwrap_err().code, "input_window_metadata");
+}
