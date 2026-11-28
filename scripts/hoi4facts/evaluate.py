@@ -199,7 +199,36 @@ def cmd_construction(a, sit):
     return r, text_construction(r)
 
 
-COMMANDS = {"design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
+def text_research(r):
+    m = r["model"]
+    out = [f"RESEARCH for {r.get('country', '')} at {r.get('date', '')}: {r['slots']} slots, research speed "
+           f"{m['research_speed']:+g}; techs: {r['techs']}",
+           f"  value base: {m['base']}; IC per factory-year {m['ic_per_factory_year']:g}; a civilian factory builds "
+           f"{m['build_rate']:g} military factories a year ({m['build_rate_why']}); horizon {m['horizon_years']:g} years",
+           f"  army: {m['army_templates']} fielded templates, {m['army_ic']:g} IC, against {m['enemy_template']}",
+           f"  days: {r['method']}; " + "; ".join(m["defines"])]
+    for i, sl in enumerate(r["picks"], 1):
+        out.append(f"  slot {i}:")
+        for p in sl:
+            extra = f"; bonus {p['bonus']}" if p.get("bonus") else ""
+            out.append(f"    day {p['start_day']:>4} {p['tech']} ({p['days']} days): value {p['value']:g} factory-years,"
+                       f" chain rate {p['rate']:g}/day via {' > '.join(p['chain'])}; parts {p['parts']}{extra}")
+            if p.get("equipment") or p.get("unvalued"):
+                out.append(f"         equipment {p['equipment'] or '-'}; unvalued {p['unvalued'] or '-'}")
+            out.append(f"         next best then: {p['next_best']}")
+    for b in r["bonuses"]:
+        out.append(f"  bonus {b['bonus']}: {b['advice']}")
+    return out
+
+
+def cmd_research(a, sit):
+    from hoi4facts.evaluators import research
+    r = research.evaluate(sit, slots=a.slots, picks=a.picks, horizon_years=a.horizon_years, enemies=a.enemy or None)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_research(r)
+
+
+COMMANDS = {"research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
             "construction": cmd_construction}
 
 
@@ -232,6 +261,10 @@ def parser():
     add("refresh", "tech")
     p = add("template", "role")
     p.add_argument("--width", type=int, default=None, help="a width target instead of the theatre's terrain")
+    p = add("research")
+    p.add_argument("--slots", type=int, default=None)
+    p.add_argument("--picks", type=int, default=3, help="picks per slot")
+    p.add_argument("--horizon-years", type=float, default=4.0, help="years the value is counted for")
     p = add("construction")
     p.add_argument("--war-date", default=None, help="the planned war date (the 'standing' horizon)")
     p.add_argument("--war-years", type=float, default=2.0, help="the war's planned length (the 'output' horizon)")

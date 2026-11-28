@@ -1935,10 +1935,16 @@ def check_affairs_keys(game, plan, meta, rep):
             if isinstance(e.get("policy"), str) and policies and e["policy"] not in policies:
                 rep.error(f"{label}: no MIO policy {e['policy']} in common/military_industrial_organization/policies")
             entries = len(orgs[org]["traits"]) + 1  # the tree window lists the initial trait and the traits
+            tokens = {t.get("token") for t in orgs[org]["traits"]}
+            tokens.add((orgs[org].get("initial_trait") or {}).get("token"))
+            tokens.discard(None)
             for t in e.get("traits") or []:
                 idx = int(t) if isinstance(t, str) and t.isdigit() else t
                 if _is_int(idx) and idx >= entries:
                     rep.error(f"{label}: trait_index {idx} but the tree has {entries} entries (initial trait included)")
+                elif isinstance(idx, str) and tokens and idx not in tokens:
+                    rep.error(f"{label}: no trait {idx} in {org}'s tree (include, remove_trait and add_trait applied; "
+                              f"facts.py mio {tag} --id {org} lists the tokens)")
 
     tr = plan.get("trade")
     deals = tr if isinstance(tr, list) else (tr.get("deals") if isinstance(tr, dict) else None)

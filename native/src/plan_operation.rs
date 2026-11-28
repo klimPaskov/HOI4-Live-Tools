@@ -59,6 +59,8 @@ mod capacity;
 mod ground;
 #[path = "plan_operation/pace.rs"]
 mod pace;
+#[path = "plan_operation/weather_gate.rs"]
+mod weather_gate;
 
 /// Game days without a gain on the line before the next line is drawn.
 const STALL_DAYS: i64 = 7;
@@ -3251,7 +3253,14 @@ fn one(
         // stood from W-142 to the end of the war while the attackers read 0.34-0.43)
         state.op_notes.remove(&format!("{id}:planning"));
     }
-    if !resting && gate.is_none() {
+    // THE GROUND (`weather_gate`, on unless false): bad ground in the attack's regions that
+    // clears within the wait holds the declaration (weather_gate.rs)
+    let ground = if !resting && gate.is_none() && !before_war_of(op, &at_war) {
+        weather_held(state, tools, id, op, &units, now)
+    } else {
+        None
+    };
+    if !resting && gate.is_none() && ground.is_none() {
         state.done.entry(key(id, "ready")).or_insert(now);
     }
     // PRIMED: the attack itself reads back (no front or arrow rests) while only secondary orders
@@ -11115,6 +11124,70 @@ fn planning_held(
             (now - d) / DAY
         ))
     ))
+}
+
+/// The ground gate's step: one hoi4_weather read a day for the states the attack goes into
+/// (the units' lines and the offensive's target), judged by `weather_gate::judge`; the hold
+/// or the cost goes into the operation's notes.
+fn weather_held(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    op: &Value,
+    units: &[Unit],
+    now: GameHour,
+) -> Option<String> {
+    let cfg = &op["weather_gate"];
+    if *cfg == json!(false) {
+        return None;
+    }
+    let wait = cfg["max_wait_days"]
+        .as_i64()
+        .or_else(|| op["planning_gate"]["max_wait_days"].as_i64())
+        .unwrap_or(7);
+    let nk = format!("{id}:ground");
+    let rk = key(id, "ground_read");
+    let hk = key(id, "ground_hold");
+    if state.done.get(&rk).is_some_and(|t| now - *t < DAY) {
+        return state
+            .done
+            .contains_key(&hk)
+            .then(|| state.op_notes.get(&nk).cloned().unwrap_or_default());
+    }
+    let mut states: Vec<i64> = units.iter().flat_map(|u| u.line.iter().copied()).collect();
+    states.extend(ints(&op["offensive"]["target"]["states"]));
+    states.sort_unstable();
+    states.dedup();
+    states.truncate(64);
+    state.done.insert(rk, now);
+    if states.is_empty() {
+        return None;
+    }
+    let answer = tools
+        .call(
+            "hoi4_weather",
+            &json!({"states": states, "days": wait.clamp(0, 120)}),
+        )
+        .unwrap_or(Value::Null);
+    let waited = state
+        .done
+        .get(&key(id, "due"))
+        .map_or(0, |d| ((now - *d) / DAY).max(0));
+    let (hold, note) = weather_gate::judge(&answer, wait, waited);
+    match hold.as_ref().or(note.as_ref()) {
+        Some(line) => {
+            state.op_notes.insert(nk, format!("operation {id}: {line}"));
+        }
+        None => {
+            state.op_notes.remove(&nk);
+        }
+    }
+    if hold.is_some() {
+        state.done.insert(hk, now);
+    } else {
+        state.done.remove(&hk);
+    }
+    hold.map(|h| format!("operation {id}: {h}"))
 }
 
 /// SPEARHEAD POCKETS (`spear_pockets: true`; `pockets: false` switches every pocket off): the
