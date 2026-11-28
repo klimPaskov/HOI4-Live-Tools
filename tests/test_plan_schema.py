@@ -459,6 +459,8 @@ class CoverageKeys(unittest.TestCase):
                 "exercise_fill": 0.9, "command_power_max": 80, "cp_trait_prefer": [],
                 # plan_manage.rs: idle wings train, fuel cuts missions, unplanned reserve founds wings
                 "air_training": True, "air_training_why": "", "air_training_fuel": 0.5, "fuel_days_floor": 30,
+                # engineer 125: training stops after the game's cap (facts.py air-training); null: no limit
+                "air_training_days": None,
                 "air_reserve_min": 50,
                 # plan_military.rs: wings to the attacking armies (air_attach_rule)
                 "air_attach": {},

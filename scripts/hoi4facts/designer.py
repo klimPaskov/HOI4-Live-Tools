@@ -48,6 +48,12 @@ ROLES = {
     "strategic_bomber": {"kind": "plane", "families": ("large_plane_airframe",), "type": "strategic_bomber",
                          "mission": "strategic_bomber",
                          "weights": {"air_bombing": 1.0, "air_defence": 0.4}},
+    # engineer 125 (G250): the scout plane (the recon camera module adds the scout_plane type and the recon mission):
+    # it must live over the enemy's air (speed, agility, defence) and reach the front (range)
+    # (slot_type None: the weapon slots keep their own weapons, the camera adds the type; checked on the whole design)
+    "recon": {"kind": "plane", "families": ("small_plane_airframe",), "type": "scout_plane", "slot_type": None,
+              "mission": "recon",
+              "weights": {"maximum_speed": 0.06, "air_agility": 0.6, "air_defence": 1.0, "air_range": 0.002}},
     "tank_medium": {"kind": "tank", "families": ("medium_tank_chassis",), "type": None, "mission": None,
                     "weights": {"soft_attack": 0.6, "hard_attack": 0.8, "breakthrough": 0.5, "armor_value": 0.7,
                                 "ap_attack": 0.4, "reliability": 10.0, "maximum_speed": 0.5}},
@@ -378,9 +384,10 @@ def best(cat, role, bases, mods, need=None, top=3, beam=60, max_cost=None, objec
         slots = sorted(cat.slots(base), key=lambda s: (not any("engine" in c for c in s["categories"]),))
         options = []
         for s in slots:
+            stype = spec.get("slot_type", spec["type"])
             opts = [m for m in mods if cat.modules[m]["category"] in s["categories"]
-                    and (not cat.modules[m]["allow_types"] or not spec["type"]
-                         or spec["type"] in cat.modules[m]["allow_types"])]
+                    and (not cat.modules[m]["allow_types"] or not stype
+                         or stype in cat.modules[m]["allow_types"])]
             options.append([None] if not opts else ([] if s["required"] else [None]) + sorted(opts))
         partial = [{}]
         for s, opts in zip(slots, options):
@@ -395,7 +402,7 @@ def best(cat, role, bases, mods, need=None, top=3, beam=60, max_cost=None, objec
             scored = []
             for q in nxt:
                 ev = evaluate(cat, base, q, spec["mission"], bonus)
-                ok_type = not spec["type"] or spec["type"] in ev["types"] or not any(
+                ok_type = not spec["type"] or "slot_type" in spec or spec["type"] in ev["types"] or not any(
                     cat.modules[m]["types"] for m in q.values())
                 if not ok_type:
                     continue
