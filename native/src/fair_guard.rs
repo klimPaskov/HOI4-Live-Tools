@@ -23,9 +23,7 @@
 //!                               or disbanding a faction (fair.factions); Japan's side joining or
 //!                               inviting the European Axis or the reverse (fair.factions); a
 //!                               war-goal justification on the Soviet Union by Germany or Japan's
-//!                               side (fair.timing: the focus war goal only); volunteers outside
-//!                               Spain, the USA to the Allies, the Soviet Union or China and the
-//!                               Soviet Union to China (fair.volunteers)
+//!                               side (fair.timing: the focus war goal only)
 //!   hoi4_faction_leave          when the plan creates the faction it leaves (fair.factions)
 //!   hoi4_template_create/_edit  space marines (fair.space_marines) and paratrooper templates
 //!                               below 20 width (fair.paratroopers), from the unit files
@@ -36,9 +34,14 @@
 //!                               (fair.submarines), a mine-laying module (fair.naval_mines)
 //!   hoi4_production_add, hoi4_design_set_production  a submarine above II named by its
 //!                               equipment key (fair.submarines)
-//!   hoi4_operative_assign, hoi4_operation_start  an Axis collaboration-government operation on
-//!                               the Soviet Union (fair.collaboration)
 //!   hoi4_paradrop               more than 18 divisions named in one drop (fair.paratroopers)
+//!
+//! Allowed under FAIR by the owner's decision of 28 Nov 2026 (PROGRAMME-1123.md, "Owner's decisions,
+//! 28 Nov"): "FAIR allows, on the agent's own initiative: volunteer divisions, air volunteers,
+//! lend-lease and attaches", and "The Soviet COLLABORATION government operation: allowed". So no
+//! guard here refuses volunteers, air volunteers, lend-lease, attaches or a collaboration
+//! government. Paratroop drops are "not used by default under FAIR" (his words); the
+//! airborne rule (plan_airborne.rs) applies that default (META or a roleplay request turns them on).
 //!
 //! Not guarded (needs live state the action's arguments do not carry; the player and the plan
 //! lint own them): convoy_raiding at peace and submarine task forces below 5 (hoi4_fleet_mission),
@@ -54,13 +57,9 @@ use crate::error::{Error, Result};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-/// The European Axis, Japan's side and the Allies as the rules name them (historical tags).
+/// The European Axis and Japan's side as the rules name them (historical tags).
 const EURO_AXIS: &[&str] = &["GER", "ITA", "HUN", "ROM", "BUL", "FIN", "SLO", "CRO"];
 const JAPAN_SIDE: &[&str] = &["JAP", "MAN", "SIA", "MEN"];
-const ALLIES: &[&str] = &[
-    "ENG", "FRA", "USA", "CAN", "AST", "NZL", "SAF", "RAJ", "HOL", "BEL", "LUX", "PHI",
-];
-const SPAIN: &[&str] = &["SPR", "SPA", "SPB", "SPC", "SPD"];
 const PARA_WIDTH: f64 = 20.0;
 /// The most paratrooper divisions a FAIR nation has, so the most one drop names.
 const PARA_MAX: usize = 18;
@@ -78,8 +77,6 @@ pub const GUARDED_TOOLS: &[&str] = &[
     "hoi4_design_create",
     "hoi4_production_add",
     "hoi4_design_set_production",
-    "hoi4_operative_assign",
-    "hoi4_operation_start",
     "hoi4_paradrop",
 ];
 
@@ -94,9 +91,6 @@ fn rule_text(rule: &str) -> &'static str {
             "no disbanding factions; Japan's side never joins the Axis and no European Axis nation joins Japan's faction"
         }
         "fair.timing" => "Barbarossa and Japan's war on the Soviet Union start on the focus war goal, never a manual justification",
-        "fair.volunteers" => {
-            "no volunteers outside Spain (the USA may send them to China, the Allies and the Soviet Union; the Soviet Union to China)"
-        }
         "fair.space_marines" => {
             "no space marines: no infantry or cavalry battalions with tank battalions in one division (tank support companies are fine)"
         }
@@ -106,7 +100,6 @@ fn rule_text(rule: &str) -> &'static str {
         "fair.submarines" => {
             "submarines: nothing above Submarine II, no special submarine modules (AIP, coating), at least 5 per submarine fleet, no always engage"
         }
-        "fair.collaboration" => "no Axis collaboration governments in the Soviet Union",
         _ => "a FAIR rule",
     }
 }
@@ -292,7 +285,6 @@ fn breach(
     run: &Run,
     facts: Option<&Facts>,
 ) -> Option<(&'static str, String)> {
-    let me = run.me();
     match name {
         "hoi4_fleet_mission" => {
             let mission = text(args, "mission").to_ascii_lowercase();
@@ -349,21 +341,6 @@ fn breach(
                 .find_map(|key| facts.sub_equipment.get(key).map(|why| (key, why)))
                 .map(|(key, why)| ("fair.submarines", format!("{key}: {why}")))
         }
-        "hoi4_operative_assign" | "hoi4_operation_start" => {
-            let op = format!("{} {}", text(args, "operation"), text(args, "mission"))
-                .to_ascii_lowercase();
-            let target =
-                format!("{}{}", text(args, "country"), text(args, "target")).to_ascii_uppercase();
-            (op.contains("collaboration")
-                && target == "SOV"
-                && (has(EURO_AXIS, me) || has(JAPAN_SIDE, me)))
-            .then(|| {
-                (
-                    "fair.collaboration",
-                    format!("{me} prepares a collaboration government in the Soviet Union"),
-                )
-            })
-        }
         _ => None,
     }
 }
@@ -399,12 +376,6 @@ fn diplomacy(args: &Value, run: &Run) -> Option<(&'static str, String)> {
                 "fair.timing",
                 format!("{action} on the Soviet Union by hand: {me} uses the focus war goal"),
             ))
-        }
-        "volunteers" if !target.is_empty() => {
-            let allowed = has(SPAIN, &target)
-                || (me == "USA" && (has(ALLIES, &target) || target == "SOV" || target == "CHI"))
-                || (me == "SOV" && target == "CHI");
-            (!allowed).then(|| ("fair.volunteers", format!("volunteers to {target}")))
         }
         _ => None,
     }
@@ -711,14 +682,16 @@ mod tests {
             json!({"action": "justify_war_goal", "country": "POL"}),
             &ger,
         );
-        // volunteers
-        assert_eq!(
-            refused(
-                "hoi4_diplomacy_act",
-                json!({"action": "send_volunteers", "country": "CHI"}),
-                &ger
-            ),
-            "fair.volunteers"
+        // volunteers: allowed under FAIR anywhere the game allows them (owner, 28 Nov 2026)
+        allowed(
+            "hoi4_diplomacy_act",
+            json!({"action": "send_volunteers", "country": "CHI"}),
+            &ger,
+        );
+        allowed(
+            "hoi4_diplomacy_act",
+            json!({"action": "start_lend_lease", "country": "FIN"}),
+            &ger,
         );
         allowed(
             "hoi4_diplomacy_act",
@@ -735,13 +708,10 @@ mod tests {
             json!({"action": "send_volunteers", "country": "ENG"}),
             &fair("USA"),
         );
-        assert_eq!(
-            refused(
-                "hoi4_diplomacy_act",
-                json!({"action": "send_volunteers", "country": "ENG"}),
-                &fair("SOV")
-            ),
-            "fair.volunteers"
+        allowed(
+            "hoi4_diplomacy_act",
+            json!({"action": "send_volunteers", "country": "ENG"}),
+            &fair("SOV"),
         );
         // a faction the plan creates is not left (dismantled)
         assert_eq!(
@@ -920,13 +890,11 @@ mod tests {
 
     #[test]
     fn collaboration_in_the_soviet_union() {
-        assert_eq!(
-            refused(
-                "hoi4_operative_assign",
-                json!({"operative": 0, "operation": "prepare_collaboration_government", "country": "SOV"}),
-                &fair("GER")
-            ),
-            "fair.collaboration"
+        // allowed under FAIR by the owner's decision of 28 Nov 2026
+        allowed(
+            "hoi4_operative_assign",
+            json!({"operative": 0, "operation": "prepare_collaboration_government", "country": "SOV"}),
+            &fair("GER"),
         );
         allowed(
             "hoi4_operative_assign",
@@ -938,13 +906,10 @@ mod tests {
             json!({"operative": 0, "mission": "build_intel_network", "state_id": 219}),
             &fair("GER"),
         );
-        assert_eq!(
-            refused(
-                "hoi4_operation_start",
-                json!({"operation": "operation_collaboration_government", "target": "SOV"}),
-                &fair("JAP")
-            ),
-            "fair.collaboration"
+        allowed(
+            "hoi4_operation_start",
+            json!({"operation": "operation_collaboration_government", "target": "SOV"}),
+            &fair("JAP"),
         );
         allowed(
             "hoi4_operation_start",

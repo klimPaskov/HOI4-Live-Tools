@@ -42,6 +42,10 @@ def parse_date(text, lenient=False):
     impossible hour (an OCR misread): the date is kept and the hour is marked uncertain (hour 0)."""
     if not text:
         return None
+    from . import uiprofile
+    prof = uiprofile.active()
+    if prof.month_table() is not None:
+        return _parse_custom(text, lenient, prof)
     t = text.replace("\n", " ")
     m = DATE_RX.search(t)
     if not m:
@@ -52,7 +56,10 @@ def parse_date(text, lenient=False):
         if not m:
             return None
     hour, minute, day, mon, year = m.groups()
-    mon = MONTHS.get(mon[:3].lower())
+    return _date_dict(hour, day, MONTHS.get(mon[:3].lower()), year, m.group(0), lenient)
+
+
+def _date_dict(hour, day, mon, year, matched, lenient):
     try:
         hour, day, year = int(hour), int(day), int(year)
     except ValueError:
@@ -68,11 +75,59 @@ def parse_date(text, lenient=False):
         datetime.date(year, mon, day)
     except ValueError:
         return None
-    out = {"year": year, "month": mon, "day": day, "hour": hour, "text": m.group(0),
+    out = {"year": year, "month": mon, "day": day, "hour": hour, "text": matched,
            "iso": f"{year:04d}-{mon:02d}-{day:02d}T{hour:02d}:00", "hoi4": f"{year}.{mon}.{day}.{hour}"}
     if uncertain:
         out["hour_uncertain"] = True
     return out
+
+
+# A mod's month names (uiprofile): any word of letters (one to three words, any script) between the day and the year.
+CUSTOM_DATE_RX = re.compile(r"(\d{1,2})\s*[:.;]\s*(\d{2})\s*[,.]?\s*(\d{1,2})\s+([^\W\d_]+(?:[ '\u2019-][^\W\d_]+){0,2}?)"
+                            r"\s*[,.]?\s*(\d{4})")
+
+
+def _custom_fix(t):
+    t = re.sub(r"(?<=\s)[a-zA-Z](?=\s+[^\W\d_]{2})", lambda x: x.group(0).translate(_DIGIT_FIX), t)
+    return re.sub(r"(?<![^\W\d_])([0-9OoIlZzaA]{1,2})\s*[:.;]\s*([0-9Oo]{2})",
+                  lambda x: x.group(1).translate(_DIGIT_FIX) + ":" + x.group(2).translate(_DIGIT_FIX), t)
+
+
+def _parse_custom(text, lenient, prof):
+    """parse_date with the month names of the active interface profile (a mod that renames the months)."""
+    t = text.replace("\n", " ")
+    for cand in (t, _custom_fix(t)):
+        for m in CUSTOM_DATE_RX.finditer(cand):
+            hour, minute, day, mon, year = m.groups()
+            month = prof.month_of(mon)
+            if month is None:
+                continue
+            d = _date_dict(hour, day, month, year, m.group(0), lenient)
+            if d:
+                return d
+    return None
+
+
+def unrecognised_month(text):
+    """The month word of a date-shaped text whose month is not a known month name, or None."""
+    from . import uiprofile
+    prof = uiprofile.active()
+    t = (text or "").replace("\n", " ")
+    for cand in (t, _custom_fix(t)):
+        m = CUSTOM_DATE_RX.search(cand)
+        if m:
+            return None if prof.month_of(m.group(4)) is not None else m.group(4)
+    return None
+
+
+def month_error(d):
+    """A sentence naming the unrecognised month of a failed date read (read_date's error dict), or None."""
+    tok = d.get("unrecognised_month") if isinstance(d, dict) else None
+    if not tok:
+        return None
+    return (f"the top-bar date was read but its month '{tok}' is not a known month name (known: "
+            f"{', '.join(d.get('known_months') or [])}); if a mod renames the months, add them to the mod profile "
+            "(months.short / months.long)")
 
 
 def _preps(crop):
@@ -107,7 +162,14 @@ def read_date(img, ocr, scale=1.0):
                     fallback = fb
     if fallback is not None:
         return fallback
-    return {"error": "date not readable", "ocr": attempts}
+    err = {"error": "date not readable", "ocr": attempts}
+    tok = next((x for x in map(unrecognised_month, attempts) if x), None)
+    if tok:
+        from . import uiprofile
+        err["unrecognised_month"] = tok
+        err["known_months"] = uiprofile.active().month_names("short")
+        err["hint"] = month_error(err)
+    return err
 
 
 def date_key(d):

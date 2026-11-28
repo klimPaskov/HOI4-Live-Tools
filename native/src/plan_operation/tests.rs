@@ -1965,8 +1965,8 @@ fn the_far_line_lies_behind_the_points_that_make_the_enemy_capitulate() {
         .fold((0.0, 0.0), |a, p| (a.0 + p.1 / n, a.1 + p.2 / n));
     // Lwow, Polesie, Nowogrodek, Vilna: the eastern border from south to north; every city
     // with points (Warsaw, Krakow, Danzig, Gdynia, Poznan, Lodz, Kielce) lies in front of it
-    assert_eq!(far_line(origin, &states), [91, 94, 95, 784]);
-    assert!(far_line(origin, &states[..1]).is_empty());
+    assert_eq!(far_line_at(origin, &states, DEEP_SHARE), [91, 94, 95, 784]);
+    assert!(far_line_at(origin, &states[..1], DEEP_SHARE).is_empty());
 }
 
 fn deep_plan(replace: bool) -> Value {
@@ -5276,6 +5276,73 @@ fn the_armour_leaves_a_rough_ground_battle_s_reserve_and_goes_where_its_ground_i
     assert!(state.op_notes["op:armour:Panzer"].contains("plan's own thrust: kept"));
 }
 
+#[test]
+fn the_armour_goes_for_the_state_worth_most_per_ground_cost_not_the_cheapest_corner() {
+    // p101c (28 Nov 2026): from German Silesia the cheapest contact state was Trans-Olza (72,
+    // worth 2); Guderian's 8 mobile divisions went there and fought no battle in 8 days while
+    // Lodz (87, 10 victory points) lay three plains steps away
+    let game = Game::new();
+    let mut u = unit(
+        "Panzer".into(),
+        Role::Mobile,
+        &json!({"enemy": "POL"}),
+        &Value::Null,
+    );
+    u.spear = true;
+    *game.supply.borrow_mut() = Some(json!({"divisions": [
+        {"id": "p0", "army": "Panzer", "province_id": 710, "state_id": 71},
+        {"id": "p1", "army": "Panzer", "province_id": 710, "state_id": 71}]}));
+    *game.graph.borrow_mut() = Some(json!({"provinces": [
+        graph_row(710, 71, "plains", &[(720, 0.0), (670, 0.0)]),
+        graph_row(720, 72, "plains", &[(710, 0.0)]),
+        graph_row(670, 67, "plains", &[(710, 0.0), (675, 0.0)]),
+        graph_row(675, 67, "plains", &[(670, 0.0), (870, 0.0)]),
+        graph_row(870, 87, "plains", &[(675, 0.0), (871, 0.0)]),
+        graph_row(871, 87, "plains", &[(870, 0.0)])]}));
+    *game.pol_rows.borrow_mut() = Some(json!([
+        {"state_id": 72, "controller": "POL", "victory_points_total": 0},
+        {"state_id": 87, "controller": "POL", "victory_points_total": 10}]));
+    let wars = json!({"wars": {"enemies": ["POL"]}, "borders": [
+        {"neighbour_tag": "POL", "neighbour_states": [72, 87], "own_border_states": [71, 67]}]});
+    let op = json!({"id": "op", "enemies": ["POL"]});
+    let plan = json!({"war": {"me": "GER"}});
+    let at_war = vec!["POL".to_string()];
+    let mut state = State::default();
+    armour_ground(
+        &mut state,
+        &game,
+        &plan,
+        "op",
+        &op,
+        &u,
+        &[],
+        &wars,
+        &at_war,
+        START,
+    );
+    assert_eq!(state.done.get(&key("op", "armourpick:Panzer")), Some(&87));
+    let note = &state.op_notes["op:armour:Panzer"];
+    assert!(note.contains("state 87 (worth 102"), "{note}");
+    // with no victory point anywhere the cheaper state still wins (worth = its provinces)
+    *game.pol_rows.borrow_mut() = Some(json!([
+        {"state_id": 72, "controller": "POL", "victory_points_total": 0},
+        {"state_id": 87, "controller": "POL", "victory_points_total": 0}]));
+    let mut state = State::default();
+    armour_ground(
+        &mut state,
+        &game,
+        &plan,
+        "op",
+        &op,
+        &u,
+        &[],
+        &wars,
+        &at_war,
+        START,
+    );
+    assert_eq!(state.done.get(&key("op", "armourpick:Panzer")), Some(&72));
+}
+
 // SUPPLY BEFORE THE ATTACK (engineer 99, after o96a)
 
 #[test]
@@ -6179,4 +6246,969 @@ fn every_refinement_is_counted_in_the_operation_s_ledger() {
     assert!(note.contains("W+3.0 shed Mitte 3"), "{note}");
     assert!(note.contains("W+5.0 sideways Army Group 1 5"), "{note}");
     assert!(!note.contains("execute"), "{note}");
+}
+
+// ENGINEER 109 (the West: a small enemy on day one, arrows over open ground, Belgium in days)
+
+/// The Low Countries' provinces of o96a's graph reads (states 980, 34, 977, 6, 8, 35 and the
+/// German border provinces 9522, 3444, 3547 of Rheinland 51 and 11470, 11435, 9575 of Moselland
+/// 42): (province, state, terrain, width, attack, movement, forts, borders with river penalty).
+type GraphRow = (
+    i64,
+    i64,
+    &'static str,
+    f64,
+    f64,
+    f64,
+    i64,
+    &'static [(i64, f64)],
+);
+const LOW_COUNTRIES: &[GraphRow] = &[
+    (
+        480,
+        35,
+        "plains",
+        70.0,
+        0.0,
+        1.0,
+        0,
+        &[(6560, 0.0), (6598, 0.0)],
+    ),
+    (
+        516,
+        6,
+        "urban",
+        80.0,
+        -0.3,
+        1.2,
+        0,
+        &[
+            (3516, -0.3),
+            (3576, 0.0),
+            (6560, 0.0),
+            (6598, 0.0),
+            (9536, 0.0),
+            (13068, -0.3),
+        ],
+    ),
+    (
+        3262,
+        35,
+        "urban",
+        80.0,
+        -0.3,
+        1.2,
+        0,
+        &[(6496, 0.0), (6598, -0.3), (9431, 0.0), (11419, 0.0)],
+    ),
+    (
+        3444,
+        51,
+        "plains",
+        70.0,
+        0.0,
+        1.0,
+        1,
+        &[(6500, -0.3), (9522, 0.0), (11456, 0.0), (11562, 0.0)],
+    ),
+    (
+        3488,
+        980,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        0,
+        &[
+            (3547, 0.0),
+            (6537, 0.0),
+            (9522, 0.0),
+            (11407, 0.0),
+            (11435, 0.0),
+            (11470, 0.0),
+            (11562, 0.0),
+            (13375, 0.0),
+        ],
+    ),
+    (
+        3516,
+        34,
+        "plains",
+        70.0,
+        0.0,
+        1.0,
+        0,
+        &[
+            (516, -0.3),
+            (9444, -0.3),
+            (9536, -0.3),
+            (11519, 0.0),
+            (13068, 0.0),
+            (13081, 0.0),
+        ],
+    ),
+    (
+        3547,
+        51,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        1,
+        &[(3488, 0.0), (9522, 0.0), (11470, 0.0)],
+    ),
+    (
+        3576,
+        6,
+        "plains",
+        70.0,
+        0.0,
+        1.0,
+        0,
+        &[(516, 0.0), (6446, 0.0), (6560, 0.0), (9536, 0.0)],
+    ),
+    (
+        6446,
+        6,
+        "plains",
+        70.0,
+        0.0,
+        1.0,
+        0,
+        &[(3576, 0.0), (6560, 0.0)],
+    ),
+    (
+        6496,
+        35,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        0,
+        &[
+            (3262, 0.0),
+            (6500, 0.0),
+            (9574, 0.0),
+            (11419, 0.0),
+            (11456, -0.3),
+        ],
+    ),
+    (
+        6500,
+        35,
+        "plains",
+        70.0,
+        0.0,
+        1.0,
+        0,
+        &[
+            (3444, -0.3),
+            (6496, 0.0),
+            (9574, 0.0),
+            (11456, -0.3),
+            (11562, -0.3),
+        ],
+    ),
+    (
+        6537,
+        980,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        0,
+        &[
+            (3488, 0.0),
+            (9444, 0.0),
+            (11407, 0.0),
+            (11519, -0.3),
+            (11562, 0.0),
+        ],
+    ),
+    (
+        6560,
+        6,
+        "plains",
+        70.0,
+        0.0,
+        1.0,
+        0,
+        &[
+            (480, 0.0),
+            (516, 0.0),
+            (3576, 0.0),
+            (6446, 0.0),
+            (6598, 0.0),
+        ],
+    ),
+    (
+        6583,
+        8,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        0,
+        &[(9418, 0.0), (9575, -0.3), (11435, 0.0), (13375, 0.0)],
+    ),
+    (
+        6598,
+        977,
+        "plains",
+        70.0,
+        0.0,
+        1.0,
+        0,
+        &[
+            (480, 0.0),
+            (516, 0.0),
+            (3262, -0.3),
+            (6560, 0.0),
+            (9431, -0.3),
+            (11419, -0.3),
+            (13068, -0.3),
+        ],
+    ),
+    (
+        9418,
+        980,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        0,
+        &[(6583, 0.0), (9444, 0.0), (11407, 0.0), (13375, 0.0)],
+    ),
+    (
+        9431,
+        35,
+        "plains",
+        70.0,
+        0.0,
+        1.0,
+        0,
+        &[(3262, 0.0), (6598, -0.3)],
+    ),
+    (
+        9444,
+        980,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        0,
+        &[
+            (3516, -0.3),
+            (6537, 0.0),
+            (9418, 0.0),
+            (11407, 0.0),
+            (11519, -0.3),
+            (13081, -0.3),
+        ],
+    ),
+    (
+        9522,
+        51,
+        "plains",
+        70.0,
+        0.0,
+        1.0,
+        1,
+        &[(3444, 0.0), (3488, 0.0), (3547, 0.0), (11562, 0.0)],
+    ),
+    (
+        9536,
+        34,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        0,
+        &[(516, 0.0), (3516, -0.3), (3576, 0.0), (13081, 0.0)],
+    ),
+    (
+        9574,
+        977,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        0,
+        &[
+            (6496, 0.0),
+            (6500, 0.0),
+            (11419, 0.0),
+            (11519, 0.0),
+            (11562, -0.3),
+            (13068, 0.0),
+        ],
+    ),
+    (
+        9575,
+        42,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        1,
+        &[(6583, -0.3), (11435, -0.3), (11470, -0.3)],
+    ),
+    (
+        11407,
+        980,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        0,
+        &[
+            (3488, 0.0),
+            (6537, 0.0),
+            (9418, 0.0),
+            (9444, 0.0),
+            (13375, 0.0),
+        ],
+    ),
+    (
+        11419,
+        977,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        0,
+        &[
+            (3262, 0.0),
+            (6496, 0.0),
+            (6598, -0.3),
+            (9574, 0.0),
+            (13068, 0.0),
+        ],
+    ),
+    (
+        11435,
+        42,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        1,
+        &[
+            (3488, 0.0),
+            (6583, 0.0),
+            (9575, -0.3),
+            (11470, 0.0),
+            (13375, 0.0),
+        ],
+    ),
+    (
+        11456,
+        35,
+        "plains",
+        70.0,
+        0.0,
+        1.0,
+        0,
+        &[(3444, 0.0), (6496, -0.3), (6500, -0.3)],
+    ),
+    (
+        11470,
+        42,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        1,
+        &[(3488, 0.0), (3547, 0.0), (9575, -0.3), (11435, 0.0)],
+    ),
+    (
+        11519,
+        34,
+        "plains",
+        70.0,
+        0.0,
+        1.0,
+        0,
+        &[
+            (3516, 0.0),
+            (6537, -0.3),
+            (9444, -0.3),
+            (9574, 0.0),
+            (11562, -0.3),
+            (13068, 0.0),
+        ],
+    ),
+    (
+        11562,
+        35,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        0,
+        &[
+            (3444, 0.0),
+            (3488, 0.0),
+            (6500, -0.3),
+            (6537, 0.0),
+            (9522, 0.0),
+            (9574, -0.3),
+            (11519, -0.3),
+        ],
+    ),
+    (
+        13068,
+        977,
+        "plains",
+        70.0,
+        0.0,
+        1.0,
+        0,
+        &[
+            (516, -0.3),
+            (3516, 0.0),
+            (6598, -0.3),
+            (9574, 0.0),
+            (11419, 0.0),
+            (11519, 0.0),
+        ],
+    ),
+    (
+        13081,
+        34,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        0,
+        &[(3516, 0.0), (9444, -0.3), (9536, 0.0)],
+    ),
+    (
+        13375,
+        8,
+        "forest",
+        60.0,
+        -0.15,
+        1.5,
+        0,
+        &[
+            (3488, 0.0),
+            (6583, 0.0),
+            (9418, 0.0),
+            (11407, 0.0),
+            (11435, 0.0),
+        ],
+    ),
+];
+
+fn low_countries() -> Value {
+    let rows: Vec<Value> = LOW_COUNTRIES
+        .iter()
+        .map(|(p, s, t, w, a, m, f, b)| {
+            json!({"province": p, "state_id": s, "terrain": t, "combat_width": w,
+                   "combat_support_width": w / 2.0, "attack_modifier": a, "movement_cost": m,
+                   "forts_in_history": if *f > 0 { json!([{"building": "bunker", "level": f}]) } else { json!([]) },
+                   "borders": b.iter().map(|(q, r)| if *r < 0.0 {
+                       json!({"province": q, "river": "small", "river_share": 1.0, "river_attack_penalty": r})
+                   } else {
+                       json!({"province": q, "river": null, "river_share": 0.0})
+                   }).collect::<Vec<_>>()})
+        })
+        .collect();
+    json!({"provinces": rows})
+}
+
+#[test]
+fn an_arrow_through_one_forest_choke_is_capped_or_redrawn_over_the_open_way_in() {
+    let g = ground::read_graph(&low_countries());
+    let states = |ss: &[i64]| -> HashSet<i64> {
+        g.iter()
+            .filter(|(_, r)| ss.contains(&r.state))
+            .map(|(p, _)| *p)
+            .collect()
+    };
+    // w101b, the prepare: Armee West Süd's front on Moselland 42 (11470, 11435, 9575), its
+    // offensive [980, 34] routed by the game through the Ardennes forest 3488 into Wallonia
+    let ours: HashSet<i64> = [11470, 11435, 9575].into();
+    let theirs = states(&[980, 34, 977, 6, 8]);
+    let goal: HashSet<i64> = [34].into();
+    let path = [11470, 3488, 6537, 11519];
+    let judged = arrow_ground(&g, &path, &ours, &theirs, &goal, 24.0, &ground::INFANTRY);
+    // every way in from Moselland is forest (3488, Luxembourg's 6583 and 13375): no open way,
+    // the army keeps what the choke carries from its two sides (11470, 11435)
+    let Some(ArrowGround::Cap(entry, carries)) = judged else {
+        panic!("{judged:?}");
+    };
+    assert_eq!(entry, 3488);
+    assert!((3..=9).contains(&carries), "{carries}");
+    // an arrow entering over open ground is left as it is
+    let open_path = [6560, 3576];
+    let dutch: HashSet<i64> = [480].into();
+    assert_eq!(
+        arrow_ground(
+            &g,
+            &open_path,
+            &dutch,
+            &theirs,
+            &[6].into(),
+            24.0,
+            &ground::INFANTRY
+        ),
+        None
+    );
+    // after Holland: the group's front also holds Dutch Brabant (480 plains, 11562 forest, 6500
+    // plains): the open way in is Brabant's plains into Antwerp and Flanders, the arrow through
+    // 3488 is redrawn over it, no forest on the new target's first step
+    let ours: HashSet<i64> = [9522, 3444, 11562, 6500, 480].into();
+    let theirs = states(&[980, 34, 977, 6]);
+    let path = [9522, 3488, 6537, 11519, 3516];
+    let judged = arrow_ground(&g, &path, &ours, &theirs, &goal, 24.0, &ground::INFANTRY);
+    let Some(ArrowGround::Redraw(way)) = judged else {
+        panic!("{judged:?}");
+    };
+    assert!([6560, 6598].contains(&way[0]), "{way:?}");
+    assert!(!ground::rough(&g[&way[0]]));
+    assert_eq!(g[way.last().unwrap()].state, 34, "{way:?}");
+    assert!(!way.contains(&3488), "{way:?}");
+}
+
+/// A theatre answering the opening's reads: Luxembourg (state 8: 6583, 13375 forest) between
+/// Moselland 42 and French Lorraine 28 (9559, 3560 beside 6583).
+struct Opening {
+    calls: RefCell<Vec<(String, Value)>>,
+}
+impl Tools for Opening {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        self.calls
+            .borrow_mut()
+            .push((name.to_string(), args.clone()));
+        Ok(match name {
+            "hoi4_states" if args["query"] == json!("LUX") => {
+                json!({"states": [{"state_id": 8, "controller": "LUX"}]})
+            }
+            "hoi4_province_graph" => json!({"provinces": [
+                graph_row(6583, 8, "forest", &[(13375, 0.0), (11435, 0.0), (9559, 0.0)]),
+                graph_row(13375, 8, "forest", &[(6583, 0.0), (11435, 0.0)]),
+                graph_row(9559, 28, "plains", &[(6583, 0.0), (3560, 0.0)]),
+                graph_row(3560, 28, "plains", &[(9559, 0.0)]),
+                graph_row(11435, 42, "forest", &[(6583, 0.0), (13375, 0.0)])]}),
+            "hoi4_supply" => json!({"divisions": (0..24)
+                .map(|i| json!({"id": format!("e{i}"), "army": "Army 1", "organisation": 70.0}))
+                .collect::<Vec<_>>()}),
+            _ => json!({"receipt": {"status": "Verified"}}),
+        })
+    }
+}
+
+#[test]
+fn before_the_war_a_small_enemy_s_army_is_filled_by_what_its_allies_can_bring_in() {
+    // w101b (28 Nov 2026): Luxembourg showed 1 division at W+0 and the opening sent nothing (8
+    // against 1); the French walked in from Lorraine, 7 by W+1.5 and 15 by W+6; Army 1's 16
+    // joined Army 7 only at W+2.6. Before the war the French 35 in Lorraine 28 border Luxembourg
+    let roster = json!({"armies": [
+        {"army": "Army 7", "division_count": 8, "division_limit": 24, "states": {"42": 8}},
+        {"army": "Armee West Süd", "division_count": 14, "division_limit": 24, "states": {"42": 14}},
+        {"army": "Army 2", "division_count": 10, "states": {"51": 10}},
+        {"army": "Army 1", "division_count": 24, "states": {"68": 24}}]});
+    let wars = json!({"wars": {"at_war": true, "enemies": ["FRA", "ENG"]}, "borders": [
+        {"neighbour_tag": "FRA", "hostile": true, "hostile_divisions_in_border_states": 35,
+         "neighbour_states": [28], "own_border_states": [42, 978]},
+        {"neighbour_tag": "LUX", "hostile": false, "hostile_divisions_in_border_states": 0,
+         "neighbour_divisions_in_border_states": null,
+         "neighbour_states": [8], "own_border_states": [42]}]});
+    let ops = json!([
+        {"id": "op_lowlands", "enemies": ["BEL", "HOL", "LUX"], "stacking": {"by_width": true},
+         "opening": {"deadline_days": {"LUX": 4}, "ratio": 2},
+         "formations": [{"army": "Army 2", "role": "line"},
+                        {"army": "Army 7", "role": "mobile"},
+                        {"army": "Armee West Süd", "role": "wing"}]}]);
+    let plan = json!({"war": {"land_orders": false}, "operations": ops});
+    let op = &list(&plan, "operations")[0];
+    let mut lux = unit(
+        "Army 7".into(),
+        Role::Mobile,
+        &json!({"enemy": "LUX"}),
+        &Value::Null,
+    );
+    lux.enemy = "LUX".into();
+    let mut wing = unit(
+        "Armee West Süd".into(),
+        Role::Wing,
+        &Value::Null,
+        &Value::Null,
+    );
+    wing.enemy = "BEL".into();
+    wing.enemies = vec!["LUX".into()];
+    let mut line = unit("Army 2".into(), Role::Line, &Value::Null, &Value::Null);
+    line.enemy = "HOL".into();
+    let units = vec![lux, wing, line];
+    let now = 1000 * DAY;
+    let mut state = State::default();
+    state
+        .done
+        .insert(key("op_lowlands", "prep"), now - 30 * DAY);
+    state
+        .done
+        .insert(key("op_lowlands", "asm:Army 7"), now - 20 * DAY);
+    for a in ["Army 7", "Armee West Süd", "Army 2"] {
+        state.op_owned.insert(a.into(), "op_lowlands".into());
+    }
+    let game = Opening {
+        calls: RefCell::new(vec![]),
+    };
+    state.op_acting = true;
+    // 1. the threat before the war: the French in reach, the need is what Army 7 can still take
+    let at_war = vec!["FRA".to_string(), "ENG".to_string()];
+    let out = opening_prewar(
+        &mut state,
+        &game,
+        "op_lowlands",
+        op,
+        &units,
+        &roster,
+        &wars,
+        &at_war,
+        "l",
+        now,
+    )
+    .unwrap();
+    let note = state.op_notes["op_lowlands:opening:LUX"].clone();
+    assert!(
+        note.contains("before the war: 8 divisions facing it against 35"),
+        "{note}"
+    );
+    assert!(
+        note.contains("35 of FRA can step in from state 28 in about 18 h"),
+        "{note}"
+    );
+    assert!(note.contains("SHORT"), "{note}");
+    assert_eq!(state.done[&key("op_lowlands", "need")], 16, "{out:?}");
+    assert_eq!(state.done[&key("op_lowlands", "opening:bar:LUX")], 18);
+    // 2. the preparing operation borrows the idle Army 1 for that need (never for width)
+    let ops_v = list(&plan, "operations").to_vec();
+    let active = vec![("op_lowlands".to_string(), ops_v[0].clone())];
+    lend_idle(&mut state, &plan, &ops_v, &active, &roster, &wars, now);
+    let lend = state.op_notes["lend"].clone();
+    assert!(
+        lend.contains("Army 1 (24): lent to op_lowlands (room 16)"),
+        "{lend}"
+    );
+    // 3. the next reading fills Army 7, the army made for Luxembourg, to its limit before the war
+    let out = opening_prewar(
+        &mut state,
+        &game,
+        "op_lowlands",
+        op,
+        &units,
+        &roster,
+        &wars,
+        &at_war,
+        "l",
+        now + DAY / 4,
+    )
+    .unwrap()
+    .unwrap_or_default();
+    assert!(out.contains("16 of echelon Army 1 join Army 7"), "{out}");
+    let detach = game
+        .calls
+        .borrow()
+        .iter()
+        .find(|(n, _)| n == "hoi4_army_detach")
+        .map(|(_, a)| a.clone())
+        .unwrap_or_else(|| panic!("{out} {:?}", game.calls.borrow()));
+    assert_eq!(detach["into"], json!("Army 7"));
+    assert_eq!(detach["divisions"].as_array().unwrap().len(), 16);
+}
+
+#[test]
+fn a_spent_enemy_s_line_counts_as_taken_and_its_units_turn_on_the_next_enemy() {
+    // w101b W+5.7 (28 Nov 2026): Holland had capitulated (W+3.1) and kept a corner of Brabant 35
+    // behind the Belgian line (owns 5 states, controls 3); 5 divisions seen in its border states,
+    // 56 facing it; the group's line stayed on Holland's 35 and 7 until it stalled at W+21
+    assert!(spent_reading(true, 56, 5.0, 2.0));
+    // W+2: 13 seen against 56: not spent
+    assert!(!spent_reading(true, 56, 13.0, 2.0));
+    // Luxembourg at W+22: 24 against 3, but it holds all its land: never spent while it does
+    assert!(!spent_reading(false, 24, 3.0, 2.0));
+    let roster = json!({"armies": [
+        {"army": "Army 3", "army_group": "Army Group 2", "division_count": 28},
+        {"army": "Army 4", "army_group": "Army Group 2", "division_count": 28},
+        {"army": "Armee West Süd", "army_group": null, "division_count": 22}],
+        "army_groups": [{"army_group": "Army Group 2", "plan": []}]});
+    let mut g = unit(
+        "Army Group 2".into(),
+        Role::Group,
+        &Value::Null,
+        &Value::Null,
+    );
+    g.enemy = "HOL".into();
+    g.enemies = vec!["BEL".into()];
+    let l3 = unit("Army 3".into(), Role::Line, &Value::Null, &Value::Null);
+    let l4 = unit("Army 4".into(), Role::Line, &Value::Null, &Value::Null);
+    let mut w = unit(
+        "Armee West Süd".into(),
+        Role::Wing,
+        &Value::Null,
+        &Value::Null,
+    );
+    w.enemy = "BEL".into();
+    let units = vec![g, l3, l4, w];
+    let wars = json!({"wars": {"enemies": ["HOL", "BEL", "LUX"], "wars": [
+        {"enemy": {"tag": "HOL"}, "enemy_land": {"states_controlled": 3, "states_owned": 5}},
+        {"enemy": {"tag": "BEL"}, "enemy_land": {"states_controlled": 4, "states_owned": 4}}]},
+        "borders": [
+        {"neighbour_tag": "HOL", "hostile_divisions_in_border_states": 5, "neighbour_states": [35]},
+        {"neighbour_tag": "BEL", "hostile_divisions_in_border_states": 18, "neighbour_states": [980]}]});
+    let op = json!({"id": "op", "enemies": ["BEL", "HOL", "LUX"], "opening": {"ratio": 2}});
+    let enemies: Vec<String> = vec!["BEL".into(), "HOL".into(), "LUX".into()];
+    let at_war = enemies.clone();
+    let mut state = State::default();
+    for e in &enemies {
+        state.done.insert(key("op", &format!("war0:{e}")), START);
+    }
+    // the first reading half a day before the second: not yet spent
+    let now = START + 5 * DAY;
+    assert!(
+        spent_enemies(&mut state, "op", &op, &units, &roster, &wars, &enemies, &at_war, now)
+            .is_empty()
+    );
+    let spent = spent_enemies(
+        &mut state,
+        "op",
+        &op,
+        &units,
+        &roster,
+        &wars,
+        &enemies,
+        &at_war,
+        now + DAY / 2,
+    );
+    assert_eq!(spent, vec!["HOL".to_string()]);
+    assert!(state.op_notes["op:spent:HOL"].contains("5 division(s) seen against 56 facing it"));
+    // its units turn on Belgium; Holland's corner on the line counts as taken
+    let mut turned = units.clone();
+    hand_over_out(&mut turned, &spent, &[], &at_war, "BEL");
+    assert_eq!(turned[0].enemy, "BEL");
+    let game = Game::new();
+    // the mock's states are Poland's unless held: the corner a gone enemy holds counts as taken
+    assert!(taken_or_gone(&game, "GER", &[35, 7], &[]).is_empty());
+    assert_eq!(
+        taken_or_gone(&game, "GER", &[35, 7], &["POL".to_string()]),
+        vec![35, 7]
+    );
+    // Holland fights back (what faces it falls under the ratio's force): spent no more
+    let strong = json!({"wars": wars["wars"].clone(), "borders": [
+        {"neighbour_tag": "HOL", "hostile_divisions_in_border_states": 40, "neighbour_states": [35]}]});
+    assert!(spent_enemies(
+        &mut state,
+        "op",
+        &op,
+        &units,
+        &roster,
+        &strong,
+        &enemies,
+        &at_war,
+        now + DAY
+    )
+    .is_empty());
+}
+
+#[test]
+fn the_armour_goes_round_its_own_thrust_when_the_small_enemy_s_allies_hold_its_forest() {
+    // w101c (28 Nov 2026): Luxembourg's forest 6583 held by French divisions from W+1, attacked
+    // from one side by Panzergruppe Ost's armour, 2 engaged and 3 in reserve, to the end
+    let game = Game::new();
+    let mut u = unit(
+        "Panzer".into(),
+        Role::Mobile,
+        &json!({"enemy": "LUX"}),
+        &Value::Null,
+    );
+    u.enemy = "LUX".into();
+    u.spear = true;
+    u.line = vec![8];
+    *game.supply.borrow_mut() = Some(json!({"divisions": [
+        {"id": "p0", "army": "Panzer", "province_id": 420, "state_id": 42},
+        {"id": "p1", "army": "Panzer", "province_id": 420, "state_id": 42},
+        {"id": "p2", "army": "Panzer", "province_id": 420, "state_id": 42}]}));
+    *game.graph.borrow_mut() = Some(json!({"provinces": [
+        graph_row(420, 42, "plains", &[(6583, 0.0), (510, 0.0)]),
+        graph_row(510, 51, "plains", &[(420, 0.0), (340, 0.0)]),
+        graph_row(6583, 8, "forest", &[(420, 0.0), (340, 0.0)]),
+        graph_row(340, 34, "plains", &[(510, 0.0), (6583, 0.0)])]}));
+    let wars = json!({"wars": {"enemies": ["LUX", "BEL"]}, "borders": [
+        {"neighbour_tag": "LUX", "neighbour_states": [8], "own_border_states": [42]},
+        {"neighbour_tag": "BEL", "neighbour_states": [34], "own_border_states": [51]}]});
+    let op = json!({"id": "op", "enemies": ["LUX", "BEL"]});
+    let plan = json!({"war": {"me": "GER"}});
+    let at_war = vec!["LUX".to_string(), "BEL".to_string()];
+    let battle = |tag: &str| {
+        json!({"list": [{"province": 6583, "our_side": "attacker",
+            "lines": [{"line": "terrain", "value": -0.15}],
+            "attacker": {"engaged_divisions": [{"id": "p0"}],
+                         "reserve_divisions": [{"id": "p1"}, {"id": "p2"}]},
+            "defender": {"engaged_divisions": [{"id": "d1", "tag": tag}]}}]})
+    };
+    // Luxembourg's own divisions hold it: the plan's own thrust is kept
+    *game.battles.borrow_mut() = Some(battle("LUX"));
+    let mut state = State::default();
+    state.done.insert(key("op", "spearfor:Panzer"), 8);
+    armour_ground(
+        &mut state,
+        &game,
+        &plan,
+        "op",
+        &op,
+        &u,
+        &[8],
+        &wars,
+        &at_war,
+        START,
+    );
+    assert!(!state.done.contains_key(&key("op", "spearskip:Panzer:8")));
+    // the French got in first: the armour leaves the forest to the infantry and goes round
+    *game.battles.borrow_mut() = Some(battle("FRA"));
+    let mut state = State::default();
+    state.done.insert(key("op", "spearfor:Panzer"), 8);
+    armour_ground(
+        &mut state,
+        &game,
+        &plan,
+        "op",
+        &op,
+        &u,
+        &[8],
+        &wars,
+        &at_war,
+        START,
+    );
+    assert!(state.done.contains_key(&key("op", "spearskip:Panzer:8")));
+    let note = &state.op_notes["op:armour:Panzer"];
+    assert!(note.contains("got into its rough ground first"), "{note}");
+}
+
+#[test]
+fn an_army_meeting_the_enemy_where_the_borrower_already_holds_is_lent_to_it() {
+    // w101b W+21..W+35 (28 Nov 2026): Armee West Süd (18), named by no later operation, stood on
+    // the French border beside the Westwall hold (Armee West Nord) and Army Group 2's front,
+    // "meets an enemy, holds where it stands", while op_france's battles had room for 56-60
+    let roster = json!({"armies": [
+        {"army": "Armee West Süd", "division_count": 18, "states": {"42": 4, "980": 6, "18": 8}},
+        {"army": "Armee West Nord", "division_count": 20, "states": {"42": 10, "978": 10}},
+        {"army": "Army 2", "army_group": "Army Group 2", "division_count": 24, "states": {"980": 24}},
+        {"army": "Army 9", "division_count": 12, "states": {"6": 12}}],
+        "army_groups": [{"army_group": "Army Group 2", "plan": [
+            {"kind": "front", "id": 47, "line": {"states": [6, 980, 18]}}]}]});
+    let wars = json!({"wars": {"at_war": true, "enemies": ["FRA"]}, "borders": [
+        {"neighbour_tag": "FRA", "own_border_states": [42, 978, 980, 6], "neighbour_states": [18, 28]}]});
+    let ops = json!([
+        {"id": "op_france", "enemies": ["FRA"], "stacking": {"by_width": true},
+         "formations": [{"army": "Army 2", "role": "line"}, {"army": "Army 9", "role": "mobile"}],
+         "holds": [{"id": "hold_westwall", "facing": ["FRA"], "states": [978, 42],
+                    "armies": [{"army": "Armee West Nord"}]}]}]);
+    let plan = json!({"war": {"land_orders": false}, "operations": ops});
+    let now = 1000 * DAY;
+    let mut state = State::default();
+    for k in ["prep", "exec"] {
+        state.done.insert(key("op_france", k), now - 5 * DAY);
+    }
+    state.done.insert(key("op_france", "room"), 56);
+    state.done.insert(key("op_france", "room_at"), now - DAY);
+    for a in ["Army 2", "Army 9", "Armee West Nord", "Army Group 2"] {
+        state.op_owned.insert(a.into(), "op_france".into());
+    }
+    let ops = list(&plan, "operations").to_vec();
+    let active = vec![("op_france".to_string(), ops[0].clone())];
+    lend_idle(&mut state, &plan, &ops, &active, &roster, &wars, now);
+    let note = state.op_notes["lend"].clone();
+    assert!(
+        note.contains("Armee West Süd (18): lent to op_france (room 56) as the echelon of Army 2 (its sector is held by Armee West Nord, Army Group 2)"),
+        "{note}"
+    );
+    // a sector nobody of the borrower covers (Lorraine 28 alone): it holds where it stands
+    let mut alone = roster.clone();
+    alone["armies"][0]["states"] = json!({"28": 18});
+    let mut state2 = State::default();
+    for k in ["prep", "exec"] {
+        state2.done.insert(key("op_france", k), now - 5 * DAY);
+    }
+    state2.done.insert(key("op_france", "room"), 56);
+    state2.done.insert(key("op_france", "room_at"), now - DAY);
+    state2.op_owned = state.op_owned.clone();
+    state2.op_owned.remove("Armee West Süd");
+    lend_idle(&mut state2, &plan, &ops, &active, &alone, &wars, now);
+    assert!(
+        state2.op_notes["lend"]
+            .contains("Armee West Süd (18): meets an enemy, holds where it stands"),
+        "{}",
+        state2.op_notes["lend"]
+    );
+}
+
+#[test]
+fn the_capitulation_path_takes_the_points_a_surrender_limit_asks_and_the_far_line_follows_it() {
+    // France (1.20 files): surrender limit 0.8 less 0.5 of FRA_disjointed_government = 0.3;
+    // Paris 50, Lille 10, Calais 15, Le Havre 10, Orleans 15 near the Belgian front, the south far
+    let at = |id, vp, x, z| Far { id, vp, x, z };
+    let states = [
+        at(29, 10.0, 100.0, 0.0),   // Lille
+        at(28, 15.0, 60.0, -40.0),  // Calais
+        at(16, 50.0, 200.0, 0.0),   // Paris
+        at(18, 10.0, 160.0, -60.0), // Le Havre
+        at(27, 15.0, 300.0, 20.0),  // Orleans
+        at(30, 20.0, 150.0, 40.0),  // Reims
+        at(31, 20.0, 120.0, -20.0), // Amiens
+        at(32, 20.0, 180.0, -40.0), // Rouen
+        at(40, 80.0, 900.0, 0.0),   // the south
+        at(41, 76.0, 950.0, 80.0),
+        at(42, 80.0, 1000.0, -60.0),
+    ];
+    let total = 396.0;
+    let path = capitulation_path((0.0, 0.0), &states, 0.3);
+    let got: f64 = path.iter().map(|(_, v)| v).sum();
+    assert!(got >= 0.3 * total, "{path:?}");
+    let ids: Vec<i64> = path.iter().map(|(s, _)| *s).collect();
+    assert!(ids.contains(&16), "{ids:?}");
+    assert!(!ids.iter().any(|s| [40, 41, 42].contains(s)), "{ids:?}");
+    // the limit from the plan, the base without it; the share the far line lies behind
+    let op = json!({"surrender_limit": {"FRA": 0.3}});
+    assert_eq!(surrender_limit(&op, "FRA"), 0.3);
+    assert_eq!(surrender_limit(&op, "POL"), 0.8);
+    assert!((must_fall_share(&op, &["FRA".into()]) - 0.35625).abs() < 1e-9);
+    assert!((must_fall_share(&op, &["POL".into()]) - DEEP_SHARE).abs() < 1e-9);
+    // the far line at France's share stays in the north; at the base it runs to the south
+    let north = far_line_at((0.0, 0.0), &states, must_fall_share(&op, &["FRA".into()]));
+    assert!(!north.iter().any(|s| [40, 41, 42].contains(s)), "{north:?}");
+    let base = far_line_at((0.0, 0.0), &states, DEEP_SHARE);
+    assert!(base.iter().any(|s| [40, 41, 42].contains(s)), "{base:?}");
+}
+
+#[test]
+fn province_worth_counts_every_province_and_ten_per_victory_point() {
+    // Poland, t1939n 1939.09.25 (28 Nov 2026): 110 of 134 points held (0.82) and no
+    // capitulation at the base 0.8: the empty eastern provinces still count 1 each
+    let rows = [
+        Far {
+            id: 10,
+            vp: 30.0,
+            x: 0.0,
+            z: 0.0,
+        },
+        Far {
+            id: 95,
+            vp: 0.0,
+            x: 500.0,
+            z: 0.0,
+        },
+    ];
+    let g = ground::read_graph(&json!({"provinces": [
+        graph_row(1, 10, "plains", &[]),
+        graph_row(2, 10, "plains", &[]),
+        graph_row(3, 95, "marsh", &[]),
+        graph_row(4, 95, "marsh", &[]),
+        graph_row(5, 95, "marsh", &[])]}));
+    let w = province_worth(&rows, &g);
+    assert_eq!(w[0].vp, 302.0);
+    assert_eq!(w[1].vp, 3.0);
+    assert_eq!((w[1].x, w[1].id), (500.0, 95));
 }

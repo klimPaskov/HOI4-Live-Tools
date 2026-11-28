@@ -123,6 +123,9 @@ pub(crate) fn order_json(
             let mut row = json!({"id": arrow.id, "executing": arrow.executing, "divisions": arrow.divisions,
                    "path_provinces": arrow.provinces.len(),
                    "path_states": states_along(&arrow.provinces, state_of),
+                   // the arrow's own provinces as the game routed it (the operation reads where
+                   // its attack will concentrate: one rough-ground choke, or open ground)
+                   "path_ids": (arrow.provinces.len() <= LINE_IDS_MAX).then_some(&arrow.provinces),
                    "target": target.map(|t| json!({"provinces": t.provinces.len(),
                        "ends": t.provinces.first().zip(t.provinces.last()).map(|(a, b)| json!([a, b])),
                        "states": states_along(&t.provinces, state_of)}))});
@@ -307,6 +310,7 @@ mod tests {
         assert_eq!(row["line"]["most_in_one_province"], 3);
         let off = &row["offensives"][0];
         assert_eq!(off["path_states"], json!([67, 86]));
+        assert_eq!(off["path_ids"], json!([671, 861]));
         assert_eq!(off["target"]["provinces"], 4);
         assert_eq!(off["target"]["states"], json!([85, 86, 87, 88]));
     }

@@ -22,7 +22,7 @@ import re
 
 import numpy as np
 
-from . import topbar
+from . import topbar, uiprofile
 
 MAIN_MENU_WORDS = re.compile(r"single\s*player|multi\s*player|tutorial|credits|exit|mods|settings", re.I)
 ESC_MENU_WORDS = re.compile(r"resume|save\s*game|load\s*game|settings|quit|exit to|surrender|options", re.I)
@@ -121,7 +121,8 @@ PANEL_KEYS = {"politics": "q", "decisions": "shift+q", "intelligence": "shift+w"
 def detect_panel(lines, w, h):
     """(panel name, title text) from OCR lines of the whole screen: titles sit in the strip under the top bar."""
     strip = [l for l in lines if 60 <= l.center[1] <= 200 and l.center[0] <= min(w, 1100)]
-    for name, rx in PANELS:
+    panels = uiprofile.active().panel_patterns(PANELS)        # PANELS itself, plus a mod's titles (uiprofile)
+    for name, rx in panels:
         for l in strip:
             if matches(rx, l.text):
                 return name, l.text
@@ -129,7 +130,7 @@ def detect_panel(lines, w, h):
     left = sorted((l for l in strip if l.center[0] <= 560), key=lambda l: (l.center[1] // 12, l.box[0]))
     joined = " ".join(l.text for l in left)
     if joined:
-        for name, rx in PANELS:
+        for name, rx in panels:
             if matches(rx, joined) and name not in ("politics", "research", "trade", "production", "construction",
                                                      "logistics", "faction", "decisions", "diplomacy"):
                 return name, joined
@@ -163,6 +164,7 @@ def dark_window_box(img, min_frac=0.06):
 
 
 SAVE_ROW_DATE = re.compile(r"\d{1,2}:\d{2},?\s*\d{1,2}\s+[A-Za-z]+,?\s*\d{4}")
+SAVE_ROW_DATE_ANY = re.compile(r"\d{1,2}:\d{2},?\s*\d{1,2}\s+[^\W\d_]+,?\s*\d{4}")     # a mod's month names
 
 
 def classify(img, ocr, game_log_idle=None):
@@ -180,19 +182,26 @@ def classify(img, ocr, game_log_idle=None):
     low = [t.lower() for t in texts]
     has = lambda rx: any(re.search(rx, t, re.I) for t in texts)
     center = [l.text for l in res.lines if w * 0.3 < l.center[0] < w * 0.7 and h * 0.15 < l.center[1] < h * 0.85]
-    esc_hits = [t for t in center if ESC_MENU_WORDS.search(t)]
-    save_rows = [t for t in texts if SAVE_ROW_DATE.search(t)]
+    prof = uiprofile.active()                 # vanilla: every regex below is the vanilla one, unchanged
+    esc_rx = prof.section_rx(ESC_MENU_WORDS, "pause_menu")
+    esc_hits = [t for t in center if esc_rx.search(t)]
+    save_rx = SAVE_ROW_DATE if prof.month_table() is None else SAVE_ROW_DATE_ANY
+    save_rows = [t for t in texts if save_rx.search(t)]
+    load_rx = prof.pattern("main_menu", "load", r"^\W*load\W*$", anchored=True)
     if "date" in out and len(esc_hits) >= 3:
         out["screen"] = "esc_menu"
-    elif has(r"back\s*to\s*menu") or (len(save_rows) >= 2 and has(r"^\W*load\W*$")) or \
-            (has(r"^\W*local\W*$") and has(r"^\W*cloud") and has(r"^\W*load\W*$") and has(r"^\W*back\W*$")):
+    elif has(prof.pattern("setup", "back_to_menu", r"back\s*to\s*menu")) or (len(save_rows) >= 2 and has(load_rx)) or \
+            (has(r"^\W*local\W*$") and has(r"^\W*cloud") and has(load_rx) and has(r"^\W*back\W*$")):
         out["screen"] = "load_screen"
     elif "date" in out:
         out["screen"] = "map"
-    elif has(r"single\s*player") and (has(r"multi\s*player") or has(r"career\s*profile") or has(r"^\W*credits\W*$")):
+    elif (has(r"single\s*player") and (has(r"multi\s*player") or has(r"career\s*profile") or
+                                       has(r"^\W*credits\W*$"))) or prof.main_menu_hits(texts)[0]:
         # 1.19.4.1's animated menu background garbles one button now and then ("Yu ur IPLAYER")
         out["screen"] = "main_menu"
-    elif has(r"^\W*continue\W*$") or (has(r"new\s*game") and has(r"tutorial")):
+    elif has(prof.pattern("main_menu", "continue", r"^\W*continue\W*$", anchored=True)) or \
+            (has(prof.pattern("main_menu", "new_game", r"new\s*game")) and
+             has(prof.pattern("main_menu", "tutorial", r"tutorial"))):
         out["screen"] = "single_player_menu"
     elif has(r"^\W*loading") or (game_log_idle is not None and game_log_idle < 3):
         out["screen"] = "loading"
