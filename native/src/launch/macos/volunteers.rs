@@ -21,6 +21,9 @@ pub(super) const MAX_DIVISIONS: usize = 64;
 pub(super) enum Action {
     Send,
     Recall,
+    /// engineer 125: an expeditionary force (the diplomacy view's action toward an ally at war; family diplomacy2,
+    /// the catalog's send_expeditionary_force row: a division list the module fills through its own allocator)
+    Expedition,
 }
 
 impl Action {
@@ -29,6 +32,7 @@ impl Action {
         match s {
             "send_volunteers" => Some(Self::Send),
             "recall_volunteers" | "return_volunteers" => Some(Self::Recall),
+            "expeditionary_force" | "send_expeditionary_force" => Some(Self::Expedition),
             _ => None,
         }
     }
@@ -47,6 +51,14 @@ impl Action {
         match self {
             Self::Send => "diplomacy.send_volunteers",
             Self::Recall => "diplomacy.recall_volunteers",
+            Self::Expedition => "diplomacy2.send_expeditionary_force",
+        }
+    }
+    /// The module family that serves the action (its own opt-in and live session).
+    pub(super) fn family(self) -> &'static str {
+        match self {
+            Self::Send | Self::Recall => "diplomacy",
+            Self::Expedition => "diplomacy2",
         }
     }
     pub(super) fn takes_divisions(self) -> bool {
@@ -60,8 +72,9 @@ pub(super) fn allowed_mode(mode: inproc::Mode) -> Result<()> {
         inproc::Mode::Auto if LIVE_PASSED => Ok(()),
         _ => Err(Error::new(
             "volunteers_unvalidated",
-            "send_volunteers / recall_volunteers run through the in-process module only, and only with HOI4_BACKEND=inprocess until its \
-             live session S25-VOLUNTEERS passes (docs/LIVE_VALIDATION_QUEUE.md); nothing was posted",
+            "send_volunteers / recall_volunteers / expeditionary_force run through the in-process module only, and only with \
+             HOI4_BACKEND=inprocess until their live sessions (S25-VOLUNTEERS, S27-DIPLOMACY-ANY) pass (docs/LIVE_VALIDATION_QUEUE.md); \
+             nothing was posted",
         )),
     }
 }

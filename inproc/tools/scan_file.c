@@ -122,6 +122,8 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[a], "act_size:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_size : 0; }
         else if (!strcmp(argv[a], "diplo_classes")) got = (uint64_t)t.st2.ndcat;
         else if (!strcmp(argv[a], "diplo_buildable")) got = (uint64_t)t.st2.ndyn;
+        /* engineer 125: the war goal type database (list, count, token offsets packed one byte each) */
+        else if (!strcmp(argv[a], "wgt_offs")) got = t.st2.diplo.wgt_got ? ((uint64_t)t.st2.diplo.wgt_arr_off << 16) | ((uint64_t)t.st2.diplo.wgt_cnt_off << 8) | t.st2.diplo.wgt_tok_off : 0;
         else if (!strncmp(argv[a], "act_type:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_type : 0; }
         /* engineer 118: a volunteer action's division list, packed as list offset, inline buffer, inline places */
         else if (!strncmp(argv[a], "act_units:", 10)) {

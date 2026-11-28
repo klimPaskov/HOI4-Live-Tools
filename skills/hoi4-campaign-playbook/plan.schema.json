@@ -4019,6 +4019,8 @@
             "maxItems": 5,
             "description": "justify: 1 to 5 state names as hoi4_diplomacy lists them"
           },
+          "war_goal_key": {"type": "string", "pattern": "^[A-Za-z0-9_]{1,39}$", "description": "justify by command: the game's own war goal key (common/wargoals: take_state, annex_everything, topple_government ...) instead of war_goal + states; the module builds it (HOI4_BACKEND=inprocess until S27-DIPLOMACY-ANY)"},
+          "state_ids": {"type": "array", "items": {"type": "integer", "minimum": 1}, "maxItems": 64, "description": "with war_goal_key: the states a take-state goal names, by id"},
           "justify_days": {
             "type": "integer",
             "minimum": 0,

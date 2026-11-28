@@ -1001,16 +1001,33 @@ static void diplo_action_facts(const scan_image *im, const cmd_spec *s, cmd_type
         int simple = s->ctor == CTOR_DIPLO_SIMPLE && cmd_pmatch(fb, 15, "55 48 89 e5 53 48 83 ec 28 48 89 fb 8b 41 08", c, 6);
         int war = s->ctor == CTOR_DIPLO_WAR &&
                   cmd_pmatch(fb, 26, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 44 89 c3 49 89 cf 49 89 fe 41 8b 41 08", c, 6);
-        int vol = s->ctor == CTOR_VOLUNTEER &&
+        int vol = (s->ctor == CTOR_VOLUNTEER || s->ctor == CTOR_DIPLO_DIVLIST) &&
                   cmd_pmatch(fb, 19, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 48 89 fb 8b 41 08", c, 6);
-        if (!simple && !war && !vol) continue;
+        /* engineer 125: justify (type pointer in rcx kept in r14, the date in r8) */
+        int jus = s->ctor == CTOR_DIPLO_JUSTIFY &&
+                  cmd_pmatch(fb, 23, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 49 89 ce 48 89 fb 41 8b 40 08", c, 6);
+        if (!simple && !war && !vol && !jus) continue;
         unsigned m = 0;
         long b = pfind_at(im, fs, 0xa0, "c7 04 24 01 00 00 00 48 8d 4d B 45 31 c0 41 b9 ff ff ff ff e8 D 48 8d 05 D", c, 6, &m);
         if (b < 0 || m != 1) continue;
         uint64_t at = fs + (uint64_t)b, base = at + 25 + (int64_t)(int32_t)c[1], vt = at + 32 + (int64_t)(int32_t)c[2];
         if (vt != o->vt_obj || !in_text(im, base)) continue;
-        uint32_t u_off = 0, u_inl = 0, u_cap = 0;
-        if (vol) {
+        uint32_t u_off = 0, u_inl = 0, u_cap = 0, j_type = 0;
+        if (jus || (vol && s->ctor == CTOR_DIPLO_DIVLIST)) {
+            /* engineer 125: an empty list with no inline places: lea r15,[rbx+L]; xorps; movups [rbx+L],xmm0;
+             * mov rax,[rip+allocator]; mov [rbx+L+0x10],rax (justify: then mov [rbx+T],r14, the type) */
+            uint32_t v[8]; unsigned mv = 0;
+            if (pfind_at(im, fs, 0xc0, "4c 8d 7b B 0f 57 c0 0f 11 43 B 48 8b 05 D 48 89 83 D", v, 8, &mv) < 0 || mv != 1 ||
+                v[1] != v[0] || v[3] != v[0] + 0x10)
+                continue;
+            u_off = v[0];
+            if (jus) {
+                if (pfind_at(im, fs, 0xc0, "4c 89 b3 D 48 89 df be D e8 D c6 43 0e 01", v, 8, &mv) < 0 || mv != 1 ||
+                    v[0] <= u_off + 0x10 || v[0] > 0x200)
+                    continue;
+                j_type = v[0];
+            }
+        } else if (vol) {
             /* the list: lea r15,[rbx+L]; lea rax,[rbx+A]; xorps; movups [rbx+L],xmm0 ... then
              * lea rax,[rbx+I]; mov [rbx+L],rax; mov dword [rbx+L+8],CAP (the inline buffer and its places) */
             uint32_t v[8]; unsigned mv = 0;
@@ -1022,7 +1039,7 @@ static void diplo_action_facts(const scan_image *im, const cmd_spec *s, cmd_type
             u_inl = v[0]; u_cap = v[3];
         }
         long t2 = simple ? pfind_at(im, fs, 0xa0, "48 89 03 48 89 df be D", c + 3, 3, &m)
-                : vol    ? pfind_at(im, fs, 0xe0, "48 89 df be D e8 D", c + 3, 3, &m)
+                : (vol || jus) ? pfind_at(im, fs, 0xe0, "48 89 df be D e8 D", c + 3, 3, &m)
                          : pfind_at(im, fs, 0xe0, "41 88 5e B 4c 89 f7 be D", c + 3, 3, &m);
         if (simple && t2 < 0) { /* improve relations: the constructor also sets one byte flag of its own first */
             uint32_t e[3];
@@ -1030,7 +1047,7 @@ static void diplo_action_facts(const scan_image *im, const cmd_spec *s, cmd_type
             if (t2 >= 0) c[3] = e[1];
         }
         if (t2 < 0 || m != 1) continue;
-        uint32_t typ = war ? c[4] : c[3], goal_off = 0, flag_off = war ? c[3] : 0;
+        uint32_t typ = war ? c[4] : c[3], goal_off = jus ? j_type : 0, flag_off = war ? c[3] : 0;
         if (war) {
             uint32_t g[2]; unsigned mg = 0;
             if (pfind_at(im, fs, 0xe0, "49 8b 47 08 49 89 46 B", g, 2, &mg) < 0 || mg != 1) continue;
@@ -1714,6 +1731,39 @@ static int diplo_date_reg(const uint8_t *fb) {
     return 0;
 }
 
+/* engineer 125: how an action class's write slot (vtable +0x18) serializes the elements of a handle list: the field id
+ * and the writer it calls per element (mov rdi,rbx; mov esi,FIELD; call begin; mov rdi,rbx; mov rsi,r15; call WRITER).
+ * A division list is proven by the same field and writer as the volunteers' list (a list of states or anything else
+ * is serialized differently and is never filled with divisions). */
+static int list_writer(const scan_image *im, uint64_t vt, uint32_t *field, uint64_t *writer) {
+    uint64_t wr = 0; uint32_t c[6]; unsigned m = 0;
+    if (!scan_q(im, vt + 0x18, &wr) || !in_text(im, wr)) return 0;
+    long a = pfind_at(im, wr, 0x100, "48 89 df be D e8 D 48 89 df 4c 89 fe e8 D", c, 6, &m);
+    if (a < 0 || m != 1) return 0;
+    *field = c[0];
+    *writer = wr + (uint64_t)a + 27 + (int64_t)(int32_t)c[2];
+    return 1;
+}
+
+/* engineer 125: the war goal type database, read from the justify action's own reader (vtable slot +0x28): the branch for
+ * the type's field loads the database through a GOT slot and calls the lookup by token, storing the result at the
+ * action's type offset; the lookup walks the database's type list from entry 1 comparing each type's token (entry 0 is
+ * its fallback). Every fact from these two sites; nothing assumed. */
+static void scan_wgt(const scan_image *im, uint64_t vt, uint32_t type_off, diplo_facts *d) {
+    uint64_t rd = 0; uint32_t c[6]; unsigned m = 0;
+    d->wgt_got = 0; d->wgt_arr_off = d->wgt_cnt_off = d->wgt_tok_off = 0;
+    if (!scan_q(im, vt + 0x28, &rd) || !in_text(im, rd)) return;
+    long a = pfind_at(im, rd, 0xc0, "48 8b 05 D 48 8b 38 41 8b b6 D e8 D 48 89 83 D", c, 6, &m);
+    if (a < 0 || m != 1 || c[3] != type_off) return;
+    uint64_t at = rd + (uint64_t)a, got = at + 7 + (int64_t)(int32_t)c[0], fn = at + 22 + (int64_t)(int32_t)c[2];
+    if (!in_text(im, fn)) return;
+    uint32_t e[6]; unsigned me = 0, mt = 0;
+    if (pfind_at(im, fn, 0x80, "41 8b 46 B 49 8b 4e B 83 f8 02 7c B", e, 6, &me) < 0 || me != 1) return;
+    uint32_t t[2];
+    if (pfind_at(im, fn, 0xa0, "48 8b 04 f1 39 58 B 74 B", t, 2, &mt) < 0 || mt != 1) return;
+    d->wgt_got = got; d->wgt_cnt_off = e[0]; d->wgt_arr_off = e[1]; d->wgt_tok_off = t[0];
+}
+
 static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stage2_table *t) {
     (void)pl; /* the command-level facts (post layout included) come from the resolved hand-written row */
     t->ndcat = 0; t->ndyn = 0;
@@ -1721,6 +1771,11 @@ static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stag
     for (int i = 0; i < t->n; i++)
         if (t->t[i].ok && t->t[i].spec->auth_kind == AUTH_DIPLO && t->t[i].spec->ctor == CTOR_DIPLO_SIMPLE && t->t[i].act_base) { ref = &t->t[i]; break; }
     const uint8_t *d = scan_ptr(im, im->dconst_addr, im->dconst_size);
+    /* engineer 125: the volunteers' division list serializer, the proof a division_list class holds divisions */
+    uint32_t div_field = 0; uint64_t div_writer = 0; int div_ok = 0;
+    for (int i = 0; i < t->n && !div_ok; i++)
+        if (t->t[i].ok && t->t[i].spec->ctor == CTOR_VOLUNTEER && t->t[i].vt_obj)
+            div_ok = list_writer(im, t->t[i].vt_obj, &div_field, &div_writer);
     /* the base class's typeinfo from the resolved row's own: its vtable -8 is its typeinfo, whose +0x10 is the base's */
     uint64_t ti_ref = 0, ti_base = 0, si_vptr = 0;
     char bn[72];
@@ -1810,6 +1865,8 @@ static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stag
             if (cmd_pmatch(fb, 15, "55 48 89 e5 53 48 83 ec 28 48 89 fb 8b 41 08", cc, 2)) kmask |= 1;
             if (cmd_pmatch(fb, 19, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 48 89 fb 8b 41 08", cc, 2)) kmask |= 2;
             if (cmd_pmatch(fb, 26, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 44 89 c3 49 89 cf 49 89 fe 41 8b 41 08", cc, 2)) kmask |= 4;
+            /* engineer 125: justify (the war goal type in rcx, the date in r8) */
+            if (cmd_pmatch(fb, 23, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 49 89 ce 48 89 fb 41 8b 40 08", cc, 2)) kmask |= 8;
         }
         const char *why = best == 3 ? "unsupported:dialog_fields" : best == 2 ? "unsupported:constructor_args_1"
                         : best == 1 ? "unsupported:constructor_args_2" : "unsupported:no_player_constructor";
@@ -1817,10 +1874,18 @@ static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stag
         if (!vts[k]) why = "unsupported:no_vtable";
         /* a constructor with the date in rcx may still be one of the known shapes: try them through the common scan */
         if (kmask && t->ndyn < DIPLO_CAT_MAX && t->n < CMD2_MAX) {
-            static const int kinds[3] = {CTOR_DIPLO_SIMPLE, CTOR_VOLUNTEER, CTOR_DIPLO_WAR};
+            /* engineer 125: the division prologue is tried with inline places (volunteers) and then with an allocated
+             * list (the expeditionary force); the justify prologue as the war goal type shape */
+            static const int kinds[5] = {CTOR_DIPLO_SIMPLE, CTOR_VOLUNTEER, CTOR_DIPLO_WAR, CTOR_DIPLO_DIVLIST, CTOR_DIPLO_JUSTIFY};
+            static const int kbit[5] = {1, 2, 4, 2, 8};
+            static const char *const kname[5] = {"simple", "divisions", "war_goal", "division_list", "war_goal_type"};
             snprintf(dc->op, sizeof dc->op, "diplomacy2.%s", dc->key);
-            for (int q = 0; q < 3; q++) {
-                if (!(kmask & (1 << q))) continue;
+            for (int q = 0; q < 5; q++) {
+                if (!(kmask & kbit[q])) continue;
+                if (kinds[q] == CTOR_DIPLO_DIVLIST) {
+                    uint32_t f = 0; uint64_t w = 0;
+                    if (!div_ok || !list_writer(im, vts[k], &f, &w) || f != div_field || w != div_writer) continue;
+                }
                 cmd_spec *sp = &t->dspec[t->ndyn];
                 *sp = *ref->spec;
                 sp->family = "diplomacy2"; sp->op = dc->op; sp->obj_cast = dc->cls; sp->ctor = kinds[q];
@@ -1842,7 +1907,8 @@ static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stag
                         break;
                     }
                     t->n++; t->ndyn++;
-                    snprintf(dc->shape, sizeof dc->shape, "%s", q == 0 ? "simple" : q == 1 ? "divisions" : "war_goal");
+                    snprintf(dc->shape, sizeof dc->shape, "%s", kname[q]);
+                    if (kinds[q] == CTOR_DIPLO_JUSTIFY) scan_wgt(im, vts[k], row->act_goal_off, &t->diplo);
                     dc->act_type = row->act_type; dc->on = 1;
                     break;
                 }
@@ -1854,7 +1920,9 @@ static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stag
 }
 
 const char *stage2_diplo_json(const stage2_table *t, char *buf, size_t n) {
-    size_t at = (size_t)snprintf(buf, n, "\"classes\":%d,\"buildable\":%d,\"actions\":[", t->ndcat, t->ndyn);
+    /* engineer 125: whether the war goal type database (justify's types by key) resolved */
+    size_t at = (size_t)snprintf(buf, n, "\"classes\":%d,\"buildable\":%d,\"war_goal_types\":%s,\"actions\":[", t->ndcat, t->ndyn,
+                                 t->diplo.wgt_got ? "true" : "false");
     for (int i = 0; i < t->ndcat && at < n; i++) {
         const diplo_class *c = &t->dcat[i];
         at += (size_t)snprintf(buf + at, n - at, "%s{\"key\":\"%s\",\"class\":\"%s\",\"op\":\"%s\",\"shape\":\"%s\",\"type\":%u,\"on\":%s}",

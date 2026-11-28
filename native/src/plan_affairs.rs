@@ -75,8 +75,9 @@
 //!                Against Tyranny the design click opens the MIO chooser (not live-verified)
 //!   diplomacy    [{"id","action","target":TAG,"when"?,"world_tension_max"?,..}] in list order, each done once
 //!                per `id` (else action and target) through hoi4_diplomacy_act. `action`: "justify"
-//!                (justify_war_goal; needs "war_goal" (a type, e.g. "Conquer") and "states" (1-5 names as
-//!                hoi4_diplomacy lists them); a goal against the target in hoi4_diplomacy_state
+//!                (justify_war_goal; needs "war_goal_key" (the game's key, e.g. "take_state") with "state_ids"
+//!                for a goal on states (by command), or "war_goal" (a type, e.g. "Conquer") and "states" (1-5
+//!                names as hoi4_diplomacy lists them; the dialog); a goal against the target in hoi4_diplomacy_state
 //!                own_war_goals, or a war with it, counts as done), "declare" (declare_war, below),
 //!                "guarantee", "non_aggression" (or "nap"), "access" (ask_military_access),
 //!                "offer_access", "docking", "improve_relations", "send_attache", "invite_to_faction",
@@ -1857,20 +1858,25 @@ fn justify(
     }
     let war_goal = text(&item["war_goal"]).trim().to_string();
     let states = strings(item, "states");
-    if war_goal.is_empty() || states.is_empty() {
+    // engineer 125: by the game's own war goal key and state ids (the module's justify by command), else by the
+    // view's names (the dialog)
+    let goal_key = text(&item["war_goal_key"]).trim().to_string();
+    let args = if !goal_key.is_empty() {
+        let ids: Vec<i64> = item["state_ids"]
+            .as_array()
+            .map(|a| a.iter().filter_map(Value::as_i64).collect())
+            .unwrap_or_default();
+        json!({"action": "justify_war_goal", "country": target, "war_goal_key": goal_key, "state_ids": ids})
+    } else if war_goal.is_empty() || states.is_empty() {
         waits.push(format!(
-            "{label}: justify needs war_goal and states (names as hoi4_diplomacy lists them)"
+            "{label}: justify needs war_goal_key (and state_ids for a goal on states) or war_goal and states (names as hoi4_diplomacy lists them)"
         ));
         state.skip(now, "dip", key, 30 * DAY);
         return Ok(None);
-    }
-    let (ok, why) = state.act(
-        run.tools,
-        run.lease,
-        "hoi4_diplomacy_act",
-        json!({"action": "justify_war_goal", "country": target, "war_goal": war_goal, "states": states}),
-        "dp",
-    )?;
+    } else {
+        json!({"action": "justify_war_goal", "country": target, "war_goal": war_goal, "states": states})
+    };
+    let (ok, why) = state.act(run.tools, run.lease, "hoi4_diplomacy_act", args, "dp")?;
     if ok || code(&why) == "nothing_to_change" {
         state.done.insert(key.to_string(), now);
     } else {

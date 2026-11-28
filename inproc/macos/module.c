@@ -432,6 +432,8 @@ typedef struct {
     /* units (engineer 75): each division's army before the post (the read-back compares), a new name (std::string
      * short form: at most 22 bytes), divisions not yet in an army are legal for a new army / a transfer */
     uint64_t grp_before[J2_DIVS]; char name[24]; int nname; int allow_free;
+    /* engineer 125: justify: the war goal type's key (the game's own key, e.g. take_state) */
+    char wgkey[40];
     /* events (engineer 76): the window's pending id, event, its handle, the country, the option chosen (shown place ->
      * the event's own option index) */
     int32_t ev_id, ev_country, ev_option; uint64_t ev_event, ev_handle;
@@ -743,6 +745,15 @@ static int fill_array(char *cmd, const cmd_field *f, const void *src, int n, int
     return 1;
 }
 
+/* engineer 125: fill an action's empty list ({data, capacity, size} + its allocator at +0x10) with n elements through
+ * that allocator's own allocate slot, as fill_array does for a command's field */
+static int fill_list(char *obj, uint32_t off, const void *src, int n, int esize) {
+    cmd_field f;
+    memset(&f, 0, sizeof f);
+    f.off = off; f.count_off = off + 0xc;
+    return fill_array(obj, &f, src, n, esize);
+}
+
 /* engineer 76: an event answer, everything taken from the open window as its own option click takes it. The window
  * must accept a click now (its gate byte), name the player's country, hold an event that resolves (generic lookup, the
  * auth slot's cast to CEvent) and has a pending record of the window's id in the game state (the record holds that
@@ -805,6 +816,25 @@ static const char *events_prep(job2_t *j, uint64_t gs, int *unavailable) {
 typedef void *(*country_of_fn)(const int32_t *);
 typedef void (*act_simple_fn)(void *, const int32_t *, const int32_t *, const void *);
 typedef void (*act_war_fn)(void *, const int32_t *, const int32_t *, const void *, int, const void *);
+/* engineer 125: justify's constructor (action, sender, receiver, war goal type, date) */
+typedef void (*act_justify_fn)(void *, const int32_t *, const int32_t *, const void *, const void *);
+static uint64_t mio_name_cb(void *ctx, int32_t tok);
+static int mio_rd_cb(uint64_t a, void *b, size_t n);
+/* engineer 125: the war goal type of that key from the game's own database (entry 0 is the lookup's fallback, never a
+ * match): each type's token named by the game's token-to-name function; 0 = no such type */
+static uint64_t war_goal_type(const char *key) {
+    const diplo_facts *d = &g_t.st2.diplo;
+    uint64_t slot = 0, db = 0, arr = 0; int32_t cnt = 0;
+    if (!d->wgt_got || !g_t.st2.mio.tok2str || !sq(d->wgt_got + (uint64_t)g_slide, &slot) || !plausible(slot) || !sq(slot, &db) ||
+        !plausible(db) || !sread(db + d->wgt_cnt_off, &cnt, 4) || cnt < 2 || cnt > 4096 || !sq(db + d->wgt_arr_off, &arr) || !plausible(arr))
+        return 0;
+    for (int32_t i = 1; i < cnt; i++) {
+        uint64_t ty = 0; int32_t tok = 0; char nm[64];
+        if (!sq(arr + 8 * (uint64_t)i, &ty) || !plausible(ty) || !sread(ty + d->wgt_tok_off, &tok, 4)) continue;
+        if (mio_str(mio_rd_cb, mio_name_cb(NULL, tok), nm, sizeof nm) && !strcmp(nm, key)) return ty;
+    }
+    return 0;
+}
 typedef void **(*make_cmd_fn)(void **, void **);
 typedef void *(*new_fn)(size_t);
 static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint64_t q, uint64_t post) {
@@ -840,6 +870,12 @@ static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint6
     uint64_t dobj[3] = {d->date_vt + sl + 0x10, (uint64_t)(uint32_t)date, d->date_vt + sl + 0x60};
     /* engineer 118: volunteers carry divisions; one action per group of at most the list's inline places (j->res[k] per
      * action); every other action is one post */
+    /* engineer 125: justify needs its war goal type (by key) before anything is built */
+    uint64_t wgt = 0;
+    if (ct->spec->ctor == CTOR_DIPLO_JUSTIFY) {
+        wgt = war_goal_type(j->wgkey);
+        if (!wgt) { j->res[0] = R_BAD_OBJ; return "no war goal type of that key in the game's database"; }
+    }
     int vol = ct->spec->ctor == CTOR_VOLUNTEER, nact = 1, per = 1;
     if (vol) {
         per = (int)ct->act_units_cap;
@@ -852,7 +888,10 @@ static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint6
     char *act = (char *)nw(ct->act_size);
     if (!act) { j->unexplained = 1; return "allocation failed"; }
     memset(act, 0, ct->act_size);
-    if (ct->spec->ctor == CTOR_DIPLO_SIMPLE || vol) ((act_simple_fn)(uintptr_t)(ct->act_ctor + sl))(act, &j->player_tag, &target, dobj);
+    if (ct->spec->ctor == CTOR_DIPLO_SIMPLE || vol || ct->spec->ctor == CTOR_DIPLO_DIVLIST)
+        ((act_simple_fn)(uintptr_t)(ct->act_ctor + sl))(act, &j->player_tag, &target, dobj);
+    else if (ct->spec->ctor == CTOR_DIPLO_JUSTIFY)
+        ((act_justify_fn)(uintptr_t)(ct->act_ctor + sl))(act, &j->player_tag, &target, (const void *)(uintptr_t)wgt, dobj);
     else ((act_war_fn)(uintptr_t)(ct->act_ctor + sl))(act, &j->player_tag, &target, (const void *)(uintptr_t)goal, 0, dobj);
     /* what the game built must be exactly what was asked */
     uint64_t av = 0, ah = 0; int32_t at = -1, as = -1, ar = -1;
@@ -876,6 +915,12 @@ static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint6
             *(int32_t *)(act + ct->act_units_off + 0xc) = m;
         }
     }
+    if (ok && ct->spec->ctor == CTOR_DIPLO_JUSTIFY) { /* the type as given, then the states (take-state goals) */
+        uint64_t ty = 0;
+        ok = sq((uint64_t)(uintptr_t)act + ct->act_goal_off, &ty) && ty == wgt;
+        if (ok && j->nprov) ok = fill_list(act, ct->act_units_off, j->provs, j->nprov, 4);
+    }
+    if (ok && ct->spec->ctor == CTOR_DIPLO_DIVLIST) ok = fill_list(act, ct->act_units_off, j->divh, j->ndivh, 8);
     if (!ok) { void **vt0 = *(void ***)act; ((delete_fn2)vt0[1])(act); j->res[k] = R_UNEXPECTED; j->unexplained = 1; return "the action constructor built an unexpected object"; }
     void *up = act, *cmd = NULL;
     ((make_cmd_fn)(uintptr_t)(d->make_cmd + sl))(&cmd, &up); /* moves the action into a fresh command, stamps the date */
@@ -1173,7 +1218,7 @@ static void run_job2(void *ctx) {
     }
     if (ct->spec->auth_kind == AUTH_DIPLO) { /* engineer 78: no object handles; the action is built and checked whole */
         uint64_t post2 = g_t.post.post + (uint64_t)g_slide;
-        if (ct->spec->ctor == CTOR_VOLUNTEER) { /* engineer 118: every division checked as the division commands check one */
+        if (ct->spec->ctor == CTOR_VOLUNTEER || ct->spec->ctor == CTOR_DIPLO_DIVLIST) { /* engineer 118: every division checked as the division commands check one */
             const char *w = orders2_divisions(j);
             if (w) { j->res[0] = R_BAD_OBJ; snprintf(j->reason, sizeof j->reason, "%s", w); finish2(j); return; }
         }
@@ -1611,13 +1656,29 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
          * the diplomacy view); a division-list action (send / recall volunteers) also names the divisions (divs: hex
          * addresses, at most 64); flag 0 = post, 2 = check only (the action is built and the game's own "can do" asked,
          * then destroyed: nothing is posted; the answer of the view's Send button for the diplomacy read) */
-        int wants_divs = ct->spec->ctor == CTOR_VOLUNTEER;
+        int wants_divs = ct->spec->ctor == CTOR_VOLUNTEER || ct->spec->ctor == CTOR_DIPLO_DIVLIST;
+        /* engineer 125: justify also takes the war goal type's key as character codes after the tag (vals[1..], as a
+         * rename passes its name) and, for a goal on states, their ids in provs (1..64) */
+        int jus = ct->spec->ctor == CTOR_DIPLO_JUSTIFY;
         if (j->n != 1 || j->obj[0] != 0) why = "diplomacy ops name no object: objs = 0 (vals: the receiving country's tag id)";
-        else if (nv != 1 || j->val[0] < 1 || j->val[0] > 100000) why = "vals: the receiving country's tag id";
-        else if ((flag != 0 && flag != 2) || (obj2 && *obj2) || (provs && *provs)) why = "diplomacy ops take flag 0 (post) or 2 (check only) and no obj2 or provs";
+        else if (!jus && (nv != 1 || j->val[0] < 1 || j->val[0] > 100000)) why = "vals: the receiving country's tag id";
+        else if (jus && (nv < 2 || nv - 1 >= (int)sizeof j->wgkey || j->val[0] < 1 || j->val[0] > 100000))
+            why = "vals: the receiving country's tag id, then the war goal type's key as character codes (1..39)";
+        else if ((flag != 0 && flag != 2) || (obj2 && *obj2) || (!jus && provs && *provs)) why = "diplomacy ops take flag 0 (post) or 2 (check only) and no obj2 or provs";
         else if (!wants_divs && divs && *divs) why = "this diplomatic action takes no divs";
         else if (wants_divs && ((j->ndiv = parse_list_u64(divs ? divs : "", j->divs, 64)) < 1)) why = "divs: 1 to 64 comma-separated division addresses";
         for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a division is listed twice";
+        if (!why && jus) {
+            for (int k = 1; k < nv && !why; k++) {
+                int64_t ch = j->val[k];
+                if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_')) why = "the war goal key is letters, digits and _ only";
+                else j->wgkey[k - 1] = (char)ch;
+            }
+            j->wgkey[nv - 1] = 0;
+            if (!why && provs && *provs && ((j->nprov = parse_list_i32(provs, j->provs, 64)) < 1)) why = "provs: 1 to 64 state ids";
+            for (int a = 0; !why && a < j->nprov; a++) if (j->provs[a] < 1 || j->provs[a] > 100000) why = "a state id is outside 1..100000";
+            nv = 1; /* the tag only stays in vals[0] */
+        }
         if (!why) { j->n = 1; j->obj[0] = 0; if (wants_divs) j->allow_free = 1; }
         if (why) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused_by_policy\",\"reason\":\"%s\"", op, why); free(j); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
         nv = 0; /* consumed */
