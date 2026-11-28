@@ -148,12 +148,12 @@ impl Table {
 /// below 2^64.
 pub(crate) const UNMAPPED: u64 = 1 << 47;
 
-/// Table for the Linux build (HOI4 1.20.0.0, GNU build ID 71806afa): the 1.19.4.1 table (from
-/// `scripts/gen_linux_layout.py generate` plus the reviewed hints and live corrections) moved to
-/// this build by `scripts/linux_build_migrate.py --table`; entries the migration could not confirm
-/// are left out.
+/// Table for the Linux build (HOI4 1.20.1.0, GNU build ID 8e7ff8b3): `scripts/game_migrate.py` against
+/// the macOS key build, joined with the 1.20.0.0 table moved by `scripts/linux_build_migrate.py --table`
+/// (the move wins where they differ: its values are the 1.20.0.0 ones, several confirmed live); entries
+/// neither could confirm are left out.
 const LINUX_TABLE: Option<&str> = Some(include_str!(
-    "../layouts/linux-71806afa707a46fb72f0738a719c3f1c3f5e2e42.json"
+    "../layouts/linux-8e7ff8b3de4402d28ada7f7c976e7464e1fbe458.json"
 ));
 
 /// Development builds only (`--features dev-table`, never in releases): the
