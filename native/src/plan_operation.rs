@@ -2005,15 +2005,180 @@ fn order(
     tool: &str,
     args: Value,
 ) -> Result<String> {
+    let moved = refinement(what, tool, &args);
     let (ok, why) = state.act(tools, lease, tool, args, "op")?;
     if !ok && why.contains("events_open") {
         // an open event holds every order of the operation: the next tick's event pass answers
         // it at once (o1g: germany_mefo_bills.1 in the declaration tick held the attack 7 days)
         state.op_events_now = true;
     }
+    if let Some((kind, army, n)) = moved {
+        ledger(state, id, kind, &army, n, ok, what);
+    }
     let line = format!("operation {id}: {what}: {ok} {why}");
     state.op_notes.insert(id.to_string(), line.clone());
     Ok(line)
+}
+
+/// Game hours of a war in which the refinements wait for every attacker to read executing (the
+/// opening's own orders first); after them a refinement runs even if an attacker never executes.
+const OPENING_FIRST: GameHour = 2 * DAY;
+
+/// Whether the refinements wait: the operation's war is younger than OPENING_FIRST and an
+/// attacker at war does not read executing yet, or its execution mode (when chosen by value)
+/// has not been read in this war. Pure but for the state's timers.
+fn opening_orders_first(
+    state: &State,
+    id: &str,
+    op: &Value,
+    units: &[Unit],
+    roster: &Value,
+    at_war: &[String],
+    now: GameHour,
+) -> bool {
+    let young = at_war.iter().any(|e| {
+        state
+            .done
+            .get(&key(id, &format!("war0:{e}")))
+            .is_some_and(|t| now.saturating_sub(*t) < OPENING_FIRST)
+    });
+    young
+        && units
+            .iter()
+            .filter(|u| attacker(u) && at_war.contains(&u.enemy))
+            .any(|u| {
+                !executing(roster, &u.name)
+                    || (pace::auto(op) && !state.skipped(now, "opmodeauto", &u.name))
+            })
+}
+
+/// What a refinement order moves (kind, army, divisions; 0 = the whole army or a weight change):
+/// the orders that take divisions out of, between or into the battle plan's own distribution
+/// (a direct move, an assignment, a spread, a detach or merge, a cleared plan). The orders that
+/// start or steer the attack itself (execute, mode, front, offensive) are not refinements. Pure.
+fn refinement(what: &str, tool: &str, args: &Value) -> Option<(&'static str, String, usize)> {
+    let army = text(&args["army"]).to_string();
+    let count = |v: &Value| v.as_array().map_or(0, Vec::len);
+    let (by_tool, n) = match tool {
+        "hoi4_army_move" if args["divisions"].is_array() => ("move", count(&args["divisions"])),
+        "hoi4_army_plan" if args["assign"].is_object() => {
+            ("assign", count(&args["assign"]["divisions"]))
+        }
+        "hoi4_army_plan" if args["distribute"].is_object() => ("spread", 0),
+        "hoi4_army_plan" if args["clear_orders"] == json!(true) => ("clear", 0),
+        "hoi4_army_detach" => ("detach", count(&args["divisions"])),
+        "hoi4_army_merge" => ("merge", 0),
+        _ => return None,
+    };
+    let army = if army.is_empty() {
+        text(&args["source"]).to_string()
+    } else {
+        army
+    };
+    let w = what.to_ascii_lowercase();
+    let kind = if w.starts_with("shed") {
+        "shed"
+    } else if w.starts_with("stuck point") {
+        "push"
+    } else if w.contains("sideways") {
+        "sideways"
+    } else if w.starts_with("opening") {
+        "opening"
+    } else if w.contains("echelon") {
+        "echelon"
+    } else if w.contains("relief") || w.contains("overdrawn") {
+        "relief"
+    } else if w.contains("hand") {
+        "handover"
+    } else {
+        by_tool
+    };
+    Some((kind, army, n))
+}
+
+/// How many recent refinements the ledger note lists.
+const LEDGER_RECENT: usize = 8;
+
+/// THE REFINEMENT LEDGER (engineer 104, 28 Nov 2026): every refinement the operation sends is
+/// counted per kind (orders, divisions, refused) and the last few are listed with their war day,
+/// in the note `<id>:ledger` that the [ops] line prints: a refinement that moved divisions out of
+/// the attack at the wrong hour is visible in one read (w101c: three sheds by the mouse in the
+/// declaration's burst took Holland's opening; nothing in the notes said so).
+fn ledger(state: &mut State, id: &str, kind: &str, army: &str, n: usize, ok: bool, what: &str) {
+    let now = state.clock;
+    let bump = |state: &mut State, what: String, by: i64| {
+        *state.done.entry(key(id, &what)).or_insert(0) += by;
+    };
+    bump(state, format!("ledger:k:{kind}"), 1);
+    bump(state, format!("ledger:n:{kind}"), n as i64);
+    if !ok {
+        bump(state, format!("ledger:x:{kind}"), 1);
+    }
+    let w0 = state
+        .done
+        .iter()
+        .filter(|(k, _)| k.starts_with(&key(id, "war0:")))
+        .map(|(_, v)| *v)
+        .min();
+    let day = match w0 {
+        Some(t) => format!("W{:+.1}", (now - t) as f64 / DAY as f64),
+        None => "peace".to_string(),
+    };
+    let short: String = what.chars().take(70).collect();
+    let entry = format!(
+        "{day} {kind} {army}{} {}: {short}",
+        if n > 0 {
+            format!(" {n}")
+        } else {
+            String::new()
+        },
+        if ok { "ok" } else { "refused" }
+    );
+    let nk = format!("{id}:ledger");
+    let mut recent: Vec<String> = state
+        .op_notes
+        .get(&nk)
+        .and_then(|s| s.split_once(" | last: "))
+        .map(|(_, r)| r.split(" || ").map(String::from).collect())
+        .unwrap_or_default();
+    recent.push(entry);
+    let skip = recent.len().saturating_sub(LEDGER_RECENT);
+    let recent: Vec<String> = recent.into_iter().skip(skip).collect();
+    let prefix = key(id, "ledger:k:");
+    let mut totals: Vec<String> = state
+        .done
+        .iter()
+        .filter_map(|(k, v)| {
+            let kind = k.strip_prefix(&prefix)?;
+            let divs = state
+                .done
+                .get(&key(id, &format!("ledger:n:{kind}")))
+                .copied()
+                .unwrap_or(0);
+            let refused = state
+                .done
+                .get(&key(id, &format!("ledger:x:{kind}")))
+                .copied()
+                .unwrap_or(0);
+            Some(format!(
+                "{kind} {v} order(s), {divs} division(s){}",
+                if refused > 0 {
+                    format!(", {refused} refused")
+                } else {
+                    String::new()
+                }
+            ))
+        })
+        .collect();
+    totals.sort();
+    state.op_notes.insert(
+        nk,
+        format!(
+            "operation {id}: refinements: {} | last: {}",
+            totals.join("; "),
+            recent.join(" || ")
+        ),
+    );
 }
 
 /// A mobile army's front in peace is a narrow segment: the border between its one own state and
@@ -2695,6 +2860,11 @@ fn one(
     for e in &all_enemies {
         if at_war.contains(e) {
             state.done.insert(key(id, &format!("fought:{e}")), now);
+            // the hour the operation first met this war (the ledger's W, the opening's age)
+            state
+                .done
+                .entry(key(id, &format!("war0:{e}")))
+                .or_insert(now);
         }
     }
     // OUT: an enemy fought and no longer at war, or left with a remnant across the sea
@@ -2815,11 +2985,6 @@ fn one(
         spear_pockets(
             state, tools, plan, op, &mut units, roster, &enemies, &at_war, now,
         )?;
-        // THE STUCK POINT: a battle not won for days with idle fit divisions on its unused sides
-        if let Some(line) = stuck_push_step(state, tools, id, op, &units, roster, wars, lease, now)?
-        {
-            return Ok(Some(line));
-        }
         // the strike formations first: their orders are quick whole-army moves, and behind the
         // line work they got no turn while a line order kept failing (qb1, 19 Nov 2026: the
         // column stood in Lodz from day 28 to day 56 while the burst ended on resting redraws)
@@ -2863,7 +3028,19 @@ fn one(
             return Ok(Some(line));
         }
         // THE EXECUTION MODE BY VALUE, once the war's own orders stand
-        return war_modes(state, tools, id, op, &units, roster, &at_war, lease, now);
+        if let Some(line) = war_modes(state, tools, id, op, &units, roster, &at_war, lease, now)? {
+            return Ok(Some(line));
+        }
+        // REFINEMENTS LAST (the stuck point, the shed): direct orders that take divisions out of
+        // the battle plan's own distribution come after every order that starts or steers the
+        // attack, and never while the opening's own orders are still to stand (w101c, 28 Nov
+        // 2026: three sheds by the mouse went first in the declaration's burst, 31 s, before
+        // Luxembourg's army executed, before the rush modes and the air; the next war turn came
+        // at W+3 and Holland, out at W+3.1 in w101b, held every state on W+15)
+        if opening_orders_first(state, id, op, &units, roster, &at_war, now) {
+            return Ok(None);
+        }
+        return stuck_push_step(state, tools, id, op, &units, roster, wars, lease, now);
     }
     // BORDER FRONTS: marked before the prepare's own reconcile, so the unit's line offensive goes
     // under its own front and each border front gets its own
@@ -7877,12 +8054,17 @@ fn stuck_push_step(
     )?))
 }
 
-/// SHED TO THE UNATTACKED (`push.shed`, on unless `false`): with no stuck battle to push, the
+/// SHED TO THE UNATTACKED (`push.shed`, OFF unless `true`): with no stuck battle to push, the
 /// divisions that wait where they cannot fight (a full battle's reserve, the fit idle ones on the
 /// line) attack the enemy province beside them that no battle of ours attacks (`capacity::shed`),
 /// by a direct order of the one army with most of them, within its refinement cool-down; one
 /// province in `push.days`. w101a (28 Nov 2026, W+10): 3488 held 21 for a width of 7, 4 of the 7
 /// enemy provinces in reach were attacked, and no push went out in ten war days.
+/// OFF BY DEFAULT (engineer 104): the first leg with it on (w101c, 28 Nov 2026) shed 9 divisions
+/// of the Holland group by the mouse in its first three war turns, Holland held every state on
+/// W+15 where w101b without it had Holland out on W+3.1, and the engaged share fell (8-22% against
+/// 10-36%): a refinement that lowers the engaged share or delays a capitulation stays off until a
+/// leg proves it.
 #[allow(clippy::too_many_arguments)]
 fn shed_step(
     state: &mut State,
@@ -7898,7 +8080,7 @@ fn shed_step(
     now: GameHour,
 ) -> Result<Option<String>> {
     let cfg = &op["push"];
-    if cfg["shed"] == json!(false) || enemy_states.is_empty() {
+    if cfg["shed"] != json!(true) || enemy_states.is_empty() {
         return Ok(None);
     }
     let due: HashSet<String> = armies

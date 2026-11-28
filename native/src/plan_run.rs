@@ -5208,10 +5208,29 @@ fn opening_holds(
 /// Wall seconds the operations' burst may take between two declarations due the same day.
 const BETWEEN_DECLARATIONS_SECONDS: u64 = 6;
 
-/// Whether the operations' burst after a declaration had an order refused (an open event holds
-/// them, or an order line reads `: false`): the opening air burst then waits a tick.
+/// Whether the operations' burst after a declaration had an ATTACK order refused (an open event
+/// holds them, or an execute or attack order reads `: false`): the opening air burst then waits a
+/// tick. A refused refinement (a shed, a push, a sideways move, a spread) is not the attack: it
+/// does not cost the air its opening (w101c, 28 Nov 2026: a shed by the mouse read
+/// input_readback_failed, the air burst was dropped from the declaration's tick and came on W+5).
 fn burst_refused(events_now: bool, executed: Option<&str>) -> bool {
-    events_now || executed.is_some_and(|l| l.contains(": false "))
+    const REFINEMENTS: [&str; 7] = [
+        "shed:",
+        "stuck point:",
+        "sideways",
+        "spread over",
+        "echelon",
+        "opening:",
+        "relief",
+    ];
+    events_now
+        || executed.is_some_and(|l| {
+            l.split("; ").any(|part| {
+                part.contains(": false ")
+                    && (part.contains("events_open")
+                        || !REFINEMENTS.iter().any(|r| part.contains(r)))
+            })
+        })
 }
 
 /// A due declaration of war, then (same tick) the execution of the operations that wait for
@@ -14022,6 +14041,28 @@ mod tests {
             Some("operation op: execute Army Group 1: true Verified")
         ));
         assert!(!super::burst_refused(false, None));
+    }
+
+    #[test]
+    fn a_refused_refinement_does_not_hold_the_opening_air_burst() {
+        // w101c (28 Nov 2026): the declaration's burst; the shed by the mouse failed and the air
+        // burst over Holland waited five game days
+        let w101c = "war burst of 3 orders in 31 s: operation op_lowlands: shed: 2 of Army 2 \
+            waiting where they cannot fight attack the unattacked province 6500 (state 35) from \
+            [3444]: false input_readback_failed: No division took a march order; operation \
+            op_lowlands: shed: 2 of Armee West Süd waiting where they cannot fight attack the \
+            unattacked province 6583 (state 8) from [11435]: true Verified";
+        assert!(!super::burst_refused(false, Some(w101c)));
+        // an event that refuses the shed refuses the attack's orders too
+        assert!(super::burst_refused(
+            false,
+            Some("operation op: shed: 2 of A attack 6500: false events_open: germany_mefo_bills.1")
+        ));
+        // a refused execute beside a working refinement still holds it
+        assert!(super::burst_refused(
+            false,
+            Some("operation op: shed: 2 of A attack 6500: true Verified; operation op: Army 7 is not executing: execute: false action_not_applied")
+        ));
     }
 
     #[test]

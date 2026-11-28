@@ -5742,7 +5742,17 @@ fn a_pile_on_a_full_battle_sheds_to_the_unattacked_enemy_province_beside_it() {
         {"neighbour_tag": "LUX", "own_border_states": [42], "neighbour_states": [8]}]});
     let units = vec![unit("West".into(), Role::Wing, &Value::Null, &Value::Null)];
     let roster = game.roster.borrow().clone();
-    let op = json!({"id": "op", "enemies": ["BEL", "LUX"], "refine_days": 2});
+    // OFF BY DEFAULT (w101c, 28 Nov 2026): without `push.shed: true` nothing is shed
+    let plain = json!({"id": "op", "enemies": ["BEL", "LUX"], "refine_days": 2});
+    let mut state = State::default();
+    assert!(
+        stuck_push_step(&mut state, &game, "op", &plain, &units, &roster, &wars, "l", START,)
+            .unwrap()
+            .is_none()
+    );
+    assert!(game.orders().iter().all(|(n, _)| n != "hoi4_army_move"));
+    let op = json!({"id": "op", "enemies": ["BEL", "LUX"], "refine_days": 2,
+                    "push": {"shed": true}});
     let mut state = State::default();
     let line = stuck_push_step(
         &mut state, &game, "op", &op, &units, &roster, &wars, "l", START,
@@ -5988,4 +5998,128 @@ fn an_enemy_met_on_land_that_keeps_only_land_overseas_is_out_of_the_operation() 
     let mut fresh = State::default();
     let sea = json!({"wars": {"enemies": ["ENG"], "no_land_front": ["ENG"]}, "borders": []});
     assert!(!left_the_land(&mut fresh, "op", &sea, "ENG"));
+}
+
+#[test]
+fn the_refinements_wait_while_the_opening_s_own_orders_do_not_stand() {
+    // w101c (28 Nov 2026): three sheds went out in the declaration's burst before Army 7 executed
+    // and before the rush modes; the next war turn came at W+3
+    let mut roster = json!({"armies": [
+        {"army": "Group", "army_group": null, "plan": [
+            {"kind": "front", "executing": true, "offensives": []}]},
+        {"army": "Lux", "army_group": null, "plan": [
+            {"kind": "front", "executing": false, "offensives": []}]}]});
+    let mut g = unit("Group".into(), Role::Group, &Value::Null, &Value::Null);
+    g.enemy = "HOL".into();
+    let mut l = unit("Lux".into(), Role::Mobile, &Value::Null, &Value::Null);
+    l.enemy = "LUX".into();
+    let units = vec![g, l];
+    let at_war = vec!["HOL".to_string(), "LUX".to_string()];
+    let op = json!({"id": "op", "enemies": ["HOL", "LUX"]});
+    let mut state = State::default();
+    state.done.insert(key("op", "war0:HOL"), START);
+    state.done.insert(key("op", "war0:LUX"), START);
+    // Luxembourg's army does not execute yet: the refinements wait
+    assert!(opening_orders_first(
+        &state,
+        "op",
+        &op,
+        &units,
+        &roster,
+        &at_war,
+        START + 1
+    ));
+    // it executes, but no mode has been read for the war yet (the mode by value is on)
+    roster["armies"][1]["plan"][0]["executing"] = json!(true);
+    assert!(opening_orders_first(
+        &state,
+        "op",
+        &op,
+        &units,
+        &roster,
+        &at_war,
+        START + 1
+    ));
+    // both modes read: the refinements may go
+    state.skip(START, "opmodeauto", "Group", 3 * DAY);
+    state.skip(START, "opmodeauto", "Lux", 3 * DAY);
+    assert!(!opening_orders_first(
+        &state,
+        "op",
+        &op,
+        &units,
+        &roster,
+        &at_war,
+        START + 1
+    ));
+    // an attacker that never executes does not hold them past the opening's first days
+    roster["armies"][1]["plan"][0]["executing"] = json!(false);
+    assert!(opening_orders_first(
+        &state,
+        "op",
+        &op,
+        &units,
+        &roster,
+        &at_war,
+        START + 1
+    ));
+    assert!(!opening_orders_first(
+        &state,
+        "op",
+        &op,
+        &units,
+        &roster,
+        &at_war,
+        START + OPENING_FIRST
+    ));
+}
+
+#[test]
+fn every_refinement_is_counted_in_the_operation_s_ledger() {
+    // one read of the [ops] notes shows which refinement moved how many divisions when
+    let game = Game::new();
+    let mut state = State::default();
+    state.done.insert(key("op", "war0:HOL"), START);
+    state.clock = START + 3 * DAY;
+    order(
+        &mut state,
+        &game,
+        "l",
+        "op",
+        "shed: 3 of Army 3 waiting where they cannot fight attack the unattacked province 11318",
+        "hoi4_army_move",
+        json!({"army": "Army 3", "divisions": ["a", "b", "c"], "province_id": 11318, "state_id": 36}),
+    )
+    .unwrap();
+    state.clock = START + 5 * DAY;
+    order(
+        &mut state,
+        &game,
+        "l",
+        "op",
+        "Army Group 2: 5 divisions sideways onto front 48: province 3488 holds 18 in reserve",
+        "hoi4_army_plan",
+        json!({"army": "Army Group 2", "assign": {"divisions": ["d", "e", "f", "g", "h"], "order": 48}}),
+    )
+    .unwrap();
+    // the attack's own orders are not refinements
+    order(
+        &mut state,
+        &game,
+        "l",
+        "op",
+        "Army 7 is not executing: execute",
+        "hoi4_army_plan",
+        json!({"army": "Army 7", "execute": true}),
+    )
+    .unwrap();
+    let note = &state.op_notes["op:ledger"];
+    assert!(note.contains("shed 1 order(s), 3 division(s)"), "{note}");
+    assert!(
+        note.contains("sideways 1 order(s), 5 division(s)"),
+        "{note}"
+    );
+    assert!(note.contains("W+3.0 shed Army 3 3"), "{note}");
+    assert!(note.contains("W+5.0 sideways Army Group 2 5"), "{note}");
+    assert!(!note.contains("execute"), "{note}");
 }
