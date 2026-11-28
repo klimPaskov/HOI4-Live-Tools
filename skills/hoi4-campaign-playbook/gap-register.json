@@ -1547,14 +1547,14 @@
    "tools": [
     "hoi4_diplomacy_act"
    ],
-   "blocked": "send_volunteers dialog needs a division group choice: dialog_unsupported",
+   "blocked": "send_volunteers dialog needs a division group choice: dialog_unsupported. Statically: the action is CSendVolunteerAction (recall CRecallVolunteerAction), chosen in CDiplomacySendVolunteersController; the in-process diplomacy family leaves dialog actions to the mouse",
    "blocked_terms": [
     "volunteer"
    ],
    "payoff": "medium",
    "why": "army XP and veteran divisions before the main war",
    "closing": "both",
-   "owner": "volunteer dialog support, then live"
+   "owner": "engineer 108 (strategy): a volunteers opportunity rule (any war we may join as volunteers, ideology and tension gates as the diplomacy view shows them, recall lock 180 days, stop before our own war); then a typed tool: CSendVolunteerAction with the chosen divisions through the diplomacy family, live"
   },
   {
    "id": "lendlease.air_volunteers",
@@ -1565,7 +1565,7 @@
    ],
    "plan": [],
    "tools": [],
-   "blocked": "no tool for air volunteers",
+   "blocked": "no tool for air volunteers; no air-volunteer command class found by name in the executable (the land action is CSendVolunteerAction); the air wing view's send path is not mapped",
    "payoff": "low",
    "why": "air XP only",
    "closing": "both",
@@ -5594,6 +5594,25 @@
    "owner": "Decide whether carrier wings need orders (game assigns them to the carrier); map carrier wings in hoi4_air"
   },
   {
+   "id": "air.paradrop",
+   "domain": "air",
+   "capability": "Paratrooper drops on victory points, ports and air fields when transports reach, the region's air is ours and (FAIR) the front can link up",
+   "playbook": [
+    "exploits.md#paradrop rows (META only)"
+   ],
+   "plan": [
+    "airborne",
+    "airborne.targets"
+   ],
+   "tools": [
+    "hoi4_paradrop"
+   ],
+   "payoff": "low",
+   "why": "A drop costs 50 transports a division (90 for two, 135 for three) and 70% air superiority: worth it only where it decides a capitulation VP, a port an invasion needs, or a pocket",
+   "closing": "live",
+   "owner": "S21-PARADROP (docs/LIVE_VALIDATION_QUEUE.md), then paradrop::LIVE_PASSED; para template, transport line and special-forces doctrine (S18 D2) in the strategist's plan"
+  },
+  {
    "id": "air.raids",
    "domain": "air",
    "capability": "Gotterdammerung raids: list the raids a country may run (common/raids), plan their prerequisites, prepare and launch them (Eben-Emael before the West, pathfinder before a landing, facility and oilfield raids)",
@@ -5606,7 +5625,7 @@
    "payoff": "high",
    "why": "Belgium is where the West loses most days: Eben-Emael (FAIR allowed) removes 4-6 bunker levels at Liege and gives -25% river crossing against Belgium for 180 days; raids are a general system for any country (custom raids first)",
    "closing": "both",
-   "owner": "engineer 106: in-process raid family (a builder for the starting point and target structs, the raid type by name), a read of available raids and instances, hoi4_raid (list, prepare, launch, read), the raids plan key and the operation step; live session S22-RAID"
+   "owner": "engineer 106: in-process raid family (a builder for the starting point and target structs, the raid type by name), a read of available raids and instances, hoi4_raid (list, prepare, launch, read), the raids plan key and the operation step; live session S23-RAID"
   },
   {
    "id": "navy.patrol_dominance",

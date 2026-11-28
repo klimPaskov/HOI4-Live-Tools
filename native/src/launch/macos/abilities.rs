@@ -35,6 +35,10 @@ pub(super) struct Ability {
     pub cooldown_h: i64,
     pub not_for_army_groups: bool,
     pub dlc_in_allowed: Vec<String>,
+    /// Conditions on the country in `allowed` (a completed focus, a country flag, a tag, ...), as
+    /// "key = value": no tool checks them here, so such an ability is never a best pick (live 115,
+    /// 28 Nov 2026: Germany was offered Japan's staff plan and the quinine ability).
+    pub country_requires: Vec<String>,
     pub modifiers: Vec<(String, f64)>,
     pub nested: Vec<(String, String, f64)>,
 }
@@ -85,9 +89,36 @@ pub(super) fn parse(entries: &[Entry]) -> Vec<Ability> {
                 cooldown_h: b.number("cooldown").unwrap_or(0.0) as i64,
                 not_for_army_groups: allowed.text("is_leading_army_group") == Some("no"),
                 dlc_in_allowed: dlcs(allowed),
+                country_requires: country_requires(allowed),
                 modifiers,
                 nested,
             });
+        }
+    }
+    out
+}
+
+/// The unconditional conditions on the country of an `allowed` block: the entries of its OWNER
+/// scope (and tag tests at its top) other than conditional wrappers (`if`, `else`, `limit`) and the
+/// DLC tests. `NOT`, `OR` and the like count as one condition each.
+fn country_requires(allowed: &[Entry]) -> Vec<String> {
+    let mut out = Vec::new();
+    let text = |e: &Entry| match &e.val {
+        Val::Scalar(v) => format!("{} = {}", e.key, v.trim_matches('"')),
+        Val::Block(_) => format!("{} = {{..}}", e.key),
+    };
+    for e in allowed {
+        let key = e.key.to_ascii_lowercase();
+        if key == "tag" || key == "original_tag" {
+            out.push(text(e));
+        }
+        if key == "owner" {
+            for c in e.val.block() {
+                let k = c.key.to_ascii_lowercase();
+                if !matches!(k.as_str(), "if" | "else" | "else_if" | "limit" | "has_dlc") {
+                    out.push(text(c));
+                }
+            }
         }
     }
     out
@@ -180,7 +211,7 @@ pub(super) fn best<'a>(
 ) -> Option<(&'a Ability, f64)> {
     let mut rows: Vec<(&Ability, f64, bool)> = all
         .iter()
-        .filter(|a| a.kind == "army_leader" && a.cost > 0.0)
+        .filter(|a| a.kind == "army_leader" && a.cost > 0.0 && a.country_requires.is_empty())
         .map(|a| {
             let (g, d) = worth(a, situation);
             (a, g / a.cost, d.is_some())
@@ -210,6 +241,7 @@ pub(super) fn answer(all: &[Ability], command_power: Option<f64>) -> Value {
                 "cooldown_days": (a.cooldown_h > 0).then(|| a.cooldown_h as f64 / 24.0),
                 "field_marshal_may_use": !a.not_for_army_groups,
                 "dlc_in_allowed": a.dlc_in_allowed,
+                "country_requires": a.country_requires,
                 "unit_modifiers": a.modifiers.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<Map<_, _>>(),
                 "terrain_modifiers": a.nested.iter().map(|(s, k, v)| json!({"where": s, k: v})).collect::<Vec<_>>(),
                 "worth": worth_in,
@@ -258,7 +290,7 @@ pub(super) fn call(
 }
 
 pub(super) fn tool() -> Value {
-    json!({"name": "hoi4_army_abilities", "description": "Read-only, no input: the commander abilities of the running game (common/abilities, mods included): per ability its command power cost per day (for each battalion group the game's tooltip names), duration, cooldown, whether a field marshal may use it, its unit modifiers, and its worth in each situation (prepare_attack: planning speed; reinforce: reinforce rate; attack, attack_river, attack_fort: attack and breakthrough plus the river's or fort's own bonus; defend: defence and dig-in; short_supply: days without supply), with the drawback named (more strength lost, no retreat, less attack); best_by_situation picks the highest gain per command power without a drawback; the current command power from the top bar. The order itself is not built yet (issue).", "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false}})
+    json!({"name": "hoi4_army_abilities", "description": "Read-only, no input: the commander abilities of the running game (common/abilities, mods included): per ability its command power cost per day (for each battalion group the game's tooltip names), duration, cooldown, whether a field marshal may use it, its unit modifiers, and its worth in each situation (prepare_attack: planning speed; reinforce: reinforce rate; attack, attack_river, attack_fort: attack and breakthrough plus the river's or fort's own bonus; defend: defence and dig-in; short_supply: days without supply), with the drawback named (more strength lost, no retreat, less attack); best_by_situation picks the highest gain per command power without a drawback among the abilities with no country condition (an ability whose allowed names a focus, flag or tag lists it in country_requires and is never picked: those conditions are not checked here); the current command power from the top bar. The order itself is not built yet (issue).", "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false}})
 }
 
 #[cfg(test)]
@@ -285,6 +317,33 @@ mod tests {
         assert_eq!(all[2].nested, vec![("river".into(), "attack".into(), 0.2)]);
         assert_eq!(all[3].duration_h, -1);
         assert_eq!(all[4].cooldown_h, 504);
+    }
+
+    #[test]
+    fn a_country_gated_ability_is_listed_but_never_picked() {
+        let file = "ability = {
+          staff_office_plan = { type = army_leader cost = 0.12 duration = 168 unit_modifiers = { planning_speed = 4.0 } }
+          jap_better_staff_office_plan = { type = army_leader allowed = { is_border_war = no OWNER = { has_completed_focus = JAP_the_art_of_warfare } }
+            cost = 0.06 duration = 168 unit_modifiers = { planning_speed = 4.0 } }
+          quinine = { type = army_leader allowed = { OWNER = { has_country_flag = has_quinine } } cost = 0.1 duration = 168 unit_modifiers = { no_supply_grace = 168 } }
+        }";
+        let all = parse(&script::parse(file));
+        assert!(all[0].country_requires.is_empty());
+        assert_eq!(
+            all[1].country_requires,
+            vec!["has_completed_focus = JAP_the_art_of_warfare".to_string()]
+        );
+        assert_eq!(
+            all[2].country_requires,
+            vec!["has_country_flag = has_quinine".to_string()]
+        );
+        assert_eq!(
+            best(&all, "prepare_attack", false).unwrap().0.key,
+            "staff_office_plan"
+        );
+        assert!(best(&all, "short_supply", false).is_none());
+        // force_attack's OWNER holds only a conditional DLC test: no country condition
+        assert!(parse(&script::parse(FILE))[0].country_requires.is_empty());
     }
 
     #[test]

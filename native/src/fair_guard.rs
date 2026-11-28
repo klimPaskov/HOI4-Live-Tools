@@ -47,13 +47,14 @@
 //!                               (fair.submarines), a mine-laying module (fair.naval_mines)
 //!   hoi4_production_add, hoi4_design_set_production  a submarine above II named by its
 //!                               equipment key (fair.submarines)
+//!   hoi4_paradrop               more than 18 divisions named in one drop (fair.paratroopers)
 //!
 //! Allowed under FAIR by the owner's decision of 28 Nov 2026 (PROGRAMME-1123.md, "Owner's decisions,
 //! 28 Nov"): "FAIR allows, on the agent's own initiative: volunteer divisions, air volunteers,
 //! lend-lease and attaches", and "The Soviet COLLABORATION government operation: allowed". So no
 //! guard here refuses volunteers, air volunteers, lend-lease, attaches or a collaboration
-//! government. Paratroop drops are "not used by default under FAIR" (his words); there is no drop
-//! tool to guard yet, and the drop's owner applies that default (META or a roleplay goal may use them).
+//! government. Paratroop drops are "not used by default under FAIR" (his words); the
+//! airborne rule (plan_airborne.rs) applies that default (META or a roleplay request turns them on).
 //!
 //! Not guarded (needs live state the action's arguments do not carry; the player and the plan
 //! lint own them): convoy_raiding at peace and submarine task forces below 5 (hoi4_fleet_mission),
@@ -73,6 +74,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 const EURO_AXIS: &[&str] = &["GER", "ITA", "HUN", "ROM", "BUL", "FIN", "SLO", "CRO"];
 const JAPAN_SIDE: &[&str] = &["JAP", "MAN", "SIA", "MEN"];
 const PARA_WIDTH: f64 = 20.0;
+/// The most paratrooper divisions a FAIR nation has, so the most one drop names.
+const PARA_MAX: usize = 18;
 
 /// Every tool a guard looks at (reads and the other actions pass untouched).
 pub const GUARDED_TOOLS: &[&str] = &[
@@ -87,6 +90,7 @@ pub const GUARDED_TOOLS: &[&str] = &[
     "hoi4_design_create",
     "hoi4_production_add",
     "hoi4_design_set_production",
+    "hoi4_paradrop",
 ];
 
 /// The rules in plain words (the end of every refusal).
@@ -375,6 +379,15 @@ fn breach(
                 .then(|| ("fair.naval_mines", format!("mission {mission}")))
         }
         "hoi4_diplomacy_act" => diplomacy(args, run),
+        "hoi4_paradrop" => {
+            let n = args["division_ids"].as_array().map_or(0, Vec::len);
+            (n > PARA_MAX).then(|| {
+                (
+                    "fair.paratroopers",
+                    format!("{n} divisions in one drop (at most {PARA_MAX})"),
+                )
+            })
+        }
         "hoi4_faction_leave" => run.leads_faction.then(|| {
             (
                 "fair.factions",
@@ -596,6 +609,26 @@ mod tests {
 
     fn allowed(name: &str, args: Value, run: &Run) {
         check(name, &args, run, Some(&facts())).expect(name);
+    }
+
+    #[test]
+    fn paradrop_names_at_most_eighteen_divisions() {
+        let fair = Run::default_fair();
+        let ids: Vec<String> = (0..19).map(|i| format!("{i:08x}:00000001")).collect();
+        let e = check(
+            "hoi4_paradrop",
+            &json!({"army": "A", "division_ids": ids}),
+            &fair,
+            Some(&facts()),
+        )
+        .unwrap_err();
+        assert!(e.message.contains("fair.paratroopers"));
+        allowed(
+            "hoi4_paradrop",
+            json!({"army": "A", "division_ids": &ids[..18]}),
+            &fair,
+        );
+        allowed("hoi4_paradrop", json!({"army": "A"}), &fair);
     }
 
     #[test]

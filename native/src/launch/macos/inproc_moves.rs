@@ -45,13 +45,57 @@ pub(super) fn pending(
                 .is_some_and(|h| *h == to || wanted.contains(h))
         })
         .filter(|d| {
-            !at.get(*d)
-                .copied()
-                .flatten()
-                .is_some_and(|p| wanted.contains(&p))
+            // standing there counts only while it is not marching away (live 115, 28 Nov 2026: a
+            // division in the target province heading elsewhere was skipped)
+            let marching_away = headings
+                .get(*d)
+                .is_some_and(|h| *h != 0 && *h != to && !wanted.contains(h));
+            marching_away
+                || !at
+                    .get(*d)
+                    .copied()
+                    .flatten()
+                    .is_some_and(|p| wanted.contains(&p))
         })
         .cloned()
         .collect()
+}
+
+/// Whether every posted division shows a new heading (non-zero and not the one it had before).
+pub(super) fn all_started(
+    before: &BTreeMap<String, i32>,
+    now: &BTreeMap<String, i32>,
+    ids: &[String],
+) -> bool {
+    !ids.is_empty()
+        && ids.iter().all(|d| {
+            now.get(d)
+                .is_some_and(|h| *h != 0 && before.get(d) != Some(h))
+        })
+}
+
+/// How long the read-back waits for the posted moves to show: the command runs on the game's next
+/// frame, paused or not (live 115, s115a: a single read right after the post read NotApplied for
+/// 9 of 12 in-process moves).
+pub(super) const START_WAIT_MS: u64 = 1500;
+
+/// Re-read the headings (`read`) until every posted division shows a new one, at most
+/// START_WAIT_MS; true when they all did.
+pub(super) fn wait_started(
+    mut read: impl FnMut() -> crate::error::Result<BTreeMap<String, i32>>,
+    before: &BTreeMap<String, i32>,
+    ids: &[String],
+) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(START_WAIT_MS);
+    loop {
+        if read().is_ok_and(|now| all_started(before, &now, ids)) {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        crate::phase::sleep(std::time::Duration::from_millis(30));
+    }
 }
 
 /// The answer of the posts for one order: Done when any division's command was posted (the read-back judges the
@@ -130,6 +174,34 @@ mod tests {
             ("d".to_string(), None),
         ]);
         assert_eq!(pending(&ids, &headings, &at, 7, &[7, 8]), vec!["b", "d"]);
+        // standing in the target while marching away: ordered again
+        let away = BTreeMap::from([("c".to_string(), 99)]);
+        let at_c = BTreeMap::from([("c".to_string(), Some(8))]);
+        assert_eq!(
+            pending(&["c".to_string()], &away, &at_c, 7, &[7, 8]),
+            vec!["c"]
+        );
+        let still = BTreeMap::from([("c".to_string(), 0)]);
+        assert!(pending(&["c".to_string()], &still, &at_c, 7, &[7, 8]).is_empty());
+    }
+
+    #[test]
+    fn the_read_back_waits_until_every_posted_division_has_a_new_heading() {
+        let before = BTreeMap::from([("a".to_string(), 0), ("b".to_string(), 5)]);
+        let ids = vec!["a".to_string(), "b".to_string()];
+        assert!(!all_started(&before, &before, &ids));
+        let half = BTreeMap::from([("a".to_string(), 7), ("b".to_string(), 5)]);
+        assert!(!all_started(&before, &half, &ids));
+        let both = BTreeMap::from([("a".to_string(), 7), ("b".to_string(), 7)]);
+        assert!(all_started(&before, &both, &ids));
+        // the second read shows them: true without waiting the whole time
+        let mut reads = vec![both.clone(), before.clone()];
+        assert!(wait_started(
+            || Ok(reads.pop().unwrap_or_default()),
+            &before,
+            &ids
+        ));
+        assert!(!all_started(&before, &both, &[]));
     }
 
     #[test]

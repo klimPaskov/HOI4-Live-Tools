@@ -131,9 +131,14 @@ pub(super) fn train(
                 &[v],
                 "more lines for this queue",
             )?);
-            let now = until(process, "the added lines", |qs| {
+            // a post the game takes but does not carry out (its own check when the command runs;
+            // S15-TRAINING s115a, 28 Nov 2026: 7 asked, the line count stopped at 5 at war in 1939)
+            // adds nothing: the lines standing are the answer, the queue is kept
+            let Ok(now) = until(process, "the added lines", |qs| {
                 lines_of(qs).is_some_and(|n| n > before)
-            })?;
+            }) else {
+                return Ok(before);
+            };
             let first = lines_of(&now).unwrap_or(before);
             // a post may show its lines over more than one frame: the count it answers is the one
             // that stands still over two reads
@@ -154,11 +159,18 @@ pub(super) fn train(
         Ok(got)
     };
     match filled(&mut *route, &mut replies) {
-        Ok((lines, posts)) => Ok(Some(
-            json!({"backend":"inprocess","queue":format!("{q:#x}"),
+        Ok((lines, posts)) => {
+            let short = (count as i64 - lines as i64).max(0);
+            let mut out = json!({"backend":"inprocess","queue":format!("{q:#x}"),
             "province":province,"lines":lines,"asked":count,"line_posts":posts,
-            "over":(lines as i64 - count as i64).max(0),"posts":replies}),
-        )),
+            "over":(lines as i64 - count as i64).max(0),"short":short,"posts":replies});
+            if short > 0 {
+                out["short_reason"] = json!(format!(
+                    "the game took the Add Unit post but added no line at {lines} of {count} (its own check when the command runs, e.g. manpower or the template); the queue keeps its {lines} line(s): ask again later"
+                ));
+            }
+            Ok(Some(out))
+        }
         Err(e) => {
             // a refusal after the queue was made: the queue it made is cancelled (S15-TRAINING: a
             // refused add left a one-line queue behind)
@@ -208,7 +220,8 @@ pub(super) fn settled(first: i32, mut read: impl FnMut() -> Result<i32>) -> Resu
 /// lines and returns the lines the queue holds after it (settled). One line is asked a post, and
 /// a post is made only while the queue is short, so the queue never passes `count` by more than
 /// the game adds to a single one-line post (which is in the reply as `over`; no command takes a
-/// line off a queue). Returns (lines, posts).
+/// line off a queue). A post that adds nothing ends the filling short (the game's own check when the
+/// command runs: the lines it took stand, the caller reports the shortfall). Returns (lines, posts).
 pub(super) fn fill_lines(
     count: usize,
     mut lines: i32,
@@ -221,10 +234,7 @@ pub(super) fn fill_lines(
         let now = post(ask)?;
         posts += 1;
         if now <= lines {
-            return Err(Error::new(
-                "input_readback_failed",
-                format!("An Add Unit post for {ask} line(s) added none ({lines} of {count})"),
-            ));
+            break;
         }
         lines = now;
     }
@@ -308,7 +318,15 @@ mod tests {
         assert_eq!(got, (7, 5));
         // nothing to add, or a post that adds nothing
         assert_eq!(fill_lines(1, 1, |_| unreachable!()).unwrap(), (1, 0));
-        assert!(fill_lines(3, 1, |_| Ok(1)).is_err());
+        assert_eq!(fill_lines(3, 1, |_| Ok(1)).unwrap(), (1, 1));
+        // s115a: the count stops rising at 5 of 7: five lines stand, the sixth post ends it
+        let mut q = 1;
+        let got = fill_lines(7, 1, |_| {
+            q = (q + 1).min(5);
+            Ok(q)
+        })
+        .unwrap();
+        assert_eq!(got, (5, 5));
         // a refusal is passed on (the caller cancels the queue)
         let e = fill_lines(6, 1, |_| {
             Err(Error::new("refused_by_game_check", "more lines"))

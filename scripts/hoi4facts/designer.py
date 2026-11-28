@@ -166,12 +166,13 @@ class Catalog:
         return stats
 
     def slots(self, e):
+        found = []
         for x in self.chain(e):
             r = self.equip[x]
             s = r["slots"] or (self.equip.get(r.get("duplicate_of"), {}).get("slots") if r.get("duplicate_of") else None)
             if s:
-                return s
-        return []
+                found.append(s)
+        return resolve_slots(found)
 
     def family(self, e):
         c = self.chain(e)
@@ -186,7 +187,30 @@ def _slots(block):
         if n and isinstance(b, list):
             out.append({"slot": n, "required": get1(b, "required") == "yes",
                         "categories": bare(get1(b, "allowed_module_categories", []))})
+        elif n and b == "inherit":
+            # `fixed_ship_engine_slot = inherit` (ship_hull_light_2, the Panzerschiff): the slot as the next
+            # equipment up the chain defines it
+            out.append({"slot": n, "inherit": True})
     return out or None
+
+
+def resolve_slots(found):
+    """The slot list of an equipment from the slot lists along its chain, the equipment's own first: the first
+    list wins, and each of its `inherit` slots takes the definition from the next list that defines that slot (an
+    inherit slot no list defines is dropped)."""
+    if not found:
+        return []
+    out = []
+    for s in found[0]:
+        if not s.get("inherit"):
+            out.append(s)
+            continue
+        for lst in found[1:]:
+            d = next((x for x in lst if x["slot"] == s["slot"] and not x.get("inherit")), None)
+            if d:
+                out.append(d)
+                break
+    return out
 
 
 # ---------------------------------------------------------------- the evaluator

@@ -158,6 +158,11 @@ class ValidatePlanTests(unittest.TestCase):
         rep = self.run_plan(focus_path=["T_root", "T_missing"])
         self.assertTrue(any("unknown focus T_missing" in e for e in rep.errors))
 
+    def test_focus_window_names_a_listed_focus(self):
+        rep = self.run_plan(focus_when={"T_left": "1936.6.1", "T_nowhere": "1936.6.1"})
+        self.assertTrue(any("focus_when.T_nowhere" in e for e in rep.errors), rep.errors)
+        self.assertFalse(any("focus_when.T_left" in e for e in rep.errors), rep.errors)
+
     def test_focus_fallback_conflicts(self):
         rep = self.run_plan(focus_fallback=["T_right"])
         self.assertTrue(any("T_right" in e and "exclusive" in e for e in rep.errors))
