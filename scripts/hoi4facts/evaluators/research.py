@@ -81,7 +81,8 @@ class Army:
             if all(self.b.fieldable(x) for x in bats + sup):
                 ic, _, _ = self.b.cost(bats, sup)
                 self.future = [{"template": "computed line", "n": 1, "bats": bats, "sup": sup, "ic": ic}]
-        self.archs = sorted(set(self.archs) | {self.b.data.archetype(e) for r in self.future for x in r["bats"] + r["sup"]
+        self.archs = sorted(set(self.archs) | {self.b.data.archetype(e) for r in self.future
+                                               for x in r["bats"] + r["sup"]
                                                for e in (self.b.data.units.get(x) or {}).get("need", {})})
         self.base_mods = divstats.factors(self.b.data, self.have, self.doctrines)
         self.base_eq = dict(self.b.equipment)
