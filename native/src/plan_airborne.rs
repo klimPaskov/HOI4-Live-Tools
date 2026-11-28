@@ -3,6 +3,8 @@
 //! {"army":"<the paratrooper army>","from_states":[air base states]?,"targets":[{"province","state","why"?,
 //!  "when"?}],"min_air_share":0.7,"link_up_km":300,"cooldown_days":14,"min_transports":50,
 //!  "transports_per_division":45,"enabled"?}
+//! The plan's `drops[]` rows ({"target_province","target_state","when"?}) are read as targets after `targets[]`;
+//! `raids[]` (the raid rows, each with its own rule switch) are not drops and are not read here.
 //!
 //! At war, once a day, while the transport planes carry the army (at least min_transports and transports_per_division
 //! a division: the game's MIN_PLANE_COUNT_PARADROP and BASE_UNIT_WEIGHT_IN_TRANSPORT_PLANES, which the strategist
@@ -225,8 +227,11 @@ pub(super) fn airborne_step(
         .filter(|s| wanted.is_empty() || wanted.contains(s))
         .collect();
     let mut targets = Vec::new();
-    for t in list(cfg, "targets") {
-        let (Some(p), Some(s)) = (t["province"].as_i64(), t["state"].as_i64()) else {
+    // the plan's `drops[]` rows (target_province / target_state) are targets after `targets[]`
+    for t in list(cfg, "targets").iter().chain(list(cfg, "drops").iter()) {
+        let province = t["province"].as_i64().or(t["target_province"].as_i64());
+        let st = t["state"].as_i64().or(t["target_state"].as_i64());
+        let (Some(p), Some(s)) = (province, st) else {
             continue;
         };
         if state.done.contains_key(&format!("airborne:{p}")) {
