@@ -377,6 +377,32 @@ def starved_lanes(snap):
             if isinstance(r, dict) and r.get("lane") and r.get("kind") != "ticks" and r.get("starved")]
 
 
+def equipment_fill_lines(land):
+    """Equipment fill per army at a declaration: the mean and lowest fill of its divisions and how
+    many stand below three quarters (the share below which the game's own division attacks no
+    more; w92b, 28 Nov 2026: the infantry went into the West at 0.27 after a template edit at war)."""
+    by_army = {}
+    for d in land.get("divisions") or []:
+        f = d.get("equipment_fill")
+        if isinstance(f, (int, float)) and d.get("army"):
+            by_army.setdefault(d["army"], []).append(float(f))
+    rows = []
+    for a in land.get("armies") or []:
+        fills = by_army.get(a.get("army")) or []
+        if fills:
+            mean = sum(fills) / len(fills)
+            low = sum(1 for f in fills if f < 0.75)
+            rows.append((mean, f"- {a.get('army')}: equipment fill mean {mean:.2f}, lowest {min(fills):.2f}, "
+                               f"{low} of {len(fills)} division(s) below 0.75"))
+        elif isinstance(a.get("equipment_fill_min"), (int, float)):
+            rows.append((a["equipment_fill_min"], f"- {a.get('army')}: equipment fill lowest "
+                                                  f"{a['equipment_fill_min']:.2f} (no division read)"))
+    if not rows:
+        return ["Equipment fill per army: not read"]
+    rows.sort(key=lambda r: r[0])
+    return ["Equipment fill per army (lowest first):"] + [r[1] for r in rows]
+
+
 def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", budget_line=""):
     """One page: what happened, issues opened and closed since the last gate, overdue, counters, costs."""
     w = snap.get("wars") or {}
@@ -392,6 +418,8 @@ def gate_packet(kind, snap, detector, since_seq, costs_line="", cleanliness="", 
     land = snap.get("land") or {}
     if land.get("division_count") is not None:
         lines.append(f"Divisions {land.get('division_count')}; armies {len(land.get('armies') or [])}")
+    if kind == "war_declared":
+        lines += equipment_fill_lines(land)
     opened = [i for i in detector.issues.values() if int(i["id"][1:]) > since_seq]
     closed = [i for i in detector.issues.values() if i["state"] == "resolved" and i.get("resolved_at")
               and int(i["id"][1:]) <= since_seq]
