@@ -7376,6 +7376,7 @@ fn prepare_supply(
 ///   ground model's armour weights (movement, the assault penalty of terrain, rivers and forts,
 ///   narrow ground, roads, the hostile divisions seen), kept as `armourpick:<army>` for
 ///   `spear_line` instead of the nearest state.
+///
 /// o96a (28 Nov 2026): the Panzer divisions stood in the reserves of the Ardennes forest battles
 /// (3488, then 13375) for 25 days at 10-24% supply, none in the one plains battle; breakthroughs
 /// 0, pockets 0.
