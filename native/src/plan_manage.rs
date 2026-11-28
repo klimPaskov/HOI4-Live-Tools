@@ -11113,11 +11113,14 @@ mod tests {
         // against 2000 (1.2): the least needed; support equipment short at the front
         let stock = json!({"equipment": [
             {"archetype": "infantry_equipment", "cover_after_shortfall": 9000.0,
-             "fielded_need": 30000.0, "fielded_short": 0.0, "variants": []},
+             "production_lines": 1, "fielded_need": 30000.0, "fielded_short": 0.0,
+             "variants": [{"type": "infantry_equipment_1"}]},
             {"archetype": "artillery_equipment", "cover_after_shortfall": 2400.0,
-             "fielded_need": 2000.0, "fielded_short": 0.0, "variants": []},
+             "production_lines": 1, "fielded_need": 2000.0, "fielded_short": 0.0,
+             "variants": [{"type": "artillery_equipment_1"}]},
             {"archetype": "support_equipment", "cover_after_shortfall": -5.0,
-             "fielded_need": 600.0, "fielded_short": 5.0, "variants": []}]});
+             "production_lines": 1, "fielded_need": 600.0, "fielded_short": 5.0,
+             "variants": [{"type": "support_equipment_1"}]}]});
         let tools = fake(vec![
             ("hoi4_production_lines", lines),
             ("hoi4_air", air),
