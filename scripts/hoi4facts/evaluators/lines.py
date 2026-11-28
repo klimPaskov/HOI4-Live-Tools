@@ -168,7 +168,8 @@ def doctrine(r):
                  "reasoning": "no doctrine rows"}]
     return [{"decision": "land grand doctrine (attack R, base)", "chosen": best["doctrine"], "value": att(best),
              "unit": "attacker R with planning, the longest offensive given",
-             "alternatives": [_opt(x["doctrine"], att(x), [f"unvalued {(x.get('unvalued') or {}).get('all milestones')}"])
+             "alternatives": [_opt(x["doctrine"], att(x),
+                                   [f"unvalued {(x.get('unvalued') or {}).get('all milestones')}"])
                               for x in rows if x is not best],
              "reasoning": "held " + str(r.get("held")) + "; a comparison, never a switch: the owner decides",
              "inputs": {"enemy_template": r.get("enemy_template"), "roles": r.get("roles")}}]
