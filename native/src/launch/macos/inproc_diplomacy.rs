@@ -150,7 +150,10 @@ pub(super) fn act(ch: &mut Channel, op: &str, tag_index: i32) -> Routed {
 pub(super) fn justify_request(tag_index: i32, war_goal_key: &str, states: &[i32]) -> Result<Value> {
     use crate::error::Error;
     if tag_index <= 0 {
-        return Err(Error::new("invalid_target", "the receiver has no tag index"));
+        return Err(Error::new(
+            "invalid_target",
+            "the receiver has no tag index",
+        ));
     }
     if war_goal_key.is_empty()
         || war_goal_key.len() > 39
@@ -164,7 +167,10 @@ pub(super) fn justify_request(tag_index: i32, war_goal_key: &str, states: &[i32]
         ));
     }
     if states.len() > 64 || states.iter().any(|s| !(1..=100_000).contains(s)) {
-        return Err(Error::new("invalid_arguments", "state_ids: 0..64 state ids"));
+        return Err(Error::new(
+            "invalid_arguments",
+            "state_ids: 0..64 state ids",
+        ));
     }
     let mut vals = vec![i64::from(tag_index)];
     vals.extend(war_goal_key.bytes().map(i64::from));
@@ -184,7 +190,12 @@ pub(super) const JUSTIFY_OP: &str = "diplomacy2.generate_war_goal";
 
 /// engineer 125: post one justification; the module's reply on success. The game's own check refusing it (no such goal
 /// toward that country now, not enough political power, a goal already justified ...) is the answer.
-pub(super) fn justify(ch: &mut Channel, tag_index: i32, war_goal_key: &str, states: &[i32]) -> Routed {
+pub(super) fn justify(
+    ch: &mut Channel,
+    tag_index: i32,
+    war_goal_key: &str,
+    states: &[i32],
+) -> Routed {
     match justify_request(tag_index, war_goal_key, states).and_then(|r| ch.post_raw(r)) {
         Ok(reply) => routed(reply, "this war goal justification now"),
         Err(_) => Routed::Gui,
@@ -224,9 +235,18 @@ mod tests {
         assert_eq!(r["cmd"], JUSTIFY_OP);
         assert_eq!(r["vals"], "7,116,97,107,101,95,115,116,97,116,101");
         assert_eq!(r["provs"], "64,65");
-        assert!(justify_request(7, "annex_everything", &[]).unwrap().get("provs").is_none());
-        assert_eq!(justify_request(7, "Conquer!", &[]).unwrap_err().code, "invalid_arguments");
-        assert_eq!(justify_request(0, "take_state", &[]).unwrap_err().code, "invalid_target");
+        assert!(justify_request(7, "annex_everything", &[])
+            .unwrap()
+            .get("provs")
+            .is_none());
+        assert_eq!(
+            justify_request(7, "Conquer!", &[]).unwrap_err().code,
+            "invalid_arguments"
+        );
+        assert_eq!(
+            justify_request(0, "take_state", &[]).unwrap_err().code,
+            "invalid_target"
+        );
     }
 
     fn cat() -> Value {
