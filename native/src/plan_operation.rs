@@ -55,6 +55,8 @@ use std::collections::{HashMap, HashSet};
 
 #[path = "plan_operation/ground.rs"]
 mod ground;
+#[path = "plan_operation/pace.rs"]
+mod pace;
 
 /// Game days without a gain on the line before the next line is drawn.
 const STALL_DAYS: i64 = 7;
@@ -1536,6 +1538,28 @@ fn supply_pace(
             state.skip(now, "opsupply", &u.name, DAY / 4);
             return Ok(Paced::Go);
         }
+        // A WINNING ATTACK GOES ON: an attacker whose losses cost the enemy at least as much
+        // (the mode rule's last reading, `war_modes`) is not stopped for its supply; a stop gives
+        // up the ground the enemy is losing and restores nothing where it stands. The relief
+        // levers act for it all the same, one per call.
+        if winning(state, id, op, &u.name, now) {
+            state.op_notes.insert(
+                nk.clone(),
+                format!(
+                    "{}: supply {mean:.0}% below the floor {:.0}%, but the attack wins on its losses: \
+                     it goes on (railway and trucks meanwhile)",
+                    u.name,
+                    limits.floor()
+                ),
+            );
+            state.skip(now, "opsupply", &u.name, DAY / 4);
+            if let Some(line) = relief_levers(
+                state, tools, plan, id, u, roster, &read, &limits, lease, now,
+            )? {
+                return Ok(Paced::Acted(line));
+            }
+            return Ok(Paced::Go);
+        }
         // a supply stop is a refinement: at most once per refine_days per army (an army that
         // goes on after one does not stop again at once)
         if !refine_due(state, id, op, &u.name, now) {
@@ -1579,33 +1603,10 @@ fn supply_pace(
         return Ok(Paced::Go);
     }
     // the relief levers, one per call, for the armies of the unit that starve
-    let members: Vec<Value> = list(roster, "armies")
-        .iter()
-        .filter(|r| text(&r["army"]) == u.name || r["army_group"].as_str() == Some(u.name.as_str()))
-        .cloned()
-        .collect();
-    for army in &members {
-        let one = Unit {
-            name: text(&army["army"]).to_string(),
-            role: Role::Line,
-            ..u.clone()
-        };
-        let Some(supply) = unit_supply(&read, roster, &one) else {
-            continue;
-        };
-        if let Some(line) = super::plan_war::supply_relief(
-            state,
-            tools,
-            lease,
-            plan,
-            army,
-            Some(&read),
-            supply,
-            &limits,
-            now,
-        )? {
-            return Ok(Paced::Acted(format!("operation {id}: {line}")));
-        }
+    if let Some(line) = relief_levers(
+        state, tools, plan, id, u, roster, &read, &limits, lease, now,
+    )? {
+        return Ok(Paced::Acted(line));
     }
     state.op_notes.insert(
         nk,
@@ -1618,6 +1619,62 @@ fn supply_pace(
     );
     state.skip(now, "opsupply", &u.name, DAY / 4);
     Ok(Paced::Held)
+}
+
+/// The war step's supply relief (a railway toward the worst-fed province, a level of trucks,
+/// the report), one lever per call, for the armies of `u` that read a supply figure.
+#[allow(clippy::too_many_arguments)]
+fn relief_levers(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    id: &str,
+    u: &Unit,
+    roster: &Value,
+    read: &Value,
+    limits: &super::plan_war::Limits,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let members: Vec<Value> = list(roster, "armies")
+        .iter()
+        .filter(|r| text(&r["army"]) == u.name || r["army_group"].as_str() == Some(u.name.as_str()))
+        .cloned()
+        .collect();
+    for army in &members {
+        let one = Unit {
+            name: text(&army["army"]).to_string(),
+            role: Role::Line,
+            ..u.clone()
+        };
+        let Some(supply) = unit_supply(read, roster, &one) else {
+            continue;
+        };
+        if let Some(line) = super::plan_war::supply_relief(
+            state,
+            tools,
+            lease,
+            plan,
+            army,
+            Some(read),
+            supply,
+            limits,
+            now,
+        )? {
+            return Ok(Some(format!("operation {id}: {line}")));
+        }
+    }
+    Ok(None)
+}
+
+/// Whether the mode rule's last reading of `name` (within three of its periods) said the attack
+/// wins on its losses (`op:<id>:modewin:<name>`, set by `war_modes`).
+fn winning(state: &State, id: &str, op: &Value, name: &str, now: GameHour) -> bool {
+    let fresh = 3 * pace::Rule::of(op).days * DAY;
+    state
+        .done
+        .get(&key(id, &format!("modewin:{name}")))
+        .is_some_and(|t| now.saturating_sub(*t) <= fresh)
 }
 
 /// Whether a unit has an offensive arrow that holds divisions (or reads no count) and does not
@@ -2488,9 +2545,13 @@ fn one(
         if let Some(line) = border_fronts(state, tools, id, &units, roster, wars, lease, now)? {
             return Ok(Some(line));
         }
-        return advance(
+        if let Some(line) = advance(
             state, tools, plan, id, op, &units, roster, wars, &enemies, &at_war, lease, now,
-        );
+        )? {
+            return Ok(Some(line));
+        }
+        // THE EXECUTION MODE BY VALUE, once the war's own orders stand
+        return war_modes(state, tools, id, op, &units, roster, &at_war, lease, now);
     }
     // BORDER FRONTS: marked before the prepare's own reconcile, so the unit's line offensive goes
     // under its own front and each border front gets its own
@@ -2661,6 +2722,133 @@ fn one(
                     .join(", ")
             ),
         );
+    }
+    Ok(None)
+}
+
+/// THE EXECUTION MODE BY VALUE (`execution` absent or "auto"; the numbers in `execution_rule`,
+/// see pace.rs): at war, every `execution_rule.days` (2) per executing attacker, the mode follows
+/// its battles and the losses against the countries it fights: rush while each loss of ours costs
+/// the enemy at least as much (`rush_ratio` 1.0), balanced when ours outrun theirs, careful under
+/// `careful_ratio` (0.5) with most battles lost. The losses are read over the days since the last
+/// reading once they hold `min_losses`, else over the war. A plan that names a mode keeps it. No
+/// battle read, nothing judged. o96a (28 Nov 2026): balanced took 7 of Holland's 91 points in 21
+/// days at 0.92 enemy losses to 1 own; rush took Holland in 6 days at 1.10 and Belgium at 4.5.
+#[allow(clippy::too_many_arguments)]
+fn war_modes(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    op: &Value,
+    units: &[Unit],
+    roster: &Value,
+    at_war: &[String],
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if !pace::auto(op) {
+        return Ok(None);
+    }
+    let rule = pace::Rule::of(op);
+    let due: Vec<&Unit> = units
+        .iter()
+        .filter(|u| {
+            attacker(u)
+                && at_war.contains(&u.enemy)
+                && executing(roster, &u.name)
+                && !state.skipped(now, "opmodeauto", &u.name)
+        })
+        .collect();
+    if due.is_empty() {
+        return Ok(None);
+    }
+    let Ok(battles) = tools.call("hoi4_battles", &json!({"divisions": true})) else {
+        return Ok(None);
+    };
+    if !battles["list"].is_array() {
+        return Ok(None);
+    }
+    let army_of: HashMap<String, String> = tools
+        .call("hoi4_supply", &json!({}))
+        .map(|read| {
+            list(&read, "divisions")
+                .iter()
+                .filter_map(|d| {
+                    let id = d["id"]
+                        .as_str()
+                        .map(String::from)
+                        .or_else(|| d["id"].as_i64().map(|n| n.to_string()))?;
+                    Some((id, text(&d["army"]).to_string()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let table = tools
+        .call("hoi4_war_stats", &json!({}))
+        .ok()
+        .and_then(|s| super::plan_military::losses_by_enemy(&s))
+        .unwrap_or_default();
+    for u in due {
+        state.skip(now, "opmodeauto", &u.name, rule.days * DAY);
+        let members: HashSet<String> = if u.role == Role::Group {
+            list(roster, "armies")
+                .iter()
+                .filter(|r| r["army_group"].as_str() == Some(u.name.as_str()))
+                .map(|r| text(&r["army"]).to_string())
+                .collect()
+        } else {
+            HashSet::from([u.name.clone()])
+        };
+        let odds = pace::battle_odds(&battles, &members, &army_of);
+        let mut tags = odds.tags.clone();
+        tags.extend(at_war.iter().cloned());
+        let total = pace::losses_against(&table, &tags);
+        let (lo, le) = (
+            key(id, &format!("modelo:{}", u.name)),
+            key(id, &format!("modele:{}", u.name)),
+        );
+        let window = match (state.done.get(&lo), state.done.get(&le)) {
+            (Some(o), Some(e)) => (
+                (total.0 - *o as f64).max(0.0),
+                (total.1 - *e as f64).max(0.0),
+            ),
+            _ => (0.0, 0.0),
+        };
+        state.done.insert(lo, total.0.round() as i64);
+        state.done.insert(le, total.1.round() as i64);
+        let (mode, why) = pace::choose(&odds, window, total, &rule);
+        // the attack WINS when it presses on the losses' word (not only for want of losses): the
+        // supply pace lets such an attacker go on (see `supply_pace`)
+        let judged = window.0 + window.1 >= rule.min_losses || total.0 + total.1 >= rule.min_losses;
+        let wk = key(id, &format!("modewin:{}", u.name));
+        if mode == "rush" && judged {
+            state.done.insert(wk, now);
+        } else {
+            state.done.remove(&wk);
+        }
+        let mk = key(id, &format!("modeauto:{}", u.name));
+        state.op_notes.insert(
+            format!("{id}:mode:{}", u.name),
+            format!("{}: {mode} ({why})", u.name),
+        );
+        if state.done.get(&mk).copied() == pace::index(mode) {
+            continue;
+        }
+        let line = order(
+            state,
+            tools,
+            lease,
+            id,
+            &format!("{} attacks in the {mode} mode: {why}", u.name),
+            "hoi4_army_plan",
+            json!({"army": u.name, "mode": mode}),
+        )?;
+        if state.last_ok == Some(true) {
+            if let Some(i) = pace::index(mode) {
+                state.done.insert(mk, i);
+            }
+        }
+        return Ok(Some(line));
     }
     Ok(None)
 }

@@ -53,6 +53,8 @@ struct Game {
     templates: RefCell<Option<Value>>,
     /// every offensive draw read back Diverged: the game drew the arrow to this state instead
     diverge_to: RefCell<Option<i64>>,
+    /// what hoi4_war_stats answers, when set
+    war_stats: RefCell<Option<Value>>,
 }
 
 impl Game {
@@ -99,6 +101,7 @@ impl Game {
             battles: RefCell::new(None),
             templates: RefCell::new(None),
             diverge_to: RefCell::new(None),
+            war_stats: RefCell::new(None),
         }
     }
     fn orders(&self) -> Vec<(String, Value)> {
@@ -287,6 +290,9 @@ impl Tools for Game {
                         }
                     }
                 })
+            }
+            "hoi4_war_stats" if self.war_stats.borrow().is_some() => {
+                return Ok(self.war_stats.borrow().clone().unwrap());
             }
             "hoi4_battles" if self.battles.borrow().is_some() => {
                 return Ok(self.battles.borrow().clone().unwrap());
@@ -4711,4 +4717,134 @@ fn a_group_with_two_fronts_spreads_its_divisions_and_each_border_gets_its_own_de
     assert!(offensives(&roster, "Army Group 1")
         .iter()
         .any(|o| o["id"] == json!(111)));
+}
+
+/// A battle as hoi4_battles {divisions} lists it: province, our side, our and the enemy side's
+/// hours until broken, our engaged division ids, the enemy's tags.
+fn battle_row(p: i64, us: f64, them: f64, ids: &[&str], tags: &[&str]) -> Value {
+    json!({"province": p, "our_side": "attacker",
+           "attacker": {"hours_until_broken": us, "reserve_divisions": [],
+                        "engaged_divisions": ids.iter().map(|i| json!({"id": i})).collect::<Vec<_>>()},
+           "defender": {"hours_until_broken": them, "tags": tags}})
+}
+
+/// hoi4_war_stats with the player's losses and the enemy's in one relation per enemy.
+fn war_stats(rows: &[(&str, f64, f64)]) -> Value {
+    let relations: Vec<Value> = rows
+        .iter()
+        .map(|(t, own, enemy)| {
+            json!({"countries": [{"tag": "GER", "casualties": own}, {"tag": t, "casualties": enemy}]})
+        })
+        .collect();
+    json!({"player": {"tag": "GER"}, "wars": [{"includes_player": true, "relations": relations}]})
+}
+
+#[test]
+fn at_war_the_mode_follows_the_battles_and_the_losses_of_the_attack() {
+    // o96a (28 Nov 2026, the Low Countries by hand): balanced from W to W+21 took 7 of 91 Dutch
+    // points at 0.92 enemy losses to 1 own over W+10..W+18; rush took Holland in 6 days
+    let game = Game::new();
+    game.unit("Nord", |r| r["plan_executing"] = json!(true));
+    *game.supply.borrow_mut() = Some(json!({"divisions": [
+        {"id": "n1", "army": "Nord"}, {"id": "n2", "army": "Nord"}, {"id": "x1", "army": "Other"}]}));
+    // W+1: the Ardennes 3488 and 11562 are won (the defender breaks first), Luxembourg 6583 lost
+    *game.battles.borrow_mut() = Some(json!({"list": [
+        battle_row(3488, 786.0, 139.0, &["n1"], &["BEL"]),
+        battle_row(11562, 2120.0, 90.0, &["n2"], &["BEL", "HOL"]),
+        battle_row(6583, 549.0, 1113.0, &["n2"], &["FRA", "LUX"]),
+        battle_row(1, 10.0, 900.0, &["x1"], &["POL"])]}));
+    let mut u = unit("Nord".into(), Role::Wing, &Value::Null, &Value::Null);
+    u.enemy = "BEL".into();
+    let units = vec![u];
+    let at_war = vec!["BEL".to_string(), "HOL".to_string(), "LUX".to_string()];
+    let op = json!({"id": "op_low", "enemies": ["BEL", "HOL", "LUX"]});
+    let roster = game.roster.borrow().clone();
+    let mut state = State::default();
+    let run = |state: &mut State, op: &Value, t: GameHour| {
+        war_modes(state, &game, "op_low", op, &units, &roster, &at_war, "l", t).unwrap()
+    };
+    // too few losses to judge, 2 of 3 battles won: the attack presses at once
+    assert!(run(&mut state, &op, START).is_some());
+    let modes = |game: &Game| -> Vec<String> {
+        game.orders()
+            .iter()
+            .filter(|(n, a)| n == "hoi4_army_plan" && text(&a["army"]) == "Nord")
+            .map(|(_, a)| text(&a["mode"]).to_string())
+            .collect()
+    };
+    assert_eq!(modes(&game), vec!["rush"]);
+    assert!(state.op_notes["op_low:mode:Nord"].contains("2 of 3 battles won"));
+    // read again only after its two days; the same mode is never sent twice
+    assert!(run(&mut state, &op, START + DAY).is_none());
+    // W+10.5: the war's losses 22699 enemy to 6198 own, most battles lost: rush stays
+    *game.war_stats.borrow_mut() = Some(war_stats(&[
+        ("HOL", 1152.0, 10719.0),
+        ("BEL", 3078.0, 11754.0),
+        ("LUX", 1968.0, 226.0),
+    ]));
+    *game.battles.borrow_mut() = Some(json!({"list": [
+        battle_row(13375, 508.0, 526.0, &["n1"], &["BEL", "FRA"]),
+        battle_row(391, 234.0, 1248.0, &["n2"], &["BEL", "HOL"])]}));
+    assert!(run(&mut state, &op, START + 2 * DAY).is_none());
+    assert_eq!(modes(&game), vec!["rush"]);
+    assert!(state.op_notes["op_low:mode:Nord"].contains("losses 3.66 enemy to 1 own"));
+    assert!(winning(&state, "op_low", &op, "Nord", START + 2 * DAY));
+    // W+18.5: 13428 more own losses against 12347: our losses outrun theirs, balanced
+    *game.war_stats.borrow_mut() = Some(war_stats(&[
+        ("HOL", 3793.0, 15974.0),
+        ("BEL", 11692.0, 18846.0),
+        ("LUX", 4141.0, 226.0),
+    ]));
+    assert!(run(&mut state, &op, START + 4 * DAY).is_some());
+    assert_eq!(modes(&game), vec!["rush", "balanced"]);
+    assert!(state.op_notes["op_low:mode:Nord"].contains("over the last days"));
+    assert!(!winning(&state, "op_low", &op, "Nord", START + 4 * DAY));
+    // a plan that names its mode keeps it; no battle read, nothing judged
+    let fixed = json!({"id": "op_low", "execution": "rush"});
+    assert!(run(&mut state, &fixed, START + 10 * DAY).is_none());
+    *game.battles.borrow_mut() = None;
+    assert!(run(&mut state, &op, START + 10 * DAY).is_none());
+    assert_eq!(modes(&game).len(), 2);
+}
+
+#[test]
+fn a_starving_attack_that_wins_on_its_losses_is_not_stopped_for_its_supply() {
+    let game = Game::new();
+    game.unit("Nord", |r| r["plan_executing"] = json!(true));
+    *game.supply.borrow_mut() = Some(json!({"divisions": [
+        {"id": "n1", "army": "Nord", "supply_percent": 20.0},
+        {"id": "n2", "army": "Nord", "supply_percent": 24.0}]}));
+    let mut u = unit("Nord".into(), Role::Wing, &Value::Null, &Value::Null);
+    u.enemy = "BEL".into();
+    let at_war = vec!["BEL".to_string()];
+    let op = json!({"id": "op_low", "enemies": ["BEL"], "supply": {"floor": 35}});
+    let plan = json!({"war": {"me": "GER"}});
+    let roster = game.roster.borrow().clone();
+    let stops = |game: &Game| {
+        game.orders()
+            .iter()
+            .filter(|(n, a)| n == "hoi4_army_plan" && a["execute"] == json!(false))
+            .count()
+    };
+    // the mode rule read a winning attack: it goes on, its supply note says why
+    let mut state = State::default();
+    state.done.insert(key("op_low", "modewin:Nord"), START);
+    let paced = supply_pace(
+        &mut state, &game, &plan, "op_low", &op, &u, &roster, &at_war, "l", START,
+    )
+    .unwrap();
+    assert_ne!(paced, Paced::Held);
+    assert_eq!(stops(&game), 0);
+    assert!(state.op_notes["op_low:supply:Nord"].contains("the attack wins on its losses"));
+    // no such reading (or a stale one): the advance waits for its supply as before
+    let mut state = State::default();
+    state
+        .done
+        .insert(key("op_low", "modewin:Nord"), START - 30 * DAY);
+    let paced = supply_pace(
+        &mut state, &game, &plan, "op_low", &op, &u, &roster, &at_war, "l", START,
+    )
+    .unwrap();
+    assert!(matches!(paced, Paced::Acted(_)), "{paced:?}");
+    assert_eq!(stops(&game), 1);
 }
