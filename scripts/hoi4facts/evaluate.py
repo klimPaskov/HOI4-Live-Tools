@@ -131,8 +131,14 @@ def text_template(r):
            f"  widths: {r['width_why']}", f"  chosen width {r.get('chosen_width')}: the widest of the equal fills "
            f"({r.get('command_rule')}: frontage per commander grows with width)",
            f"  against: {r['enemy_template']}: " + _fmt_stats(r["enemy_template_stats"])]
+    g = r.get("axis")
+    if g:
+        out.append(f"  axis: {g['why']}; terrain {g['shares']}; battle width {g['battle_width']}, movement cost "
+                   f"{g['movement_cost']}, {g['km']} km between provinces; supply delivered {g['supply']:g} "
+                   f"({g['supply_from']})")
     for arch, d in (r.get("designs_used") or {}).items():
-        out.append(f"  design for {arch}: {d['base']} " + ", ".join(sorted(d["modules"].values())))
+        sp = f" ({d['speed']:g} km/h, {d['ic']:g} IC, floor {d['floor']:g})" if d.get("speed") and d.get("floor") else ""
+        out.append(f"  design for {arch}{sp}: {d['base']} " + ", ".join(sorted(d["modules"].values())))
     for i, t in enumerate(r["templates"], 1):
         bats = ", ".join(f"{n} {k}" for k, n in t["battalions"].items())
         out.append(f"  #{i} width {t['width']:g}: {bats}; regimental {t['regimental'] or '-'} "
@@ -141,7 +147,17 @@ def text_template(r):
         out.append(f"     cost: {t['ic']:g} IC, {t['manpower']:g} manpower; equipment " +
                    ", ".join(f"{k} {v:g}" for k, v in t["equipment"].items()))
         p = t["parts"]
-        if "R" in p:
+        lg = t.get("logistics") or {}
+        if lg:
+            out.append(f"     logistics: speed {lg.get('speed', 0):g} km/h, supply {lg.get('supply', 0):g} a day, fuel "
+                       f"{lg.get('fuel', 0):g} (equipment fuel_consumption x amount; the game's time unit for it is not verified)")
+        if "provinces_per_day" in p:
+            out.append(f"     why: {p['provinces_per_day']:g} provinces a day = 24 / (battle {p['battle_hours']:g} h + march "
+                       f"{p['march_hours']:g} h at {p['speed']:g} km/h); R {p['R']:g}; supply ratio {p['supply_ratio']:g} "
+                       f"({p['divisions_per_battle']:g} divisions x {p['supply_use']:g} against {p['axis_supply']:g}); "
+                       f"exploitation {p['exploit_km_per_day']:g} km a day; score {t['score']:g} = provinces a day x "
+                       f"sqrt(width / IC)" + (f"; {p['note']}" if p.get("note") else ""))
+        elif "R" in p:
             out.append(f"     why: R {p['R']:g} = our endurance {p['our_hours']:g} h / theirs {p['their_hours']:g} h "
                        f"(attacks per width ours {p['our_attacks_per_width']:g}, theirs {p['their_attacks_per_width']:g});"
                        f" score {t['score']:g} = R x sqrt(width / IC)")
@@ -154,7 +170,7 @@ def text_template(r):
         c = r["special_forces_cap"]
         out.append(f"  special forces cap {c['cap']:g} battalions = max({c['min']:g}, {c['factor']:g} x "
                    f"{c['non_sf_battalions']} other battalions)")
-    out.append("  rules: " + "; ".join(r["rules"]))
+    out.append("  rules: " + "; ".join(r["rules"] + list(r.get("logistic_rules") or [])))
     return out
 
 
