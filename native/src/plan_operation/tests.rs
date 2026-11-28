@@ -6791,7 +6791,7 @@ fn before_the_war_a_small_enemy_s_army_is_filled_by_what_its_allies_can_bring_in
     };
     // 1. the threat before the war: the French in reach, the need is what Army 7 can still take
     let at_war = vec!["FRA".to_string(), "ENG".to_string()];
-    let out = opening(
+    let out = opening_prewar(
         &mut state,
         &game,
         "op_lowlands",
@@ -6826,7 +6826,7 @@ fn before_the_war_a_small_enemy_s_army_is_filled_by_what_its_allies_can_bring_in
         "{lend}"
     );
     // 3. the next reading fills Army 7, the army made for Luxembourg, to its limit before the war
-    let out = opening(
+    let out = opening_prewar(
         &mut state,
         &game,
         "op_lowlands",
@@ -6884,7 +6884,7 @@ fn a_spent_enemy_s_line_counts_as_taken_and_its_units_turn_on_the_next_enemy() {
         &Value::Null,
     );
     w.enemy = "BEL".into();
-    let mut units = vec![g, l3, l4, w];
+    let units = vec![g, l3, l4, w];
     let wars = json!({"wars": {"enemies": ["HOL", "BEL", "LUX"], "wars": [
         {"enemy": {"tag": "HOL"}, "enemy_land": {"states_controlled": 3, "states_owned": 5}},
         {"enemy": {"tag": "BEL"}, "enemy_land": {"states_controlled": 4, "states_owned": 4}}]},
@@ -6918,8 +6918,9 @@ fn a_spent_enemy_s_line_counts_as_taken_and_its_units_turn_on_the_next_enemy() {
     assert_eq!(spent, vec!["HOL".to_string()]);
     assert!(state.op_notes["op:spent:HOL"].contains("5 division(s) seen against 56 facing it"));
     // its units turn on Belgium; Holland's corner on the line counts as taken
-    hand_over_out(&mut units, &spent, &[], &at_war, "BEL");
-    assert_eq!(units[0].enemy, "BEL");
+    let mut turned = units.clone();
+    hand_over_out(&mut turned, &spent, &[], &at_war, "BEL");
+    assert_eq!(turned[0].enemy, "BEL");
     let game = Game::new();
     // the mock's states are Poland's unless held: the corner a gone enemy holds counts as taken
     assert!(taken_or_gone(&game, "GER", &[35, 7], &[]).is_empty());

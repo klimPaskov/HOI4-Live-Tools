@@ -3127,7 +3127,7 @@ fn one(
     // THE OPENING BEFORE THE WAR: the army facing a small enemy is filled from an echelon by what
     // can stand there within its deadline (its would-be allies across its other borders)
     if !pre_pass && !op["opening"]["deadline_days"].is_null() {
-        if let Some(line) = opening(
+        if let Some(line) = opening_prewar(
             state, tools, id, op, &units, roster, wars, &at_war, lease, now,
         )? {
             return Ok(Some(line));
@@ -10924,6 +10924,44 @@ fn opening(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
+    opening_at(
+        state, tools, id, op, units, roster, wars, at_war, lease, now, false,
+    )
+}
+
+/// The opening in the prepare: the enemies not yet at war, by what can stand there.
+#[allow(clippy::too_many_arguments)]
+fn opening_prewar(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    op: &Value,
+    units: &[Unit],
+    roster: &Value,
+    wars: &Value,
+    at_war: &[String],
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    opening_at(
+        state, tools, id, op, units, roster, wars, at_war, lease, now, true,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn opening_at(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    op: &Value,
+    units: &[Unit],
+    roster: &Value,
+    wars: &Value,
+    at_war: &[String],
+    lease: &str,
+    now: GameHour,
+    prewar: bool,
+) -> Result<Option<String>> {
     let cfg = &op["opening"];
     let Some(deadlines) = cfg["deadline_days"].as_object() else {
         return Ok(None);
@@ -10935,7 +10973,6 @@ fn opening(
         .collect();
     tags.sort_by_key(|(_, d)| *d);
     let mut need: i64 = 0;
-    let prewar = !state.done.contains_key(&key(id, "exec"));
     let out = opening_tags(
         state, tools, id, op, units, roster, wars, at_war, lease, now, tags, ratio, prewar,
         &mut need,

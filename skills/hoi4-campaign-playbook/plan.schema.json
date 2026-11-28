@@ -2390,7 +2390,24 @@
           },
           "armour_ground": {
             "type": "boolean",
-            "description": "default true: at war a spearhead formation whose divisions wait in the reserves of rough-ground battles (terrain or river penalty, forts) leaves the state the operation gave it to the infantry (the plan's own thrust is kept), and its next objective is the state of the line or the enemy's contact its armour reaches cheapest by the ground model, not the nearest"
+            "description": "default true: at war a spearhead formation whose divisions wait in the reserves of rough-ground battles (terrain or river penalty, forts) leaves the state the operation gave it to the infantry (the plan's own thrust is kept unless another country's divisions hold its rough ground: the small enemy's allies got in first, the infantry holds it and the armour goes round), and its next objective is the state of the line or the enemy's contact its armour reaches cheapest by the ground model, not the nearest"
+          },
+          "choke": {
+            "oneOf": [
+              {"type": "boolean"},
+              {
+                "type": "object",
+                "properties": {
+                  "min_surplus": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "divisions over what the choke carries before the surplus leaves the army (default 3)"
+                  }
+                },
+                "additionalProperties": false
+              }
+            ],
+            "description": "THE ARROWS OVER OPEN GROUND (off without it), in the prepare only: each attacking army's offensive whose path the game routed through one rough-ground province (attack penalty or forts) is judged once: with an open way in from its front (no river, no rough ground) its target is redrawn over that way to the same objective (by command, the order and its planning stay); with none, an army (not a group) holding more than the choke carries gives the surplus to a reserve behind the operation's line army with the fewest divisions"
           },
           "group": {
             "type": "string",
