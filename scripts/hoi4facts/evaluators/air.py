@@ -5,8 +5,8 @@ sizes the counts for force planning, with the same inputs the executor uses.
 
 Fighters per front = enemy fighters x (their air_superiority per plane / ours) x fighter_ratio.
   enemy fighters        the live read when the situation has one (state `enemy_fighters` {tag: planes}, what we
-                        see over the front's regions); otherwise the enemy's start OOB fighters [prior: the start
-                        wings, not what the enemy builds by the war date]
+                        see over the front's regions); otherwise the enemy's start OOB fighters plus, with a war
+                        date, what their start fighter lines make by then [prior: start lines kept]
   per-plane quality     the region's superiority is the sum of the planes' air_superiority (the airframe's stat:
                         1 a fighter in vanilla, so numbers decide it); theirs from their best start fighter variant,
                         ours from the best fighter the designer builds with our techs (designer.best, role
@@ -20,6 +20,7 @@ CAS per front (the most that can still join the battles) = LAND_AIR_COMBAT_MAX_P
   CAS flies where the fighters win the air: none required while fighters fall short (the answer says so).
 """
 from .. import designer, force as fm, theatre
+from . import design
 
 
 def _first(v, default):
@@ -28,15 +29,43 @@ def _first(v, default):
     return default if v is None else v
 
 
-def enemy_fighters(sit, tags):
-    """({tag: fighters}, source)."""
+def enemy_fighters(sit, tags, war_date=None):
+    """({tag: fighters}, source). Without a live read: the start OOB wings, plus, with a war date, the fighters their
+    start production lines make by then (each line's factories x the efficiency curve over the days / the line's
+    plane IC: the history's lines kept to the war date [prior: neither new factories nor a switch of lines])."""
     live = sit.state.get("enemy_fighters")
     if isinstance(live, dict) and any(t in live for t in tags):
         return {t: int(live.get(t) or 0) for t in tags}, "live read (state enemy_fighters)"
-    out = {}
+    out, grown = {}, {}
     for t in tags:
         out[t] = sum(int(a.get("amount") or 0) for a in sit.world.oob(t).get("air") or []
                      if fm.plane_kind(sit.game, a.get("type")) in ("fighter", "heavy_fighter"))
+    if war_date:
+        from ..world import day_number
+        from . import production
+        cat = designer.Catalog(sit.game)
+        days = max(0, day_number(war_date) - day_number(sit.world.date))
+        for t in tags:
+            other = sit.other(t)
+            eff = production.Efficiency(other)
+            variants = {v.get("name"): v for v in other.world.country(t).get("variants") or [] if v.get("name")}
+            add = 0.0
+            for ln in other.world.oob(t).get("production") or []:
+                if fm.plane_kind(sit.game, ln["type"]) not in ("fighter", "heavy_fighter") or not ln.get("factories"):
+                    continue
+                v = variants.get(ln.get("version")) or {}
+                mods = {k: m for k, m in (v.get("modules") or {}).items() if m and m != "empty"}
+                try:
+                    ic = float(designer.evaluate(cat, ln["type"], mods)["stats"].get("build_cost_ic") or 0.0)
+                except Exception:  # noqa: BLE001 - not a designer airframe: the equipment's own cost
+                    ic = float(design.Vehicles.of(sit.game).base_stats(ln["type"]).get("build_cost_ic") or 0.0)
+                if ic > 0 and days:
+                    add += ln["factories"] * eff.ic_per_factory(days) / ic
+            grown[t] = int(add)
+            out[t] += grown[t]
+        if any(grown.values()):
+            return out, (f"start OOB wings + what their start fighter lines make by {war_date} ({days} days: "
+                         + ", ".join(f"{t} +{n}" for t, n in grown.items()) + ") [prior: start lines kept]")
     return out, "start OOB wings [prior: not what they build by the war date]"
 
 
@@ -83,11 +112,12 @@ def battle_width(sit, tags):
     return (w or 0.0), "no map graph: one plains battle"
 
 
-def need(sit, enemies=None, axes=1, fighter_ratio=None):
-    """{fighters, cas, terms, why} for one front against `enemies` with `axes` attack axes."""
+def need(sit, enemies=None, axes=1, fighter_ratio=None, war_date=None):
+    """{fighters, cas, terms, why} for one front against `enemies` with `axes` attack axes (enemy fighters grown to
+    war_date by their start lines when given)."""
     tags, _ = sit.enemies(enemies)
     cat = designer.Catalog(sit.game)
-    fighters, src = enemy_fighters(sit, tags)
+    fighters, src = enemy_fighters(sit, tags, war_date)
     total = sum(fighters.values())
     theirs, their_e = _their_fighter(sit, cat, tags)
     bases, mods = designer.available(cat, set(sit.techs()))

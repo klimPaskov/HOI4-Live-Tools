@@ -264,7 +264,7 @@ def text_air(r):
 
 def cmd_air(a, sit):
     from hoi4facts.evaluators import air
-    r = air.need(sit, a.enemy or None, axes=a.axes, fighter_ratio=a.fighter_ratio)
+    r = air.need(sit, a.enemy or None, axes=a.axes, fighter_ratio=a.fighter_ratio, war_date=a.war_date)
     r["country"], r["date"] = sit.tag, sit.date
     return r, text_air(r)
 
@@ -444,6 +444,7 @@ def parser():
     p.add_argument("--picks", type=int, default=3, help="picks per slot")
     p.add_argument("--horizon-years", type=float, default=4.0, help="years the value is counted for")
     p = add("air")
+    p.add_argument("--war-date", default=None, help="grow the enemy fighters by their start lines to this date")
     p.add_argument("--axes", type=int, default=1, help="attack axes on the front (force sizing gives them)")
     p.add_argument("--fighter-ratio", type=float, default=None,
                    help="the plan's air_situation.fighter_ratio (default: parity)")
