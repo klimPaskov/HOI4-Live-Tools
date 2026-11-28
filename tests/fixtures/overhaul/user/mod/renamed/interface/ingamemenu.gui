@@ -1,0 +1,9 @@
+guiTypes = {
+	containerWindowType = {
+		name = "ingamemenu"
+		ButtonType = { name = "menu_load_button" buttonText = "MENU_BAR_LOAD_GAME" }
+		ButtonType = { name = "menu_save_button" buttonText = "MENU_BAR_SAVE_GAME" }
+		ButtonType = { name = "menu_resign_button" buttonText = "OVH_ABDICATE" }
+		ButtonType = { name = "menu_quit_button" buttonText = "OVH_LEAVE" }
+	}
+}
