@@ -3598,11 +3598,21 @@ fn pocket_step_with(
             Some((n.clone(), state.centers.get(&(s as i32)).copied()?))
         })
         .collect();
+    // what the scan saw, in the operation's notes when no pocket is taken (w96d, 28 Nov 2026: a
+    // scan every few days and no pocket note in ten war days: which condition failed was unread)
+    let (mut cut, mut unready, mut capital, mut necks_n, mut tried, mut far) = (0, 0, 0, 0, 0, 0);
+    let seen = list(&read, "pockets").len();
     for pk in list(&read, "pockets") {
-        if pk["already_cut_off"] == json!(true)
-            || pk["pincer_ready"] != json!(true)
-            || pk["capital_inside"] == json!(true)
-        {
+        if pk["already_cut_off"] == json!(true) {
+            cut += 1;
+            continue;
+        }
+        if pk["pincer_ready"] != json!(true) {
+            unready += 1;
+            continue;
+        }
+        if pk["capital_inside"] == json!(true) {
+            capital += 1;
             continue;
         }
         let necks: Vec<i64> = list(pk, "neck_states")
@@ -3610,6 +3620,7 @@ fn pocket_step_with(
             .filter_map(|n| n["state_id"].as_i64())
             .collect();
         let [neck] = necks.as_slice() else {
+            necks_n += 1;
             continue;
         };
         let neck = *neck;
@@ -3618,6 +3629,7 @@ fn pocket_step_with(
             .get(&format!("pocket:tried:{neck}"))
             .is_some_and(|t| now - t < POCKET_RETRY_DAYS * DAY)
         {
+            tried += 1;
             continue;
         }
         let province = match best.get(&neck).copied() {
@@ -3638,6 +3650,7 @@ fn pocket_step_with(
             .collect();
         near.sort_by(|a, b| a.0.total_cmp(&b.0));
         if near.len() < 2 {
+            far += 1;
             continue;
         }
         let inside: Vec<i64> = list(pk, "pocket_states")
@@ -3668,6 +3681,13 @@ fn pocket_step_with(
             closed: false,
         }));
     }
+    state.op_notes.insert(
+        "pocket".into(),
+        format!(
+            "pocket scan: {seen} candidate(s) against {}: {cut} already cut off, {unready} not pincer-ready, {capital} with the capital inside, {necks_n} with more than one neck state, {tried} tried lately, {far} without two strike formations placed; no pocket taken",
+            tags.iter().map(|t| t.as_str()).collect::<Vec<_>>().join(", ")
+        ),
+    );
     Ok(None)
 }
 
@@ -7636,7 +7656,7 @@ fn stuck_push_step(
         id,
         &what,
         "hoi4_army_move",
-        json!({"army": push.army, "divisions": push.divisions, "province_id": push.province}),
+        json!({"army": push.army, "divisions": push.divisions, "province_id": push.province, "state_id": push.state}),
     )?))
 }
 
@@ -7728,13 +7748,19 @@ fn prepare_supply(
                 .iter()
                 .map(|(q, rail)| format!("node {q} railway {rail}"))
                 .collect();
+            let flows = list(&read, "provinces")
+                .iter()
+                .find(|row| row["province_id"].as_i64() == Some(*p))
+                .map_or(0, |row| list(row, "flows").len());
             format!(
                 "{p} (state {s}): {n} divisions at {:.0}% of their need, fed by {}",
                 r * 100.0,
-                if fed.is_empty() {
-                    "no node".to_string()
-                } else {
+                if !fed.is_empty() {
                     fed.join(", ")
+                } else if flows > 0 {
+                    format!("no node read ({flows} flow(s) whose node is not in the own node list)")
+                } else {
+                    "no node read (no flow in the read)".to_string()
                 }
             )
         })
@@ -7759,7 +7785,31 @@ fn prepare_supply(
             .map(|(q, _)| (*p, *s, *n, *r, q))
     });
     let Some((p, s, n, r, q)) = due else {
-        return Ok(None);
+        // NO NODE READ: the read names no feeding node for the worst-fed start province (w96d, 28
+        // Nov 2026: every start province 'fed by no node', no railway in the whole prepare, the
+        // start line at 51% supply against 63%): the railway goes to that province's nearest
+        // railway end from the nearest fed node, as the tool chooses them (to_nearest_node,
+        // from_nearest_node), once a province in 30 days
+        let Some((p, s, n, r, _)) = starved
+            .iter()
+            .find(|(p, _, _, _, _)| feeders(&read, *p).is_empty() && !recent(state, *p))
+            .copied()
+        else {
+            return Ok(None);
+        };
+        state.done.insert(key(id, &format!("prail:{p}")), now);
+        return Ok(Some(order(
+            state,
+            tools,
+            lease,
+            id,
+            &format!(
+                "supply before the attack: railway toward province {p} (state {s}: {n} divisions at {:.0}% of their need; no feeding node read: its nearest railway end)",
+                r * 100.0
+            ),
+            "hoi4_railway_build",
+            json!({"to_province": p, "to_state": s, "to_nearest_node": true, "from_nearest_node": true}),
+        )?));
     };
     state.done.insert(key(id, &format!("prail:{q}")), now);
     Ok(Some(order(

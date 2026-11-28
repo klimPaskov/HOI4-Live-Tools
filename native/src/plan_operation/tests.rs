@@ -5194,6 +5194,50 @@ fn before_the_attack_the_unrailed_node_feeding_the_most_starved_start_province_g
     );
 }
 
+#[test]
+fn with_no_feeding_node_read_the_worst_fed_start_province_gets_its_nearest_railway_end() {
+    // w96d (28 Nov 2026): every start province 'fed by no node' and no railway in the prepare
+    let game = Game::new();
+    let divisions: Vec<Value> = (0..20)
+        .map(|i| json!({"id": format!("a{i}"), "army": "Mitte"}))
+        .collect();
+    let ids: Vec<Value> = (0..20).map(|i| json!(format!("a{i}"))).collect();
+    *game.supply.borrow_mut() = Some(json!({"divisions": divisions, "provinces": [
+        {"province_id": 17, "state_id": 86, "divisions": 20, "division_ids": ids,
+         "supply": 2.0, "demand": 20.0, "railway_level": 0, "flows": []}]}));
+    let units = vec![unit("Mitte".into(), Role::Line, &Value::Null, &Value::Null)];
+    let roster = game.roster.borrow().clone();
+    let mut state = State::default();
+    let op = json!({"id": "op"});
+    let line = prepare_supply(&mut state, &game, "op", &op, &units, &roster, "l", START)
+        .unwrap()
+        .expect("a railway");
+    assert!(line.contains("railway toward province 17"), "{line}");
+    let rail = game
+        .orders()
+        .into_iter()
+        .find(|(n, _)| n == "hoi4_railway_build")
+        .unwrap();
+    assert_eq!(
+        rail.1,
+        json!({"to_province": 17, "to_state": 86, "to_nearest_node": true, "from_nearest_node": true})
+    );
+    assert!(state.op_notes["op:supply_prepare"].contains("no node read (no flow in the read)"));
+    // not again for the same province within 30 days
+    assert!(prepare_supply(
+        &mut state,
+        &game,
+        "op",
+        &op,
+        &units,
+        &roster,
+        "l",
+        START + DAY
+    )
+    .unwrap()
+    .is_none());
+}
+
 // THE STUCK POINT (engineer 99, after o96a)
 
 #[test]
@@ -5227,6 +5271,8 @@ fn a_battle_stuck_for_days_is_attacked_by_the_idle_divisions_on_its_unused_side(
         .find(|(n, _)| n == "hoi4_army_move")
         .unwrap();
     assert_eq!(mv.1["province_id"], json!(6583));
+    // the move tool takes the state with the province (w96d: invalid_arguments without it)
+    assert_eq!(mv.1["state_id"], json!(8));
     assert_eq!(mv.1["divisions"], json!(["m3", "m4", "m5"]));
     // once a day; the same battle not again within 5 days; off by the plan
     assert!(stuck_push_step(
