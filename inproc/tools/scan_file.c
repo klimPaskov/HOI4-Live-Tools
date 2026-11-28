@@ -56,6 +56,7 @@ int main(int argc, char **argv) {
     long qrank = -1;
     for (size_t i = 0; i < ng; i++) if (g[i] == t.cap[CAP_QUEUE_ROOT].value) qrank = (long)i;
     printf("],\"queue_root_rank\":%ld}\n", qrank);
+    { static char db[16384]; printf("{%s}\n", stage2_diplo_json(&t.st2, db, sizeof db)); } /* engineer 122: the diplomacy catalog */
     int bad = 0;
     for (int a = 2; a < argc; a++) {
         char *eq = strchr(argv[a], '=');
@@ -119,6 +120,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "wg_count_off")) got = t.st2.diplo.wg_count_off;
         else if (!strcmp(argv[a], "wg_target_off")) got = t.st2.diplo.wg_target_off;
         else if (!strncmp(argv[a], "act_size:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_size : 0; }
+        else if (!strcmp(argv[a], "diplo_classes")) got = (uint64_t)t.st2.ndcat;
+        else if (!strcmp(argv[a], "diplo_buildable")) got = (uint64_t)t.st2.ndyn;
         else if (!strncmp(argv[a], "act_type:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_type : 0; }
         /* engineer 118: a volunteer action's division list, packed as list offset, inline buffer, inline places */
         else if (!strncmp(argv[a], "act_units:", 10)) {

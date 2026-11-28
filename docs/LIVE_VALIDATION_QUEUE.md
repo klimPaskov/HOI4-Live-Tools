@@ -1127,6 +1127,36 @@ named, an attaché or volunteers to a country not named, a module `unexplained` 
 Pass: V0, V1, V3, V5, V7 (V2, V4, V6 recorded). Then set LIVE_PASSED in native/src/launch/macos/volunteers.rs and the
 `volunteers` entry of IPC_LIVE_PASSED in inproc/core/ipc.c to 1, with the session's numbers in the comment.
 
+## Session S27-DIPLOMACY-ANY: every diplomatic action by its key, the catalog and the game's own answer (module family `diplomacy2`; about 30 minutes) -- part of the diplomacy session, with S25-VOLUNTEERS
+Owner, 28 Nov: ONE dynamic diplomacy tool for any diplomatic action. What it proves: `hoi4_diplomacy {catalog:true}` lists
+every diplomatic action class the game has (43 on 1.20.1.0: the module's scan of the game's own action classes) plus the
+content's scripted actions, each with its shape and the game's own "can do" toward a country asked WITHOUT sending; and
+`hoi4_diplomacy_act` posts a catalog key the module builds (family `diplomacy2`) only when the game's check passes.
+Launch with `HOI4_BACKEND=inprocess` and the opt-in naming `diplomacy` and `diplomacy2` (HOI4_INPROC_POST=...,diplomacy,diplomacy2).
+Bed: the 1939 bookmark as Germany (w92b or the game's own 1939 start), paused; Spain or a minor at peace as a neutral target.
+D0 hello: family `diplomacy2` on, 12 types on (embargo, docking_rights, offer_docking_rights, air_base_access,
+offer_air_base_access, naval_blockade, peace_proposal, reduce_autonomy, increase_autonomy,
+request_access_to_license_production, cancel_licensed_production, return_all_expeditionary_forces).
+D1 catalog read: `hoi4_diplomacy {catalog:true, country:"SPR"}` (or the neutral tag): 43 rows (+ scripted rows if a mod adds
+any), every row has shape and route; rows whose shape is unsupported are present (justify_war_goal constructor_args_1,
+stage_coup dialog_fields, scripted_diplomatic scripted_type ...). Open the diplomacy view on the same country (read only,
+no click) and compare: for each simple row, can_do true exactly where the view's button is enabled. Record any row
+where they differ (key, can_do, the view's state, the tooltip text). Measure the call's time.
+D2 nothing sent by the read: political power, relations (`hoi4_diplomacy_state`) and world tension unchanged after D1.
+D3 a refusal: `hoi4_diplomacy_act {action:"increase_autonomy", country:"SPR"}` (not our subject): refused_by_game, nothing posted.
+D4 a post: `hoi4_diplomacy_act {action:"embargo", country:<a neutral we do not trade with>}` while can_do is true: the reply
+shows 1 posted; the view shows the embargo; record PP before and after. Then the SAME call again: it must NOT lift the
+embargo silently: record whether the tool refuses (nothing_to_change) or the game toggles it off. If it toggles, the
+`embargo` mapping in inproc_diplomacy::op_of must be removed before this family is switched on (report it).
+D5 docking rights: `{action:"ask_docking_rights", country:<an ally or friendly minor>}`: posted only when can_do is true;
+the AI answers when the game runs (Diverged until then); record the answer after 2 game days.
+D6 a key the module cannot build: `{action:"justify_war_goal" ...}` keeps the mouse path (the view's dialog); a catalog key
+with an unsupported shape and no view row (e.g. `{action:"request_foreign_manpower", country:...}`) is refused
+dialog_unsupported and nothing is sent.
+Stop at once on: any post while the view greys the button, any change after D1/D2, a module `unexplained` result, a
+toggle that removed a relation we had.
+Pass: D0-D4, D6 (D5 recorded). Then set the `diplomacy2` entry of IPC_LIVE_PASSED in inproc/core/ipc.c to 1 with the numbers.
+
 ## Session S25-MIOKEY: organisation traits by key (in process, family `mio`; about 5 minutes) -- any time
 What it proves: hoi4_mio_trait `trait` / `traits` resolve the scripts' trait keys to the tree through the module's
 organisations read, and the executor's `mio[].traits` keys reach the game.

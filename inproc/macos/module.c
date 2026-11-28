@@ -404,16 +404,17 @@ typedef void *(*alloc_fn)(void *, uint64_t, uint64_t);
 #define J2_DIVS 512
 
 #define J2_MAX 32
-enum { R_NONE = 0, R_POSTED, R_INVALID, R_NOT_OWN, R_BAD_OBJ, R_BAD_OBJ2, R_DROPPED, R_UNEXPECTED, R_SKIPPED };
+enum { R_NONE = 0, R_POSTED, R_INVALID, R_NOT_OWN, R_BAD_OBJ, R_BAD_OBJ2, R_DROPPED, R_UNEXPECTED, R_SKIPPED, R_CAN_DO };
 static const char *const R_NAMES[] = {"none", "posted", "refused_by_game_check", "not_own", "not_a_live_object",
-                                      "second_object_invalid", "dropped_by_post", "unexpected_object", "skipped"};
+                                      "second_object_invalid", "dropped_by_post", "unexpected_object", "skipped",
+                                      "can_do" /* engineer 122: a check-only diplomacy request the game's own check accepts */};
 
 typedef struct {
     int refs;
     const cmd_type *ct;
     int n; uint64_t obj[J2_MAX]; int64_t val[J2_MAX]; uint64_t obj2; int64_t flag; long id;
     long long queued_us, deadline_us;
-    int ran, main_thread, forbid, requeues, unexplained, posted, refused;
+    int ran, main_thread, forbid, requeues, unexplained, posted, refused, checked; /* checked: engineer 122, check-only answers */
     int32_t player_tag, region_id;
     int res[J2_MAX]; int32_t before[J2_MAX];
     /* orders (engineer 73): the province list, the order named by id (vals[0]), the divisions a new front gets, the
@@ -882,6 +883,9 @@ static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint6
     }
     void **vt = *(void ***)cmd;
     if (!((valid_fn2)vt[c->valid_slot / 8])(cmd, 0)) { ((delete_fn2)vt[c->delete_slot / 8])(cmd); j->res[k] = R_INVALID; j->refused++; continue; }
+    /* engineer 122: check only (flag 2): the game's own answer is the result; the command and its action are freed by the
+     * game's own destructor, nothing is posted */
+    if (j->flag == 2) { ((delete_fn2)vt[c->delete_slot / 8])(cmd); j->res[k] = R_CAN_DO; j->checked++; continue; }
     long long t0 = mono_us();
     unsigned char r = ((post_fn)(uintptr_t)post)((void *)(uintptr_t)q, cmd, 0);
     j->post_us += mono_us() - t0;
@@ -1597,26 +1601,20 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
     j->n = parse_list_u64(objs, j->obj, J2_MAX);
     int nv = vals && *vals ? parse_list_i64(vals, j->val, J2_MAX) : 0;
     const char *why = NULL;
-    if (!strcmp(op, "diplomacy.send_volunteers") || !strcmp(op, "diplomacy.recall_volunteers") || !strcmp(op, "diplomacy.send_attache")) {
-        /* engineer 118: as diplomacy (objs = 0, vals = the receiving country's tag id); send / recall also name the
-         * divisions (divs: hex addresses, at most 64), the attache none */
-        int wants_divs = strcmp(op, "diplomacy.send_attache") != 0;
-        if (j->n != 1 || j->obj[0] != 0) why = "these diplomacy ops name no object: objs = 0 (vals: the receiving country's tag id)";
-        else if (nv != 1 || j->val[0] < 1 || j->val[0] > 100000) why = "vals: the receiving country's tag id";
-        else if (flag || (obj2 && *obj2) || (provs && *provs)) why = "these diplomacy ops take no flag, obj2 or provs";
-        else if (!wants_divs && divs && *divs) why = "the attache takes no divs";
-        else if (wants_divs && ((j->ndiv = parse_list_u64(divs ? divs : "", j->divs, 64)) < 1)) why = "divs: 1 to 64 comma-separated division addresses";
-        for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a division is listed twice";
-        if (!why) { j->n = 1; j->obj[0] = 0; j->allow_free = 1; }
-        if (why) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused_by_policy\",\"reason\":\"%s\"", op, why); free(j); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
-        nv = 0; /* consumed */
-    } else if (!strncmp(op, "diplomacy.", 10)) {
-        /* engineer 78: no object (objs = "0", the channel's one placeholder); vals = the receiving country's tag id (the
-         * shown country of the diplomacy view) */
+    if (ct->spec->auth_kind == AUTH_DIPLO) {
+        /* engineer 78 / 118 / 122: every diplomatic action, hand-written (diplomacy.*) or from the catalog (diplomacy2.*):
+         * no object (objs = 0, the channel's one placeholder); vals = the receiving country's tag id (the shown country of
+         * the diplomacy view); a division-list action (send / recall volunteers) also names the divisions (divs: hex
+         * addresses, at most 64); flag 0 = post, 2 = check only (the action is built and the game's own "can do" asked,
+         * then destroyed: nothing is posted; the answer of the view's Send button for the diplomacy read) */
+        int wants_divs = ct->spec->ctor == CTOR_VOLUNTEER;
         if (j->n != 1 || j->obj[0] != 0) why = "diplomacy ops name no object: objs = 0 (vals: the receiving country's tag id)";
         else if (nv != 1 || j->val[0] < 1 || j->val[0] > 100000) why = "vals: the receiving country's tag id";
-        else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "diplomacy ops take no flag, obj2, provs or divs";
-        else { j->n = 1; j->obj[0] = 0; }
+        else if ((flag != 0 && flag != 2) || (obj2 && *obj2) || (provs && *provs)) why = "diplomacy ops take flag 0 (post) or 2 (check only) and no obj2 or provs";
+        else if (!wants_divs && divs && *divs) why = "this diplomatic action takes no divs";
+        else if (wants_divs && ((j->ndiv = parse_list_u64(divs ? divs : "", j->divs, 64)) < 1)) why = "divs: 1 to 64 comma-separated division addresses";
+        for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a division is listed twice";
+        if (!why) { j->n = 1; j->obj[0] = 0; if (wants_divs) j->allow_free = 1; }
         if (why) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused_by_policy\",\"reason\":\"%s\"", op, why); free(j); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
         nv = 0; /* consumed */
     } else if (j->n < 1) why = "objs: comma-separated hex addresses";
@@ -2209,7 +2207,8 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
                                  "\"result\":\"%s\",\"reason\":\"%s\",\"main_wait_ms\":%.2f,\"requeues\":%d,\"forbid\":%d,"
                                  "\"post_us_total\":%lld,\"readback_ms\":%.2f,\"total_ms\":%.2f,\"player_tag_id\":%d,\"per_object\":[",
                                  op, ct->type_id, j->n, j->posted, j->refused, executed,
-                                 !j->ran ? "not_run" : j->unexplained ? "unexplained" : j->refused ? (j->posted ? "partly_refused" : "refused") : "posted",
+                                 !j->ran ? "not_run" : j->unexplained ? "unexplained" : (j->checked && !j->refused) ? "can_do" :
+                                 j->refused ? (j->posted ? "partly_refused" : "refused") : "posted",
                                  j->reason, j->ran_us / 1000.0, j->requeues, j->forbid, j->post_us, rb_us >= 0 ? rb_us / 1000.0 : -1.0,
                                  (mono_us() - t0) / 1000.0, j->player_tag);
     for (int i = 0; i < j->n && at < n; i++)
@@ -2218,6 +2217,7 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
     if (at < n) at += (size_t)snprintf(out + at, n - at, "]%s", rbx);
     logj("\"event\":\"post2\",\"id\":%ld,%s", id, out);
     int ok = j->ran && !j->unexplained && j->refused == 0 && j->posted == j->n && (pending == 0);
+    if (j->flag == 2 && ct->spec->auth_kind == AUTH_DIPLO) ok = j->ran && !j->unexplained; /* a check's answer, either way */
     job2_release(j);
     return ok;
 }
@@ -2330,12 +2330,18 @@ static int be_mios(char *out, size_t n) {
 }
 
 static int be_orders(const char *group, char *out, size_t n) { return be_tree(group, out, n, 0); }
+/* engineer 122: the diplomacy catalog (scan facts only; no game state is read, so no main-thread job) */
+static int be_diplomacy_actions(char *out, size_t n) {
+    if (!g_t.st2.common.ok) { snprintf(out, n, "\"classes\":0,\"buildable\":0,\"actions\":[],\"reason\":\"stage-2 common facts unresolved\""); return 0; }
+    stage2_diplo_json(&g_t.st2, out, n);
+    return 1;
+}
 static int be_fronts(const char *group, char *out, size_t n) { return be_tree(group, out, n, 1); }
 static void be_log(const char *members) { logj("%s", members); }
 
 static void *ipc_thread(void *arg) {
     pthread_setname_np("hoi4-live-inproc-ipc");
-    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, be_post2, be_orders, be_fronts, be_mios, killed, be_log};
+    static const ipc_backend be = {be_hello, be_read, be_probe, be_post_speed, be_post2, be_orders, be_fronts, be_mios, be_diplomacy_actions, killed, be_log};
     ipc_serve((const char *)arg, &be, &g_policy);
     return NULL;
 }
