@@ -28,6 +28,7 @@ mod inproc_doctrine;
 mod inproc_events;
 mod inproc_holds;
 mod inproc_mio;
+mod inproc_moves;
 mod inproc_navy;
 mod inproc_orders;
 mod inproc_picks;
@@ -7415,6 +7416,9 @@ impl MacClock {
                 let retry = actions.receipt_exists(id);
                 let action = json!({"kind":"army_move","army":army,"state_id":state,
                     "province_id":p,"divisions":ids});
+                // engineer 105: each division's move by command (family move), the mouse path the fallback
+                let mut move_route = inproc::route("move");
+                let had_route = move_route.is_some();
                 if !retry {
                     let (on_way, there) = count().unwrap_or((0, 0));
                     if on_way + there >= ids.len() {
@@ -7423,7 +7427,9 @@ impl MacClock {
                                 "divisions_there": there,
                                 "note": "already heading or standing there: nothing was sent"}}}));
                     }
-                    self.keys.preflight()?;
+                    if !had_route {
+                        self.keys.preflight()?;
+                    }
                 }
                 let keys = &self.keys;
                 let mut settle = || {
@@ -7440,6 +7446,7 @@ impl MacClock {
                         journal::Outcome::Unchanged(detail)
                     })
                 };
+                let mut move_reply = None;
                 let mut dispatch = || {
                     authority.authorize(token, &epoch)?;
                     let at = ui::read(process, armies::division_provinces).unwrap_or_default();
@@ -7448,10 +7455,25 @@ impl MacClock {
                         .filter(|d| at.get(*d).copied().flatten() != Some(p))
                         .cloned()
                         .collect();
+                    move_reply = module_in_process(&mut move_route, |ch| {
+                        let headings = ui::read(process, armies::division_headings)?;
+                        let left = inproc_moves::pending(&pending, &headings, &at, p, &[p]);
+                        if left.is_empty() {
+                            return Ok(inproc::Routed::Gui);
+                        }
+                        let ptrs = ui::read(process, |r, i| armies::division_ptrs(r, i, &left))?;
+                        Ok(inproc_moves::move_divisions(ch, &ptrs, p))
+                    })?;
+                    if move_reply.is_some() {
+                        return Ok(());
+                    }
+                    if had_route {
+                        keys.preflight()?;
+                    }
                     armies::move_divisions(process, keys, army, &pending, state, p)
                 };
                 let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-                return Ok(json!({"receipt":receipt}));
+                return Ok(with_inproc(receipt, move_reply));
             }
             let heading = || ui::read(process, |r, i| armies::heading_for(r, i, army, &wanted));
             let retry = actions.receipt_exists(id);
@@ -7461,6 +7483,9 @@ impl MacClock {
             // (w24: the same three Somaliland provinces were ordered 17 times, each a card click,
             // a Find view and a right click). While some division does neither, the order is
             // sent: half an army marching left the other half without it (live 15 Nov 2026).
+            // engineer 105: the army's divisions ordered by command (family move), the mouse path the fallback
+            let mut move_route = inproc::route("move");
+            let had_route = move_route.is_some();
             if !retry {
                 let (on_way, total) = heading().unwrap_or((0, 0));
                 let ids = ui::read(process, |r, i| armies::army_division_ids(r, i, army))
@@ -7481,7 +7506,9 @@ impl MacClock {
                             "divisions_there": standing,
                             "note": "already heading or standing there: nothing was sent"}}}));
                 }
-                self.keys.preflight()?;
+                if !had_route {
+                    self.keys.preflight()?;
+                }
             }
             let keys = &self.keys;
             // A move by sea or a long route first heads for the embarkation port or the next
@@ -7556,12 +7583,46 @@ impl MacClock {
                     journal::Outcome::Unchanged(detail)
                 })
             };
+            let mut move_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                move_reply = module_in_process(&mut move_route, |ch| {
+                    let to = match province {
+                        Some(p) => Some(p),
+                        None => {
+                            let ports =
+                                ui::read(process, naval::naval_base_provinces).unwrap_or_default();
+                            let victory = mapdata::state_victory_points(&game_dir)?;
+                            inproc_moves::state_target(
+                                &wanted,
+                                &ports,
+                                victory.get(&state).map(Vec::as_slice).unwrap_or(&[]),
+                            )
+                        }
+                    };
+                    let Some(to) = to else {
+                        return Ok(inproc::Routed::Gui);
+                    };
+                    let ids = ui::read(process, |r, i| armies::army_division_ids(r, i, army))?;
+                    let headings = ui::read(process, armies::division_headings)?;
+                    let at = ui::read(process, armies::division_provinces)?;
+                    let left = inproc_moves::pending(&ids, &headings, &at, to, &wanted);
+                    if left.is_empty() {
+                        return Ok(inproc::Routed::Gui);
+                    }
+                    let ptrs = ui::read(process, |r, i| armies::division_ptrs(r, i, &left))?;
+                    Ok(inproc_moves::move_divisions(ch, &ptrs, to))
+                })?;
+                if move_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 armies::move_to(process, keys, army, state, province)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, move_reply));
         }
         if name == "hoi4_army_plan" {
             allowed(

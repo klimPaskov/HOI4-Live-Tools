@@ -30,6 +30,7 @@ its mouse path.
 | doctrine | S18-DOCTRINE | not passed: takes the mouse path |
 | projects | S19-PROJECTS | not run |
 | navyhq | S20-NAVYHQ | not runnable yet: the command is found, but no read gives a headquarters' address |
+| move | S20-MOVE | not run: division moves by command (hoi4_army_move), off under `auto` |
 | multiplayer | S1-MP, S2-MP | not run (needs two clients); every post refuses outside single player |
 
 ## Proof state of the registered tools (23 November 2026)
@@ -1013,3 +1014,36 @@ changed. P5 save + reload; a plain load without the module.
 Stop at once on: a crash, any `unexplained`, a scientist in two facilities, a project running in a facility of another
 specialization, another country's facility changed.
 Pass -> IPC_LIVE_PASSED entry 21 (projects) = 1.
+
+## Session S20-MOVE: the in-process module, division moves (family `move`; about 25 minutes) -- after S19-PROJECTS
+
+Built by engineer 105 (28 Nov 2026), offline-proven only: the scanner resolves `move.division` at full confidence on
+1.19.4.1, 1.20.0.0 and 1.20.1.0 macOS (CMoveCommand 10402, the same constructor, action offsets and flag bytes in all
+three; `inproc/test_offline.sh` checks them). OFF under `auto` until this session passes.
+- What it posts: one CMoveCommand per division, built by the game's own province constructor with the constants of the
+  right click's own call for a reachable province (normal move, kind 2, byte 1, the four stack bytes 0), then the game's
+  own "can do"; a refusal is deleted, never posted. The module checks each division first (a live CUnit through the
+  game's lookup and cast, owned by the player) and reads the built command back (handle, a one-province path, the bytes).
+- MCP: hoi4_army_move with `province_id` (with or without `divisions`) and with `state_id` alone (the state's port, else
+  its largest victory point, else its first province, as the mouse path aims) goes in process; `halt` stays on the
+  mouse. Only divisions neither marching on the target nor standing in it are ordered. The Verified read-back (the
+  divisions' headings) is unchanged; a partial post settles in process (no mouse pass orders a division twice).
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,move ./inproc_stage2.sh PREV-1939 s20m` (Germany 1939, or
+any save with an own army at peace and a war at hand), `HOI4_BACKEND=inprocess`.
+M1 paused, at peace: `hoi4_armies {}`; pick an army with at least 3 divisions standing in one province and an own
+province next to it. `hoi4_army_move {"army":"<name>","state_id":<s>,"province_id":<p>,"divisions":[<3 ids>]}`:
+Verified, the receipt carries `in_process` with `posted` 3; the three show the move arrow to <p> (the same arrow and
+march time as a right click to <p> with the same divisions selected); the rest of the army keeps its orders.
+M2 running at speed 2: the same three back to their province by `province_id`, then the whole army to a neighbouring own
+state by `state_id` alone: Verified; every division heads for the chosen province; a second identical call sends
+nothing ("already heading or standing there").
+M3 at war (declare, or use a save at war): `hoi4_army_move` on an enemy-held province next to the army: the divisions
+attack (a battle opens) exactly as a right click on that province attacks; record the battle's attackers.
+M4 refusals: a province across the sea with no transport path, or a sea province: `refused_by_game_check` (or the
+typed refusal), nothing posted, nothing moves; a division of another country's id: not_own, nothing posted.
+M5 timings: ten moves of 3 divisions each by command, then the same ten with `HOI4_BACKEND=gui`: record the wall time
+per call (the war step's measure). Expected: under 0.2 s by command against several seconds by mouse.
+M6 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, a division moving that was not named, a move arrow or march time that
+differs from the right click's, a battle that a right click would not open, or a post the game's check refused.
+Pass -> IPC_LIVE_PASSED entry 23 (move) = 1.
