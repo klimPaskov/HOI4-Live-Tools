@@ -45,6 +45,11 @@ pub trait Process: ReadMemory {
     fn identity(&self) -> Option<&Identity> {
         None
     }
+    /// A cheap check that the same owned process is still alive, for checks between the events
+    /// of one input action. The full `check` stays at action boundaries. Defaults to `check`.
+    fn check_alive(&self) -> Result<()> {
+        self.check()
+    }
 }
 // Share one opened native handle between the stdio reader and its owned worker.
 // Delegation preserves batching, ABI and freshness checks; Arc grants no access.
@@ -71,6 +76,9 @@ impl<T: Process + ?Sized> Process for std::sync::Arc<T> {
     }
     fn identity(&self) -> Option<&Identity> {
         (**self).identity()
+    }
+    fn check_alive(&self) -> Result<()> {
+        (**self).check_alive()
     }
 }
 

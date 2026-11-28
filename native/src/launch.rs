@@ -9,6 +9,8 @@ mod linux;
 pub mod macos;
 #[cfg(target_os = "windows")]
 pub mod windows;
+#[cfg(all(target_os = "windows", feature = "dev-table"))]
+mod windows_probe;
 /// Attach to a game the user started: verify the process and write `session.json` (private, owner
 /// only) into the run directory. Returns the session as JSON for the caller to show.
 pub fn attach(pid: i32, directory: &Path) -> Result<String> {

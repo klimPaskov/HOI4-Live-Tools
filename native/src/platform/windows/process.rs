@@ -99,6 +99,9 @@ impl crate::platform::Process for WindowsProcess {
     fn check(&self) -> Result<()> {
         self.reader.check()
     }
+    fn check_alive(&self) -> Result<()> {
+        self.reader.check_handles()
+    }
     fn image_base(&self) -> u64 {
         self.reader.image_base()
     }

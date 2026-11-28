@@ -105,9 +105,11 @@ Two runtimes exist:
   game (globals, date, speed, pause, player tag, countries, difficulty, playthrough, the country's
   member objects, division strength and organisation, the tag database; checked through the tools on 24
   November 2026: `hoi4_overview` and `hoi4_army` on a paused game). The division province and the
-  production members are not measured yet and fail with `read_bound`. Every read batch runs the full
-  ownership census (tens of milliseconds), so a multi-read snapshot of a running game tears
-  (`torn_read`); reads of a paused game work. Its input backend (step 4) is bound to nothing yet. A
+  production members are not measured yet and fail with `read_bound`. On master every read batch
+  runs the full ownership census (tens of milliseconds), so a multi-read snapshot of a running game
+  can tear (`torn_read`); reads of a paused game work. The census at snapshot boundaries (PR 375)
+  removes this. Its input backend (step 4) is bound to no tool yet; development builds expose it
+  to a file-driven probe for live checks (`native/src/launch/windows_probe.rs`). A
   development build (`--features dev-table`) reads a table from `HOI4_LIVE_DEV_TABLE` and accepts
   the executable named by `HOI4_LIVE_DEV_WINDOWS_SHA256`; release builds attach to nothing.
   The management tools are compiled and unit-tested on Windows, but nothing binds them there yet.
@@ -123,19 +125,24 @@ Steps to finish, in order:
    starts it without Steam variables in a private user folder, like the Linux launcher.
 4. Written, not live-tested: `WinInput` (`native/src/platform/windows/input.rs`), the Windows
    `GameInput`. It binds a top-level window that belongs to the owned game PID, is visible, not
-   minimised, at 100% scaling (`GetDpiForWindow` 96; this process does not change its DPI
-   awareness) and has exactly the bound client size, and re-checks all of that plus "is the
-   foreground window" before every input (`input_target_not_frontmost` otherwise; it never calls
-   `SetForegroundWindow`). Before a press, `WindowFromPoint` at the target must be the owned window
+   minimised, at 100% scaling and has exactly the bound client size. Scaling: `GetDpiForWindow`
+   must be 96, and for a DPI-unaware window (for which that call always says 96) the monitor's
+   effective DPI must be 96 too, read as a per-monitor-aware thread. Each action runs the full
+   ownership census once, then re-checks the window state, the client origin
+   (`input_geometry_changed` if the window moved after the action was planned) and "is the
+   foreground window" before every event with only the cheap handle check (the zero-timeout wait
+   plus PID and creation time), so a path drag does not pay a census per move
+   (`input_target_not_frontmost` otherwise; it never calls `SetForegroundWindow`). Before a press, `WindowFromPoint` at the target must be the owned window
    (`input_point_occluded`), and no key or button may be held (`input_busy`). Input is `SendInput`:
    absolute moves normalised over the virtual desktop to the pixel centre, buttons, wheel (one
    notch of 120 per 120 pixels), and keys as scan codes (`KEYEVENTF_SCANCODE`, US layout, `wVk`
    filled too) as the Python runtime drove the game. Modifiers are held 150 ms around a key or
    click and presses last 60 ms, as on Linux; Ctrl+click, path drags and Alt (`press_option`, no
    dead keys on Windows) are built, Command+click refuses, and shell chords (Alt+F4, Alt+Tab,
-   Alt+Space, Alt+Escape, Alt+Return, Ctrl+Escape) are refused. Capture is
-   `PrintWindow(PW_CLIENTONLY | PW_RENDERFULLCONTENT)` with a `BitBlt` fallback; a black frame is
-   refused. The key table, coordinate maths and event sequences are unit-tested as data; nothing
+   Alt+Space, Alt+Escape, Alt+Return, Ctrl+Escape) are refused. A key or button stays held until
+   an up is delivered, so a failed up is sent again by the cleanup. A zero scroll sends nothing.
+   Capture is `PrintWindow(PW_CLIENTONLY | PW_RENDERFULLCONTENT)`, then `BitBlt` when
+   `PrintWindow` fails or returns a black frame; a black frame from both is refused. The key table, coordinate maths and event sequences are unit-tested as data; nothing
    has sent input to the game, and no launcher binds it yet.
 5. A layout table for the Windows build. Started: `scripts/pe_rtti_map.py MACHO PE` maps every
    vtable key the sources use (the `Class` tags, the `img()` vtables and the `*vtable*` values of

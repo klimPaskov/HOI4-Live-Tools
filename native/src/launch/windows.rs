@@ -259,7 +259,7 @@ fn run(config: &Config, exe: &Path) -> Result<()> {
     let (process, unavailable) =
         match crate::platform::windows::process::WindowsProcess::open(session) {
             Ok(p) => (
-                Some(Box::new(p) as Box<dyn crate::platform::Process + Send + Sync>),
+                Some(std::sync::Arc::new(p) as std::sync::Arc<dyn crate::platform::Process + Send + Sync>),
                 None,
             ),
             Err(e) => {
@@ -267,13 +267,26 @@ fn run(config: &Config, exe: &Path) -> Result<()> {
                 (None, Some(e))
             }
         };
+    // Development builds: the input probe (`windows_probe`) for live checks of SendInput.
+    let probe_stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    #[cfg(feature = "dev-table")]
+    let probe = process.clone().map(|p| {
+        let directory = config.run_directory.clone();
+        let stop = probe_stop.clone();
+        std::thread::spawn(move || super::windows_probe::watch(p, pid, directory, stop))
+    });
     let server = crate::protocol::Server {
-        process,
+        process: process.map(|p| Box::new(p) as Box<dyn crate::platform::Process + Send + Sync>),
         unavailable,
     };
     let served = crate::framing::serve(std::io::stdin().lock(), std::io::stdout().lock(), |m| {
         server.handle(m)
     });
+    probe_stop.store(true, std::sync::atomic::Ordering::Release);
+    #[cfg(feature = "dev-table")]
+    if let Some(probe) = probe {
+        let _ = probe.join();
+    }
     drop(server);
     close_game(pid, &mut child);
     served.map_err(Into::into)

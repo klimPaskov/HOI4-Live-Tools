@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+Windows input (`SendInput` backend, not bound to any tool yet): each action runs the ownership census once and the
+cheap handle check at its inner fences, a window moved after planning refuses with `input_geometry_changed`, a
+DPI-unaware window is checked against its monitor's scaling, a failed key or button up stays held for the cleanup,
+a black `PrintWindow` frame falls back to `BitBlt`, and a zero scroll sends nothing. Development builds add a
+file-driven input probe to the owned Windows server for live checks.
+
 Overhaul and total-conversion mods ([guide](docs/LEGACY_WINDOWS_USAGE.md#overhaul-and-total-conversion-mods)): the
 Windows Python runtime resolves an interface profile for the enabled playset, so a mod that replaces the main menu,
 renames the pause menu, the panel titles or the months no longer stalls `hoi4_launch` or stops `hoi4_time`,

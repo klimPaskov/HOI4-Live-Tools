@@ -348,6 +348,22 @@ impl<A: Api> OwnedReader<A> {
             Ok(())
         })())
     }
+    /// The cheap handle check alone: the held game and supervisor handles still name their
+    /// pinned PID and creation time, and neither process has exited (the zero-timeout wait).
+    /// For checks between the events of one input action; `check` stays the full census.
+    pub(crate) fn check_handles(&self) -> Result<()> {
+        if self.poisoned.load(Ordering::Acquire) {
+            return Err(error(
+                "ownership_changed",
+                "Windows reader lifetime is quarantined",
+            ));
+        }
+        self.keep((|| {
+            self.api.check_handle(&self.game, &self.session.game)?;
+            self.api
+                .check_handle(&self.supervisor, &self.session.supervisor)
+        })())
+    }
     pub(crate) fn identity(&self) -> &Identity {
         &self.session.game
     }

@@ -163,14 +163,15 @@ pub(crate) fn refuse_chord(modifier: Option<KeyCode>, code: u16) -> Result<()> {
 }
 
 /// Wheel events for a macOS-style pixel scroll: one notch of 120 per 120 pixels, at least
-/// one. Positive scrolls content up (wheel away from the user, a positive delta).
+/// one for any non-zero scroll and none for zero. Positive scrolls content up (wheel away from
+/// the user, a positive delta).
 pub(crate) fn notches(pixels: i32) -> (i32, u32) {
     let delta = if pixels > 0 {
         WHEEL_DELTA
     } else {
         -WHEEL_DELTA
     };
-    (delta, pixels.unsigned_abs().div_ceil(120).max(1))
+    (delta, pixels.unsigned_abs().div_ceil(120))
 }
 
 /// Where the owned client area is: its screen origin and size, and the virtual desktop
@@ -495,8 +496,13 @@ pub(crate) fn run(
                         send(event)
                     }
                     Some((h, false)) => {
-                        held.retain(|v| *v != h);
-                        up(&mut send, event)
+                        // Only a delivered up releases it; a failed up stays held so the
+                        // cleanup below tries again.
+                        let result = up(&mut send, event);
+                        if result.is_ok() {
+                            held.retain(|v| *v != h);
+                        }
+                        result
                     }
                     None => send(event),
                 }
@@ -616,9 +622,23 @@ const PW_CLIENTONLY: u32 = 1;
 const PW_RENDERFULLCONTENT: u32 = 2;
 const SRCCOPY: u32 = 0x00CC_0020;
 const DIB_RGB_COLORS: u32 = 0;
+const DPI_AWARENESS_UNAWARE: i32 = 0;
+/// `DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2`.
+const PER_MONITOR_AWARE_V2: isize = -4;
+const MONITOR_DEFAULTTONEAREST: u32 = 2;
+const MDT_EFFECTIVE_DPI: i32 = 0;
+
+#[link(name = "shcore")]
+unsafe extern "system" {
+    fn GetDpiForMonitor(monitor: isize, kind: i32, x: *mut u32, y: *mut u32) -> i32;
+}
 
 #[link(name = "user32")]
 unsafe extern "system" {
+    fn GetWindowDpiAwarenessContext(window: Hwnd) -> isize;
+    fn GetAwarenessFromDpiAwarenessContext(context: isize) -> i32;
+    fn SetThreadDpiAwarenessContext(context: isize) -> isize;
+    fn MonitorFromWindow(window: Hwnd, flags: u32) -> isize;
     fn GetWindowThreadProcessId(window: Hwnd, pid: *mut u32) -> u32;
     fn IsWindow(window: Hwnd) -> i32;
     fn IsWindowVisible(window: Hwnd) -> i32;
@@ -737,6 +757,47 @@ fn send_event(event: Event) -> Result<()> {
     Ok(())
 }
 
+/// The window is not scaled by the system. `GetDpiForWindow` reports 96 for any DPI-unaware
+/// window whatever the monitor's scaling, so for an unaware window the monitor's effective DPI
+/// is read too (as a per-monitor-aware thread, or that read would also say 96).
+fn unscaled(window: Hwnd) -> Result<()> {
+    let refuse = || {
+        Error::new(
+            "input_geometry_unverified",
+            "Owned window is not at 100% scaling; coordinates would be virtualised",
+        )
+    };
+    // SAFETY: plain window queries; 0 for an invalid window.
+    let (dpi, awareness) = unsafe {
+        (
+            GetDpiForWindow(window),
+            GetAwarenessFromDpiAwarenessContext(GetWindowDpiAwarenessContext(window)),
+        )
+    };
+    if dpi != DEFAULT_DPI {
+        return Err(refuse());
+    }
+    if awareness != DPI_AWARENESS_UNAWARE {
+        return Ok(());
+    }
+    let (mut x, mut y) = (0u32, 0u32);
+    // SAFETY: the thread's awareness is set for this one query and put back; the monitor
+    // handle comes from the system and two writable outputs are passed.
+    let status = unsafe {
+        let previous = SetThreadDpiAwarenessContext(PER_MONITOR_AWARE_V2);
+        let monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+        let status = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut x, &mut y);
+        if previous != 0 {
+            SetThreadDpiAwarenessContext(previous);
+        }
+        status
+    };
+    if status != 0 || x != DEFAULT_DPI || y != DEFAULT_DPI {
+        return Err(refuse());
+    }
+    Ok(())
+}
+
 fn window_pid(window: Hwnd) -> u32 {
     let mut pid = 0u32;
     // SAFETY: any window value is accepted; an invalid one returns 0 and leaves pid at 0.
@@ -783,44 +844,13 @@ impl Drop for Gdi {
     }
 }
 
-/// Top-down 32-bit BGRA pixels of the client area. `PrintWindow` with
-/// `PW_RENDERFULLCONTENT` asks the compositor for the window's own content (a DirectX
-/// flip-model swap chain reads black through a plain `BitBlt`); `BitBlt` from the client DC is
-/// the fallback. An all-black frame is refused rather than returned.
-fn capture_client(window: Hwnd, width: u32, height: u32) -> Result<Vec<u8>> {
+fn all_black(data: &[u8]) -> bool {
+    data.chunks_exact(4).all(|p| p[..3] == [0, 0, 0])
+}
+
+/// Top-down 32-bit pixels of the memory DC's bitmap; deselects the bitmap first.
+fn read_bitmap(gdi: &mut Gdi, width: u32, height: u32) -> Result<Vec<u8>> {
     let (w, h) = (width as i32, height as i32);
-    let mut gdi = Gdi {
-        window,
-        window_dc: 0,
-        memory_dc: 0,
-        bitmap: 0,
-        previous: 0,
-    };
-    // SAFETY: the owned window handle was verified by the caller; a failure returns 0.
-    gdi.window_dc = unsafe { GetDC(window) };
-    if gdi.window_dc == 0 {
-        return Err(os_error("capture_unavailable", "GetDC"));
-    }
-    // SAFETY: a valid window DC; failures return 0 and are checked.
-    unsafe {
-        gdi.memory_dc = CreateCompatibleDC(gdi.window_dc);
-        if gdi.memory_dc == 0 {
-            return Err(os_error("capture_unavailable", "CreateCompatibleDC"));
-        }
-        gdi.bitmap = CreateCompatibleBitmap(gdi.window_dc, w, h);
-        if gdi.bitmap == 0 {
-            return Err(os_error("capture_unavailable", "CreateCompatibleBitmap"));
-        }
-        gdi.previous = SelectObject(gdi.memory_dc, gdi.bitmap);
-    }
-    // SAFETY: the memory DC holds a w x h bitmap; both calls only draw into it.
-    let drawn = unsafe {
-        PrintWindow(window, gdi.memory_dc, PW_CLIENTONLY | PW_RENDERFULLCONTENT) != 0
-            || BitBlt(gdi.memory_dc, 0, 0, w, h, gdi.window_dc, 0, 0, SRCCOPY) != 0
-    };
-    if !drawn {
-        return Err(os_error("capture_unavailable", "PrintWindow and BitBlt"));
-    }
     // SAFETY: GetDIBits needs the bitmap deselected; the previous object goes back first.
     unsafe { SelectObject(gdi.memory_dc, gdi.previous) };
     gdi.previous = 0;
@@ -857,7 +887,57 @@ fn capture_client(window: Hwnd, width: u32, height: u32) -> Result<Vec<u8>> {
     if lines != h {
         return Err(os_error("capture_unavailable", "GetDIBits"));
     }
-    if data.chunks_exact(4).all(|p| p[..3] == [0, 0, 0]) {
+    Ok(data)
+}
+
+/// Top-down 32-bit BGRA pixels of the client area. `PrintWindow` with
+/// `PW_RENDERFULLCONTENT` asks the compositor for the window's own content (a DirectX
+/// flip-model swap chain reads black through a plain `BitBlt`); `BitBlt` from the client DC is
+/// the fallback. An all-black frame is refused rather than returned.
+fn capture_client(window: Hwnd, width: u32, height: u32) -> Result<Vec<u8>> {
+    let (w, h) = (width as i32, height as i32);
+    let mut gdi = Gdi {
+        window,
+        window_dc: 0,
+        memory_dc: 0,
+        bitmap: 0,
+        previous: 0,
+    };
+    // SAFETY: the owned window handle was verified by the caller; a failure returns 0.
+    gdi.window_dc = unsafe { GetDC(window) };
+    if gdi.window_dc == 0 {
+        return Err(os_error("capture_unavailable", "GetDC"));
+    }
+    // SAFETY: a valid window DC; failures return 0 and are checked.
+    unsafe {
+        gdi.memory_dc = CreateCompatibleDC(gdi.window_dc);
+        if gdi.memory_dc == 0 {
+            return Err(os_error("capture_unavailable", "CreateCompatibleDC"));
+        }
+        gdi.bitmap = CreateCompatibleBitmap(gdi.window_dc, w, h);
+        if gdi.bitmap == 0 {
+            return Err(os_error("capture_unavailable", "CreateCompatibleBitmap"));
+        }
+        gdi.previous = SelectObject(gdi.memory_dc, gdi.bitmap);
+    }
+    // PrintWindow first; a frame it reports drawn can still be black (a DirectX surface it did
+    // not reach), so BitBlt from the client DC is tried before a black frame is refused.
+    // SAFETY: the memory DC holds a w x h bitmap; PrintWindow only draws into it.
+    let printed = unsafe { PrintWindow(window, gdi.memory_dc, PW_CLIENTONLY | PW_RENDERFULLCONTENT) != 0 };
+    if printed {
+        let data = read_bitmap(&mut gdi, width, height)?;
+        if !all_black(&data) {
+            return Ok(data);
+        }
+        // SAFETY: the bitmap goes back into the memory DC for the BitBlt below.
+        gdi.previous = unsafe { SelectObject(gdi.memory_dc, gdi.bitmap) };
+    }
+    // SAFETY: same w x h bitmap; BitBlt only draws into it.
+    if unsafe { BitBlt(gdi.memory_dc, 0, 0, w, h, gdi.window_dc, 0, 0, SRCCOPY) } == 0 {
+        return Err(os_error("capture_unavailable", "PrintWindow and BitBlt"));
+    }
+    let data = read_bitmap(&mut gdi, width, height)?;
+    if all_black(&data) {
         return Err(Error::new(
             "capture_unavailable",
             "The window returned a black frame (its DirectX content was not captured)",
@@ -955,11 +1035,22 @@ impl WinInput<'static> {
 }
 
 impl WinInput<'_> {
-    /// Ownership and window state, without the foreground requirement.
+    /// Ownership and window state, without the foreground requirement. The full ownership
+    /// census runs here.
     fn bound(&self) -> Result<()> {
+        self.bound_with(true)
+    }
+    /// Window state with the ownership census (`full`, once per action) or only the cheap
+    /// handle check (`check_alive`, at the fences between the events of one action, so a click
+    /// or a path drag does not pay a census per event).
+    fn bound_with(&self, full: bool) -> Result<()> {
         let s = &self.shared;
         let process = self.process.get();
-        process.check()?;
+        if full {
+            process.check()?;
+        } else {
+            process.check_alive()?;
+        }
         if process.identity() != s.identity.as_ref() {
             return Err(Error::new(
                 "ownership_changed",
@@ -992,18 +1083,15 @@ impl WinInput<'_> {
                 "Owned client dimensions differ from the bound size",
             ));
         }
-        // SAFETY: plain window query; 0 for an invalid window.
-        if unsafe { GetDpiForWindow(s.window) } != DEFAULT_DPI {
-            return Err(Error::new(
-                "input_geometry_unverified",
-                "Owned window is not at 100% scaling; coordinates would be virtualised",
-            ));
-        }
-        Ok(())
+        unscaled(s.window)
     }
-    /// Ownership, window state and foreground, then every action fence.
+    /// Ownership (full census), window state and foreground, then every action guard. Runs
+    /// once at the start of each action.
     fn check(&self) -> Result<()> {
-        self.bound()?;
+        self.check_with(true)
+    }
+    fn check_with(&self, full: bool) -> Result<()> {
+        self.bound_with(full)?;
         // SAFETY: no arguments; returns 0 when no window is foreground.
         if unsafe { GetForegroundWindow() } != self.shared.window {
             return Err(Error::new(
@@ -1073,25 +1161,62 @@ impl WinInput<'_> {
             desk,
         })
     }
-    fn fence(&self, fence: Fence, before_down: &dyn Fn() -> Result<()>) -> Result<()> {
+    /// The client origin is still where the plan was made (`planned`). A window moved between
+    /// planning and a press would put the event on another game pixel while the point can
+    /// still lie inside the window.
+    fn same_origin(&self, planned: Option<(i32, i32)>) -> Result<()> {
+        let Some(planned) = planned else {
+            return Ok(());
+        };
+        let mut origin = Point32::default();
+        // SAFETY: one writable POINT.
+        if unsafe { ClientToScreen(self.shared.window, &mut origin) } == 0 {
+            return Err(os_error("input_unavailable", "ClientToScreen"));
+        }
+        if (origin.x, origin.y) != planned {
+            return Err(Error::new(
+                "input_geometry_changed",
+                "Owned window moved after the action was planned",
+            ));
+        }
+        Ok(())
+    }
+    /// One fence inside an action: the cheap handle check, window state, foreground and
+    /// origin; the full census ran once when the action started.
+    fn fence(
+        &self,
+        fence: Fence,
+        before_down: &dyn Fn() -> Result<()>,
+        origin: Option<(i32, i32)>,
+    ) -> Result<()> {
         match fence {
-            Fence::Ready => self.check(),
+            Fence::Ready => {
+                self.check_with(false)?;
+                self.same_origin(origin)
+            }
             Fence::Idle => self.idle(),
             Fence::Point(x, y) => {
-                self.check()?;
+                self.check_with(false)?;
+                self.same_origin(origin)?;
                 self.unoccluded(x, y)
             }
             Fence::BeforeDown => before_down(),
         }
     }
-    fn execute(&self, plan: &[Step], before_down: &dyn Fn() -> Result<()>) -> Result<()> {
-        run(plan, |f| self.fence(f, before_down), send_event, sleep)
+    fn execute(
+        &self,
+        plan: &[Step],
+        before_down: &dyn Fn() -> Result<()>,
+        origin: Option<(i32, i32)>,
+    ) -> Result<()> {
+        run(plan, |f| self.fence(f, before_down, origin), send_event, sleep)
     }
     fn tap(&self, code: u16, modifier: Option<KeyCode>) -> Result<()> {
         refuse_chord(modifier, code)?;
         let key = key_code(code)
             .ok_or_else(|| Error::new("invalid_arguments", "Key has no Windows equivalent"))?;
-        self.execute(&tap_plan(key, modifier), &|| Ok(()))
+        self.check()?;
+        self.execute(&tap_plan(key, modifier), &|| Ok(()), None)
     }
     fn click_with(
         &self,
@@ -1103,8 +1228,13 @@ impl WinInput<'_> {
         before_down: &dyn Fn() -> Result<()>,
     ) -> Result<Point> {
         self.check()?;
-        let at = self.geometry(game)?.target(x, y)?;
-        self.execute(&click_plan(at, button, modifier), before_down)?;
+        let geometry = self.geometry(game)?;
+        let at = geometry.target(x, y)?;
+        self.execute(
+            &click_plan(at, button, modifier),
+            before_down,
+            Some(geometry.origin),
+        )?;
         Ok(Point { x, y })
     }
     fn drag_with(
@@ -1116,8 +1246,9 @@ impl WinInput<'_> {
         before_down: &dyn Fn() -> Result<()>,
     ) -> Result<()> {
         self.check()?;
-        let plan = drag_plan(&self.geometry(game)?, points, button, stroke)?;
-        self.execute(&plan, before_down)
+        let geometry = self.geometry(game)?;
+        let plan = drag_plan(&geometry, points, button, stroke)?;
+        self.execute(&plan, before_down, Some(geometry.origin))
     }
     fn once(&self, code: u16) -> key_once::Dispatch {
         struct Pair {
@@ -1248,9 +1379,17 @@ impl GameInput for WinInput<'_> {
         self.drag_with(game, points, Button::Left, Stroke::Path, &|| Ok(()))
     }
     fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()> {
+        if pixels == 0 {
+            return Ok(());
+        }
         self.check()?;
-        let target = self.geometry(game)?.target(at.0, at.1)?;
-        self.execute(&scroll_plan(target, pixels), &|| Ok(()))
+        let geometry = self.geometry(game)?;
+        let target = geometry.target(at.0, at.1)?;
+        self.execute(
+            &scroll_plan(target, pixels),
+            &|| Ok(()),
+            Some(geometry.origin),
+        )
     }
     fn scroll_burst(
         &self,
@@ -1259,9 +1398,17 @@ impl GameInput for WinInput<'_> {
         pixels: i32,
         count: u32,
     ) -> Result<()> {
+        if pixels == 0 || count == 0 {
+            return Ok(());
+        }
         self.check()?;
-        let target = self.geometry(game)?.target(at.0, at.1)?;
-        self.execute(&burst_plan(target, pixels, count), &|| Ok(()))
+        let geometry = self.geometry(game)?;
+        let target = geometry.target(at.0, at.1)?;
+        self.execute(
+            &burst_plan(target, pixels, count),
+            &|| Ok(()),
+            Some(geometry.origin),
+        )
     }
     fn press_code(&self, code: u16) -> Result<()> {
         self.tap(code, None)
@@ -1397,7 +1544,7 @@ mod tests {
         assert_eq!(notches(240), (120, 2));
         assert_eq!(notches(30), (120, 1));
         assert_eq!(notches(-121), (-120, 2));
-        assert_eq!(notches(0), (-120, 1));
+        assert_eq!(notches(0).1, 0);
     }
 
     #[test]
@@ -1752,6 +1899,26 @@ mod tests {
                 Event::Key(k, true),
                 Event::Key(k, false),
                 Event::Key(k, false)
+            ]
+        );
+    }
+
+    #[test]
+    fn an_up_that_fails_twice_stays_held_and_the_cleanup_sends_it_again() {
+        let k = key_code(vk::LETTERS[2]).unwrap();
+        // Both attempts of the planned up fail: the key is still held, so the cleanup sends
+        // the up again (and retries it once more if needed) before the error is returned.
+        let (result, sent, _) = record(&tap_plan(k, None), None, &|e, n| {
+            e == Event::Key(k, false) && n < 2
+        });
+        assert_eq!(result.unwrap_err().code, "input_unavailable");
+        assert_eq!(
+            sent,
+            vec![
+                Event::Key(k, true),
+                Event::Key(k, false),
+                Event::Key(k, false),
+                Event::Key(k, false),
             ]
         );
     }
