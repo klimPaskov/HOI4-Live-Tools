@@ -228,7 +228,24 @@ def cmd_research(a, sit):
     return r, text_research(r)
 
 
-COMMANDS = {"research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
+def text_air(r):
+    t = r["terms"]
+    return [f"AIR need for {r.get('country', '')} at {r.get('date', '')} against {', '.join(r['enemies'])}: "
+            f"{r['fighters']} fighters, {r['cas']} close air support (at most {r['cas_cap']} join; "
+            f"{r['cas_requires']})",
+            f"  fighters: {r['why']['fighters']}",
+            f"  cas: {r['why']['cas']}",
+            f"  our fighter: {t['our_design']}; their best: {t['their_airframe']}; {t['src']}"]
+
+
+def cmd_air(a, sit):
+    from hoi4facts.evaluators import air
+    r = air.need(sit, a.enemy or None, axes=a.axes, fighter_ratio=a.fighter_ratio)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_air(r)
+
+
+COMMANDS = {"research": cmd_research, "air": cmd_air, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
             "construction": cmd_construction}
 
 
@@ -265,6 +282,10 @@ def parser():
     p.add_argument("--slots", type=int, default=None)
     p.add_argument("--picks", type=int, default=3, help="picks per slot")
     p.add_argument("--horizon-years", type=float, default=4.0, help="years the value is counted for")
+    p = add("air")
+    p.add_argument("--axes", type=int, default=1, help="attack axes on the front (force sizing gives them)")
+    p.add_argument("--fighter-ratio", type=float, default=None,
+                   help="the plan's air_situation.fighter_ratio (default: parity)")
     p = add("construction")
     p.add_argument("--war-date", default=None, help="the planned war date (the 'standing' horizon)")
     p.add_argument("--war-years", type=float, default=2.0, help="the war's planned length (the 'output' horizon)")
