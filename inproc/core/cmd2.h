@@ -84,7 +84,11 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
        /* engineer 82: construction: the map click's own constructor (cmd, mode byte, const tag *, const CBuildingReference *,
         * count); the reference {vptr, location id, building id, tag} is built by the module the way the game's reference
         * constructors build it (a state id for a state building, a province id for a province building) */
-       CTOR_CONSTRUCTION = 23 };
+       CTOR_CONSTRUCTION = 23,
+       /* engineer 105: a division's move (CMoveCommand): (cmd, CUnit *, province id, normal 1, kind 2, 1, four stack bytes
+        * 0), the constants of the right click's own call for a reachable province (the province helper of the division's
+        * move virtual); the constructor builds the unit action at +auth_off with a one-province path */
+       CTOR_UNIT_PROVINCE = 24 };
 /* engineer 74: BUILD_FIELDS also fills CPdxArray fields (a division handle list, a province list): the fresh object's
  * array is empty ({data 0, capacity 0, size 0} and its allocator set by the factory); the module allocates the
  * elements through THAT allocator's own allocate slot (read from the game's array growth code), so the command's
@@ -104,7 +108,12 @@ enum { AUTH_HANDLE = 0, AUTH_TAG = 1,
         * +auth_off and the sender must control the action's sender tag. obj_cast = the ACTION class (exact vtable); the
         * game's own "can do" is the command's check, which asks the action's own legality virtual (the one that greys the
         * diplomacy view's button) */
-       AUTH_DIPLO = 4 };
+       AUTH_DIPLO = 4,
+       /* engineer 105: the command holds a unit action at +auth_off (CMoveCommand). The auth slot has the generic shape
+        * (the action's resolver, the owner getter, "sender controls"); the resolver reads the action's unit handle through
+        * the generic lookup and steps back over the reference base (target_hint): the object is a CUnit, checked as the
+        * division commands check one (the lookup gives it back, the C++ cast to CUnit accepts it) */
+       AUTH_ACTION = 5 };
 /* the second object a type takes, checked before posting */
 enum { OBJ2_NONE = 0, OBJ2_AIR_BASE, OBJ2_REGION, OBJ2_ORDERS_GROUP,
        OBJ2_REGION_ID, /* a strategic region given by id in vals (0 = none: hold), looked up as the game's check does */
@@ -157,6 +166,11 @@ typedef struct {
      * the base constructor it calls, the sender field (from the command's auth slot); WAR: the war goal handle field and
      * the flag byte the constructor writes */
     uint64_t act_ctor, act_base; uint32_t act_size, act_type, act_sender_off, act_goal_off, act_flag_off;
+    /* engineer 105, AUTH_ACTION: inside the unit action (at +auth_off): the unit handle the resolver reads, the path
+     * (data, count) the province constructor fills, the second path array (data) that must be empty too, and the first
+     * of its flag bytes (act_flag_off: +0 normal, +1, +2, +3, +4, +5, +8 kind (i32), +0xc), each read from the action's
+     * own constructors; act_ctor = that province constructor */
+    uint32_t act_handle_off, act_path_off, act_path_cnt_off, act_path2_off;
     unsigned conf, need;
     char evidence[300];
 } cmd_type;

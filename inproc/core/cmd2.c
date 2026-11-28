@@ -442,6 +442,19 @@ const cmd_spec CMD2_SPECS[] = {
     {"navyhq", "navyhq.admiral", "CAssignAdmiralToNavyHeadquarter", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x2c, "11CUnitLeader", 2,
      {{"admiral", 0x2c, FK_REF, 0, 0x3042, 0}, {"headquarters", 0x24, FK_REF, 0, 0x284f, 0}},
      OBJ2_CAST, 0, AUTH_HANDLE, NULL, "25CCustomizableBuildingItem", 0},
+    /* ---- move (engineer 105, 28 Nov): a division's move order, as the right click on a province posts it. Read from
+     * 1.20.0.0 and 1.19.4.1 (identical code): CMoveCommand 10402 (0x88; factory 1.20 0x100b403b0, vtable 0x103526f28)
+     * holds a unit action at +0x28 (its own serializer writes everything through that action, so no field of the command
+     * is listed here). The right click: the division's move virtual (CArmy slot 0x28, 0x1000766f0) calls the province
+     * helper 0x100b44730, which builds the command with the province constructor 0x100b2ede0 (cmd, unit, province id,
+     * normal 1, kind 2, 1, stack bytes 0, 0, 0, 0 for a reachable province) and posts it. That constructor calls the
+     * action's province constructor (thunk 0x100b2c6f0 -> 0x100b2c570): the unit's handle (+0x18 of the unit) into the
+     * action's +0xc, a one-province path (+0x18 data, +0x24 count), the flag bytes +0x50.., the kind +0x58. "Can do"
+     * 0x100b2efd0 (the action's own check: the handle resolves to a CUnit, the path is legal); auth 0x100b2efe0: the
+     * action's resolver (handle +0xc, the generic lookup, minus the reference base 0x10), the unit's owner, the sender
+     * controls it. Off in auto until S20-MOVE passes (ipc.c). */
+    {"move", "move.division", "CMoveCommand", 0x88, BUILD_CTOR, CTOR_UNIT_PROVINCE, 0, 0x28, "5CUnit", 0, {{0}},
+     OBJ2_NONE, 0, AUTH_ACTION},
 };
 const int CMD2_NSPECS = (int)(sizeof CMD2_SPECS / sizeof CMD2_SPECS[0]);
 
@@ -726,6 +739,88 @@ static int resolver_shape(const scan_image *im, const cmd_spec *s, cmd_type *o) 
     return lk && o->target_hint < 0x400 && cmd_pmatch(lk, 16, "55 48 89 e5 8b 07 48 3d", c, 8);
 }
 
+/* engineer 105, AUTH_ACTION: the unit action's resolver: if its handle (two dwords at +H) is set, the generic lookup of
+ * &action[H] minus the reference base (add rax, -hint; NULL stays NULL). The hint must be the division's reference base
+ * the division commands read (stage-2 common unit_hint), and the lookup the generic one (its first bytes) */
+static int action_resolver_shape(const scan_image *im, const stage2_common *cm, cmd_type *o) {
+    uint32_t c[8];
+    const uint8_t *b = scan_ptr(im, o->resolve_fn, 0x30);
+    if (!b || !cmd_pmatch(b, 0x2d, "55 48 89 e5 83 7f B 00 75 B 83 7f B 00 74 B 48 83 c7 B e8 D 48 89 c1 48 83 c0 B 48 85 c9 "
+                                   "48 0f 44 c1 5d c3", c, 8))
+        return 0;
+    uint32_t h = c[0], hint = (uint32_t)(uint8_t)(-(int8_t)(uint8_t)c[6]);
+    if (c[2] != h + 4 || c[4] != h || !hint || hint != cm->unit_hint || !cm->ti_unit) return 0;
+    o->lookup_fn = o->resolve_fn + 0x19 + (int64_t)(int32_t)c[5];
+    const uint8_t *lk = scan_ptr(im, o->lookup_fn, 16);
+    if (!lk || !cmd_pmatch(lk, 16, "55 48 89 e5 8b 07 48 3d", c, 8)) return 0;
+    o->target_hint = hint; o->act_handle_off = h;
+    return 1;
+}
+
+/* engineer 105: the unit action's province constructor (the target of the move constructor's call, through a one-jump
+ * thunk): its prologue binds (action, unit, province, normal, kind, byte); it copies the unit's handle (unit + hint +
+ * handle offset) into the action's handle field, stores the flag bytes and the kind at fixed distances from the first
+ * flag byte, and appends the province to the path. Every offset it shows must agree with the resolver's handle field
+ * and with the default action the factory builds (empty arrays, the same places). */
+static int move_action_ctor(const scan_image *im, uint64_t call_target, const stage2_common *cm, cmd_type *o) {
+    uint32_t c[8];
+    const uint8_t *th = scan_ptr(im, call_target, 10);
+    if (th && cmd_pmatch(th, 10, "55 48 89 e5 5d e9 D", c, 8)) call_target = call_target + 10 + (int64_t)(int32_t)c[0];
+    const uint8_t *a = scan_ptr(im, call_target, 0x180);
+    if (!a || !cmd_pmatch(a, 0x20, "55 48 89 e5 41 57 41 56 41 55 41 54 53 50 45 89 cf 45 89 c4 41 89 cd 89 55 d0 49 89 f6 48 89 fb", c, 8))
+        return 0;
+    int handle = 0, flags = 0, path = 0, path2 = 0;
+    uint32_t flag0 = 0, pcnt = 0, pdata = 0, p2 = 0, pdata2 = 0;
+    for (size_t k = 0; k + 0x30 <= 0x180; k++) {
+        if (!handle && cmd_pmatch(a + k, 8, "49 8b 46 B 48 89 43 B", c, 8) && c[0] == cm->unit_hint + cm->cref_handle_off &&
+            c[1] == o->act_handle_off)
+            handle = 1;
+        if (!flags && cmd_pmatch(a + k, 27, "66 0f 7e 43 B 0f b6 45 30 88 43 B 0f b6 45 18 88 43 B 44 89 63 B 44 88 7b B", c, 8) &&
+            c[1] == c[0] + 4 && c[2] == c[0] + 5 && c[3] == c[0] + 8 && c[4] == c[0] + 0xc) {
+            flags = 1; flag0 = c[0];
+        }
+        /* the path: movsxd rax, [rbx + COUNT]; mov ecx, [rbp - 0x30] (the province); mov [r14 + 4*rax], ecx; then the old
+         * data mov rsi, [rbx + DATA] */
+        if (!path && cmd_pmatch(a + k, 18, "48 63 43 B 8b 4d d0 41 89 0c 86 48 8b 73 B", c, 8) && c[1] + 0xc == c[0]) {
+            path = 1; pcnt = c[0]; pdata = c[1];
+        }
+        /* both arrays cleared, each followed by its allocator: xorps xmm1, xmm1; movups [rbx + DATA], xmm1; mov rdi,
+         * [rip + allocator]; mov [rbx + DATA + 0x10], rdi; movups [rbx + DATA2], xmm1; mov [rbx + DATA2 + 0x10], rdi */
+        if (!path2 && cmd_pmatch(a + k, 26, "0f 57 c9 0f 11 4b B 48 8b 3d D 48 89 7b B 0f 11 4b B 48 89 7b B", c, 8) &&
+            c[2] == c[0] + 0x10 && c[4] == c[3] + 0x10 && c[3] > c[0]) {
+            path2 = 1; p2 = c[3]; pdata2 = c[0];
+        }
+    }
+    if (!handle || !flags || !path || !path2 || pdata != pdata2 || p2 >= flag0) return 0;
+    o->act_ctor = call_target; o->act_flag_off = flag0; o->act_path_off = pdata; o->act_path_cnt_off = pcnt; o->act_path2_off = p2;
+    return 1;
+}
+
+/* engineer 105: CMoveCommand's province constructor: four stack bytes read first, the command header, the vptr (lea r14),
+ * then rdi += auth_off and the call of the action's province constructor with the five bytes pushed (the complete- and
+ * base-object copies are identical; every match must name the same action constructor) */
+static int move_ctor(const scan_image *im, const cmd_spec *s, const stage2_common *cm, cmd_type *o) {
+    uint64_t st[16]; unsigned ns = lea_sites(im, o->vtable, st, 16), found = 0;
+    uint64_t ctor = 0, act = 0;
+    uint32_t c[8];
+    for (unsigned i = 0; i < ns && i < 16; i++) {
+        uint64_t fs = fn_start(im, st[i]);
+        const uint8_t *pre = fs ? scan_ptr(im, fs, 0x40) : NULL, *body = scan_ptr(im, st[i], 0x30);
+        if (!pre || !body || st[i] - fs > 0x60) continue;
+        if (!cmd_pmatch(pre, 0x1d, "55 48 89 e5 41 56 53 0f b6 45 10 44 0f b6 55 18 44 0f b6 5d 20 0f b6 5d 28 c6 47 08 00", c, 8))
+            continue;
+        if (!cmd_pmatch(body, 0x2d, "4c 8d 35 D 4c 89 37 48 83 c7 B 48 83 ec 08 0f b6 db 45 0f b6 db 45 0f b6 d2 0f b6 c0 53 6a 00 "
+                                    "41 53 41 52 50 e8 D", c, 8) || c[1] != s->auth_off)
+            continue;
+        cmd_type t = *o;
+        if (!move_action_ctor(im, st[i] + 0x2d + (int64_t)(int32_t)c[2], cm, &t)) continue;
+        if (found && t.act_ctor != act) return 0;
+        if (!found) { ctor = fs; act = t.act_ctor; *o = t; o->ctor = ctor; }
+        found++;
+    }
+    return found > 0;
+}
+
 /* the UI constructor for BUILD_CTOR types: stores the vptr and the arguments at the serializer's offsets */
 static int find_ctor(const scan_image *im, const cmd_spec *s, cmd_type *o) {
     uint64_t st[16]; unsigned ns = lea_sites(im, o->vtable, st, 16);
@@ -959,6 +1054,11 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
             if (ti_name(im, src, sn, sizeof sn) && !strcmp(sn, "16CReferenceObject") && ti_name(im, dst, dn, sizeof dn) &&
                 !strcmp(dn, s->obj_cast)) { o->ti_src = src; o->ti_dst = dst; o->conf |= C_RESOLVER; }
         }
+    } else if (s->auth_kind == AUTH_ACTION) {
+        /* engineer 105: the generic auth slot over the command's unit action; its resolver; the province constructor */
+        if ((o->conf & C_SLOTS) && auth_shape(im, o->auth_fn, s, o)) o->conf |= C_AUTH;
+        if ((o->conf & C_AUTH) && action_resolver_shape(im, cm, o)) o->conf |= C_RESOLVER;
+        if ((o->conf & C_RESOLVER) && (o->conf & C_FACTORY) && s->ctor == CTOR_UNIT_PROVINCE && move_ctor(im, s, cm, o)) o->conf |= C_CTOR;
     } else {
         if ((o->conf & C_SLOTS) && auth_shape(im, o->auth_fn, s, o)) o->conf |= C_AUTH;
         if ((o->conf & C_AUTH) && resolver_shape(im, s, o)) o->conf |= C_RESOLVER;
@@ -999,7 +1099,8 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
         }
         if (all) o->conf |= C_SERIAL;
     }
-    if (s->build == BUILD_CTOR && s->auth_kind != AUTH_DIPLO && (o->conf & C_FACTORY) && find_ctor(im, s, o)) o->conf |= C_CTOR;
+    if (s->build == BUILD_CTOR && s->auth_kind != AUTH_DIPLO && s->auth_kind != AUTH_ACTION && (o->conf & C_FACTORY) && find_ctor(im, s, o))
+        o->conf |= C_CTOR;
     o->ok = (o->conf & o->need) == o->need;
     snprintf(o->evidence, sizeof o->evidence,
              "%s: size 0x%x, type id %u, valid 0x%llx, auth 0x%llx (resolver 0x%llx -> %s +0x%x, owner 0x%llx), serializer "

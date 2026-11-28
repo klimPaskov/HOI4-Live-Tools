@@ -121,6 +121,14 @@ int main(int argc, char **argv) {
         else if (!strncmp(argv[a], "act_size:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_size : 0; }
         else if (!strncmp(argv[a], "act_type:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_type : 0; }
         else if (!strncmp(argv[a], "act_goal_off:", 13)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 13); got = x ? x->act_goal_off : 0; }
+        /* engineer 105: a unit action's facts (move.division): its province constructor, and its offsets packed as
+         * handle, path data, path count, second array, first flag byte (one byte each, high to low) */
+        else if (!strncmp(argv[a], "act_ctor:", 9)) { const cmd_type *x = stage2_find(&t.st2, argv[a] + 9); got = x ? x->act_ctor : 0; }
+        else if (!strncmp(argv[a], "act_offs:", 9)) {
+            const cmd_type *x = stage2_find(&t.st2, argv[a] + 9);
+            got = x ? ((uint64_t)x->act_handle_off << 32) | ((uint64_t)x->act_path_off << 24) | ((uint64_t)x->act_path_cnt_off << 16) |
+                      ((uint64_t)x->act_path2_off << 8) | x->act_flag_off : 0;
+        }
         /* engineer 79: the area-defence order */
         /* engineer 82: the building reference */
         else if (!strcmp(argv[a], "build_ok")) { got = (uint64_t)t.st2.build.ok; fprintf(stderr, "construction: %s\n", t.st2.build.evidence); }

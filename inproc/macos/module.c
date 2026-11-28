@@ -393,6 +393,8 @@ typedef void (*ctor_research)(void *, const int32_t *, void *, int32_t, int, int
 typedef void (*ctor_idea)(void *, const int32_t *, void *);           /* engineer 79: AddIdea (cmd, &tag, idea) */
 typedef void (*ctor_idea2)(void *, const int32_t *, void *, void *);  /* engineer 79: ReplaceIdea (cmd, &tag, old, new) */
 typedef void (*ctor_construction)(void *, int, const int32_t *, const void *, int32_t); /* engineer 82: (cmd, mode, &tag, &reference, count) */
+/* engineer 105: (cmd, unit, province, normal, kind, byte, then four bytes the callee reads from its stack slots) */
+typedef void (*ctor_unit_province)(void *, void *, int32_t, int, int32_t, int, int, int, int, int);
 typedef unsigned char (*option_test_fn)(void *, const void *, unsigned char);
 typedef void (*ctor_groups_obj)(void *, const pdx_array *, void *);
 typedef void (*ctor_groups_obj_i32)(void *, const pdx_array *, void *, int32_t);
@@ -477,6 +479,21 @@ static int roundtrip(const cmd_type *ct, uint64_t obj, uint64_t *handle) {
         *handle = h;
         return (uint64_t)(uintptr_t)g_dyncast((void *)(uintptr_t)obj, (void *)(uintptr_t)(ct->ti_src + (uint64_t)g_slide),
                                               (void *)(uintptr_t)(ct->ti_dst + (uint64_t)g_slide), -1) == obj;
+    }
+    if (ct->spec->auth_kind == AUTH_ACTION) {
+        /* engineer 105: a division, as the division commands check one: its handle (at its reference base) resolves through
+         * the generic lookup to that base, and the C++ cast to CUnit gives the division back */
+        uint64_t lk = ct->lookup_fn + (uint64_t)g_slide;
+        void *ref = NULL;
+        if (!g_dyncast) g_dyncast = (dyncast_fn)dlsym(RTLD_DEFAULT, "__dynamic_cast");
+        *handle = 0;
+        if (!g_dyncast || !c->ti_unit || ct->target_hint != c->unit_hint || !plausible(obj) ||
+            !sq(obj + c->unit_hint + c->cref_handle_off, &h) || !h || !code_ptr(lk) ||
+            (ref = ((resolve_fn2)(uintptr_t)lk)(&h)) == NULL || (uint64_t)(uintptr_t)ref != obj + c->unit_hint)
+            return 0;
+        *handle = h;
+        return (uint64_t)(uintptr_t)g_dyncast(ref, (void *)(uintptr_t)(c->ti_reference + (uint64_t)g_slide),
+                                              (void *)(uintptr_t)(c->ti_unit + (uint64_t)g_slide), c->unit_hint) == obj;
     }
     if (!plausible(obj) || !sq(obj + ct->target_hint + c->cref_handle_off, &h) || h == 0) return 0;
     uint64_t rf = ct->resolve_fn + (uint64_t)g_slide;
@@ -1169,7 +1186,7 @@ static void run_job2(void *ctx) {
         uint64_t owner_f = ct->owner_fn + (uint64_t)g_slide;
         if (!roundtrip(ct, j->obj[i], &hs[i])) { j->res[i] = R_BAD_OBJ; j->refused++; continue; }
         /* AUTH_TAG: the command names the player's own tag; whether the country may use the object is the game's check */
-        if (ct->spec->auth_kind == AUTH_HANDLE &&
+        if ((ct->spec->auth_kind == AUTH_HANDLE || ct->spec->auth_kind == AUTH_ACTION) &&
             (!code_ptr(owner_f) || ((owner_fn2)(uintptr_t)owner_f)((void *)(uintptr_t)j->obj[i]) != j->player_tag)) { j->res[i] = R_NOT_OWN; j->refused++; continue; }
         if (!strcmp(op, "training.create")) { /* engineer 82: a live own template: the Train button's can_train(deployment, body, 1, 0) */
             typedef unsigned char (*can_train_fn2)(void *, const void *, int32_t, int32_t);
@@ -1283,7 +1300,12 @@ static void run_job2(void *ctx) {
             uint64_t data = 1; int32_t size = 1;
             if (ct->spec->ctor == CTOR_ADDLINE) /* no list: the variant's handle field still holds the empty handle */
                 ok = sq((uint64_t)(uintptr_t)cmd + ct->spec->f[1].off, &data) && data == nullref;
-            else if (ct->spec->ctor == CTOR_LEADER || ct->spec->ctor == CTOR_GROUP_NAME || ct->spec->ctor == CTOR_EVENT_OPTION ||
+            else if (ct->spec->ctor == CTOR_UNIT_PROVINCE) { /* engineer 105: the factory's default action: both arrays empty */
+                uint64_t a = (uint64_t)(uintptr_t)cmd + ct->spec->auth_off, d1 = 1, d2 = 1; int32_t n1 = 1, n2 = 1;
+                ok = sq(a + ct->act_path_off, &d1) && d1 == 0 && sread(a + ct->act_path_cnt_off, &n1, 4) && n1 == 0 &&
+                     sq(a + ct->act_path2_off, &d2) && d2 == 0 &&
+                     sread(a + ct->act_path2_off + (ct->act_path_cnt_off - ct->act_path_off), &n2, 4) && n2 == 0;
+            } else if (ct->spec->ctor == CTOR_LEADER || ct->spec->ctor == CTOR_GROUP_NAME || ct->spec->ctor == CTOR_EVENT_OPTION ||
                      ct->spec->ctor == CTOR_RESEARCH || ct->spec->ctor == CTOR_IDEA_ADD || ct->spec->ctor == CTOR_IDEA_REPLACE ||
                      ct->spec->ctor == CTOR_CONSTRUCTION) {
                 /* no list: every handle still empty */
@@ -1327,6 +1349,8 @@ static void run_job2(void *ctx) {
                     memcpy(ref, &rv, 8); memcpy(ref + 8, &j->bld_loc, 4); memcpy(ref + 12, &j->bld_id, 4); /* tag +0x10 stays 0 */
                     ((ctor_construction)(uintptr_t)ctor)(cmd, 2, &j->player_tag, ref, 1); break;
                 }
+                case CTOR_UNIT_PROVINCE: /* engineer 105: the right click's own call for a reachable province */
+                    ((ctor_unit_province)(uintptr_t)ctor)(cmd, obj, (int32_t)j->val[i], 1, 2, 1, 0, 0, 0, 0); break;
                 case CTOR_AREA_STATE: /* engineer 79: the map tool's click: group, order id (0 = new), the state, settings */
                     ((ctor_area_state)(uintptr_t)ctor)(cmd, obj, j->order_id, j->provs[i], j->hold_setting); break;
                 case CTOR_EVENT_OPTION: /* the window's own fields, as its option click passes them */
@@ -1427,6 +1451,21 @@ static void run_job2(void *ctx) {
                      sread((uint64_t)(uintptr_t)cmd + 0x30, &sl, 4) && sl == (int32_t)j->val[0] &&
                      sread((uint64_t)(uintptr_t)cmd + 0x34, b, 3) && b[0] == 0 && b[1] == 1 && b[2] == 0;
                 if (!ok) { j->res[i] = R_UNEXPECTED; j->unexplained = 1; snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload"); break; }
+            } else if (ok && ct->spec->ctor == CTOR_UNIT_PROVINCE) { /* engineer 105: the division's handle, one province, the bytes */
+                uint64_t a = (uint64_t)(uintptr_t)cmd + ct->spec->auth_off, hv = 0, pd = 0;
+                int32_t pn = -1, x = 0, kind = -1; uint8_t fl[6] = {9, 9, 9, 9, 9, 9}, last = 9;
+                ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
+                     sq(a + ct->act_handle_off, &hv) && hv == h &&
+                     sq(a + ct->act_path_off, &pd) && sread(a + ct->act_path_cnt_off, &pn, 4) && pn == 1 &&
+                     sread(pd, &x, 4) && x == (int32_t)j->val[i] &&
+                     sread(a + ct->act_flag_off, fl, 6) && fl[0] == 1 && !fl[1] && !fl[2] && !fl[3] && !fl[4] && !fl[5] &&
+                     sread(a + ct->act_flag_off + 8, &kind, 4) && kind == 2 && sread(a + ct->act_flag_off + 0xc, &last, 1) && last == 1;
+                if (!ok) {
+                    j->res[i] = R_UNEXPECTED; j->unexplained = 1;
+                    snprintf(j->reason, sizeof j->reason, "the constructor built an unexpected payload (handle %s, path %d of 1 to %d, flags %u/%u/%u/%u/%u/%u, kind %d, byte %u)",
+                             hv == h ? "ok" : "differs", pn, x, fl[0], fl[1], fl[2], fl[3], fl[4], fl[5], kind, last);
+                    break;
+                }
             } else if (ok && ct->spec->ctor == CTOR_AREA_STATE) { /* engineer 79: exactly one click's payload */
                 uint64_t hg = 0, d = 0; int32_t oid = -1, cnt = -1, x = 0, st = -1; uint8_t b[2] = {9, 9};
                 ok = sq((uint64_t)(uintptr_t)cmd, &cvp) && cvp == ct->vtable + (uint64_t)g_slide &&
@@ -1851,6 +1890,15 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         if (nv) why = "this op takes no vals";
         else if (j->n != 1) why = "decisions.take: exactly one decision";
         else if (flag || (obj2 && *obj2) || (provs && *provs)) why = "decisions.take takes no flag, obj2 or provs";
+    } else if (!strncmp(op, "move.", 5)) {
+        /* engineer 105: a division's move order, as the right click on a province posts it (CMoveCommand, one per division).
+         *   division: objs = own divisions (1..32, each a live CUnit); vals = ONE province id (1..100000) for all of them.
+         * The game's own "can do" decides whether the province is a legal destination now (refused = deleted, never posted) */
+        if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "move ops take no flag, obj2, provs or divs";
+        else if (strcmp(op, "move.division")) why = "unknown move op";
+        else if (nv != 1 || j->val[0] < 1 || j->val[0] > 100000) why = "vals: one province id (1..100000)";
+        else for (int k = 1; k < j->n; k++) j->val[k] = j->val[0];
+        nv = 0;
     } else if (!strncmp(op, "events.", 7)) {
         /* engineer 76: an event answer. objs = ONE open event window (CEventWindow); vals = the option's place among the
          * shown options (0..7) and how many the window shows (1..8: the module's option test must agree) */
