@@ -5644,7 +5644,7 @@ struct SlotRead {
 }
 
 /// The default standing order. It names no game key: every vacant seat of the military staff
-/// (chiefs and high command) takes the first advisor the game enables there. Laws and
+/// (chiefs and high command) takes the enabled advisor of most value there (crate::pick_value). Laws and
 /// political advisors are the plan's to name in `politics_auto.order`: which law is best and
 /// what an advisor brings are judgements the game files answer, not the executor. Until a read
 /// has listed the category's seats (or `recheck` after the last listing) the first seat stands
@@ -5659,7 +5659,7 @@ fn politics_auto_default(state: &State, now: GameHour, recheck: GameHour) -> Val
             .into_iter()
             .map(|slot| {
                 json!({"category": "military_staff", "slot": slot,
-                    "why": "a vacant military staff seat: the first advisor the game enables"})
+                    "why": "a vacant military staff seat: the enabled option of most value"})
             })
             .collect(),
     )
@@ -5686,7 +5686,7 @@ fn politics_auto_fill(state: &State, now: GameHour, recheck: GameHour) -> Vec<Va
         };
         for slot in seats {
             out.push(json!({"category": category, "slot": slot, "fill": true,
-                "why": "a vacant seat: the first advisor the game enables"}));
+                "why": "a vacant seat: the enabled option of most value"}));
         }
     }
     out
@@ -6119,7 +6119,8 @@ pub(super) fn politics_auto_step(
             .or(options["current"]["idea"].as_str())
             .unwrap_or("")
             .to_string();
-        let fill = entry["fill"] == json!(true);
+        // an entry naming no ideas fills a vacant seat (politics_auto_choice): by value
+        let fill = strings(entry, "ideas").is_empty();
         let offered = offered_in_order(&options, fill, &mut value_ctx, tools, plan);
         if offered.iter().any(|(_, enabled)| *enabled) {
             could_buy = true;

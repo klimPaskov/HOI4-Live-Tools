@@ -1130,7 +1130,7 @@ pub(super) fn officer_call(
                 // read back not taken, no reason given)
                 let held = read(process, doctrines::snapshot)
                     .ok()
-                    .and_then(|s| doctrines::xp_index(&view).map(|x| s.xp[x]));
+                    .and_then(|s| doctrines::xp_index(view).map(|x| s.xp[x]));
                 if let (Some(price), Some(held)) = (entry["cost"].as_f64(), held) {
                     if held + 1e-6 < price {
                         return Err(refuse(
