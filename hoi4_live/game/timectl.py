@@ -34,6 +34,8 @@ def probe_running(session, wait=0.9, tries=5):
         d = topbar.read_date(img, session.ocr)
         if "error" in d:
             last = {"error": "date not readable", "date": d, "icon": ev}
+            if d.get("unrecognised_month"):
+                last.update(unrecognised_month=d["unrecognised_month"], known_months=d.get("known_months"))
             session.sleep(0.4)
             continue
         if state in ("paused", "running") and ev.get("icon") != "unknown":
@@ -58,7 +60,7 @@ def set_paused(session, paused=True, attempts=3, settle=6.0):
     for _ in range(attempts):
         running, d, ev = probe_running(session)
         if running is None:
-            raise ToolError("cannot read the in-game date; is a game loaded and the interface shown?", ev)
+            raise ToolError(topbar.month_error(ev) or "cannot read the in-game date; is a game loaded and the interface shown?", ev)
         if running != paused:
             return d
         session.input.key("space")
@@ -128,7 +130,7 @@ def _run_days(session, days, hours, popup_policy, speed, max_seconds, poll, use_
     poll = poll or session.cfg["time"]["poll_seconds"]
     start, img = read_date(session)
     if "error" in start:
-        raise ToolError("cannot read the in-game date before running time", start)
+        raise ToolError(topbar.month_error(start) or "cannot read the in-game date before running time", start)
     h_start = topbar.hours(start)
     target = h_start + total_hours
     report = {"start": start["hoi4"], "requested_hours": total_hours, "popups": [], "polls": 0}

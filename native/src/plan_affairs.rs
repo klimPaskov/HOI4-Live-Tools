@@ -193,6 +193,11 @@ pub(super) fn digest(state: &State) -> Option<Value> {
     (!state.affairs.notes.is_empty()).then(|| json!(state.affairs.notes))
 }
 
+/// Every note of these rules (the lane-turn record reads them).
+pub(super) fn notes(state: &State) -> &BTreeMap<String, String> {
+    &state.affairs.notes
+}
+
 /// A section's last status line (the alerts rule reads the owning step's reason here).
 pub(super) fn note_of<'a>(state: &'a State, key: &str) -> Option<&'a str> {
     state.affairs.notes.get(key).map(String::as_str)
@@ -936,6 +941,61 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
                 }
             }
         }
+        // A switch the game did not take SWITCH_TRIES times in a row (t1939n, 27 Nov 2026: the
+        // read-back showed the old design four times, NotApplied, tried every 3 days for 259
+        // days): the new design starts on a separate line and the old line keeps building; the
+        // balance moves factories between them by need.
+        let fail_prefix = format!("pdesfail:{key}#");
+        let fails = state
+            .done
+            .keys()
+            .filter(|k| k.starts_with(&fail_prefix))
+            .count();
+        if fails >= SWITCH_TRIES {
+            let separate = rows.iter().any(|l| {
+                text(&l["equipment_id"]) == design_type
+                    && l["design_id"]
+                        .as_i64()
+                        .zip(target.as_i64())
+                        .is_none_or(|(a, b)| a == b)
+                    && l["entry_index"] != line["entry_index"]
+            });
+            if separate {
+                state.done.insert(key, now);
+                note(
+                    state,
+                    "production_designs",
+                    format!("{equipment} -> {label}: the switch failed {fails} times; the design runs on its own line, the old line keeps building"),
+                );
+                continue;
+            }
+            let start = ((line_factories(&line) as f64 * 0.1).round() as i64).clamp(1, 5);
+            let kind = if design_type.is_empty() {
+                equipment.to_string()
+            } else {
+                design_type.clone()
+            };
+            let (ok, why) = state.act(
+                tools,
+                run.lease,
+                "hoi4_production_add",
+                json!({"equipment": kind, "design": target, "factories": start}),
+                "dn",
+            )?;
+            if ok {
+                state.done.insert(key, now);
+            } else {
+                state.skip(now, "pdes", &key, 30 * DAY);
+            }
+            note(
+                state,
+                "production_designs",
+                format!("{equipment} -> {label}: the line switch did not hold {fails} times in a row; the design starts on a separate line with {start} factories: {ok} {why}"),
+            );
+            return Ok(Some(format!(
+                "production {label} on a separate line ({start} factories) after {fails} failed switches of {equipment}: {ok} {why}"
+            )));
+        }
         let (ok, why) = state.act(
             tools,
             run.lease,
@@ -945,6 +1005,7 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
         )?;
         let c = code(&why);
         if ok || c == "already_building" {
+            state.done.retain(|k, _| !k.starts_with(&fail_prefix));
             state.done.insert(key, now);
         } else if c == "design_wrong_type" && sw.by_type.is_some() {
             // `replace` across families: the factories move instead (next ticks)
@@ -961,7 +1022,20 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
                 }
                 "design_unknown" => 7,
                 "line_unknown" => 1,
-                _ => 3,
+                _ => {
+                    // not taken although the order went in (NotApplied, a read-back that shows
+                    // the old design): rests 3, 6, ... days and says so; at SWITCH_TRIES the
+                    // separate line above takes over
+                    state
+                        .done
+                        .insert(format!("{fail_prefix}{}", fails + 1), now);
+                    note(
+                        state,
+                        "production_designs",
+                        format!("{equipment} -> {label}: the switch did not hold ({} of {SWITCH_TRIES}): {}", fails + 1, why.chars().take(160).collect::<String>()),
+                    );
+                    3 << fails.min(3)
+                }
             };
             state.skip(now, "pdes", &key, days * DAY);
         }
@@ -978,6 +1052,9 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
     }
     Ok(None)
 }
+
+/// Failed line switches in a row before the design starts on a separate line instead.
+const SWITCH_TRIES: usize = 3;
 
 /// `designs[].decommission`: once the item's design is made and a production line builds it,
 /// each listed older design (a name or a design id) is decommissioned once through
@@ -1116,9 +1193,17 @@ pub fn declaration_near(
     now: GameHour,
     ahead: GameHour,
 ) -> bool {
-    let at = state.done.get("declnear:at").copied();
+    // one remembered answer PER `ahead`: with one shared answer the declaration's own check
+    // (ahead 0, false before the day) answered the air's three-day look-ahead for six game hours,
+    // so the slow air orders never waited (t1939n, 27 Nov 2026: a 35-second air burst ran from
+    // 29 August to 1 September and Poland was declared on the 2nd)
+    let (at_key, v_key) = (
+        format!("declnear:at:{ahead}"),
+        format!("declnear:v:{ahead}"),
+    );
+    let at = state.done.get(&at_key).copied();
     if at.is_some_and(|t| now >= t && now - t < DAY / 4) {
-        return state.done.get("declnear:v") == Some(&1);
+        return state.done.get(&v_key) == Some(&1);
     }
     let mut near = false;
     for item in list(plan, "diplomacy") {
@@ -1138,9 +1223,14 @@ pub fn declaration_near(
             break;
         }
     }
-    state.done.insert("declnear:at".to_string(), now);
-    state.done.insert("declnear:v".to_string(), i64::from(near));
+    state.done.insert(at_key, now);
+    state.done.insert(v_key, i64::from(near));
     near
+}
+
+/// Forgets every remembered `declaration_near` answer: the next call judges again.
+pub fn declaration_near_forget(state: &mut State) {
+    state.done.retain(|k, _| !k.starts_with("declnear:"));
 }
 
 /// The plan's war declarations whose condition holds, ahead of everything else: a declaration
@@ -1232,6 +1322,17 @@ fn diplomacy_items(
         return Ok(None);
     }
     let mut waits: Vec<String> = Vec::new();
+    // ONE OPENING, ONE HOUR: the declarations of the enemies one operation names go out in the
+    // same pass once the first of them is posted; no burst or lane comes between (w96d, 28 Nov
+    // 2026: Holland 05.10 06h, Belgium 18 h later, Luxembourg 79 h later, each behind the burst
+    // that executed its own armies and Luxembourg behind two days of a failed view read)
+    let mut declared: Vec<String> = Vec::new();
+    let mut opening: HashSet<String> = HashSet::new();
+    // COLLECT, THEN POST (engineer 104): every declaration of the opening is checked first (its
+    // gates, the target's diplomacy view, who would join), then all are posted back to back with
+    // no read between, then verified (w101c, 28 Nov 2026: Luxembourg's view read of 1.6 s and its
+    // checks came between Belgium's post and its own, five game hours at speed 2)
+    let mut ready: Vec<(String, String, Value)> = Vec::new();
     for item in items {
         let Some(action) = dip_action(text(&item["action"])) else {
             continue;
@@ -1240,6 +1341,10 @@ fn diplomacy_items(
             continue;
         }
         let target = dip_target(item);
+        let gathering = !declared.is_empty() || !ready.is_empty();
+        if gathering && (action != "declare_war" || !opening.contains(&target)) {
+            continue;
+        }
         let key = dip_key(item, &action, &target);
         if state.done.contains_key(&key) {
             continue;
@@ -1260,7 +1365,11 @@ fn diplomacy_items(
         if action == "declare_war" {
             expiry_watch(state, plan, now, item, &key, &target);
             if let Some(line) = war_goal_watch(state, run, item, &key, &target)? {
-                return Ok(Some(line));
+                if declared.is_empty() && ready.is_empty() {
+                    return Ok(Some(line));
+                }
+                declared.push(line);
+                continue;
             }
         }
         if state.skipped(now, "dip", &key) {
@@ -1320,14 +1429,101 @@ fn diplomacy_items(
                 }
             }
         }
+        // the opening's other declarations hold this one while their own conditions do not
+        // hold yet (at most OP_DECLARE_WAIT from its due day): one gate for the opening
+        if action == "declare_war" && declared.is_empty() && ready.is_empty() {
+            let behind = opening_members(plan, &target)
+                .into_iter()
+                .filter(|t| *t != target)
+                .filter_map(|t| {
+                    let other = declaration_item(plan, &t)?;
+                    let k = dip_key(other, "declare_war", &t);
+                    let pending = !state.done.contains_key(&k)
+                        && super::judge(state, tools, &json!(format!("at_war_with:{t}")), now)
+                            != Truth::True;
+                    (pending && gate(state, tools, &other["when"], now).is_some()).then_some(t)
+                })
+                .collect::<Vec<_>>();
+            if !behind.is_empty() {
+                let first = *state.done.entry(format!("declwait:{key}")).or_insert(now);
+                if now - first < OP_DECLARE_WAIT {
+                    waits.push(format!(
+                        "{label}: waits for the opening's other declarations ({}), declared together",
+                        behind.join(", ")
+                    ));
+                    continue;
+                }
+            }
+        }
+        if action == "declare_war" && declarations_only {
+            if let Some(args) = declare_check(state, run, item, &key, &target, &mut waits)? {
+                if ready.is_empty() && declared.is_empty() {
+                    opening = opening_members(plan, &target);
+                }
+                ready.push((key, target, args));
+                if opening.len() > 1 {
+                    continue;
+                }
+                break;
+            }
+            continue;
+        }
         let acted = match action.as_str() {
             "justify_war_goal" => justify(state, run, item, &key, &target, &mut waits)?,
             "declare_war" => declare(state, run, item, &key, &target, &mut waits)?,
             _ => relation(state, run, item, &action, &key, &target)?,
         };
-        if acted.is_some() {
-            return Ok(acted);
+        if let Some(line) = acted {
+            let posted =
+                declarations_only && action == "declare_war" && state.done.contains_key(&key);
+            if posted && declared.is_empty() {
+                opening = opening_members(plan, &target);
+            }
+            if posted || !declared.is_empty() {
+                declared.push(line);
+                if !posted || opening.len() > 1 {
+                    continue;
+                }
+                break;
+            }
+            return Ok(Some(line));
         }
+    }
+    if !ready.is_empty() {
+        // back to back: nothing is read between the posts
+        let mut posted: Vec<(String, String, bool)> = Vec::new();
+        for (key, target, args) in ready {
+            let (ok, line) = declare_post(state, run, &key, &target, args)?;
+            posted.push((key, target, ok));
+            declared.push(line);
+        }
+        // then verified: a posted declaration whose war does not read is due again within the
+        // day (the act's own receipt said Verified; the war list is the game's word)
+        if posted.len() > 1 {
+            state.pcache = None;
+            let mut missing: Vec<String> = Vec::new();
+            for (k, t, ok) in &posted {
+                let war = json!(format!("at_war_with:{t}"));
+                if *ok && super::judge(state, tools, &war, now) == Truth::False {
+                    state.done.remove(k);
+                    state.skip(now, "dip", k, DAY / 4);
+                    missing.push(t.clone());
+                }
+            }
+            let at_war = posted.iter().filter(|(_, _, ok)| *ok).count() - missing.len();
+            declared.push(if missing.is_empty() {
+                format!("declared back to back: {at_war} war(s) read")
+            } else {
+                format!(
+                    "declared back to back: {at_war} war(s) read, {} not read yet ({}): again within the day",
+                    missing.len(),
+                    missing.join(", ")
+                )
+            });
+        }
+    }
+    if !declared.is_empty() {
+        return Ok(Some(declared.join("; ")));
     }
     if declarations_only {
         // checked again in a quarter of a game day (the predicates are reads)
@@ -1337,6 +1533,23 @@ fn diplomacy_items(
         state.skip(now, "mdip", "x", DAY);
     }
     Ok(None)
+}
+
+/// The enemies one opening declares together: every enemy of each plan operation that names
+/// `target` (empty when none does).
+fn opening_members(plan: &Value, target: &str) -> HashSet<String> {
+    list(plan, "operations")
+        .iter()
+        .filter(|op| strings(op, "enemies").iter().any(|e| e == target))
+        .flat_map(|op| strings(op, "enemies"))
+        .collect()
+}
+
+/// The plan's declaration of war on `target`.
+fn declaration_item<'a>(plan: &'a Value, target: &str) -> Option<&'a Value> {
+    list(plan, "diplomacy").iter().find(|i| {
+        dip_action(text(&i["action"])).as_deref() == Some("declare_war") && dip_target(i) == target
+    })
 }
 
 fn justify(
@@ -1726,6 +1939,22 @@ fn declare(
     target: &str,
     waits: &mut Vec<String>,
 ) -> Result<Option<String>> {
+    match declare_check(state, run, item, key, target, waits)? {
+        Some(args) => Ok(Some(declare_post(state, run, key, target, args)?.1)),
+        None => Ok(None),
+    }
+}
+
+/// Every check of a declaration (the justification, the target's view, who would join): the
+/// act's arguments when it may go out now, else None with the wait in `waits`.
+fn declare_check(
+    state: &mut State,
+    run: &Run<'_>,
+    item: &Value,
+    key: &str,
+    target: &str,
+    waits: &mut Vec<String>,
+) -> Result<Option<Value>> {
     let (plan, now) = (run.plan, run.now);
     let label = item_id(item).unwrap_or_else(|| format!("declare {target}"));
     // the plan's own justification for this target comes first
@@ -1759,11 +1988,15 @@ fn declare(
     } else {
         declare_ready(run, target)
     } {
+        // the view did not read, but it offered Declare war before: the declaration goes out
+        // (the act's own check refuses an expired goal, war_goal_required); w96d (28 Nov 2026):
+        // the read failed twice and Luxembourg waited two days behind Holland and Belgium
+        Truth::Unknown if state.done.contains_key(&ready_key) => {}
         Truth::Unknown => {
             waits.push(format!(
                 "{label}: whether war can be declared is unknown (hoi4_diplomacy unreadable)"
             ));
-            state.skip(now, "dipchk", key, DAY);
+            state.skip(now, "dipchk", key, DAY / 4);
             return Ok(None);
         }
         Truth::False => {
@@ -1846,6 +2079,19 @@ fn declare(
     if item["accept_widening"] == json!(true) {
         args["accept_widening"] = json!(true);
     }
+    Ok(Some(args))
+}
+
+/// The declaration's post (its arguments from `declare_check`) and its done-record: (ok, line).
+fn declare_post(
+    state: &mut State,
+    run: &Run<'_>,
+    key: &str,
+    target: &str,
+    args: Value,
+) -> Result<(bool, String)> {
+    let now = run.now;
+    let ready_key = format!("dipready:{key}");
     let (ok, why) = state.act(run.tools, run.lease, "hoi4_diplomacy_act", args, "dp")?;
     if ok {
         state.done.insert(key.to_string(), now);
@@ -1865,7 +2111,7 @@ fn declare(
         };
         state.skip(now, "dip", key, wait);
     }
-    Ok(Some(format!("diplomacy declare_war {target}: {ok} {why}")))
+    Ok((ok, format!("diplomacy declare_war {target}: {ok} {why}")))
 }
 
 fn relation(
@@ -3115,19 +3361,50 @@ fn branch_of(state: &mut State, tools: &dyn Tools, now: GameHour, upgrade: &str)
 
 fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     let (tools, plan, now) = (run.tools, run.plan, run.now);
-    let cfg = &plan["intelligence"];
-    if !cfg.is_object() || state.skipped(now, "mintel", "x") {
+    let empty = json!({});
+    let cfg = if plan["intelligence"].is_object() {
+        &plan["intelligence"]
+    } else {
+        &empty
+    };
+    // A free operative slot the game offers (its operative_recruitable alert) is filled: an
+    // operative costs nothing to recruit and every network, operation and counter-intelligence
+    // needs one. `intelligence.operatives: 0` (with its why) declines. The networks and operations
+    // name operatives by index, and those are recruited too (t1939n, 27 Nov 2026: the plan's
+    // networks named operatives 0 and 1, the plan had no `operatives` key, nothing was recruited
+    // and the alert stayed open 118 days with no reason).
+    let offered = state
+        .manage
+        .alert_since
+        .contains_key("operative_recruitable")
+        && cfg["operatives"] != json!(0);
+    if !(plan["intelligence"].is_object() || offered) || state.skipped(now, "mintel", "x") {
         return Ok(None);
     }
     let upgrades = list(cfg, "upgrades");
-    let operatives: Vec<Value> = match &cfg["operatives"] {
+    let mut operatives: Vec<Value> = match &cfg["operatives"] {
         Value::Number(n) => vec![Value::Null; n.as_u64().unwrap_or(0).min(16) as usize],
         Value::Array(entries) => entries.clone(),
         _ => Vec::new(),
     };
+    let named = list(cfg, "networks")
+        .iter()
+        .chain(list(cfg, "operations").iter())
+        .filter_map(|e| e["operative"].as_u64())
+        .map(|i| i as usize + 1)
+        .max()
+        .unwrap_or(0);
+    let recruited = (0..16)
+        .take_while(|i| state.done.contains_key(&format!("intel:op:{i}")))
+        .count();
+    let wanted = named.max(if offered { recruited + 1 } else { 0 }).min(16);
+    while operatives.len() < wanted {
+        operatives.push(Value::Null);
+    }
     let want_agency = cfg["agency"] == json!(true) && !state.done.contains_key("intel:agency");
     let has_ops = !list(cfg, "networks").is_empty() || !list(cfg, "operations").is_empty();
     if !want_agency && upgrades.is_empty() && operatives.is_empty() && !has_ops {
+        note(state, "intelligence", "the plan names no agency, upgrade, operative, network or operation, and the game offers no operative");
         return Ok(None);
     }
     let mut waits: Vec<String> = Vec::new();
@@ -3794,6 +4071,25 @@ mod tests {
                 .unwrap_or_else(|| json!({})))
         }
     }
+    #[test]
+    fn declaration_near_remembers_each_look_ahead_apart() {
+        let plan = json!({
+            "diplomacy": [{"action": "declare", "target": "POL", "when": "date >= 1939.9.1"}],
+            "operations": [{"id": "op_poland", "enemies": ["POL"]}]
+        });
+        let tools = fake(vec![]);
+        let mut state = State::default();
+        state.done.insert("op:op_poland:primed".to_string(), 1);
+        let now = date_hour("1939.8.30").unwrap();
+        // the declaration's own check first: not due yet
+        assert!(!declaration_near(&mut state, &tools, &plan, now, 0));
+        // the air's look-ahead in the same hour is its own answer: due within three days
+        assert!(declaration_near(&mut state, &tools, &plan, now, 3 * DAY));
+        assert!(!declaration_near(&mut state, &tools, &plan, now + 1, 0));
+        declaration_near_forget(&mut state);
+        assert!(!state.done.keys().any(|k| k.starts_with("declnear:")));
+    }
+
     fn fake(replies: Vec<(&str, Value)>) -> Fake {
         Fake {
             calls: RefCell::new(Vec::new()),
@@ -3932,6 +4228,62 @@ mod tests {
         assert_eq!(actions(&tools).len(), 1);
         assert!(state.affairs.notes["designs"].contains("s2: when unknown"));
         assert!(state.strategy.unknown.contains_key("bop:ITA_x > 0.5"));
+    }
+
+    /// t1939n (27 Nov 2026): the switch came back NotApplied four times, tried every 3 days for
+    /// 259 days while the line kept making the older model.
+    #[test]
+    fn a_line_switch_that_does_not_hold_rests_longer_then_starts_a_separate_line() {
+        let tools = fake(vec![
+            (
+                "hoi4_production_lines",
+                json!({"lines": [
+                {"entry_index": 2, "line_kind": "military", "equipment_id": "medium_tank_chassis",
+                    "line_handle": "0x10", "factory_counters": {"requested_factories_raw_signed": 30}}]}),
+            ),
+            (
+                "hoi4_designs",
+                json!({"designs": [{"design_id": 5194, "name": "Panzer III S",
+                    "hull_or_chassis": "medium_tank_chassis", "production_lines": []}]}),
+            ),
+        ]);
+        tools.refuse("hoi4_design_set_production", "not_applied");
+        let plan = json!({"manage": {"off": ["mio_lines"]},
+            "designs": [{"id": "t1", "kind": "tank", "base": "Panzer III", "name": "Panzer III S", "xp": 0}],
+            "production": [{"equipment": "medium_tank_chassis", "factories": 5, "design": "t1"}]});
+        let mut state = State::default();
+        state.done.insert("design:id:t1".into(), START);
+        let mut at = START;
+        for rest in [3, 6, 12] {
+            step(&mut state, &tools, &plan, "l", at).unwrap();
+            let note = &state.affairs.notes["production_designs"];
+            assert!(note.contains("the switch did not hold"), "{note}");
+            // not again before the rest is over
+            let sent = actions(&tools).len();
+            step(&mut state, &tools, &plan, "l", at + (rest - 1) * DAY).unwrap();
+            assert_eq!(actions(&tools).len(), sent);
+            at += rest * DAY;
+        }
+        assert_eq!(
+            actions(&tools)
+                .iter()
+                .filter(|(n, _)| n == "hoi4_design_set_production")
+                .count(),
+            3
+        );
+        // the fourth time the design starts on its own line, 10% of the old line's factories
+        let out = step(&mut state, &tools, &plan, "l", at).unwrap().unwrap();
+        assert!(
+            out.contains("separate line (3 factories) after 3 failed switches"),
+            "{out}"
+        );
+        let sent = actions(&tools);
+        let last = sent.last().unwrap();
+        assert_eq!(last.0, "hoi4_production_add");
+        assert_eq!(last.1["design"], 5194);
+        assert!(state
+            .done
+            .contains_key("pdes:medium_tank_chassis:Panzer III S"));
     }
 
     #[test]
@@ -4420,6 +4772,139 @@ mod tests {
         assert_eq!(
             declare_due_step(&mut fresh, &tools, &quiet, "l", START).unwrap(),
             None
+        );
+    }
+
+    #[test]
+    fn an_openings_declarations_go_out_together_in_one_pass_behind_one_gate() {
+        // w96d (28 Nov 2026): Holland 05.10 06h, Belgium 18 h later, Luxembourg 79 h later
+        let tools = fake(vec![
+            ("hoi4_diplomacy", declare_rows(true)),
+            (
+                "hoi4_war_risk",
+                json!({"country": "HOL", "would_join": [], "borders_not_held": []}),
+            ),
+        ]);
+        let plan = |lux_when: Value| {
+            json!({"operations": [{"id": "op_lowlands", "enemies": ["BEL", "HOL", "LUX"]}],
+            "diplomacy": [
+                {"id": "dow_hol", "action": "declare", "target": "HOL", "accept_widening": true},
+                {"id": "dow_den", "action": "declare", "target": "DEN", "accept_widening": true},
+                {"id": "dow_bel", "action": "declare", "target": "BEL", "accept_widening": true},
+                {"id": "dow_lux", "action": "declare", "target": "LUX", "accept_widening": true,
+                 "when": lux_when}]})
+        };
+        // one member's own condition does not hold: the whole opening waits for it
+        let mut state = State::default();
+        let held = plan(json!("date >= 1950.1.1"));
+        let out = declare_due_step(&mut state, &tools, &held, "l", START).unwrap();
+        assert!(
+            !actions(&tools)
+                .iter()
+                .any(|(_, a)| a["country"] == "HOL" || a["country"] == "BEL"),
+            "{out:?}"
+        );
+        // every member ready: Holland, Belgium and Luxembourg in the same pass, Denmark (no
+        // member of the opening) not with them
+        let mut state = State::default();
+        tools.calls.borrow_mut().clear();
+        let out = declare_due_step(&mut state, &tools, &plan(Value::Null), "l", START)
+            .unwrap()
+            .unwrap();
+        let sent: Vec<String> = actions(&tools)
+            .iter()
+            .map(|(_, a)| text(&a["country"]).to_string())
+            .collect();
+        assert_eq!(sent, vec!["HOL", "BEL", "LUX"], "{out}");
+        assert_eq!(out.matches("declare_war").count(), 3, "{out}");
+        // BACK TO BACK (w101c, 28 Nov 2026: Luxembourg's 1.6 s view read came between Belgium's
+        // post and its own, five game hours): every check and read first, then the three posts
+        // with no call between them, then the war list read once
+        let calls: Vec<String> = tools
+            .calls
+            .borrow()
+            .iter()
+            .map(|(n, _)| n.clone())
+            .collect();
+        let first = calls
+            .iter()
+            .position(|n| n == "hoi4_diplomacy_act")
+            .unwrap();
+        assert_eq!(
+            &calls[first..first + 3],
+            &["hoi4_diplomacy_act"; 3],
+            "{calls:?}"
+        );
+        assert!(
+            calls[first + 3..].iter().all(|n| n != "hoi4_diplomacy"),
+            "{calls:?}"
+        );
+        assert!(out.contains("declared back to back"), "{out}");
+    }
+
+    #[test]
+    fn a_declaration_posted_with_others_whose_war_does_not_read_goes_again_within_the_day() {
+        let tools = fake(vec![
+            ("hoi4_diplomacy", declare_rows(true)),
+            (
+                "hoi4_war_risk",
+                json!({"country": "HOL", "would_join": [], "borders_not_held": []}),
+            ),
+            ("hoi4_wars", json!({"wars": {"enemies": []}})),
+        ]);
+        let plan = json!({"operations": [{"id": "op", "enemies": ["HOL", "BEL", "LUX"]}],
+            "diplomacy": [
+                {"id": "dow_hol", "action": "declare", "target": "HOL", "accept_widening": true},
+                {"id": "dow_bel", "action": "declare", "target": "BEL", "accept_widening": true},
+                {"id": "dow_lux", "action": "declare", "target": "LUX", "accept_widening": true}]});
+        let mut state = State::default();
+        let out = declare_due_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        // posted back to back; the war list read after the posts shows none of them: each goes
+        // again within the day
+        assert_eq!(actions(&tools).len(), 3, "{out}");
+        assert!(out.contains("not read yet"), "{out}");
+        assert!(state.skipped(START + DAY / 8, "dip", "dip:id:dow_lux"));
+        assert!(!state.done.contains_key("dip:id:dow_lux"));
+        // the war list now reads Holland and Belgium: Luxembourg alone goes again
+        tools.reply("hoi4_wars", json!({"wars": {"enemies": ["HOL", "BEL"]}}));
+        let out = declare_due_step(&mut state, &tools, &plan, "l", START + DAY / 2)
+            .unwrap()
+            .unwrap();
+        let again: Vec<String> = actions(&tools)
+            .iter()
+            .skip(3)
+            .map(|(_, a)| text(&a["country"]).to_string())
+            .collect();
+        assert_eq!(again, vec!["LUX"], "{out}");
+    }
+
+    #[test]
+    fn a_declaration_whose_view_offered_it_before_goes_out_when_the_view_does_not_read() {
+        // w96d (28 Nov 2026): the diplomacy view read failed twice; Luxembourg waited two days
+        let tools = fake(vec![(
+            "hoi4_war_risk",
+            json!({"country": "LUX", "would_join": [], "borders_not_held": []}),
+        )]);
+        let plan = json!({"diplomacy": [
+            {"id": "dow_lux", "action": "declare", "target": "LUX", "accept_widening": true}]});
+        let mut state = State::default();
+        // never read: it waits (a quarter day)
+        assert_eq!(
+            declare_due_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(actions(&tools).is_empty());
+        // offered Declare war five days ago: it goes out
+        let mut state = State::default();
+        state
+            .done
+            .insert("dipready:dip:id:dow_lux".into(), START - 5 * DAY);
+        let out = declare_due_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("diplomacy declare_war LUX: true Verified")
         );
     }
 
@@ -5338,6 +5823,46 @@ mod tests {
         let sent = actions(&tools).len();
         step(&mut state, &tools, &plan, "l", at + 9 * DAY).unwrap();
         assert_eq!(actions(&tools).len(), sent);
+    }
+
+    /// t1939n (27 Nov 2026): the networks named operatives 0 and 1, the plan had no
+    /// `operatives` key and the game's operative_recruitable alert stayed open 118 days.
+    #[test]
+    fn operatives_the_networks_name_or_the_game_offers_are_recruited() {
+        let tools = fake(vec![]);
+        let plan = json!({"intelligence": {"networks": [
+            {"operative": 1, "state_id": 10, "target": "POL"}]}});
+        let mut state = State::default();
+        state.done.insert("intel:agency".into(), START);
+        let out = intelligence_step(&mut state, &Run::new(&tools, &plan, "l", START)).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("intelligence operative 0 recruit: true Verified")
+        );
+        let out = intelligence_step(&mut state, &Run::new(&tools, &plan, "l", START)).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("intelligence operative 1 recruit: true Verified")
+        );
+        // no plan key at all: the game's offer alone recruits; `operatives: 0` declines it
+        let mut state = State::default();
+        state
+            .manage
+            .alert_since
+            .insert("operative_recruitable".into(), START);
+        let out = intelligence_step(&mut state, &Run::new(&tools, &json!({}), "l", START)).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("intelligence operative 0 recruit: true Verified")
+        );
+        let mut state = State::default();
+        state
+            .manage
+            .alert_since
+            .insert("operative_recruitable".into(), START);
+        let no = json!({"intelligence": {"operatives": 0}});
+        let out = intelligence_step(&mut state, &Run::new(&tools, &no, "l", START)).unwrap();
+        assert_eq!(out, None);
     }
 
     #[test]

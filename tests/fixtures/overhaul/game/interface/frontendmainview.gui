@@ -1,0 +1,19 @@
+guiTypes = {
+	containerWindowType = {
+		name = "mainmenu_single_player"
+		ButtonType = { name = "sp_continue_button" buttonText = "FE_CONTINUE" }
+		ButtonType = { name = "sp_new_button" buttonText = "FE_NEW" }
+		ButtonType = { name = "sp_load_button" buttonText = "MENU_BAR_LOAD" }
+		ButtonType = { name = "sp_tutorial_button" buttonText = "FE_TUTORIAL" }
+	}
+	containerWindowType = {
+		name ="mainmenu_panel_bottom"
+		ButtonType = {
+			name = "single_player_button"
+			text = "FE_SINGLE_PLAYER"   # the label sits in `text` here
+		}
+		ButtonType = { name = "multi_player_button" text = "FE_MULTI_PLAYER" }
+		ButtonType = { name = "credits_button" buttonText = "FE_CREDITS" }
+		ButtonType = { name = "exit_button" text = "FE_EXIT" }
+	}
+}

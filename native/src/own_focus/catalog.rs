@@ -8,6 +8,25 @@ pub(super) fn snapshot(
     limit: usize,
     prefix: Option<&str>,
 ) -> Result<Value> {
+    walk(process, offset, limit, prefix, None).map(|(v, _)| v)
+}
+
+/// engineer 75: the address of the own tree's focus with this key (the in-process focus pick carries the focus by
+/// pointer), from the same validated walk as the catalog: exact vtables, own tree membership, unique keys.
+pub(crate) fn address(process: &dyn Process, key: &str) -> Result<u64> {
+    walk(process, 0, 0, Some(key), Some(key))?
+        .1
+        .ok_or_else(|| Error::new("invalid_target", "No focus with this key in the own tree"))
+}
+
+fn walk(
+    process: &dyn Process,
+    offset: usize,
+    limit: usize,
+    prefix: Option<&str>,
+    want: Option<&str>,
+) -> Result<(Value, Option<u64>)> {
+    let mut found = None;
     let started = Instant::now();
     process.begin_snapshot()?;
     let w = Witnesses {
@@ -80,6 +99,9 @@ pub(super) fn snapshot(
             ));
         }
         let key = r.string_bounded(focus + 0x18, 256)?;
+        if want == Some(key.as_str()) {
+            found = Some(focus);
+        }
         if key.is_empty()
             || !key
                 .bytes()
@@ -99,7 +121,7 @@ pub(super) fn snapshot(
     let page: Vec<_> = output.into_iter().skip(offset).take(limit).collect();
     let (calls, bytes) = w.finish()?;
     process.check()?;
-    Ok(
+    Ok((
         json!({"source":"native own canonical focus catalog","build_id":g.build_id,"owned":true,
         "catalog_count":own.len(),"filtered_count":total,"offset":offset,"limit":limit,
         "next_offset":if offset.saturating_add(page.len())<total {Some(offset+page.len())}else{None},
@@ -107,5 +129,6 @@ pub(super) fn snapshot(
         "numeric_ids_available":false,"eligibility_available":false,"input_authorized":false,"branch_visibility_available":false,
         "observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
             "elapsed_ms":started.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+calls as u64,"read_bytes":r.bytes.get()+bytes}}),
-    )
+        found,
+    ))
 }

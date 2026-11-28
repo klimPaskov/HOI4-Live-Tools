@@ -402,6 +402,8 @@ pub(super) struct Layout5 {
     /// `columns[x]` lists the regiment column x top to bottom, empty cells removed.
     pub columns: Vec<Vec<String>>,
     pub support: Vec<String>,
+    /// The regimental support row: `regimental[x]` is the company under regiment column x ("" = none).
+    pub regimental: Vec<String>,
     pub priority: i32,
 }
 /// Every sub-unit definition (key, group id, width), from the catalog array.
@@ -511,8 +513,38 @@ pub(super) fn template_data(r: &Reader<'_>, image: u64, data: u64) -> Result<Lay
         name: r.string_bounded(data + l.data_name, 128)?,
         columns,
         support,
+        regimental: regimental_row(r, data + l.data_support + REGIMENTAL_AFTER_SUPPORT, key_of),
         priority: r.i32(data + l.data_priority)?,
     })
+}
+/// The regimental support row follows the support companies in the template data (engineer 110, read from
+/// the 1.20 executable: the template writer 0x10076dd40 takes battalions at +0x38, support companies at
+/// +0x58 and the regimental supports through the getter 0x1005d81c0 = +0x78 of the same object: the same
+/// 0x20 stride after the support array as support after the battalions). Not yet confirmed live
+/// (S22-REGIMENTAL).
+pub(super) const REGIMENTAL_AFTER_SUPPORT: u64 = 0x20;
+/// One key per regiment column ("" for an empty slot, trailing empties dropped). Read leniently: an array
+/// that does not look like the row (more than 5 cells, unreadable) gives an empty row and never fails the
+/// template read the other tools depend on.
+fn regimental_row(
+    r: &Reader<'_>,
+    at: u64,
+    key_of: impl Fn(u64) -> Result<Option<String>>,
+) -> Vec<String> {
+    let Ok(cells) = r.pointer_array(at) else {
+        return Vec::new();
+    };
+    if cells.len() > 5 {
+        return Vec::new();
+    }
+    let mut row: Vec<String> = cells
+        .into_iter()
+        .map(|c| key_of(c).ok().flatten().unwrap_or_default())
+        .collect();
+    while row.last().is_some_and(String::is_empty) {
+        row.pop();
+    }
+    row
 }
 /// Name and layout of the division template object `template` (any country's:
 /// `CArmy` +0x3b0 points at it), through its data object.
@@ -1029,6 +1061,32 @@ pub(super) fn leaders(r: &Reader<'_>, image: u64) -> Result<Vec<Leader>> {
         });
     }
     Ok(out)
+}
+
+/// engineer 75: the own army leader with exactly this name (for the in-process commander pick); refused when none or
+/// more than one leader carries it.
+pub(super) fn leader_address(r: &Reader<'_>, image: u64, name: &str) -> Result<u64> {
+    let l = layout(r)?;
+    let country = own_country(r, image)?;
+    let characters = r.u64(country + l.country_characters)?;
+    if !is_ptr(characters) {
+        return Err(Error::new("invalid_type", "Country characters unavailable"));
+    }
+    r.object_type(characters, "CCountryCharacters")?;
+    let mut found = None;
+    for leader in r.pointer_array(characters + l.characters_army_leaders)? {
+        exact(r, image, leader, l.leader_vtable, "army leader")?;
+        if r.string_bounded(leader + l.leader_name, 128)? == name {
+            if found.is_some() {
+                return Err(Error::new(
+                    "ambiguous_commander",
+                    "Two own leaders carry this name",
+                ));
+            }
+            found = Some(leader);
+        }
+    }
+    found.ok_or_else(|| Error::new("unknown_commander", "No own army leader has this name"))
 }
 
 /// One consistent bracket of reads for the tools.

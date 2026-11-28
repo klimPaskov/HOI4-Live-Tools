@@ -72,6 +72,16 @@ def _watches_clock(t):
     return t.family in ("campaign", "military") and t.name not in guard.SKIP
 
 
+def _ui_profile(session):
+    """Keep the interface profile (month names, menu labels) in step with the playset. Cheap when nothing changed;
+    never fails a call (an invalid profile is reported by hoi4_launch and hoi4_status)."""
+    try:
+        from ..perception import uiprofile
+        uiprofile.ensure(session)
+    except Exception as e:                      # a fake session in tests, an unreadable user folder
+        log.debug("interface profile not resolved: %s", e)
+
+
 def call(session, name, arguments, progress=None, cancel=None):
     """Returns an MCP CallToolResult dict. Never raises for tool failures."""
     t = registry.get(name)
@@ -93,6 +103,7 @@ def call(session, name, arguments, progress=None, cancel=None):
         if t.test_only or name == "hoi4_save":
             from ..game import gamemode
             gamemode.check(session, name)
+        _ui_profile(session)
         prev = session.begin_call(name, progress, cancel)
         # The registered wrapper guards direct/background calls. Dispatch has
         # already authorized this exact request before popup/ownership handling.

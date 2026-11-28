@@ -144,6 +144,21 @@ def production_lines(src_root):
                 yield f, rel, lines, i
 
 
+def load_map(path):
+    """A migration map; one that names `same_code_of` (a build with the base build's code in place,
+    scripts/game_migrate.py same-code) takes the base map's tables and keeps its own identity."""
+    path = pathlib.Path(path)
+    m = json.loads(read(path))
+    base = m.get('same_code_of')
+    if base:
+        b = load_map(path.parent / base)
+        if b.get('from') != m.get('from'):
+            raise SystemExit(f'{path}: same_code_of {base} starts from another build')
+        b.update({k: v for k, v in m.items() if k != 'same_code_of'})
+        m = b
+    return m
+
+
 def plan(src_root, mapping):
     """(edits {file: {line index: new text}}, sites, problems). src_root is the crate folder (native)."""
     v = mapping.get('variant', {})
@@ -256,7 +271,7 @@ def main(argv=None):
     p.add_argument('--check', action='store_true')
     p.add_argument('--verify', metavar='DIR', help='check a generated tree for leftover old addresses')
     a = p.parse_args(argv)
-    mapping = json.loads(read(a.map))
+    mapping = load_map(a.map)
     if a.verify:
         left = verify(pathlib.Path(a.verify) / 'native', mapping)
         for x in left[:60]:

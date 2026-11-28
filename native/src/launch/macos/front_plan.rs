@@ -365,6 +365,10 @@ pub(super) struct StaticMap {
     pub capitals: BTreeMap<String, i32>,
     pub centers: HashMap<i32, (f64, f64)>,
     pub names: HashMap<i32, String>,
+    /// land province contact (minus impassable pairs), for a front stated by provinces (engineer 73)
+    pub prov_adj: HashMap<i32, Vec<i32>>,
+    /// province -> state
+    pub prov_state: HashMap<i32, i32>,
 }
 
 /// Fold province contact into state adjacency and mark coastal states.
@@ -492,6 +496,18 @@ fn build_static(dir: &Path) -> Result<StaticMap> {
         }
     }
     let (adj, coastal) = fold_map(&edges, &rows, &impassable, &state_of);
+    let land: HashSet<i32> = rows
+        .iter()
+        .filter(|r| r.kind == "land")
+        .map(|r| r.id)
+        .collect();
+    let mut prov_adj: HashMap<i32, Vec<i32>> = HashMap::new();
+    for &(a, b) in &edges {
+        if a != b && land.contains(&a) && land.contains(&b) && !impassable.contains(&(a, b)) {
+            prov_adj.entry(a).or_default().push(b);
+            prov_adj.entry(b).or_default().push(a);
+        }
+    }
     for id in coastal {
         if let Some(s) = info.get_mut(&id) {
             s.coastal = true;
@@ -509,6 +525,8 @@ fn build_static(dir: &Path) -> Result<StaticMap> {
         capitals: read_capitals(dir),
         centers,
         names,
+        prov_adj,
+        prov_state: state_of,
     })
 }
 
@@ -1815,6 +1833,57 @@ fn live_graph(process: &dyn Process, dir: &Path, enemies: BTreeSet<String>) -> R
             .collect(),
         divisions: snap.divisions,
     })
+}
+
+/// A front stated as "the own border against `against`" (engineer 73): the own land provinces of the states the
+/// player controls (only `own_states` when given) that touch a province of a state `against` controls, in drawing
+/// order, one chain per connected stretch (see `inproc_orders::border_chains`). State control as the player's map
+/// shows it; the game's own front command then keeps only the provinces the country controls.
+pub(super) fn border_front_provinces(
+    process: &dyn Process,
+    dir: &Path,
+    against: &str,
+    own_states: Option<&[i32]>,
+) -> Result<Vec<Vec<i32>>> {
+    let g = live_graph(process, dir, BTreeSet::from([against.to_string()]))?;
+    let mine = |s: i32| g.controller.get(&s).is_some_and(|c| *c == g.player);
+    let theirs = |s: i32| g.controller.get(&s).is_some_and(|c| c == against);
+    let mut own = BTreeSet::new();
+    let mut enemy = BTreeSet::new();
+    for (p, s) in &g.map.prov_state {
+        if mine(*s) && own_states.is_none_or(|l| l.contains(s)) {
+            own.insert(*p);
+        } else if theirs(*s) {
+            enemy.insert(*p);
+        }
+    }
+    let adj = |p: i32| g.map.prov_adj.get(&p).cloned().unwrap_or_default();
+    let chains = super::inproc_orders::border_chains(&own, &enemy, &adj, &|_| true);
+    if chains.is_empty() {
+        return Err(Error::new(
+            "no_border",
+            format!("No own border against {against} in the given states"),
+        ));
+    }
+    Ok(chains)
+}
+
+/// Explicit front provinces must lie in states the player controls (the UI's front tool only offers those; the game's
+/// command check counts provinces but its execution silently drops foreign ones). Returns the first foreign or
+/// unknown province.
+pub(super) fn foreign_province(
+    process: &dyn Process,
+    dir: &Path,
+    provinces: &[i32],
+) -> Result<Option<i32>> {
+    let g = live_graph(process, dir, BTreeSet::new())?;
+    Ok(provinces.iter().copied().find(|p| {
+        !g.map
+            .prov_state
+            .get(p)
+            .and_then(|s| g.controller.get(s))
+            .is_some_and(|c| *c == g.player)
+    }))
 }
 
 fn finish(mut v: Value) -> Value {

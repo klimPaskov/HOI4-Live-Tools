@@ -289,3 +289,47 @@ class Rekey(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SameCode(unittest.TestCase):
+    """A rebuild with every address in place (1.20.0.0 -> 1.20.1.0 on macOS: 376 changed bytes, all in
+    the build stamp, the version strings and one static initializer) is carried without a migrate."""
+
+    def write(self, d, name, blob):
+        p = pathlib.Path(d) / name
+        p.write_bytes(blob)
+        return str(p)
+
+    def migration(self, prev):
+        return {'from': {'build_id': 'K'}, 'to': {'build_id': gm.xmap.load_image(prev).identity},
+                'image': {'0x10': {'new': hex(0x3010), 'confidence': 'high'},
+                          '0x20': {'new': hex(0x2000), 'confidence': 'high'}}, 'fields_default': 'identity'}
+
+    def test_a_rebuild_whose_changes_touch_no_value_keeps_every_value(self):
+        blob, at = synthetic_elf()
+        with tempfile.TemporaryDirectory() as d:
+            prev = self.write(d, 'prev', blob)
+            changed = bytearray(blob)
+            changed[-1] ^= 0xFF          # a byte outside every section (a stamp in the header area)
+            new = self.write(d, 'new', bytes(changed))
+            out, report = gm.same_code(self.migration(prev), prev, new)
+            self.assertIsNotNone(out, report['problems'])
+            self.assertEqual(out['image']['0x10']['new'], hex(0x3010))
+            self.assertEqual(out['to']['sha256'], report['new']['sha256'])
+            self.assertEqual(report['touched'], [])
+
+    def test_a_changed_byte_under_a_value_or_a_moved_layout_refuses(self):
+        blob, at = synthetic_elf()
+        with tempfile.TemporaryDirectory() as d:
+            prev = self.write(d, 'prev', blob)
+            ro = blob.index(b'17CCurrentGameState')
+            changed = bytearray(blob)
+            changed[ro + 3] ^= 0x01      # the type name the value 0x2000 points at
+            new = self.write(d, 'new', bytes(changed))
+            out, report = gm.same_code(self.migration(prev), prev, new)
+            self.assertIsNone(out)
+            self.assertEqual([t['key'] for t in report['touched']], ['0x20'])
+            longer = self.write(d, 'longer', blob + b'\0' * 16)
+            out, report = gm.same_code(self.migration(prev), prev, longer)
+            self.assertIsNone(out)
+            self.assertIn('section layout', report['problems'][0])

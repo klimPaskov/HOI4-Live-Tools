@@ -21,6 +21,22 @@ mod commanders;
 mod construction;
 mod construction_find;
 mod fair_facts;
+mod inproc;
+mod inproc_construction;
+mod inproc_diplomacy;
+mod inproc_doctrine;
+mod inproc_events;
+mod inproc_holds;
+mod inproc_mio;
+mod inproc_moves;
+mod inproc_navy;
+mod inproc_orders;
+mod inproc_picks;
+mod inproc_politics;
+mod inproc_projects;
+mod inproc_research;
+mod inproc_training;
+mod inproc_units;
 mod operation_act;
 mod railway;
 // Internal prospective click opener; no tool/configuration registration.
@@ -132,6 +148,7 @@ use crate::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
+    collections::BTreeMap,
     fs::File,
     io::Read,
     path::Path,
@@ -817,11 +834,11 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_train","description":"Queue `count` divisions of an own template in ONE training queue with ordinary input: the template's Train button creates the queue, its + sets each line to train one division (the game's default is infinite: a line that trains forever), then Add Unit adds the other lines in parallel; the queue gets the own state deploy_state_id as location (a queue without a location never deploys). Each step is verified on the queue in memory (amount, line count).","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"count":{"type":"integer","minimum":1,"maximum":24},"deploy_state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","count","deploy_state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_deploy_locations","description":"Give every training line without a deployment location the own state state_id (Find view, the line's location button, one click on the state). Lines without a location never deploy. Verified by the lines' deployment provinces.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_armies","description":"Own armies (name, division ids, division_limit: the divisions its commander leads without penalty, the game's base plus his traits; per army group army_limit: the armies its field marshal leads; threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids (unassigned_by_state: per state the ids and shared_with, the armies standing in the same provinces and how many of them each shares). Per army `planning` {mean, min, max} is its divisions' planning bonus (0..1, 0.3 = 30%); it grows while the army holds a front or plan and stops at a cap the game computes from generals, technology and the HQ distance (not stored: a value that has stopped rising has reached it). threat:false skips the threat reads. Per army and per army group `plan` reads every battle-plan order from the game itself (what the battle-plan bar and the map arrows show): kind (front, offensive, fallback, area_defense), id, executing, divisions assigned; for a line its provinces count, its two end provinces, the states along it, the owner's divisions standing on it and the most in one province; per front its offensives with the arrow's states and the target line (provinces, ends, states, i.e. how deep and wide the advance goes); an area defence lists its states. An army inside an army group whose own plan is [] follows the group's orders. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).","inputSchema":{"type":"object","properties":{"threat":{"type":"boolean"}},"additionalProperties":false}}),
-        json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border; with from_state (an own state touching state_id) a drag along that stretch of border only, a narrow front for a mobile army; with from_states (2-12 own states side by side) a drag along the border between those states and the land of state_id's controller only: one army group's own piece of a border that two groups share. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"from_state":{"type":"integer","minimum":1,"maximum":4095},"from_states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":2,"maxItems":12},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border; with from_state (an own state touching state_id) a drag along that stretch of border only, a narrow front for a mobile army; with from_states (2-12 own states side by side) a drag along the border between those states and the land of state_id's controller only: one army group's own piece of a border that two groups share. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"from_state":{"type":"integer","minimum":1,"maximum":4095},"from_states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":2,"maxItems":12},"provinces":{"type":"array","items":{"type":"integer","minimum":1,"maximum":99999},"minItems":1,"maxItems":1024,"description":"in-process only (family orders): the front's own provinces in drawing order; no drag. Each piece of the line on one theatre front section (the border against one enemy) becomes its own plan root (family orders2: one line per border for the whole group, the Shift+click form), all created in this call, each with its share of the group's divisions by length and place (the fronts the group already has included). Provinces no section holds are reported in in_process.coverage.uncovered and the receipt is Diverged (front_cut), never Verified"},"against":{"description":"in-process only: the front along the whole own border against this tag, or against each of several tags in one call (own_states narrows it): one plan root per border section, each with its share of the divisions; a tag with no border in the states is named in coverage.no_border","oneOf":[{"type":"string","minLength":3,"maxLength":3},{"type":"array","items":{"type":"string","minLength":3,"maxLength":3},"minItems":1,"maxItems":16}]},"own_states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":64},"parent_order":{"type":"integer","minimum":1,"description":"in-process only: the plan order the new front hangs under (default: the army's one top order)"},"replace_order":{"type":"integer","minimum":1,"description":"in-process only: give this existing front order the new province path instead of adding a front (keeps its id)"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_move","description":"Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool. With province_id the order goes to that one province (the whole army gathers on it: a strike on one objective); it is sent again while any division neither marches on it nor stands in it. halt:true (no state_id) cancels every march and attack order of the army with the unit panel's halt control (H): the divisions stay where they stand and recover; verified by the divisions no longer marching (hoi4_supply shows each division's heading_province). divisions (with province_id) orders only those divisions of the army, one at a time (each selected from the army's division list, then one right click); the rest keep their orders: a strike sized to what the province feeds, a garrison left behind.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"halt":{"type":"boolean"},"divisions":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":48,"description":"Division ids as hoi4_armies or hoi4_supply list them; needs province_id"},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"One province of the state to move to (an enemy-held province inside an own state, a port); hoi4_states with the state ID lists each province and its controller"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button (execute), and set how its battle plans are carried out (mode). Execute is verified by the card's executing state. mode sets the execution mode on the battle plan bar: careful (no attack on heavily fortified provinces, none that lengthens the front), balanced (the game's default) or rush (every province of the plan is attacked: it lengthens the front and can gather an army in one unsupplied province; it suits a weak or broken enemy line and is a plan decision). The army is selected, the bar's execution button opens the three choices, the wanted one is clicked and verified by the three buttons' frames (detail: frames_before, frames_after); the selection is cleared afterwards. Give execute, mode or both: with both the mode is set first (journalled as <request_id>:mode, returned as mode_receipt) and the execute or stop order follows only when the mode is verified. A failure of the mode step names the bar, the window, the rectangles and the frames it found.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean","description":"true executes the plan, false stops it; may be left out only when mode is given"},"mode":{"type":"string","enum":["careful","balanced","rush"],"description":"execution mode of the army's battle plans; alone it only sets the mode"},"clear_orders":{"type":"boolean","description":"true deletes every battle-plan order of the army or army group (the bar's delete button, right click, confirmed); goes alone; verified by no order left"},"delete_order":{"type":"integer","minimum":1,"description":"deletes ONE battle-plan order by its id from the plan read-back (hoi4_armies plan: a front's offensives[].id): the bar's delete tool (left click), then a click on the order's arrow on the map; the front and every other order stay, so the front's divisions keep their planning bonus. Goes alone; verified by the id gone"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_army_offensive","description":"Draw an offensive line for an own army that already holds a front line, into a target state: army card, offensive-line drawing (X), one right-button drag across the state, parallel to the army's front, so the whole front advances to it. With province_id (a province of the state, e.g. its victory point) the line runs through that province's depth; without it through the middle of the state. Verified by new battle-plan orders on the army; the receipt's detail.plan reads the army's orders back from the game (the target line's provinces, ends and states). With states the line runs across several states at once, the way the game's AI draws its offensive (its 1939 Poland line: 22 provinces through eight states, one arrow, the whole army group on it). Execute the plan afterwards.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"The objective inside the state: the line is drawn at its depth from the army"},"spearhead":{"type":"boolean","description":"Draw the game's spearhead order (battle-plan bar, Shift+X) instead of an offensive line: it takes the provinces as painted without adjusting, for encirclements and narrow thrusts (armour)"},"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":2,"maxItems":12,"description":"A deep line across these target states side by side (the phase line: e.g. every state along a river across the enemy country): one bending stroke through the states' centres in the order given (list them side by side from one end of the line to the other, e.g. along a river); state_id is then only the state the camera finds first. No province_id."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_army_fallback","description":"Draw a fallback line for an own army through own states (a defender's line on rivers, mountains or forts behind the front): army card, fallback-line drawing (C), one right-button stroke across the states at their middle depth, perpendicular to the way to the army. Verified by new battle-plan orders on the army. The army moves to the line when its plan is executed (hoi4_army_plan execute): a defender executes it when the front breaks or goes unfed.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":8,"description":"own states the line runs through, side by side"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","states","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button (execute), and set how its battle plans are carried out (mode). Execute is verified by the card's executing state. mode sets the execution mode on the battle plan bar: careful (no attack on heavily fortified provinces, none that lengthens the front), balanced (the game's default) or rush (every province of the plan is attacked: it lengthens the front and can gather an army in one unsupplied province; it suits a weak or broken enemy line and is a plan decision). The army is selected, the bar's execution button opens the three choices, the wanted one is clicked and verified by the three buttons' frames (detail: frames_before, frames_after); the selection is cleared afterwards. Give execute, mode or both: with both the mode is set first (journalled as <request_id>:mode, returned as mode_receipt) and the execute or stop order follows only when the mode is verified. A failure of the mode step names the bar, the window, the rectangles and the frames it found.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean","description":"true executes the plan, false stops it; may be left out only when mode is given"},"mode":{"type":"string","enum":["careful","balanced","rush"],"description":"execution mode of the army's battle plans; alone it only sets the mode"},"clear_orders":{"type":"boolean","description":"true deletes every battle-plan order of the army or army group (the bar's delete button, right click, confirmed); goes alone; verified by no order left"},"delete_order":{"type":"integer","minimum":1,"description":"deletes ONE battle-plan order by its id from the plan read-back (hoi4_armies plan: a front's offensives[].id): the bar's delete tool (left click), then a click on the order's arrow on the map; the front and every other order stay, so the front's divisions keep their planning bonus. Goes alone; verified by the id gone"},"assign":{"type":"object","description":"in-process only (family orders2: the plan bar's assign): divisions onto ONE order of the plan by its id (a front, or an offensive to put them in the attack): the listed division ids, or the count of the army's divisions standing nearest the order's line that it does not hold yet. Goes alone; verified by the order's division count read back","properties":{"order":{"type":"integer","minimum":1},"divisions":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":512},"count":{"type":"integer","minimum":1,"maximum":512}},"required":["order"],"additionalProperties":false},"distribute":{"description":"in-process only (family orders2): the army group's (or army's) divisions over its fronts (plan roots) by each front's weight (weights by front order id, default the front's length in provinces) and by place: each front keeps the divisions standing by it, the rest go to the nearest front with room, at least one per front while there are as many divisions as fronts; a front's new divisions go to its one offensive when it has one. The game puts every division of a new front on that front, so a group with two fronts drawn one after the other holds them all on the newest: distribute right after drawing fronts and whenever a front reads 0 divisions. Goes alone; verified by the division counts read back per order","oneOf":[{"type":"boolean"},{"type":"object","properties":{"weights":{"type":"object","additionalProperties":{"type":"number","minimum":0}}},"required":["weights"],"additionalProperties":false}]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_offensive","description":"Draw an offensive line for an own army that already holds a front line, into a target state: army card, offensive-line drawing (X), one right-button drag across the state, parallel to the army's front, so the whole front advances to it. With province_id (a province of the state, e.g. its victory point) the line runs through that province's depth; without it through the middle of the state. Verified by new battle-plan orders on the army; the receipt's detail.plan reads the army's orders back from the game (the target line's provinces, ends and states). With states the line runs across several states at once, the way the game's AI draws its offensive (its 1939 Poland line: 22 provinces through eight states, one arrow, the whole army group on it). Execute the plan afterwards.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"The objective inside the state: the line is drawn at its depth from the army"},"spearhead":{"type":"boolean","description":"Draw the game's spearhead order (battle-plan bar, Shift+X) instead of an offensive line: it takes the provinces as painted without adjusting, for encirclements and narrow thrusts (armour)"},"target_provinces":{"type":"array","items":{"type":"integer","minimum":1,"maximum":99999},"minItems":1,"maxItems":1024,"description":"in-process only: the exact target line in drawing order; with spearhead:true a new spearhead under parent_order (family orders2), with replace_order the new path of that existing order (family orders); a plain new offensive is still drawn by the stroke"},"parent_order":{"type":"integer","minimum":1},"replace_order":{"type":"integer","minimum":1},"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":2,"maxItems":12,"description":"A deep line across these target states side by side (the phase line: e.g. every state along a river across the enemy country): one bending stroke through the states' centres in the order given (list them side by side from one end of the line to the other, e.g. along a river); state_id is then only the state the camera finds first. No province_id."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_fallback","description":"Draw a fallback line for an own army through own states (a defender's line on rivers, mountains or forts behind the front): army card, fallback-line drawing (C), one right-button stroke across the states at their middle depth, perpendicular to the way to the army. Verified by new battle-plan orders on the army. The army moves to the line when its plan is executed (hoi4_army_plan execute): a defender executes it when the front breaks or goes unfed.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":8,"description":"own states the line runs through, side by side"},"provinces":{"type":"array","items":{"type":"integer","minimum":1,"maximum":99999},"minItems":1,"maxItems":1024,"description":"in-process only (family orders2): the fallback line's own provinces in drawing order, posted as one fallback order; states is then the mouse path's line"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","states","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_area_defense","description":"Give an own army an area defence order over own states (the army spreads over them and holds what the order covers): army card, area defence (V), one right-click on each state (Find view first). Verified by new battle-plan orders on the army. Refused before input with no_commander when the army has no general (the game takes battle-plan orders only from a led army). `settings` (the order window's toggles: victory_points, ports, coastlines, airbases, borders, forts, rail, facility) is not yet built: refused with not_yet_built; the game's defaults apply.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":8},"settings":{"type":"array","items":{"type":"string","enum":["victory_points","ports","coastlines","airbases","borders","forts","rail","facility"]}},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","states","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_exercise","description":"Start or stop army exercises for own armies: the divisions train toward the game's training maximum and the country earns army experience (doctrines, templates and designs are paid with it), at the cost of extra attrition (equipment) and fuel. Start: the army's card selects it and the battle plan bar's exercise button (btn_exercise) is clicked; stop_at_max (default true) Shift+clicks it so each army stops by itself at the maximum. Stop (on:false): the card's stop-training button. Verified per army by its card: training_marker shown while it exercises, icn_exercise_stop_at_max with the stop at the maximum (hoi4_armies reports both as exercising and exercise_stop_at_max). An army already as asked is left alone. A disabled button (no division that can train, all at the maximum) is refused with exercise_unavailable for that army; the receipt's detail lists every army's card state.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string","minLength":1,"maxLength":128},"minItems":1,"maxItems":24},"on":{"type":"boolean"},"stop_at_max":{"type":"boolean","description":"start only: stop each army at the training maximum (default true)"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","on","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_states","description":"States in one memory read (no interface input). A country tag (e.g. SOV, GER) lists every state it owns or controls: owner, controller, category, live building levels (buildings, factories), for the own country the shared building slots (unlocked, used, queued, free), resources, victory points with who holds them, the factories history/states gives (factories_start, an estimate for another country) and totals. Filter and sort in the same call instead of opening states one by one: owned_only, ids, min_free_slots, building with min_level/max_level, resource; sort by free_slots (default), factories, infrastructure, victory_points, level (of building), resource, id or name; limit (default 200) and offset. Large countries are read as fast as small ones: choose the few states to act on from this table, then act. A name (accent-insensitive substring) or one exact ID finds states by name instead. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"},"ids":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"maxItems":1000},"owned_only":{"type":"boolean"},"min_free_slots":{"type":"integer","minimum":0,"maximum":25},"building":{"type":"string"},"min_level":{"type":"integer","minimum":0},"max_level":{"type":"integer","minimum":0},"resource":{"type":"string"},"sort":{"type":"string","enum":["free_slots","factories","infrastructure","victory_points","level","resource","id","name"]},"limit":{"type":"integer","minimum":0,"maximum":1000},"offset":{"type":"integer","minimum":0}},"required":["query"],"additionalProperties":false}}),
@@ -858,7 +875,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         special_projects::unassign_tool(),
         special_projects::recruit_tool(),
         doctrine_act::tool(),
-        json!({"name":"hoi4_army_commander","description":"Assign a general (exact name as listed by hoi4_commanders) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list. Verified when the army's commander is that general. Refused before any click with army_unknown (lists valid armies/groups), unknown_commander (5 closest names) or commander_unavailable (already leads another army/group; pass reassign: true to move them).","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"general":{"type":"string"},"reassign":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","general","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_commander","description":"Assign a general (by the full name hoi4_commanders lists, a part of it that names one commander only such as the surname, or the character id) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list. Verified when the army's commander is that general. Refused before any click with army_unknown (lists valid armies/groups), unknown_commander (5 closest names) or commander_unavailable (already leads another army/group; pass reassign: true to move them).","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"general":{"type":"string"},"reassign":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","general","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wings","description":"Own air wings with air base, assigned region and missions, from the Air Forces Overview (opens it). Changes nothing in the game.","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_mission","description":"Give an own air wing (exact name) a mission over a strategic air region with the game's ordinary controls: wing row of the Air Forces Overview (L), the mission button, the Find view centres `state_id` (any state inside the wanted region) and a right click assigns. Pass `region` (region id or display name, e.g. 'Eastern Germany') instead of or with `state_id`: the state is then chosen from the game's files and the result is verified to be that region; a sea region (no state in it, e.g. 'English Channel') is reached by centring the nearest state and clicking the region's own sea provinces on screen. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (unknown mission), region_unknown, region_state_mismatch; the game's own disabling (mission not offered / needs more planes) surfaces as invalid_target. Verified from the wing's mission mask and region id in memory (hoi4_air). No percent or intensity control exists in the game's air UI; aggressiveness and day/night are per-wing cycle buttons not driven by this tool.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) given the same mission over the same region in one input sequence: selected together in the overview (a click, then Shift+clicks), one mission click, one region click; a wing the selection does not take is ordered alone. The receipt is Verified when all fly it, Diverged when some do (detail.wings names each, result.failed says why)"},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"anyOf":[{"type":"string","maxLength":96},{"type":"integer","minimum":1,"maximum":4095}]},"bulk":{"type":"boolean","description":"With wings: the bases whose every wing is listed are ordered by one click on the base circle (it selects all its wings), one mission or rebase order for all, read back at the end; the other wings and any the base order missed take the single path in the same call. Off until its live probe passes."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["mission","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_rebase","description":"Rebase one own air wing to the air base of a state with ordinary input: strategic air map (F3), the wing's row of the Air Forces Overview, the Find view centres `state_id`, the base's circle is located from the game's own map icon objects and right clicked. The wing flies a transfer (status 'To <base>'); verified from the wing's transfer destination in memory (hoi4_air `transfer_to_base_id`), the base id changes on arrival. Typed refusals before any input: wing_unknown, wing_ambiguous, air_base_unknown (state without an own air base; lists own base states), nothing_to_change (already based or already flying there), air_base_full (capacity minus wings stationed or incoming). The game set no range limit on a transfer in the test (a 570 km fighter wing was accepted 207 map units away); if it refuses anyway the tool reports rebase_refused. Map mode is restored afterwards.","inputSchema":{"type":"object","properties":{"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) to the same base in one call: one air mode, each selected and right-clicked onto the base in turn (the camera stays on the base). Verified when all transfer, Diverged when some do (detail.wings, result.failed)"},"wing":{"type":"string","maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"bulk":{"type":"boolean","description":"With wings: the bases whose every wing is listed are ordered by one click on the base circle (it selects all its wings), one mission or rebase order for all, read back at the end; the other wings and any the base order missed take the single path in the same call. Off until its live probe passes."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
@@ -1156,6 +1173,8 @@ impl MacClock {
         // no-pause campaign) refuses a player's speed change to another value: pr1 (17 Nov 2026)
         // the player set speed 2 for a stretch of 1937 against a brief that says speed 3.
         if name == "hoi4_time" && !crate::autopilot::autopilot().in_step() {
+            // the run's player is an agent: its speed change is not a human's (plan_speed)
+            crate::plan_run::note_agent_speed();
             if let Some(Err(e)) = arguments
                 .get("speed")
                 .and_then(Value::as_i64)
@@ -1468,15 +1487,6 @@ fn not_applied_is_error(value: Value) -> Result<Value> {
 /// (countrystateview.gui `law_and_template_container`); the tool drives the default-law button
 /// only today, so the argument is refused the same way (gap register occupation.per_state_law).
 ///
-/// `regimental_support` on hoi4_template_create / hoi4_template_edit: the regimental support row
-/// of the Division Designer (divisiondesignerview.gui `regiment_support_grid` under
-/// `regimental_support_header_label`), one company per regiment column up to
-/// NDefines.NMilitary.MAX_REGIMENTAL_SUPPORT_WIDTH, a column taking one only with
-/// REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS battalions, at REGIMENTAL_SUPPORT_SLOT_COST_MULTIPLIER of
-/// a support slot's cost; a company whose common/units entry says `regimental = no` cannot go
-/// there. The tools fill the battalion grid and the division support column only, so the
-/// argument is refused (gap register templates.regimental_support).
-///
 /// `replace` on hoi4_doctrine_adopt: swapping the folder's grand doctrine or a track's chosen
 /// subdoctrine for another (the officer corps view's slot, picked again while filled). The tool
 /// adopts into empty slots only and refuses a filled one before input (grand_doctrine_set,
@@ -1498,7 +1508,6 @@ pub(super) fn refuse_unbuilt_args(tool: &str, args: &serde_json::Map<String, Val
         let what = match *arg {
             "organization" => "choosing the military-industrial organisation (the line gets none)",
             "state" => "setting the law of one state (only the default law is set)",
-            "regimental_support" => "filling the regimental support row (the template gets none)",
             "replace" => "replacing a chosen doctrine (an occupied slot is refused)",
             "settings" => "the area order's settings toggles (the game's defaults apply)",
             "force_government" => {
@@ -1755,6 +1764,14 @@ impl MacClock {
                     })?,
             };
             let mut full = supply::report(process, below)?;
+            // the hub defines as the running game (and its mods) load them: the executor sizes
+            // trucks by these, never by a number of its own
+            if let Ok(dir) = mgmt::game_dir(process) {
+                let defines = crate::script::cached(&dir, "supply_defines", supply::defines_in);
+                if let Some(o) = full.as_object_mut() {
+                    o.insert("defines".into(), (*defines).clone());
+                }
+            }
             // summary:true keeps the per-army rows, totals and short lists (a few KB instead of
             // 40-60 KB of division rows); army:"X" keeps one army's divisions.
             if let Some(army) = args.get("army").and_then(Value::as_str) {
@@ -2402,10 +2419,29 @@ impl MacClock {
                 // A retry only settles or replays its receipt; it never refuses on new state.
                 special_projects::plan(&before, facility, scientist, project).ok()
             } else {
-                let plan = special_projects::plan(&before, facility, scientist, project)?;
-                bounded_keys.preflight()?;
-                Some(plan)
+                Some(special_projects::plan(
+                    &before, facility, scientist, project,
+                )?)
             };
+            // engineer 85: in process (family `projects`): the tab's own commands for the objects of the game's lists
+            let mut sp_route = if retry {
+                None
+            } else {
+                inproc::route("projects")
+            };
+            let sp_posts = match (sp_route.as_ref(), plan.as_ref()) {
+                (Some(_), Some(p)) => special_projects::objects(process)
+                    .ok()
+                    .and_then(|o| inproc_projects::assign_posts(&o, p).ok().flatten()),
+                _ => None,
+            };
+            if sp_posts.is_none() {
+                sp_route = None;
+            }
+            if !retry && sp_route.is_none() {
+                bounded_keys.preflight()?;
+            }
+            let sp_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
             let action = json!({
                 "kind": "special_project_assign",
                 "facility_id": facility,
@@ -2416,6 +2452,7 @@ impl MacClock {
             let (want_scientist, want_project) =
                 special_projects::wanted(&before, scientist, project);
             let keys = &bounded_keys;
+            let mut sp_reply: Option<Value> = None;
             let mut settle = || {
                 let now = special_projects::slots(process, facility)?;
                 let detail = json!({
@@ -2429,7 +2466,12 @@ impl MacClock {
                     want_scientist,
                     want_project,
                 );
-                Ok(if retry && verdict == settle::Verdict::Unchanged {
+                let early = sp_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                Ok(if early && verdict != settle::Verdict::Reached {
+                    journal::Outcome::Unknown
+                } else if retry && verdict == settle::Verdict::Unchanged {
                     // A retry's own before-snapshot proves nothing about the first attempt.
                     journal::Outcome::Diverged(detail)
                 } else {
@@ -2444,10 +2486,18 @@ impl MacClock {
                         "A retried request is never dispatched again",
                     )
                 })?;
+                if let (Some(ch), Some(posts)) = (sp_route.as_mut(), sp_posts.as_ref()) {
+                    if let Some(r) = inproc_projects::post_all(ch, posts)? {
+                        sp_posted.set(Some(Instant::now()));
+                        sp_reply = Some(json!(r));
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 special_projects::assign(process, keys, plan)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, sp_reply));
         }
         if name == "hoi4_special_project_stop" || name == "hoi4_special_project_unassign" {
             let stopping = name == "hoi4_special_project_stop";
@@ -2479,8 +2529,38 @@ impl MacClock {
                 } else {
                     special_projects::plan_unassign(&before, facility)?;
                 }
+            }
+            // engineer 85: in process (family `projects`)
+            let mut sp_route = if retry {
+                None
+            } else {
+                inproc::route("projects")
+            };
+            let sp_post = match sp_route.as_ref() {
+                Some(_) => special_projects::objects(process).ok().and_then(|o| {
+                    if stopping {
+                        inproc_projects::stop_post(&before, &o, facility)
+                    } else {
+                        inproc_projects::unassign_post(&before, &o, facility)
+                    }
+                    .ok()
+                    .flatten()
+                }),
+                None => None,
+            };
+            if sp_post.is_none() {
+                sp_route = None;
+            }
+            if !retry && sp_route.is_none() {
                 bounded_keys.preflight()?;
             }
+            let sp_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
+            let mut sp_reply: Option<Value> = None;
+            let sp_early = || {
+                sp_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE)
+            };
             let slots_before = special_projects::Slots::of(&before, facility);
             let action = json!({
                 "kind": if stopping { "special_project_stop" } else { "special_project_unassign" },
@@ -2496,7 +2576,9 @@ impl MacClock {
                         "stopping": now.map(|n| n.1),
                     });
                     let verdict = settle::special_stop(slots_before.and_then(|s| s.project), now);
-                    Ok(if retry && verdict == settle::Verdict::Unchanged {
+                    Ok(if sp_early() && verdict != settle::Verdict::Reached {
+                        journal::Outcome::Unknown
+                    } else if retry && verdict == settle::Verdict::Unchanged {
                         journal::Outcome::Diverged(detail)
                     } else {
                         verdict.outcome(detail)
@@ -2509,7 +2591,9 @@ impl MacClock {
                     });
                     let verdict =
                         settle::special_unassign(slots_before.and_then(|s| s.scientist), now);
-                    Ok(if retry && verdict == settle::Verdict::Unchanged {
+                    Ok(if sp_early() && verdict != settle::Verdict::Reached {
+                        journal::Outcome::Unknown
+                    } else if retry && verdict == settle::Verdict::Unchanged {
                         journal::Outcome::Diverged(detail)
                     } else {
                         verdict.outcome(detail)
@@ -2524,6 +2608,14 @@ impl MacClock {
                         "A retried request is never dispatched again",
                     ));
                 }
+                if let (Some(ch), Some(post)) = (sp_route.as_mut(), sp_post.as_ref()) {
+                    if let Some(r) = inproc_projects::post_all(ch, std::slice::from_ref(post))? {
+                        sp_posted.set(Some(Instant::now()));
+                        sp_reply = Some(json!(r));
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 if stopping {
                     special_projects::stop(process, keys, facility)
                 } else {
@@ -2531,7 +2623,7 @@ impl MacClock {
                 }
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, sp_reply));
         }
         if name == "hoi4_design_options" {
             allowed(
@@ -2928,6 +3020,17 @@ impl MacClock {
                     None if kind == "create" => Some(Vec::new()),
                     None => None,
                 },
+                regimental: args
+                    .get("regimental_support")
+                    .map(template_edit::parse_regimental)
+                    .transpose()?,
+                regimental_min: args
+                    .get("regimental_support")
+                    .and_then(|_| mgmt::game_dir(process).ok())
+                    .and_then(|d| {
+                        std::fs::read_to_string(d.join("common/defines/00_defines.lua")).ok()
+                    })
+                    .and_then(|t| template_edit::regimental_required(&t)),
                 priority: template_edit::priority_arg(args.get("priority"))?,
                 allow_in_use: args
                     .get("allow_in_use")
@@ -3168,12 +3271,23 @@ impl MacClock {
             let process: &dyn Process = &fence;
             let action = json!({"kind":"research_start","technology":key,"slot":slot});
             let before = research::assignments(process)?;
+            // engineer 79: in process (family `research`): SetResearch(own tag, the template, the slot) after the
+            // game's own check; the template from the game's technology database, no view opened
+            let mut research_route = if actions.receipt_exists(id) {
+                None
+            } else {
+                inproc::route("research")
+            };
             if actions.receipt_exists(id) {
                 // A retry only settles or replays its receipt; it never refuses on new state.
             } else {
                 research::check(&before, key, slot, replace)?;
-                bounded_keys.preflight()?;
+                if research_route.is_none() {
+                    bounded_keys.preflight()?;
+                }
             }
+            let had_research_route = research_route.is_some();
+            let mut research_reply = None;
             let keys = &bounded_keys;
             let mut settle = || {
                 let now = research::assignments(process)?;
@@ -3188,11 +3302,22 @@ impl MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                research_reply = module_in_process(&mut research_route, |ch| {
+                    let template =
+                        ui::read(process, |r, i| crate::research::template_address(r, i, key))?;
+                    Ok(inproc_research::start(ch, template, slot))
+                })?;
+                if research_reply.is_some() {
+                    return Ok(());
+                }
+                if had_research_route {
+                    keys.preflight()?;
+                }
                 research::start(process, keys, key, slot)
             };
             let receipt =
                 actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, research_reply));
         }
         if name == "hoi4_production_priority" {
             allowed(
@@ -3217,22 +3342,42 @@ impl MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            let handle = production::lines(process)?
+            let all_lines = production::lines(process)?;
+            let (handle, address) = all_lines
                 .get(index)
                 .filter(|l| l.key.as_deref() == Some(key))
-                .map(|l| l.handle)
+                .map(|l| (l.handle, l.address))
                 .ok_or_else(|| {
                     Error::new(
                         "invalid_target",
                         "No own line with this index and equipment",
                     )
                 })?;
-            let order = || ui::read(process, production::shown_order);
+            // in process (family production2): the arrows' command, ChangePriority(line, place) with the absolute
+            // place; the order is then read from the country's own line list (no view needs to be open)
+            let mut prio_route = if actions.receipt_exists(id) {
+                None
+            } else {
+                inproc::route("production2")
+            };
+            let own_order = || {
+                production::lines(process)
+                    .ok()
+                    .map(|v| v.iter().map(|l| l.handle).collect::<Vec<u64>>())
+            };
+            let in_process = prio_route.is_some();
+            let order = || {
+                if in_process {
+                    own_order().ok_or_else(|| Error::new("read_failed", "own lines"))
+                } else {
+                    ui::read(process, production::shown_order)
+                }
+            };
             let before = order().ok();
             let place =
                 |o: &Option<Vec<u64>>| o.as_ref().and_then(|o| o.iter().position(|h| *h == handle));
             let retry = actions.receipt_exists(id);
-            if !retry {
+            if !retry && !in_process {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"production_priority","line":index,"equipment":key,
@@ -3260,10 +3405,30 @@ impl MacClock {
             let keys = &self.keys;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let (Some(ch), Some(now)) = (prio_route.as_mut(), own_order()) {
+                    if let Some(at) = now.iter().position(|h| *h == handle) {
+                        let want = to.target(at, now.len());
+                        if want == at {
+                            return Ok(());
+                        }
+                        match inproc::priority_post(ch, address, want, &mut || {
+                            own_order().map(|o| o.iter().position(|h| *h == handle) == Some(want))
+                        }) {
+                            inproc::Routed::Done(_) => return Ok(()),
+                            inproc::Routed::Refused(what) => {
+                                return Err(inproc::refused_error(&what))
+                            }
+                            inproc::Routed::Gui => {}
+                        }
+                    }
+                    keys.preflight()?;
+                }
                 production::prioritize(process, keys, handle, to)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(
+                json!({"receipt":receipt,"backend":if in_process { "inprocess" } else { "gui" }}),
+            );
         }
         if name == "hoi4_production_add" || name == "hoi4_production_set" {
             let adding = name == "hoi4_production_add";
@@ -3397,9 +3562,43 @@ impl MacClock {
                         ));
                     }
                 }
+            }
+            // The in-process backend (HOI4_BACKEND): setting a line's factories is one command through the game's
+            // own command path; no input, no focus. Adding a line stays on the GUI (not in the families yet).
+            let mut inproc_route = match index {
+                Some(_) if !retry => inproc::route("production"),
+                // a NEW line (engineer 71, family production2): AddProductionLine(own tag, the named design, no
+                // organisation), then the factories through the production family; only with an explicit design
+                // (without one the GUI picks the selection window's first design, an order the reads do not hold)
+                None if !retry && design.is_some() => inproc::route("production2")
+                    .filter(|ch| inproc::family_usable(&ch.hello, "production", inproc::mode())),
+                _ => None,
+            };
+            let add_variant = match (index, design, inproc_route.is_some()) {
+                (None, Some(wanted), true) => designs::read_all(process)?
+                    .iter()
+                    .find(|d| d.variant.id == wanted && d.variant.address != 0)
+                    .map(|d| d.variant.address),
+                _ => None,
+            };
+            if index.is_none() && add_variant.is_none() {
+                inproc_route = None;
+            }
+            if !retry && inproc_route.is_none() {
                 bounded_keys.preflight()?;
             }
             let keys = &bounded_keys;
+            // an order posted in process runs on the game's next frame: a read in the same
+            // millisecond still shows the old line (s7n, 24 Nov 2026: a line closed in process read
+            // back unchanged 4 ms later, NotApplied, and the balance rested two game days with 27
+            // factories idle). Unchanged counts only after IPC_SETTLE.
+            let ipc_posted: std::cell::Cell<Option<std::time::Instant>> =
+                std::cell::Cell::new(None);
+            let ipc_early = || {
+                ipc_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE)
+            };
             let mut settle = || {
                 let now = production::lines(process)?;
                 let detail = json!({"lines":now.iter().map(|l| json!({"equipment":l.key,"factories":l.requested})).collect::<Vec<_>>()});
@@ -3438,6 +3637,8 @@ impl MacClock {
                                 .any(|l| l.key.as_deref() == Some(key) && l.requested == factories)
                         {
                             journal::Outcome::Reached(detail)
+                        } else if added.is_empty() && ipc_early() {
+                            journal::Outcome::Unknown
                         } else if added.is_empty() {
                             journal::Outcome::Unchanged(detail)
                         } else {
@@ -3449,6 +3650,9 @@ impl MacClock {
                         match now.iter().find(|l| l.handle == line.handle) {
                             Some(l) if l.requested == factories => {
                                 journal::Outcome::Reached(detail)
+                            }
+                            Some(l) if l.requested == line.requested && ipc_early() => {
+                                journal::Outcome::Unknown
                             }
                             Some(l) if l.requested == line.requested => {
                                 journal::Outcome::Unchanged(detail)
@@ -3463,6 +3667,51 @@ impl MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let (None, Some(variant), Some(ch)) = (index, add_variant, inproc_route.as_mut())
+                {
+                    let known: Vec<u64> = before.iter().map(|l| l.handle).collect();
+                    let mut new_line = || {
+                        production::lines(process).ok().and_then(|now| {
+                            now.into_iter()
+                                .find(|l| {
+                                    !known.contains(&l.handle) && l.key.as_deref() == Some(key)
+                                })
+                                .map(|l| (l.address, l.requested))
+                        })
+                    };
+                    match inproc::add_line(ch, variant, factories, &mut new_line) {
+                        inproc::Routed::Done(_) => {
+                            ipc_posted.set(Some(std::time::Instant::now()));
+                            return Ok(());
+                        }
+                        inproc::Routed::Refused(what) => return Err(inproc::refused_error(&what)),
+                        inproc::Routed::Gui => bounded_keys.preflight()?,
+                    }
+                }
+                if let (Some(index), Some(ch)) = (index, inproc_route.as_mut()) {
+                    let line = &before[index];
+                    match inproc::production_op(line.requested, factories) {
+                        None => return Ok(()),
+                        Some((op, delta)) => {
+                            let vals = if delta == 0 { vec![] } else { vec![delta] };
+                            match ch.post(op, &[line.address], &vals, None, None) {
+                                Ok(reply) if inproc::all_posted(&reply) => {
+                                    ipc_posted.set(Some(std::time::Instant::now()));
+                                    return Ok(());
+                                }
+                                // the game's own check refused it: that is the answer (the GUI's
+                                // buttons post the same refused command)
+                                Ok(reply) if inproc::game_refused(&reply) => {
+                                    return Err(inproc::refused_error(&format!(
+                                        "{key} line to {factories} factories"
+                                    )))
+                                }
+                                // not run or refused by the module: the GUI path decides, in this same call
+                                Ok(_) | Err(_) => bounded_keys.preflight()?,
+                            }
+                        }
+                    }
+                }
                 match index {
                     None => production::add(process, keys, key, factories, design, chords),
                     Some(index) => production::set(process, keys, index, key, factories, chords),
@@ -3645,26 +3894,53 @@ impl MacClock {
             let action = json!({"kind":"diplomacy_act","state_id":state_json,"country":country_json,"action":action_name,"war_goal":kind,"states":states,"try_anyway":try_anyway});
             let retry = actions.receipt_exists(id);
             let keys = &self.keys;
-            let plan = if retry {
-                None
-            } else {
-                keys.preflight()?;
-                let plan = diplomacy::plan(process, keys, &target, action_name, try_anyway)?;
-                if plan.spec.map(|s| s.key) == Some("declare_war") && confirm != Some("declare_war")
-                {
+            // engineer 78: an action the module sends as the view does (no view opened), for a country target; the
+            // relation snapshot before it is the same read-back the mouse path uses. Off under `auto` until passed live.
+            let inproc_op = match &target {
+                diplomacy::Target::Country(_) if !retry => diplomacy_keys::spec_of_key(action_name)
+                    .or_else(|| diplomacy_keys::spec_of_row(action_name))
+                    .and_then(|s| inproc_diplomacy::op_of(s.key)),
+                _ => None,
+            };
+            let diplo_route =
+                std::cell::RefCell::new(inproc_op.and_then(|_| inproc::route("diplomacy")));
+            let war_checks = |key: Option<&str>, tag: &str| -> Result<()> {
+                if key == Some("declare_war") && confirm != Some("declare_war") {
                     return Err(Error::new(
                         "confirmation_required",
                         "Declaring war is one explicit step: repeat the call with confirm:\"declare_war\" (the game accepts it only with a completed war goal)",
                     ));
                 }
-                if plan.spec.map(|s| s.key) == Some("declare_war") && !flag("accept_widening")? {
+                if key == Some("declare_war") && !flag("accept_widening")? {
                     // Ger1 (1 Nov 2026) declared on Poland without reading its guarantors: Britain
                     // and France joined and walked through an empty Rhine. Refuse before input when
                     // a country that would join borders us without a held front.
-                    self.check_war_widening(process, &plan.tag)?;
+                    self.check_war_widening(process, tag)?;
                 }
+                Ok(())
+            };
+            let mut inproc_before = None;
+            let plan = if retry {
+                None
+            } else if diplo_route.borrow().is_some() {
+                let tag = diplomacy::target_tag(process, &target)?;
+                war_checks(
+                    diplomacy_keys::spec_of_key(action_name)
+                        .or_else(|| diplomacy_keys::spec_of_row(action_name))
+                        .map(|s| s.key),
+                    &tag,
+                )?;
+                inproc_before = Some(ui::read(process, |r, i| {
+                    diplomacy_state::snapshot(r, i, &tag)
+                })?);
+                None
+            } else {
+                keys.preflight()?;
+                let plan = diplomacy::plan(process, keys, &target, action_name, try_anyway)?;
+                war_checks(plan.spec.map(|s| s.key), &plan.tag)?;
                 Some(plan)
             };
+            let inproc_ai_sent = std::cell::Cell::new(false);
             let tag = match &plan {
                 Some(p) => p.tag.clone(),
                 None => diplomacy::target_tag(process, &target)?,
@@ -3681,7 +3957,7 @@ impl MacClock {
                 let snap = ui::read(process, |r, i| diplomacy_state::snapshot(r, i, &tag))?;
                 let mut verdict = diplomacy_keys::verdict(
                     spec,
-                    plan.as_ref().map(|p| &p.before),
+                    plan.as_ref().map(|p| &p.before).or(inproc_before.as_ref()),
                     &snap,
                     proven.get(),
                 );
@@ -3697,11 +3973,13 @@ impl MacClock {
                     .and_then(Value::as_str)
                     .map(str::to_lowercase)
                     .unwrap_or_default();
+                // engineer 78: a proposal sent in process has no dialog text; the game's own check passed and the
+                // command was posted, so the target's AI answers when the game runs (the same as a sent dialog)
                 let awaiting = verdict == settle::Verdict::Unchanged
                     && spec.is_some_and(|s| s.ai_decides)
                     && sent.get()
-                    && reply.contains("will accept")
-                    && !reply.contains("not accept");
+                    && ((reply.contains("will accept") && !reply.contains("not accept"))
+                        || inproc_ai_sent.get());
                 if awaiting {
                     verdict = settle::Verdict::Diverged;
                 }
@@ -3713,9 +3991,52 @@ impl MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
-                let plan = plan
-                    .as_ref()
-                    .ok_or_else(|| Error::new("invalid_state", "No plan for this dispatch"))?;
+                if let (Some(op), Some(ch)) = (inproc_op, diplo_route.borrow_mut().as_mut()) {
+                    let idx = ui::read(process, |r, i| diplomacy_state::tag_index_of(r, i, &tag))?;
+                    let pp_before = decisions::political_power(process).ok();
+                    match inproc_diplomacy::act(ch, op, idx) {
+                        inproc::Routed::Done(body) => {
+                            sent.set(true);
+                            // read-back: the relation the action makes, or political power spent, within 3 s
+                            let deadline =
+                                std::time::Instant::now() + std::time::Duration::from_secs(3);
+                            loop {
+                                let snap = ui::read(process, |r, i| {
+                                    diplomacy_state::snapshot(r, i, &tag)
+                                })?;
+                                let reached = diplomacy_keys::verdict(
+                                    spec,
+                                    inproc_before.as_ref(),
+                                    &snap,
+                                    false,
+                                ) == settle::Verdict::Reached;
+                                let pp_spent = matches!((pp_before, decisions::political_power(process).ok()), (Some(a), Some(b)) if b < a);
+                                if reached || pp_spent || std::time::Instant::now() >= deadline {
+                                    proven.set(reached || pp_spent);
+                                    break;
+                                }
+                                crate::phase::sleep(std::time::Duration::from_millis(80));
+                            }
+                            inproc_ai_sent.set(spec.is_some_and(|s| s.ai_decides));
+                            *dialog.borrow_mut() = body;
+                            return Ok(());
+                        }
+                        inproc::Routed::Refused(what) => return Err(inproc::refused_error(&what)),
+                        inproc::Routed::Gui => {}
+                    }
+                }
+                let fallback;
+                let plan = match plan.as_ref() {
+                    Some(p) => p,
+                    // the module handed the action to the mouse (not an unexplained refusal): the view's own path
+                    None if inproc_op.is_some() && !retry => {
+                        keys.preflight()?;
+                        fallback =
+                            diplomacy::plan(process, keys, &target, action_name, try_anyway)?;
+                        &fallback
+                    }
+                    None => return Err(Error::new("invalid_state", "No plan for this dispatch")),
+                };
                 let proof = diplomacy::execute(process, keys, plan, kind, &states, &sent)?;
                 proven.set(proof.rows_changed || proof.pp_spent || proof.relation);
                 *dialog.borrow_mut() = proof.dialog;
@@ -3729,7 +4050,26 @@ impl MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            self.keys.preflight()?;
+            // engineer 82: in process (family `construction`): the view's own move / the line's removal, no panel
+            let order_retry = args
+                .get("request_id")
+                .and_then(Value::as_str)
+                .is_some_and(|id| actions.receipt_exists(id));
+            let mut order_route = if order_retry {
+                None
+            } else {
+                inproc::route("construction")
+            };
+            let order_queue = match order_route {
+                Some(_) => ui::read(process, crate::construction::inproc_queue).ok(),
+                None => None,
+            };
+            if order_queue.is_none() {
+                order_route = None;
+            }
+            if order_route.is_none() {
+                self.keys.preflight()?;
+            }
             let line = args
                 .get("line")
                 .and_then(Value::as_u64)
@@ -3754,8 +4094,29 @@ impl MacClock {
                 })
             };
             let keys = &self.keys;
+            let mut order_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(queue) = order_queue.as_ref() {
+                    match construction_order_in_process(
+                        process,
+                        &mut order_route,
+                        queue,
+                        line as usize,
+                        order,
+                    ) {
+                        Ok(Some((body, reply))) => {
+                            order_reply = Some(reply);
+                            *done.borrow_mut() = Some(body);
+                            return Ok(());
+                        }
+                        Ok(None) => keys.preflight()?,
+                        Err(e) => {
+                            refused.set(matches!(e.code, "invalid_arguments" | "invalid_target"));
+                            return Err(e);
+                        }
+                    }
+                }
                 match construction::reorder(process, keys, line as usize, order) {
                     Ok(body) => {
                         *done.borrow_mut() = Some(body);
@@ -3772,7 +4133,7 @@ impl MacClock {
                 }
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, order_reply));
         }
         if name == "hoi4_railway_build" {
             allowed(
@@ -4259,6 +4620,9 @@ impl MacClock {
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
             let retry = actions.receipt_exists(id);
+            // engineer 76: the answer in process (family `events`), the mouse path as the fallback
+            let mut events_route = inproc::route("events");
+            let had_route = events_route.is_some();
             if !retry {
                 if !events::is_open(process, event)? {
                     return Err(Error::new(
@@ -4266,7 +4630,9 @@ impl MacClock {
                         format!("Event {event} is not open"),
                     ));
                 }
-                self.keys.preflight()?;
+                if !had_route {
+                    self.keys.preflight()?;
+                }
             }
             let action = json!({"kind":"event_choose","event":event,"option":option});
             let keys = &self.keys;
@@ -4281,12 +4647,27 @@ impl MacClock {
                     journal::Outcome::Unchanged(detail)
                 })
             };
+            let mut events_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // the window's own option click as one command: the window and its shown option count from the
+                // events read, the option by its shown place; the module checks the rest with the game's code
+                events_reply = module_in_process(&mut events_route, |ch| {
+                    Ok(match events::window_of(process, event)? {
+                        Some((window, count)) => inproc_events::answer(ch, window, option, count),
+                        None => inproc::Routed::Gui,
+                    })
+                })?;
+                if events_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 events::choose(process, keys, event, option)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, events_reply));
         }
         if name == "hoi4_fleet_mission" || name == "hoi4_fleet_region" {
             let by_mission = name == "hoi4_fleet_mission";
@@ -4369,9 +4750,40 @@ impl MacClock {
             } else {
                 None
             };
-            if !retry {
+            // engineer 85: in process (family `navy`): the mission bar's command for the task force, or the fleet's
+            // region by strategic region id, after the module's checks and the game's own "can do"; the mouse path
+            // serves the call when the module refuses for its own reasons
+            let mut navy_route = if retry { None } else { inproc::route("navy") };
+            let navy_target: Option<(u64, i32)> = if navy_route.is_some() {
+                inproc_navy::objects(process).ok().and_then(|objs| {
+                    if let Some(plan) = &mission_plan {
+                        let (_, _, tf) =
+                            navalact::find_task_force(&fleets, &plan.task_force).ok()?;
+                        Some((
+                            inproc_navy::task_force_object(&fleets, &objs, tf)?,
+                            plan.code,
+                        ))
+                    } else {
+                        let plan = region_plan.as_ref()?;
+                        let f = fleets.iter().find(|f| f.name == plan.fleet)?;
+                        Some((
+                            inproc_navy::fleet_object(&fleets, &objs, f)?,
+                            inproc_navy::region_id(process, &plan.region)?,
+                        ))
+                    }
+                })
+            } else {
+                None
+            };
+            if navy_target.is_none() {
+                navy_route = None;
+            }
+            let had_navy_route = navy_route.is_some();
+            if !retry && !had_navy_route {
                 bounded_keys.preflight()?;
             }
+            let navy_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
+            let navy_reply: std::cell::RefCell<Option<Value>> = std::cell::RefCell::new(None);
             let action = if by_mission {
                 json!({"kind":"fleet_mission","task_force":subject,"mission":detail})
             } else {
@@ -4393,6 +4805,12 @@ impl MacClock {
                         (true, Some(_)) => settle::Verdict::Unchanged,
                         _ => navalact::settle_mission(before_code.unwrap_or(-1), now, target_code),
                     };
+                    let early = navy_posted
+                        .get()
+                        .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                    if early && verdict == settle::Verdict::Unchanged {
+                        return Ok(journal::Outcome::Unknown);
+                    }
                     Ok(verdict.outcome(json!({"task_force":subject,"mission_code":now})))
                 } else {
                     let now = navalact::region_present_now(process, &subject, &detail)?;
@@ -4404,6 +4822,12 @@ impl MacClock {
                             navalact::settle_region(had_region.unwrap_or(false), now, want_present)
                         }
                     };
+                    let early = navy_posted
+                        .get()
+                        .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                    if early && verdict == settle::Verdict::Unchanged {
+                        return Ok(journal::Outcome::Unknown);
+                    }
                     Ok(verdict.outcome(json!({"fleet":subject,"region":detail,"present":now})))
                 }
             };
@@ -4415,6 +4839,23 @@ impl MacClock {
                         "A retried request is never dispatched again",
                     ));
                 }
+                if let Some((object, value)) = navy_target {
+                    let reply = module_in_process(&mut navy_route, |ch| {
+                        Ok(if by_mission {
+                            inproc_navy::mission(ch, &[object], value)
+                        } else {
+                            inproc_navy::region(ch, object, value, remove)
+                        })
+                    })?;
+                    if let Some(r) = reply {
+                        navy_posted.set(Some(Instant::now()));
+                        *navy_reply.borrow_mut() = Some(r);
+                        return Ok(());
+                    }
+                }
+                if had_navy_route {
+                    keys.preflight()?;
+                }
                 *info.borrow_mut() = match (&mission_plan, &region_plan) {
                     (Some(plan), _) => navalact::set_mission(process, keys, plan)?,
                     (_, Some(plan)) => navalact::region_op(process, keys, plan)?,
@@ -4425,10 +4866,12 @@ impl MacClock {
             let receipt =
                 actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
             let after = navalact::own_fleets(process).ok();
-            return Ok(json!({"receipt":receipt,"result":*info.borrow(),
+            return Ok(
+                json!({"receipt":receipt,"result":*info.borrow(),"in_process":navy_reply.into_inner(),
                 "fleets_after":after.map(|f| f.iter().map(|f| json!({"fleet":f.name.trim(),
                     "regions":f.regions.iter().map(|r| &r.1).collect::<Vec<_>>(),
-                    "task_forces":f.task_forces.iter().map(|t| json!({"task_force":t.name,"mission":naval::mission_name(t.mission_code)})).collect::<Vec<_>>()})).collect::<Vec<_>>())}));
+                    "task_forces":f.task_forces.iter().map(|t| json!({"task_force":t.name,"mission":naval::mission_name(t.mission_code)})).collect::<Vec<_>>()})).collect::<Vec<_>>())}),
+            );
         }
         if name == "hoi4_fleet_admiral" {
             allowed(
@@ -4506,7 +4949,26 @@ impl MacClock {
             } else {
                 Some(navalact::plan_admiral(&fleets, &fleet, admiral.as_deref())?)
             };
-            if !retry {
+            // engineer 85: in process (family `navy`): the commander list's command (the fleet, the admiral or none)
+            let mut navy_route = if retry { None } else { inproc::route("navy") };
+            let navy_target: Option<(u64, Option<u64>)> = match (&plan, navy_route.is_some()) {
+                (Some(p), true) => inproc_navy::objects(process).ok().and_then(|objs| {
+                    let f = fleets.iter().find(|f| f.name == p.fleet)?;
+                    let fo = inproc_navy::fleet_object(&fleets, &objs, f)?;
+                    match &p.admiral {
+                        Some(a) => Some((fo, Some(inproc_navy::admiral_object(&objs, a)?))),
+                        None => Some((fo, None)),
+                    }
+                }),
+                _ => None,
+            };
+            if navy_target.is_none() {
+                navy_route = None;
+            }
+            let had_navy_route = navy_route.is_some();
+            let navy_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
+            let navy_reply: std::cell::RefCell<Option<Value>> = std::cell::RefCell::new(None);
+            if !retry && !had_navy_route {
                 bounded_keys.preflight()?;
             }
             let before = fleets
@@ -4533,6 +4995,12 @@ impl MacClock {
                 } else {
                     navalact::settle_admiral(&before, now.as_ref(), &want)
                 };
+                let early = navy_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                if early && verdict == settle::Verdict::Unchanged {
+                    return Ok(journal::Outcome::Unknown);
+                }
                 Ok(verdict.outcome(json!({"fleet":fleet,"admiral":now})))
             };
             let mut dispatch = || {
@@ -4543,12 +5011,27 @@ impl MacClock {
                         "A retried request is never dispatched again",
                     ));
                 };
+                if let Some((fo, admiral)) = navy_target {
+                    let reply = module_in_process(&mut navy_route, |ch| {
+                        Ok(inproc_navy::leader(ch, fo, admiral))
+                    })?;
+                    if let Some(r) = reply {
+                        navy_posted.set(Some(Instant::now()));
+                        *navy_reply.borrow_mut() = Some(r);
+                        return Ok(());
+                    }
+                }
+                if had_navy_route {
+                    keys.preflight()?;
+                }
                 *info.borrow_mut() = navalact::assign_admiral(process, keys, plan)?;
                 Ok(())
             };
             let receipt =
                 actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
-            return Ok(json!({"receipt":receipt,"result":*info.borrow()}));
+            return Ok(
+                json!({"receipt":receipt,"result":*info.borrow(),"in_process":navy_reply.into_inner()}),
+            );
         }
         if name == "hoi4_fleet_create" {
             allowed(args, &["task_force", "request_id", "lease_token"])?;
@@ -4798,6 +5281,12 @@ impl MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
+            // in process (family airwing): the army card's command, Attach(wing, army), one per wing
+            if let Some(mut ch) = inproc::route("airwing") {
+                if let Some(v) = airattach::attach_inprocess(process, &mut ch, &wings, &army)? {
+                    return Ok(v);
+                }
+            }
             self.keys.preflight()?;
             return airattach::attach(process, &self.keys, &wings, &army);
         }
@@ -5091,6 +5580,19 @@ impl MacClock {
                         merge_plan = Some(airact::plan_merge(&wings, wing, with.as_deref())?)
                     }
                 }
+            }
+            // The in-process backend (HOI4_BACKEND) for missions and rebases: the UI's own commands, no input.
+            let mut air_route = match &op {
+                Air::Mission { .. } | Air::Rebase { .. } if !retry => inproc::route("air"),
+                // wing structure (engineer 71): the airwing family, OFF under auto until its live session passes
+                Air::Hold { .. } | Air::Split { .. } | Air::Merge { .. } | Air::Disband { .. }
+                    if !retry =>
+                {
+                    inproc::route("airwing")
+                }
+                _ => None,
+            };
+            if !retry && air_route.is_none() {
                 bounded_keys.preflight()?;
             }
             let action = match &op {
@@ -5241,6 +5743,49 @@ impl MacClock {
                         "action_uncertain",
                         "A retried request is never dispatched again",
                     ));
+                }
+                if let Some(ch) = air_route.as_mut() {
+                    let mut reread = || airact::own(process).ok().map(|(_, w)| w);
+                    let done = match &op {
+                        Air::Mission {
+                            wings: names,
+                            region,
+                            mask,
+                            ..
+                        } => inproc::air_mission(
+                            ch,
+                            &bases,
+                            &wings,
+                            names,
+                            *region,
+                            *mask,
+                            &mut reread,
+                        ),
+                        Air::Rebase { .. } => {
+                            inproc::air_rebase(ch, &bases, &wings, &rebase_plans, &mut reread)
+                        }
+                        Air::Hold { wing } => inproc::air_hold(ch, &wings, wing, &mut reread),
+                        Air::Disband { wing } => inproc::air_disband(ch, &wings, wing, &mut reread),
+                        Air::Split { .. } => match split_plan.as_ref() {
+                            Some(p) => inproc::air_split(ch, &wings, p, &mut reread),
+                            None => inproc::Routed::Gui,
+                        },
+                        Air::Merge { .. } => match merge_plan.as_ref() {
+                            Some(p) => inproc::air_merge(ch, &wings, p, &mut reread),
+                            None => inproc::Routed::Gui,
+                        },
+                        _ => inproc::Routed::Gui,
+                    };
+                    match done {
+                        inproc::Routed::Done(v) => {
+                            *info.borrow_mut() = v;
+                            return Ok(());
+                        }
+                        inproc::Routed::Refused(what) => return Err(inproc::refused_error(&what)),
+                        inproc::Routed::Gui => {}
+                    }
+                    // refused or not run: the GUI path decides, in this same call
+                    bounded_keys.preflight()?;
                 }
                 *info.borrow_mut() = match &op {
                     Air::Mission {
@@ -5629,7 +6174,9 @@ impl MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            if !actions.receipt_exists(id) {
+            let mut units_route = inproc::route("units");
+            let had_route = units_route.is_some();
+            if !actions.receipt_exists(id) && !had_route {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"army_detach","army":army,"divisions":ids,"into":into});
@@ -5665,14 +6212,32 @@ impl MacClock {
                     journal::Outcome::Diverged(detail)
                 })
             };
+            let mut units_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // engineer 75: in process = one command (a new army of these divisions, or Assign into `into`)
+                units_reply = module_in_process(&mut units_route, |ch| {
+                    let divs = ui::read(process, |r, i| armies::detach_targets(r, i, army, &ids))?;
+                    Ok(match into {
+                        Some(t) => {
+                            let g = ui::read(process, |r, i| armies::group_address(r, i, t))?;
+                            inproc_units::transfer(ch, g, &divs)
+                        }
+                        None => inproc_units::new_army(ch, &divs),
+                    })
+                })?;
+                if units_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 let name = armies::detach(process, keys, army, &ids, into)?;
                 *moved_to.borrow_mut() = Some(name);
                 Ok(())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, units_reply));
         }
         if name == "hoi4_army_rename" {
             allowed(args, &["army", "name", "request_id", "lease_token"])?;
@@ -5690,6 +6255,10 @@ impl MacClock {
                 if let Some(refusal) = armies::rename_refusal(&view, army, new_name) {
                     return Err(refusal);
                 }
+            }
+            let mut units_route = inproc::route("units");
+            let had_route = units_route.is_some();
+            if !actions.receipt_exists(id) && !had_route {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"army_rename","army":army,"name":new_name});
@@ -5706,15 +6275,26 @@ impl MacClock {
                     journal::Outcome::Diverged(body)
                 })
             };
+            let mut units_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 if army == new_name {
                     return Ok(());
                 }
+                units_reply = module_in_process(&mut units_route, |ch| {
+                    let g = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+                    Ok(inproc_units::rename(ch, g, new_name))
+                })?;
+                if units_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 armies::rename(process, keys, army, new_name)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, units_reply));
         }
         if name == "hoi4_army_motorization" {
             allowed(args, &["army", "level", "request_id", "lease_token"])?;
@@ -5803,6 +6383,10 @@ impl MacClock {
                         format!("{source} ({a}) + {target} ({b}) would exceed {} divisions; split first", armies::ARMY_CAP),
                     ));
                 }
+            }
+            let mut units_route = inproc::route("units");
+            let had_route = units_route.is_some();
+            if !actions.receipt_exists(id) && !had_route {
                 self.keys.preflight()?;
             }
             let mut settle = || {
@@ -5812,12 +6396,30 @@ impl MacClock {
                         .outcome(now),
                 )
             };
+            let mut units_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // engineer 75: every division of the source into the target (the right click on its card), one command
+                units_reply = module_in_process(&mut units_route, |ch| {
+                    let (s, t) = ui::read(process, |r, i| {
+                        Ok((
+                            armies::group_address(r, i, source)?,
+                            armies::group_address(r, i, target)?,
+                        ))
+                    })?;
+                    let divs = ui::read(process, |r, i| armies::group_division_ptrs(r, i, s))?;
+                    Ok(inproc_units::transfer(ch, t, &divs))
+                })?;
+                if units_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 armies::merge(process, keys, source, target)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, units_reply));
         }
         if name == "hoi4_army_gather" {
             allowed(args, &["army", "max", "request_id", "lease_token"])?;
@@ -5873,7 +6475,9 @@ impl MacClock {
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
             let retry = actions.receipt_exists(id);
-            if !retry {
+            let mut units_route = inproc::route("units");
+            let had_route = units_route.is_some();
+            if !retry && !had_route {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"army_split","army":army,"count":count});
@@ -5890,14 +6494,33 @@ impl MacClock {
                     verdict.outcome(now)
                 })
             };
+            let mut units_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // engineer 75: the army's first `count` divisions (the roster's order) as one new army, one command
+                units_reply = module_in_process(&mut units_route, |ch| {
+                    let view = armies::armies(process)?;
+                    let ids = armies::first_divisions(&view, army, count).ok_or_else(|| {
+                        Error::new(
+                            "army_unknown",
+                            "No own army with this name and that many divisions",
+                        )
+                    })?;
+                    let divs = ui::read(process, |r, i| armies::division_ptrs(r, i, &ids))?;
+                    Ok(inproc_units::new_army(ch, &divs))
+                })?;
+                if units_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 armies::split(process, keys, army, count)?;
                 verified.set(true);
                 Ok(())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, units_reply));
         }
         if name == "hoi4_army_group_create" {
             allowed(args, &["armies", "request_id", "lease_token"])?;
@@ -5921,7 +6544,9 @@ impl MacClock {
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
             let retry = actions.receipt_exists(id);
-            if !retry {
+            let mut units_route = inproc::route("units");
+            let had_route = units_route.is_some();
+            if !retry && !had_route {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"army_group_create","armies":names});
@@ -5938,14 +6563,31 @@ impl MacClock {
                     verdict.outcome(now)
                 })
             };
+            let mut units_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // engineer 75: one ArmyGroup command over the armies (they share a theatre; the module checks it)
+                units_reply = module_in_process(&mut units_route, |ch| {
+                    let groups = ui::read(process, |r, i| {
+                        names
+                            .iter()
+                            .map(|n| armies::group_address(r, i, n))
+                            .collect::<Result<Vec<_>>>()
+                    })?;
+                    Ok(inproc_units::army_group_new(ch, &groups))
+                })?;
+                if units_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 armies::create_group(process, keys, &names)?;
                 verified.set(true);
                 Ok(())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, units_reply));
         }
         if name == "hoi4_army_commander" {
             allowed(
@@ -5971,8 +6613,22 @@ impl MacClock {
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
             let retry = actions.receipt_exists(id);
+            // a listed commander's surname, folded name or id names him (g92a: "Kesselring")
+            let resolved = match commanders::canonical_name(process, general) {
+                Ok(n) => n,
+                Err(e) if matches!(e.code, "unknown_commander" | "ambiguous_commander") => {
+                    return Err(e)
+                }
+                // an unreadable roster leaves the name to the commander list, as before
+                Err(_) => general.to_string(),
+            };
+            let general = resolved.as_str();
+            let mut units_route = inproc::route("units");
+            let had_route = units_route.is_some();
             if !retry {
-                self.keys.preflight()?;
+                if !had_route {
+                    self.keys.preflight()?;
+                }
                 commanders::precheck(process, army, general, reassign)?;
             }
             let action = json!({"kind":"army_commander","army":army,"general":general});
@@ -5993,12 +6649,29 @@ impl MacClock {
                     },
                 )
             };
+            let mut units_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // engineer 75: SetArmyLeader(the leader by name, the army or army group), one command
+                units_reply = module_in_process(&mut units_route, |ch| {
+                    let (g, l) = ui::read(process, |r, i| {
+                        Ok((
+                            armies::group_address(r, i, army)?,
+                            units::leader_address(r, i, general)?,
+                        ))
+                    })?;
+                    Ok(inproc_units::leader(ch, g, Some(l)))
+                })?;
+                if units_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 armies::assign_commander(process, keys, army, general)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, units_reply));
         }
         if name == "hoi4_army_exercise" {
             allowed(
@@ -6125,7 +6798,10 @@ impl MacClock {
         if name == "hoi4_army_fallback" || name == "hoi4_army_area_defense" {
             let fallback = name == "hoi4_army_fallback";
             if fallback {
-                allowed(args, &["army", "states", "request_id", "lease_token"])?;
+                allowed(
+                    args,
+                    &["army", "states", "provinces", "request_id", "lease_token"],
+                )?;
             } else {
                 allowed(
                     args,
@@ -6155,6 +6831,30 @@ impl MacClock {
                         "states must be 1..8 state ids (1..4095)",
                     )
                 })?;
+            // engineer 74: the exact fallback line (provinces in drawing order) through the module's orders2 family
+            // when it is usable; `states` stays the mouse path's line (it ignores the province list)
+            let line: Option<Vec<i32>> = match args.get("provinces") {
+                None | Some(Value::Null) => None,
+                Some(v) => Some(
+                    v.as_array()
+                        .filter(|a| (1..=1024).contains(&a.len()))
+                        .and_then(|a| {
+                            a.iter()
+                                .map(|x| {
+                                    x.as_i64()
+                                        .filter(|p| (1..100_000).contains(p))
+                                        .map(|p| p as i32)
+                                })
+                                .collect::<Option<Vec<i32>>>()
+                        })
+                        .ok_or_else(|| {
+                            Error::new(
+                                "invalid_arguments",
+                                "provinces: 1..1024 province ids in drawing order",
+                            )
+                        })?,
+                ),
+            };
             let id = string(args, "request_id")?;
             let token = string(args, "lease_token")?;
             let observed = guard.observe(process)?;
@@ -6185,9 +6885,58 @@ impl MacClock {
                     ));
                 }
             }
-            if !retry {
+            let mut inproc_route = line.as_ref().and_then(|_| inproc::route("orders2"));
+            // engineer 79: an area-defence order through the module (family `holds`): one map click per state, the
+            // first makes the order, the rest go into its id
+            let mut area_existing: Option<(i32, Vec<i32>)> = None;
+            let mut holds_route = if fallback || retry {
+                None
+            } else {
+                inproc::route("holds")
+            };
+            if holds_route.is_some() {
+                // the map tool takes battle-plan orders only from an army led by a general; a state the player does
+                // not control is not a click the tool takes (refused before anything is posted)
+                let view = armies::armies(process)?;
+                let leaderless = view["armies"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|a| a["army"].as_str() == Some(army))
+                    .is_some_and(|a| a["commander"].is_null());
+                if leaderless {
+                    return Err(Error::new(
+                        "no_commander",
+                        format!(
+                            "{army} has no commander: the game takes battle-plan orders only from an army led by a \
+                             general (hoi4_army_commander first); nothing was posted"
+                        ),
+                    ));
+                }
+                let controlled = armies::controlled_state_ids(process)?;
+                if let Some(bad) = states.iter().find(|s| !controlled.contains(s)) {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        format!("state {bad} is not controlled by the player: an area order covers own states"),
+                    ));
+                }
+                // ONE AREA ORDER PER ARMY: a new order replaces the army's old one in the game (s81b, 24 Nov 2026:
+                // Army 2's order over 55 was dropped when [64,58] made a new one). The states go into the army's
+                // standing area order by its id; those already in it are not clicked (a click removes a state)
+                area_existing = inproc_holds::standing_area(&view, army);
+                if let Some((_, held)) = &area_existing {
+                    if states.iter().all(|s| held.contains(s)) {
+                        return Err(Error::new(
+                            "nothing_to_change",
+                            format!("{army}'s area order already holds {states:?}"),
+                        ));
+                    }
+                }
+            }
+            if !retry && inproc_route.is_none() && holds_route.is_none() {
                 self.keys.preflight()?;
             }
+            let mut inproc_reply = Value::Null;
             let kind = if fallback {
                 "army_fallback"
             } else {
@@ -6198,6 +6947,18 @@ impl MacClock {
             let mut settle = || {
                 let now = nodes()?;
                 let detail = json!({"army":army,"plan_orders":now});
+                // an area order is proven by its states: the army's area order holds every state asked for
+                // (adding to a standing order does not change the order count)
+                if !fallback {
+                    let view = armies::armies(process)?;
+                    if let Some((_, held)) = inproc_holds::standing_area(&view, army) {
+                        if states.iter().all(|s| held.contains(s)) {
+                            return Ok(journal::Outcome::Reached(
+                                json!({"army":army,"area_states":held}),
+                            ));
+                        }
+                    }
+                }
                 Ok(if retry {
                     journal::Outcome::Diverged(detail)
                 } else {
@@ -6206,6 +6967,57 @@ impl MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let (Some(ch), Some(line)) = (inproc_route.as_mut(), line.as_ref()) {
+                    if let Some(bad) = front_plan::foreign_province(process, &game_dir, line)? {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            format!("province {bad} is not in a state the player controls"),
+                        ));
+                    }
+                    let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+                    let req =
+                        inproc_orders::request2("orders2.fallback", group, &[], line, &[], None)?;
+                    let reply = ch.orders_post(req)?;
+                    if inproc::game_refused(&reply) {
+                        return Err(inproc::refused_error("fallback line"));
+                    }
+                    if !inproc::all_posted(&reply) {
+                        return Err(Error::new(
+                            "inproc_refused",
+                            format!(
+                                "the module did not post the fallback line: {}",
+                                reply["reason"]
+                                    .as_str()
+                                    .or(reply["error"].as_str())
+                                    .unwrap_or("?")
+                            ),
+                        ));
+                    }
+                    inproc_reply = reply;
+                    return Ok(());
+                }
+                if let Some(ch) = holds_route.as_mut() {
+                    let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+                    let routed = match &area_existing {
+                        Some((oid, held)) => {
+                            let add: Vec<i32> = states
+                                .iter()
+                                .copied()
+                                .filter(|s| !held.contains(s))
+                                .collect();
+                            inproc_holds::area_into(ch, group, *oid, &add)
+                        }
+                        None => inproc_holds::area(ch, group, &states),
+                    };
+                    match routed {
+                        inproc::Routed::Done(v) => {
+                            inproc_reply = v;
+                            return Ok(());
+                        }
+                        inproc::Routed::Refused(what) => return Err(inproc::refused_error(&what)),
+                        inproc::Routed::Gui => keys.preflight()?,
+                    }
+                }
                 if fallback {
                     armies::fallback(process, keys, &game_dir, army, &states)
                 } else {
@@ -6213,7 +7025,11 @@ impl MacClock {
                 }
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(if inproc_reply.is_null() {
+                json!({"receipt":receipt})
+            } else {
+                json!({"receipt":receipt,"in_process":inproc_reply})
+            });
         }
         if name == "hoi4_army_offensive" {
             allowed(
@@ -6224,10 +7040,64 @@ impl MacClock {
                     "province_id",
                     "states",
                     "spearhead",
+                    "target_provinces",
+                    "parent_order",
+                    "replace_order",
                     "request_id",
                     "lease_token",
                 ],
             )?;
+            // engineer 74: the exact target line (provinces in drawing order) through the module: a spearhead under
+            // parent_order (orders2.spearhead), or a new path for an existing offensive's target line (replace_order,
+            // orders.set_path). A new plain offensive has no in-process command yet: the stroke below draws it.
+            let target: Option<Vec<i32>> = match args.get("target_provinces") {
+                None | Some(Value::Null) => None,
+                Some(v) => Some(
+                    v.as_array()
+                        .filter(|a| (1..=1024).contains(&a.len()))
+                        .and_then(|a| {
+                            a.iter()
+                                .map(|x| {
+                                    x.as_i64()
+                                        .filter(|p| (1..100_000).contains(p))
+                                        .map(|p| p as i32)
+                                })
+                                .collect::<Option<Vec<i32>>>()
+                        })
+                        .ok_or_else(|| {
+                            Error::new(
+                                "invalid_arguments",
+                                "target_provinces: 1..1024 province ids in drawing order",
+                            )
+                        })?,
+                ),
+            };
+            let order_arg = |k: &str| -> Result<Option<i32>> {
+                match args.get(k) {
+                    None | Some(Value::Null) => Ok(None),
+                    Some(v) => v
+                        .as_i64()
+                        .filter(|v| (1..=100_000_000).contains(v))
+                        .map(|v| Some(v as i32))
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", format!("{k}: an order id"))
+                        }),
+                }
+            };
+            let parent_order = order_arg("parent_order")?;
+            let replace_order = order_arg("replace_order")?;
+            if (parent_order.is_some() || replace_order.is_some()) && target.is_none() {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "parent_order and replace_order need target_provinces",
+                ));
+            }
+            if parent_order.is_some() && replace_order.is_some() {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "give parent_order or replace_order, not both",
+                ));
+            }
             // The game's spearhead order (battle-plan bar) instead of an offensive line.
             let spearhead = match args.get("spearhead") {
                 None => false,
@@ -6301,9 +7171,18 @@ impl MacClock {
             // the states the new arrow must reach: the line's states, or the one target state
             let want: Vec<i32> = across.clone().unwrap_or_else(|| vec![state]);
             let retry = actions.receipt_exists(id);
-            if !retry {
+            // engineer 89: a plain new offensive is orders.new_front (family orders): COrderNewFrontCommand makes the
+            // arrow and its target line under the parent front, exactly as the X stroke does (s89a: the same tree)
+            let family = if replace_order.is_some() || !spearhead {
+                "orders"
+            } else {
+                "orders2"
+            };
+            let mut inproc_route = target.as_ref().and_then(|_| inproc::route(family));
+            if !retry && inproc_route.is_none() {
                 self.keys.preflight()?;
             }
+            let mut inproc_reply = Value::Null;
             let mut action = json!({"kind":"army_offensive","army":army,"state_id":state});
             if let Some(p) = through {
                 action["province_id"] = json!(p);
@@ -6324,6 +7203,24 @@ impl MacClock {
                 if let Some(m) = &miss {
                     detail["missed"] = m.clone();
                 }
+                // engineer 95: a new path keeps the order (no order grows): verified by the same id standing with a
+                // target line that changed (o96a, 28 Nov 2026: the path took, id 100 with its 11 new provinces, and the
+                // receipt said NotApplied because no order was added)
+                if let Some(rid) = replace_order.filter(|_| target.is_some()) {
+                    let (was, is) = (
+                        replaced_target(&plan_before, rid),
+                        replaced_target(&plan, rid),
+                    );
+                    detail["replaced"] =
+                        json!({"order": rid, "before": was.clone(), "after": is.clone()});
+                    return Ok(match (&was, &is) {
+                        _ if retry => journal::Outcome::Diverged(detail),
+                        (_, None) => journal::Outcome::Diverged(detail),
+                        // the game takes the path on a later frame: looked at again within the window
+                        (Some(a), Some(b)) if a == b => journal::Outcome::Unknown,
+                        _ => journal::Outcome::Reached(detail),
+                    });
+                }
                 Ok(if retry {
                     journal::Outcome::Diverged(detail)
                 } else if miss.is_some() && now > before {
@@ -6337,6 +7234,18 @@ impl MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let (Some(ch), Some(line)) = (inproc_route.as_mut(), target.as_ref()) {
+                    inproc_reply = offensive_in_process(
+                        process,
+                        ch,
+                        army,
+                        line,
+                        parent_order,
+                        replace_order,
+                        spearhead,
+                    )?;
+                    return Ok(());
+                }
                 match &across {
                     Some(st) => {
                         armies::offensive_across(process, keys, &game_dir, army, st, spearhead)
@@ -6347,7 +7256,11 @@ impl MacClock {
                 }
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(if inproc_reply.is_null() {
+                json!({"receipt":receipt})
+            } else {
+                json!({"receipt":receipt,"in_process":inproc_reply})
+            });
         }
         if name == "hoi4_army_move" {
             allowed(
@@ -6504,6 +7417,9 @@ impl MacClock {
                 let retry = actions.receipt_exists(id);
                 let action = json!({"kind":"army_move","army":army,"state_id":state,
                     "province_id":p,"divisions":ids});
+                // engineer 105: each division's move by command (family move), the mouse path the fallback
+                let mut move_route = inproc::route("move");
+                let had_route = move_route.is_some();
                 if !retry {
                     let (on_way, there) = count().unwrap_or((0, 0));
                     if on_way + there >= ids.len() {
@@ -6512,7 +7428,9 @@ impl MacClock {
                                 "divisions_there": there,
                                 "note": "already heading or standing there: nothing was sent"}}}));
                     }
-                    self.keys.preflight()?;
+                    if !had_route {
+                        self.keys.preflight()?;
+                    }
                 }
                 let keys = &self.keys;
                 let mut settle = || {
@@ -6529,6 +7447,7 @@ impl MacClock {
                         journal::Outcome::Unchanged(detail)
                     })
                 };
+                let mut move_reply = None;
                 let mut dispatch = || {
                     authority.authorize(token, &epoch)?;
                     let at = ui::read(process, armies::division_provinces).unwrap_or_default();
@@ -6537,10 +7456,25 @@ impl MacClock {
                         .filter(|d| at.get(*d).copied().flatten() != Some(p))
                         .cloned()
                         .collect();
+                    move_reply = module_in_process(&mut move_route, |ch| {
+                        let headings = ui::read(process, armies::division_headings)?;
+                        let left = inproc_moves::pending(&pending, &headings, &at, p, &[p]);
+                        if left.is_empty() {
+                            return Ok(inproc::Routed::Gui);
+                        }
+                        let ptrs = ui::read(process, |r, i| armies::division_ptrs(r, i, &left))?;
+                        Ok(inproc_moves::move_divisions(ch, &ptrs, p))
+                    })?;
+                    if move_reply.is_some() {
+                        return Ok(());
+                    }
+                    if had_route {
+                        keys.preflight()?;
+                    }
                     armies::move_divisions(process, keys, army, &pending, state, p)
                 };
                 let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-                return Ok(json!({"receipt":receipt}));
+                return Ok(with_inproc(receipt, move_reply));
             }
             let heading = || ui::read(process, |r, i| armies::heading_for(r, i, army, &wanted));
             let retry = actions.receipt_exists(id);
@@ -6550,6 +7484,9 @@ impl MacClock {
             // (w24: the same three Somaliland provinces were ordered 17 times, each a card click,
             // a Find view and a right click). While some division does neither, the order is
             // sent: half an army marching left the other half without it (live 15 Nov 2026).
+            // engineer 105: the army's divisions ordered by command (family move), the mouse path the fallback
+            let mut move_route = inproc::route("move");
+            let had_route = move_route.is_some();
             if !retry {
                 let (on_way, total) = heading().unwrap_or((0, 0));
                 let ids = ui::read(process, |r, i| armies::army_division_ids(r, i, army))
@@ -6570,7 +7507,9 @@ impl MacClock {
                             "divisions_there": standing,
                             "note": "already heading or standing there: nothing was sent"}}}));
                 }
-                self.keys.preflight()?;
+                if !had_route {
+                    self.keys.preflight()?;
+                }
             }
             let keys = &self.keys;
             // A move by sea or a long route first heads for the embarkation port or the next
@@ -6645,12 +7584,46 @@ impl MacClock {
                     journal::Outcome::Unchanged(detail)
                 })
             };
+            let mut move_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                move_reply = module_in_process(&mut move_route, |ch| {
+                    let to = match province {
+                        Some(p) => Some(p),
+                        None => {
+                            let ports =
+                                ui::read(process, naval::naval_base_provinces).unwrap_or_default();
+                            let victory = mapdata::state_victory_points(&game_dir)?;
+                            inproc_moves::state_target(
+                                &wanted,
+                                &ports,
+                                victory.get(&state).map(Vec::as_slice).unwrap_or(&[]),
+                            )
+                        }
+                    };
+                    let Some(to) = to else {
+                        return Ok(inproc::Routed::Gui);
+                    };
+                    let ids = ui::read(process, |r, i| armies::army_division_ids(r, i, army))?;
+                    let headings = ui::read(process, armies::division_headings)?;
+                    let at = ui::read(process, armies::division_provinces)?;
+                    let left = inproc_moves::pending(&ids, &headings, &at, to, &wanted);
+                    if left.is_empty() {
+                        return Ok(inproc::Routed::Gui);
+                    }
+                    let ptrs = ui::read(process, |r, i| armies::division_ptrs(r, i, &left))?;
+                    Ok(inproc_moves::move_divisions(ch, &ptrs, to))
+                })?;
+                if move_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 armies::move_to(process, keys, army, state, province)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, move_reply));
         }
         if name == "hoi4_army_plan" {
             allowed(
@@ -6661,6 +7634,8 @@ impl MacClock {
                     "mode",
                     "clear_orders",
                     "delete_order",
+                    "assign",
+                    "distribute",
                     "request_id",
                     "lease_token",
                 ],
@@ -6668,6 +7643,93 @@ impl MacClock {
             let army = string(args, "army")?;
             if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
                 return Err(Error::new("invalid_arguments", "Invalid army name"));
+            }
+            // engineer 95: divisions onto one order (assign) or the group's divisions over its fronts (distribute),
+            // through the module (family orders2, the plan bar's assign); each goes alone. No mouse path: a refusal
+            // says the family is not usable.
+            let assign = args.get("assign").filter(|v| !v.is_null());
+            let distribute = args
+                .get("distribute")
+                .filter(|v| !v.is_null() && **v != Value::Bool(false));
+            if assign.is_some() || distribute.is_some() {
+                if (assign.is_some() && distribute.is_some())
+                    || ["execute", "mode", "clear_orders", "delete_order"]
+                        .iter()
+                        .any(|k| args.get(*k).is_some())
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "assign and distribute go alone (no execute, mode, clear_orders or delete_order)",
+                    ));
+                }
+                let parsed = plan_assign_args(assign, distribute)?;
+                let id = string(args, "request_id")?;
+                let token = string(args, "lease_token")?;
+                let epoch = guard.observe(process)?.epoch;
+                authority.authorize(token, &epoch)?;
+                let dir = mapdata::game_dir(&epoch.game.exe)?;
+                let mut route = inproc::route("orders2").ok_or_else(|| {
+                    Error::new(
+                        "inproc_refused",
+                        format!(
+                            "assigning divisions to an order goes by command (in-process family orders2), which is not usable here{}",
+                            inproc::os_unavailable().map(|r| format!(": {r}")).unwrap_or_default()
+                        ),
+                    )
+                })?;
+                let retry = actions.receipt_exists(id);
+                let action =
+                    json!({"kind":"army_plan","army":army,"assign":assign,"distribute":distribute});
+                let expected: std::cell::RefCell<BTreeMap<i32, usize>> =
+                    std::cell::RefCell::new(BTreeMap::new());
+                let report: std::cell::RefCell<Value> = std::cell::RefCell::new(Value::Null);
+                let mut settle = || {
+                    let now = ui::read(process, |r, i| armies::order_divisions(r, i, army))?;
+                    let want = expected.borrow();
+                    let short: Vec<Value> = want
+                        .iter()
+                        .filter(|(o, n)| now.get(*o).copied().unwrap_or(0) < **n)
+                        .map(|(o, n)| json!({"order":o,"wanted":n,"read":now.get(o)}))
+                        .collect();
+                    let detail = json!({"army":army,
+                        "divisions_per_order":serde_json::to_value(&now).unwrap_or_default(),
+                        "wanted":serde_json::to_value(&*want).unwrap_or_default(),
+                        "short":short,"in_process":report.borrow().clone()});
+                    Ok(if retry {
+                        journal::Outcome::Diverged(detail)
+                    } else if !want.is_empty() && short.is_empty() {
+                        journal::Outcome::Reached(detail)
+                    } else {
+                        journal::Outcome::Unchanged(detail)
+                    })
+                };
+                let mut dispatch = || {
+                    authority.authorize(token, &epoch)?;
+                    let (rep, want) = match &parsed {
+                        PlanAssign::Order {
+                            order,
+                            divisions,
+                            count,
+                        } => assign_order_in_process(
+                            process,
+                            &mut route,
+                            army,
+                            &dir,
+                            *order,
+                            divisions.as_deref(),
+                            *count,
+                        )?,
+                        PlanAssign::Distribute { weights } => {
+                            distribute_in_process(process, &mut route, army, &dir, weights)?
+                        }
+                    };
+                    *report.borrow_mut() = rep;
+                    *expected.borrow_mut() = want;
+                    Ok(())
+                };
+                let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+                let rep = report.borrow().clone();
+                return Ok(json!({"receipt":receipt,"in_process":rep}));
             }
             // ONE order deleted (the bar's delete tool, then a click on the order's arrow): the
             // front and the other orders stay. Alone, it is the whole call.
@@ -6869,11 +7931,17 @@ impl MacClock {
                     "state_id",
                     "from_state",
                     "from_states",
+                    "provinces",
+                    "against",
+                    "own_states",
+                    "parent_order",
+                    "replace_order",
                     "request_id",
                     "lease_token",
                 ],
             )?;
             let army = string(args, "army")?;
+            let stated = front_stated(args)?;
             if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
                 return Err(Error::new("invalid_arguments", "Invalid army name"));
             }
@@ -6909,7 +7977,10 @@ impl MacClock {
             let orders = || ui::read(process, |r, i| armies::orders(r, i, army));
             let before = orders()?;
             let retry = actions.receipt_exists(id);
-            if !retry {
+            // engineer 73: a front stated by provinces goes through the module's orders family when it is usable
+            // (never under auto before its live pass); otherwise the drag below, which ignores the province list
+            let inproc_route = stated.as_ref().and_then(|_| inproc::route("orders"));
+            if !retry && inproc_route.is_none() {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"army_front","army":army,"state_id":state,"from_state":one});
@@ -6918,21 +7989,47 @@ impl MacClock {
                 action["from_states"] = json!(list);
             }
             let keys = &self.keys;
+            // engineer 95: a stated line the game's sections did not hold whole is reported, never Verified
+            let cut: std::cell::RefCell<Option<Value>> = std::cell::RefCell::new(None);
+            // the coverage goes in the receipt itself too (o96a, 28 Nov 2026: read in the receipt, not found)
+            let covered: std::cell::RefCell<Option<Value>> = std::cell::RefCell::new(None);
             let mut settle = || {
                 let now = orders()?;
-                let detail = json!({"army":army,"orders":now});
+                let mut detail = json!({"army":army,"orders":now});
+                if let Some(c) = covered.borrow().as_ref() {
+                    detail["coverage"] = c.clone();
+                }
+                if let Some(c) = cut.borrow().as_ref() {
+                    detail["front_cut"] = c.clone();
+                    return Ok(journal::Outcome::Diverged(detail));
+                }
                 Ok(if retry {
                     journal::Outcome::Diverged(detail)
                 } else {
                     settle::order_growth(before, now).outcome(detail)
                 })
             };
+            let mut inproc_route = inproc_route;
+            let mut inproc_reply = Value::Null;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let (Some(ch), Some(st)) = (inproc_route.as_mut(), stated.as_ref()) {
+                    inproc_reply = front_in_process(process, ch, army, st)?;
+                    let c = &inproc_reply["coverage"];
+                    *covered.borrow_mut() = Some(c.clone());
+                    if c["uncovered"].as_array().is_some_and(|a| !a.is_empty()) {
+                        *cut.borrow_mut() = Some(c.clone());
+                    }
+                    return Ok(());
+                }
                 armies::front(process, keys, army, state, segment.as_deref())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(if inproc_reply.is_null() {
+                json!({"receipt":receipt})
+            } else {
+                json!({"receipt":receipt,"in_process":inproc_reply})
+            });
         }
         if name == "hoi4_army_create" {
             allowed(
@@ -7110,7 +8207,24 @@ impl MacClock {
                 ids
             };
             let retry = actions.receipt_exists(id);
-            if !retry {
+            // engineer 82: in process (family `training`): the Train button's command, then the new queue's series,
+            // lines and location, no panel; the deploy state's first own province as the location click
+            let mut train_route = if retry {
+                None
+            } else {
+                inproc::route("training")
+            };
+            let train_province = match train_route {
+                Some(_) => mapdata::game_dir(&epoch.game.exe)
+                    .and_then(|d| mapdata::state_provinces(&d, deploy_state))
+                    .ok()
+                    .and_then(|p| p.first().copied()),
+                None => None,
+            };
+            if train_province.is_none() {
+                train_route = None;
+            }
+            if !retry && train_route.is_none() {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"train","template":template,"count":count});
@@ -7125,16 +8239,25 @@ impl MacClock {
                 Ok(if retry {
                     journal::Outcome::Diverged(detail)
                 } else {
-                    settle::queue_growth(0, added as i64, count as i64).outcome(detail)
+                    settle::lines_added_exactly(added as i64, count as i64).outcome(detail)
                 })
             };
+            let mut train_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(p) = train_province {
+                    train_reply =
+                        inproc_training::train(process, &mut train_route, template, count, p)?;
+                    if train_reply.is_some() {
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 deployment::train(process, keys, template, count)?;
                 deployment::set_locations(process, keys, deploy_state).map(|_| ())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, train_reply));
         }
         if name == "hoi4_deploy_locations" {
             allowed(args, &["state_id", "request_id", "lease_token"])?;
@@ -7148,10 +8271,34 @@ impl MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            let unlocated = || ui::read(process, deployment::unlocated);
-            let start = unlocated()?;
             let retry = actions.receipt_exists(id);
-            if !retry {
+            // engineer 82: in process (family `training`): the location command for every queue without one, the
+            // state's first own province as the click; the queues' own province field is the read-back (no panel)
+            let mut locate_route = if retry {
+                None
+            } else {
+                inproc::route("training")
+            };
+            let locate_province = match locate_route {
+                Some(_) => mapdata::game_dir(&epoch.game.exe)
+                    .and_then(|d| mapdata::state_provinces(&d, state))
+                    .ok()
+                    .and_then(|p| p.first().copied()),
+                None => None,
+            };
+            if locate_province.is_none() {
+                locate_route = None;
+            }
+            let in_memory = locate_route.is_some();
+            let unlocated = || {
+                if in_memory {
+                    inproc_training::unlocated(process)
+                } else {
+                    ui::read(process, deployment::unlocated)
+                }
+            };
+            let start = unlocated()?;
+            if !retry && !in_memory {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"deploy_locations","state_id":state});
@@ -7165,12 +8312,20 @@ impl MacClock {
                     settle::locations(start, now).outcome(detail)
                 })
             };
+            let mut locate_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(p) = locate_province {
+                    locate_reply = inproc_training::locate(process, &mut locate_route, p)?;
+                    if locate_reply.is_some() {
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 deployment::set_locations(process, keys, state).map(|_| ())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, locate_reply));
         }
         if name == "hoi4_decisions_list" {
             allowed(args, &["lease_token"])?;
@@ -7236,14 +8391,23 @@ impl MacClock {
                         .outcome(detail)
                 })
             };
+            // engineer 76: the decision in process (family `decisions`): the panel's row gives the decision object
+            let mut decisions_route = inproc::route("decisions");
+            let mut decisions_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
-                decisions::take(process, keys, key, target)?;
+                let mut post = |decision: u64| -> Result<bool> {
+                    decisions_reply = module_in_process(&mut decisions_route, |ch| {
+                        Ok(inproc_picks::decision(ch, decision))
+                    })?;
+                    Ok(decisions_reply.is_some())
+                };
+                decisions::take(process, keys, key, target, &mut post)?;
                 verified.set(true);
                 Ok(())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, decisions_reply));
         }
         if name == "hoi4_politics_options" || name == "hoi4_politics_choose" {
             let choosing = name == "hoi4_politics_choose";
@@ -7285,7 +8449,25 @@ impl MacClock {
             }
             let id = string(args, "request_id")?;
             let retry = actions.receipt_exists(id);
-            if !retry {
+            // engineer 79: in process (family `politics`): a law (an idea of the game's idea database) by the politics
+            // view's own command, the objects from the game's lists (the idea database, the own active ideas), no panel;
+            // a key that is no idea (an advisor, staff: characters) goes to the mouse path
+            let mut law_route = if retry {
+                None
+            } else {
+                inproc::route("politics")
+            };
+            let law = match law_route {
+                Some(_) => ui::read(process, |r, i| inproc_politics::law(r, i, idea))?,
+                None => None,
+            };
+            if law.is_none() {
+                law_route = None;
+            }
+            let law_before = law
+                .as_ref()
+                .and_then(|l| l.current.as_ref().map(|c| c.1.clone()));
+            if !retry && law.is_none() {
                 if before.as_deref() == Some(idea)
                     || politics::holder(process, category, idea)?.is_some()
                 {
@@ -7296,10 +8478,38 @@ impl MacClock {
                 }
                 self.keys.preflight()?;
             }
+            let in_process = law.is_some();
             let action =
                 json!({"kind":"politics_choose","category":category,"slot":index,"idea":idea});
             let keys = &self.keys;
+            // a law posted in process takes effect on the game's next frame: a read 90 ms later still
+            // showed the old law (s81b, 24 Nov 2026: limited_exports and service_by_requirement read
+            // back NotApplied, PP spent and both active a moment later). Unchanged counts only after
+            // IPC_SETTLE, as for production.
+            let ipc_posted: std::cell::Cell<Option<std::time::Instant>> =
+                std::cell::Cell::new(None);
             let mut settle = || {
+                if in_process {
+                    // the own active ideas: the law active = Reached; the replaced one still active = Unchanged
+                    let own = ui::read(process, inproc_politics::active)?;
+                    let keys_now: Vec<&str> = own.iter().map(|(_, k)| k.as_str()).collect();
+                    let detail = json!({"active_ideas":keys_now,"replaced":law_before});
+                    let early = ipc_posted
+                        .get()
+                        .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                    return Ok(if keys_now.contains(&idea) {
+                        journal::Outcome::Reached(detail)
+                    } else if early {
+                        journal::Outcome::Unknown
+                    } else if law_before
+                        .as_deref()
+                        .is_none_or(|old| keys_now.contains(&old))
+                    {
+                        journal::Outcome::Unchanged(detail)
+                    } else {
+                        journal::Outcome::Diverged(detail)
+                    });
+                }
                 let now = politics::current(process, category, index)?;
                 let held = politics::holder(process, category, idea)?;
                 let detail = json!({"current":now,"held_in_slot":held});
@@ -7311,12 +8521,22 @@ impl MacClock {
                     journal::Outcome::Diverged(detail)
                 })
             };
+            let mut law_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(l) = law.as_ref() {
+                    law_reply =
+                        module_in_process(&mut law_route, |ch| Ok(inproc_politics::take(ch, l)))?;
+                    if law_reply.is_some() {
+                        ipc_posted.set(Some(std::time::Instant::now()));
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 politics::choose(process, keys, category, index, idea)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, law_reply));
         }
         if name == "hoi4_construction_add" {
             allowed(
@@ -7368,19 +8588,72 @@ impl MacClock {
             let action = json!({"kind":"construction_add","building":key,"state_id":state,"province_id":province,"count":count});
             let start = construction::queued(process, key, state)?;
             let retry = actions.receipt_exists(id);
-            if !retry {
+            // engineer 82: in process (family `construction`): the map click's own command, one per click, the building
+            // reference as the game builds it (a province building on the named province, a state building in the
+            // state); Shift's fill and a province building without a province stay on the mouse
+            let mut build_route = if retry || fill {
+                None
+            } else {
+                inproc::route("construction")
+            };
+            let placement = match build_route {
+                Some(_) => ui::read(process, |r, i| {
+                    crate::construction::template_placement(r, i, key)
+                })
+                .ok(),
+                None => None,
+            };
+            let on_province = placement.is_some_and(|(_, p)| p);
+            let template = placement
+                .filter(|(_, p)| !*p || province.is_some())
+                .map(|(t, _)| t);
+            if template.is_none() {
+                build_route = None;
+            }
+            let in_process = build_route.is_some();
+            let location = if on_province {
+                province.unwrap_or(0)
+            } else {
+                state
+            };
+            if !retry && !in_process {
                 self.keys.preflight()?;
             }
             let keys = &self.keys;
+            // a command posted in process runs on the game's next frame: an unchanged queue counts only after IPC_SETTLE
+            let ipc_posted: std::cell::Cell<Option<Instant>> = std::cell::Cell::new(None);
             // The pre-input amount is stored in the intent, so a retry settles against it.
             let mut settle = |baseline: &Value| {
                 let original = baseline.as_i64().unwrap_or(start);
                 let now = construction::queued(process, key, state)?;
                 let detail = json!({"building":key,"state_id":state,"queued_in_state":now,"queued_before":original});
+                let early = ipc_posted
+                    .get()
+                    .is_some_and(|t| t.elapsed() < inproc::IPC_SETTLE);
+                if early && now < original + count {
+                    return Ok(journal::Outcome::Unknown);
+                }
                 Ok(settle::queue_growth(original, now, count).outcome(detail))
             };
+            let mut build_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                if let Some(t) = template {
+                    build_reply = module_in_process(&mut build_route, |ch| {
+                        Ok(inproc_construction::add(
+                            ch,
+                            t,
+                            location,
+                            on_province,
+                            count,
+                        ))
+                    })?;
+                    if build_reply.is_some() {
+                        ipc_posted.set(Some(Instant::now()));
+                        return Ok(());
+                    }
+                    keys.preflight()?;
+                }
                 construction::add(process, keys, key, state, count, province, fill)
             };
             let receipt = actions.execute_baselined(
@@ -7391,7 +8664,7 @@ impl MacClock {
                 &mut settle,
                 &mut dispatch,
             )?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, build_reply));
         }
         if name == "hoi4_focus_start" {
             allowed(args, &["focus", "request_id", "lease_token"])?;
@@ -7426,9 +8699,13 @@ impl MacClock {
             let bounded_keys = self.keys.guarded(&fence, &check_input)?;
             let process: &(dyn Process + Send + Sync) = &fence;
             let action = json!({"kind":"focus_start","focus":key});
+            let mut picks_route = inproc::route("picks");
+            let had_route = picks_route.is_some();
             if !actions.receipt_exists(id) {
                 focus::check(&focus::progress(process)?, key)?;
-                bounded_keys.preflight()?;
+                if !had_route {
+                    bounded_keys.preflight()?;
+                }
             }
             let keys = &bounded_keys;
             let mut settle = || {
@@ -7439,13 +8716,25 @@ impl MacClock {
                         .outcome(detail),
                 )
             };
+            let mut picks_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                // engineer 75: SetNationalFocus(own tag, the focus) after the game's own "can start", one command
+                picks_reply = module_in_process(&mut picks_route, |ch| {
+                    let f = crate::own_focus::focus_address(process, key)?;
+                    Ok(inproc_picks::focus(ch, f))
+                })?;
+                if picks_reply.is_some() {
+                    return Ok(());
+                }
+                if had_route {
+                    keys.preflight()?;
+                }
                 focus::start(process, keys, key, fence.until)
             };
             let receipt =
                 actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(with_inproc(receipt, picks_reply));
         }
         allowed(args, &["paused", "speed", "request_id", "lease_token"])?;
         let id = string(args, "request_id")?;
@@ -7519,6 +8808,17 @@ impl MacClock {
 /// The new offensive arrows of a plan read back after a draw (ids absent `before`) when none of
 /// them reaches a wanted state: the arrow's target states (a spearhead's path as well). None
 /// when no new arrow stands or one reaches the line.
+/// The target line of offensive `id` in a plan read (`armies::orders::of_named`): its province count, ends and
+/// states; None when no front holds that offensive. Pure.
+fn replaced_target(plan: &Value, id: i32) -> Option<Value> {
+    plan.as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|front| front["offensives"].as_array().cloned().unwrap_or_default())
+        .find(|o| o["id"].as_i64() == Some(i64::from(id)))
+        .map(|o| o["target"].clone())
+}
+
 fn offensive_miss(before: &Value, now: &Value, want: &[i32], spearhead: bool) -> Option<Value> {
     let arrows = |plan: &Value| -> Vec<Value> {
         plan.as_array()
@@ -7591,6 +8891,16 @@ mod offensive_miss_tests {
         assert!(offensive_miss(&now, &now, &[34], false).is_none());
         // a spearhead reaches through its path
         assert!(offensive_miss(&before, &now, &[8], true).is_none());
+    }
+
+    #[test]
+    fn a_new_path_is_read_on_the_same_order() {
+        // o96a: the path took on order 100 and no order was added
+        let before = plan(&[(100, &[6, 34])]);
+        let now = plan(&[(100, &[8, 6, 977, 34, 980])]);
+        let (a, b) = (replaced_target(&before, 100), replaced_target(&now, 100));
+        assert!(a.is_some() && b.is_some() && a != b);
+        assert_eq!(replaced_target(&now, 101), None);
     }
 }
 
@@ -7768,4 +9078,797 @@ fn order_kind(name: &str, arguments: &Value) -> String {
     } else {
         format!("{base}.{variant}")
     }
+}
+
+/// engineer 95: what hoi4_army_plan's `assign` or `distribute` asks.
+enum PlanAssign {
+    Order {
+        order: i32,
+        divisions: Option<Vec<String>>,
+        count: Option<usize>,
+    },
+    Distribute {
+        weights: BTreeMap<i32, f64>,
+    },
+}
+
+fn plan_assign_args(assign: Option<&Value>, distribute: Option<&Value>) -> Result<PlanAssign> {
+    let bad = |m: &str| Error::new("invalid_arguments", m.to_string());
+    if let Some(a) = assign {
+        let order = a["order"]
+            .as_i64()
+            .filter(|o| (1..=i64::from(i32::MAX)).contains(o))
+            .ok_or_else(|| bad("assign.order: an order id from the plan read-back"))?
+            as i32;
+        let divisions = match a.get("divisions") {
+            None | Some(Value::Null) => None,
+            Some(Value::Array(l)) if !l.is_empty() && l.len() <= 512 => Some(
+                l.iter()
+                    .map(|d| {
+                        d.as_str()
+                            .filter(|s| !s.is_empty() && s.len() <= 64)
+                            .map(str::to_string)
+                            .ok_or_else(|| {
+                                bad("assign.divisions: division ids as hoi4_armies lists them")
+                            })
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            ),
+            _ => return Err(bad("assign.divisions: 1..512 division ids")),
+        };
+        let count = match a.get("count") {
+            None | Some(Value::Null) => None,
+            Some(v) => Some(
+                v.as_u64()
+                    .filter(|n| (1..=512).contains(n))
+                    .ok_or_else(|| bad("assign.count: 1..512"))? as usize,
+            ),
+        };
+        if divisions.is_some() == count.is_some() {
+            return Err(bad("assign takes divisions or count, one of them"));
+        }
+        if let Some(o) = a.as_object() {
+            if o.keys()
+                .any(|k| !["order", "divisions", "count"].contains(&k.as_str()))
+            {
+                return Err(bad("assign: order with divisions or count"));
+            }
+        }
+        return Ok(PlanAssign::Order {
+            order,
+            divisions,
+            count,
+        });
+    }
+    let mut weights = BTreeMap::new();
+    match distribute {
+        Some(Value::Bool(true)) => {}
+        Some(Value::Object(o)) => {
+            if o.keys().any(|k| k != "weights") {
+                return Err(bad("distribute: true or {weights: {order id: weight}}"));
+            }
+            for (k, v) in o
+                .get("weights")
+                .and_then(Value::as_object)
+                .ok_or_else(|| bad("distribute.weights: {order id: weight}"))?
+            {
+                let id: i32 = k
+                    .parse()
+                    .ok()
+                    .filter(|i| *i > 0)
+                    .ok_or_else(|| bad("distribute.weights: keys are front order ids"))?;
+                let w = v
+                    .as_f64()
+                    .filter(|w| w.is_finite() && *w >= 0.0)
+                    .ok_or_else(|| bad("distribute.weights: weights are numbers 0 or more"))?;
+                weights.insert(id, w);
+            }
+        }
+        _ => return Err(bad("distribute: true or {weights: {order id: weight}}")),
+    }
+    Ok(PlanAssign::Distribute { weights })
+}
+
+/// A front stated exactly (engineer 73): explicit provinces, or the own border against a tag, optionally a parent
+/// order or an existing front order to re-path. None when the call states none of these (the drag decides).
+struct FrontStated {
+    provinces: Option<Vec<i32>>,
+    /// engineer 95: one tag or several (every border of the group in one call, each piece its own root)
+    against: Option<(Vec<String>, Option<Vec<i32>>)>,
+    parent: Option<i32>,
+    replace: Option<i32>,
+}
+
+fn front_stated(args: &serde_json::Map<String, Value>) -> Result<Option<FrontStated>> {
+    let ints = |k: &str, lo: i64, hi: i64, max: usize| -> Result<Option<Vec<i32>>> {
+        match args.get(k) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::Array(a)) if !a.is_empty() && a.len() <= max => a
+                .iter()
+                .map(|v| {
+                    v.as_i64()
+                        .filter(|x| (lo..=hi).contains(x))
+                        .map(|x| x as i32)
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", format!("{k}: integers {lo}..{hi}"))
+                        })
+                })
+                .collect::<Result<Vec<_>>>()
+                .map(Some),
+            _ => Err(Error::new(
+                "invalid_arguments",
+                format!("{k}: 1..{max} integers"),
+            )),
+        }
+    };
+    let one = |k: &str| -> Result<Option<i32>> {
+        match args.get(k) {
+            None | Some(Value::Null) => Ok(None),
+            Some(v) => v
+                .as_i64()
+                .filter(|x| (1..=i64::from(i32::MAX)).contains(x))
+                .map(|x| Some(x as i32))
+                .ok_or_else(|| {
+                    Error::new(
+                        "invalid_arguments",
+                        format!("{k} must be a positive order id"),
+                    )
+                }),
+        }
+    };
+    let provinces = ints("provinces", 1, 99_999, 1024)?;
+    let own_states = ints("own_states", 1, 4095, 64)?;
+    let tag = |v: &Value| -> Option<String> {
+        v.as_str()
+            .filter(|t| t.len() == 3 && t.chars().all(|c| c.is_ascii_alphanumeric()))
+            .map(str::to_ascii_uppercase)
+    };
+    let against = match args.get("against") {
+        None | Some(Value::Null) => None,
+        Some(Value::Array(l)) if !l.is_empty() && l.len() <= 16 => {
+            let mut tags = Vec::new();
+            for v in l {
+                let t = tag(v).ok_or_else(|| {
+                    Error::new(
+                        "invalid_arguments",
+                        "against: a three-letter country tag or a list of them",
+                    )
+                })?;
+                if !tags.contains(&t) {
+                    tags.push(t);
+                }
+            }
+            Some(tags)
+        }
+        Some(v) => Some(vec![tag(v).ok_or_else(|| {
+            Error::new(
+                "invalid_arguments",
+                "against: a three-letter country tag or a list of them",
+            )
+        })?]),
+    };
+    let parent = one("parent_order")?;
+    let replace = one("replace_order")?;
+    if provinces.is_some() && against.is_some() {
+        return Err(Error::new(
+            "invalid_arguments",
+            "give provinces or against, not both",
+        ));
+    }
+    if own_states.is_some() && against.is_none() {
+        return Err(Error::new(
+            "invalid_arguments",
+            "own_states narrows against",
+        ));
+    }
+    if (parent.is_some() || replace.is_some()) && provinces.is_none() && against.is_none() {
+        return Err(Error::new(
+            "invalid_arguments",
+            "parent_order and replace_order need provinces or against",
+        ));
+    }
+    if parent.is_some() && replace.is_some() {
+        return Err(Error::new(
+            "invalid_arguments",
+            "give parent_order or replace_order, not both",
+        ));
+    }
+    if provinces.is_none() && against.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(FrontStated {
+        provinces,
+        against: against.map(|t| (t, own_states)),
+        parent,
+        replace,
+    }))
+}
+
+/// engineer 74: the offensive's exact target line through the module: a new spearhead (arrow plus its line) under
+/// `parent` (default: the army's one top order), or the new path of an existing order (`replace`).
+fn offensive_in_process(
+    process: &dyn Process,
+    ch: &mut inproc::Channel,
+    army: &str,
+    line: &[i32],
+    parent: Option<i32>,
+    replace: Option<i32>,
+    spearhead: bool,
+) -> Result<Value> {
+    let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+    let nodes = inproc_orders::tree_nodes(&ch.orders_tree(group)?)?;
+    let ids = inproc_orders::all_ids(&nodes);
+    let req = match replace {
+        Some(order) if ids.contains(&order) => {
+            // engineer 95: an arrow's own path is the game's (re-derived from its front to its target line on every
+            // change), so the new line goes to the arrow's target line, which the arrow then follows
+            let to = inproc_orders::path_target(&nodes, order);
+            inproc_orders::request("orders.set_path", group, to, line, None, None)?
+        }
+        Some(order) => {
+            return Err(Error::new(
+                "invalid_arguments",
+                format!("order {order} is not in {army}'s plan"),
+            ))
+        }
+        None => {
+            let p = parent.or_else(|| inproc_orders::default_parent(&nodes)).ok_or_else(|| {
+                Error::new(
+                    "plan_parent_unknown",
+                    format!("{army}'s plan has no single top order: name parent_order (one of {ids:?})"),
+                )
+            })?;
+            if !ids.contains(&p) {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    format!("order {p} is not in {army}'s plan"),
+                ));
+            }
+            if spearhead {
+                inproc_orders::request2("orders2.spearhead", group, &[p as i64], line, &[], None)?
+            } else {
+                // engineer 89: the plain offensive: NewFront under the front (the arrow + its target line), the
+                // front's free divisions handed over as the X stroke hands them
+                inproc_orders::request("orders.new_front", group, p, line, None, None)?
+            }
+        }
+    };
+    let reply = ch.orders_post(req)?;
+    if inproc::game_refused(&reply) {
+        return Err(inproc::refused_error("offensive"));
+    }
+    if !inproc::all_posted(&reply) {
+        return Err(Error::new(
+            "inproc_refused",
+            format!(
+                "the module did not post the offensive: {}",
+                reply["reason"]
+                    .as_str()
+                    .or(reply["error"].as_str())
+                    .unwrap_or("?")
+            ),
+        ));
+    }
+    Ok(reply)
+}
+
+/// engineer 75: one army-structure change through the module when the `units` family is usable (never under `auto`
+/// before its live pass): Some(the module's reply) when every command was posted, None when the mouse path runs,
+/// the typed refusal when the game's own check refused the change (the mouse would send the same refused order).
+fn module_in_process(
+    route: &mut Option<inproc::Channel>,
+    f: impl FnOnce(&mut inproc::Channel) -> Result<inproc::Routed>,
+) -> Result<Option<Value>> {
+    let Some(ch) = route.as_mut() else {
+        return Ok(None);
+    };
+    match f(ch)? {
+        inproc::Routed::Done(v) => Ok(Some(v)),
+        inproc::Routed::Refused(what) => Err(inproc::refused_error(&what)),
+        inproc::Routed::Gui => Ok(None),
+    }
+}
+
+/// The receipt with the module's reply when the change went in process.
+fn with_inproc<R: serde::Serialize>(receipt: R, reply: Option<Value>) -> Value {
+    match reply {
+        Some(r) => json!({"receipt":receipt,"in_process":r}),
+        None => json!({"receipt":receipt}),
+    }
+}
+
+/// engineer 82: one construction-queue order in process: the line's removal or the view's move, then the queue read
+/// back until the game ran it (it runs on the next frame; a paused game runs commands too). Ok(None): the mouse path
+/// runs (no channel, or the module could not explain its answer); a game refusal is the typed error.
+fn construction_order_in_process(
+    process: &dyn Process,
+    route: &mut Option<inproc::Channel>,
+    queue: &[crate::construction::InprocLine],
+    line: usize,
+    action: &str,
+) -> Result<Option<(Value, Value)>> {
+    let n = queue.len();
+    let Some(target) = queue.get(line) else {
+        return Err(Error::new(
+            "invalid_target",
+            format!("No construction line {line}: the queue has {n} (hoi4_construction_queue lists them in order)"),
+        ));
+    };
+    let address = target.address;
+    let to = inproc_construction::target_index(action, line, n);
+    if action != "remove" && to.is_none() {
+        return Err(Error::new(
+            "invalid_arguments",
+            "action must be top, up, down, bottom or remove",
+        ));
+    }
+    if to == Some(line) {
+        return Ok(Some((
+            json!({"position": line, "unchanged": "already there"}),
+            json!({"backend":"inprocess","posted":0}),
+        )));
+    }
+    let reply = module_in_process(route, |ch| {
+        Ok(match to {
+            None => inproc_construction::remove(ch, target),
+            Some(to) => inproc_construction::move_line(ch, queue, line, to),
+        })
+    })?;
+    let Some(reply) = reply else {
+        return Ok(None);
+    };
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        let now = ui::read(process, crate::construction::inproc_queue)?;
+        let at = now.iter().position(|l| l.address == address);
+        let body = match (to, at) {
+            (None, None) => {
+                Some(json!({"removed": true, "lines_before": n, "lines_after": now.len()}))
+            }
+            (Some(want), Some(at)) if at == want => Some(json!({"from": line, "to": want})),
+            _ => None,
+        };
+        if let Some(body) = body {
+            return Ok(Some((body, reply)));
+        }
+        if Instant::now() >= deadline {
+            return Err(Error::new(
+                "input_readback_failed",
+                format!("The module posted the order, but the line is at {at:?} after 3 s (wanted {to:?}; None = removed)"),
+            ));
+        }
+        crate::phase::sleep(Duration::from_millis(30));
+    }
+}
+
+/// engineer 74: a plan root for an own army or army group through the module, bound to `section` of the theatre front
+/// `front`, split 0. engineer 95: it carries `divisions` (its share), never the whole group: the game puts every
+/// division a root is given on that root, so a second root given all of them empties the first (ctl92a, 28 Nov 2026:
+/// Holland's root 0 divisions, Belgium's 68). Returns the new root's id (the top order not there before) and the reply.
+fn new_root_in_process(
+    ch: &mut inproc::Channel,
+    group: u64,
+    front: u64,
+    section: i32,
+    divisions: &[u64],
+) -> Result<(i32, Value)> {
+    let before: std::collections::BTreeSet<i32> = inproc_orders::root_rows(&ch.orders_tree(group)?)
+        .iter()
+        .map(|r| r.id)
+        .collect();
+    let req = inproc_orders::request2(
+        "orders2.new_root",
+        group,
+        &[section as i64, 0, 100_000, 0],
+        &[],
+        divisions,
+        Some(front),
+    )?;
+    let reply = ch.orders_post(req)?;
+    if inproc::game_refused(&reply) {
+        return Err(inproc::refused_error("plan root"));
+    }
+    if !inproc::all_posted(&reply) {
+        return Err(Error::new(
+            "inproc_refused",
+            format!(
+                "the module did not post the root: {}",
+                reply["reason"]
+                    .as_str()
+                    .or(reply["error"].as_str())
+                    .unwrap_or("?")
+            ),
+        ));
+    }
+    let root = inproc_orders::root_rows(&ch.orders_tree(group)?)
+        .iter()
+        .map(|r| r.id)
+        .find(|id| !before.contains(id))
+        .ok_or_else(|| {
+            Error::new(
+                "inproc_unverified",
+                "the root was posted but no new top order reads back",
+            )
+        })?;
+    Ok((root, reply))
+}
+
+/// engineer 95: the group's divisions over `targets` (front lines as provinces) by `weights`, by place: each target
+/// keeps what stands by it, the rest go to the nearest target with room (`inproc_orders::split_by_place`). `holder`
+/// maps a division to the target that holds it now.
+fn shares_by_place(
+    process: &dyn Process,
+    dir: &std::path::Path,
+    group: u64,
+    targets: &[Vec<i32>],
+    weights: &[f64],
+    holder: &BTreeMap<u64, usize>,
+) -> Result<Vec<Vec<u64>>> {
+    let placed = ui::read(process, |r, i| armies::group_divisions_placed(r, i, group))?;
+    let pos = mapdata::positions(dir)?;
+    let divs: Vec<(u64, Option<(f64, f64)>)> = placed
+        .iter()
+        .map(|(d, p)| (*d, p.and_then(|p| pos.get(&p).copied())))
+        .collect();
+    let current: Vec<Option<usize>> = divs.iter().map(|(d, _)| holder.get(d).copied()).collect();
+    let lines: Vec<Vec<(f64, f64)>> = targets
+        .iter()
+        .map(|t| t.iter().filter_map(|p| pos.get(p).copied()).collect())
+        .collect();
+    let q = inproc_orders::quotas(divs.len(), weights);
+    Ok(inproc_orders::split_by_place(&divs, &current, &lines, &q))
+}
+
+/// engineer 95: the group's order tree with each order's divisions in the group's own division addresses (the ones
+/// orders2 takes and `group_divisions_placed` reads), matched by `inproc_orders::match_divisions`: an order's list did
+/// not compare equal to them (o96a, 28 Nov 2026), so a front's own divisions read as none of its own.
+fn group_tree(process: &dyn Process, ch: &mut inproc::Channel, group: u64) -> Result<Value> {
+    let mut tree = ch.orders_tree(group)?;
+    // the module's reference handle offset (stage2.common.handle_off: 8 on 1.20.1.0)
+    let handle_off = ch.hello["stage2"]["common"]["handle_off"]
+        .as_u64()
+        .unwrap_or(8);
+    let group_divs = ui::read(process, |r, i| {
+        let mut out = Vec::new();
+        for d in armies::group_division_ptrs(r, i, group)? {
+            out.push((d, r.u64(d + handle_off).unwrap_or(0)));
+        }
+        Ok(out)
+    })?;
+    let values = inproc_orders::tree_division_values(&tree);
+    let matched = inproc_orders::match_divisions(&values, &group_divs);
+    inproc_orders::translate_divisions(&mut tree, &matched);
+    tree["division_match"] = json!({"values": values.len(), "matched": matched.len()});
+    Ok(tree)
+}
+
+/// engineer 95: divisions onto one order through the module (orders2.assign: the plan bar's assign); nothing is posted
+/// for none.
+fn assign_in_process(
+    ch: &mut inproc::Channel,
+    group: u64,
+    order: i32,
+    divisions: &[u64],
+) -> Result<Value> {
+    if divisions.is_empty() {
+        return Ok(json!({"moved":0}));
+    }
+    let mut replies = Vec::new();
+    for part in divisions.chunks(512) {
+        let req = inproc_orders::request2(
+            "orders2.assign",
+            group,
+            &[i64::from(order)],
+            &[],
+            part,
+            None,
+        )?;
+        let reply = ch.orders_post(req)?;
+        if inproc::game_refused(&reply) {
+            return Err(inproc::refused_error("assignment"));
+        }
+        if !inproc::all_posted(&reply) {
+            return Err(Error::new(
+                "inproc_refused",
+                format!(
+                    "the module did not post the assignment to order {order}: {}",
+                    reply["reason"]
+                        .as_str()
+                        .or(reply["error"].as_str())
+                        .unwrap_or("?")
+                ),
+            ));
+        }
+        replies.push(reply);
+    }
+    Ok(json!({"moved":divisions.len(),"replies":replies}))
+}
+
+/// engineer 95: the group's divisions over its fronts (plan roots), by each front's weight (`weights` by root id,
+/// else the front's length in provinces) and by place; every front that has a line gets at least one while there
+/// are as many divisions as fronts. Each front's new divisions go to its one offensive when it has one (the attack
+/// carries them), else to the front. Returns the report and the divisions each order must hold after it.
+fn distribute_in_process(
+    process: &dyn Process,
+    ch: &mut inproc::Channel,
+    army: &str,
+    dir: &std::path::Path,
+    weights: &BTreeMap<i32, f64>,
+) -> Result<(Value, BTreeMap<i32, usize>)> {
+    let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+    let tree = group_tree(process, ch, group)?;
+    let roots = inproc_orders::root_rows(&tree);
+    if roots.is_empty() {
+        return Err(Error::new(
+            "plan_front_missing",
+            format!("{army} has no front to distribute its divisions over"),
+        ));
+    }
+    let mut holder = BTreeMap::new();
+    for (t, r) in roots.iter().enumerate() {
+        for d in r.all_divisions() {
+            holder.insert(d, t);
+        }
+    }
+    let targets: Vec<Vec<i32>> = roots.iter().map(|r| r.provinces.clone()).collect();
+    let w: Vec<f64> = roots
+        .iter()
+        .map(|r| {
+            weights
+                .get(&r.id)
+                .copied()
+                .unwrap_or((r.provinces.len() as f64).max(1.0))
+        })
+        .collect();
+    let shares = shares_by_place(process, dir, group, &targets, &w, &holder)?;
+    let mut rows = Vec::new();
+    let mut want = BTreeMap::new();
+    for (t, r) in roots.iter().enumerate() {
+        let has = r.all_divisions();
+        let to = r.assign_order();
+        let on_order: std::collections::BTreeSet<u64> = if to == r.id {
+            r.divisions.iter().copied().collect()
+        } else {
+            r.arrows
+                .iter()
+                .find(|(id, _)| *id == to)
+                .map(|(_, d)| d.iter().copied().collect())
+                .unwrap_or_default()
+        };
+        let moving: Vec<u64> = shares[t]
+            .iter()
+            .copied()
+            .filter(|d| !has.contains(d))
+            .collect();
+        let reply = assign_in_process(ch, group, to, &moving)?;
+        let stays = shares[t].iter().filter(|d| on_order.contains(d)).count();
+        want.insert(to, stays + moving.len());
+        rows.push(
+            json!({"front":r.id,"order":to,"provinces":r.provinces.len(),"weight":w[t],
+            "share":shares[t].len(),"held_before":has.len(),"moved_in":moving.len(),"reply":reply}),
+        );
+    }
+    Ok((
+        json!({"fronts":rows,"division_match":tree["division_match"]}),
+        want,
+    ))
+}
+
+/// engineer 95: divisions onto one order of `army`: the listed ones, or the `count` of the group nearest the order's
+/// line that it does not hold yet. Returns the report and the divisions the order must hold after it.
+fn assign_order_in_process(
+    process: &dyn Process,
+    ch: &mut inproc::Channel,
+    army: &str,
+    dir: &std::path::Path,
+    order: i32,
+    listed: Option<&[String]>,
+    count: Option<usize>,
+) -> Result<(Value, BTreeMap<i32, usize>)> {
+    let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+    let tree = group_tree(process, ch, group)?;
+    let (line, on) = inproc_orders::order_row(&tree, order).ok_or_else(|| {
+        Error::new(
+            "invalid_arguments",
+            format!("order {order} is not in {army}'s plan"),
+        )
+    })?;
+    let divisions: Vec<u64> = match (listed, count) {
+        (Some(ids), _) => ui::read(process, |r, i| armies::division_ptrs(r, i, ids))?
+            .into_iter()
+            .filter(|d| !on.contains(d))
+            .collect(),
+        (None, Some(n)) => {
+            let placed = ui::read(process, |r, i| armies::group_divisions_placed(r, i, group))?;
+            let pos = mapdata::positions(dir)?;
+            let at: Vec<(f64, f64)> = line.iter().filter_map(|p| pos.get(p).copied()).collect();
+            let mut free: Vec<(f64, u64)> = placed
+                .iter()
+                .filter(|(d, _)| !on.contains(d))
+                .map(|(d, p)| {
+                    let dist = p
+                        .and_then(|p| pos.get(&p).copied())
+                        .map(|(x, z)| {
+                            at.iter()
+                                .map(|(a, b)| (a - x).powi(2) + (b - z).powi(2))
+                                .fold(f64::INFINITY, f64::min)
+                        })
+                        .unwrap_or(f64::INFINITY);
+                    (dist, *d)
+                })
+                .collect();
+            free.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+            free.into_iter().take(n).map(|(_, d)| d).collect()
+        }
+        _ => {
+            return Err(Error::new(
+                "invalid_arguments",
+                "assign needs divisions or count",
+            ))
+        }
+    };
+    let reply = assign_in_process(ch, group, order, &divisions)?;
+    let want = BTreeMap::from([(order, on.len() + divisions.len())]);
+    Ok((
+        json!({"order":order,"held_before":on.len(),"moved_in":divisions.len(),"reply":reply,
+               "division_match":tree["division_match"]}),
+        want,
+    ))
+}
+
+/// The stated front through the module: read the army's plan, resolve the province chains, then one plan root
+/// (orders2.new_root, bound to the theatre front section holding the chain) per chain (or one orders.set_path on
+/// `replace_order`, the first chain).
+/// The journal's settle (one more battle-plan order on the army, from the external read) stays the authority.
+fn front_in_process(
+    process: &dyn Process,
+    ch: &mut inproc::Channel,
+    army: &str,
+    st: &FrontStated,
+) -> Result<Value> {
+    let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+    let tree = group_tree(process, ch, group)?;
+    let nodes = inproc_orders::tree_nodes(&tree)?;
+    let exe = &process
+        .identity()
+        .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+        .exe;
+    let dir = mapdata::game_dir(exe)?;
+    let mut no_border: Vec<String> = Vec::new();
+    let chains: Vec<Vec<i32>> = match (&st.provinces, &st.against) {
+        (Some(p), _) => {
+            if let Some(bad) = front_plan::foreign_province(process, &dir, p)? {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    format!("province {bad} is not in a state the player controls"),
+                ));
+            }
+            vec![p.clone()]
+        }
+        (None, Some((tags, own))) => {
+            // every border asked: a tag without a border in the given states is named, the others go on
+            let mut all = Vec::new();
+            let mut none = Vec::new();
+            for tag in tags {
+                match front_plan::border_front_provinces(process, &dir, tag, own.as_deref()) {
+                    Ok(c) => all.extend(c),
+                    Err(e) if e.code == "no_border" && tags.len() > 1 => none.push(tag.clone()),
+                    Err(e) => return Err(e),
+                }
+            }
+            if all.is_empty() {
+                return Err(Error::new(
+                    "no_border",
+                    format!("No own border against any of {tags:?} in the given states"),
+                ));
+            }
+            no_border = none;
+            all
+        }
+        _ => return Err(Error::new("invalid_arguments", "no front stated")),
+    };
+    let ids = inproc_orders::all_ids(&nodes);
+    let mut replies = Vec::new();
+    let mut coverage = Value::Null;
+    if let Some(order) = st.replace {
+        if !ids.contains(&order) {
+            return Err(Error::new(
+                "invalid_arguments",
+                format!("order {order} is not in {army}'s plan"),
+            ));
+        }
+        let req = inproc_orders::request("orders.set_path", group, order, &chains[0], None, None)?;
+        replies.push(ch.orders_post(req)?);
+    } else {
+        // engineer 89 (s89a/s89b, 27 Nov): COrderNewFrontCommand is the OFFENSIVE (an arrow and its target line in
+        // enemy land under the parent front; the game drops every own province), so a front line by command is a plan
+        // root bound to the theatre front section holding the chain, one per chain (an army or army group may hold
+        // several fronts). A root needs no parent: parent_order is ignored here. s89b: the root equals the Z click's
+        // order field by field (kind, flags, provinces, divisions) in 0.48 s against 2.72 s
+        let _ = (st.parent, &ids);
+        if !inproc::family_usable(&ch.hello, "orders2", inproc::mode()) {
+            return Err(Error::new(
+                "inproc_refused",
+                "a front line by command is a plan root (family orders2), which is not usable here",
+            ));
+        }
+        // engineer 95: a root binds to ONE section (one enemy's border): the line's pieces by section, one root
+        // each, created together; the group's divisions split over the fronts it has and the new ones by length and
+        // place; the provinces no section holds are reported (the game would have cut them silently)
+        let fronts = ch.fronts(group)?;
+        let mut pieces: Vec<(u64, i32, Vec<i32>)> = Vec::new();
+        let mut uncovered: Vec<i32> = Vec::new();
+        for chain in &chains {
+            let (found, left) = inproc_orders::section_pieces(&fronts, chain);
+            for (addr, sec, provs) in found {
+                match pieces
+                    .iter_mut()
+                    .find(|(a, s2, _)| *a == addr && *s2 == sec)
+                {
+                    Some(p) => p.2.extend(provs),
+                    None => pieces.push((addr, sec, provs)),
+                }
+            }
+            uncovered.extend(left);
+        }
+        if pieces.is_empty() {
+            return Err(Error::new(
+                "plan_front_missing",
+                "no front of the group's theatre touches the stated line (a root binds to an existing front)",
+            ));
+        }
+        let roots = inproc_orders::root_rows(&tree);
+        let mut holder = BTreeMap::new();
+        for (t, r) in roots.iter().enumerate() {
+            for d in r.all_divisions() {
+                holder.insert(d, t);
+            }
+        }
+        let mut targets: Vec<Vec<i32>> = roots.iter().map(|r| r.provinces.clone()).collect();
+        targets.extend(pieces.iter().map(|p| p.2.clone()));
+        let weights: Vec<f64> = targets.iter().map(|t| (t.len() as f64).max(1.0)).collect();
+        let shares = shares_by_place(process, &dir, group, &targets, &weights, &holder)?;
+        let mut made = Vec::new();
+        for (k, (addr, sec, provs)) in pieces.iter().enumerate() {
+            let share = &shares[roots.len() + k];
+            let (root, reply) = new_root_in_process(ch, group, *addr, *sec, share)?;
+            made.push(
+                json!({"root":root,"section":sec,"provinces":provs.len(),"divisions":share.len()}),
+            );
+            replies.push(reply);
+        }
+        // a division the split gives a standing front that it does not hold yet (one no front held) goes to it
+        let mut assigned = Vec::new();
+        for (t, r) in roots.iter().enumerate() {
+            let has = r.all_divisions();
+            let moving: Vec<u64> = shares[t]
+                .iter()
+                .copied()
+                .filter(|d| !has.contains(d))
+                .collect();
+            if !moving.is_empty() {
+                assigned.push(assign_in_process(ch, group, r.assign_order(), &moving)?);
+            }
+        }
+        let asked: usize = chains.iter().map(Vec::len).sum();
+        coverage = json!({"asked":asked,"on_roots":asked - uncovered.len(),"uncovered":uncovered,
+            "roots":made,"standing_fronts":roots.len(),"assigned":assigned,"no_border":no_border});
+    }
+    for r in &replies {
+        if inproc::game_refused(r) {
+            return Err(inproc::refused_error("front line"));
+        }
+        if !inproc::all_posted(r) {
+            return Err(Error::new(
+                "inproc_refused",
+                format!(
+                    "the module did not post the front: {}",
+                    r["reason"].as_str().or(r["error"].as_str()).unwrap_or("?")
+                ),
+            ));
+        }
+    }
+    Ok(
+        json!({"chains":chains.iter().map(Vec::len).collect::<Vec<_>>(),"coverage":coverage,"replies":replies}),
+    )
 }

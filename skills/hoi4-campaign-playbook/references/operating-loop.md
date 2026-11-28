@@ -126,7 +126,10 @@ fresh player-visible evidence. A war is won when the enemy owns and controls no
 state, or controls none of its own: the game can keep the war relation of an
 annexed enemy (a government in exile) for months, so `hoi4_wars` gives each war a
 plain `result` ("WON: ..." / "ongoing: ...") and `capitulated:<TAG>` reads true
-for a landless enemy. A capitulation event can name any country: read its text.
+for a landless enemy. "ongoing, no land front: ..." (listed in `wars.no_land_front`) is an
+enemy whose land touches none of ours: an overseas enemy, or the colonies a capitulated
+country keeps while its government in exile keeps the war; nothing attacks it over land.
+A capitulation event can name any country: read its text.
 
 Every game alert has an owner: an executor rule fed by a plan key, or an entry in
 `manage.alerts_ignore` with its reason in `manage.alerts_ignore_why` (lint

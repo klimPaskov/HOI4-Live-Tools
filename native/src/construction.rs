@@ -387,6 +387,105 @@ pub(crate) fn lines_in(
         members: entries,
     })
 }
+/// engineer 82: the building template of `key` in the game's building database (the object the construction view's
+/// click hands to the add-construction command; the in-process module checks its exact class again) and whether the
+/// game places it on a province: its province count (+0x26c) is above 0, the test the game's own reference
+/// constructors make (1.20 0x100db7dc0 / 0x100db7f30), so a mod's own province buildings route the same way.
+pub(crate) fn template_placement(r: &Reader<'_>, base: u64, key: &str) -> Result<(u64, bool)> {
+    let address = catalog::observe(r, base)?.required(key)?.address;
+    Ok((address, r.i32(address + 0x26c)? > 0))
+}
+
+/// engineer 82: one own construction line as the construction view's move reads it (1.20 0x10204cc20, the same code
+/// on 1.19.4.1): the line's kind (the game's own numbers: 1 a building, 2 a railway), its level count, the byte the
+/// move stores (+0x70: placed by hand), its building template, whether that template is a real one (+0x18), whether
+/// the line is active (+0x80 > 0: the building line's own "can be grouped" virtual reads it; a railway never groups).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct InprocLine {
+    pub(crate) address: u64,
+    pub(crate) amount: i32,
+    pub(crate) kind: u8,
+    pub(crate) placed: bool,
+    pub(crate) template: Option<u64>,
+    pub(crate) real: bool,
+    pub(crate) active: bool,
+}
+
+/// engineer 82: the own construction queue in queue order for the in-process module. A queue with a line of a kind
+/// this reader does not know is refused (the view's rule needs every neighbour's kind).
+pub(crate) fn inproc_queue(r: &Reader<'_>, base: u64) -> Result<Vec<InprocLine>> {
+    let (_, production) = economy::own_production(r, base)?;
+    let lines = lines_in(r, base, production, 0, false)?;
+    if !lines.unsupported.is_empty() {
+        return Err(invalid("The queue holds a line of an unknown kind"));
+    }
+    let mut out = Vec::with_capacity(lines.known.len());
+    for q in &lines.known {
+        let template = q.building_identity.map(|(_, template, _)| template);
+        let real = match template {
+            Some(t) => boolean(r, t + 0x18)?,
+            None => false,
+        };
+        out.push(InprocLine {
+            address: q.address,
+            amount: q.amount,
+            kind: if q.building { 1 } else { 2 },
+            placed: boolean(r, q.address + 0x70)?,
+            template,
+            real,
+            active: q.building && r.i32(q.address + 0x80)? > 0,
+        });
+    }
+    Ok(out)
+}
+
+/// engineer 82: the "placed by hand" byte the construction view computes for a move of line `from` to index `to`
+/// (1.20 0x10204cc20; 1.19.4.1 0x102049bd0): false when the line lands next to a line it groups with (an active line of
+/// the same building that is not placed by hand), else true; a line that cannot group (a railway, an inactive line)
+/// gets false, and a line moved onto its own place keeps its byte.
+pub(crate) fn placement_byte(lines: &[InprocLine], from: usize, to: usize) -> bool {
+    let Some(line) = lines.get(from) else {
+        return false;
+    };
+    // the line's own "can be grouped" virtual (railway: never; building: active)
+    if !(line.kind == 1 && line.active) {
+        return false;
+    }
+    if from == to {
+        return line.placed;
+    }
+    let groupable = |x: &InprocLine| {
+        x.active
+            && !x.placed
+            && match x.kind {
+                3 => true,
+                1 => x.real,
+                _ => false,
+            }
+    };
+    let index = to + usize::from(from < to);
+    let above = index.checked_sub(1).and_then(|i| lines.get(i));
+    let below = lines.get(index);
+    if let Some(a) = above {
+        if groupable(a)
+            && a.kind == line.kind
+            && (a.kind == 3 || (a.kind == 1 && a.template == line.template))
+        {
+            return false;
+        }
+    }
+    if let Some(b) = below {
+        if groupable(b) && b.kind == line.kind {
+            return match b.kind {
+                3 => false,
+                1 => b.template != line.template,
+                _ => true,
+            };
+        }
+    }
+    true
+}
+
 /// Queued amount of one canonical building in one own state versus elsewhere.
 /// Complete only when every line of that building has a proven own location.
 #[derive(Clone, Debug, PartialEq, Eq)]

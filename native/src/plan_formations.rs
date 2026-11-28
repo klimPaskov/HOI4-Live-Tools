@@ -338,6 +338,38 @@ fn pickable<'a>(rows: &'a [Value], tag: &str) -> Vec<&'a Value> {
         .collect()
 }
 
+/// Whether a commander row's army role is visible now: the roster's `visible_when` (the game's
+/// own `visible` trigger of the role, common/characters) holds. A leader the game hides stays in
+/// the country's leader list and an assignment by command reads back verified, then the game
+/// takes him off the army: Armee Pommern got eight generals in 150 days, Hoth, Rommel,
+/// Manteuffel, Student, Hausser, Dietrich and Hell all hidden until a focus (g92b, 27 Nov 2026).
+/// Only a trigger that holds counts: an unreadable one (a global flag) keeps the leader out.
+pub(super) fn role_visible(
+    state: &mut State,
+    tools: &dyn Tools,
+    row: &Value,
+    now: GameHour,
+) -> bool {
+    match &row["visible_when"] {
+        Value::Null => true,
+        when => super::judge(state, tools, when, now) == crate::plan_predicate::Truth::True,
+    }
+}
+
+/// The names of the rows whose army role the game hides now ([`role_visible`]).
+pub(super) fn hidden_now(
+    state: &mut State,
+    tools: &dyn Tools,
+    rows: &[Value],
+    now: GameHour,
+) -> HashSet<String> {
+    rows.iter()
+        .filter(|c| !c["visible_when"].is_null() && c["assigned_to"].is_null())
+        .filter(|c| !role_visible(state, tools, c, now))
+        .map(|c| text(&c["name"]).to_string())
+        .collect()
+}
+
 fn num(c: &Value, key: &str) -> i64 {
     c[key].as_i64().unwrap_or(0)
 }
@@ -410,6 +442,9 @@ pub(super) fn best_marshal_of(
     pickable(rows, tag)
         .into_iter()
         .filter(|c| !skip(text(&c["name"])))
+        // a leader whose role the game hides until a trigger is no fallback: the plan names him
+        // when his focus is due (the fill reads his trigger, see `role_visible`)
+        .filter(|c| c["visible_when"].is_null())
         .max_by_key(|c| {
             (
                 is_field_marshal(c),
@@ -451,11 +486,11 @@ pub(super) fn command_step(
             return Ok(Some(done));
         }
     }
-    // Armies on objective strikes keep their divisions: no merge moves them between armies.
-    if (plan["armies"].is_object() || plan["army_layout"].is_array())
-        && !state.skipped(now, "command", "armies")
-        && !super::plan_strike::owns_armies(state, plan)
-    {
+    // The merges follow the plan's layout; a general for every army that has none is standing
+    // work of every plan (g92a, 27 Nov 2026: Armee Pommern without a general for 147 days while
+    // free generals were listed). Armies on objective strikes keep their divisions (no merge),
+    // not their vacancies.
+    if !state.skipped(now, "command", "armies") {
         if let Some(done) = merge_and_lead(state, tools, plan, lease, now)? {
             return Ok(Some(done));
         }
@@ -607,7 +642,10 @@ fn merge_and_lead(
         .map(|a| text(&a["army"]).to_string())
         .collect();
     // 1. merges into formations
-    if cfg["concentrate"] != json!(false) && !list(plan, "army_layout").is_empty() {
+    if cfg["concentrate"] != json!(false)
+        && !list(plan, "army_layout").is_empty()
+        && !super::plan_strike::owns_armies(state, plan)
+    {
         let max = cfg["max"].as_u64().unwrap_or(24);
         let formations: Vec<String> = list(plan, "army_layout")
             .iter()
@@ -835,12 +873,18 @@ fn merge_and_lead(
     }
     // 2. a general for every army that has none
     let min_general = cfg["min_for_general"].as_u64().unwrap_or(1).max(1);
+    let lost_pairs = fills_that_did_not_hold(state, armies);
+    let lost: Vec<String> = lost_pairs
+        .iter()
+        .map(|(a, g)| format!("{a} ({g})"))
+        .collect();
     let leaderless: Vec<(String, Option<String>)> = armies
         .iter()
         .filter(|a| a["commander"].is_null())
         .filter(|a| a["division_count"].as_u64().unwrap_or(0) >= min_general)
         .map(|a| text(&a["army"]).to_string())
         .filter(|n| !state.skipped(now, "cgen", n))
+        .filter(|n| !state.done.contains_key(&format!("cgenstop:{n}")))
         .map(|n| {
             let hint = state
                 .layout
@@ -851,6 +895,22 @@ fn merge_and_lead(
         })
         .collect();
     if leaderless.is_empty() {
+        let resting: Vec<String> = armies
+            .iter()
+            .filter(|a| a["commander"].is_null())
+            .filter(|a| a["division_count"].as_u64().unwrap_or(0) >= min_general)
+            .map(|a| text(&a["army"]).to_string())
+            .collect();
+        let line = if resting.is_empty() {
+            "every army with divisions has a general".to_string()
+        } else {
+            format!(
+                "without a general, waiting for the next try: {}{}",
+                resting.join(", "),
+                lost_note(&lost)
+            )
+        };
+        plan_military::set_note(state, "command", line);
         state.skip(now, "command", "armies", DAY / 2);
         return Ok(None);
     }
@@ -868,6 +928,10 @@ fn merge_and_lead(
         })
         .collect();
     let rows = list(&read, "commanders");
+    // leaders the game hides now (their role's `visible` trigger does not hold) are never given
+    // an army: the game would take them off again
+    let hidden = hidden_now(state, tools, rows, now);
+    let stopped = classify_lost(state, rows, &lost_pairs, now);
     let busy: HashSet<String> = rows
         .iter()
         .filter(|c| !c["assigned_to"].is_null())
@@ -881,13 +945,18 @@ fn merge_and_lead(
     let usable = |state: &State, name: &str| {
         !name.is_empty()
             && !busy.contains(name)
+            && !hidden.contains(name)
             && !state.skipped(now, "cgenx", name)
             && rows
                 .iter()
                 .find(|c| text(&c["name"]) == name)
                 .is_none_or(|c| free_own(c, &tag))
     };
+    let mut unfilled: Vec<String> = Vec::new();
     for (army, hint) in leaderless {
+        if stopped.contains(&army) {
+            continue;
+        }
         let entry = hint.as_ref().and_then(|h| {
             list(plan, "army_layout")
                 .iter()
@@ -915,6 +984,7 @@ fn merge_and_lead(
         wanted.extend(pool.iter().map(|c| text(&c["name"]).to_string()));
         let Some(general) = wanted.into_iter().find(|g| usable(state, g)) else {
             state.skip(now, "cgen", &army, 7 * DAY);
+            unfilled.push(army);
             continue;
         };
         let (ok, why) = state.act(
@@ -925,7 +995,18 @@ fn merge_and_lead(
             "cg",
         )?;
         if ok {
-            state.skip(now, "cgen", &army, 365 * DAY);
+            // Filled: the vacancy is looked at again once the reads have settled, not a year
+            // later. A verified fill can be undone (another order takes the general, the game
+            // drops him): Armee Pommern's Hoth was verified at 1936.01.0x and the army read
+            // without a general twelve seconds later, then stayed so for 147 days behind the
+            // old 365-day rest (g92a, 27 Nov 2026). The fill is remembered so a loss names him.
+            state.skip(now, "cgen", &army, 2 * DAY);
+            state.done.insert(format!("cgenfill:{army}|{general}"), now);
+            plan_military::set_note(
+                state,
+                "command",
+                format!("general {general} -> {army}: {why}{}", lost_note(&lost)),
+            );
         } else {
             state.skip(now, "cgen", &army, DAY);
             // A name the commander list does not offer is not a general of this country now:
@@ -944,8 +1025,122 @@ fn merge_and_lead(
             "command: general {general} -> {army}: {ok} {why}"
         )));
     }
+    if !unfilled.is_empty() {
+        let free = pickable(rows, &tag).len();
+        plan_military::set_note(
+            state,
+            "command",
+            format!(
+                "without a general: {}: no general to give ({free} free commander(s) read, each \
+                 kept for an army group, leading, or resting after a refusal){}",
+                unfilled.join(", "),
+                lost_note(&lost)
+            ),
+        );
+    }
     state.skip(now, "command", "armies", DAY / 2);
     Ok(None)
+}
+
+/// Fills that did not hold: an army the lane gave a general (verified) that reads without one
+/// again. Each such general rests 30 days for that army's next fill (another general is tried:
+/// the same order would meet the same cause), and the loss is named in the lane's note. A fill
+/// that held (the army reads its general) is forgotten. Returns "army (general)" per loss.
+fn fills_that_did_not_hold(state: &mut State, armies: &[Value]) -> Vec<(String, String)> {
+    let fills: Vec<(String, String, String)> = state
+        .done
+        .keys()
+        .filter_map(|k| {
+            let rest = k.strip_prefix("cgenfill:")?;
+            let (army, general) = rest.split_once('|')?;
+            Some((k.clone(), army.to_string(), general.to_string()))
+        })
+        .collect();
+    let mut lost = Vec::new();
+    for (key, army, general) in fills {
+        let Some(row) = armies.iter().find(|a| text(&a["army"]) == army) else {
+            // the army is gone (merged, disbanded): nothing to learn
+            state.done.remove(&key);
+            continue;
+        };
+        match row["commander"].as_str() {
+            Some(c) if !c.trim().is_empty() => {
+                state.done.remove(&key);
+            }
+            _ => {
+                state.done.remove(&key);
+                lost.push((army, general));
+            }
+        }
+    }
+    lost
+}
+
+/// What a lost fill says, now that the roster is read: a general whose role the game hides
+/// (`visible_when`) was given by mistake and the visibility filter keeps him out from now on;
+/// any other loss has no known cause and is a fault to find, not a reason to try the next name.
+/// The first such loss of an army rests that general 30 days and lets one other general try;
+/// the second stops the fills of that army (`cgenstop:`) with the fault in the note, so a
+/// vacancy is never filled in a loop (owner: no assign/unassign churn). Returns the armies whose
+/// fills stop.
+fn classify_lost(
+    state: &mut State,
+    rows: &[Value],
+    lost: &[(String, String)],
+    now: GameHour,
+) -> HashSet<String> {
+    let mut stopped: HashSet<String> = state
+        .done
+        .keys()
+        .filter_map(|k| k.strip_prefix("cgenstop:").map(str::to_string))
+        .collect();
+    for (army, general) in lost {
+        let row = rows.iter().find(|c| text(&c["name"]) == general.as_str());
+        if row.is_some_and(|c| !c["visible_when"].is_null()) {
+            plan_military::set_note(
+                state,
+                "command_lost",
+                format!(
+                    "{general} left {army}: the game hides his army role until {} (common/characters visible); he is not given an army while it does not hold",
+                    row.map(|c| c["visible_when"].to_string()).unwrap_or_default()
+                ),
+            );
+            continue;
+        }
+        state.skip(now, "cgenx", general, 30 * DAY);
+        let prefix = format!("cgenlost:{army}#");
+        let n = state.done.keys().filter(|k| k.starts_with(&prefix)).count() + 1;
+        state.done.insert(format!("{prefix}{n}|{general}"), now);
+        if n >= 2 {
+            state.done.insert(format!("cgenstop:{army}"), now);
+            stopped.insert(army.clone());
+        }
+        plan_military::set_note(
+            state,
+            "command_lost",
+            format!(
+                "FAULT: {general}'s verified fill of {army} did not stay and no hidden role explains it ({n} such loss(es) on this army){}",
+                if n >= 2 {
+                    "; the army gets no further general until the cause is fixed (no churn)"
+                } else {
+                    "; one other general is tried"
+                }
+            ),
+        );
+    }
+    stopped
+}
+
+fn lost_note(lost: &[String]) -> String {
+    if lost.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "; verified fills that did not hold (the army reads without a general again; that \
+             general rests 30 days): {}",
+            lost.join(", ")
+        )
+    }
 }
 
 #[cfg(test)]
@@ -1387,8 +1582,126 @@ mod tests {
             out.starts_with("command: general Guillet -> Army 9: true"),
             "{out}"
         );
-        // given once: the army is not looked at again for a year
-        assert!(state.skipped(1000 + 300 * DAY, "cgen", "Army 9"));
+        // given once: the vacancy is looked at again only after the reads settle, and only
+        // while the army reads without a general (a led army is never touched)
+        assert!(state.skipped(1000 + DAY, "cgen", "Army 9"));
+        assert!(!state.skipped(1000 + 3 * DAY, "cgen", "Army 9"));
+    }
+
+    /// g92a (27 Nov 2026): a plan with no `armies` or `army_layout` key; Armee Pommern's verified
+    /// general was gone again within seconds, and the 365-day rest after a fill left the army
+    /// without a general for 147 days while free generals were listed. The vacancy is filled
+    /// without a plan entry, a fill that did not hold is named and another general is tried.
+    #[test]
+    fn a_vacancy_is_filled_without_a_plan_entry_and_a_fill_that_did_not_hold_tries_another_general()
+    {
+        let plan = json!({"war": {"me": "GER"}});
+        let commanders = json!({"commanders": [
+            {"name": "Hermann Hoth", "id": "GER_hoth", "assigned_to": null, "skill": 4, "attack": 4},
+            {"name": "Arno von Lenski", "id": "GER_lenski", "assigned_to": null, "skill": 2, "attack": 2}]});
+        let leaderless = json!({"armies": [
+            {"army": "Armee Pommern", "division_count": 5, "commander": null, "main_state": 1}]});
+        let tools = game(vec![
+            ("hoi4_armies", leaderless.clone()),
+            ("hoi4_commanders", commanders.clone()),
+        ]);
+        let mut state = State::default();
+        let out = command_step(&mut state, &tools, &plan, "l", 1000)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("command: general Hermann Hoth -> Armee Pommern: true"),
+            "{out}"
+        );
+        // two days on the army reads without a general again: Hoth's fill did not hold
+        let later = 1000 + 3 * DAY;
+        let tools = game(vec![
+            ("hoi4_armies", leaderless),
+            ("hoi4_commanders", commanders),
+        ]);
+        let out = command_step(&mut state, &tools, &plan, "l", later)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("command: general Arno von Lenski -> Armee Pommern: true"),
+            "{out}"
+        );
+        let note = plan_military::note_of(&state, "command").unwrap();
+        assert!(
+            note.contains("did not hold") && note.contains("Armee Pommern (Hermann Hoth)"),
+            "{note}"
+        );
+        // every army led: the lane says so (the omission row quotes it, not the marshals' rule)
+        let led = game(vec![(
+            "hoi4_armies",
+            json!({"armies": [{"army": "Armee Pommern", "division_count": 5,
+                "commander": "Arno von Lenski", "main_state": 1}]}),
+        )]);
+        let _ = command_step(&mut state, &led, &plan, "l", later + 3 * DAY).unwrap();
+        assert_eq!(
+            plan_military::note_of(&state, "command"),
+            Some("every army with divisions has a general")
+        );
+    }
+
+    /// g92b (27 Nov 2026): Armee Pommern got Hoth, Rommel, Manteuffel, Student, Hausser,
+    /// Dietrich, Hell and Heinrici in turn, each verified and gone: all but Heinrici are hidden
+    /// by their role's visible trigger in 1936. A hidden leader is never picked (the first fill
+    /// is Heinrici), and an unexplained loss lets one other general try, then the fills stop.
+    #[test]
+    fn hidden_generals_are_never_given_an_army_and_lost_fills_do_not_cycle() {
+        let plan = json!({"war": {"me": "GER"},
+            "army_layout": [{"name_hint": "L_pommern", "general": "Hermann Hoth", "role": "strike"}]});
+        let hidden = |name: &str, id: &str, skill: i64, when: Value| {
+            json!({"name": name, "id": id, "assigned_to": null, "skill": skill, "attack": skill,
+                   "visible_when": when})
+        };
+        let commanders = json!({"commanders": [
+            hidden("Hermann Hoth", "GER_hermann_hoth", 3,
+                   json!({"any": ["unread_trigger:has_global_flag", "focus_completed:GER_bribe_senior_officers"]})),
+            hidden("Erwin Rommel", "GER_erwin_rommel", 4, json!("focus_completed:GER_adopt_new_panzer_doctrine")),
+            hidden("Paul Hausser", "GER_paul_hausser", 4, json!("focus_completed:GER_strengthen_the_waffen_ss")),
+            {"name": "Gotthard Heinrici", "id": "GER_gotthard_heinrici", "assigned_to": null, "skill": 2, "attack": 2},
+            {"name": "Arno von Lenski", "id": "GER_arno_von_lenski", "assigned_to": null, "skill": 1, "attack": 1}]});
+        let leaderless = json!({"armies": [
+            {"army": "Armee Pommern", "division_count": 5, "commander": null, "main_state": 63}]});
+        let mut state = State::default();
+        state
+            .layout
+            .insert("L_pommern".into(), "Armee Pommern".into());
+        let mut picks = Vec::new();
+        let mut at = 1000;
+        for _ in 0..4 {
+            let tools = game(vec![
+                ("hoi4_armies", leaderless.clone()),
+                ("hoi4_commanders", commanders.clone()),
+            ]);
+            let _ = command_step(&mut state, &tools, &plan, "l", at).unwrap();
+            for (_, args) in tools.actions.borrow().iter() {
+                picks.push(text(&args["general"]).to_string());
+            }
+            at += 3 * DAY;
+        }
+        // the hidden ones never; Heinrici, lost without a cause, then one other, then nothing
+        assert_eq!(picks, ["Gotthard Heinrici", "Arno von Lenski"], "{picks:?}");
+        assert!(state.done.contains_key("cgenstop:Armee Pommern"));
+        let note = plan_military::note_of(&state, "command_lost").unwrap();
+        assert!(
+            note.contains("FAULT") && note.contains("no churn"),
+            "{note}"
+        );
+        // a hidden leader's trigger that holds makes him a candidate again (Rommel's focus done)
+        let mut state = State::default();
+        let row = hidden("Erwin Rommel", "GER_erwin_rommel", 4, json!(true));
+        let tools = game(vec![]);
+        assert!(role_visible(&mut state, &tools, &row, at));
+        let row = hidden(
+            "Hermann Hoth",
+            "GER_hermann_hoth",
+            3,
+            json!("unread_trigger:has_global_flag"),
+        );
+        assert!(!role_visible(&mut state, &tools, &row, at));
     }
 
     #[test]

@@ -22,7 +22,7 @@ use super::{
     loc, mgmt, panelkit as pk,
     settle::Verdict,
     ui::{accept_command, clear_notices, read, settled, wait},
-    ui_action::{self, refuse, Driven, Job},
+    ui_action::{self, refuse, Driven, Fail, Job},
     Guard, InputAuthority,
 };
 use crate::{
@@ -690,6 +690,37 @@ pub(super) fn call(
     };
     let id = super::string(args, "request_id")?;
     let token = super::string(args, "lease_token")?;
+    // engineer 85: in process (family `doctrine`): the view's own command for the template of the game's database,
+    // after the same typed refusals; a module refusal of its own runs the mouse path in the same call
+    if !actions.receipt_exists(id) {
+        if let Some(ch) = super::inproc::route("doctrine") {
+            let l = live(process, doctrine, track)?;
+            check(&l.snapshot, &l.catalog, &l.target)?;
+            let sub = match l.target.kind {
+                Kind::Grand => None,
+                Kind::Sub => {
+                    let folder = l.snapshot.folders.get(l.target.folder_index);
+                    match (folder, l.target.track.as_ref()) {
+                        (Some(f), Some((t, _))) => Some((f.template, *t)),
+                        _ => return Err(Error::new("action_uncertain", "Track place unread")),
+                    }
+                }
+            };
+            let name_key = l.target.name_key.clone();
+            // a database the read cannot walk (a build without the key) is the mouse path, never a failed call
+            if let Some(post) = read(process, |r, i| {
+                super::inproc_doctrine::objects(r, i, &name_key, sub)
+            })
+            .ok()
+            .flatten()
+            {
+                return in_process(
+                    ch, post, l, doctrine, track, id, token, process, keys, guard, authority,
+                    actions,
+                );
+            }
+        }
+    }
     let target: RefCell<Option<(Target, String)>> = RefCell::new(None);
     let job = Job {
         kind: "doctrine_adopt",
@@ -732,6 +763,85 @@ pub(super) fn call(
         }),
     };
     ui_action::run(job, id, token, process, keys, guard, authority, actions)
+}
+
+/// The adoption by the module's post, read back from the doctrine system (the same slot read as the mouse path) after
+/// the settle window; a module refusal of its own (nothing posted) runs the mouse path in the same call.
+#[allow(clippy::too_many_arguments)]
+fn in_process(
+    ch: super::inproc::Channel,
+    post: super::inproc_doctrine::Post,
+    l: Live,
+    doctrine: &str,
+    track: Option<&str>,
+    id: &str,
+    token: &str,
+    process: &(dyn Process + Send + Sync),
+    keys: &dyn GameInput,
+    guard: &mut Guard,
+    authority: &InputAuthority,
+    actions: &mut super::journal::GameJournal,
+) -> Result<Value> {
+    use super::inproc::{self, Routed};
+    guard.observe_context(process)?;
+    let epoch = guard.epoch.clone();
+    authority.authorize(token, &epoch)?;
+    let action = json!({"kind":"doctrine_adopt","doctrine":doctrine,"track":track});
+    let ch = RefCell::new(ch);
+    let reply: RefCell<Option<Value>> = RefCell::new(None);
+    let gui_seen: RefCell<Option<Value>> = RefCell::new(None);
+    let posted_at: std::cell::Cell<Option<std::time::Instant>> = std::cell::Cell::new(None);
+    let mut settle = || -> Result<Outcome> {
+        let now_l = live(process, doctrine, track)?;
+        let t = &now_l.target;
+        let now = slot_now(&now_l.snapshot, t);
+        let verdict = settle_slot(&t.name_key, now.as_ref().map(|o| o.as_deref()));
+        let detail = json!({"doctrine": t.id, "folder": t.folder, "slot": now.flatten(), "backend": "inprocess"});
+        let early = posted_at
+            .get()
+            .is_some_and(|p| p.elapsed() < inproc::IPC_SETTLE);
+        Ok(match verdict {
+            Verdict::Reached => Outcome::Reached(detail),
+            Verdict::Unknown => Outcome::Unknown,
+            _ if early => Outcome::Unknown,
+            v => v.outcome(detail),
+        })
+    };
+    let mut dispatch = || -> Result<()> {
+        authority.authorize(token, &epoch)?;
+        match super::inproc_doctrine::adopt(&mut ch.borrow_mut(), post) {
+            Routed::Done(v) => {
+                *reply.borrow_mut() = Some(v);
+                posted_at.set(Some(std::time::Instant::now()));
+                Ok(())
+            }
+            Routed::Refused(w) => Err(inproc::refused_error(&w)),
+            Routed::Gui => {
+                keys.preflight()?;
+                let display = l.display.clone().ok_or_else(|| {
+                    Error::new(
+                        "display_name_unknown",
+                        format!(
+                            "No English display name for {} in the install's localisation",
+                            l.target.name_key
+                        ),
+                    )
+                })?;
+                match adopt(process, keys, &l.target, &display) {
+                    Ok(seen) => {
+                        *gui_seen.borrow_mut() = Some(seen);
+                        Ok(())
+                    }
+                    Err(Fail::Refused(e)) | Err(Fail::Failed(e)) => Err(e),
+                }
+            }
+        }
+    };
+    let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+    Ok(
+        json!({"receipt":receipt,"tool":"doctrine_adopt","validated":false,"observed":gui_seen.into_inner(),
+        "in_process":reply.into_inner()}),
+    )
 }
 
 pub(super) fn tool() -> Value {
@@ -1124,14 +1234,40 @@ pub(super) fn officer_call(
                     .find(|s| s["view"] == json!(view) && s["index"] == json!(k))
                     .map(|s| s["taken"] == json!(true))
                     .unwrap_or(false);
+                // the branch's experience against the price the window shows (every cost
+                // modifier applied): a pick the pool cannot pay is refused before the click with
+                // both numbers (g92b, 27 Nov 2026: Political Loyalty clicked three times, each
+                // read back not taken, no reason given)
+                let held = read(process, doctrines::snapshot)
+                    .ok()
+                    .and_then(|s| doctrines::xp_index(view).map(|x| s.xp[x]));
+                if let (Some(price), Some(held)) = (entry["cost"].as_f64(), held) {
+                    if held + 1e-6 < price {
+                        return Err(refuse(
+                            "insufficient_experience",
+                            format!(
+                                "{want} costs {price} {view} experience and {} is held",
+                                mgmt::round(held, 1)
+                            ),
+                        ));
+                    }
+                }
                 pk::click(process, keys, "officer corps spirit", |_, _| Ok(target))?;
-                crate::phase::sleep(Duration::from_millis(500));
-                let after = slots_of(&read(process, |r, i| officer_widgets(r, i, false))?);
-                let taken = after
-                    .iter()
-                    .find(|s| s["view"] == json!(view) && s["index"] == json!(k))
-                    .map(|s| s["taken"] == json!(true))
-                    .unwrap_or(false);
+                // the slot is read again until it shows the spirit (the view refreshes on the
+                // game's own tick, not at once), up to three seconds
+                let mut taken = false;
+                for _ in 0..12 {
+                    crate::phase::sleep(Duration::from_millis(250));
+                    let after = slots_of(&read(process, |r, i| officer_widgets(r, i, false))?);
+                    taken = after
+                        .iter()
+                        .find(|s| s["view"] == json!(view) && s["index"] == json!(k))
+                        .map(|s| s["taken"] == json!(true))
+                        .unwrap_or(false);
+                    if taken && !before_taken {
+                        break;
+                    }
+                }
                 Ok(
                     json!({"slot": format!("{view}:{k}"), "spirit": entry["name"],
                     "cost": entry["cost"], "taken_before": before_taken, "taken_after": taken,

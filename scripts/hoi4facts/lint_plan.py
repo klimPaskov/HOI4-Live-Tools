@@ -406,6 +406,12 @@ module's docstring has the detail:
   focus.condition_unchecked  a planned focus gate the plan cannot decide offline, with no dated checkpoint
   decision.condition       a planned decision closed (or opening late) under the plan's timeline
   politics.visible         an advisor or law the game never shows or allows the plan country
+  politics.held_at_start   a plan pick whose idea the country already holds at the start (its history)
+  construction.requires_tech  a construction_plan building no start technology unlocks (lint_support.py)
+  projects.facility        a special project of a specialisation with no facility at the start (lint_support.py)
+  supply.trains            no train line from the start (lint_support.py)
+  supply.hubs              an operation's motorization without logistics.hubs (lint_support.py)
+  formations.keep          a formations.keep name that is neither a start nor a plan template (lint_support.py)
   diplomacy.borders_unheld  a declaration whose border states (gained ones included) no army covers
   plan.stop_date           stop_on_date before the run's end in a no-pause run
   manage.owner             an inventory item or alert with neither owner nor written reason
@@ -440,6 +446,7 @@ module's docstring has the detail:
   force.air_bases          a base in another country's land; fighters and CAS above the border air bases' capacity
   force.air_research       an airframe flown before the research plan unlocks it
   force.air_design         a designer airframe produced or flown with no variant and no design
+  force.air_design_blind   a plane design on a designer airframe naming no module (a blind design)
   force.air_doctrine       no air doctrine while the plan fights for the air
   force.air_fuel           wings with no fuel plan
   force.invasion           a landing without the fighters, or with a weaker fleet and no naval strike planes
@@ -617,6 +624,7 @@ NEW_RULES |= {"construction.requires_tech", "projects.facility", "formations.kee
              "supply.trains", "supply.hubs"}  # lint_support.py
 NEW_RULES |= {"force.home_divisions"}  # every start division outside the theatre has a stated use
 # the plan against the game's own conditions, the management inventory, production over all lines
+NEW_RULES |= {"politics.held_at_start"}  # a pick the start already holds holds power for nothing
 NEW_RULES |= {"focus.condition", "focus.condition_unchecked", "decision.condition", "politics.visible",
               "diplomacy.borders_unheld", "plan.stop_date", "manage.owner", "production.start_lines",
               "production.duplicate_line", "production.priority_all", "production.missing_line",
@@ -625,7 +633,8 @@ NEW_RULES |= {"focus.condition", "focus.condition_unchecked", "decision.conditio
 NEW_RULES |= {"force.required", "force.breakthrough", "force.single_template", "force.air", "force.invasion",
               "force.unused_line", "force.template_late", "force.readiness", "force.budget", "force.air_support",
               "force.air_none", "force.air_use", "force.air_lost", "force.air_deploy", "force.air_losses",
-              "force.air_bases", "force.air_research", "force.air_design", "force.air_doctrine", "force.air_fuel"}
+              "force.air_bases", "force.air_research", "force.air_design", "force.air_doctrine", "force.air_fuel",
+              "force.air_design_blind"}
 # the navy as an arm (lint_force_navy.py)
 NEW_RULES |= {"force.sea_required", "force.sea_control", "force.sea_screens", "force.sea_lift", "force.sea_port",
               "force.sea_patrol", "force.sea_raid", "force.carrier_air", "force.navy_unused", "force.navy_readiness",

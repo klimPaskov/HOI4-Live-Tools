@@ -56,7 +56,7 @@ def experience(snap, prev, facts):
         have = xp.get(pool)
         if have is None:
             continue
-        cap = facts["xp_cap"].get(pool, 500.0)
+        cap = (facts.get("xp_cap") or {}).get(pool)  # the loaded defines; unknown without them
         was = g(back, "doctrines", "experience", pool) if back else None
         gain = (have - was) / span if (was is not None and span) else None
         buys = []
@@ -67,19 +67,20 @@ def experience(snap, prev, facts):
                 buys.append(f"{f['folder']} grand doctrine ({f['grand_xp_cost']:.0f})")
             for t in f.get("open_tracks") or []:
                 buys.append(f"{f['folder']}/{t} subdoctrine")
-        spirit = min(facts["spirit_costs"].get(pool) or [20.0])
-        if "modify_officer_corps" in alerts and have >= spirit:
-            buys.append(f"an empty officer corps spirit slot (from {spirit:.0f})")
-        days_to_cap = (cap - have) / gain if gain and gain > 0 else None
+        # the game's own check that a spirit can be taken (its alert), never a price kept here
+        if "modify_officer_corps" in alerts:
+            buys.append("an officer corps spirit (the game marks a pick open)")
+        days_to_cap = (cap - have) / gain if cap and gain and gain > 0 else None
         spending = gain is not None and gain < 0
         if spending or (not buys and (days_to_cap is None or have < cap / 2)):
             continue
         trend = (f"+{gain * 30:.0f} a month, at the cap ({cap:.0f}, defines) in {days_to_cap:.0f} days: every "
-                 f"day after it is lost" if days_to_cap is not None else "not growing")
+                 f"day after it is lost" if days_to_cap is not None else
+                 ("growing, cap unknown (no defines read)" if gain and gain > 0 and not cap else "not growing"))
         what = ("; it can buy " + ", ".join(buys[:4])) if buys else (
             "; nothing the read shows is open to buy: spirits of the other slots, designs and refits "
             "(equipment designer), template edits, or a completed track's next subdoctrine")
-        sev = "high" if (days_to_cap is not None and days_to_cap <= 30) or have >= cap * 0.6 else "medium"
+        sev = "high" if (days_to_cap is not None and days_to_cap <= 30) or (cap and have >= cap * 0.6) else "medium"
         out.append(F("experience_unspent", sev, f"{pool} experience {have:.0f} unspent ({trend}){what}",
                      subject=pool, experience=round(have, 1), cap=cap,
                      days_to_cap=None if days_to_cap is None else round(days_to_cap),
@@ -105,9 +106,12 @@ def mastery(snap, facts):
             elif m == 0:
                 empty.append(f"{f['folder']}/{t['track']} {sub}")
     if done:
+        bank = (f"is reserved at {facts['bank_rate']:.0%} up to {facts['bank_max']:.0f} (defines)"
+                if facts.get("bank_rate") is not None and facts.get("bank_max") is not None
+                else "is only partly reserved (the defines give how much)")
         out.append(F("doctrine_track_complete", "medium",
                      f"{len(done)} doctrine track(s) past their last reward: {'; '.join(done[:5])}; further mastery "
-                     f"is reserved at {facts['bank_rate']:.0%} up to {facts['bank_max']:.0f}: a new subdoctrine on the "
+                     f"{bank}: a new subdoctrine on the "
                      f"track (its experience cost) starts its rewards with the reserve (what the switch keeps of the "
                      f"old rewards is a live check)", tracks=len(done)))
     if empty:
@@ -252,8 +256,8 @@ def laws(snap, prev, facts_dir=None, idle_men=False):
     if not drop:
         return []
     return [F("conscription_above_need", "medium",
-              f"{current} costs {drop} (files) while men sit idle; {best['law']} ({best['cost']:.0f} political "
-              f"power) recruits {best['modifiers'].get('conscription', 0):.1%} of the population instead of "
+              f"{current} costs {drop} (files) while men sit idle; {best['law']} (its price and whether it "
+              f"can be taken now are the game's: hoi4_politics_options) recruits {best['modifiers'].get('conscription', 0):.1%} of the population instead of "
               f"{cur['modifiers'].get('conscription', 0):.1%} and drops those penalties; worth it only if the "
               f"force's need (the plan's divisions, losses, garrisons) stays under the lower ceiling",
               law=current, lower=best["law"])]
@@ -282,9 +286,17 @@ def waits(snap, prev):
         limit, _ = R.deadline_days(o["item"], at_war)
         if days <= max(limit, 1):
             continue
-        said = note[:160] if note else "no reason given"
+        if o.get("owner_silent") or not note:
+            # a lane past the row's deadline that never said why it does not act is a fault of the
+            # rule, not a wait: its own code, counted by the gate packet (t1939n, 27 Nov 2026: 20
+            # rows read "lane training says: no reason given" for 100-150 game days)
+            out.append(F("lane_silent", "high",
+                         f"{o['item']} open {days} days, past its {limit}-day deadline, and lane {o.get('owner')} "
+                         f"states no reason: {note[:200] or 'the row carries no note'}",
+                         subject=o["item"], days_open=days, owner=o.get("owner"), note=note[:300]))
+            continue
         out.append(F("lane_wait_outlived", "high",
-                     f"{o['item']} open {days} days, past its {limit}-day deadline; lane {o.get('owner')} says: {said}",
+                     f"{o['item']} open {days} days, past its {limit}-day deadline; lane {o.get('owner')} says: {note[:160]}",
                      subject=o["item"], days_open=days, owner=o.get("owner"), note=note[:300]))
     return out
 

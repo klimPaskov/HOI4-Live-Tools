@@ -96,9 +96,15 @@ the strongest legitimate route; no message, lint or note treats a goal as doubtf
 * No deleting stockpiles, factories or research facilities. Dockyards may go only when the state is out of
   slots.
 
+## Owner's decisions (28 Nov 2026): allowed under FAIR
+
+* On the agent's own initiative: volunteer divisions, air volunteers, lend-lease and attaches, wherever the
+  game allows them. The multiplayer limits on volunteers and lend-lease below no longer bind.
+* The collaboration-government operation on the Soviet Union is allowed.
+* Paratroop drops are not used by default under FAIR; META may use them, and a roleplay request is honoured.
+
 ## Axis rules
 
-* No collaboration governments in the Soviet Union.
 * Military and docking access between the European Axis and Japan only once the Iran corridor is secured.
 * Sea Lion (invading Great Britain): the European Axis first holds 2 of Gibraltar, Malta and Suez; 1 is
   enough once Barbarossa has started.
@@ -131,7 +137,6 @@ the strongest legitimate route; no message, lint or note treats a goal as doubtf
 ## Allies rules
 
 * No Allied troops from outside mainland Europe in mainland Europe until France capitulates.
-* No volunteers outside Spain (exceptions below).
 * Take Iwo Jima, Taiwan and Okinawa before attacking mainland Japan.
 * Secure North Africa before invading the core Italian mainland. Islands are fine; attacks over land are
   exempt.
@@ -141,7 +146,6 @@ the strongest legitimate route; no message, lint or note treats a goal as doubtf
 **France**
 * No building or upgrading ports or air bases in France before capitulation.
 * All troops stay in mainland Europe before capitulation.
-* No lend-lease before capitulation; Republican Spain is the exception.
 
 **Soviet Union**
 * Attacks the Axis from 1942, or earlier once the Axis has invaded the mainland USA or UK.

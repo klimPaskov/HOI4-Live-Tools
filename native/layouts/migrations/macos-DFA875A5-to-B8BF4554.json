@@ -1,0 +1,114 @@
+{
+ "changed": {
+  "__TEXT,__const": 1,
+  "__TEXT,__cstring": 325,
+  "__TEXT,__text": 34,
+  "header": 16
+ },
+ "changed_spans": [
+  {
+   "hi": "0x261a330",
+   "kind": "text",
+   "lo": "0x261a0e0",
+   "where": "__TEXT,__text"
+  },
+  {
+   "hi": "0x30f82dd",
+   "kind": "rodata",
+   "lo": "0x30f82dc",
+   "where": "__TEXT,__const"
+  },
+  {
+   "hi": "0x313972b",
+   "kind": "cstring",
+   "lo": "0x313970b",
+   "where": "__TEXT,__cstring"
+  },
+  {
+   "hi": "0x325f842",
+   "kind": "cstring",
+   "lo": "0x325f82e",
+   "where": "__TEXT,__cstring"
+  },
+  {
+   "hi": "0x3261675",
+   "kind": "cstring",
+   "lo": "0x3261655",
+   "where": "__TEXT,__cstring"
+  },
+  {
+   "hi": "0x3268849",
+   "kind": "cstring",
+   "lo": "0x3268829",
+   "where": "__TEXT,__cstring"
+  },
+  {
+   "hi": "0x327c05f",
+   "kind": "cstring",
+   "lo": "0x327c006",
+   "where": "__TEXT,__cstring"
+  },
+  {
+   "hi": "0x3351031",
+   "kind": "cstring",
+   "lo": "0x3350fff",
+   "where": "__TEXT,__cstring"
+  },
+  {
+   "hi": "0x3351083",
+   "kind": "cstring",
+   "lo": "0x3351037",
+   "where": "__TEXT,__cstring"
+  },
+  {
+   "hi": "0x335109e",
+   "kind": "cstring",
+   "lo": "0x335108c",
+   "where": "__TEXT,__cstring"
+  },
+  {
+   "hi": "0x3384464",
+   "kind": "cstring",
+   "lo": "0x338445e",
+   "where": "__TEXT,__cstring"
+  },
+  {
+   "hi": "0x3384475",
+   "kind": "cstring",
+   "lo": "0x338446d",
+   "where": "__TEXT,__cstring"
+  },
+  {
+   "hi": "0x3384b3a",
+   "kind": "cstring",
+   "lo": "0x3384b05",
+   "where": "__TEXT,__cstring"
+  },
+  {
+   "hi": "0x3384ba4",
+   "kind": "cstring",
+   "lo": "0x3384b05",
+   "where": "__TEXT,__cstring"
+  }
+ ],
+ "from": {
+  "build_id": "DFA875A5-25BA-35E0-9736-627F8A5C4396",
+  "game_version": "1.19.4.1",
+  "sha256": "d440ad8823e1ca5106b2ff87bc5135acf1b40d56f6bf0a76b52b5b247a668e07"
+ },
+ "notes": [
+  "fields: every entry the matcher mapped is unchanged (confidence unchanged); keys it did not reach are assumed unchanged (confidence assumed), as on Linux 1.20, where 2,821 of 2,827 entries were identical",
+  "image: game_migrate table entries, then macos_build_migrate (vtables, symbols, sections, cstrings) and the matcher (globals, functions) for literals outside the tool modules",
+  "fields_default identity: a field key not listed keeps its value (the structures did not move)",
+  "engineer 70: 17 macOS literals resolved or confirmed by scripts/game_migrate resolution (aligned code / aligned RIP references) and the neighbouring delta; the rest of the old unresolved list is Linux-only or not an address",
+  "same-code from ED135FE5-CDA8-38E8-8835-3F7381B79974: every image value and field kept; changed spans 14 (__TEXT,__const, __TEXT,__cstring, __TEXT,__text)"
+ ],
+ "same_code_of": "macos-DFA875A5-to-ED135FE5.json",
+ "status": "same code as 1.20.0.0 ED135FE5-CDA8-38E8-8835-3F7381B79974 (game_migrate.py same-code): identical section layout; changed bytes __TEXT,__const 1, __TEXT,__cstring 325, __TEXT,__text 34, header 16; none of the 437 image values lies in or reads from them. static: every production macOS literal resolves (high or medium); not proven live until the 1.20 self-check (NOTES-1116 24 Nov engineer 70). Keys stay the 1.19.4.1 values: tables for other builds and platforms are never re-keyed; macOS 1.20 is a table like any other build.",
+ "system": "macos",
+ "to": {
+  "build_id": "B8BF4554-DC8D-3381-B277-9F4E6230CBA5",
+  "game_version": "1.20.1.0",
+  "sha256": "69994d57057814a5c72bdcdaabc4afa5695178ed4a0239ec4d4bc43b5137032a"
+ }
+}

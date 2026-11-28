@@ -479,9 +479,19 @@ pub(super) fn list(
             .collect::<Vec<_>>())
     })?;
     dismiss(process, keys, |r, i| Ok(!window_open(r, i)?));
+    // what each idea does and costs by the running game's scripts (crate::pick_value), so a
+    // standing order can buy by value
+    let catalog = super::mgmt::game_dir(process)
+        .ok()
+        .map(|d| crate::script::cached(&d, "pick_values", crate::pick_value::load));
     Ok(json!(found
         .into_iter()
-        .map(|(key, enabled)| json!({"idea":key,"enabled":enabled}))
+        .map(|(key, enabled)| {
+            let item = catalog.as_ref().and_then(|c| c.items.get(&key));
+            json!({"idea":key,"enabled":enabled,
+                "cost":item.and_then(|i| i.cost),
+                "effects":item.map(crate::pick_value::item_json)})
+        })
         .collect::<Vec<_>>()))
 }
 

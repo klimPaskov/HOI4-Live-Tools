@@ -303,12 +303,22 @@ fn when_holds(state: &mut State, tools: &dyn Tools, when: &Value, now: GameHour)
 }
 
 /// A section's last status line (the alerts rule reads the owning step's reason here).
+/// Every note of these rules (the lane-turn record reads them).
+pub(super) fn notes(state: &State) -> &BTreeMap<String, String> {
+    &state.military.notes
+}
+
 pub(super) fn note_of<'a>(state: &'a State, key: &str) -> Option<&'a str> {
     state.military.notes.get(key).map(String::as_str)
 }
 
 fn note(state: &mut State, rule: &str, line: impl Into<String>) {
     state.military.notes.insert(rule.to_string(), line.into());
+}
+
+/// [`note`] for the command rules kept in plan_formations.rs (their lane is `command`).
+pub(super) fn set_note(state: &mut State, rule: &str, line: impl Into<String>) {
+    note(state, rule, line);
 }
 
 fn off(plan: &Value, rule: &str) -> bool {
@@ -2588,9 +2598,12 @@ pub(super) fn group_marshal_step(
     };
     let tag = super::plan_formations::country_tag(state, tools, plan);
     let rows = list(&read, "commanders");
+    // leaders the game hides now (their role's visible trigger) cannot lead a group
+    let hidden = super::plan_formations::hidden_now(state, tools, rows, now);
     for (group, divisions) in vacant {
         let named = planned_marshals(state, plan, &roster, &group);
-        let skip = |n: &str| state.skipped(now, "gfmc", &format!("{group}|{n}"));
+        let skip =
+            |n: &str| hidden.contains(n) || state.skipped(now, "gfmc", &format!("{group}|{n}"));
         // the commander list closed: the read knows only the leaders who lead something, so a
         // free field marshal is invisible (w46a1, 23 Nov 2026: leader_roster_read false, Army
         // Group 2 leaderless all war). The plan's named marshals who lead no group are tried by
@@ -2859,19 +2872,104 @@ fn fleet_shape(
             break;
         }
     }
+    if order.is_none() && cfg["reserve_stays"] != json!(true) {
+        order = reserve_out(state, cfg, fleets, invasion, now);
+    }
     let Some((tool, args, key, what)) = order else {
         return Ok(None);
     };
     let (ok, why) = state.act(tools, lease, tool, args, "ns")?;
-    // a refused order waits a week; a merge is not repeated within the week either (task
-    // forces in other ports stay apart and would be merged again every tick)
-    if !ok || tool == "hoi4_fleet_merge" {
+    // a refused order waits a week; a merge or a move out of the reserve is not repeated within
+    // the week either (task forces in other ports stay apart and would be merged again every
+    // tick; a moved task force shows in its new fleet on the next read)
+    if !ok || tool == "hoi4_fleet_merge" || what.contains("out of the reserve fleet") {
         state.skip(now, "nshape", &key, 7 * DAY);
     }
     if !ok && code(&why) == "nothing_to_change" {
         note(state, "navy_shape", format!("{what}: nothing to change"));
     }
     Ok(Some(format!("navy shape: {what}: {ok} {why}")))
+}
+
+/// Submarines in a task force's `ships_by_type` (the unit type names the hull: "submarine").
+fn subs_of(tf: &Value) -> (u64, u64) {
+    tf["ships_by_type"].as_object().map_or((0, 0), |m| {
+        m.iter().fold((0, 0), |(subs, all), (kind, n)| {
+            let n = n.as_u64().unwrap_or(0);
+            (
+                subs + if kind.contains("submarine") { n } else { 0 },
+                all + n,
+            )
+        })
+    })
+}
+
+/// A task force of the reserve fleet the plan does not keep there (`navy.reserve`) goes to a
+/// fleet with an admiral by its role: submarines to the fleet that holds the most submarines (the
+/// raiders), surface ships to the one with the most surface ships. A reserve fleet takes no
+/// admiral and no mission, and new ships land in it (t1939n, 27 Nov 2026: 23 ships idle there,
+/// the admiral_assignable alert open 259 days on it). `navy.reserve_stays: true` keeps them; pure
+/// but for the skip check.
+fn reserve_out(
+    state: &State,
+    cfg: &Value,
+    fleets: &[Value],
+    invasion: Option<&str>,
+    now: GameHour,
+) -> Option<(&'static str, Value, String, String)> {
+    let reserve = reserve_fleet(fleets)?;
+    let kept = strings(cfg, "reserve");
+    let led: Vec<&Value> = fleets
+        .iter()
+        .filter(|f| {
+            let name = text(&f["fleet"]);
+            !same_name(name, reserve)
+                && !invasion.is_some_and(|i| same_name(i, name))
+                && f["admiral"].as_str().is_some_and(|a| !a.trim().is_empty())
+        })
+        .collect();
+    let share = |f: &Value, subs: bool| -> u64 {
+        list(f, "task_forces")
+            .iter()
+            .map(|t| {
+                let (s, all) = subs_of(t);
+                if subs {
+                    s
+                } else {
+                    all - s
+                }
+            })
+            .sum()
+    };
+    let row = fleets
+        .iter()
+        .find(|f| same_name(text(&f["fleet"]), reserve))?;
+    for tf in list(row, "task_forces") {
+        let name = text(&tf["task_force"]).to_string();
+        if name.is_empty()
+            || kept.iter().any(|k| same_name(k, &name))
+            || state.done.contains_key(&format!("nrep:{name}"))
+            || state.skipped(now, "nshape", &name)
+        {
+            continue;
+        }
+        let (subs, all) = subs_of(tf);
+        let raider = all > 0 && subs * 2 >= all;
+        let to = led
+            .iter()
+            .max_by_key(|f| share(f, raider))
+            .map(|f| text(&f["fleet"]).trim().to_string())?;
+        return Some((
+            "hoi4_fleet_assign",
+            json!({"task_force": name, "to_fleet": to}),
+            name.clone(),
+            format!(
+                "{name} ({all} ships{}) out of the reserve fleet into {to}",
+                if raider { ", submarines" } else { "" }
+            ),
+        ));
+    }
+    None
 }
 
 fn navy_step(
@@ -3134,10 +3232,21 @@ fn navy_step(
         });
         let mut line = admirals.join("; ");
         if all_led {
+            // The game's alert is the naval headquarters' own (alert_headquarter_admiral: "Assign
+            // an admiral to increase effectiveness of Task Forces operating within the range of
+            // Naval Headquarters"): a headquarters building takes admirals of its own (up to the
+            // define MAX_ADMIRAL_HEADQUARTER_ASSIGNMENTS), and a led fleet never closes it
+            // (g92a, 27 Nov 2026: open 150.8 days). The game's command is found (engineer 102,
+            // 28 Nov: CAssignAdmiralToNavyHeadquarter, module op navyhq.admiral, its family off
+            // until it passes live); the headquarters read it needs (the country's headquarters
+            // items and the admirals they hold) is not built, and no mouse path is known, so the
+            // lane names the gap.
             line.push_str(
-                "; every fleet that takes an admiral has one: the alert rests on the reserve \
-                 fleet (no admiral slot) or on admirals with no fleet to lead (no fleet is \
-                 founded for an admiral alone)",
+                "; every fleet that takes an admiral has one: the alert is a naval headquarters \
+                 without an admiral (the game's alert_headquarter_admiral), which no tool fills \
+                 yet (gap navy.hq_admiral: the game's command navyhq.admiral is found and off \
+                 until passed live; the headquarters read is missing); leave it open, it is a \
+                 tool gap, not a lane choice",
             );
         }
         note(state, "admiral_assignable", line);
@@ -3364,6 +3473,19 @@ fn navy_step(
             )));
         }
     }
+    // 4. a task force no planned mission covers (engineer 102, 28 Nov 2026: task forces of fleets
+    // the plan does not name sat on hold through the war)
+    if let Some(line) = composition_mission(
+        state,
+        tools,
+        cfg,
+        fleets,
+        invasion_fleet.as_deref(),
+        lease,
+        now,
+    )? {
+        return Ok(Some(line));
+    }
     state.skip(now, "mnavy", "x", 3 * DAY);
     let mut line = format!("{on_plan} task force(s) on their planned mission");
     if !missing.is_empty() {
@@ -3378,6 +3500,142 @@ fn navy_step(
 /// A task force the game is sending home or holding for repairs: on hold below full strength,
 /// at sea (sailing home) or in port (repairing). g17a (17 Nov 2026): a training school on hold
 /// in port at 94% (weakest ship 89%) dropped the exercise order twice; orders wait for 100%.
+/// The mission a task force's composition calls for: submarines raid convoys (a submarine's range
+/// covers distant seas from few ports, and a raider that is not hunting is wasted), capital ships
+/// and heavy cruisers form a strike force, screens alone patrol. The hull names are the game's
+/// unit types as `ships_by_type` reads them, matched by part so modded hulls of the same kind fit.
+fn mission_by_composition(tf: &Value) -> Option<&'static str> {
+    let (subs, all) = subs_of(tf);
+    if all == 0 {
+        return None;
+    }
+    if subs * 2 >= all {
+        return Some("convoy_raiding");
+    }
+    let heavy = tf["ships_by_type"].as_object().is_some_and(|m| {
+        m.iter().any(|(kind, n)| {
+            n.as_u64().unwrap_or(0) > 0
+                && ["battleship", "battle_cruiser", "carrier", "heavy_cruiser"]
+                    .iter()
+                    .any(|h| kind.contains(h))
+        })
+    });
+    Some(if heavy { "strike_force" } else { "patrol" })
+}
+
+/// Step 4 of the navy: at war, a task force on hold at full strength that no planned mission
+/// covers gets the mission its composition calls for, in the sea regions its fleet holds. A fleet
+/// with no region is named (the plan must give it one) rather than sent somewhere guessed. In
+/// peace a task force waits in port (no fuel, no accidents). `navy.by_composition: false` with
+/// `navy.by_composition_why` leaves them to the plan, with that reason in the notes.
+fn composition_mission(
+    state: &mut State,
+    tools: &dyn Tools,
+    cfg: &Value,
+    fleets: &[Value],
+    invasion: Option<&str>,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if cfg["by_composition"] == json!(false) {
+        let why = text(&cfg["by_composition_why"]);
+        note(
+            state,
+            "navy_composition",
+            format!(
+                "task forces with no planned mission are left by the plan: {}",
+                if why.trim().is_empty() {
+                    "no reason given"
+                } else {
+                    why.trim()
+                }
+            ),
+        );
+        return Ok(None);
+    }
+    // at war with anyone, as the game's war read says (an unreadable read is peace)
+    let at_war = tools
+        .call("hoi4_wars", &json!({}))
+        .is_ok_and(|w| w["wars"]["at_war"] == json!(true));
+    if !at_war {
+        return Ok(None);
+    }
+    let reserve = reserve_fleet(fleets).map(str::to_string);
+    let plans = fleet_plans(cfg);
+    let mut unregioned: Vec<String> = Vec::new();
+    for row in fleets {
+        let fleet = text(&row["fleet"]).trim().to_string();
+        if fleet.is_empty()
+            || invasion.is_some_and(|i| same_name(i, &fleet))
+            || reserve.as_deref().is_some_and(|r| same_name(r, &fleet))
+        {
+            continue;
+        }
+        let planned = plans.iter().find(|fp| same_name(&fp.fleet, &fleet));
+        let has_region = !list(row, "assigned_regions").is_empty();
+        for tf in list(row, "task_forces") {
+            let tname = text(&tf["task_force"]).to_string();
+            if tname.is_empty()
+                || tf["mission"]["name"].as_str() != Some("hold")
+                || returning_for_repair(tf, "hold")
+                || state.done.contains_key(&format!("nrep:{tname}"))
+                || state
+                    .done
+                    .contains_key(&format!("nmis:{tname}:composition"))
+                || state.skipped(now, "navtf", &tname)
+            {
+                continue;
+            }
+            // a planned mission that names this task force or every task force: the plan's
+            // step 3 owns it (its when may simply not hold yet)
+            if planned.is_some_and(|fp| {
+                fp.missions.iter().any(|(_, m)| {
+                    m["task_force"]
+                        .as_str()
+                        .is_none_or(|t| same_name(t, &tname))
+                })
+            }) {
+                continue;
+            }
+            let Some(mission) = mission_by_composition(tf) else {
+                continue;
+            };
+            if !has_region {
+                unregioned.push(format!("{tname} ({fleet}, {mission})"));
+                continue;
+            }
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_fleet_mission",
+                json!({"task_force": tname, "mission": mission}),
+                "nm",
+            )?;
+            if ok || code(&why) == "nothing_to_change" {
+                state.done.insert(format!("nmis:{tname}:composition"), now);
+            } else {
+                state.skip(now, "navtf", &tname, 3 * DAY);
+            }
+            return Ok(Some(format!(
+                "navy: {tname} ({fleet}) hold -> {mission} by its composition (no planned \
+                 mission): {ok} {why}"
+            )));
+        }
+    }
+    if !unregioned.is_empty() {
+        note(
+            state,
+            "navy_composition",
+            format!(
+                "at war on hold, no planned mission and no sea region in the fleet (the plan's \
+                 navy.fleets[].missions[].regions names one): {}",
+                unregioned.join(", ")
+            ),
+        );
+    }
+    Ok(None)
+}
+
 fn returning_for_repair(tf: &Value, current: &str) -> bool {
     current == "hold" && tf["strength_percent"].as_f64().is_some_and(|s| s < 99.5)
 }
@@ -4694,6 +4952,50 @@ mod tests {
             why.starts_with("Kriegsmarine: Raeder; Flotta 1: the reserve fleet, no admiral slot; every fleet that takes an admiral has one"),
             "{why}"
         );
+    }
+
+    #[test]
+    fn reserve_fleet_ships_go_to_a_led_fleet_by_role_unless_the_plan_keeps_them() {
+        let fleets = json!([
+            {"fleet": "Kriegsmarine", "admiral": "Raeder", "task_forces": [
+                {"task_force": "Main", "mission": {"name": "strike_force"},
+                 "ships_by_type": {"heavy_cruiser": 3, "destroyer": 6}}]},
+            {"fleet": "U-Boote", "admiral": "Dönitz", "task_forces": [
+                {"task_force": "Wolf", "mission": {"name": "convoy_raiding"},
+                 "ships_by_type": {"submarine": 12}}]},
+            {"fleet": "Flotta 1", "admiral": null, "task_forces": [
+                {"task_force": "New subs", "mission": {"name": "reserve"},
+                 "ships_by_type": {"submarine": 4}},
+                {"task_force": "New screens", "mission": {"name": "reserve"},
+                 "ships_by_type": {"destroyer": 2}}]}]);
+        let rows = fleets.as_array().unwrap();
+        let state = State::default();
+        let (tool, args, _, what) = reserve_out(&state, &json!({}), rows, None, START).unwrap();
+        assert_eq!(tool, "hoi4_fleet_assign");
+        assert_eq!(
+            args,
+            json!({"task_force": "New subs", "to_fleet": "U-Boote"})
+        );
+        assert!(what.contains("4 ships, submarines"), "{what}");
+        let keep = json!({"reserve": ["New subs"]});
+        let (_, args, _, _) = reserve_out(&state, &keep, rows, None, START).unwrap();
+        assert_eq!(
+            args,
+            json!({"task_force": "New screens", "to_fleet": "Kriegsmarine"})
+        );
+        // the move goes out once a week, not every tick
+        let tools = fake(vec![("hoi4_fleets", json!({"fleets": fleets}))]);
+        let plan = json!({"navy": {"posture": "coastal", "reserve": ["New screens"]}});
+        let mut state = State::default();
+        for day in 0..3 {
+            navy_step(&mut state, &tools, &plan, "l", START + day * DAY).unwrap();
+        }
+        let moved: Vec<Value> = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_fleet_assign")
+            .map(|(_, a)| a["task_force"].clone())
+            .collect();
+        assert_eq!(moved, vec![json!("New subs")]);
     }
 
     #[test]
@@ -6246,6 +6548,82 @@ mod tests {
             .any(|(n, a)| a["army"] == "Guardia"
                 && a.get("request_id").is_some()
                 && n != "hoi4_army_move"));
+    }
+
+    #[test]
+    fn at_war_a_task_force_no_plan_covers_takes_the_mission_its_composition_calls_for() {
+        let tfs = |wolf: &str, main: &str| {
+            json!({"fleets": [
+                {"fleet": "Raiders", "admiral": "A", "home_port": {"state_id": 2},
+                 "assigned_regions": [{"key": "North Atlantic", "name": "North Atlantic"}],
+                 "task_forces": [
+                    {"task_force": "Wolf", "mission": {"name": wolf}, "strength_percent": 100.0,
+                     "ships_by_type": {"submarine": 8}},
+                    {"task_force": "Main", "mission": {"name": main}, "strength_percent": 100.0,
+                     "ships_by_type": {"battleship": 2, "destroyer": 4}}]},
+                {"fleet": "Coast", "admiral": "B", "home_port": {"state_id": 9},
+                 "assigned_regions": [],
+                 "task_forces": [
+                    {"task_force": "Screens", "mission": {"name": "hold"}, "strength_percent": 100.0,
+                     "ships_by_type": {"destroyer": 6}},
+                    {"task_force": "Hurt", "mission": {"name": "hold"}, "strength_percent": 70.0,
+                     "ships_by_type": {"submarine": 3}}]}]})
+        };
+        let tools = fake(vec![
+            ("hoi4_fleets", tfs("hold", "hold")),
+            (
+                "hoi4_wars",
+                json!({"wars": {"at_war": false, "enemies": []}}),
+            ),
+        ]);
+        let plan = json!({"navy": {"posture": "blue_water"}});
+        let mut state = State::default();
+        // in peace every task force waits in port
+        assert_eq!(
+            navy_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(actions(&tools).is_empty());
+        tools.reply(
+            "hoi4_wars",
+            json!({"wars": {"at_war": true, "enemies": ["ENG"]}}),
+        );
+        let now = START + 4 * DAY;
+        assert_eq!(
+            navy_step(&mut state, &tools, &plan, "l", now).unwrap().as_deref(),
+            Some("navy: Wolf (Raiders) hold -> convoy_raiding by its composition (no planned mission): true Verified")
+        );
+        tools.reply("hoi4_fleets", tfs("convoy_raiding", "hold"));
+        assert_eq!(
+            navy_step(&mut state, &tools, &plan, "l", now).unwrap().as_deref(),
+            Some("navy: Main (Raiders) hold -> strike_force by its composition (no planned mission): true Verified")
+        );
+        tools.reply("hoi4_fleets", tfs("convoy_raiding", "strike_force"));
+        // the screens' fleet holds no sea region: named, not guessed; a damaged task force waits
+        assert_eq!(
+            navy_step(&mut state, &tools, &plan, "l", now).unwrap(),
+            None
+        );
+        let note = &state.military.notes["navy_composition"];
+        assert!(note.contains("Screens (Coast, patrol)"), "{note}");
+        assert!(!note.contains("Hurt"), "{note}");
+        assert_eq!(actions(&tools).len(), 2);
+        // a task force the plan names is the plan's (its when may not hold yet)
+        let mut state = State::default();
+        let planned = json!({"navy": {"fleets": [{"fleet": "Raiders",
+            "missions": [{"mission": "convoy_escort", "when": "date >= 1950.1.1"}]}]}});
+        tools.reply("hoi4_fleets", tfs("hold", "hold"));
+        let before = actions(&tools).len();
+        assert_eq!(
+            navy_step(&mut state, &tools, &planned, "l", now).unwrap(),
+            None
+        );
+        assert_eq!(actions(&tools).len(), before);
+        // the plan can leave them with a reason
+        let mut state = State::default();
+        let off = json!({"navy": {"by_composition": false, "by_composition_why": "ports only"}});
+        assert_eq!(navy_step(&mut state, &tools, &off, "l", now).unwrap(), None);
+        assert!(state.military.notes["navy_composition"].contains("ports only"));
     }
 }
 

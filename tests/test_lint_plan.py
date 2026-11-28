@@ -65,7 +65,8 @@ class CalendarAndHelpers(unittest.TestCase):
 # name a rule from these lists before lint_plan.py or the executor has it; drop a name here once it lands.
 PENDING_LINT_RULES = set()  # every lesson's lint rule is in lint_plan.py now
 THIS_PASS = {"focus.condition", "focus.condition_unchecked", "decision.condition", "decision.condition_unchecked",
-             "politics.visible", "politics.exclusive", "politics.dual_role", "diplomacy.borders_unheld",
+             "politics.visible", "politics.held_at_start", "politics.exclusive", "politics.dual_role",
+             "diplomacy.borders_unheld",
              "plan.stop_date", "manage.owner", "production.start_lines", "production.duplicate_line",
              "production.priority_all", "production.missing_line", "production.need_balance",
              "production.parked_request", "production.need_cap", "construction.capacity", "plan.ai_baseline"}
@@ -77,7 +78,7 @@ FORCE_RULES = {"force.required", "force.breakthrough", "force.single_template", 
               "force.unused_line", "force.template_late", "force.readiness", "force.anti_tank",
               "force.anti_air", "force.budget", "force.air_support", "force.air_none", "force.air_use",
               "force.air_lost", "force.air_deploy", "force.air_losses", "force.air_bases", "force.air_research",
-              "force.air_design", "force.air_doctrine", "force.air_command", "force.air_defence", "force.air_fuel",
+              "force.air_design", "force.air_design_blind", "force.air_doctrine", "force.air_command", "force.air_defence", "force.air_fuel",
               "force.air_resources"}
 # the navy as an arm and the dominance standard (lint_force_navy.py, test_force_navy, test_force_decisive)
 FORCE_RULES |= {"force.bombers", "force.design_cost", "force.decisive", "force.sea_required", "force.sea_control",
@@ -339,6 +340,9 @@ class HandPlans(unittest.TestCase):
             ("supply.axis_reach", "war_by_phase.P3_gondar_afar.axes[2] state 837"),
             ("war.encircle", "war.direct_moves"),  # direct moves switch encirclement off
             ("war.planning_wait", "war.direct_moves"),  # direct moves build no planning
+            # no train line: the 1936 colonial war ran on the start trains (the rule came after the plan,
+            # #352; a hand plan reports it as a warning)
+            ("supply.trains", "logistics.trains"),
             ("war.supply_floor", "war.supply_floor"),  # 30 is under the 35% attrition line
             # the Ca.101 and Ca.133 wings at home: no selector names them and the war missions never reach them
             ("air.idle_wings", "air_plan"),
@@ -410,6 +414,9 @@ class HandPlans(unittest.TestCase):
             ("supply.axis_reach", "war_by_phase.P4_south.axes[0] state 844"),
             ("war.encircle", "war.direct_moves"),
             ("war.planning_wait", "war.direct_moves"),
+            # no train line: the 1936 colonial war ran on the start trains (the rule came after the plan,
+            # #352; a hand plan reports it as a warning)
+            ("supply.trains", "logistics.trains"),
             ("war.supply_floor", "war.supply_floor"),  # 20 is under the 35% attrition line
             # with By Blood Alone the category of ETH_defeat_italy is never visible
             ("decision.condition", "decisions[0]"),

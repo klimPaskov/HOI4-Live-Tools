@@ -236,6 +236,96 @@ pub(super) fn check_assignment(
     Ok(())
 }
 
+/// One script trigger block as a plan predicate (plan_predicate.rs): `has_completed_focus`
+/// becomes `focus_completed:<key>`, `OR`/`AND` become any/all, `NOT` (a NOR in the game's
+/// scripts) becomes not-any, `always` a constant; every other trigger becomes an atom the server
+/// cannot read (`unread_trigger:<key>`, always unknown), so a trigger is never guessed true.
+fn trigger_when(block: &[crate::script::Entry]) -> Value {
+    use crate::script::Val;
+    let parts: Vec<Value> = block
+        .iter()
+        .filter(|e| !e.key.is_empty())
+        .map(|e| match (e.key.as_str(), &e.val) {
+            ("has_completed_focus", Val::Scalar(k)) => json!(format!("focus_completed:{k}")),
+            ("OR", Val::Block(b)) => json!({"any": trigger_list(b)}),
+            ("AND", Val::Block(b)) => json!({"all": trigger_list(b)}),
+            ("NOT", Val::Block(b)) => json!({"not": {"any": trigger_list(b)}}),
+            ("always", Val::Scalar(v)) if v == "yes" => json!(true),
+            ("always", Val::Scalar(v)) if v == "no" => json!(false),
+            (key, _) => json!(format!("unread_trigger:{key}")),
+        })
+        .collect();
+    match parts.len() {
+        1 => parts.into_iter().next().unwrap_or(Value::Null),
+        _ => json!({ "all": parts }),
+    }
+}
+
+fn trigger_list(block: &[crate::script::Entry]) -> Vec<Value> {
+    block
+        .iter()
+        .filter(|e| !e.key.is_empty())
+        .map(|e| trigger_when(std::slice::from_ref(e)))
+        .collect()
+}
+
+/// The game's `visible` trigger of each character's army-leader role, as a plan predicate, by
+/// character id (common/characters of the running game, mods included). A leader whose role is
+/// not visible stays in the country's leader list, and an assignment by command reads back
+/// verified, but the game takes him off the army again: Armee Pommern was given Hoth, Rommel,
+/// Manteuffel, Hausser and Dietrich in turn (g92b, 27 Nov 2026), each hidden until a focus. A
+/// character with a role that has no `visible` trigger is absent (always visible). Pure.
+pub(super) fn visible_whens(entries: &[crate::script::Entry]) -> BTreeMap<String, Value> {
+    use crate::script::{Block, Val};
+    let mut out = BTreeMap::new();
+    for top in entries.iter().filter(|e| e.key == "characters") {
+        for character in top.val.block() {
+            let roles: Vec<&[crate::script::Entry]> = ["corps_commander", "field_marshal"]
+                .iter()
+                .filter_map(|r| character.val.block().find_val(r))
+                .map(Val::block)
+                .collect();
+            if roles.is_empty() {
+                continue;
+            }
+            // a role with no trigger makes the leader visible whatever the other says
+            if roles.iter().any(|r| r.find_val("visible").is_none()) {
+                continue;
+            }
+            let whens: Vec<Value> = roles
+                .iter()
+                .filter_map(|r| r.find_val("visible"))
+                .map(|v| trigger_when(v.block()))
+                .collect();
+            let when = if whens.len() == 1 {
+                whens.into_iter().next().unwrap_or(Value::Null)
+            } else {
+                json!({ "any": whens })
+            };
+            out.insert(character.key.clone(), when);
+        }
+    }
+    out
+}
+
+/// [`visible_whens`] of the running game, read once per install.
+fn visible_catalog(process: &dyn Process) -> Option<std::sync::Arc<BTreeMap<String, Value>>> {
+    let dir = super::mgmt::game_dir(process).ok()?;
+    Some(crate::script::cached(&dir, "leader_visible", |d| {
+        visible_whens(&crate::script::parse_dir(&d.join("common/characters")))
+    }))
+}
+
+/// Adds `visible_when` (the role's visibility trigger as a plan predicate) to every roster row
+/// whose character has one; pure over the catalog.
+pub(super) fn mark_visibility(rows: &mut [Value], catalog: &BTreeMap<String, Value>) {
+    for row in rows {
+        if let Some(when) = row["id"].as_str().and_then(|id| catalog.get(id)) {
+            row["visible_when"] = when.clone();
+        }
+    }
+}
+
 /// Merged roster entries (JSON) from a snapshot.
 pub(super) fn entries(snap: &Snapshot) -> Vec<Value> {
     struct Acc {
@@ -373,6 +463,113 @@ pub(super) fn snapshot(process: &dyn Process) -> Result<Snapshot> {
     })
 }
 
+/// Words of a name for matching: accents folded, lower case, punctuation as spaces.
+fn name_words(name: &str) -> Vec<String> {
+    super::states::fold(name)
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// The listed commander a request names, from every name the roster knows (`names`) and the
+/// leaders' character ids (`ids`, id -> name). The asked text resolves when exactly one name
+/// matches at the first step that matches any: the name itself (any case), the same words with
+/// accents folded ("Gunther von Kluge"), the character id ("GER_albert_kesselring"), every asked
+/// word among the name's words ("Kesselring", "von Rundstedt"), the asked words inside the name.
+/// Two or more at one step refuse as ambiguous; none refuses with the closest names. A roster
+/// with no names passes the asked text on unchanged (the mouse path reads the list itself).
+/// The player's "Kesselring" was refused unknown_commander although "Albert Kesselring" was
+/// listed free (g92a, 27 Nov 2026); pure.
+pub(super) fn resolve_name(
+    asked: &str,
+    names: &[String],
+    ids: &[(String, String)],
+) -> Result<String> {
+    if names.is_empty() {
+        return Ok(asked.to_string());
+    }
+    let mut uniq: Vec<String> = Vec::new();
+    for n in names {
+        if !uniq.iter().any(|u| u == n) {
+            uniq.push(n.clone());
+        }
+    }
+    let want = name_words(asked);
+    let joined = want.join(" ");
+    let steps: [&dyn Fn(&String) -> bool; 5] = [
+        &|n: &String| n.eq_ignore_ascii_case(asked),
+        &|n: &String| !want.is_empty() && name_words(n) == want,
+        &|n: &String| {
+            ids.iter()
+                .any(|(id, name)| name == n && id.eq_ignore_ascii_case(asked.trim()))
+        },
+        &|n: &String| {
+            let words = name_words(n);
+            !want.is_empty() && want.iter().all(|w| words.contains(w))
+        },
+        &|n: &String| !joined.is_empty() && name_words(n).join(" ").contains(&joined),
+    ];
+    for step in steps {
+        let hits: Vec<&String> = uniq.iter().filter(|n| step(n)).collect();
+        match hits.as_slice() {
+            [one] => return Ok((*one).clone()),
+            [] => continue,
+            many => {
+                return Err(Error::new(
+                    "ambiguous_commander",
+                    format!(
+                        "\"{asked}\" names more than one commander: {}. Nothing was clicked; \
+                         pass the full name.",
+                        many.iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                ))
+            }
+        }
+    }
+    Err(Error::new(
+        "unknown_commander",
+        format!(
+            "No commander named \"{asked}\". Closest: {}. Nothing was clicked. Call \
+             hoi4_commanders for the roster.",
+            closest_names(asked, &uniq, 5).join(", ")
+        ),
+    ))
+}
+
+/// The full listed name of the commander `asked` names (see [`resolve_name`]): the country's
+/// army leaders, the leaders of its armies and groups and the commander list's rows.
+pub(super) fn canonical_name(process: &dyn Process, asked: &str) -> Result<String> {
+    let snap = snapshot(process)?;
+    let mut names: Vec<String> = snap
+        .leaders
+        .iter()
+        .flatten()
+        .map(|l| l.name.clone())
+        .collect();
+    names.extend(snap.known_names());
+    names.extend(snap.stale_rows.iter().flatten().map(|r| r.name.clone()));
+    let ids: Vec<(String, String)> = snap
+        .leaders
+        .iter()
+        .flatten()
+        .map(|l| (l.id.clone(), l.name.clone()))
+        .collect();
+    match resolve_name(asked, &names, &ids) {
+        // only a complete roster (the country's leaders read, or the open list) refuses a
+        // name; otherwise the commander list itself decides, as before
+        Err(e)
+            if e.code == "unknown_commander" && snap.leaders.is_none() && snap.rows.is_none() =>
+        {
+            Ok(asked.to_string())
+        }
+        other => other,
+    }
+}
+
 pub(super) fn precheck(
     process: &dyn Process,
     army: &str,
@@ -389,7 +586,11 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
     // While the panel list is fresh, leaders it does not list (not recruited, foreign,
     // retired) cannot be assigned: name them apart so a player does not pick them (Ethiopia
     // run 10 tried an unlisted general and Ethiopian leaders).
-    let (commanders, not_assignable): (Vec<Value>, Vec<Value>) = entries(&snap)
+    let mut rows = entries(&snap);
+    if let Some(catalog) = visible_catalog(process) {
+        mark_visibility(&mut rows, &catalog);
+    }
+    let (commanders, not_assignable): (Vec<Value>, Vec<Value>) = rows
         .into_iter()
         .partition(|c| !list_open || c["listed_in_panel_or_assigned"] == json!(true));
     let not_assignable: Vec<Value> = not_assignable
@@ -434,12 +635,45 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
 }
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_commanders","description":"Own army commanders: every commander who leads an own army or army group (name, rank, assigned_to) plus, while the army panel's commander list is open, every listed general with available true/false. Every army leader of the country is listed with id, skill, attack, defense, planning, logistics and traits (base values, matched against common/characters for five leaders); while the list is open, leaders it does not show (not recruited, foreign, retired) are only named in not_assignable; with the list closed they appear with listed_in_panel_or_assigned false and available null. Pure memory read: no lease, no input, no cursor. Use the names with hoi4_army_commander; it refuses unknown_commander, commander_unavailable and army_unknown before any click.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
+    json!({"name":"hoi4_commanders","description":"Own army commanders: every commander who leads an own army or army group (name, rank, assigned_to) plus, while the army panel's commander list is open, every listed general with available true/false. Every army leader of the country is listed with id, skill, attack, defense, planning, logistics and traits (base values, matched against common/characters for five leaders); while the list is open, leaders it does not show (not recruited, foreign, retired) are only named in not_assignable; with the list closed they appear with listed_in_panel_or_assigned false and available null. Pure memory read: no lease, no input, no cursor. A leader whose army role the game keeps hidden until a trigger (common/characters `visible`, e.g. a focus) carries visible_when, that trigger as a plan predicate (unreadable triggers as unread_trigger atoms): such a leader is not assignable until it holds (an assignment reads back and the game removes him again). Use the names with hoi4_army_commander; it refuses unknown_commander, commander_unavailable and army_unknown before any click.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// g92a (27 Nov 2026): the player's "Kesselring" was refused unknown_commander while "Albert
+    /// Kesselring" was listed free. A listed commander's surname, folded name or id resolves.
+    #[test]
+    fn a_listed_commanders_surname_folded_name_or_id_resolves_to_his_full_name() {
+        let names: Vec<String> = [
+            "Albert Kesselring",
+            "Günther von Kluge",
+            "Gerd von Rundstedt",
+            "Erich von Manstein",
+            "Hans von Kluge",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let ids = vec![(
+            "GER_albert_kesselring".to_string(),
+            "Albert Kesselring".to_string(),
+        )];
+        let r = |a: &str| resolve_name(a, &names, &ids);
+        assert_eq!(r("Kesselring").unwrap(), "Albert Kesselring");
+        assert_eq!(r("albert kesselring").unwrap(), "Albert Kesselring");
+        assert_eq!(r("GER_albert_kesselring").unwrap(), "Albert Kesselring");
+        assert_eq!(r("Gunther von Kluge").unwrap(), "Günther von Kluge");
+        assert_eq!(r("von Rundstedt").unwrap(), "Gerd von Rundstedt");
+        assert_eq!(r("Manst").unwrap(), "Erich von Manstein");
+        // two Kluges: the surname alone is ambiguous, nothing is guessed
+        assert_eq!(r("Kluge").unwrap_err().code, "ambiguous_commander");
+        let e = r("Rommel").unwrap_err();
+        assert_eq!(e.code, "unknown_commander");
+        // an empty roster passes the name on (the mouse path reads the list itself)
+        assert_eq!(resolve_name("Rommel", &[], &[]).unwrap(), "Rommel");
+    }
 
     fn t(name: &str, is_group: bool, c: Option<&str>) -> Target {
         Target {
@@ -591,6 +825,44 @@ mod tests {
         let e = entries(&s);
         assert!(e.iter().all(|v| v["available"] != true));
         assert_eq!(e.len(), 2);
+    }
+    #[test]
+    fn hidden_army_roles_carry_their_visible_trigger_as_a_predicate() {
+        let text = r#"characters = {
+            GER_hermann_hoth = { name = GER_hermann_hoth
+                corps_commander = { skill = 3 visible = { OR = { has_global_flag = GER_civil_war_has_started has_completed_focus = GER_bribe_senior_officers } } } }
+            GER_erwin_rommel = { corps_commander = { visible = { has_completed_focus = GER_adopt_new_panzer_doctrine } } }
+            GER_kurt_x = { corps_commander = { visible = { NOT = { has_government = fascism has_completed_focus = GER_a } } } }
+            GER_erich_von_manstein = { corps_commander = { skill = 4 } }
+            GER_both = { field_marshal = { skill = 4 } corps_commander = { visible = { always = no } } }
+            GER_adviser = { advisor = { slot = political_advisor } }
+        }"#;
+        let cat = visible_whens(&crate::script::parse(text));
+        assert_eq!(
+            cat["GER_hermann_hoth"],
+            json!({"any": ["unread_trigger:has_global_flag", "focus_completed:GER_bribe_senior_officers"]})
+        );
+        assert_eq!(
+            cat["GER_erwin_rommel"],
+            json!("focus_completed:GER_adopt_new_panzer_doctrine")
+        );
+        assert_eq!(
+            cat["GER_kurt_x"],
+            json!({"not": {"any": ["unread_trigger:has_government", "focus_completed:GER_a"]}})
+        );
+        assert!(!cat.contains_key("GER_erich_von_manstein"));
+        assert!(
+            !cat.contains_key("GER_both"),
+            "a role without a trigger is always visible"
+        );
+        assert!(!cat.contains_key("GER_adviser"));
+        let mut rows = vec![
+            json!({"name": "Hermann Hoth", "id": "GER_hermann_hoth"}),
+            json!({"name": "Erich von Manstein", "id": "GER_erich_von_manstein"}),
+        ];
+        mark_visibility(&mut rows, &cat);
+        assert!(rows[0]["visible_when"].is_object());
+        assert!(rows[1].get("visible_when").is_none());
     }
     #[test]
     fn stale_rows_are_marked_and_not_available() {

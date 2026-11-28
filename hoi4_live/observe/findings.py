@@ -70,9 +70,12 @@ def from_omissions(snap):
         if o.get("note_contradicts_read"):
             text += " (the rule's note contradicts the read)"
         sev = "high" if (days or 0) >= 14 else "medium"
+        if o.get("left_by_plan"):
+            text += " (left by the plan)"
         out.append(F(o.get("item") or "omission", sev, text, owner="server omissions",
                      days_open=days, owner_rule=o.get("owner"),
-                     owner_note=str(o["owner_note"])[:300] if o.get("owner_note") else None))
+                     owner_note=str(o["owner_note"])[:300] if o.get("owner_note") else None,
+                     left_by_plan=bool(o.get("left_by_plan"))))
         seen[sig] = out[-1]
     return out
 
@@ -136,7 +139,6 @@ def assignable(snap, prev):
                              f"army {a['army']} ({a['divisions']} divisions) has no general: no leader "
                              f"skills, no experience gained", subject=a["army"]))
     out.extend(political_power(snap, prev, have))
-    out.extend(doctrines(snap, have))
     sp = snap.get("special_projects") or {}
     idle_fac = [f for f in sp.get("facilities") or [] if not f.get("project")]
     if idle_fac and "special_project_idle" not in have:
@@ -152,7 +154,9 @@ def political_power(snap, prev, have):
     if pp is None or "political_power_unspent" in have:
         return []
     alerts = {a.get("alert") for a in snap.get("alerts") or [] if a.get("alert")}
-    marked = sorted(alerts & {"modify_government", "decisions_available"})
+    # the game's decisions_available alert lights while any decision is enabled, wanted or not:
+    # no sign of idle power (the executor's own row judges the decisions by value)
+    marked = sorted(alerts & {"modify_government"})
     affordable = [a for a in pol.get("affordable") or [] if (a.get("cost") or 0) <= pp]
     if not marked and not affordable:
         return []
@@ -173,28 +177,9 @@ def political_power(snap, prev, have):
               political_power=pp, gain_14d=gain)]
 
 
-def doctrines(snap, have):
-    if "doctrine_affordable" in have or "doctrines_available" in have:
-        return []
-    out = []
-    for f in g(snap, "doctrines", "folders", default=[]):
-        xp = f.get("experience")
-        if xp is None:
-            continue
-        costs = [t.get("xp_cost") for t in f.get("tracks") or [] if t.get("xp_cost")]
-        if not f.get("grand_doctrine"):
-            cost = f.get("grand_xp_cost") or (min(costs) if costs else None)
-            if cost and xp >= cost:
-                out.append(F("doctrine_affordable", "medium",
-                             f"{f['folder']} experience {xp:.0f} buys a grand doctrine ({cost}) and none is "
-                             f"picked", subject=f["folder"], experience=xp))
-            continue
-        if f.get("open_tracks") and costs and xp >= min(costs):
-            out.append(F("doctrine_affordable", "medium",
-                         f"{f['folder']} experience {xp:.0f} and {len(f['open_tracks'])} track(s) without a "
-                         f"subdoctrine ({', '.join(f['open_tracks'][:3])}; a subdoctrine costs about "
-                         f"{min(costs)})", subject=f["folder"], experience=xp))
-    return out
+# The doctrine finding is the game's own: its doctrines_available alert (issue doctrine_affordable)
+# and the executor's omission row. A price compared here would be the files' base cost, before the
+# modifiers the game applies (owner, 27 Nov 2026: no cost judged in code).
 
 
 # --- force distribution --------------------------------------------------------
@@ -204,6 +189,56 @@ def doctrines(snap, have):
 # FIELD_MARSHAL_ARMIES_CAP), used only when the roster read gives no limit of its own.
 ARMY_DIVISIONS_BASE = 24
 GROUP_ARMIES_BASE = 5
+
+
+
+def _idle_arrows(out, name, order):
+    """An arrow that holds divisions and does not execute while the war is on (its front may read
+    executing): those divisions stand still. t1939n (27 Nov 2026): Army Group 2's front read
+    executing from W+13 to W+20 while its 37 divisions stood on unexecuted arrows."""
+    idle = [x for x in order.get("offensives") or []
+            if not x.get("executing") and (x.get("divisions") is None or x.get("divisions") > 0)]
+    if idle and order.get("executing"):
+        held = sum(x.get("divisions") or 0 for x in idle)
+        out.append(F("arrow_not_executing", "high",
+                     f"{name}: {len(idle)} arrow(s) holding {held} divisions do not execute on a front that "
+                     f"does (targets {[x.get('target_states') for x in idle][:3]}): those divisions stand still",
+                     subject=name, divisions=held))
+
+HOLD_KINDS = ("area_defense", "fallback")
+
+
+def _idle_at_war(out, snap, group_orders):
+    """At war: the armies standing only on holds (area defence, fallback line) outside any group
+    front, named with their divisions at every gate, with the loans the executor has made (w96a,
+    w96c, w96d: 40-58 divisions on area defences at home through the whole West)."""
+    lent = {}
+    for op, o in (g(snap, "executor", "operations", default={}) or {}).items():
+        for army in o.get("lent") or []:
+            lent[army] = op
+    rows = []
+    for a in g(snap, "land", "armies", default=[]):
+        n = a.get("divisions") or 0
+        orders = a.get("orders") or []
+        if not n or not orders:
+            continue
+        if any(o.get("offensives") or o.get("executing") for o in orders):
+            continue
+        if not all(o.get("kind") in HOLD_KINDS for o in orders):
+            continue
+        if a.get("group") and any(o.get("kind") == "front" for o in group_orders.get(a.get("group")) or []):
+            continue  # army_outside_group_front names it
+        rows.append((n, a["army"]))
+    if not rows:
+        return
+    rows.sort(key=lambda r: (-r[0], r[1]))
+    total = sum(n for n, _ in rows)
+    named = ", ".join(f"{name} ({n}{', lent to ' + lent[name] if name in lent else ''})" for n, name in rows)
+    out.append(F("armies_idle_at_war", "high" if total >= 10 else "medium",
+                 f"{total} divisions in {len(rows)} army(ies) stand on holds away from any attack at war: {named}; "
+                 f"each should be lent to the operation whose front has room, or kept as a named reserve or "
+                 f"garrison with its reason (the executor's lend note)",
+                 divisions=total, armies=[name for _, name in rows], lent=sorted(lent)))
 
 
 def land(snap, prev):
@@ -271,6 +306,23 @@ def land(snap, prev):
                 out.append(F("order_not_executing", "medium",
                              f"army {a['army']}'s battle plan on {o.get('states')} is not executing",
                              subject=a["army"]))
+            elif at_war:
+                _idle_arrows(out, a["army"], o)
+        # an army with an order of its own inside a group whose front is drawn takes no part in it
+        # (t1939n, 27 Nov 2026: Armee Süd, 15 divisions, on an area defence in Army Group 2)
+        if at_war and orders and a.get("group") and group_orders.get(a.get("group")) and \
+                not any(o.get("offensives") for o in orders) and \
+                any(o.get("kind") == "front" for o in group_orders[a["group"]]):
+            kinds = sorted({str(o.get("kind")) for o in orders})
+            out.append(F("army_outside_group_front", "high",
+                         f"army {a['army']} ({n} divisions) stands in {a['group']} with an order of its own "
+                         f"({', '.join(kinds)}) while the group has a front: its divisions take no part in the "
+                         f"group's attack", subject=a["army"], divisions=n))
+    if at_war:
+        _idle_at_war(out, snap, group_orders)
+        for grp in g(snap, "land", "groups", default=[]):
+            for o in grp.get("orders") or []:
+                _idle_arrows(out, grp.get("group"), o)
     # stacking: provinces whose divisions draw more than the province gives
     rows = []
     for p in g(snap, "stacking", "provinces", default=[]):
@@ -409,10 +461,22 @@ def supply_and_stock(snap):
     out = []
     for e in g(snap, "production", "stockpile", default=[]):
         short = e.get("fielded_short") or 0
-        if short > 0 and (e.get("net_per_day") or 0) <= 0 and not e.get("stockpile"):
-            out.append(F("equipment_short", "high",
-                         f"divisions lack {short:.0f} {e['archetype']} with an empty stockpile and "
-                         f"{e.get('net_per_day') or 0:+.1f}/day: add or raise a line", subject=e["archetype"]))
+        net = e.get("net_per_day")
+        made = e.get("produced_per_day") or 0
+        if short > 0 and (net or 0) <= 0 and not e.get("stockpile"):
+            # what the lines make, not an unread net shown as zero (t1939n, 27 Nov 2026: "+0.0/day"
+            # for support equipment whose line of 3 factories made 4.25 a day)
+            if made > 0:
+                how = (f"its {e.get('production_lines') or 'its'} line(s) make {made:.1f}/day "
+                       f"({short / made:.0f} days to cover the shortfall alone"
+                       + (f", net {net:+.1f}/day after losses" if net is not None else "") + ")")
+                fix = "raise its line if those days are too long for the war"
+            else:
+                how = "no line makes it"
+                fix = "add a line"
+            out.append(F("equipment_short", "high" if made <= 0 else "medium",
+                         f"divisions lack {short:.0f} {e['archetype']} with an empty stockpile; {how}: {fix}",
+                         subject=e["archetype"], short=short, produced_per_day=made))
         elif e.get("depleting") and e.get("days_of_cover") is not None and e["days_of_cover"] < 30:
             out.append(F("equipment_depleting", "medium",
                          f"{e['archetype']} stockpile runs out in {e['days_of_cover']:.0f} days at "

@@ -2486,6 +2486,131 @@ fn army_groups(r: &Reader<'_>, image: u64) -> Result<BTreeSet<u64>> {
 pub(super) fn army_address(process: &dyn Process, army: &str) -> Result<u64> {
     read(process, |r, i| group_named(r, i, army))
 }
+/// The orders group (army or army group) named `army`: its address, for the in-process module (engineer 73).
+pub(super) fn group_address(r: &Reader<'_>, image: u64, army: &str) -> Result<u64> {
+    group_named(r, image, army)
+}
+
+/// The addresses of the divisions an orders group commands (engineer 74, for orders2 new_root/assign): an army's own
+/// divisions, or for an army group those of its armies; the module checks each one again before posting.
+pub(super) fn group_division_ptrs(r: &Reader<'_>, image: u64, group: u64) -> Result<Vec<u64>> {
+    let u = ui(r)?;
+    let country = own_country(r, image)?;
+    let (_, data, count) = r.array_header(country + u.country_divisions)?;
+    let mut out = Vec::new();
+    for index in 0..count.min(4096) as u64 {
+        let division = r.u64(data + index * 8)?;
+        if r.u64(division)? != image + u.division_vtable {
+            return Err(Error::new(
+                "invalid_army_type",
+                "Exact own division required",
+            ));
+        }
+        let army = r.u64(division + u.division_group)?;
+        if army != 0 && (army == group || r.u64(army + u.army_group)? == group) {
+            out.push(division);
+        }
+    }
+    Ok(out)
+}
+
+/// engineer 95: the divisions an orders group commands (as `group_division_ptrs`) with the province each stands in
+/// (None while it moves between provinces or the read has none): the place a front's share is chosen by.
+pub(super) fn group_divisions_placed(
+    r: &Reader<'_>,
+    image: u64,
+    group: u64,
+) -> Result<Vec<(u64, Option<i32>)>> {
+    let u = ui(r)?;
+    let l = crate::construction::layout(r);
+    let mut out = Vec::new();
+    for division in group_division_ptrs(r, image, group)? {
+        let location = r.u64(division + u.division_location)?;
+        let province = if location != 0 && r.u64(location)? == image + l.province_vtable {
+            Some(r.i32(location + u.province_id)?)
+        } else {
+            None
+        };
+        out.push((division, province));
+    }
+    Ok(out)
+}
+
+/// engineer 75: the mouse detach's own refusals (a division not in the army, the army emptied), then the divisions'
+/// addresses for the in-process path, so both paths refuse the same calls.
+pub(super) fn detach_targets(
+    r: &Reader<'_>,
+    image: u64,
+    army: &str,
+    ids: &[String],
+) -> Result<Vec<u64>> {
+    let source = group_named(r, image, army)?;
+    let members = membership(r, image)?;
+    for id in ids {
+        if members.get(id) != Some(&source) {
+            return Err(Error::new(
+                "invalid_target",
+                format!("Division {id} is not in {army} (ids as hoi4_armies lists them)"),
+            ));
+        }
+    }
+    if ids.len() >= members.values().filter(|g| **g == source).count() {
+        return Err(Error::new(
+            "invalid_target",
+            "That would empty the army; use hoi4_army_merge to move a whole army",
+        ));
+    }
+    division_ptrs(r, image, ids)
+}
+
+/// engineer 75: an army's first `count` division ids in the roster's order (hoi4_army_split in process); None when the
+/// army is unknown or has fewer.
+pub(super) fn first_divisions(view: &Value, army: &str, count: usize) -> Option<Vec<String>> {
+    let a = view["armies"]
+        .as_array()?
+        .iter()
+        .find(|a| a["army"].as_str() == Some(army))?;
+    let ids: Vec<String> = a["divisions"]
+        .as_array()?
+        .iter()
+        .filter_map(|d| d.as_str().map(str::to_string))
+        .take(count)
+        .collect();
+    (ids.len() == count).then_some(ids)
+}
+
+/// engineer 75: the own divisions named by id (`TYPE:TOKEN`, as hoi4_armies lists them), in the order given: their
+/// addresses for the in-process module (which checks each one again: a live CUnit through the game's own lookup).
+pub(super) fn division_ptrs(r: &Reader<'_>, image: u64, ids: &[String]) -> Result<Vec<u64>> {
+    let u = ui(r)?;
+    let country = own_country(r, image)?;
+    let (_, data, count) = r.array_header(country + u.country_divisions)?;
+    let mut by_id = BTreeMap::new();
+    for index in 0..count.min(4096) as u64 {
+        let division = r.u64(data + index * 8)?;
+        if r.u64(division)? != image + u.division_vtable {
+            return Err(Error::new(
+                "invalid_army_type",
+                "Exact own division required",
+            ));
+        }
+        let handle = r.read(division + u.division_handle, 8)?;
+        let id = format!(
+            "{:08x}:{:08x}",
+            u32::from_le_bytes(handle[..4].try_into().unwrap()),
+            u32::from_le_bytes(handle[4..].try_into().unwrap())
+        );
+        by_id.insert(id, division);
+    }
+    ids.iter()
+        .map(|id| {
+            by_id.get(id.as_str()).copied().ok_or_else(|| {
+                Error::new("unknown_division", format!("{id} is not an own division"))
+            })
+        })
+        .collect()
+}
+
 fn group_named(r: &Reader<'_>, image: u64, army: &str) -> Result<u64> {
     let mut groups: BTreeSet<u64> = membership(r, image)?
         .into_values()
@@ -2941,6 +3066,10 @@ fn own_states(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
     Ok(out)
 }
 /// Map position of the target state's province nearest the army's divisions.
+/// engineer 79: the own-controlled state ids (the area-defence order's states must be among them).
+pub(super) fn controlled_state_ids(process: &dyn Process) -> Result<Vec<i32>> {
+    read(process, controlled_states)
+}
 /// Own-controlled state ids (controller is the player, whoever owns them).
 fn controlled_states(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
     let g = game::layout(r);
@@ -3230,6 +3359,27 @@ fn front_point_province(process: &dyn Process, army: &str, state: i32) -> Result
 }
 /// Arrow-key taps the front's border point may take to reach the middle of the map area.
 const FRONT_PAN_TAPS: usize = 8;
+/// Wheel steps in at most, and the screen span (pixels between a segment's farthest projected
+/// points) a segment front needs before its ends can be dragged between.
+const SEGMENT_ZOOM_STEPS: usize = 3;
+const SEGMENT_MIN_SPAN: f64 = 60.0;
+
+/// The largest distance between two projected points; None when a point is off the view.
+fn screen_span(points: &[Option<(f64, f64)>]) -> Option<f64> {
+    let pts: Vec<(f64, f64)> = points.iter().copied().collect::<Option<Vec<_>>>()?;
+    let mut best: f64 = 0.0;
+    for (n, a) in pts.iter().enumerate() {
+        for b in &pts[n + 1..] {
+            best = best.max((a.0 - b.0).hypot(a.1 - b.1));
+        }
+    }
+    Some(best)
+}
+
+/// The map area a segment drag's points must lie in (the one the drag itself checks).
+fn segment_point_fits(p: (f64, f64)) -> bool {
+    (300.0..1700.0).contains(&p.0) && (120.0..860.0).contains(&p.1)
+}
 
 pub(super) fn front(
     process: &dyn Process,
@@ -3355,6 +3505,50 @@ pub(super) fn front(
             ))?
         ));
     }
+    // A short segment (Luxembourg's border with one German state at the map zoom) projects to
+    // points a few pixels apart: both snap to the same highlighted pixel and no drag can be
+    // made (t1939m, 24 Nov 2026: "not highlighted at two points or more at this zoom" for a
+    // wing's front toward Luxembourg, three times). Wheel in at the segment's middle until its
+    // ends lie far enough apart to drag between, and back out a step if an end leaves the map
+    // area.
+    if let (Some(path), Some((x, y, z))) = (ends.as_deref(), near) {
+        let span = |process: &dyn Process| -> Result<(Option<f64>, bool)> {
+            read(process, |r, i| {
+                let pts = path
+                    .iter()
+                    .map(|p| super::screenmap::to_screen_at(r, i, p.0, p.1, p.2))
+                    .collect::<Result<Vec<_>>>()?;
+                Ok((
+                    screen_span(&pts),
+                    pts.iter().all(|p| p.is_some_and(segment_point_fits)),
+                ))
+            })
+        };
+        for _ in 0..SEGMENT_ZOOM_STEPS {
+            let (Some(len), true) = span(process)? else {
+                break;
+            };
+            if len >= SEGMENT_MIN_SPAN {
+                break;
+            }
+            let Some(at) = read(process, |r, i| {
+                super::screenmap::to_screen_at(r, i, x, y, z)
+            })?
+            else {
+                break;
+            };
+            keys.scroll_burst(GAME, at, 240, 1)?;
+            crate::phase::sleep(std::time::Duration::from_millis(80));
+            super::screenmap::wait_camera_still(process, 600);
+            if !span(process)?.1 {
+                keys.scroll_burst(GAME, at, -240, 1)?;
+                crate::phase::sleep(std::time::Duration::from_millis(80));
+                super::screenmap::wait_camera_still(process, 600);
+                break;
+            }
+        }
+        super::ui::trace("front: segment zoom", t0);
+    }
     // The fronts this army can take are highlighted only in front-line
     // drawing, in a colour that varies by army and lighting; compare one
     // capture before Z with one after it, at the same camera position.
@@ -3438,8 +3632,7 @@ pub(super) fn front(
                 .map(|p| super::screenmap::to_screen_at(r, i, p.0, p.1, p.2))
                 .collect::<Result<Vec<_>>>()
         })?;
-        let inside =
-            |p: &(f64, f64)| (300.0..1700.0).contains(&p.0) && (120.0..860.0).contains(&p.1);
+        let inside = |p: &(f64, f64)| segment_point_fits(*p);
         let mut pts: Vec<(f64, f64)> = Vec::new();
         for p in screen {
             let Some(p) = p.filter(inside) else {
@@ -3677,6 +3870,26 @@ pub(super) fn order_ids(r: &Reader<'_>, image: u64, army: &str) -> Result<Vec<i3
         .collect();
     while let Some(n) = stack.pop() {
         out.push(n.id);
+        stack.extend(n.children);
+    }
+    Ok(out)
+}
+
+/// engineer 95: the divisions each order of `army` holds (every order id: fronts, their arrows and targets, the
+/// defensive lists), the read-back of an assignment.
+pub(super) fn order_divisions(
+    r: &Reader<'_>,
+    image: u64,
+    army: &str,
+) -> Result<BTreeMap<i32, usize>> {
+    let group = group_named(r, image, army)?;
+    let mut out = BTreeMap::new();
+    let mut stack: Vec<orders::OrderNode> = orders::group_orders(r, image, group)?
+        .into_iter()
+        .map(|(_, n)| n)
+        .collect();
+    while let Some(n) = stack.pop() {
+        out.insert(n.id, n.divisions);
         stack.extend(n.children);
     }
     Ok(out)
@@ -5409,6 +5622,18 @@ pub(super) fn split(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_segment_span_is_its_farthest_points_and_unknown_off_the_view() {
+        assert_eq!(
+            super::screen_span(&[Some((0.0, 0.0)), Some((3.0, 4.0)), Some((1.0, 1.0))]),
+            Some(5.0)
+        );
+        assert_eq!(super::screen_span(&[Some((10.0, 10.0))]), Some(0.0));
+        assert_eq!(super::screen_span(&[Some((0.0, 0.0)), None]), None);
+        assert!(super::segment_point_fits((960.0, 540.0)));
+        assert!(!super::segment_point_fits((200.0, 540.0)));
+    }
     #[test]
     fn several_own_states_face_every_state_beside_them_the_target_first() {
         let mut adj: BTreeMap<i32, BTreeSet<i32>> = BTreeMap::new();

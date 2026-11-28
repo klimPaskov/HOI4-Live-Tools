@@ -270,7 +270,7 @@ pub(super) fn catalog(dir: &Path) -> std::sync::Arc<Catalog> {
 
 // ------------------------------------------------------------------ memory
 
-fn template(r: &Reader<'_>, address: u64, mangled: &str) -> Result<RawTemplate> {
+pub(super) fn template(r: &Reader<'_>, address: u64, mangled: &str) -> Result<RawTemplate> {
     mgmt::expect_type(r, address, mangled)?;
     let abi = r.string_abi();
     let f = |offset: u64| fld(abi, &DOCTRINE_TEMPLATE, offset).map(|o| o as usize);
