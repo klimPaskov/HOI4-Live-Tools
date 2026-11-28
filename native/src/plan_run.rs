@@ -4710,12 +4710,26 @@ fn focus_lane_inner(
                 json!({"focus": key}),
                 "fo",
             )?;
-            if ok {
+            let code = why.split(':').next().unwrap_or("").trim();
+            if ok || matches!(code, "nothing_to_change" | "focus_completed") {
+                // started, or already running or done (the tool read it so before any input):
+                // not a refusal of the key
                 state.stages.focus_why.remove(&key);
                 state.stages.focus_gui_fails.remove(&key);
                 state.stages.focus_refused_unjudged.remove(&key);
+                state.stages.focus_refused.remove(&key);
                 state.stages.focus = Some((format!("focus: started {key}"), false));
-                return Ok(Some(format!("focus {key}")));
+                return Ok(Some(if ok {
+                    format!("focus {key}")
+                } else {
+                    format!("focus {key}: already ({why})")
+                }));
+            }
+            if code == "focus_slot_busy" {
+                // another focus runs (this tick's read was older than the tool's): the key is not
+                // refused, the focus step waits for the slot
+                state.stages.focus = Some((format!("focus: slot busy ({why})"), false));
+                return Ok(Some(format!("focus {key}: false {why}")));
             }
             // A focus the game disables (requirements, exclusive branch) waits 10 game days
             // (6 game hours was under a second at speed 3) and does not hold up the next key.

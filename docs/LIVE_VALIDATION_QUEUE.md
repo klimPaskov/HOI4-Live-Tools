@@ -1462,4 +1462,7 @@ F3 hoi4_train on a capped template (special forces over its cap, or manpower sho
 short_reason (the game's own check), not Diverged; the executor does not ask again at once.
 F4 the executor: a plan commanders[].traits entry the game refuses (trait_not_assignable): asked once, then rests half a
 year in peace (14 days at war); the ledger line carries the whole refusal reason (no 160-character cut).
-Pass: F1-F4.
+F5 hoi4_focus_start on the running focus: nothing_to_change; on a completed focus: focus_completed; another focus while one
+runs: focus_slot_busy naming the running one (all before input). The executor: none of these rests the key (no 10-day rest,
+focus_refused unchanged); the slot is filled the day it empties.
+Pass: F1-F5.
