@@ -3874,7 +3874,7 @@ fn decryption_step(state: &mut State, run: &Run<'_>, cfg: &Value) -> Result<Opti
     if ciphers.iter().any(|c| c["decrypting"] == json!(true)) {
         return Ok(None);
     }
-    for entry in &decrypt {
+    for entry in decrypt {
         let target = cipher_target(entry);
         if target.is_empty()
             || state
