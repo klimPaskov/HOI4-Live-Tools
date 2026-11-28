@@ -1157,6 +1157,28 @@ Stop at once on: any post while the view greys the button, any change after D1/D
 toggle that removed a relation we had.
 Pass: D0-D4, D6 (D5 recorded). Then set the `diplomacy2` entry of IPC_LIVE_PASSED in inproc/core/ipc.c to 1 with the numbers.
 
+## Capture C-DESIGNER: why the designer base reads fail (read only, mouse opens and closes the designer; about 15 minutes) -- any time, before the next designer session
+Not a pass/fail session: it records what an offline engineer needs. s115b (28 Nov) failed `hoi4_design_options` with a base:
+tank 4517 and plane 1320 `read_bound` "Invalid address or snapshot read budget" (a pointer outside the address range or one
+read over 1 MB, while reading the OPENED designer), plane 1323 `read_failed`, ship 1348 `design_not_offered` (1348 is not a
+design id the Production list offers: probably an equipment type id passed as a design id).
+Server env: `HOI4_TRACE=1 HOI4_TRACE_READS=1` (the second prints `[read_bound] address=0x.. size=.. snapshot_bytes=..` or
+`[read_failed] address=0x.. size=..` on stderr for the refused read). Bed: the same save as s115b if kept (else w92b or the
+1936 study end GER_1936_05_05_05), paused. Save everything under `<run>/designer-capture/`.
+C1 the lists: `hoi4_design_options {kind:"tank"}`, `{kind:"plane"}`, `{kind:"ship"}` -> tank.json, plane.json, ship.json; and
+`hoi4_designs {kind:...}` for the same three -> designs-<kind>.json (to see whether 1348/4517/1320/1323 are design ids, which
+types, which designer: upgrade or modules).
+C2 for each of: tank 4517 and the first listed default tank chassis (e.g. 1333), plane 1320, 1323 and the first listed default
+plane airframe (e.g. 1318), ship 1348 and one listed ship hull id: call `hoi4_design_options {kind, base}`; save the reply as
+<kind>-<base>.json and the server's stderr lines of that call (the [read_bound]/[read_failed] lines and the HOI4_TRACE steps) as
+<kind>-<base>.trace.txt; take ONE screenshot while the designer is open (before the tool closes it; if it closes at once, the
+screenshot right after the error) as <kind>-<base>.png.
+C3 for the failing bases also run `{kind, base, slot:<one slot name from designs-<kind>.json>}`: does the one-slot scan pass?
+(save as <kind>-<base>-slot.json).
+C4 record the build (master sha of the server and module), the game version, and whether each base's designer is the
+module designer (slots) or the upgrade designer (rows) on screen.
+Hand the folder to the air engineer: the trace's address and the screenshot tell which reader followed a wrong pointer.
+
 ## Session S25-MIOKEY: organisation traits by key (in process, family `mio`; about 5 minutes) -- any time
 What it proves: hoi4_mio_trait `trait` / `traits` resolve the scripts' trait keys to the tree through the module's
 organisations read, and the executor's `mio[].traits` keys reach the game.
