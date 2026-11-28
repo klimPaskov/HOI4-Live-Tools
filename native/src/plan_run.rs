@@ -12553,22 +12553,26 @@ fn decisions_step(
             && !state.skipped(now, "decnote", "x")
         {
             state.skip(now, "decnote", "x", 30 * DAY);
-            if let Ok(offered) = tools.call("hoi4_decisions_list", &json!({"lease_token": lease})) {
+            if let Ok(mut offered) =
+                tools.call("hoi4_decisions_list", &json!({"lease_token": lease}))
+            {
+                judge_decisions(state, tools, plan, &mut offered, &[], now);
                 state.manage.decisions_seen = Some((now, offered.clone()));
                 let line = decisions_left_note(plan, &offered, &[]);
                 plan_manage::note(state, "decisions", line);
                 offer_unwanted_decisions(state, plan, &offered, &[], now);
             }
         }
-        return Ok(None);
+        return take_by_value(state, tools, plan, lease, &[], now);
     }
-    let offered = tools.call("hoi4_decisions_list", &json!({"lease_token": lease}))?;
-    state.manage.decisions_seen = Some((now, offered.clone()));
+    let mut offered = tools.call("hoi4_decisions_list", &json!({"lease_token": lease}))?;
     let pending: Vec<String> = rules
         .iter()
         .map(|r| r.1.clone())
         .chain(wanted.iter().cloned())
         .collect();
+    judge_decisions(state, tools, plan, &mut offered, &pending, now);
+    state.manage.decisions_seen = Some((now, offered.clone()));
     plan_manage::note(
         state,
         "decisions",
@@ -12645,7 +12649,153 @@ fn decisions_step(
             return Ok(Some(format!("decision {key}: {ok} {why}")));
         }
     }
-    Ok(None)
+    take_by_value(state, tools, plan, lease, &pending, now)
+}
+
+/// Every offered decision no plan entry names, judged by its value (crate::pick_value: the
+/// decision's own modifier, days and effects from the running game's scripts, weighed in
+/// factory-years for this country, `value.weights` of the plan first), written into the read as
+/// `value`, `value_terms`, `unvalued` and `verdict`: `take` (worth something), `left_by_value`
+/// (worth nothing or less: the reason is its terms), `judgement` (nothing in it valued: the
+/// player's call, see [`offer_unwanted_decisions`]), `left_after_offer` (a judgement the player
+/// did not take within the grace). The omission row and the standing order read the verdicts
+/// from `decisions_seen` (engineer 94's missing piece: g92b offered and left the same decisions
+/// 154 days).
+fn judge_decisions(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    offered: &mut Value,
+    planned: &[String],
+    now: GameHour,
+) {
+    let judged = |d: &Value| {
+        let key = text(&d["decision"]);
+        !key.is_empty() && !planned.iter().any(|p| p == key) && !decision_forbidden(plan, key)
+    };
+    if !list(offered, "decisions").iter().any(&judged) {
+        return;
+    }
+    // the country the value is judged for, read only when something is to be judged
+    let economy = tools.call("hoi4_economy", &json!({})).unwrap_or_default();
+    let slots = tools
+        .call("hoi4_research", &json!({}))
+        .ok()
+        .map(|r| list(&r, "slots").len() as f64);
+    let ctx = crate::pick_value::Ctx::from_reads(&economy, slots, plan);
+    let offer_over = state
+        .done
+        .get("decoffer")
+        .is_some_and(|since| now.saturating_sub(*since) >= plan_xp::HOLD_GRACE);
+    let Some(rows) = offered["decisions"].as_array_mut() else {
+        return;
+    };
+    for d in rows {
+        if !judged(&*d) {
+            continue;
+        }
+        let verdict = match crate::pick_value::value(&d["effects"], &ctx, plan) {
+            Some((v, terms, unvalued)) => {
+                d["value"] = json!((v * 10.0).round() / 10.0);
+                d["value_terms"] = json!(terms);
+                d["unvalued"] = json!(unvalued);
+                if v > 0.0 {
+                    "take"
+                } else {
+                    "left_by_value"
+                }
+            }
+            None if offer_over => "left_after_offer",
+            None => "judgement",
+        };
+        d["verdict"] = json!(verdict);
+    }
+}
+
+/// The decision of most value per political power among the last read's `take` verdicts that
+/// the power above the plan's reserve pays now (the reserve: the plan's own picks that can be
+/// bought now, plan_manage::politics_reserve), taken with hoi4_decision_take. The read is the
+/// decisions step's own, at most a month old; a take that does not hold rests as any decision.
+fn take_by_value(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    pending: &[String],
+    now: GameHour,
+) -> Result<Option<String>> {
+    let Some((at, read)) = state.manage.decisions_seen.clone() else {
+        return Ok(None);
+    };
+    if now.saturating_sub(at) > 31 * DAY || state.skipped(now, "decvalue", "x") {
+        return Ok(None);
+    }
+    let candidates: Vec<(String, f64, f64, String)> = list(&read, "decisions")
+        .iter()
+        .filter(|d| {
+            d["verdict"] == json!("take")
+                && d["enabled"] == json!(true)
+                && !d["active_timer"].as_bool().unwrap_or(false)
+        })
+        .filter_map(|d| {
+            let key = text(&d["decision"]).to_string();
+            let cost = d["cost"].as_f64()?;
+            let value = d["value"].as_f64()?;
+            let terms = strings(d, "value_terms").join(", ");
+            (!pending.contains(&key)).then_some((key, cost, value, terms))
+        })
+        .filter(|(k, _, _, _)| !state.skipped(now, "dec", k))
+        .collect();
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+    let Some(pp) = plan_manage::political_power(tools) else {
+        return Ok(None);
+    };
+    let (reserve, _) = plan_manage::politics_reserve(state, tools, plan, now);
+    let budget = pp - reserve;
+    let best = candidates
+        .iter()
+        .filter(|(_, cost, _, _)| *cost <= budget + 1e-6)
+        .max_by(|a, b| (a.2 / a.1.max(1.0)).total_cmp(&(b.2 / b.1.max(1.0))))
+        .cloned();
+    let Some((key, cost, value, terms)) = best else {
+        // the power is short of every one worth taking: it is looked at again once a game day
+        state.skip(now, "decvalue", "x", DAY);
+        let cheapest = candidates.iter().map(|c| c.1).fold(f64::INFINITY, f64::min);
+        plan_manage::note(
+            state,
+            "decisions_value",
+            format!(
+                "worth taking when the power pays: {} (cheapest {cheapest:.0}; {budget:.0} free above the plan's reserve {reserve:.0})",
+                candidates
+                    .iter()
+                    .map(|c| format!("{} ({:.0} power, value {:+.1})", c.0, c.1, c.2))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        );
+        return Ok(None);
+    };
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_decision_take",
+        json!({"decision": key}),
+        "dv",
+    )?;
+    let rest = decision_rest(state, &key, ok, now);
+    state.skip(now, "dec", &key, rest);
+    if !ok {
+        decision_refused_note(state, &key, "", &key, &why, rest);
+    }
+    // the next turn reads the panel again: the take changed what is enabled
+    state.skip(now, "decnote", "x", 0);
+    let line = format!(
+        "decision {key} by value: {value:+.1} factory-years for {cost:.0} political power ({terms}): {ok} {why}"
+    );
+    plan_manage::note(state, "decisions_value", line.clone());
+    Ok(Some(line))
 }
 
 /// How long a decision rests after a take (game hours): 30 days once taken; after a take that
@@ -12772,11 +12922,16 @@ fn offer_unwanted_decisions(
             || pending.contains(&key)
             || keys.contains(&key)
             || decision_forbidden(plan, &key)
+            // a decision judged by value is the lane's to take or leave, not the player's
+            || d["value"].is_number()
         {
             continue;
         }
         keys.push(key.clone());
-        options.push(json!({"decision": key, "title": d["title"], "cost": d["cost"]}));
+        options.push(
+            json!({"decision": key, "title": d["title"], "cost": d["cost"],
+            "unvalued": d["effects"]["unread"]}),
+        );
     }
     if !open || options.is_empty() {
         state.done.remove("decoffer");
@@ -12832,6 +12987,8 @@ fn offer_unwanted_decisions(
 fn decisions_left_note(plan: &Value, offered: &Value, pending: &[String]) -> String {
     let mut left: Vec<String> = Vec::new();
     let mut never: Vec<String> = Vec::new();
+    let mut by_value: Vec<String> = Vec::new();
+    let mut worth: Vec<String> = Vec::new();
     for d in list(offered, "decisions") {
         if d["enabled"] != json!(true) || d["active_timer"].as_bool().unwrap_or(false) {
             continue;
@@ -12842,6 +12999,14 @@ fn decisions_left_note(plan: &Value, offered: &Value, pending: &[String]) -> Str
         }
         if decision_forbidden(plan, &key) {
             never.push(key);
+        } else if d["verdict"] == json!("left_by_value") {
+            by_value.push(format!(
+                "{key} (value {}: {})",
+                d["value"],
+                strings(d, "value_terms").join(", ")
+            ));
+        } else if d["verdict"] == json!("take") {
+            worth.push(key);
         } else {
             left.push(key);
         }
@@ -12856,10 +13021,22 @@ fn decisions_left_note(plan: &Value, offered: &Value, pending: &[String]) -> Str
     if !never.is_empty() {
         parts.push(format!("never-take rules: {}", never.join(", ")));
     }
+    if !worth.is_empty() {
+        parts.push(format!(
+            "worth taking by value, taken when the power above the plan's reserve pays: {}",
+            worth.join(", ")
+        ));
+    }
+    if !by_value.is_empty() {
+        parts.push(format!(
+            "left by value (worth nothing or less in factory-years for this country): {}",
+            by_value.join("; ")
+        ));
+    }
     if !left.is_empty() {
         let shown: Vec<&String> = left.iter().take(12).collect();
         parts.push(format!(
-            "enabled but deliberately not taken (no decisions/decision_rules entry wants them): {}{}",
+            "enabled, no plan entry, no value read from their effects (the player's judgement): {}{}",
             shown.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "),
             if left.len() > 12 { format!(" and {} more", left.len() - 12) } else { String::new() }
         ));
@@ -24463,6 +24640,74 @@ mod tests {
         state.manage.alert_since.clear();
         offer_unwanted_decisions(&mut state, &plan, &json!({}), &[], later);
         assert!(!state.done.contains_key("decoffer"));
+    }
+
+    /// g92b (27 Nov 2026): decisions no plan entry named were offered and left for 154 days with
+    /// no value read. Their effects (the game's scripts) are now valued for the country: the one
+    /// worth something is taken from the power above the plan's reserve, the one worth less than
+    /// nothing is left with its terms, only one with nothing valued goes to the player.
+    #[test]
+    fn decisions_no_entry_names_are_taken_or_left_by_their_value() {
+        let plan = json!({});
+        let rows = json!({"decisions": [
+            {"decision": "improved_worker_conditions", "enabled": true, "active_timer": false,
+             "cost": 100.0, "effects": {"parts": [{"days": 180.0, "modifiers": {
+                 "stability_weekly": 0.005, "consumer_goods_factor": 0.1,
+                 "industrial_capacity_factory": -0.1}}], "once": {}, "unread": []}},
+            {"decision": "build_factories", "enabled": true, "active_timer": false,
+             "cost": 50.0, "effects": {"parts": [], "once": {"building:industrial_complex": 2.0},
+                 "unread": []}},
+            {"decision": "HOL_demand", "enabled": true, "active_timer": false, "cost": 10.0,
+             "effects": {"parts": [], "once": {}, "unread": ["add_to_variable"]}}]});
+        let game = |pp: i64| {
+            fake(vec![
+                ("hoi4_decisions_list", rows.clone()),
+                (
+                    "hoi4_economy",
+                    json!({"political_power": {"raw_signed": pp},
+                        "factory_trigger_count": {"military": 28, "civilian": 35, "naval": 10}}),
+                ),
+            ])
+        };
+        let mut state = State::default();
+        state
+            .manage
+            .alert_since
+            .insert("decisions_available".into(), START);
+        // 30 power: nothing worth taking is paid yet; the note says what waits for the power
+        let poor = game(3_000_000);
+        assert_eq!(
+            decisions_step(&mut state, &poor, &plan, "l", START).unwrap(),
+            None
+        );
+        let n = plan_manage::note_of(&state, "decisions").unwrap();
+        assert!(
+            n.contains("left by value") && n.contains("improved_worker_conditions"),
+            "{n}"
+        );
+        assert!(
+            n.contains("worth taking by value") && n.contains("build_factories"),
+            "{n}"
+        );
+        let alarms = plan_manage::take_alarms(&mut state);
+        let offer = alarms
+            .iter()
+            .find(|a| a["reason"] == "decisions_unwanted")
+            .expect("the unvalued one goes to the player");
+        assert_eq!(offer["evidence"]["options"].as_array().unwrap().len(), 1);
+        assert_eq!(offer["evidence"]["options"][0]["decision"], "HOL_demand");
+        // 60 power a day later: the factories are bought from the read the lane made
+        let rich = game(6_000_000);
+        let out = decisions_step(&mut state, &rich, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("decision build_factories by value"),
+            "{out}"
+        );
+        assert!(!actions(&rich)
+            .iter()
+            .any(|(_, a)| a["decision"] == "improved_worker_conditions"));
     }
 
     #[test]

@@ -238,6 +238,9 @@ pub(super) struct Memory {
     /// `xp_budget` entries the pool could already pay, by id -> since when (plan_xp.rs: a hold
     /// for a spend its lane does not make stops holding the other spends back).
     pub(super) xp_payable_since: HashMap<String, GameHour>,
+    /// Template edits waiting for their equipment: template -> (game hour, pieces the stock and
+    /// lines do not cover yet by archetype). The balance and the feed count them as need.
+    pub(super) edit_need: HashMap<String, (GameHour, HashMap<String, f64>)>,
     /// Plan `politics` picks the power could already pay, by key -> since when
     /// ([`politics_reserve`]: a pick its lane does not buy within the grace holds nothing back).
     pub(super) pol_payable_since: HashMap<String, GameHour>,
@@ -590,7 +593,17 @@ pub(super) fn missing_line_step(
         );
         return Ok(None);
     }
-    let ok_list = strings(&plan["manage"], "unproduced_ok");
+    let mut ok_list = strings(&plan["manage"], "unproduced_ok");
+    // an equipment the plan's own production entry removes now (`remove: true`, reached and not
+    // re-added) is the plan's choice with its why: no line is opened against it (g92b, 27 Nov
+    // 2026: the plan closed the 1936 fighter, CAS and bomber lines on day 0, "outclassed by the
+    // 1937-39 designs"; the alert for the wings' planes then stood 154 days as idle factories)
+    let removed = plan_removals(plan, now);
+    for (equipment, _) in &removed {
+        if !ok_list.iter().any(|o| family(o) == family(equipment)) {
+            ok_list.push(equipment.clone());
+        }
+    }
     let stock = stockpile(state, tools, now);
     let air = tools.call("hoi4_air", &json!({})).ok();
     let lines = tools
@@ -602,7 +615,15 @@ pub(super) fn missing_line_step(
         .iter()
         .filter_map(|e| ok_list.iter().find(|o| family(o) == family(e)))
         .map(|o| {
-            let why = text(&plan["manage"]["unproduced_ok_why"][o.as_str()]);
+            let removal = removed
+                .iter()
+                .find(|(e, _)| family(e) == family(o))
+                .map(|(_, w)| w.as_str())
+                .unwrap_or("");
+            let why = match text(&plan["manage"]["unproduced_ok_why"][o.as_str()]) {
+                "" if !removal.is_empty() => removal,
+                w => w,
+            };
             format!(
                 "{o} left by the plan ({})",
                 if why.is_empty() {
@@ -686,6 +707,31 @@ pub(super) fn missing_line_step(
     let line = format!("missing equipment: a {equipment} line on one factory: {ok} {why}");
     note(state, key, line.clone());
     Ok(Some(line))
+}
+
+/// The equipment the plan's production entries remove now (`remove: true`, its `from` reached,
+/// no later entry of the same equipment re-adding it before now), each with the entry's why
+/// ("the plan removes it" when it gives none); pure.
+fn plan_removals(plan: &Value, now: GameHour) -> Vec<(String, String)> {
+    list(plan, "production")
+        .iter()
+        .filter(|l| {
+            l["remove"] == json!(true)
+                && super::reached(l, now)
+                && !super::removal_superseded(plan, l, now)
+        })
+        .filter_map(|l| {
+            let e = text(&l["equipment"]).to_string();
+            let why = match text(&l["why"]) {
+                "" => "the plan's production entry removes it".to_string(),
+                w => format!(
+                    "the plan removes it: {}",
+                    w.chars().take(160).collect::<String>()
+                ),
+            };
+            (!e.is_empty()).then_some((e, why))
+        })
+        .collect()
 }
 
 /// hoi4_stockpile, read at most once a game day (None when unreadable or listing nothing).
@@ -1631,42 +1677,88 @@ fn unit_needs(read: &Value) -> HashMap<String, HashMap<String, f64>> {
     out
 }
 
-/// Why an edit of `target` to `regiments` + `support` cannot be equipped from the stockpile
-/// for every fielded division of the template ("artillery_equipment 40 < 912 for 38 fielded
-/// divisions (+24 each)"), None when it can, when no division is fielded, or when a battalion's
-/// need is not known from any own template (the tool's own checks then decide).
+/// Why an edit of `target` to `regiments` + `support` must wait, with the pieces it adds that
+/// the stock and lines do not cover yet ({archetype: pieces}: the production response raises
+/// those lines first, see `edit_need`). None when the edit adds no equipment, when no division is
+/// fielded, or when the stock and the lines cover it in time.
+///
+/// Every added piece must be in store or made within the cover time, read from the game: at war
+/// none (the divisions fight short at once: w92b, 28 Nov 2026, the infantry edit at war left the
+/// West's infantry at equipment fill 0.27, and a division short of three quarters of its
+/// equipment does not attack); at peace the template's training time (its battalions'
+/// `training_days`, the time the game takes to field such a division). While an operation is
+/// under way (prepared, preparing or executing: its formations hold the front) a fielded
+/// template's edit waits whatever the stock. A battalion no own template carries is read from the
+/// designer's definitions (hoi4_template_options); one still unread makes the edit wait (before,
+/// it passed unjudged).
+pub(super) struct EditWait {
+    pub why: String,
+    pub need: HashMap<String, f64>,
+}
+
+#[allow(clippy::too_many_arguments)]
 fn edit_stock_short(
+    state: &mut State,
     tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
     target: &str,
     regiments: &Value,
     support: &[Value],
-) -> Option<String> {
+) -> Option<EditWait> {
     let read = tools.call("hoi4_template_get", &json!({})).ok()?;
     let row = list(&read, "templates")
         .iter()
-        .find(|t| text(&t["template"]) == target)?;
+        .find(|t| text(&t["template"]) == target)?
+        .clone();
     let fielded = row["divisions_using_template"].as_u64().unwrap_or(0);
     if fielded == 0 {
         return None;
     }
-    let needs = unit_needs(&read);
+    let mut needs = unit_needs(&read);
     let mut now_need: HashMap<String, f64> = HashMap::new();
-    for u in list(row, "units") {
+    for u in list(&row, "units") {
         for (a, n) in u["equipment_need"].as_object().into_iter().flatten() {
             *now_need.entry(a.clone()).or_insert(0.0) += n.as_f64().unwrap_or(0.0);
         }
     }
-    let keys: Vec<&str> = regiments
+    let keys: Vec<String> = regiments
         .as_array()
         .into_iter()
         .flatten()
         .flat_map(|c| c.as_array().into_iter().flatten())
         .chain(support.iter())
         .filter_map(Value::as_str)
+        .map(str::to_string)
         .collect();
+    if keys.iter().any(|k| !needs.contains_key(k)) {
+        if let Ok(options) = tools.call("hoi4_template_options", &json!({"lease_token": lease})) {
+            for u in list(&options, "battalions")
+                .iter()
+                .chain(list(&options, "support_companies"))
+            {
+                let key = text(&u["key"]).to_string();
+                let Some(m) = u["equipment_need"].as_object() else {
+                    continue;
+                };
+                needs.entry(key).or_insert_with(|| {
+                    m.iter()
+                        .filter_map(|(a, n)| Some((a.clone(), n.as_f64()?)))
+                        .collect()
+                });
+            }
+        }
+    }
     let mut new_need: HashMap<String, f64> = HashMap::new();
-    for k in keys {
-        for (a, n) in needs.get(k)? {
+    for k in &keys {
+        let Some(n) = needs.get(k) else {
+            return Some(EditWait {
+                why: format!("the equipment {k} needs is not read (no own template carries it, the designer did not list it)"),
+                need: HashMap::new(),
+            });
+        };
+        for (a, n) in n {
             *new_need.entry(a.clone()).or_insert(0.0) += n;
         }
     }
@@ -1679,22 +1771,93 @@ fn edit_stock_short(
         return None;
     }
     added.sort_by(|a, b| a.0.cmp(&b.0));
+    let total: HashMap<String, f64> = added
+        .iter()
+        .map(|(a, per)| (a.clone(), per * fielded as f64))
+        .collect();
+    if super::plan_operation::active(state) {
+        return Some(EditWait {
+            why: format!(
+                "an operation is under way: the {fielded} fielded divisions keep their equipment until it ends"
+            ),
+            need: total,
+        });
+    }
+    let war = at_war(state, tools, plan, now);
+    let cover_days = if war {
+        0.0
+    } else {
+        list(&row, "units")
+            .iter()
+            .filter_map(|u| u["training_days"].as_f64())
+            .fold(0.0, f64::max)
+    };
     let archetypes: Vec<&str> = added.iter().map(|(a, _)| a.as_str()).collect();
     let stock = tools
         .call("hoi4_stockpile", &json!({"equipment": archetypes}))
         .ok()?;
-    added.into_iter().find_map(|(a, per)| {
-        let row = list(&stock, "equipment")
+    let mut short: HashMap<String, f64> = HashMap::new();
+    let mut why: Vec<String> = Vec::new();
+    for (a, per) in &added {
+        let Some(r) = list(&stock, "equipment")
             .iter()
-            .find(|r| text(&r["archetype"]) == a)?;
-        let cover = row["cover_after_shortfall"]
+            .find(|r| text(&r["archetype"]) == a.as_str())
+        else {
+            short.insert(a.clone(), per * fielded as f64);
+            why.push(format!("{a}: no stock read"));
+            continue;
+        };
+        let Some(cover) = r["cover_after_shortfall"]
             .as_f64()
-            .or_else(|| row["stockpile"].as_f64())?;
+            .or_else(|| r["stockpile"].as_f64())
+        else {
+            continue;
+        };
+        let per_day = r["produced_per_day"].as_f64().unwrap_or(0.0).max(0.0);
         let need = per * fielded as f64;
-        (cover < need).then(|| {
-            format!("{a} {cover:.0} < {need:.0} for {fielded} fielded divisions (+{per:.0} each)")
-        })
+        let by_then = cover + per_day * cover_days;
+        if by_then < need {
+            short.insert(a.clone(), need - cover.max(0.0));
+            let days = if per_day > 0.0 {
+                format!(
+                    "covered in about {:.0} days at {per_day:.1} a day",
+                    (need - cover) / per_day
+                )
+            } else {
+                "no line makes it".to_string()
+            };
+            let within = if war {
+                "at war only the stock counts".to_string()
+            } else {
+                format!("{cover_days:.0} training days")
+            };
+            why.push(format!(
+                "{a} {cover:.0} < {need:.0} for {fielded} fielded divisions (+{per:.0} each; {within}; {days})"
+            ));
+        }
+    }
+    if why.is_empty() {
+        return None;
+    }
+    Some(EditWait {
+        why: why.join("; "),
+        need: short,
     })
+}
+
+/// The pieces the plan's waiting template edits add ({archetype: pieces}), at most 30 days old
+/// (a waiting edit renews its need every look): the production response raises those lines
+/// before the edit is made.
+pub(super) fn edit_need(state: &State, now: GameHour) -> HashMap<String, f64> {
+    let mut out: HashMap<String, f64> = HashMap::new();
+    for (at, need) in state.manage.edit_need.values() {
+        if now.saturating_sub(*at) <= 30 * DAY {
+            for (a, n) in need {
+                *out.entry(a.clone()).or_insert(0.0) += n;
+            }
+        }
+    }
+    out
 }
 
 /// Army experience a create costs (the tool's costs: 5 per battalion, 10 per company, 25 per
@@ -1877,13 +2040,22 @@ fn templates_step(
         // stock 0-10 for a year, training nearly stopped). `stock_guard: false` opts out.
         if let (Some(target), Some(r)) = (edit, regiments.as_ref()) {
             if entry["stock_guard"] != json!(false) {
-                if let Some(short) = edit_stock_short(tools, target, r, &support) {
-                    waits.push(format!("{name}: edit waits for stock: {short}"));
-                    state.skip(now, "tpl", &key, 7 * DAY);
+                if let Some(wait) =
+                    edit_stock_short(state, tools, plan, lease, now, target, r, &support)
+                {
+                    waits.push(format!("{name}: edit waits for stock: {}", wait.why));
+                    // the lines for the added need are raised first (the balance and the feed
+                    // count it as need), then the edit is looked at again in a game day
+                    state
+                        .manage
+                        .edit_need
+                        .insert(name.clone(), (now, wait.need));
+                    state.skip(now, "tpl", &key, DAY);
                     continue;
                 }
             }
         }
+        state.manage.edit_need.remove(&name);
         let mut args = Map::new();
         let verb = if let Some(target) = edit {
             args.insert("template".into(), json!(target));
@@ -5500,6 +5672,47 @@ fn politics_auto_fill(state: &State, now: GameHour, recheck: GameHour) -> Vec<Va
     out
 }
 
+/// A seat's options as (idea, enabled). For a vacancy fill (`fill`), best value first: each
+/// option's effects (the read's `effects`, crate::pick_value over the game's scripts: an
+/// adviser's traits, a law's modifiers) valued for this country; an option worth nothing or less
+/// is dropped (left by value), options with nothing valued follow in the game's order. Before,
+/// a fill took the first advisor the game enabled whatever he brought.
+fn offered_in_order(
+    options: &Value,
+    fill: bool,
+    ctx: &mut Option<crate::pick_value::Ctx>,
+    tools: &dyn Tools,
+    plan: &Value,
+) -> Vec<(String, bool)> {
+    let rows = list(options, "options");
+    let plain = |i: &Value| (text(&i["idea"]).to_string(), i["enabled"] == json!(true));
+    if !fill {
+        return rows.iter().map(plain).collect();
+    }
+    let ctx = ctx.get_or_insert_with(|| {
+        let economy = tools.call("hoi4_economy", &json!({})).unwrap_or_default();
+        let slots = tools
+            .call("hoi4_research", &json!({}))
+            .ok()
+            .map(|r| list(&r, "slots").len() as f64);
+        crate::pick_value::Ctx::from_reads(&economy, slots, plan)
+    });
+    let mut valued: Vec<(f64, (String, bool))> = Vec::new();
+    let mut unvalued: Vec<(String, bool)> = Vec::new();
+    for i in rows {
+        match crate::pick_value::value(&i["effects"], ctx, plan) {
+            Some((v, _, _)) if v > 0.0 => {
+                let per = v / i["cost"].as_f64().unwrap_or(1.0).max(1.0);
+                valued.push((per, plain(i)));
+            }
+            Some(_) => {}
+            None => unvalued.push(plain(i)),
+        }
+    }
+    valued.sort_by(|a, b| b.0.total_cmp(&a.0));
+    valued.into_iter().map(|(_, o)| o).chain(unvalued).collect()
+}
+
 /// Political power now (hoi4_economy).
 pub(super) fn political_power(tools: &dyn Tools) -> Option<f64> {
     tools
@@ -5768,6 +5981,8 @@ pub(super) fn politics_auto_step(
     // Whether an entry that is due (its when holds, or it has none) costs more than the power:
     // only then is unbought power saved for the next buy.
     let mut due_short = false;
+    // the country the options are valued for, read once a scan (a vacancy fill only)
+    let mut value_ctx: Option<crate::pick_value::Ctx> = None;
     for entry in order.as_array().map_or(&[][..], Vec::as_slice) {
         let (category, slot) = (text(&entry["category"]).to_string(), &entry["slot"]);
         let slot_key = format!("{category}:{slot}");
@@ -5884,10 +6099,8 @@ pub(super) fn politics_auto_step(
             .or(options["current"]["idea"].as_str())
             .unwrap_or("")
             .to_string();
-        let offered: Vec<(String, bool)> = list(&options, "options")
-            .iter()
-            .map(|i| (text(&i["idea"]).to_string(), i["enabled"] == json!(true)))
-            .collect();
+        let fill = entry["fill"] == json!(true);
+        let offered = offered_in_order(&options, fill, &mut value_ctx, tools, plan);
         if offered.iter().any(|(_, enabled)| *enabled) {
             could_buy = true;
         }
@@ -5911,10 +6124,7 @@ pub(super) fn politics_auto_step(
                 ) else {
                     continue;
                 };
-                let offered: Vec<(String, bool)> = list(&other, "options")
-                    .iter()
-                    .map(|i| (text(&i["idea"]).to_string(), i["enabled"] == json!(true)))
-                    .collect();
+                let offered = offered_in_order(&other, fill, &mut value_ctx, tools, plan);
                 let mut moved = entry.clone();
                 moved["slot"] = json!(seat);
                 if let Ok(idea) = politics_auto_choice(&moved, "", &offered, &never, &conscription)
@@ -6562,7 +6772,10 @@ fn feed_choice(
     } else {
         supply(state, tools, now)
     };
-    let short = shortfall(stock.as_ref(), read.as_ref());
+    let mut short = shortfall(stock.as_ref(), read.as_ref());
+    for (a, n) in edit_need(state, now) {
+        *short.entry(a).or_insert(0.0) += n;
+    }
     let lack = |l: &MilLine| -> f64 {
         short
             .iter()
@@ -8444,6 +8657,10 @@ fn balance_once(
             *b.need.entry(a).or_insert(0.0) += short + reserve;
         }
     }
+    // a template edit waiting for its equipment: its lines are raised before it is made
+    for (a, n) in edit_need(state, now) {
+        *b.need.entry(a).or_insert(0.0) += n;
+    }
     // the planned force: divisions the active training entries still add, times each template's need
     let training = active_training(state, tools, plan, now);
     if !training.is_empty() {
@@ -8911,41 +9128,127 @@ mod tests {
 
     #[test]
     fn a_template_edit_waits_while_the_stock_cannot_equip_the_fielded_divisions() {
-        let inf = json!({"unit": "infantry", "equipment_need": {"infantry_equipment": 100.0}});
+        let inf = json!({"unit": "infantry", "equipment_need": {"infantry_equipment": 100.0},
+                         "training_days": 90.0});
         let art = json!({"unit": "artillery_brigade",
                          "equipment_need": {"artillery_equipment": 24.0}});
         let read = json!({"templates": [
             {"template": "Inf", "divisions_using_template": 38, "units": [inf.clone(), inf.clone()]},
             {"template": "Art", "divisions_using_template": 1, "units": [art.clone()]}]});
-        let stock = |cover: f64| {
+        let stock = |cover: f64, per_day: f64| {
             json!({"equipment": [{"archetype": "artillery_equipment", "stockpile": cover,
-                                  "cover_after_shortfall": cover}]})
+                                  "cover_after_shortfall": cover, "produced_per_day": per_day}]})
         };
         let regiments = json!([
             ["infantry", "infantry"],
             ["artillery_brigade", "artillery_brigade"]
         ]);
-        let tools = fake(vec![
-            ("hoi4_template_get", read.clone()),
-            ("hoi4_stockpile", stock(40.0)),
-        ]);
-        let short = edit_stock_short(&tools, "Inf", &regiments, &[]).unwrap();
+        let short = |stock: Value, state: &mut State| {
+            let tools = fake(vec![
+                ("hoi4_template_get", read.clone()),
+                ("hoi4_stockpile", stock),
+            ]);
+            edit_stock_short(
+                state,
+                &tools,
+                &json!({}),
+                "l",
+                START,
+                "Inf",
+                &regiments,
+                &[],
+            )
+        };
+        let mut state = State::default();
+        let wait = short(stock(40.0, 0.0), &mut state).unwrap();
         assert!(
-            short.starts_with("artillery_equipment 40 < 1824 for 38"),
-            "{short}"
+            wait.why.starts_with("artillery_equipment 40 < 1824 for 38"),
+            "{}",
+            wait.why
         );
+        assert!(wait.why.contains("no line makes it"), "{}", wait.why);
+        assert_eq!(wait.need["artillery_equipment"], 1784.0);
+        assert!(short(stock(2000.0, 0.0), &mut state).is_none());
+        // at peace the line's output over the template's training days counts: 40 + 90 x 20
+        assert!(short(stock(40.0, 20.0), &mut state).is_none());
+        // an operation under way: the fielded divisions keep their equipment whatever the stock
+        state.done.insert("op:west:prep".into(), START);
+        let wait = short(stock(2000.0, 0.0), &mut state).unwrap();
+        assert!(
+            wait.why.starts_with("an operation is under way"),
+            "{}",
+            wait.why
+        );
+        state.done.insert("op:west:end".into(), START);
+        assert!(short(stock(2000.0, 0.0), &mut state).is_none());
+    }
+
+    /// w92b (28 Nov 2026): the infantry edit at war added two artillery battalions no own
+    /// template carried, so its need was unknown and the guard let it through; the West's
+    /// infantry stood at equipment fill 0.27. An unknown battalion is now read from the designer,
+    /// and one still unread makes the edit wait; the need it waits for is fed to the lines first.
+    #[test]
+    fn a_battalion_no_template_carries_is_read_from_the_designer_and_its_need_raises_lines() {
+        let inf = json!({"unit": "infantry", "equipment_need": {"infantry_equipment": 100.0}});
+        let read = json!({"templates": [
+            {"template": "Inf", "divisions_using_template": 10, "units": [inf.clone()]}]});
+        let regiments = json!([["infantry"], ["artillery_brigade"]]);
+        let options = json!({"battalions": [{"key": "artillery_brigade",
+            "equipment_need": {"artillery_equipment": 12.0}}], "support_companies": []});
         let tools = fake(vec![
             ("hoi4_template_get", read.clone()),
-            ("hoi4_stockpile", stock(2000.0)),
+            ("hoi4_template_options", options),
+            (
+                "hoi4_stockpile",
+                json!({"equipment": [{"archetype": "artillery_equipment",
+                "stockpile": 20.0, "cover_after_shortfall": 20.0, "produced_per_day": 0.0}]}),
+            ),
         ]);
-        assert_eq!(edit_stock_short(&tools, "Inf", &regiments, &[]), None);
-        // a battalion no own template carries: not judged here
-        let other = json!([["infantry", "infantry"], ["anti_tank_brigade"]]);
-        let tools = fake(vec![
-            ("hoi4_template_get", read),
-            ("hoi4_stockpile", stock(0.0)),
-        ]);
-        assert_eq!(edit_stock_short(&tools, "Inf", &other, &[]), None);
+        let mut state = State::default();
+        let wait = edit_stock_short(
+            &mut state,
+            &tools,
+            &json!({}),
+            "l",
+            START,
+            "Inf",
+            &regiments,
+            &[],
+        )
+        .unwrap();
+        assert!(
+            wait.why.starts_with("artillery_equipment 20 < 120 for 10"),
+            "{}",
+            wait.why
+        );
+        // unread: the edit waits rather than passing unjudged
+        let tools = fake(vec![("hoi4_template_get", read)]);
+        let wait = edit_stock_short(
+            &mut state,
+            &tools,
+            &json!({}),
+            "l",
+            START,
+            "Inf",
+            &regiments,
+            &[],
+        )
+        .unwrap();
+        assert!(
+            wait.why.contains("artillery_brigade needs is not read"),
+            "{}",
+            wait.why
+        );
+        // the waiting need is the balance's and the feed's need
+        state.manage.edit_need.insert(
+            "Inf".into(),
+            (
+                START,
+                HashMap::from([("artillery_equipment".into(), 100.0)]),
+            ),
+        );
+        assert_eq!(edit_need(&state, START + DAY)["artillery_equipment"], 100.0);
+        assert!(edit_need(&state, START + 31 * DAY).is_empty());
     }
 
     fn fake(replies: Vec<(&str, Value)>) -> Fake {
@@ -10352,6 +10655,83 @@ mod tests {
         assert!(note_of(&state, "missing_equipment_production")
             .unwrap()
             .contains("no paratroopers planned"));
+    }
+
+    /// g92b (27 Nov 2026): the plan removed the 1936 plane lines on day 0 with its reason; the
+    /// wings' planes then had no line and the alert stood 154 days. The plan's own removal is
+    /// its choice: no factory is taken for it while it stands, and the note gives the plan's why;
+    /// once a later entry re-adds the family, the line is opened again.
+    /// A vacancy fill took the first advisor the game enabled, whatever he brought: the seat's
+    /// options are now ordered by their value per political power for this country (effects from
+    /// the game's scripts), one worth nothing or less is left out, unvalued ones follow.
+    #[test]
+    fn a_vacancy_fill_takes_the_option_of_most_value_first() {
+        let options = json!({"options": [
+            {"idea": "cheap_nothing", "enabled": true, "cost": 50.0,
+             "effects": {"parts": [], "once": {}, "unread": ["trait unknown"]}},
+            {"idea": "harmful", "enabled": true, "cost": 50.0,
+             "effects": {"parts": [{"days": null, "modifiers": {"consumer_goods_factor": 0.05}}],
+                 "once": {}, "unread": []}},
+            {"idea": "builder", "enabled": true, "cost": 150.0,
+             "effects": {"parts": [{"days": null, "modifiers": {
+                 "production_speed_buildings_factor": 0.1}}], "once": {}, "unread": []}}]});
+        let tools = fake(vec![(
+            "hoi4_economy",
+            json!({"factory_trigger_count": {"military": 28, "civilian": 35, "naval": 10}}),
+        )]);
+        let mut ctx = None;
+        let order = offered_in_order(&options, true, &mut ctx, &tools, &json!({}));
+        let names: Vec<&str> = order.iter().map(|(i, _)| i.as_str()).collect();
+        assert_eq!(names, vec!["builder", "cheap_nothing"]);
+        // not a fill: the game's order
+        let plain = offered_in_order(&options, false, &mut ctx, &tools, &json!({}));
+        assert_eq!(plain.len(), 3);
+        assert_eq!(plain[0].0, "cheap_nothing");
+    }
+
+    #[test]
+    fn equipment_the_plan_removes_with_a_reason_gets_no_line_until_the_plan_re_adds_it() {
+        let lines = json!({"lines": [
+            {"line_kind": "military", "entry_index": 0, "equipment_id": "infantry_equipment_1",
+             "factory_counters": {"requested_factories_raw_signed": 20}}]});
+        let air = json!({"wings": [{"wing": "JG 132", "aircraft_type": "small_plane_airframe_0"}]});
+        let tools = fake(vec![
+            ("hoi4_production_lines", lines),
+            ("hoi4_air", air),
+            ("hoi4_stockpile", json!({"equipment": []})),
+            (
+                "hoi4_economy",
+                json!({"factory_trigger_count": {"military": 20}}),
+            ),
+        ]);
+        let plan = json!({"production": [
+            {"equipment": "small_plane_airframe_1", "from": "1936.1.1", "remove": true,
+             "why": "the 1936 design is outclassed by the 1937-39 designs"},
+            {"equipment": "small_plane_airframe_1", "from": "1937.1.1", "factories": 7}]});
+        let mut state = State::default();
+        let day0 = crate::alarms::stop_on_date(&json!({"stop_on_date": "1936.1.2"}))
+            .unwrap()
+            .unwrap()
+            .0;
+        state
+            .manage
+            .alert_since
+            .insert("missing_equipment_production".into(), day0);
+        assert!(missing_line_step(&mut state, &tools, &plan, "l", day0)
+            .unwrap()
+            .is_none());
+        let note = note_of(&state, "missing_equipment_production").unwrap();
+        assert!(note.contains("outclassed"), "{note}");
+        assert!(actions(&tools).is_empty());
+        // the plan re-adds fighters in 1937: the line is opened (one factory from the largest)
+        let later = crate::alarms::stop_on_date(&json!({"stop_on_date": "1937.1.2"}))
+            .unwrap()
+            .unwrap()
+            .0;
+        let out = missing_line_step(&mut state, &tools, &plan, "l", later)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("small_plane_airframe_0"), "{out}");
     }
 
     fn set_reply(tools: &Fake, tool: &str, v: Value) {
