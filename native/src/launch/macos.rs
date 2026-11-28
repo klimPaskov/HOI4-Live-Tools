@@ -6794,7 +6794,7 @@ impl MacClock {
             let mut reply = Value::Null;
             // the read-back of volunteers abroad is mapped by S25-VOLUNTEERS; until then the module's posted count is
             // the verdict
-            let mut settle = || Ok(journal::Outcome::Unobservable);
+            let mut settle = || -> Result<journal::Outcome> { Ok(journal::Outcome::Unobservable) };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 let ch = route
