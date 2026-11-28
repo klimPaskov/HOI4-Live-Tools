@@ -1106,6 +1106,15 @@ the entry with a region id; that region holds most of the army's divisions (hoi4
 the army advances into another region, within `every_days` the entry's wings fly over the new region. F3 an unknown army:
 the note says "no army ..." and no wing moves. Record the regions and the days.
 
+### F4 CLOSE AIR SUPPORT AT THE GAME'S PLANE LIMIT (engineer 134, written, #511; same bed, same session)
+hoi4_battles gives each side `cas_planes_max` = NMilitary.LAND_AIR_COMBAT_MAX_PLANES_PER_ENEMY_WIDTH (3 on 1.20) x the
+other side's `width_engaged`; plan_air sums it per region and stops close air support there. F4a: for 3 battles, the
+value equals 3 x the enemy's engaged width (record both). F4b: with more CAS planes than a region's limit (bed: every CAS
+wing free, `air_situation:{}` without entries), the note says "the game lets N into its battles" and the extra wings go to
+a region with room (record the orders); with every region at its limit, "left over" is said and no wing flies there.
+F4c (the game's side, optional): the battle view's air line shows no more CAS planes than the value. Fail = a region gets
+more planes than its limit, or a value disagrees with 3 x width.
+
 ## Air reads and the air plan (engineer 106, 28 Nov 2026): live checks, no new command
 
 - air-coverage: `hoi4_air {}` per wing `air_range_km` and `coverage` against the game's own "Coverage in this region"
