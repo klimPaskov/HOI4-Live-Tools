@@ -2581,6 +2581,10 @@ fn one(
     if let Some(line) = execution_modes(state, tools, id, op, &units, roster, lease, now)? {
         return Ok(Some(line));
     }
+    // SUPPLY BEFORE THE ATTACK: railway to the start line where its stacks starve
+    if let Some(line) = prepare_supply(state, tools, id, op, &units, roster, lease, now)? {
+        return Ok(Some(line));
+    }
     // every order of the prepare reads back (none rests after a failure): a declaration
     // against its enemies may go out
     let secondary_free = due(state, id);
@@ -7218,6 +7222,149 @@ fn spear_line(
     next
 }
 
+/// The own provinces of `armies` that draw more supply than they receive, from a `hoi4_supply`
+/// read: (province, state, divisions, supply over demand, railway level), the most starved first
+/// (its divisions times the missing share). Pure.
+fn starved_start(read: &Value, armies: &HashSet<String>) -> Vec<(i64, i64, i64, f64, i64)> {
+    let army_of: HashMap<String, String> = list(read, "divisions")
+        .iter()
+        .filter_map(|d| {
+            let id = d["id"]
+                .as_str()
+                .map(String::from)
+                .or_else(|| d["id"].as_i64().map(|n| n.to_string()))?;
+            Some((id, text(&d["army"]).to_string()))
+        })
+        .collect();
+    let mut out: Vec<(i64, i64, i64, f64, i64)> = list(read, "provinces")
+        .iter()
+        .filter_map(|p| {
+            let ids: Vec<String> = list(p, "division_ids")
+                .iter()
+                .filter_map(|v| {
+                    v.as_str()
+                        .map(String::from)
+                        .or_else(|| v.as_i64().map(|n| n.to_string()))
+                })
+                .collect();
+            let n = ids
+                .iter()
+                .filter(|i| army_of.get(*i).is_some_and(|a| armies.contains(a)))
+                .count() as i64;
+            let supply = p["supply"].as_f64()?;
+            let demand = p["demand"].as_f64().filter(|d| *d > 0.0)?;
+            (n > 0 && supply < demand).then(|| {
+                (
+                    p["province_id"].as_i64().unwrap_or(0),
+                    p["state_id"].as_i64().unwrap_or(0),
+                    n,
+                    supply / demand,
+                    p["railway_level"].as_i64().unwrap_or(0),
+                )
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        let w = |r: &(i64, i64, i64, f64, i64)| r.2 as f64 * (1.0 - r.3);
+        w(b).total_cmp(&w(a)).then(a.0.cmp(&b.0))
+    });
+    out
+}
+
+/// SUPPLY BEFORE THE ATTACK (`supply.prepare`, on unless `false`): once a game day while the
+/// operation prepares, the provinces where its attackers' divisions stand are read: the most
+/// starved one with no railway gets a railway from the nearest node the network feeds
+/// (`hoi4_railway_build` to_nearest_node, from_nearest_node; each province once in 30 days), so
+/// the line is fed before the declaration, not after the advance has outrun it; the stacks over
+/// their supply are in the note (the capacity spread takes them down; the trucks come from the
+/// logistics hubs rule, which reads the truck stock first). o96a (28 Nov 2026): 26 divisions in the
+/// Ardennes forest province 3488 with no railway on supply 1.7 against 21.3 from W+10; 41-49 of
+/// 68 divisions under half supply.
+#[allow(clippy::too_many_arguments)]
+fn prepare_supply(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    op: &Value,
+    units: &[Unit],
+    roster: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if op["supply"]["prepare"] == json!(false) || state.skipped(now, "opprepsup", id) {
+        return Ok(None);
+    }
+    state.skip(now, "opprepsup", id, DAY);
+    let mut armies: HashSet<String> = HashSet::new();
+    for u in units.iter().filter(|u| attacker(u) || u.role == Role::Line) {
+        armies.insert(u.name.clone());
+        armies.extend(u.members.iter().cloned());
+        if u.role == Role::Group {
+            armies.extend(
+                list(roster, "armies")
+                    .iter()
+                    .filter(|r| r["army_group"].as_str() == Some(u.name.as_str()))
+                    .map(|r| text(&r["army"]).to_string()),
+            );
+        }
+    }
+    let Ok(read) = tools.call("hoi4_supply", &json!({})) else {
+        return Ok(None);
+    };
+    if read["supply_available"] == json!(false) {
+        return Ok(None);
+    }
+    let starved = starved_start(&read, &armies);
+    let nk = format!("{id}:supply_prepare");
+    if starved.is_empty() {
+        state.op_notes.insert(
+            nk,
+            format!("operation {id}: every province of the start line feeds its divisions"),
+        );
+        return Ok(None);
+    }
+    let shown: Vec<String> = starved
+        .iter()
+        .take(4)
+        .map(|(p, s, n, r, rail)| {
+            format!(
+                "{p} (state {s}): {n} divisions at {:.0}% of their need, railway {rail}",
+                r * 100.0
+            )
+        })
+        .collect();
+    state.op_notes.insert(
+        nk.clone(),
+        format!(
+            "operation {id}: start line short of supply: {}",
+            shown.join("; ")
+        ),
+    );
+    let due = starved.iter().find(|(p, _, _, _, rail)| {
+        *rail == 0
+            && state
+                .done
+                .get(&key(id, &format!("prail:{p}")))
+                .is_none_or(|t| now.saturating_sub(*t) >= 30 * DAY)
+    });
+    let Some((p, s, n, r, _)) = due.copied() else {
+        return Ok(None);
+    };
+    state.done.insert(key(id, &format!("prail:{p}")), now);
+    Ok(Some(order(
+        state,
+        tools,
+        lease,
+        id,
+        &format!(
+            "supply before the attack: railway to province {p} (state {s}: {n} divisions at {:.0}% of their need, no railway)",
+            r * 100.0
+        ),
+        "hoi4_railway_build",
+        json!({"to_province": p, "to_state": s, "to_nearest_node": true, "from_nearest_node": true}),
+    )?))
+}
+
 /// ARMOUR WHERE IT CAN BREAK THROUGH (`armour_ground`, on unless `false`), once a game day per
 /// spearhead formation at war:
 /// - OFF ROUGH GROUND: when most of its divisions that stand in battles wait in the reserves of
@@ -7269,6 +7416,9 @@ fn armour_ground(
         .iter()
         .filter_map(|d| d["province_id"].as_i64())
         .collect();
+    if starts.is_empty() {
+        return;
+    }
     let me = player(tools, plan);
     let tags: Vec<String> = strings(op, "enemies")
         .into_iter()

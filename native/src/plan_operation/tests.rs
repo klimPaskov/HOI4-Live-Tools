@@ -5035,3 +5035,78 @@ fn the_armour_leaves_a_rough_ground_battle_s_reserve_and_goes_where_its_ground_i
     assert!(!state.done.contains_key(&key("op", "spearskip:Panzer:980")));
     assert!(state.op_notes["op:armour:Panzer"].contains("plan's own thrust: kept"));
 }
+
+// SUPPLY BEFORE THE ATTACK (engineer 99, after o96a)
+
+#[test]
+fn before_the_attack_the_most_starved_start_province_without_a_railway_gets_one() {
+    let game = Game::new();
+    // o96a W+10: 26 divisions in the Ardennes forest province 3488 (no railway) on 1.66 against
+    // 21.3; 8 in 11562 (railway 2) on 2.0 against 5.0; 6 in Rheinland 3444 with headroom
+    let ids = |prefix: &str, n: usize| -> Vec<Value> {
+        (0..n).map(|i| json!(format!("{prefix}{i}"))).collect()
+    };
+    let mut divisions: Vec<Value> = Vec::new();
+    for (prefix, n) in [("a", 26), ("b", 8), ("c", 6)] {
+        for i in 0..n {
+            divisions.push(json!({"id": format!("{prefix}{i}"), "army": "Mitte"}));
+        }
+    }
+    *game.supply.borrow_mut() = Some(json!({"divisions": divisions, "provinces": [
+        {"province_id": 11562, "state_id": 35, "divisions": 8, "division_ids": ids("b", 8),
+         "supply": 2.03, "demand": 4.98, "railway_level": 2},
+        {"province_id": 3488, "state_id": 980, "divisions": 26, "division_ids": ids("a", 26),
+         "supply": 1.66, "demand": 21.3, "railway_level": 0},
+        {"province_id": 3444, "state_id": 51, "divisions": 6, "division_ids": ids("c", 6),
+         "supply": 4.57, "demand": 1.75, "railway_level": 0}]}));
+    let u = unit("Mitte".into(), Role::Line, &Value::Null, &Value::Null);
+    let units = vec![u];
+    let op = json!({"id": "op"});
+    let roster = game.roster.borrow().clone();
+    let mut state = State::default();
+    let line = prepare_supply(&mut state, &game, "op", &op, &units, &roster, "l", START)
+        .unwrap()
+        .expect("a railway");
+    assert!(line.contains("railway to province 3488"), "{line}");
+    let rail = game
+        .orders()
+        .into_iter()
+        .find(|(n, _)| n == "hoi4_railway_build")
+        .unwrap();
+    assert_eq!(rail.1["to_province"], json!(3488));
+    assert_eq!(rail.1["to_nearest_node"], json!(true));
+    assert!(state.op_notes["op:supply_prepare"].contains("11562 (state 35): 8 divisions"));
+    // once a day; the same province not again for 30 days, a province with a railway never
+    assert!(prepare_supply(
+        &mut state,
+        &game,
+        "op",
+        &op,
+        &units,
+        &roster,
+        "l",
+        START + 1
+    )
+    .unwrap()
+    .is_none());
+    assert!(prepare_supply(
+        &mut state,
+        &game,
+        "op",
+        &op,
+        &units,
+        &roster,
+        "l",
+        START + DAY
+    )
+    .unwrap()
+    .is_none());
+    // switched off by the plan
+    let off = json!({"id": "op", "supply": {"prepare": false}});
+    let mut state = State::default();
+    assert!(
+        prepare_supply(&mut state, &game, "op", &off, &units, &roster, "l", START)
+            .unwrap()
+            .is_none()
+    );
+}

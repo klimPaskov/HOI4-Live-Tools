@@ -4125,10 +4125,15 @@ const AIR_REBASE_BATCH: usize = 12;
 const FOLLOW_MISSIONS: [&str; 2] = ["cas", "air_superiority"];
 
 /// The fighting region an `air_plan` entry with a land mission flies over once the war has left
-/// its planned region: the planned region (an id) held a state of the contact line earlier in this
-/// run (`airfight:<region>`) and holds none now, while other regions do. The new region is the
-/// one with the contact state nearest the entry's wings' bases (else the one with most contact
-/// states). None: the planned region stands (no war, a region given by name, no region facts).
+/// its planned region: the planned region (an id) held a state of the contact line now or earlier
+/// in this run (`airfight:<region>`). While our battles stand anywhere (hoi4_battles, each battle's
+/// state), a planned region with none of them follows them: the battle region nearest the entry's
+/// wings' bases (else the one with most of our divisions engaged). With no battle read, a planned
+/// region that holds no contact state follows the contact: the region with the contact state
+/// nearest the bases (else the one with most contact states). None: the planned region stands (no
+/// war, a region given by name, no region facts). The enemy's air superiority per region is not
+/// read (hoi4_air_regions: not located in memory; hoi4_air_region_probe reads one region's window
+/// with a click), so the regions are chosen by the battles alone.
 #[allow(clippy::too_many_arguments)]
 fn follow_fighting(
     state: &mut State,
@@ -4182,7 +4187,84 @@ fn follow_fighting(
     for r in &fighting {
         state.done.insert(format!("airfight:{r}"), now);
     }
-    if fighting.contains(&rid) || !state.done.contains_key(&format!("airfight:{rid}")) {
+    // THE BATTLES: a land mission flies where our battles are, not over every region that
+    // touches an enemy at war (o96a, 28 Nov 2026: 23% of the planes, mostly medium bombers on
+    // close support, flew over Northern France, a contact region with no battle of ours until
+    // day 37, while every battle stood in Benelux). The battles' regions by our divisions engaged
+    // in them; a planned region that touched the war (now or before) and holds none of them
+    // follows them.
+    let mut battles: HashMap<i64, (f64, Vec<i64>)> = HashMap::new();
+    if let Ok(read) = tools.call("hoi4_battles", &json!({})) {
+        for b in list(&read, "list") {
+            let Some(s) = b["state"].as_i64() else {
+                continue;
+            };
+            let Some(r) = region_of(s) else { continue };
+            let side = if text(&b["our_side"]) == "defender" {
+                &b["defender"]
+            } else {
+                &b["attacker"]
+            };
+            let e = battles.entry(r).or_default();
+            e.0 += side["engaged"].as_f64().unwrap_or(1.0).max(1.0);
+            e.1.push(s);
+        }
+    }
+    let touched = fighting.contains(&rid) || state.done.contains_key(&format!("airfight:{rid}"));
+    if !battles.is_empty() {
+        if battles.contains_key(&rid) || !touched {
+            return None;
+        }
+        let pts: Vec<(f64, f64)> = owned
+            .iter()
+            .filter_map(|w| w["air_base"]["state_id"].as_i64())
+            .filter_map(|s| state.centers.get(&(s as i32)).copied())
+            .collect();
+        let centre = |s: i64| state.centers.get(&(s as i32)).copied();
+        let (target, anchor) = if pts.is_empty() {
+            let (r, (_, states)) = battles
+                .iter()
+                .max_by(|a, b| a.1 .0.total_cmp(&b.1 .0).then(b.0.cmp(a.0)))?;
+            (*r, states.iter().find_map(|s| centre(*s)))
+        } else {
+            let n = pts.len() as f64;
+            let (x, z) = (
+                pts.iter().map(|p| p.0).sum::<f64>() / n,
+                pts.iter().map(|p| p.1).sum::<f64>() / n,
+            );
+            let mut near: Vec<(i64, f64, (f64, f64))> = battles
+                .iter()
+                .flat_map(|(r, (_, states))| {
+                    states.iter().filter_map(move |s| {
+                        let p = centre(*s)?;
+                        Some((*r, (p.0 - x).powi(2) + (p.1 - z).powi(2), p))
+                    })
+                })
+                .collect();
+            near.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)));
+            match near.first() {
+                Some((r, _, p)) => (*r, Some(*p)),
+                None => {
+                    let (r, _) = battles
+                        .iter()
+                        .max_by(|a, b| a.1 .0.total_cmp(&b.1 .0).then(b.0.cmp(a.0)))?;
+                    (*r, None)
+                }
+            }
+        };
+        note(
+            state,
+            "air_plan",
+            format!(
+                "{}: no battle of ours in region {rid}: {} over region {target}, where {:.0} of our divisions fight",
+                text(&entry["id"]),
+                mission.unwrap_or(""),
+                battles.get(&target).map_or(0.0, |b| b.0)
+            ),
+        );
+        return Some((json!(target), anchor));
+    }
+    if fighting.contains(&rid) || !touched {
         return None;
     }
     // the wings' bases' middle; the nearest contact state's region
@@ -10854,6 +10936,53 @@ mod tests {
         assert!(actions(&tools)
             .iter()
             .all(|(_, a)| a["region"] == json!("8")));
+    }
+
+    #[test]
+    fn a_close_support_wing_over_a_contact_region_without_a_battle_flies_over_the_battles() {
+        // o96a (28 Nov 2026): 23% of the planes (mostly medium bombers on close support) flew
+        // over Northern France (19), at war but with no battle of ours until day 37, while every
+        // battle stood in Benelux
+        let read = json!({"air_bases": [
+            {"base_id": 9, "state_id": 66, "free": 1000, "region": {"id": 8}}],
+            "wings": [{"wing": "KG 1", "aircraft_type": "small_plane_cas_airframe_1",
+                       "aircraft": 100, "standing_by": false, "region": {"id": 19},
+                       "air_base": {"base_id": 9, "state_id": 66}, "missions": ["cas"]}]});
+        let states = json!({"states": [
+            {"state_id": 86, "region": 38, "x": 10.0, "z": 0.0},
+            {"state_id": 28, "region": 19, "x": -90.0, "z": 0.0},
+            {"state_id": 66, "region": 8, "x": 0.0, "z": 0.0}]});
+        let wars = json!({"wars": {"enemies": ["POL", "FRA"]}, "borders": [
+            {"neighbour_tag": "POL", "neighbour_states": [86]},
+            {"neighbour_tag": "FRA", "neighbour_states": [28]}]});
+        let tools = fake(vec![
+            ("hoi4_air", read),
+            ("hoi4_states", states),
+            ("hoi4_wars", wars),
+            ("hoi4_overview", json!({"player": "GER"})),
+            (
+                "hoi4_battles",
+                json!({"list": [
+                {"province": 3488, "state": 86, "our_side": "attacker", "attacker": {"engaged": 9}}]}),
+            ),
+        ]);
+        let plan = json!({"air_plan": [{"id": "ap_fra", "airframe": "small_plane_cas_airframe_1",
+            "region": 19, "mission": "cas"}]});
+        let mut state = State::default();
+        air_plan_step(&mut state, &tools, &plan, "l", START).unwrap();
+        let sent = actions(&tools);
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!(sent[0].0, "hoi4_air_mission");
+        assert_eq!(sent[0].1["region"], json!("38"));
+        // a wing over the battles' own region stays
+        let plan = json!({"air_plan": [{"id": "ap_pol", "airframe": "small_plane_cas_airframe_1",
+            "region": 38, "mission": "cas"}]});
+        let mut state = State::default();
+        tools.calls.borrow_mut().clear();
+        air_plan_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(actions(&tools)
+            .iter()
+            .all(|(_, a)| a["region"] == json!("38")));
     }
 
     #[test]
