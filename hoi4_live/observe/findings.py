@@ -151,7 +151,9 @@ def political_power(snap, prev, have):
     if pp is None or "political_power_unspent" in have:
         return []
     alerts = {a.get("alert") for a in snap.get("alerts") or [] if a.get("alert")}
-    marked = sorted(alerts & {"modify_government", "decisions_available"})
+    # the game's decisions_available alert lights while any decision is enabled, wanted or not:
+    # no sign of idle power (the executor's own row judges the decisions by value)
+    marked = sorted(alerts & {"modify_government"})
     affordable = [a for a in pol.get("affordable") or [] if (a.get("cost") or 0) <= pp]
     if not marked and not affordable:
         return []

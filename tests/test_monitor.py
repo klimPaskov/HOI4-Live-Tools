@@ -415,6 +415,34 @@ class MonitorTest(unittest.TestCase):
         assert "| army experience | 10 | 10 |" in text
         assert "Silent lanes past their deadline (FAIL while any): 0" in text
 
+    def test_each_idle_row_shows_its_lanes_turns_and_answers_and_counts_the_right_issues(self):
+        # g92b, 27 Nov 2026: every military factory worked while missing_equipment_production stood
+        # open; decisions_available lit for unwanted decisions; the naval HQ admiral sat in task forces
+        from hoi4_live.observe.escalation import gate_packet
+        from hoi4_live.observe.idle_days import sink_of
+        assert sink_of({"code": "missing_equipment_production"}) == "equipment without a line"
+        assert sink_of({"code": "decisions_available"}) is None
+        assert sink_of({"code": "admiral_assignable"}) == "leaders"
+        assert sink_of({"code": "free_military_factories"}) == "military factories"
+        det = Detector(str(self.tmp), write=False)
+        det._set_date("1936.01.01.12")
+        det.raise_issue("modify_officer_corps", "modify_officer_corps", "a spirit can be picked", "medium")
+        it = det.issues["modify_officer_corps"]
+        it["lane"] = "officer_corps"
+        for _ in range(3):
+            det.outcome({"id": it["id"], "outcome": "cannot", "lane": "officer_corps",
+                         "reason": "lane officer_corps had its turn and found nothing to do or wait for"})
+        det.outcome({"id": it["id"], "outcome": "waiting", "lane": "officer_corps",
+                     "reason": "waiting: Logistical Focus needs 350 army xp"})
+        det._set_date("1936.01.11.12")
+        snap_ = {"date": "1936.01.11.12", "lane_turns": [
+            {"lane": "officer_corps", "turns": 145, "days_since": 0},
+            {"kind": "ticks", "lane": "(ticks)", "ticks": 300}]}
+        text = gate_packet("run_end", snap_, det, 0)
+        row = next(l for l in text.splitlines() if l.startswith("| officer corps |"))
+        assert "officer_corps 145 turns: waiting 1, cannot 3" in row, row
+        assert "Logistical Focus" in row
+
     def test_the_gate_packet_counts_a_silent_lane_and_the_issue_goes_to_the_row_owner(self):
         from hoi4_live.observe.escalation import gate_packet
         det = Detector(str(self.tmp), write=False)

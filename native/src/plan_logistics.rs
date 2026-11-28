@@ -328,12 +328,13 @@ pub(super) fn hub_raise_trucks(
         return None;
     }
     let ops = operation_armies(state, plan);
-    // the hub truck cost is the game's define: unread, there is no number to count
-    hub_wants(plan, roster, supply, &ops)
+    // a raise whose cost per hub is unread adds nothing: the stock it needs is unknown
+    let need: f64 = hub_wants(plan, roster, supply, &ops)
         .iter()
         .filter(|w| w.wanted > w.level)
-        .map(|w| w.trucks)
-        .sum()
+        .filter_map(|w| w.trucks)
+        .sum();
+    Some(need)
 }
 
 fn hubs_step(

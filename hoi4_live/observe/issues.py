@@ -481,6 +481,7 @@ class Detector:
                 it["lane_outcome"] = {k: rec.get(k) for k in ("outcome", "reason", "lane", "hour")}
                 if rec.get("reason"):
                     it["lane_reason"] = str(rec["reason"])[:300]
+                self.idle.answer(it, rec.get("outcome"), rec.get("reason"))
                 if rec.get("outcome") in ("waiting", "cannot"):
                     self._emit("lane_answer", it, outcome=rec.get("outcome"), reason=str(rec.get("reason"))[:200])
                 return it

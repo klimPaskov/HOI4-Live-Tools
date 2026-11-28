@@ -6532,6 +6532,28 @@ fn layout_step(
         }
         let row = armies.iter().find(|a| text(&a["army"]) == army);
         if row.is_some_and(|a| a["commander"].is_null()) {
+            // a general whose army role the game hides now is not given the army: the game
+            // would take him off again (g92b: Hoth, hidden until a focus, verified on Armee
+            // Pommern and gone the same day); the command step fills the vacancy meanwhile
+            if let Ok(read) = tools.call("hoi4_commanders", &json!({})) {
+                let hidden = list(&read, "commanders")
+                    .iter()
+                    .find(|c| text(&c["name"]) == general)
+                    .cloned()
+                    .filter(|c| !plan_formations::role_visible(state, tools, c, now));
+                if let Some(c) = hidden {
+                    state.skip(now, "layoutgen", &army, DAY);
+                    plan_manage::note(
+                        state,
+                        "layout_general",
+                        format!(
+                            "{general} is not given {army}: the game hides his army role until {}",
+                            c["visible_when"]
+                        ),
+                    );
+                    continue;
+                }
+            }
             let (ok, why) = state.act(
                 tools,
                 lease,
