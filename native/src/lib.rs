@@ -23,6 +23,7 @@ pub mod operation_rules;
 pub mod own_focus;
 pub(crate) mod pause_guard;
 pub(crate) mod phase;
+pub(crate) mod pick_value;
 pub mod plan_predicate;
 pub mod plan_run;
 pub mod platform;

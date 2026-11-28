@@ -107,6 +107,14 @@ pub(super) fn affordable_decisions(read: &Value, budget: f64, plan: &Value) -> V
     let mut out: Vec<(String, f64)> = list(read, "decisions")
         .iter()
         .filter(|d| d["enabled"] == json!(true) && d["active_timer"] != json!(true))
+        // a decision the lane judged worth nothing (its value read from the game's scripts), or
+        // one the player was offered and did not take, is left with a reason: no idle power
+        .filter(|d| {
+            !matches!(
+                d["verdict"].as_str(),
+                Some("left_by_value" | "left_after_offer")
+            )
+        })
         .filter_map(|d| {
             let cost = d["cost"].as_f64()?;
             let key = text(&d["decision"]).to_string();

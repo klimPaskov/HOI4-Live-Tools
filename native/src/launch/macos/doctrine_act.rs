@@ -1234,14 +1234,40 @@ pub(super) fn officer_call(
                     .find(|s| s["view"] == json!(view) && s["index"] == json!(k))
                     .map(|s| s["taken"] == json!(true))
                     .unwrap_or(false);
+                // the branch's experience against the price the window shows (every cost
+                // modifier applied): a pick the pool cannot pay is refused before the click with
+                // both numbers (g92b, 27 Nov 2026: Political Loyalty clicked three times, each
+                // read back not taken, no reason given)
+                let held = read(process, doctrines::snapshot)
+                    .ok()
+                    .and_then(|s| doctrines::xp_index(view).map(|x| s.xp[x]));
+                if let (Some(price), Some(held)) = (entry["cost"].as_f64(), held) {
+                    if held + 1e-6 < price {
+                        return Err(refuse(
+                            "insufficient_experience",
+                            format!(
+                                "{want} costs {price} {view} experience and {} is held",
+                                mgmt::round(held, 1)
+                            ),
+                        ));
+                    }
+                }
                 pk::click(process, keys, "officer corps spirit", |_, _| Ok(target))?;
-                crate::phase::sleep(Duration::from_millis(500));
-                let after = slots_of(&read(process, |r, i| officer_widgets(r, i, false))?);
-                let taken = after
-                    .iter()
-                    .find(|s| s["view"] == json!(view) && s["index"] == json!(k))
-                    .map(|s| s["taken"] == json!(true))
-                    .unwrap_or(false);
+                // the slot is read again until it shows the spirit (the view refreshes on the
+                // game's own tick, not at once), up to three seconds
+                let mut taken = false;
+                for _ in 0..12 {
+                    crate::phase::sleep(Duration::from_millis(250));
+                    let after = slots_of(&read(process, |r, i| officer_widgets(r, i, false))?);
+                    taken = after
+                        .iter()
+                        .find(|s| s["view"] == json!(view) && s["index"] == json!(k))
+                        .map(|s| s["taken"] == json!(true))
+                        .unwrap_or(false);
+                    if taken && !before_taken {
+                        break;
+                    }
+                }
                 Ok(
                     json!({"slot": format!("{view}:{k}"), "spirit": entry["name"],
                     "cost": entry["cost"], "taken_before": before_taken, "taken_after": taken,

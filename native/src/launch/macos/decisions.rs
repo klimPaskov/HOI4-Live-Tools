@@ -59,6 +59,17 @@ fn cost(process: &dyn Process, key: &str) -> Option<f64> {
     .copied()
 }
 
+/// What `key` does by the running game's scripts (crate::pick_value: the decision's modifier,
+/// its days, its valued and unread effects), None when the content folder is unreadable or the
+/// decision is not in it.
+fn effects(process: &dyn Process, key: &str) -> Option<Value> {
+    let dir = super::mgmt::game_dir(process).ok()?;
+    crate::script::cached(&dir, "pick_values", crate::pick_value::load)
+        .items
+        .get(key)
+        .map(crate::pick_value::item_json)
+}
+
 /// Raw engine units per political power point (economy.rs FIXED).
 const PP_UNITS: f64 = 100_000.0;
 
@@ -265,7 +276,8 @@ pub(super) fn list(process: &dyn Process, keys: &dyn GameInput) -> Result<Value>
         .into_iter()
         .map(|r| {
             let cost = cost(process, &r.key);
-            json!({"decision":r.key,"title":r.title,"active_timer":r.timed,"enabled":r.enabled,"cost":cost})
+            let effects = effects(process, &r.key);
+            json!({"decision":r.key,"title":r.title,"active_timer":r.timed,"enabled":r.enabled,"cost":cost,"effects":effects})
         })
         .collect::<Vec<_>>()))
 }

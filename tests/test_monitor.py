@@ -443,6 +443,22 @@ class MonitorTest(unittest.TestCase):
         assert "officer_corps 145 turns: waiting 1, cannot 3" in row, row
         assert "Logistical Focus" in row
 
+    def test_a_declaration_gate_lists_equipment_fill_per_army(self):
+        # w92b, 28 Nov 2026: a template edit at war left the West's infantry at fill 0.27
+        from hoi4_live.observe.escalation import gate_packet
+        det = Detector(str(self.tmp), write=False)
+        land = {"armies": [{"army": "1. Armee"}, {"army": "6. Armee", "equipment_fill_min": 0.9}],
+                "divisions": [{"army": "1. Armee", "equipment_fill": 0.27},
+                              {"army": "1. Armee", "equipment_fill": 0.31}],
+                "division_count": 2}
+        text = gate_packet("war_declared", {"date": "1939.09.01.00", "trigger": "war_declared:POL",
+                                            "land": land}, det, 0)
+        lines = text.splitlines()
+        at = lines.index("Equipment fill per army (lowest first):")
+        assert lines[at + 1] == "- 1. Armee: equipment fill mean 0.29, lowest 0.27, 2 of 2 division(s) below 0.75"
+        assert lines[at + 2].startswith("- 6. Armee: equipment fill lowest 0.90")
+        assert "Equipment fill" not in gate_packet("run_end", {"date": "1939.09.01.00", "land": land}, det, 0)
+
     def test_the_gate_packet_counts_a_silent_lane_and_the_issue_goes_to_the_row_owner(self):
         from hoi4_live.observe.escalation import gate_packet
         det = Detector(str(self.tmp), write=False)
