@@ -255,6 +255,19 @@ class Golden(unittest.TestCase):
         self.assertNotIn("CAS_equipment_2", bases)
         self.assertNotIn("fighter_equipment_2", bases)
 
+    def test_turret_opens_the_main_armament_and_duplicates_evaluate(self):
+        # the three-man turret adds tank_medium_main_armament to main_armament_slot; the tank-destroyer chassis is a
+        # duplicate archetype whose type is a block (type = { anti_tank armor })
+        tank = {"turret_type_slot": "tank_medium_three_man_tank_turret", "main_armament_slot": "tank_medium_cannon",
+                "suspension_type_slot": "tank_bogie_suspension", "armor_type_slot": "tank_welded_armor",
+                "engine_type_slot": "tank_gasoline_engine"}
+        self.assertEqual(designer.evaluate(self.cat, "medium_tank_chassis_2", tank)["problems"], [])
+        td = dict(tank, turret_type_slot="tank_medium_fixed_superstructure_turret",
+                  main_armament_slot="tank_high_velocity_cannon", armor_type_slot="tank_riveted_armor")
+        ev = designer.evaluate(self.cat, "medium_tank_destroyer_chassis_1", td)
+        self.assertEqual(ev["problems"], [])
+        self.assertIn("anti_tank", ev["types"])
+
 
 if __name__ == "__main__":
     unittest.main()
