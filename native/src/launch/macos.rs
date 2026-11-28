@@ -7427,9 +7427,13 @@ impl MacClock {
                     let headings = ui::read(process, armies::division_headings)?;
                     let at = ui::read(process, armies::division_provinces)?;
                     let on_way = ids.iter().filter(|d| headings.get(*d) == Some(&p)).count();
+                    // standing there and not marching away (live 115, 28 Nov 2026)
                     let there = ids
                         .iter()
-                        .filter(|d| at.get(*d).copied().flatten() == Some(p))
+                        .filter(|d| {
+                            at.get(*d).copied().flatten() == Some(p)
+                                && headings.get(*d).is_none_or(|h| *h == 0 || *h == p)
+                        })
                         .count();
                     Ok((on_way, there))
                 };
@@ -7470,11 +7474,16 @@ impl MacClock {
                 let mut dispatch = || {
                     authority.authorize(token, &epoch)?;
                     let at = ui::read(process, armies::division_provinces).unwrap_or_default();
+                    let away = ui::read(process, armies::division_headings).unwrap_or_default();
                     let pending: Vec<String> = ids
                         .iter()
-                        .filter(|d| at.get(*d).copied().flatten() != Some(p))
+                        .filter(|d| {
+                            at.get(*d).copied().flatten() != Some(p)
+                                || away.get(*d).is_some_and(|h| *h != 0 && *h != p)
+                        })
                         .cloned()
                         .collect();
+                    let mut posted = (Vec::new(), BTreeMap::new());
                     move_reply = module_in_process(&mut move_route, |ch| {
                         let headings = ui::read(process, armies::division_headings)?;
                         let left = inproc_moves::pending(&pending, &headings, &at, p, &[p]);
@@ -7482,9 +7491,15 @@ impl MacClock {
                             return Ok(inproc::Routed::Gui);
                         }
                         let ptrs = ui::read(process, |r, i| armies::division_ptrs(r, i, &left))?;
+                        posted = (left, headings);
                         Ok(inproc_moves::move_divisions(ch, &ptrs, p))
                     })?;
                     if move_reply.is_some() {
+                        inproc_moves::wait_started(
+                            || ui::read(process, armies::division_headings),
+                            &posted.1,
+                            &posted.0,
+                        );
                         return Ok(());
                     }
                     if had_route {
@@ -7511,6 +7526,7 @@ impl MacClock {
                 let ids = ui::read(process, |r, i| armies::army_division_ids(r, i, army))
                     .unwrap_or_default();
                 let at = ui::read(process, armies::division_provinces).unwrap_or_default();
+                let away = ui::read(process, armies::division_headings).unwrap_or_default();
                 let standing = ids
                     .iter()
                     .filter(|d| {
@@ -7518,6 +7534,7 @@ impl MacClock {
                             .copied()
                             .flatten()
                             .is_some_and(|p| wanted.contains(&p))
+                            && away.get(*d).is_none_or(|h| *h == 0 || wanted.contains(h))
                     })
                     .count();
                 if total > 0 && on_way + standing >= total {
@@ -7606,6 +7623,7 @@ impl MacClock {
             let mut move_reply = None;
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
+                let mut posted = (Vec::new(), BTreeMap::new());
                 move_reply = module_in_process(&mut move_route, |ch| {
                     let to = match province {
                         Some(p) => Some(p),
@@ -7631,9 +7649,15 @@ impl MacClock {
                         return Ok(inproc::Routed::Gui);
                     }
                     let ptrs = ui::read(process, |r, i| armies::division_ptrs(r, i, &left))?;
+                    posted = (left, headings);
                     Ok(inproc_moves::move_divisions(ch, &ptrs, to))
                 })?;
                 if move_reply.is_some() {
+                    inproc_moves::wait_started(
+                        || ui::read(process, armies::division_headings),
+                        &posted.1,
+                        &posted.0,
+                    );
                     return Ok(());
                 }
                 if had_route {
