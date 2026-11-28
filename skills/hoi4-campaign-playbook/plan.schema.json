@@ -358,7 +358,7 @@
     "airborne": {
       "type": "object",
       "x-owner": "executor",
-      "description": "standing opportunity rule for paratroopers (plan_airborne.rs): at war, once a day, the first target whose `when` holds, that a transport wing reaches from one of the air bases, whose region's air is ours by the region window's estimate (min_air_share), and in FAIR mode lies within link_up_km of one of our battles, gets hoi4_paradrop with `army`; then the rule rests cooldown_days. The game's own checks still decide. Absent or enabled:false: off (a roleplay goal switches it off). hoi4_paradrop is off in auto until S21-PARADROP passes.",
+      "description": "standing opportunity rule for paratroopers (plan_airborne.rs): at war, once a day, the first target whose `when` holds, that a transport wing reaches from one of the air bases, whose region's air is ours by the region window's estimate (min_air_share), and in FAIR mode lies within link_up_km of one of our battles, gets hoi4_paradrop with `army`; then the rule rests cooldown_days. The game's own checks still decide. Absent or enabled:false: off (a roleplay goal switches it off). FAIR: off unless roleplay_request (the owner's rule); META: on. hoi4_paradrop is off in auto until S21-PARADROP passes.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -424,6 +424,11 @@
           "type": "integer",
           "minimum": 1,
           "default": 14
+        },
+        "roleplay_request": {
+          "type": "boolean",
+          "default": false,
+          "description": "FAIR: drops are off by default; true when the player asked for them (META drops without it)"
         },
         "min_transports": {
           "type": "integer",

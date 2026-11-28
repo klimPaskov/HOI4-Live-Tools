@@ -15,7 +15,8 @@
 //! snipes without a supportable operation, MX43 the retreat trick); META lifts it. The game's own checks
 //! (paratroopers, transports, PARADROP_AIR_SUPERIORITY_RATIO) still decide. The strategist writes the targets
 //! (victory points, ports, air fields) from the game files for any country; a roleplay goal switches the rule off
-//! (`enabled: false`). hoi4_paradrop itself is off in auto until S21-PARADROP passes; the rule then waits on its
+//! (`enabled: false`). Drops are off by default in FAIR (the owner's rule of 28 Nov) and on in META; in FAIR a player's
+//! request (`roleplay_request: true`) turns them on. hoi4_paradrop itself is off in auto until S21-PARADROP passes; the rule then waits on its
 //! refusal (paradrop_unvalidated) with the reason in the digest.
 
 use std::collections::HashMap;
@@ -116,6 +117,11 @@ pub(super) fn pick_drop(
     (None, why)
 }
 
+/// Whether the rule may drop: always in META; in FAIR only on the player's request (`roleplay_request`).
+pub(super) fn drops_allowed(fair: bool, cfg: &Value) -> bool {
+    !fair || cfg["roleplay_request"].as_bool() == Some(true)
+}
+
 /// Transport planes a drop of `divisions` needs: the game's minimum, else the weight of each division.
 pub(super) fn transports_needed(divisions: u64, min: u64, per_division: u64) -> u64 {
     (divisions * per_division).max(min)
@@ -131,6 +137,11 @@ pub(super) fn airborne_step(
 ) -> Result<Option<String>> {
     let cfg = &plan["airborne"];
     if !cfg.is_object() || cfg["enabled"] == json!(false) || state.skipped(now, "airborne", "x") {
+        return Ok(None);
+    }
+    // the owner's rule (28 Nov): drops are off by default in FAIR, on in META, and on in FAIR when the player asks for
+    // them (a roleplay request: `roleplay_request`)
+    if !drops_allowed(crate::fair_guard::Run::from_plan(plan).fair, cfg) {
         return Ok(None);
     }
     let army = text(&cfg["army"]).to_string();
@@ -364,6 +375,13 @@ mod tests {
         // unread air waits
         let (pick, why) = sky(&HashMap::new(), &[10], None);
         assert!(pick.is_none() && why.iter().any(|w| w.contains("not read")));
+    }
+
+    #[test]
+    fn drops_are_off_in_fair_unless_the_player_asks() {
+        assert!(drops_allowed(false, &json!({})));
+        assert!(!drops_allowed(true, &json!({})));
+        assert!(drops_allowed(true, &json!({"roleplay_request": true})));
     }
 
     #[test]
