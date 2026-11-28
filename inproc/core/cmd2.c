@@ -510,6 +510,26 @@ const cmd_spec CMD2_SPECS[] = {
      * the command carries only the tag) */
     {"faction", "faction.spymaster", "CBecomeSpyMasterCommand", 0x28, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "8CCountry", 1,
      {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}}, OBJ2_NONE, 0, AUTH_TAG_PTR, "8CCountry"},
+    /* ---- decrypt (engineer 133, 28 Nov): the agency's cipher work, as the cryptology view posts it. Read from 1.20.0.0
+     * (1.20.1.0 identical; 1.19.4.1 the same code one vtable slot lower). The decryption state is the player's agency
+     * (country +0xd68) +0x128: a token hash map +0x40 (mask +0x4c, extra probes +0x50, entries of 12 bytes: distance +0,
+     * key +4, index +8) into an array +0x28 (size +0x34) of 0x38-byte records: target tag +0x8, active days +0xc, bonus
+     * active +0x10, decrypting +0x12, progress +0x18.
+     * start: CStartStopDecryptionCommand 19064 (0x30; factory 0x1008f1e80, vtable 0x1035163c8): tag +0x24 (0x289a), the
+     * target country's tag +0x28 (0x6b, the tag writer), start 1 / stop 0 byte +0x2c (0x69; the factory leaves it
+     * unwritten). "Can do" (0x1008eb450): both tags > 0; start: the target is a valid decryption target (0x101334a20:
+     * not ourselves, an existing country with an agency) and not decrypted already; stop: it is being decrypted.
+     * Execution (0x1008eb2f0) sets the record's decrypting byte (+0x11 = 0, +0x12 = 1) or clears it.
+     * activate: CActivateActiveDecryptionBonuses 19072 (0x30; factory 0x1008f1ed0, vtable 0x103516498): tag +0x24, target
+     * +0x28 (0x6b). "Can do" (0x1008eb9f0): the target's record exists, its cipher is broken (progress against the
+     * target's encryption, 0x1013343e0) and its bonus is not active yet; execution sets the bonus active (+0x10 = 1), its
+     * days (+0xc) and stops the decryption (+0x12 = 0). Auth (both): the sender controls the tag. The request's object is
+     * the TARGET country (exactly a CCountry, from its tag on the main thread) */
+    {"decrypt", "decrypt.start", "CStartStopDecryptionCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "8CCountry", 3,
+     {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"target", 0x28, FK_I32, 0, 0x6b, 0, 1}, {"start", 0x2c, FK_U8, 0, 0x69, 0, 2, -1}},
+     OBJ2_NONE, 0, AUTH_TAG_PTR, "8CCountry"},
+    {"decrypt", "decrypt.activate", "CActivateActiveDecryptionBonuses", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "8CCountry", 2,
+     {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"target", 0x28, FK_I32, 0, 0x6b, 0, 1}}, OBJ2_NONE, 0, AUTH_TAG_PTR, "8CCountry"},
     /* ---- move (engineer 105, 28 Nov): a division's move order, as the right click on a province posts it. Read from
      * 1.20.0.0 and 1.19.4.1 (identical code): CMoveCommand 10402 (0x88; factory 1.20 0x100b403b0, vtable 0x103526f28)
      * holds a unit action at +0x28 (its own serializer writes everything through that action, so no field of the command

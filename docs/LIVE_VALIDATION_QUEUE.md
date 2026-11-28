@@ -33,6 +33,7 @@ its mouse path.
 | move | S20-MOVE | not run: division moves by command (hoi4_army_move), off under `auto` |
 | leader | S31-TRAIT | not run: a general's trait by its key and the promotion to field marshal (hoi4_general_trait trait / promote:true), off under `auto` |
 | faction | S32-FACTION | not run: a faction goal by its key and the spymaster role (hoi4_diplomacy_act faction_goal / become_spymaster), off under `auto` |
+| decrypt | S33-DECRYPT | not run: start / stop decrypting a country and activate a broken cipher (hoi4_agency_upgrade decryption), off under `auto` |
 | multiplayer | S1-MP, S2-MP | not run (needs two clients); every post refuses outside single player |
 
 ## Proof state of the registered tools (23 November 2026)
@@ -1476,3 +1477,29 @@ T9 the executor: a plan with faction.spymaster true and faction.goals [two goals
 spymaster once, the first goal refused and waiting a week while the second goes; no repeat of a set goal.
 Pass: T0-T9, no window opened by the tool, the goal's exact class accepted (a refusal "not_a_live_object" in T2 means the
 goal database's value is not exactly a CFactionGoal: stop and report). Then IPC_LIVE_PASSED for faction may be set to 1.
+
+## Session S33-DECRYPT: decryption start, stop and activation by command, and the cipher read (in process, family `decrypt`; about 25 minutes) -- any time
+Build: e133 (tools 133). Module family `decrypt` named in HOI4_INPROC_POST and HOI4_BACKEND=inprocess. A 1.20.x save with
+an agency (created) and preferably one cipher already broken; the 1939 bookmark run a few weeks (or s129a's 1940 bed) does.
+There is no mouse path: every step either posts or refuses. FAIR: the cryptology view's own commands only.
+T0 hello: families.decrypt resolved (on true with the family named), live_passed false; the scan evidence of decrypt.start
+names CStartStopDecryptionCommand size 0x30, type 19064; decrypt.activate type 19072.
+T1 hoi4_intelligence: `decryption` state_read true; `ciphers` lists every country the agency worked on (target, decrypting,
+bonus_active, bonus_days_left, progress_raw) and `target` the one decrypted now; compare with the cryptology view (Shift+W,
+decryption tab): the same country decrypting, the same broken ciphers. Note progress_raw of the decrypted country on two
+days (the daily gain) and the view's percentage, so the threshold can be dated in a later build.
+T2 hoi4_agency_upgrade {decryption: {target: <a country not decrypted, not broken>, action: start}}: expect backend
+inprocess, posted 1; Verified by memory within the window (its record decrypting true); the view shows it decrypting. If
+another country was being decrypted, note whether the game moved the work (one at a time) or refused.
+T3 the same call again: nothing_to_change before any post.
+T4 action stop for it: posted 1, Verified (decrypting false); the view agrees. Stop again: nothing_to_change.
+T5 start our own tag: invalid_target, nothing posted; start a country with no agency or a released tag: refused_by_game_check.
+T6 activate a broken cipher (the view's Activate button enabled): posted 1, Verified (bonus_active true, bonus_days_left the
+defines' days); the view shows the bonuses active and the decryption of that country stopped. Activate again:
+nothing_to_change. Activate a country never worked on: cipher_not_broken. Activate one being decrypted but not broken:
+refused_by_game_check, nothing posted.
+T7 plain load of a save made after T6: the bonus still active, days running down; the records read the same.
+T8 the executor: intelligence.decrypt [<broken one>, <open one>] with no country decrypting: the first refused (broken)
+and waiting 30 days while the second starts; intelligence.activate [{target: <broken one>, operation: <an op id whose
+execute_on holds now>}]: activated once, no repeat.
+Pass: T0-T8, no window opened by the tool, the read matching the view. Then IPC_LIVE_PASSED for decrypt may be set to 1.

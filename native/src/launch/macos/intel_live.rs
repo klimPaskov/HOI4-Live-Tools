@@ -405,6 +405,69 @@ pub(super) fn operative_json(index: usize, o: &Operative) -> Value {
     })
 }
 
+/// The agency's decryption state (`agency +0x128`, engineer 133, from CStartStopDecryptionCommand's own code on
+/// 1.19.4.1, 1.20.0.0 and 1.20.1.0): its record array `+0x28` (size `+0x34`), one 0x38-byte record per country it ever
+/// worked on: target tag `+0x8`, days the active bonus still runs `+0xc`, bonus active `+0x10`, decrypting `+0x12`,
+/// progress `+0x18` (the game's fixed point; the cipher is broken when it reaches the target's encryption, which the
+/// game's own check judges when the bonus is activated). Mapped on macOS; a build without the class in its table
+/// (Linux, Windows until their maps carry it) reports the part unread.
+const DECRYPTION: u64 = 0x128;
+const DECRYPTION_CLASS: Class = Class::new("CCountryDecryptionState", 0);
+const CIPHER_RECORDS: u64 = 0x28;
+const CIPHER_STRIDE: u64 = 0x38;
+const CIPHER_TAG: u64 = 0x8;
+const CIPHER_DAYS: u64 = 0xc;
+const CIPHER_ACTIVE: u64 = 0x10;
+const CIPHER_DECRYPTING: u64 = 0x12;
+const CIPHER_PROGRESS: u64 = 0x18;
+const CIPHER_LIMIT: usize = 512;
+
+/// One country the agency decrypts or decrypted.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct Cipher {
+    pub target: String,
+    pub decrypting: bool,
+    pub bonus_active: bool,
+    pub bonus_days: i32,
+    pub progress_raw: i64,
+}
+
+pub(super) fn decryption(r: &Reader<'_>, image: u64, country: u64) -> Result<Vec<Cipher>> {
+    let a = mgmt::pointer(r, country + at(r, &COUNTRY, AGENCY)?)?;
+    mgmt::expect_type(r, a, AGENCY_TYPE)?;
+    let s = mgmt::pointer(r, a + at(r, &AGENCY_CLASS, DECRYPTION)?)?;
+    let f = |mac| at(r, &DECRYPTION_CLASS, mac);
+    let mut out = Vec::new();
+    for e in entries(r, s + f(CIPHER_RECORDS)?, CIPHER_STRIDE, CIPHER_LIMIT)? {
+        let tag = r.i32(e + CIPHER_TAG)?;
+        if tag <= 0 {
+            continue;
+        }
+        let raw = r.u64(e + CIPHER_PROGRESS)?;
+        out.push(Cipher {
+            target: states::tag_name(r, image, tag)?,
+            decrypting: r.byte(e + CIPHER_DECRYPTING)? != 0,
+            bonus_active: r.byte(e + CIPHER_ACTIVE)? != 0,
+            bonus_days: r.i32(e + CIPHER_DAYS)?,
+            progress_raw: i64::from_le_bytes(raw.to_le_bytes()),
+        });
+    }
+    Ok(out)
+}
+
+/// The decryption part of hoi4_intelligence: every record and the country decrypted now (the agency
+/// decrypts one at a time).
+pub(super) fn decryption_json(ciphers: &[Cipher]) -> Value {
+    json!({
+        "state_read": true,
+        "target": ciphers.iter().find(|c| c.decrypting).map(|c| c.target.clone()),
+        "bonus_active": ciphers.iter().filter(|c| c.bonus_active).map(|c| json!({"target": c.target, "days_left": c.bonus_days})).collect::<Vec<_>>(),
+        "ciphers": ciphers.iter().map(|c| json!({"target": c.target, "decrypting": c.decrypting,
+            "bonus_active": c.bonus_active, "bonus_days_left": c.bonus_days, "progress_raw": c.progress_raw})).collect::<Vec<_>>(),
+        "rule": "one country at a time; start or stop with hoi4_agency_upgrade decryption {target, action:start|stop}; once the cipher is broken, activate its bonuses (a limited number of days) with action activate at an operation's start: the game's own check decides",
+    })
+}
+
 pub(super) fn agency_json(a: &Agency) -> Value {
     json!({
         "created": a.created,

@@ -1178,6 +1178,15 @@ static void run_job2(void *ctx) {
                  !(sq(hold + g_t.st2.fg_faction_off, &j->faction) && plausible(j->faction)))
             j->faction = 0;
     }
+    if (!strncmp(ct->spec->op, "decrypt.", 8)) {
+        /* engineer 133: the object is the TARGET country (exactly a CCountry, the class the type's check names), taken from
+         * the target's tag (vals[0]) on the main thread; not ourselves (the game's own check refuses that too) */
+        int32_t tt = (int32_t)j->val[0];
+        uint64_t cf = g_t.st2.diplo.country_of + (uint64_t)g_slide;
+        void *tc = tt > 0 && tt != j->player_tag && g_t.st2.diplo.country_of && code_ptr(cf) ? ((country_of_fn)(uintptr_t)cf)(&tt) : NULL;
+        if (!tc) { j->res[0] = R_BAD_OBJ; snprintf(j->reason, sizeof j->reason, "the target country %d is not another live country", tt); finish2(j); return; }
+        j->obj[0] = (uint64_t)(uintptr_t)tc;
+    }
     int32_t snd = -1;
     if (!sread(q + g_t.post.sender_src, &snd, 4) || snd < 0) { snprintf(j->reason, sizeof j->reason, "sender unreadable"); finish2(j); return; }
     /* the second object, by the spec's kind: an air base (transfer) or a strategic region (enable_mission) checked by
@@ -2052,6 +2061,19 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             if (!j->obj[0]) why = "no faction goal of that key in the game's goal database";
         }
         nv = 0;
+    } else if (!strncmp(op, "decrypt.", 8)) {
+        /* engineer 133: the agency's cipher work.
+         *   start:    objs = 0 (one placeholder); vals = the target country's tag id, then 1 (start) or 0 (stop)
+         *   activate: objs = 0; vals = the target country's tag id
+         * The module takes the target country itself (main thread); the game's own "can do" decides the rest (a valid
+         * target not decrypted yet / being decrypted; a broken cipher whose bonus is not active) */
+        int act = !strcmp(op, "decrypt.activate");
+        if (!act && strcmp(op, "decrypt.start")) why = "unknown decrypt op";
+        else if (j->n != 1 || j->obj[0] != 0) why = "decrypt ops name no object: objs = 0 (vals: the target's tag id)";
+        else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "decrypt ops take no flag, obj2, provs or divs";
+        else if (act ? nv != 1 : nv != 2) why = act ? "vals: the target country's tag id" : "vals: the target country's tag id, then 1 (start) or 0 (stop)";
+        else if (j->val[0] < 1 || j->val[0] > 100000) why = "the target's tag id is outside 1..100000";
+        else if (!act && j->val[1] != 0 && j->val[1] != 1) why = "start is 1, stop is 0";
     } else if (!strncmp(op, "navyhq.", 7)) {
         /* engineer 102: a naval headquarters' admiral, as the game's own command (its AI and two UI sites build it).
          *   admiral: objs = ONE own admiral (CUnitLeader, the auth object); obj2 = the headquarters building item

@@ -15,8 +15,8 @@
 #include <time.h>
 #include <unistd.h>
 
-const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics", "construction", "training", "mio", "navy", "doctrine", "projects", "navyhq", "move", "raids", "diplomacy2", "leader", "faction"};
-const int IPC_ALLOWED_COUNT = 27;
+const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics", "construction", "training", "mio", "navy", "doctrine", "projects", "navyhq", "move", "raids", "diplomacy2", "leader", "faction", "decrypt"};
+const int IPC_ALLOWED_COUNT = 28;
 /* airwing (engineer 71, 24 Nov): split, merge, disband, attach, detach, region by id / hold; OFF in auto until its
  * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
 const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */,
@@ -87,7 +87,9 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                 0 /* leader (engineer 127, 28 Nov): a general's assignable trait by its key, the trait
                                    * tree's own CLearnTraitCommand (S31-TRAIT) */,
                                 0 /* faction (engineer 131, 28 Nov): a faction goal by its key into a free slot, become the
-                                   * faction's spymaster (S32-FACTION) */};
+                                   * faction's spymaster (S32-FACTION) */,
+                                0 /* decrypt (engineer 133, 28 Nov): start or stop decrypting a country's cipher, activate a
+                                   * broken cipher's bonuses (S33-DECRYPT) */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;

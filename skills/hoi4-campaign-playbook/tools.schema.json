@@ -22,13 +22,35 @@
    "source": "--list-tools"
   },
   "hoi4_agency_upgrade": {
-   "description": "Start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals before input: branch_unknown, upgrade_unknown (loaded database); agency_not_created, upgrade_in_progress, upgrade_maxed, upgrade_locked (missing required upgrade) from memory; upgrade_needs_factories when the upgrade's civilian factory use (scripts) is above the factories free for projects (the game would only queue it); upgrade_unavailable when the game disables the entry. Verified by memory (the running upgrade equals the request). Live-verified on 1.19.4.",
+   "description": "Start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals before input: branch_unknown, upgrade_unknown (loaded database); agency_not_created, upgrade_in_progress, upgrade_maxed, upgrade_locked (missing required upgrade) from memory; upgrade_needs_factories when the upgrade's civilian factory use (scripts) is above the factories free for projects (the game would only queue it); upgrade_unavailable when the game disables the entry. Verified by memory (the running upgrade equals the request). Live-verified on 1.19.4. DECRYPTION (instead of branch/upgrade): `decryption` {target: TAG, action: start|stop|activate} starts or stops decrypting a country's cipher (the agency decrypts one country at a time) or activates a broken cipher's bonuses for the game's own number of days (at an operation's start; the decryption of that country stops). It goes only through the in-process module's decrypt family (no mouse path; HOI4_BACKEND=inprocess until S33-DECRYPT): refusals from hoi4_intelligence `decryption` before any post (invalid_target own country, nothing_to_change, cipher_not_broken when the agency never worked on it), then the game's own check (refused_by_game_check: not a valid target, its cipher already broken, not broken yet for activate; nothing posted). Verified by memory (the target's decryption record).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "branch": {
       "maxLength": 96,
       "type": "string"
+     },
+     "decryption": {
+      "additionalProperties": false,
+      "properties": {
+       "action": {
+        "enum": [
+         "start",
+         "stop",
+         "activate"
+        ],
+        "type": "string"
+       },
+       "target": {
+        "pattern": "^[A-Z0-9]{3}$",
+        "type": "string"
+       }
+      },
+      "required": [
+       "target",
+       "action"
+      ],
+      "type": "object"
      },
      "lease_token": {
       "type": "string"
@@ -42,7 +64,6 @@
      }
     },
     "required": [
-     "branch",
      "request_id",
      "lease_token"
     ],
@@ -2201,11 +2222,11 @@
     "additionalProperties": false,
     "properties": {
      "faction_goal": {
-       "type": "string",
-       "maxLength": 128
+      "type": "string",
+      "maxLength": 128
      },
      "list": {
-       "type": "boolean"
+      "type": "boolean"
      },
      "accept_widening": {
       "type": "boolean"
@@ -3337,7 +3358,7 @@
    "source": "--list-tools"
   },
   "hoi4_intelligence": {
-   "description": "Own intelligence agency, read-only (no input, no lease, never pauses). Returns the agency name (validated live: Abwehr for Germany), the 5 upgrade branches with their upgrades from the loaded database joined with the install's scripts (levels, factory use during progress, prerequisite upgrades, per-level modifiers), the operative mission keys, the agency defines (creation/upgrade days and factories) and, with include_operations:true, the operations catalogue (operatives, network strength, days, risk). Live state from game memory (macOS 1.19.4.1): agency created/creating, upgrade levels and the running upgrade, operative slots, offered candidates, the recruited operatives with their mission, target and operation, intel network strength per target and state, and operations_running (operation, target, operatives at work, auto commence). A part that cannot be read on this build is reported as state_read:false with the error rather than guessed.",
+   "description": "Own intelligence agency, read-only (no input, no lease, never pauses). Returns the agency name (validated live: Abwehr for Germany), the 5 upgrade branches with their upgrades from the loaded database joined with the install's scripts (levels, factory use during progress, prerequisite upgrades, per-level modifiers), the operative mission keys, the agency defines (creation/upgrade days and factories) and, with include_operations:true, the operations catalogue (operatives, network strength, days, risk). Live state from game memory (macOS 1.19.4.1): agency created/creating, upgrade levels and the running upgrade, operative slots, offered candidates, the recruited operatives with their mission, target and operation, intel network strength per target and state, and operations_running (operation, target, operatives at work, auto commence). The agency's ciphers (`decryption`: every country it worked on with decrypting, bonus_active, bonus_days_left and progress_raw, and `target`, the one decrypted now; macOS mapped, state_read:false elsewhere). A part that cannot be read on this build is reported as state_read:false with the error rather than guessed.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
