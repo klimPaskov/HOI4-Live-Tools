@@ -1079,3 +1079,15 @@ the row: unit_wrong_slot.
 M4 `hoi4_template_edit` changing only `support` on a template with a regimental row: the row is unchanged (read back).
 Stop at once on: a slot clicked that is not the row's, a mismatch error naming regimental, or Save with another layout.
 Pass: M1-M4. Then delete the test template (hoi4_template_delete).
+## Session S26-PLANKEYS: the plan keys of engineer 117 in one executor run (no new input path; about 20 game days) -- any time
+What it proves: `production[].until` with `stock:<equipment>`, the atoms `divisions:<template>`, `mastery:<track>`,
+`banked_mastery:<track>`, `project_done:<key>` and `focus_when` read what the screens show, before a campaign relies on them.
+P1 a 1936 save of the plan's country, executor on, plan with: a production row `{"equipment":"<rifle variant>","factories":<n>,
+"until":"stock:infantry_equipment >= <stock now + 300>"}`; `focus_when` holding the next focus until a date 10 days ahead; a
+`special_projects` object; digest predicates `divisions:<a template> >= 0`, `mastery:<a track> >= 0`, `banked_mastery:<a track> >= 0`.
+P2 the digest's predicate values: divisions equals the count of that template on the army screen; mastery and banked mastery
+equal the doctrine view's track (write both); the focus lane line says "kept for their window: <focus> (until ...)".
+P3 run to the day the store passes the figure: the next day's production tick removes that line (one hoi4_production_remove),
+the notes show produntil:<i>:<equipment>; restart the server: the line is not added back. On the window date the focus starts.
+P4 (when a project completes in the run, else later) project_done:<key> turns true the week it completes.
+Pass: P2-P3 (P4 when seen). Stop on: a second removal of the same line, a line added back after the restart.
