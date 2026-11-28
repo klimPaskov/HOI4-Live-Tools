@@ -100,6 +100,8 @@ def run(spec, game_dir, mods=(), dlcs=None):
     # the war-date evaluators judge the situation on the war date (history to the start date, techs on time)
     wsit = Situation.load(Game(game_dir, list(mods)), tag, war, dlcs=dlcs, bookmark=date) if war else sit
     grand = spec.get("grand_doctrine")
+    step("template_war", lambda: {r: template.best(wsit, r, enemies=enemies, top=1) for r in ("line", "armour")}
+         if war else None)
     step("subdoctrine", lambda: _ev("force").subdoctrines(wsit, enemies, grand=grand))
     step("supply", lambda: _ev("logistics").axis_supply(wsit, enemies[0]) if enemies else None)
     step("air", lambda: _ev("air").need(wsit, enemies, axes=(out.get("force") or {}).get("axes") or 1,
@@ -157,6 +159,10 @@ def summary(d):
         put(f"template_{role}", lambda role=role: d["template"][role]["templates"][0]["battalions"])
         put(f"template_{role}_width", lambda role=role: d["template"][role]["templates"][0]["width"])
         put(f"template_{role}_support", lambda role=role: d["template"][role]["templates"][0]["support"])
+    for role in ("line", "armour"):
+        put(f"template_{role}_war", lambda role=role: d["template_war"][role]["templates"][0]["battalions"])
+        put(f"template_{role}_war_width", lambda role=role: d["template_war"][role]["templates"][0]["width"])
+        put(f"template_{role}_war_support", lambda role=role: d["template_war"][role]["templates"][0]["support"])
     put("design_tank_main", lambda: d["design"]["designs"][0]["base"])
     put("force_total", lambda: d["force"]["total"])
     put("force_hold", lambda: d["force"]["hold"])
@@ -237,6 +243,11 @@ def lines(data, args_text):
         out.append(f"- [C] computed focus order: {[o['focus'] for o in fo['order']]} ({cmd} focus {base} "
                    + " ".join(f"--goal {g}" for g in data["goals"]) + ")")
     w = f"--country {data['tag']} --date {data['war_date']} --bookmark {data['date']}"
+    for role, t in (data.get("template_war") or {}).items():
+        if t and t.get("templates"):
+            x = t["templates"][0]
+            out.append(f"- [C] computed template {role} on {data['war_date']}: width {x['width']:g}, {x['battalions']}, "
+                       f"support {x['support']} ({cmd} template {role} {w} {en})")
     sd = data.get("subdoctrine")
     if sd:
         out.append(f"- [C] computed subdoctrines (grand {sd['grand']}): "
