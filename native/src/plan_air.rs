@@ -406,7 +406,7 @@ pub(super) fn claim(
                 })
                 .unwrap_or(f64::MAX)
         };
-        cands.sort_by(|a, b| {
+        cands.sort_by(|&a, &b| {
             let there = |w: &MWing| {
                 !(w.wing.region == Some(e.region.id) && w.flying.iter().any(|m| m == e.mission))
             };
