@@ -8,6 +8,7 @@
     evaluate.py construction --country TAG [--date D] [--war-date D]
     evaluate.py force --country TAG --enemy TAG [--date D]
     evaluate.py doctrine --country TAG [--date D]
+    evaluate.py subdoctrine --country TAG --enemy TAG [--reach 1]  (one subdoctrine per track by value)
     evaluate.py focus --country TAG [--date D] [--goal ideology:fascism] [--goal no_war:FRA]
     evaluate.py refresh TECH --country TAG          (the design roles a finished technology re-opens)
 
@@ -322,6 +323,30 @@ def text_doctrine(r):
     return out
 
 
+def text_subdoctrine(r):
+    out = [f"SUBDOCTRINES ({len(r['tracks'])} land tracks) for {r.get('country', '')} at {r.get('date', '')}: grand "
+           f"{r['grand'] or '-'}; R against {r['enemy_template']} without a subdoctrine {r['none']}; chosen by the "
+           f"activation + the first {r['reach']} reward(s) (each needs {r['reward_mastery']:g} mastery), attacks with "
+           f"planning over {r['planning_days']} days"]
+    for t in r["tracks"]:
+        out.append(f"  track {t['track']}: CHOSEN {t['chosen']}" + (f" ({t['xor_note']})" if t.get("xor_note") else ""))
+        for c in t["candidates"][:4]:
+            res = c["results"]
+            out.append(f"     {c['subdoctrine']}: value {c['value']:+g} (base {res['base']['value']:+g}, every reward "
+                       f"{res['all']['value']:+g}); R {res['reach']['R']}" + (f"; gate {c['gate']}" if c["gate"] else "")
+                       + (f"; tactic {c['tactic']}" if c.get("tactic") else "")
+                       + (f"; not valued {c['not_valued'][:4]}" if c["not_valued"] else ""))
+    out.append("  defines: " + "; ".join(r["defines"]))
+    return out
+
+
+def cmd_subdoctrine(a, sit):
+    from hoi4facts.evaluators import force
+    r = force.subdoctrines(sit, a.enemy or None, planning_days=a.planning_days, reach=a.reach, grand=a.grand)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_subdoctrine(r)
+
+
 def cmd_doctrine(a, sit):
     from hoi4facts.evaluators import force
     r = force.doctrines(sit, a.enemy or None, planning_days=tuple(a.planning_days))
@@ -329,7 +354,7 @@ def cmd_doctrine(a, sit):
     return r, text_doctrine(r)
 
 
-COMMANDS = {"force": cmd_force, "doctrine": cmd_doctrine, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
+COMMANDS = {"force": cmd_force, "doctrine": cmd_doctrine, "subdoctrine": cmd_subdoctrine, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
             "construction": cmd_construction}
 
 
@@ -365,6 +390,10 @@ def parser():
     p = add("force")
     p.add_argument("--war-date", default=None, help="the enemy grows by its factories to this date")
     p.add_argument("--axes", type=int, default=None, help="attack axes (default: the enemy's border states)")
+    p = add("subdoctrine")
+    p.add_argument("--planning-days", type=int, default=14, help="offensive length the planning bonus is averaged over")
+    p.add_argument("--reach", type=int, default=1, help="rewards counted in the choice (each needs the mastery)")
+    p.add_argument("--grand", default=None, help="the grand doctrine assumed (default: the one held)")
     p = add("doctrine")
     p.add_argument("--planning-days", type=int, nargs="+", default=[14, 30],
                    help="offensive lengths the planning bonus is averaged over")
