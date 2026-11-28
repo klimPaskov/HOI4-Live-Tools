@@ -3859,6 +3859,9 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
                     let days = match code(&why) {
                         "no_free_operative_slot" => 30,
                         "agency_not_created" => 15,
+                        // the slot offers candidates after the game's own wait, which the refusal
+                        // names (g115a, 28 Nov 2026: refused twice a week apart, 7 days each)
+                        "operative_slot_locked" => days_named(&why).unwrap_or(7).max(1),
                         _ => 7,
                     };
                     state.skip(now, "intelop", "x", days * DAY);
@@ -3880,6 +3883,14 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
                 }
             }
         }
+        // one operative, one decision: an operative a network entry names while that entry is
+        // open (its `when` holds, strength below `until`) is the network's, and the operatives
+        // list does not send it elsewhere (g115a, 28 Nov 2026: operatives[0] and networks[0] both
+        // sent operative 0, each undoing the other: NotApplied six times)
+        let held = network_held(state, tools, cfg, now);
+        let live_ops = intel_read(state, tools, now)
+            .map(|r| list(&r["operatives"], "list").to_vec())
+            .unwrap_or_default();
         for (i, op) in operatives.iter().enumerate() {
             let mission = text(&op["mission"]).trim();
             let key = format!("intel:opm:{i}");
@@ -3888,6 +3899,22 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
                 || state.done.contains_key(&key)
                 || state.skipped(now, "intel", &key)
             {
+                continue;
+            }
+            if let Some(target) = held.get(&i) {
+                note(
+                    state,
+                    "intelligence",
+                    format!("operative {i}: held by the network entry for {target}; its listed mission waits"),
+                );
+                continue;
+            }
+            // already on the listed mission (the read names it): nothing to send
+            if live_ops
+                .get(i)
+                .is_some_and(|o| text(&o["mission"]) == mission)
+            {
+                state.done.insert(key, now);
                 continue;
             }
             let mut args = json!({"operative": i, "mission": mission});
@@ -3962,6 +3989,54 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
     }
     state.skip(now, "mintel", "x", DAY);
     Ok(None)
+}
+
+/// The days a refusal names ("... in 12 days ..."), the first such number.
+fn days_named(why: &str) -> Option<i64> {
+    let words: Vec<&str> = why.split_whitespace().collect();
+    words.windows(2).find_map(|w| {
+        (w[1].trim_end_matches(|c: char| !c.is_alphanumeric()) == "days")
+            .then(|| w[0].parse::<i64>().ok())
+            .flatten()
+    })
+}
+
+/// Operatives named by an open `networks` entry (its `when` holds and the network is below its
+/// `until`), with the entry's target: those entries own them.
+fn network_held(
+    state: &mut State,
+    tools: &dyn Tools,
+    cfg: &Value,
+    now: GameHour,
+) -> HashMap<usize, String> {
+    let mut out = HashMap::new();
+    let entries = list(cfg, "networks").to_vec();
+    if entries.is_empty() {
+        return out;
+    }
+    let read = intel_read(state, tools, now).unwrap_or(Value::Null);
+    for net in &entries {
+        let Some(i) = net["operative"].as_u64().map(|i| i as usize) else {
+            continue;
+        };
+        let target = text(&net["target"]).trim().to_uppercase();
+        if target.is_empty()
+            || out.contains_key(&i)
+            || gate(state, tools, &net["when"], now).is_some()
+        {
+            continue;
+        }
+        let until = net["until"].as_f64().unwrap_or(100.0);
+        let strength = list(&read["intel_network"], "networks")
+            .iter()
+            .find(|n| text(&n["target"]) == target)
+            .and_then(|n| n["strength"].as_f64())
+            .unwrap_or(0.0);
+        if strength < until {
+            out.insert(i, target);
+        }
+    }
+    out
 }
 
 /// Where an intel network for `wanted` can start: `wanted` itself when one of its provinces
@@ -6513,6 +6588,59 @@ mod tests {
         let assigned = actions(&tools).last().cloned().unwrap();
         assert_eq!(assigned.1["state_id"], 64);
         assert_eq!(assigned.1["operative"], 0);
+    }
+
+    #[test]
+    fn an_operative_an_open_network_names_is_the_networks_and_a_mission_already_run_is_not_sent() {
+        // g115a (28 Nov 2026): operatives[0] (a network in state 91) and networks[0] (France,
+        // state 16) both sent operative 0; each undid the other, NotApplied six times
+        let tools = fake(vec![(
+            "hoi4_intelligence",
+            json!({"operatives": {"list": [{"idle": true, "operation": null, "mission": null},
+                {"idle": false, "operation": null, "mission": "counter_intelligence"}]},
+                "intel_network": {"networks": []}}),
+        )]);
+        let plan = json!({"intelligence": {
+            "operatives": [{"mission": "build_intel_network", "state_id": 91},
+                           {"mission": "counter_intelligence"}],
+            "networks": [{"operative": 0, "state_id": 16, "target": "FRA", "until": 60}]}});
+        let mut state = State::default();
+        state.done.insert("intel:agency".into(), START);
+        state.done.insert("intel:op:0".into(), START);
+        state.done.insert("intel:op:1".into(), START);
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("intelligence network FRA operative 0: true Verified")
+        );
+        let sent: Vec<Value> = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_operative_assign")
+            .map(|(_, a)| a)
+            .collect();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0]["state_id"], 16);
+        assert!(state.affairs.notes["intelligence"].contains("held by the network entry for FRA"));
+        // operative 1 already runs its listed mission: recorded, not sent
+        assert!(state.done.contains_key("intel:opm:1"));
+        // the network reaches its target strength: the listed mission is free to go
+        tools.reply(
+            "hoi4_intelligence",
+            json!({"operatives": {"list": [{"idle": false, "operation": null, "mission": "build_intel_network"}]},
+                "intel_network": {"networks": [{"target": "FRA", "strength": 61.0}]}}),
+        );
+        state.affairs.intel = None;
+        let held = network_held(&mut state, &tools, &plan["intelligence"], START + 10 * DAY);
+        assert!(held.is_empty());
+    }
+
+    #[test]
+    fn a_refusal_naming_days_is_waited_for_those_days() {
+        assert_eq!(
+            days_named("The new operative slot offers candidates in 12 days (waited 18 of 30)"),
+            Some(12)
+        );
+        assert_eq!(days_named("no number here"), None);
     }
 
     // ----- research bonuses

@@ -3514,7 +3514,7 @@
    "tools": [
     "hoi4_doctrine_adopt"
    ],
-   "blocked": "hoi4_doctrine_adopt refuses `replace` with not_yet_built (held back in plan_run::UNBUILT_ARGS), and refuses a filled slot (grand_doctrine_set, track_occupied) before input: no swap path",
+   "blocked": "written 28 Nov (tools 123), not proven: hoi4_doctrine_adopt replace:true posts the game's own unlock command on the filled slot, by command only (in-process family doctrine, OFF until S18-DOCTRINE passes); the mouse swap is not driven",
    "blocked_terms": [
     "replace",
     "swap"

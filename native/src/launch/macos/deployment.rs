@@ -160,8 +160,8 @@ pub(super) fn queued(r: &Reader<'_>, image: u64, name: &str) -> Result<usize> {
     for line in pointers(r, status + u.conveyors, 1024)? {
         let template = r.u64(line + u.conveyor_template)?;
         if template != 0 && r.string_bounded(template + u.template_name, 128)? == name {
-            // Parallel training lines of this queue (1.19.4.1 conveyor +0x70).
-            count += r.i32(line + u.conveyor_lines)?.clamp(1, 1024) as usize;
+            // Parallel training lines of this queue (the size of its lines array).
+            count += conveyor_lines(r, line, &u)?.clamp(1, 1024) as usize;
         }
     }
     Ok(count)
@@ -322,9 +322,19 @@ pub(super) fn leave(process: &dyn Process, keys: &dyn GameInput) {
 }
 
 /// Conveyor fields (1.19.4.1, mapped live 2 November 2026): series amount per line at +0x38
-/// (0 = infinite: each line trains again forever), parallel lines at +0x70.
+/// (0 = infinite: each line trains again forever); the parallel lines are an engine array
+/// {data, capacity, size} at +0x68. Its SIZE (+0x74) is the line count: +0x70 is the capacity,
+/// which grows by half each time it fills (live 126, s126a 28 Nov 2026: six single-line posts read
+/// 3, 4, 6, 6, 9, 9 at +0x70 while the panel showed 3..8 lines; the "stop at five" of s115a and
+/// the "nine for seven" of s96b were the capacity).
 const CONVEYOR_AMOUNT: u64 = 0x38;
-const CONVEYOR_LINES: u64 = 0x70;
+const CONVEYOR_LINES: u64 = 0x68;
+
+/// The parallel lines of a conveyor: the size of its lines array.
+fn conveyor_lines(r: &Reader<'_>, conveyor: u64, u: &Ui) -> Result<i32> {
+    let (_, _, size) = r.array_header(conveyor + u.conveyor_lines)?;
+    Ok(size as i32)
+}
 /// Own conveyors in list order: (pointer, template name, amount, lines).
 fn conveyors(r: &Reader<'_>, image: u64) -> Result<Vec<(u64, String, i32, i32)>> {
     let u = ui(r)?;
@@ -342,7 +352,7 @@ fn conveyors(r: &Reader<'_>, image: u64) -> Result<Vec<(u64, String, i32, i32)>>
             line,
             name,
             r.i32(line + u.conveyor_amount)?,
-            r.i32(line + u.conveyor_lines)?,
+            conveyor_lines(r, line, &u)?,
         ));
     }
     Ok(out)

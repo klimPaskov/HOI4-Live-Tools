@@ -424,6 +424,11 @@ class MonitorTest(unittest.TestCase):
         assert sink_of({"code": "decisions_available"}) is None
         assert sink_of({"code": "admiral_assignable"}) == "leaders"
         assert sink_of({"code": "free_military_factories"}) == "military factories"
+        # g115a: a failing focus start keeps the focus row idle; a tool no sink fills counts nowhere
+        assert sink_of({"code": "tool_failing", "subject": "hoi4_focus_start"}) == "focus"
+        assert sink_of({"code": "refusal_retried_unchanged", "tool": "hoi4_fleet_assign"}) == "task forces"
+        assert sink_of({"code": "invalid_arguments", "subject": "hoi4_fleet_admiral"}) == "leaders"
+        assert sink_of({"code": "tool_failing", "subject": "hoi4_politics_options"}) is None
         det = Detector(str(self.tmp), write=False)
         det._set_date("1936.01.01.12")
         det.raise_issue("modify_officer_corps", "modify_officer_corps", "a spirit can be picked", "medium")
