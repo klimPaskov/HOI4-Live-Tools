@@ -73,7 +73,9 @@ unsafe fn optional_text(dict: CFTypeRef, key: CFTypeRef) -> Result<Option<String
     label(value).map(Some)
 }
 unsafe fn label(value: CFTypeRef) -> Result<String> {
-    if CFGetTypeID(value) != CFStringGetTypeID() || !(0..=LABEL_UNITS).contains(&CFStringGetLength(value)) {
+    if CFGetTypeID(value) != CFStringGetTypeID()
+        || !(0..=LABEL_UNITS).contains(&CFStringGetLength(value))
+    {
         return Err(invalid());
     }
     let mut buffer = vec![0u8; LABEL_UNITS as usize * 4 + 1];
