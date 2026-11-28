@@ -3825,6 +3825,76 @@ fn two_spearheads_are_painted_to_a_pockets_neck_and_hold_the_closed_ring() {
 }
 
 #[test]
+fn a_pocket_arm_goes_to_the_neck_its_spearhead_had_given_up_and_keeps_it_past_the_strike_days() {
+    // w92c (28 Nov 2026, Holland): Army 7 left state 35 to the infantry (10 days on its
+    // spearhead) 51 hours before the pocket "Army 9 and Army 7 meet in state 35 to cut off [36]"
+    // (Friesland); Army 7's line [35] was filtered out by that skip, it went on elsewhere, and the
+    // neck was given up after 6 days with one arm
+    let game = Game::new();
+    for (name, main) in [("Army 9", 67), ("Army 7", 66)] {
+        game.roster.borrow_mut()["armies"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"army": name, "division_count": 8, "main_state": main}));
+    }
+    *game.pockets.borrow_mut() = json!({"pockets": [
+        {"already_cut_off": false, "pincer_ready": true, "capital_inside": false,
+         "neck_states": [{"state_id": 35}], "pocket_states": [{"state_id": 36}]}]});
+    let mut state = State::default();
+    for (s, p) in [
+        (35, (10.0, 0.0)),
+        (36, (10.0, 5.0)),
+        (67, (12.0, 0.0)),
+        (66, (8.0, 0.0)),
+    ] {
+        state.centers.insert(s, p);
+    }
+    state
+        .done
+        .insert(key("op", "spearskip:Army 7:35"), START - 51);
+    let f = json!({"enemy": "POL", "own_states": [67]});
+    let o = json!({"target_line": [7]});
+    let mut units = vec![
+        unit("Army 9".into(), Role::Mobile, &f, &o),
+        unit("Army 7".into(), Role::Mobile, &f, &o),
+    ];
+    for u in units.iter_mut() {
+        u.spear = true;
+    }
+    let plan = json!({"war": {"me": "GER"}});
+    let roster = game.roster.borrow().clone();
+    let enemies = vec!["POL".to_string()];
+    let op = json!({"id": "op", "spear_pockets": true});
+    spear_pockets(
+        &mut state, &game, &plan, &op, &mut units, &roster, &enemies, &enemies, START,
+    )
+    .unwrap();
+    assert!(state.op_notes["pocket"].contains("meet in state 35"));
+    // both arms are painted to the neck, the one that had given it up included, and they keep it
+    // past STRIKE_MAX_DAYS (the pocket's own limit decides)
+    for t in [START, START + 11 * DAY] {
+        for u in &units {
+            let line = spear_line(&mut state, "op", &roster, u, "GER", &game, &[7], t);
+            assert_eq!(line, vec![35], "{} at {t}", u.name);
+        }
+    }
+    assert!(!state.done.contains_key(&key("op", "spearskip:Army 9:35")));
+    // the pocket over: the old skip stands again for Army 7
+    state.done.retain(|k, _| !k.starts_with("pocket:"));
+    let line = spear_line(
+        &mut state,
+        "op",
+        &roster,
+        &units[1],
+        "GER",
+        &game,
+        &[7],
+        START + 12 * DAY,
+    );
+    assert_ne!(line, vec![35]);
+}
+
+#[test]
 fn the_axis_by_terrain_is_chosen_once_round_the_forest_behind_the_river() {
     let game = Game::new();
     *game.pol_rows.borrow_mut() = Some(json!([

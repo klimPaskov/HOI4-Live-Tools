@@ -6952,7 +6952,7 @@ fn advance(
         let own_line_held = u.line.is_empty() || held(tools, &me, &u.line).len() == u.line.len();
         // ARMOUR WHERE IT CAN BREAK THROUGH: its next objective by the armour's ground cost, and
         // never the reserve of a battle on rough ground
-        if u.spear && at_war.contains(&u.enemy) {
+        if u.spear && at_war.contains(&u.enemy) && pocket_neck(state, &u.name).is_none() {
             armour_ground(state, tools, plan, id, op, u, &op_line, wars, at_war, now);
         }
         let mut wanted: Vec<i64> = if u.spear {
@@ -7150,6 +7150,15 @@ fn wing_stall(
     Ok(Some(line))
 }
 
+/// The neck state of the pocket `army` is an arm of, while that pocket stands.
+fn pocket_neck(state: &State, army: &str) -> Option<i64> {
+    let neck = state.done.get("pocket:neck").copied()?;
+    state
+        .done
+        .contains_key(&format!("pocket:arm:{army}"))
+        .then_some(neck)
+}
+
 /// The line a spearhead is painted to at war: the states of its own thrust still to take, then
 /// the nearest state of the operation's line; a state its spearhead has not taken in
 /// STRIKE_MAX_DAYS is given up to the infantry's plan and the spearhead goes on to the next (qt1,
@@ -7166,6 +7175,16 @@ fn spear_line(
     op_line: &[i64],
     now: GameHour,
 ) -> Vec<i64> {
+    // AN ARM OF A POCKET goes to the neck whatever its spearhead gave up before: the pocket has
+    // its own time (POCKET_CLOSE_DAYS). w92c (28 Nov 2026): Army 7 had left state 35 to the
+    // infantry 51 hours before the pocket "Army 9 and Army 7 meet in state 35 to cut off [36]"
+    // was chosen; its line [35] was filtered out, it went on elsewhere, and the neck was given up
+    // after 6 days with one arm
+    if let Some(neck) = pocket_neck(state, &u.name) {
+        if u.line == [neck] {
+            return vec![neck];
+        }
+    }
     let skipped = |state: &State, s: i64| {
         state
             .done
