@@ -105,9 +105,10 @@ Two runtimes exist:
   game (globals, date, speed, pause, player tag, countries, difficulty, playthrough, the country's
   member objects, division strength and organisation, the tag database; checked through the tools on 24
   November 2026: `hoi4_overview` and `hoi4_army` on a paused game). The division province and the
-  production members are not measured yet and fail with `read_bound`. Every read batch runs the full
-  ownership census (tens of milliseconds), so a multi-read snapshot of a running game tears
-  (`torn_read`); reads of a paused game work. It sends no input: a
+  production members are not measured yet and fail with `read_bound`. The full ownership census
+  (tens of milliseconds) runs at the snapshot boundaries, and between them each read checks only the
+  held handles (the zero-timeout wait, PID and creation time), so a snapshot of a running game no
+  longer tears on the moving clock (an overview takes about 50 ms). It sends no input: a
   development build (`--features dev-table`) reads a table from `HOI4_LIVE_DEV_TABLE` and accepts
   the executable named by `HOI4_LIVE_DEV_WINDOWS_SHA256`; release builds attach to nothing.
   The management tools are compiled and unit-tested on Windows, but nothing binds them there yet.
