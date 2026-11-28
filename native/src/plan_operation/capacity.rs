@@ -330,6 +330,9 @@ pub(super) fn overstacked(
     out
 }
 
+/// Our divisions waiting on a pile: (id, organisation, the province it stands in).
+type Waiting = Vec<(String, f64, Option<i64>)>;
+
 /// DEAD FRONTS: at war a stretch that faces no enemy province (`facing` 0) while our divisions
 /// stand on it holds divisions that fight nowhere; they are piles whose whole count is surplus
 /// (engaged 0), so `sideways` sends them to the stretch with most room. `root_of`: the stretch
@@ -351,7 +354,7 @@ pub(super) fn dead_fronts(
     if dead.is_empty() {
         return Vec::new();
     }
-    let mut at: HashMap<i64, (i64, Vec<(String, f64, Option<i64>)>)> = HashMap::new();
+    let mut at: HashMap<i64, (i64, Waiting)> = HashMap::new();
     for d in list(read, "divisions") {
         let (Some(id), Some(p)) = (id_of(&d["id"]), d["province_id"].as_i64()) else {
             continue;
