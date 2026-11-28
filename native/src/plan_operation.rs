@@ -2111,7 +2111,7 @@ const LEND_FRESH: GameHour = 3 * DAY;
 /// yet) and the operation's own feed-forward sends its divisions to the line. An army that a
 /// later operation names is lent until that operation's prepare starts; the loan also ends when
 /// the borrower ends. Kept: `lend.keep` [{army, why}] (a named reserve or garrison) and the
-/// armies of the plan's `holds` entries. `lend.off: true` (with `lend.why`) lends nothing.
+/// armies of the plan's `defense_lines` entries. `lend.off: true` (with `lend.why`) lends nothing.
 /// Bookkeeping only (no game order): the loans are `op:<borrower>:lent:<army>` in the
 /// done-memory, and `op_notes["lend"]` names every idle army with what it does and why.
 pub(super) fn lend_idle(
@@ -2197,11 +2197,11 @@ pub(super) fn lend_idle(
                 text(&k["why"]).trim().to_string(),
             )
         })
-        .chain(list(plan, "holds").iter().map(|h| {
+        .chain(list(plan, "defense_lines").iter().map(|h| {
             (
                 name_of(state, roster, text(&h["army"])),
                 format!(
-                    "the plan's hold {}",
+                    "the plan's defence line {}",
                     item_id(h).unwrap_or_else(|| "entry".into())
                 ),
             )
