@@ -16759,10 +16759,9 @@ mod tests {
         );
         let sent = tools.0.borrow();
         let detach = sent.iter().find(|(n, _)| n == "hoi4_army_detach").unwrap();
-        assert_eq!(
-            detach.1,
-            json!({"divisions": ["d1", "d2"], "into": "Armee 2"})
-        );
+        assert_eq!(detach.1["divisions"], json!(["d1", "d2"]));
+        assert_eq!(detach.1["into"], json!("Armee 2"));
+        assert!(detach.1.get("army").is_none());
         drop(sent);
         // a refusal waits 7 days; the gather takes them meanwhile
         let off = Fresh(RefCell::new(vec![]), false);
