@@ -32,7 +32,7 @@
     facts.py design-best <TAG> --role R [--techs a,b] [--need air_range=900] [--rival BASE:slot=mod,...]
                                  best module-by-module designs for a role by computed stats (designer.py)
     facts.py design-eval BASE slot=module ... [--mission M]   one design's stats and problems
-    facts.py design-plan <TAG> [--roles fighter,cas] [--years 1936,1940] [--need fighter:air_range=900]
+    facts.py design-plan <TAG> [--roles fighter,cas] [--years 1936,1940] [--need fighter:air_range=900] [--refresh]
                                  plan designs[] by year and the research they need (designer.plan_fragment)
     facts.py air-cover --regions 131,133 (--states 1,2 | --provinces 9,10) [--ranges 550,650,825]
                                  region radius, coverage per range, the range for 90% (aircover.py)
@@ -1392,7 +1392,8 @@ def cmd_design_plan(args):
         k, _, v = kv.partition("=")
         needs.setdefault(role, {})[k] = float(v)
     years = [int(y) for y in (args.years or "1936,1938,1940,1942,1944").split(",")]
-    frag = designer.plan_fragment(cat, args.TAG, set(w.country(args.TAG)["techs"]), years, roles, tech_year, needs)
+    frag = designer.plan_fragment(cat, args.TAG, set(w.country(args.TAG)["techs"]), years, roles, tech_year, needs,
+                                  refresh=args.refresh)
     return emit(args, frag, lambda x: [f"{d['id']}: {d['base']} {d['modules']} when {d.get('when')} xp<={d['xp']}"
                                        f" production {d.get('production')}\n  {d['why']}" for d in x["designs"]]
                 + ["research: " + ", ".join(x["research_needed"]), x["method"]])
@@ -1887,6 +1888,8 @@ def parser():
     p.add_argument("--roles", help="comma list of designer roles (default fighter,cas,naval_bomber)")
     p.add_argument("--years", help="comma list of years (default 1936,1938,1940,1942,1944)")
     p.add_argument("--need", action="append", help="role:stat=minimum, e.g. fighter:air_range=900")
+    p.add_argument("--refresh", action="store_true",
+                   help="one row per role with a refresh block: the executor makes each later design as its tech lands")
     p = add("air-cover", cmd_air_cover)
     p.add_argument("--regions", required=True)
     p.add_argument("--states")
