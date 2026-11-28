@@ -7379,7 +7379,9 @@ fn a_deferred_refinement_is_no_refusal_and_a_refused_one_keeps_its_reason() {
     );
     let note = state.op_notes["op:ledger"].clone();
     assert!(
-        note.contains("refused [refused_by_game_check: the army is at its commander's limit (24 of 24)]"),
+        note.contains(
+            "refused [refused_by_game_check: the army is at its commander's limit (24 of 24)]"
+        ),
         "{note}"
     );
     // through the order wrapper: an order deferred for want of the input is not counted

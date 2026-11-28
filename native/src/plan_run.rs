@@ -26620,9 +26620,7 @@ mod tests {
         assert_eq!(detaches(&tools), 1);
         // once it began, the operation sizes both: no top-up, no donor
         assert!(!plan_operation::sizes_army(&state, "Army 7"));
-        state
-            .done
-            .insert("op:op_lowlands:prep".into(), START);
+        state.done.insert("op:op_lowlands:prep".into(), START);
         assert!(plan_operation::sizes_army(&state, "Army 7"));
         let tools = fake(vec![("hoi4_supply", supply)]);
         let out = layout_top_up(&mut state, &tools, &plan, "l", START, &full).unwrap();
