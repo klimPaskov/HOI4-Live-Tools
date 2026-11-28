@@ -1287,18 +1287,7 @@ pub(super) fn call(
             ui_action::run(job, id, token, process, keys, guard, authority, actions)
         }
         "hoi4_operative_assign" => {
-            super::allowed(
-                args,
-                &[
-                    "operative",
-                    "mission",
-                    "operation",
-                    "state_id",
-                    "country",
-                    "request_id",
-                    "lease_token",
-                ],
-            )?;
+            super::allowed(args, OPERATIVE_ASSIGN_ARGS)?;
             if args.contains_key("operation") {
                 return Err(Error::new(
                     "operation_not_built",
@@ -1384,6 +1373,19 @@ pub(super) const TOOLS: [&str; 4] = [
     "hoi4_operative_assign",
 ];
 
+/// Every argument hoi4_operative_assign takes: the schema's properties and the dispatch's allow-list are
+/// both checked against this list (g126b: the schema offered `replace`, the allow-list refused it, and the
+/// executor's replace:true failed as invalid_arguments 4 times).
+const OPERATIVE_ASSIGN_ARGS: &[&str] = &[
+    "operative",
+    "mission",
+    "operation",
+    "state_id",
+    "country",
+    "replace",
+    "request_id",
+    "lease_token",
+];
 pub(super) fn tools() -> Vec<Value> {
     vec![
         json!({"name":"hoi4_agency_create","description":"Create the intelligence agency with ordinary input: Shift+W agency view, Create Agency, the name/logo window (default name kept, the first logo chosen when Create is disabled), Create. Refusals from a fresh memory read before any input: agency_exists, agency_creation_in_progress; agency_creation_unavailable when the game disables the button. Verified by memory (creating or created). Live-verified on 1.19.4. Creation takes civilian factories for the define's number of days.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
@@ -1404,6 +1406,30 @@ mod tests {
             creation_button_enabled: enabled,
             upgrading: upgrading.map(str::to_string),
             recruiting: false,
+        }
+    }
+
+    #[test]
+    fn operative_assign_takes_every_schema_argument() {
+        let defs = tools();
+        let def = defs
+            .iter()
+            .find(|d| d["name"] == "hoi4_operative_assign")
+            .expect("definition");
+        let props = def["inputSchema"]["properties"]
+            .as_object()
+            .expect("properties");
+        for key in props.keys() {
+            assert!(
+                OPERATIVE_ASSIGN_ARGS.contains(&key.as_str()),
+                "schema offers {key} but the dispatch refuses it"
+            );
+        }
+        for key in OPERATIVE_ASSIGN_ARGS {
+            assert!(
+                props.contains_key(*key),
+                "{key} is allowed but not in the schema"
+            );
         }
     }
 

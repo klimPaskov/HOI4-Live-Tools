@@ -1428,6 +1428,12 @@ struct Stages {
     /// and the completed-focus count when that was counted. Each further refusal doubles the
     /// key's wait; a newly completed focus clears the counts (prerequisites may now be met).
     focus_refused: HashMap<String, u32>,
+    /// Refused keys whose verdict was "not judged" by the files when the game refused them (the
+    /// part that failed reads what no file holds, e.g. GER_anschluss's army-strength ratio
+    /// against Austria). A newly completed focus does not clear them: the files judged their
+    /// prerequisites met already, so the completion changes nothing the refusal was about
+    /// (g126b: GER_anschluss and GER_demand_sudetenland refused again after each completion).
+    focus_refused_unjudged: HashSet<String>,
     focus_refused_at_completed: usize,
     /// The countries at war with the player when the refusals were counted. A war that starts
     /// or ends clears the counts too: the conditions the server cannot read (flags, events)
@@ -4341,6 +4347,25 @@ fn when_text(v: &Value) -> String {
     }
 }
 
+/// The refused keys a newly completed focus gives a fresh try (removed from `refused`): every
+/// key but those the game refused while the files could not judge them, which keep their count
+/// and wait; pure.
+fn refused_cleared_by_completion(
+    refused: &mut HashMap<String, u32>,
+    unjudged: &HashSet<String>,
+) -> Vec<String> {
+    let mut cleared: Vec<String> = refused
+        .keys()
+        .filter(|k| !unjudged.contains(*k))
+        .cloned()
+        .collect();
+    cleared.sort_unstable();
+    for key in &cleared {
+        refused.remove(key);
+    }
+    cleared
+}
+
 /// The focus order of one tick: a missed checkpoint's focuses first, then the path, keys the
 /// GUI failed to start FOCUS_GUI_FAILS times in a row behind the rest; pure.
 fn focus_order(
@@ -4434,7 +4459,10 @@ fn focus_lane_inner(
         // A completed focus can unlock others: every refused key gets a fresh try at once.
         if state.stages.focus_refused_at_completed != completed.len() {
             state.stages.focus_refused_at_completed = completed.len();
-            let refused: Vec<String> = state.stages.focus_refused.drain().map(|(k, _)| k).collect();
+            let refused = refused_cleared_by_completion(
+                &mut state.stages.focus_refused,
+                &state.stages.focus_refused_unjudged,
+            );
             for key in refused {
                 state.bad.remove(&skip_key("focus", &key));
                 // the game changed under the order: it is no longer the same order
@@ -4472,6 +4500,7 @@ fn focus_lane_inner(
                 // A war started or ended: every refused key gets a fresh try at once.
                 let refused: Vec<String> =
                     state.stages.focus_refused.drain().map(|(k, _)| k).collect();
+                state.stages.focus_refused_unjudged.clear();
                 for key in refused {
                     state.bad.remove(&skip_key("focus", &key));
                     state.ledger_forget("hoi4_focus_start", &json!({"focus": key}));
@@ -4527,6 +4556,7 @@ fn focus_lane_inner(
             if ok {
                 state.stages.focus_why.remove(&key);
                 state.stages.focus_gui_fails.remove(&key);
+                state.stages.focus_refused_unjudged.remove(&key);
                 state.stages.focus = Some((format!("focus: started {key}"), false));
                 return Ok(Some(format!("focus {key}")));
             }
@@ -4549,6 +4579,9 @@ fn focus_lane_inner(
                 // 40, 80 game days by default): in one shakedown three fallback focuses that
                 // could not start yet were opened about a hundred times, a quarter of the
                 // input lane.
+                if known.unknown.contains_key(&key) {
+                    state.stages.focus_refused_unjudged.insert(key.clone());
+                }
                 let refusals = state.stages.focus_refused.entry(key.clone()).or_insert(0);
                 let doubling = 1 << (*refusals).min(FOCUS_REFUSAL_DOUBLINGS);
                 *refusals += 1;
@@ -15064,6 +15097,24 @@ mod tests {
             super::decision_rest(&mut state, "d@FRA", false, 8 * DAY),
             3 * DAY
         );
+    }
+
+    /// g126b (28 Nov 2026): GER_anschluss and GER_demand_sudetenland were refused by the game
+    /// while the files could not judge their `available`; every newly completed focus cleared
+    /// the refusal and they were refused again. Such keys keep their count; the others clear.
+    #[test]
+    fn a_completed_focus_does_not_clear_a_refusal_the_files_could_not_judge() {
+        let mut refused: HashMap<String, u32> = [
+            ("GER_anschluss".to_string(), 1),
+            ("GER_rhine".to_string(), 2),
+        ]
+        .into_iter()
+        .collect();
+        let unjudged: HashSet<String> = ["GER_anschluss".to_string()].into_iter().collect();
+        let cleared = super::refused_cleared_by_completion(&mut refused, &unjudged);
+        assert_eq!(cleared, vec!["GER_rhine".to_string()]);
+        assert_eq!(refused.get("GER_anschluss"), Some(&1));
+        assert!(!refused.contains_key("GER_rhine"));
     }
 
     /// t1939n (27 Nov 2026): GER_autonomy_in_the_kriegsschulen failed six starts on the GUI path
