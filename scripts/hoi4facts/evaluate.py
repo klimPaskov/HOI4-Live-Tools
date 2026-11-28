@@ -303,7 +303,27 @@ def cmd_doctrine(a, sit):
     return r, text_doctrine(r)
 
 
-COMMANDS = {"force": cmd_force, "doctrine": cmd_doctrine, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
+def text_focus(r):
+    out = [f"FOCUS for {r.get('country', '')} at {r.get('date', '')} (tree {r['tree']}); goals {r['goals'] or '-'}; "
+           f"horizon {r['horizon_years']:g} years; value base {r['base']}"]
+    for o in r["order"]:
+        out.append(f"  day {o['start_day']:>4} {o['focus']} ({o['days']:g} days): value {o['value']:g} factory-years, "
+                   f"chain rate {o['rate']:g}/day via {' > '.join(o['chain'])}")
+        out.append(f"         parts {o['parts']}; unvalued {o['unvalued'] or '-'}"
+                   + (f"; gated: {o['gated'][:120]}" if o.get("gated") else ""))
+    for fid, why in list(r["dropped"].items())[:8]:
+        out.append(f"  dropped {fid}: {why}")
+    return out
+
+
+def cmd_focus(a, sit):
+    from hoi4facts.evaluators import focus
+    r = focus.evaluate(sit, goals=a.goal, horizon_years=a.horizon_years, count=a.count)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_focus(r)
+
+
+COMMANDS = {"force": cmd_force, "doctrine": cmd_doctrine, "focus": cmd_focus, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
             "construction": cmd_construction}
 
 
@@ -340,6 +360,10 @@ def parser():
     p.add_argument("--war-date", default=None, help="the enemy grows by its factories to this date")
     p.add_argument("--axes", type=int, default=None, help="attack axes (default: the enemy's border states)")
     add("doctrine")
+    p = add("focus")
+    p.add_argument("--goal", action="append", default=[], help="ideology:<name> or no_war:<TAG> (repeatable)")
+    p.add_argument("--count", type=int, default=12)
+    p.add_argument("--horizon-years", type=float, default=4.0)
     p = add("production")
     p.add_argument("--need-date", required=True, help="the date the equipment must be in the stockpile")
     p.add_argument("--add", action="append", default=[], help="ROLE=N divisions to add (templates from evaluator 2)")
