@@ -7242,3 +7242,217 @@ fn province_worth_counts_every_province_and_ten_per_victory_point() {
     assert_eq!(w[1].vp, 3.0);
     assert_eq!((w[1].x, w[1].id), (500.0, 95));
 }
+
+/// A forest choke in front of a group: own front 100, 101 (state 42, plains); the enemy's forest
+/// 200, 201 (state 980) and the plains 300 behind them (state 34). Every way in is forest.
+struct Choke {
+    calls: RefCell<Vec<(String, Value)>>,
+}
+impl Tools for Choke {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        self.calls
+            .borrow_mut()
+            .push((name.to_string(), args.clone()));
+        Ok(match name {
+            "hoi4_states" => json!({"states": [
+                {"state_id": 980, "controller": "BEL"}, {"state_id": 34, "controller": "BEL"}]}),
+            "hoi4_province_graph" => json!({"provinces": [
+                graph_row(100, 42, "plains", &[(101, 0.0), (200, 0.0)]),
+                graph_row(101, 42, "plains", &[(100, 0.0), (200, 0.0), (201, 0.0)]),
+                graph_row(200, 980, "forest", &[(100, 0.0), (101, 0.0), (201, 0.0), (300, 0.0)]),
+                graph_row(201, 980, "forest", &[(101, 0.0), (200, 0.0), (300, 0.0)]),
+                graph_row(300, 34, "plains", &[(200, 0.0), (201, 0.0)])]}),
+            // 12 of Army 2 on the front, 4 of Army 3 behind it
+            "hoi4_supply" => json!({"divisions": (0..16)
+                .map(|i| json!({"id": format!("d{i}"),
+                    "army": if i < 12 { "Army 2" } else { "Army 3" },
+                    "province_id": if i < 12 { 100 + (i % 2) } else { 50 }}))
+                .collect::<Vec<_>>()}),
+            _ => json!({"receipt": {"status": "Verified"}}),
+        })
+    }
+}
+
+#[test]
+fn a_group_s_arrow_through_a_choke_counts_its_own_divisions_and_detaches_from_the_member_on_it() {
+    // w126a (28 Nov 2026): "Army Group 2's arrow 51 runs through the rough-ground choke 3488
+    // (forest) ...: it carries 11 of 0" (a group has no army row) and the cap never acted
+    let roster = json!({"armies": [
+        {"army": "Army 2", "army_group": "Army Group 2", "division_count": 12},
+        {"army": "Army 3", "army_group": "Army Group 2", "division_count": 4},
+        {"army": "Army 5", "division_count": 6}],
+        "army_groups": [{"army_group": "Army Group 2", "plan": [
+            {"kind": "front", "id": 48, "executing": false,
+             "line": {"ids": [100, 101], "states": [42]},
+             "offensives": [{"id": 51, "divisions": 16, "executing": false,
+                 "path_ids": [100, 200, 300], "path_states": [980, 34],
+                 "target": {"states": [34]}}]}]}]});
+    let mut group = unit(
+        "Army Group 2".into(),
+        Role::Group,
+        &Value::Null,
+        &Value::Null,
+    );
+    group.enemy = "BEL".into();
+    let mut line = unit("Army 5".into(), Role::Line, &Value::Null, &Value::Null);
+    line.enemy = "BEL".into();
+    let units = vec![group.clone(), line];
+    assert_eq!(unit_division_count(&roster, &group), 16);
+    let game = Choke {
+        calls: RefCell::new(vec![]),
+    };
+    let mut state = State {
+        op_acting: true,
+        ..State::default()
+    };
+    let op = json!({"id": "op_west", "choke": {}});
+    let wars = json!({"wars": {"enemies": []}});
+    let out = choke_step(
+        &mut state, &game, "op_west", &op, &units, &roster, &wars, "l", START,
+    )
+    .unwrap()
+    .expect("the surplus leaves the choke");
+    assert!(out.contains("of 16"), "{out}");
+    assert!(out.contains("(out of Army 2)"), "{out}");
+    let calls = game.calls.borrow();
+    let detach = calls
+        .iter()
+        .find(|(n, _)| n == "hoi4_army_detach")
+        .expect("a detach");
+    assert_eq!(
+        detach.1["army"], "Army 2",
+        "the member on the arrow's front gives"
+    );
+    let n = detach.1["divisions"].as_array().unwrap().len();
+    assert!(n >= 3, "{n}");
+}
+
+#[test]
+fn a_spent_restart_is_renewed_a_day_after_the_last() {
+    let mut state = State::default();
+    let id = "op_lowlands";
+    // never seen unexecuted, no restart recorded: nothing to renew
+    assert!(!restart_renewed(&state, id, "Army 7", 0, START));
+    // unexecuted since START: a day later the line's restarts are renewed once
+    state.done.insert(key(id, "notexec:Army 7"), START);
+    assert!(!restart_renewed(&state, id, "Army 7", 0, START + DAY - 1));
+    assert!(restart_renewed(&state, id, "Army 7", 0, START + DAY));
+    // a restart at START + DAY: the next one a day after it
+    state
+        .done
+        .insert(key(id, "restartat:Army 7:0"), START + DAY);
+    assert!(!restart_renewed(&state, id, "Army 7", 0, START + DAY + 5));
+    assert!(restart_renewed(&state, id, "Army 7", 0, START + 2 * DAY));
+}
+
+#[test]
+fn the_not_executing_note_says_what_was_sent_not_executed_again() {
+    let mut state = State::default();
+    let mut u = unit("Army 7".into(), Role::Mobile, &Value::Null, &Value::Null);
+    u.enemy = "LUX".into();
+    let at_war = vec!["LUX".to_string()];
+    note_not_executing(&mut state, "op", &u, true, &at_war, START);
+    state.done.insert(key("op", "notexectry:Army 7"), 7);
+    note_not_executing(&mut state, "op", &u, true, &at_war, START + 2 * DAY);
+    let note = state.op_notes["op:notexec:Army 7"].clone();
+    assert!(note.contains("NOT EXECUTING for 2.0 days"), "{note}");
+    assert!(note.contains("7 execute order(s) taken since"), "{note}");
+    assert!(!note.contains("executed again"), "{note}");
+    // executing again clears it and the count
+    note_not_executing(&mut state, "op", &u, false, &at_war, START + 3 * DAY);
+    assert!(!state.op_notes.contains_key("op:notexec:Army 7"));
+    assert!(!state.done.contains_key(&key("op", "notexectry:Army 7")));
+}
+
+#[test]
+fn a_deferred_refinement_is_no_refusal_and_a_refused_one_keeps_its_reason() {
+    let mut state = State::default();
+    ledger(
+        &mut state,
+        "op",
+        "opening",
+        "Army 1",
+        16,
+        false,
+        "opening: 16 of echelon Army 1 join Army 7 (before the war: 10 against the 35 that can stand in LUX within 4 days: under 2:1)",
+        "refused_by_game_check: the army is at its commander's limit (24 of 24)",
+    );
+    let note = state.op_notes["op:ledger"].clone();
+    assert!(
+        note.contains("refused [refused_by_game_check: the army is at its commander's limit (24 of 24)]"),
+        "{note}"
+    );
+    // through the order wrapper: an order deferred for want of the input is not counted
+    let game = Choke {
+        calls: RefCell::new(vec![]),
+    };
+    super::super::note_tool_input("hoi4_army_detach", true);
+    state.sched.input_yield = true;
+    let line = order(
+        &mut state,
+        &game,
+        "l",
+        "op",
+        "assemble Panzergruppe Nord: 3 division(s) out of Army 1",
+        "hoi4_army_detach",
+        json!({"army": "Army 1", "divisions": ["a", "b", "c"]}),
+    )
+    .unwrap();
+    assert!(line.contains("false deferred"), "{line}");
+    assert_eq!(state.done.get(&key("op", "ledger:x:detach")), None);
+    assert_eq!(state.done.get(&key("op", "ledger:k:detach")), None);
+}
+
+#[test]
+fn an_opening_fill_counts_only_when_it_took_and_a_refusal_shows_in_the_note() {
+    let mut state = State::default();
+    state.op_notes.insert(
+        "op:opening:LUX".into(),
+        "operation op: LUX before the war: 10 divisions facing it ... SHORT".into(),
+    );
+    // deferred: nothing counted, the target not marked refined, the opening looks again at once
+    state.last_ok = Some(false);
+    state.skip(START, "opopen", "LUX", DAY);
+    opening_sent(
+        &mut state,
+        "op",
+        "LUX",
+        "op:x:sent",
+        0,
+        "Army 7",
+        "operation op: opening: 16 of echelon Army 1 join Army 7 (...): false deferred: the lanes have this tick's input",
+        START,
+    );
+    assert_eq!(state.done.get("op:x:sent"), None);
+    assert!(!state.skipped(START, "opopen", "LUX"));
+    // refused: the reason stands in the enemy's note
+    opening_sent(
+        &mut state,
+        "op",
+        "LUX",
+        "op:x:sent",
+        0,
+        "Army 7",
+        "operation op: opening: 16 of echelon Army 1 join Army 7 (...): false refused_by_game_check: over the limit",
+        START,
+    );
+    let note = &state.op_notes["op:opening:LUX"];
+    assert!(
+        note.ends_with("| refused: Army 7's fill: refused_by_game_check: over the limit"),
+        "{note}"
+    );
+    assert_eq!(state.done.get("op:x:sent"), None);
+    // taken: counted
+    state.last_ok = Some(true);
+    opening_sent(
+        &mut state,
+        "op",
+        "LUX",
+        "op:x:sent",
+        0,
+        "Army 7",
+        "... true Verified",
+        START,
+    );
+    assert_eq!(state.done.get("op:x:sent"), Some(&1));
+}
