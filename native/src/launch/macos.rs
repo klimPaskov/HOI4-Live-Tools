@@ -28,6 +28,7 @@ mod inproc_construction;
 mod inproc_diplomacy;
 mod inproc_doctrine;
 mod inproc_events;
+mod inproc_faction;
 mod inproc_holds;
 mod inproc_mio;
 mod inproc_moves;
@@ -862,7 +863,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_construction_order","description":"Reorder or remove one own construction line with its row buttons in the construction panel: action top (Shift+Click on the up arrow), up, down, bottom or remove (the row's close button). `line` is the 0-based index as hoi4_construction_queue lists the lines; the first lines get the civilian factories (15 per line), so put the supply hub or railway the front needs first. Verified by the line's new position in the own queue (or its absence after remove).","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":127},"action":{"type":"string","enum":["top","up","down","bottom","remove"]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","action","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_save","description":"Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games. Use it at the end of a campaign segment so the next launch continues exactly from this point (no turns are replayed). The game stays paused if it was paused; a game that was running is unpaused again after the save (resumed:true).","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_war_risk","description":"Read-only, before justifying or declaring war on `country`: which countries would join that war on its side (its faction, every country guaranteeing it, its overlord and subjects) and which of our borders with them are not held (need a division in every border state and two per state). hoi4_diplomacy_act declare_war refuses with war_would_widen in that case unless accept_widening:true. Memory and map files only; no input.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"}},"required":["country"],"additionalProperties":false}}),
-        json!({"name":"hoi4_diplomacy_act","description":"Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, call_to_arms, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices the tool cannot make yet), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt. send_volunteers / recall_volunteers carry `army` (the army whose divisions go) and optionally `division_ids` within it, and go through the in-process module's diplomacy family (the view's own action; HOI4_BACKEND=inprocess until S25-VOLUNTEERS): the game's own check decides (volunteer cap, divisions required, recall lock, war and ideology gates; refused_by_game posts nothing). Air volunteers are a rebase of wings to the receiver's air base (hoi4_air_rebase). Any other key that hoi4_diplomacy catalog:true lists with route in_process (a game action class with no view row the tool reads: air_base_access, offer_air_base_access, naval_blockade, peace_proposal, reduce_autonomy, increase_autonomy, request_access_to_license_production, cancel_licensed_production, or one a later game adds) takes `country` only and goes through the module's diplomacy2 family (HOI4_BACKEND=inprocess until S27-DIPLOMACY-ANY); a key whose shape the module cannot build is refused dialog_unsupported and nothing is sent. justify_war_goal may instead carry `war_goal_key` (the game's own key from common/wargoals, e.g. take_state, annex_everything, topple_government) and `state_ids` (the states a take-state goal names; none for a goal on the whole country): the module's diplomacy2 family then builds the justification by the action's own constructor and the game's own check decides (HOI4_BACKEND=inprocess until S27-DIPLOMACY-ANY). expeditionary_force with `army` (and optionally `division_ids`) goes the same way as send_volunteers, through the diplomacy2 family.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"army":{"type":"string"},"division_ids":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":64},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"war_goal_key":{"type":"string","pattern":"^[A-Za-z0-9_]{1,39}$"},"state_ids":{"type":"array","items":{"type":"integer","minimum":1,"maximum":100000},"maxItems":64},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"try_anyway":{"type":"boolean"},"accept_widening":{"type":"boolean"},"confirm":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["action","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_diplomacy_act","description":"Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, call_to_arms, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices the tool cannot make yet), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt. send_volunteers / recall_volunteers carry `army` (the army whose divisions go) and optionally `division_ids` within it, and go through the in-process module's diplomacy family (the view's own action; HOI4_BACKEND=inprocess until S25-VOLUNTEERS): the game's own check decides (volunteer cap, divisions required, recall lock, war and ideology gates; refused_by_game posts nothing). Air volunteers are a rebase of wings to the receiver's air base (hoi4_air_rebase). Any other key that hoi4_diplomacy catalog:true lists with route in_process (a game action class with no view row the tool reads: air_base_access, offer_air_base_access, naval_blockade, peace_proposal, reduce_autonomy, increase_autonomy, request_access_to_license_production, cancel_licensed_production, or one a later game adds) takes `country` only and goes through the module's diplomacy2 family (HOI4_BACKEND=inprocess until S27-DIPLOMACY-ANY); a key whose shape the module cannot build is refused dialog_unsupported and nothing is sent. justify_war_goal may instead carry `war_goal_key` (the game's own key from common/wargoals, e.g. take_state, annex_everything, topple_government) and `state_ids` (the states a take-state goal names; none for a goal on the whole country): the module's diplomacy2 family then builds the justification by the action's own constructor and the game's own check decides (HOI4_BACKEND=inprocess until S27-DIPLOMACY-ANY). expeditionary_force with `army` (and optionally `division_ids`) goes the same way as send_volunteers, through the diplomacy2 family. action faction_goal sets a goal of our faction (we lead it): `faction_goal` is the goal's key or localised name from common/factions/goals (so mods work; list:true lists key, name, category, group and changes nothing); action become_spymaster makes us the faction's spymaster. Both go only through the in-process module's faction family (no mouse path; HOI4_BACKEND=inprocess until S32-FACTION): the game's own check decides (a faction, the goal available to it, a free slot of its category, the initiative; an empty spymaster slot), refused_by_game_check posts nothing; faction_goal_unknown names the closest keys; goal_in_list is the module's read-back of the faction's goal list.","inputSchema":{"type":"object","properties":{"faction_goal":{"type":"string","maxLength":128},"list":{"type":"boolean"},"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"army":{"type":"string"},"division_ids":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":64},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"war_goal_key":{"type":"string","pattern":"^[A-Za-z0-9_]{1,39}$"},"state_ids":{"type":"array","items":{"type":"integer","minimum":1,"maximum":100000},"maxItems":64},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"try_anyway":{"type":"boolean"},"accept_widening":{"type":"boolean"},"confirm":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["action","request_id","lease_token"],"additionalProperties":false}}),
         commanders::tool(),
         supply::tool(),
         template_get::tool(),
@@ -3938,6 +3939,107 @@ impl MacClock {
             out["country"] = json!(country);
             out["note"] = json!("can_do is the game's own check (the one that enables the view's Send button), asked without sending; null = not asked (a shape that needs choices, or its family is not opted in). An action the game toggles (access, docking rights, embargo) revokes when already in force: read hoi4_diplomacy_state first. Send with hoi4_diplomacy_act and the row's key.");
             return Ok(out);
+        }
+        if name == "hoi4_diplomacy_act"
+            && matches!(
+                args.get("action").and_then(Value::as_str),
+                Some("faction_goal" | "become_spymaster")
+            )
+        {
+            // engineer 131: the faction leader's own choices through the module's faction family (no mouse path;
+            // HOI4_BACKEND=inprocess until S32-FACTION passes): a goal by its key or name from common/factions/goals into
+            // a free slot of its category, or the spymaster role. The game's own check decides; a refusal posts nothing.
+            allowed(
+                args,
+                &[
+                    "action",
+                    "faction_goal",
+                    "list",
+                    "request_id",
+                    "lease_token",
+                ],
+            )?;
+            let goal_action = string(args, "action")? == "faction_goal";
+            let list = args.get("list").and_then(Value::as_bool) == Some(true);
+            let goal = if goal_action {
+                let all = inproc_faction::goals(process)?;
+                if list {
+                    return Ok(json!({"faction_goals":inproc_faction::list_json(&all)}));
+                }
+                let asked = args
+                    .get("faction_goal")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        Error::new(
+                            "invalid_arguments",
+                            "faction_goal: a goal's key or name (list:true lists them)",
+                        )
+                    })?;
+                Some(inproc_faction::resolve(&all, asked)?.clone())
+            } else {
+                if list || args.get("faction_goal").is_some() {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "become_spymaster takes no faction_goal or list",
+                    ));
+                }
+                None
+            };
+            let req = match &goal {
+                Some(g) => inproc_faction::goal_request(&g.key)?,
+                None => inproc_faction::spymaster_request()?,
+            };
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let observed = guard.observe(process)?;
+            let epoch = observed.epoch;
+            authority.authorize(token, &epoch)?;
+            let mut route = inproc::route("faction");
+            if route.is_none() {
+                return Err(Error::new(
+                    "in_process_unavailable",
+                    "faction goals and the spymaster role run only through the module's faction family (HOI4_BACKEND=inprocess with faction opted in, until S32-FACTION passes); nothing was sent",
+                ));
+            }
+            let what = match &goal {
+                Some(g) => {
+                    json!({"kind":"diplomacy_act","action":"faction_goal","op":inproc_faction::GOAL_OP,
+                    "faction_goal":g.key,"category":g.category})
+                }
+                None => {
+                    json!({"kind":"diplomacy_act","action":"become_spymaster","op":inproc_faction::SPYMASTER_OP})
+                }
+            };
+            let answer = match &goal {
+                Some(_) => "this faction goal now (a faction led by us, the goal available to it, a free slot of its category, the initiative)",
+                None => "the spymaster role now (a faction whose spymaster slot is empty, the initiative)",
+            };
+            let mut reply = Value::Null;
+            // the module reads the faction's goal list back itself (executed = the goal is in the list); the spymaster
+            // slot is not read yet: the posted count after the game's own check is the verdict
+            let mut settle = || -> Result<journal::Outcome> { Ok(journal::Outcome::Unobservable) };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let ch = route
+                    .as_mut()
+                    .ok_or_else(|| Error::new("in_process_unavailable", "no channel"))?;
+                match inproc_faction::post(ch, req.clone(), answer) {
+                    inproc::Routed::Done(body) => {
+                        reply = body;
+                        Ok(())
+                    }
+                    inproc::Routed::Refused(what) => Err(inproc::refused_error(&what)),
+                    inproc::Routed::Gui => Err(Error::new(
+                        "in_process_unavailable",
+                        "the module did not post it (see its log); there is no mouse path, so nothing was sent",
+                    )),
+                }
+            };
+            let receipt = actions.execute(id, &epoch, what, &mut settle, &mut dispatch)?;
+            let in_list = goal
+                .is_some()
+                .then(|| reply["module"]["executed"].as_i64().unwrap_or(0) > 0);
+            return Ok(json!({"receipt":receipt,"in_process":reply,"goal_in_list":in_list}));
         }
         if name == "hoi4_diplomacy_act"
             && matches!(

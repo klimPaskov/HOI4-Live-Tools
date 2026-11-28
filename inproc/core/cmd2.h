@@ -359,6 +359,15 @@ typedef struct {
      * address, the trait list (data, count; entry 0 is the lookup's fallback) and a trait's token */
     uint64_t trait_got;
     uint32_t trait_arr_off, trait_cnt_off, trait_tok_off;
+    /* engineer 131: the faction goals. The goal database the goal command's own reader resolves a goal through (a token
+     * hash table: the GOT slot holding the database pointer; entries +fg_data_off, mask +fg_mask_off, extra probe count
+     * byte +fg_probe_off; an entry fg_stride bytes with its probe distance byte +fg_dist_off (0 = empty), token
+     * +fg_tok_off and goal +fg_val_off), and the faction's goal list as the command's "can do" reads it (country
+     * +fg_holder_off -> +fg_faction_off -> list data +fg_goals_off, count +fg_goals_cnt_off, entry fg_goal_stride bytes
+     * with the goal pointer first) */
+    uint64_t fg_got;
+    uint32_t fg_data_off, fg_mask_off, fg_probe_off, fg_stride, fg_dist_off, fg_tok_off, fg_val_off;
+    uint32_t fg_holder_off, fg_faction_off, fg_goals_off, fg_goals_cnt_off, fg_goal_stride;
     int n;
     cmd_type t[CMD2_MAX];
     /* engineer 122: the diplomatic action catalog and the specs of its rows (the rows are t[n - ndyn .. n - 1]) */

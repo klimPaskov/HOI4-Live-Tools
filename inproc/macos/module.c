@@ -447,6 +447,8 @@ typedef struct {
     /* mio (engineer 84): the player's organisation manager, the token the command carries (a trait, a policy or the
      * empty token = detach), the before-state the read-back compares, the organisation's handle (line) */
     uint64_t mio_mgr, mio_h2; int32_t mio_tok, mio_before;
+    /* faction (engineer 131): the player's faction as the goal command's "can do" reads it (0: none), for the read-back */
+    uint64_t faction;
     long long ran_us, post_us;
     char reason[200], queue_type[64], server_type[64];
     dispatch_semaphore_t done;
@@ -836,6 +838,24 @@ static uint64_t db_item_by_key(uint64_t got, uint32_t arr_off, uint32_t cnt_off,
     }
     return 0;
 }
+/* engineer 131: an item of a token hash database (the faction goals) by its key: every filled entry (probe distance byte
+ * not 0) is named through the game's own token names; the value is the item. Bounded by the table's own mask and extra
+ * probe count. */
+static uint64_t hashdb_item_by_key(const stage2_table *t, const char *key) {
+    uint64_t slot = 0, db = 0, data = 0; uint32_t mask = 0; uint8_t extra = 0;
+    if (!t->fg_got || !g_t.st2.mio.tok2str || !sq(t->fg_got + (uint64_t)g_slide, &slot) || !plausible(slot) || !sq(slot, &db) ||
+        !plausible(db) || !sread(db + t->fg_mask_off, &mask, 4) || mask == 0 || mask > 0xffff || ((mask + 1) & mask) ||
+        !sread(db + t->fg_probe_off, &extra, 1) || !sq(db + t->fg_data_off, &data) || !plausible(data))
+        return 0;
+    for (uint32_t i = 0; i <= mask + (uint32_t)extra; i++) {
+        uint64_t e = data + (uint64_t)i * t->fg_stride, val = 0; uint8_t dist = 0; int32_t tok = 0; char nm[64];
+        if (!sread(e + t->fg_dist_off, &dist, 1) || !dist || !sread(e + t->fg_tok_off, &tok, 4) || !sq(e + t->fg_val_off, &val) ||
+            !plausible(val))
+            continue;
+        if (mio_str(mio_rd_cb, mio_name_cb(NULL, tok), nm, sizeof nm) && !strcmp(nm, key)) return val;
+    }
+    return 0;
+}
 static uint64_t war_goal_type(const char *key) {
     const diplo_facts *d = &g_t.st2.diplo;
     return db_item_by_key(d->wgt_got, d->wgt_arr_off, d->wgt_cnt_off, d->wgt_tok_off, key);
@@ -1147,6 +1167,17 @@ static void run_job2(void *ctx) {
     if (strcmp(j->server_type, "12CDummyServer")) { snprintf(j->reason, sizeof j->reason, "not single player (server %s): stage 2 never posts in multiplayer", j->server_type); finish2(j); return; }
     if (!gate) { snprintf(j->reason, sizeof j->reason, "the session's command gate is closed (no country played): Post would drop"); finish2(j); return; }
     if (!sread(gs + c->player_tag_off, &j->player_tag, 4) || j->player_tag <= 0) { snprintf(j->reason, sizeof j->reason, "no player country"); finish2(j); return; }
+    if (!strncmp(ct->spec->op, "faction.", 8)) {
+        /* engineer 131: spymaster: the object is the player's own country; goal: the player's faction (country +holder ->
+         * +faction, as the goal command's "can do" reads it) for the read-back. No faction: the game's own check refuses. */
+        uint64_t cf = g_t.st2.diplo.country_of + (uint64_t)g_slide, hold = 0;
+        void *pcn = g_t.st2.diplo.country_of && code_ptr(cf) ? ((country_of_fn)(uintptr_t)cf)(&j->player_tag) : NULL;
+        if (!pcn) { j->res[0] = R_BAD_OBJ; snprintf(j->reason, sizeof j->reason, "the player's country is unreadable"); finish2(j); return; }
+        if (!strcmp(ct->spec->op, "faction.spymaster")) j->obj[0] = (uint64_t)(uintptr_t)pcn;
+        else if (g_t.st2.fg_got && sq((uint64_t)(uintptr_t)pcn + g_t.st2.fg_holder_off, &hold) && plausible(hold) &&
+                 !(sq(hold + g_t.st2.fg_faction_off, &j->faction) && plausible(j->faction)))
+            j->faction = 0;
+    }
     int32_t snd = -1;
     if (!sread(q + g_t.post.sender_src, &snd, 4) || snd < 0) { snprintf(j->reason, sizeof j->reason, "sender unreadable"); finish2(j); return; }
     /* the second object, by the spec's kind: an air base (transfer) or a strategic region (enable_mission) checked by
@@ -1996,6 +2027,31 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             }
         }
         nv = 0;
+    } else if (!strncmp(op, "faction.", 8)) {
+        /* engineer 131: the faction leader's own choices.
+         *   goal:      objs = 0 (one placeholder); vals = the goal's key as character codes (1..39, as justify passes its war
+         *              goal key); the goal comes from the game's own faction goal database by that key and must be exactly
+         *              a CFactionGoal; a free slot of its category only (no replaced goal); the game's own "can do"
+         *              decides the rest (a faction, the goal available for it, the slot, the initiative)
+         *   spymaster: objs = 0 (one placeholder); nothing else: the module takes the player's own country (the command
+         *              carries only the tag); the game's own "can do" decides (a faction whose spymaster slot is empty) */
+        int goal = !strcmp(op, "faction.goal");
+        if (!goal && strcmp(op, "faction.spymaster")) why = "unknown faction op";
+        else if (j->n != 1 || j->obj[0] != 0) why = "faction ops name no object: objs = 0";
+        else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "faction ops take no flag, obj2, provs or divs";
+        else if (!goal && nv) why = "faction.spymaster takes no vals";
+        else if (goal && (nv < 1 || nv >= (int)sizeof j->wgkey)) why = "vals: the goal's key as character codes (1..39)";
+        for (int k = 0; goal && !why && k < nv; k++) {
+            int64_t ch = j->val[k];
+            if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_')) why = "the goal key is letters, digits and _ only";
+            else j->wgkey[k] = (char)ch;
+        }
+        if (goal && !why) {
+            j->wgkey[nv] = 0;
+            j->obj[0] = hashdb_item_by_key(&g_t.st2, j->wgkey);
+            if (!j->obj[0]) why = "no faction goal of that key in the game's goal database";
+        }
+        nv = 0;
     } else if (!strncmp(op, "navyhq.", 7)) {
         /* engineer 102: a naval headquarters' admiral, as the game's own command (its AI and two UI sites build it).
          *   admiral: objs = ONE own admiral (CUnitLeader, the auth object); obj2 = the headquarters building item
@@ -2316,6 +2372,24 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         } else {
             reads_t r; do_reads(&r);
             if (!(r.ok && r.has_date && r.paused)) snprintf(j->reason, sizeof j->reason, "posted; the organisation does not show it after 3 s in a running game");
+            else snprintf(j->reason, sizeof j->reason, "posted; not executed yet (game paused)");
+        }
+    }
+    /* faction goal (engineer 131): the faction's goal list holds the goal sent. 3 s, paused-aware */
+    if (!strcmp(op, "faction.goal") && j->posted && j->faction) {
+        const stage2_table *t = &g_t.st2;
+        long long start = mono_us();
+        pending = 1;
+        while (pending && mono_us() - start < 3000000) {
+            int32_t cnt = 0; uint64_t data = 0;
+            if (sread(j->faction + t->fg_goals_cnt_off, &cnt, 4) && cnt > 0 && cnt <= 64 && sq(j->faction + t->fg_goals_off, &data) && plausible(data))
+                for (int32_t i = 0; pending && i < cnt; i++) { uint64_t g = 0; if (sq(data + (uint64_t)i * t->fg_goal_stride, &g) && g == j->obj[0]) pending = 0; }
+            if (pending) usleep(2000);
+        }
+        if (!pending) { executed = j->posted; rb_us = mono_us() - t0; snprintf(rbx, sizeof rbx, ",\"goal\":\"%s\"", j->wgkey); }
+        else {
+            reads_t r; do_reads(&r);
+            if (!(r.ok && r.has_date && r.paused)) snprintf(j->reason, sizeof j->reason, "posted; the faction's goal list does not hold the goal after 3 s in a running game");
             else snprintf(j->reason, sizeof j->reason, "posted; not executed yet (game paused)");
         }
     }

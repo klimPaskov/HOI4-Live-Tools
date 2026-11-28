@@ -161,6 +161,12 @@ int main(int argc, char **argv) {
         /* engineer 127: the leader trait database (CLearnTraitCommand's reader) */
         else if (!strcmp(argv[a], "trait_got")) got = t.st2.trait_got;
         else if (!strcmp(argv[a], "trait_offs")) got = ((uint64_t)t.st2.trait_arr_off << 32) | ((uint64_t)t.st2.trait_cnt_off << 16) | t.st2.trait_tok_off;
+        /* engineer 131: the faction goal database (CAddFactionGoalCommand's reader) and the faction's goal list */
+        else if (!strcmp(argv[a], "fg_got")) { const cmd_type *fg = stage2_find(&t.st2, "faction.goal"); got = t.st2.fg_got; fprintf(stderr, "faction.goal: %s\n", fg ? fg->evidence : "?"); }
+        else if (!strcmp(argv[a], "fg_hash")) got = ((uint64_t)t.st2.fg_data_off << 48) | ((uint64_t)t.st2.fg_mask_off << 40) | ((uint64_t)t.st2.fg_probe_off << 32) |
+                                                 ((uint64_t)t.st2.fg_stride << 24) | ((uint64_t)t.st2.fg_dist_off << 16) | ((uint64_t)t.st2.fg_tok_off << 8) | t.st2.fg_val_off;
+        else if (!strcmp(argv[a], "fg_list")) got = ((uint64_t)t.st2.fg_holder_off << 48) | ((uint64_t)t.st2.fg_faction_off << 32) | ((uint64_t)t.st2.fg_goals_off << 16) | t.st2.fg_goals_cnt_off;
+        else if (!strcmp(argv[a], "fg_stride")) got = t.st2.fg_goal_stride;
         else if (!strcmp(argv[a], "holds_ok")) { got = (uint64_t)t.st2.holds.ok; fprintf(stderr, "holds: %s\n", t.st2.holds.evidence); }
         else if (!strcmp(argv[a], "holds_kind")) got = t.st2.holds.kind_area;
         else if (!strcmp(argv[a], "holds_area_off")) got = t.st2.holds.area_off;
