@@ -1552,28 +1552,47 @@ pub(super) fn region_json(v: &airui::RegionView) -> Value {
 /// map live (gap register air.enemy_superiority_read); the plan rule `manage.enemy_air_superiority`
 /// (plan_military.rs) reads that field and acts on nothing while it is null.
 const ENEMY_SUPERIORITY_NOT_MAPPED: &str =
-    "not_mapped: the enemy's air superiority per region is not located in memory yet";
+    "not_mapped: the per-region superiority value is not read yet; static lead (1.20.0.0): routine 0x1009f8460, the only user of AIR_REGION_SUPERIORITY_PIXEL_SCALE, writes per region (stride 0xb0 from +0xe0 of a per-side air object) the summed wing superiority +0x88, the scaled value +0x90 (x1000, capped 100000) and the wing count +0xa8; the object's owner is unconfirmed (LIVE_VALIDATION_QUEUE air-superiority-read). Until then hoi4_air_region_probe reads what the region window shows (active aircraft by type, detection, efficiency) and enemy_air_superiority_estimate is computed from it";
 
 /// `hoi4_air_regions`: own wings and air bases grouped by strategic air region (memory and game
 /// files only; the enemy's presence is what `hoi4_air_region_probe` reads from the air map).
 pub(super) fn regions(process: &dyn Process) -> Result<Value> {
-    use std::collections::BTreeMap;
     let (bases, wings) = own(process)?;
-    let names = game_dir(process)
-        .map(|d| airread::region_names(&d))
+    let dir = game_dir(process);
+    let names = dir
+        .as_ref()
+        .map(|d| airread::region_names(d))
         .unwrap_or_default();
+    let geo = dir.as_ref().and_then(|d| super::aircover::geometry(d));
+    Ok(regions_view(&bases, &wings, &names, geo.as_deref()))
+}
+
+/// The `hoi4_air_regions` result from own bases and wings (pure; tests feed it).
+pub(super) fn regions_view(
+    bases: &[Base],
+    wings: &[Wing],
+    names: &std::collections::BTreeMap<i32, String>,
+    geo: Option<&super::aircover::RegionGeometry>,
+) -> Value {
+    use std::collections::BTreeMap;
+    let province_of = |id: i32| bases.iter().find(|b| b.id == id).map(|b| b.province);
     let mut rows: BTreeMap<i32, (Vec<Value>, Vec<Value>)> = BTreeMap::new();
-    for w in &wings {
+    for w in wings {
         if w.region_id > 0 {
+            let cov = geo
+                .zip(province_of(w.base_id))
+                .map_or(Value::Null, |(g, p)| {
+                    super::aircover::wing_row(g, w.region_id, p, w.range_km)
+                });
             rows.entry(w.region_id)
                 .or_default()
                 .0
                 .push(json!({"wing":w.name,"aircraft":w.planes,
                 "aircraft_type":w.equipment,"missions":airread::missions_in(w.mission_mask),
-                "air_base_state":w.base_state}));
+                "air_base_state":w.base_state,"air_range_km":w.range_km,"coverage":cov}));
         }
     }
-    for b in &bases {
+    for b in bases {
         let used: i32 = wings
             .iter()
             .filter(|w| w.base_id == b.id)
@@ -1583,6 +1602,7 @@ pub(super) fn regions(process: &dyn Process) -> Result<Value> {
         if let Some(region) = region {
             rows.entry(region).or_default().1.push(json!({"state_id":b.state,"capacity":b.capacity,
                 "aircraft_stationed":used,"free":b.capacity - used,
+                "over_capacity":super::aircover::over_capacity(b.capacity, used),
                 "wings":wings.iter().filter(|w| w.base_id == b.id).map(|w| w.name.as_str()).collect::<Vec<_>>()}));
         }
     }
@@ -1591,15 +1611,21 @@ pub(super) fn regions(process: &dyn Process) -> Result<Value> {
         .filter(|w| w.region_id <= 0)
         .map(|w| w.name.as_str())
         .collect();
-    Ok(json!({
-        "regions":rows.into_iter().map(|(id, (w, b))| json!({"region_id":id,"name":names.get(&id),
+    json!({
+        "regions":rows.into_iter().map(|(id, (w, b))| {
+            // aircraft on the region weighted by the share of it they reach (the planes that fly there)
+            let effective: f64 = w.iter().map(|x| x["aircraft"].as_f64().unwrap_or(0.0)
+                * x["coverage"]["share"].as_f64().unwrap_or(1.0)).sum();
+            json!({"region_id":id,"name":names.get(&id),
             "wings_assigned":w.len(),"aircraft_assigned":w.iter().map(|x| x["aircraft"].as_i64().unwrap_or(0)).sum::<i64>(),
+            "aircraft_by_coverage":(effective * 10.0).round() / 10.0,
             "wings":w,"air_bases_here":b,
-            "enemy_air_superiority":null,"enemy_air_superiority_reason":ENEMY_SUPERIORITY_NOT_MAPPED})).collect::<Vec<_>>(),
+            "enemy_air_superiority":null,"enemy_air_superiority_reason":ENEMY_SUPERIORITY_NOT_MAPPED})}).collect::<Vec<_>>(),
         "wings_without_region":idle,
+        "coverage_method":super::aircover::METHOD,
         "enemy_air":"Not in memory: hoi4_air_region_probe {state_id} opens the air map's region window and reads what it shows (active aircraft by type, detection and efficiency)",
         "validated":{"wings_by_region":"wing +0xb8 points at the CStrategicRegion; its file id (+0x40) matched the overview's Area column for Western and Eastern Germany","bases_by_region":"the base province's region pointer (+0xc8), file id +0x40"}
-    }))
+    })
 }
 
 // ---- region arguments ---------------------------------------------------------------------------
@@ -1890,6 +1916,7 @@ mod tests {
             base_state: Some(state),
             transfer_base_id: 0,
             attached_army: None,
+            range_km: None,
         }
     }
     fn fixture() -> (Vec<Base>, Vec<Wing>) {
@@ -2143,6 +2170,36 @@ mod tests {
             .planes = 60;
         assert_eq!(settle_merge(&three_plan, &cap), Verdict::Reached);
     }
+    #[test]
+    fn regions_view_weights_aircraft_by_coverage_and_flags_overstack() {
+        use std::collections::{BTreeMap, HashMap, HashSet};
+        use std::sync::Arc;
+        // region 7: ten land provinces 10 px apart east of the base province 1 (at x 0); 1 km per pixel
+        let mut pos = HashMap::new();
+        let mut reg = HashMap::new();
+        pos.insert(1, (0.0, 0.0));
+        for i in 1..=10 {
+            pos.insert(100 + i, (f64::from(i) * 10.0, 0.0));
+            reg.insert(100 + i, 7);
+        }
+        let geo = super::super::aircover::build(&Arc::new(pos), &reg, &HashSet::new(), 1.0);
+        let mut bases = vec![base(3, 52, 100)];
+        bases[0].region_id = Some(7);
+        let mut far = wing("JG far", 80, 3, 52);
+        far.region_id = 7;
+        far.range_km = Some(100.0);
+        let mut near = wing("JG near", 40, 3, 52);
+        near.region_id = 7;
+        near.range_km = Some(50.0);
+        let v = regions_view(&bases, &[far, near], &BTreeMap::new(), Some(&geo));
+        let r = &v["regions"][0];
+        assert_eq!(r["aircraft_assigned"], 120);
+        assert_eq!(r["aircraft_by_coverage"], 100.0); // 80 x 1.0 + 40 x 0.5
+        assert_eq!(r["wings"][1]["coverage"]["share"], 0.5);
+        assert_eq!(r["air_bases_here"][0]["over_capacity"], 20);
+        assert!(r["enemy_air_superiority"].is_null());
+    }
+
     #[test]
     fn regions_resolve_by_id_name_and_best_state() {
         let mut names = std::collections::BTreeMap::new();

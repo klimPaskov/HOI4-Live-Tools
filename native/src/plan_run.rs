@@ -287,6 +287,10 @@ use std::{
     time::Duration,
 };
 
+/// The air war by situation (`air_situation`): fighters sized to win or stay out, CAS over our
+/// battles, reach by range and base.
+#[path = "plan_air.rs"]
+mod plan_air;
 /// Concentrated command: formations and their tasks, a general for every army, the army group.
 #[path = "plan_formations.rs"]
 mod plan_formations;

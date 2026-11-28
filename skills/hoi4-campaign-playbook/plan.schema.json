@@ -355,6 +355,72 @@
       "x-owner": "executor",
       "description": "false: stop acting at stop_on_date but never pause"
     },
+    "air_situation": {
+      "type": "object",
+      "x-owner": "executor",
+      "description": "the air plan by situation (plan_air.rs): every every_days at war, fighters go to the regions of our battles sized to fighter_ratio times the enemy's fighters the region window shows (or stay out where they cannot win, stay_out), CAS only over regions not lost, wings rebased forward when their coverage of the region is below min_coverage; wings air_plan names, attached and carrier wings are never touched. {} turns it on with the defaults; enabled:false (a roleplay goal) turns it off.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "fighter_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1.5,
+          "description": "our fighters per enemy fighter shown over a region before we contest it"
+        },
+        "min_coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5,
+          "description": "least share of the region within the wing's range from its base; below it the wing rebases forward"
+        },
+        "every_days": {
+          "type": "number",
+          "minimum": 1,
+          "default": 3
+        },
+        "probe_regions": {
+          "type": "number",
+          "minimum": 0,
+          "default": 2,
+          "description": "region windows opened a turn to read the enemy's air"
+        },
+        "probe_days": {
+          "type": "number",
+          "minimum": 1,
+          "default": 7,
+          "description": "days a region read is kept"
+        },
+        "stay_out": {
+          "type": "boolean",
+          "default": true,
+          "description": "false: fly into regions we cannot win too"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "fighter",
+              "cas"
+            ]
+          },
+          "description": "roles the rule manages (default both)"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false
+    },
     "stop_on_failure": {
       "type": "boolean",
       "x-owner": "executor"

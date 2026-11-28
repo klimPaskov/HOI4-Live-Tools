@@ -10,6 +10,7 @@ mod agency_act;
 mod air;
 mod airact;
 mod airattach;
+mod aircover;
 mod airread;
 mod airui;
 mod alerts;
