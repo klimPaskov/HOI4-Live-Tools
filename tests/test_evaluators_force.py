@@ -25,7 +25,7 @@ e_locked = { track = infantry xp_cost = 100 available = { has_completed_special_
     infantry = { defense = 5.0 } }
 e_guns = { track = support xp_cost = 100 available = { always = yes } xor = { e_push }
     infantry = { soft_attack = 0.05 } }
-e_plain = { track = support xp_cost = 100 available = { always = yes }
+e_plain = { track = support xp_cost = 100 available = { }
     infantry = { soft_attack = 0.01 } }
 """
 
@@ -62,6 +62,8 @@ class SubdoctrineFixtureTest(unittest.TestCase):
         chosen = {t["chosen"] for t in r["tracks"]}
         self.assertFalse({"e_push", "e_guns"} <= chosen)                   # xor across tracks
         self.assertIn(tracks["support"]["chosen"], ("e_guns", "e_plain"))
+        sup = {c["subdoctrine"]: c for c in tracks["support"]["candidates"]}
+        self.assertIsNone(sup["e_plain"]["gate"])                           # an empty `available` is open
 
 
 @unittest.skipUnless(fx.real_situation("GER") is not None, "installed game not found (HOI4_EVAL_GAME / HOI4_DIR)")

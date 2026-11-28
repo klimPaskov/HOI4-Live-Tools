@@ -229,7 +229,7 @@ def subdoctrine_table(sit, folder="land"):
                 trs = [x for _, x in tr] if isinstance(tr, list) else [tr]
                 av = get1(body, "available")
                 gate = None
-                if isinstance(av, list) and not any(a == "always" and b == "yes" for a, b in av):
+                if isinstance(av, list) and av and not any(a == "always" and b == "yes" for a, b in av):
                     gate = " ".join(f"{a}={b}" if isinstance(b, str) else str(a) for a, b in av)[:120]
                 rw = get1(body, "rewards")
                 xor = get1(body, "xor")
