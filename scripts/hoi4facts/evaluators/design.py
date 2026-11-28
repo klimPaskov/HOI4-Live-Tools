@@ -443,9 +443,10 @@ def enemy_profile(sit, enemies=None):
                 d = divstats.division(data, bats, sup, equip, mods_f)
             except Exception:  # noqa: BLE001 - an odd template is skipped, not guessed
                 continue
+            n = sum(1 for x in oob.get("divisions") or [] if x.get("template") == name)
             divs.append({"tag": tag, "template": name, "piercing": d.get("piercing", 0.0),
                          "armor": d.get("armor", 0.0), "hardness": d.get("hardness", 0.0),
-                         "width": d.get("width", 0.0)})
+                         "width": d.get("width", 0.0), "fielded": n, "stats": d})
     line = [d for d in divs if d["hardness"] < 0.5] or divs
     prof = {
         "enemies": tags, "chosen": how,
