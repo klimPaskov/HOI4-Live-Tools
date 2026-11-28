@@ -118,6 +118,9 @@ class TemplateRealGameTest(unittest.TestCase):
         self.assertTrue(tanks)
         self.assertGreater(max(d["speed"] for d in tanks), floor)         # a faster tank than the infantry floor
         self.assertNotIn("heavy_tank_chassis", t["designs"])              # the old R-only score's pick
+        b = template.Builder(sit, None, ["POL"], designs=False)
+        towed = b.division(["motorized"] * 6, ["artillery", "engineer"])    # affects_speed = no on both companies
+        self.assertEqual(towed["speed"], b.division(["motorized"] * 6, [])["speed"])
 
     def test_minor_and_major(self):
         for tag, enemy in (("ETH", "ITA"), ("SOV", "GER")):

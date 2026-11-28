@@ -100,6 +100,7 @@ class Data:
                         "types": set(bare(typ)) if isinstance(typ, list) else set(),
                         "logistic": _stats(body, LOGISTIC),
                         "transport": get1(body, "transport"),
+                        "affects_speed": get1(body, "affects_speed") != "no",
                         "terrain_move": {t: _num(get1(tb, "movement")) for t, tb in body
                                          if isinstance(tb, list) and _num(get1(tb, "movement")) is not None},
                     }
@@ -326,6 +327,7 @@ def battalion(data, unit, equipment, mods):
     out["support"] = u["support"]
     out["equipment"] = used
     out.update(_logistic(data, u, equipment, pct))
+    out["affects_speed"] = u.get("affects_speed", True)
     return out
 
 
@@ -374,9 +376,10 @@ def division(data, battalions, support, equipment, mods):
     out["piercing"] = round(0.4 * max(prc) + 0.6 * sum(prc) / len(prc), 1)
     hard = [r["hardness"] for r in (line or rows)]
     out["hardness"] = round(sum(hard) / len(hard), 3)
-    # logistics: the division moves at its slowest sub-unit; supply = the battalions' and companies' supply
-    # consumption x (1 + the companies' supply_consumption_factor); fuel per hour summed
-    sp = [r["speed"] for r in rows if r.get("speed")]
+    # logistics: the division moves at its slowest sub-unit, except those marked affects_speed = no (most support
+    # companies); supply = the battalions' and companies' supply consumption x (1 + the companies'
+    # supply_consumption_factor); fuel summed
+    sp = [r["speed"] for r in rows if r.get("speed") and r.get("affects_speed", True)]
     out["speed"] = round(min(sp), 2) if sp else 0.0
     out["supply"] = round(sum(r["supply"] for r in rows) * max(0.0, 1 + sum(r["supply_factor"] for r in rows)), 3)
     out["fuel"] = round(sum(r["fuel"] for r in rows), 1)
