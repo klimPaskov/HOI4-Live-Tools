@@ -426,6 +426,13 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("give remove or replace, not both", text)
         self.assertIn("training[0].deploy_state is required", text)
         self.assertIn("training[1].deploy_state: unknown state id 99", text)
+        text = self.errors(training=[{"template": "Line", "queue_from": [
+            {"from": "1937.1.1", "queue": 10}, {"from": "1936.6.1", "queue": 4}, {"from": "soon", "queue": 2},
+            {"queue": -1}]}])
+        self.assertIn("training[0].queue_from[1].from must come after the entry before it", text)
+        self.assertIn("training[0].queue_from[2].from must be a date", text)
+        self.assertIn("training[0].queue_from[3] must be", text)
+        self.assertNotIn("queue_from[0]", text)
 
     def test_new_key_references(self):
         rep = self.new(stockpile_targets={"rifles": 30},

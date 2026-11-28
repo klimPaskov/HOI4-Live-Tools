@@ -879,6 +879,7 @@
           "date": {"type": "string", "description": "the date the slot waits for, when the wait is for a date (a tech that opens, a bonus that lands)"},
           "slot": {"type": "integer", "description": "which research slot (0-based) is held"},
           "days": {"type": "number", "description": "how long the slot is held; beyond BASE_RESEARCH_POINTS_SAVED the lint warns"},
+          "fill": {"type": "string", "description": "the juggle: a technology the held slot runs while it waits (the game keeps its progress when it is switched out); the executor switches the slot to `tech` with replace the moment `tech` can start, and the filler resumes later through research_path. A filled slot banks nothing, so `days` does not bound it"},
           "why": {"type": "string", "x-owner": "executor", "description": "why the slot is held; the research line quotes it while the slot waits"}
         },
         "additionalProperties": false
@@ -1228,6 +1229,27 @@
           "type": "integer",
           "minimum": 0
         },
+        "queue_from": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "$ref": "#/definitions/date"
+              },
+              "queue": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "from",
+              "queue"
+            ],
+            "additionalProperties": false
+          },
+          "description": "lines to keep queued from each date on (the last entry whose date has come replaces `queue`): one row per template carries every stage; size each from `evaluate.py training` (divisions in training at once)"
+        },
         "batch": {
           "type": "integer",
           "minimum": 1
@@ -1274,7 +1296,7 @@
       "items": {
         "$ref": "#/definitions/training_line"
       },
-      "description": "one training line or a list of them (plan_manage.rs training_step: each template kept at `queue` lines, the first one short trains `batch`)"
+      "description": "one training line or a list of them (plan_manage.rs training_step: each template kept at `queue` lines (or its `queue_from` schedule), the first one short fills its gap in one queue, at most `batch` lines)"
     },
     "production_priority": {
       "type": "array",
@@ -8422,10 +8444,20 @@
           "minimum": 0,
           "default": 6
         },
+        "queue_from": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {"from": {"$ref": "#/definitions/date"}, "queue": {"type": "integer", "minimum": 0}},
+            "required": ["from", "queue"],
+            "additionalProperties": false
+          },
+          "description": "lines to keep queued from each date on (the last entry whose date has come replaces `queue`): one row per template carries every stage; size each from `evaluate.py training` (divisions in training at once)"
+        },
         "batch": {
           "type": "integer",
           "minimum": 1,
-          "default": 2
+          "description": "at most this many lines per train action; without it one action fills the whole gap to `queue` in ONE queue"
         },
         "armies": {
           "type": "array",

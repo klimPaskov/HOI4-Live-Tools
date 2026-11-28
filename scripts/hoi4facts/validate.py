@@ -611,6 +611,22 @@ def _check_training_line(game, tr, label, rep, meta, planned_names):
     for key in ("queue", "batch"):
         if key in tr and (not isinstance(tr[key], int) or tr[key] < 1):
             rep.error(f"{label}.{key} must be a positive integer")
+    sched = tr.get("queue_from")
+    if sched is not None:
+        last = None
+        for j, step in enumerate(sched if isinstance(sched, list) else [None]):
+            where = f"{label}.queue_from[{j}]"
+            if not isinstance(step, dict) or not isinstance(step.get("queue"), int) or step["queue"] < 0:
+                rep.error(f"{where} must be {{from: date, queue: lines >= 0}}")
+                continue
+            m = _DATE.match(str(step.get("from") or ""))
+            if not m:
+                rep.error(f"{where}.from must be a date (Y.M.D)")
+                continue
+            ymd = tuple(int(x) for x in m.groups())
+            if last is not None and ymd <= last:
+                rep.error(f"{where}.from must come after the entry before it")
+            last = ymd
     dep = tr.get("deploy_state")
     if dep is None:
         rep.error(f"{label}.deploy_state is required (a line without a location never deploys)")

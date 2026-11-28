@@ -12,6 +12,12 @@
     evaluate.py refresh TECH --country TAG          (the design roles a finished technology re-opens)
     evaluate.py fuel --country TAG --enemy TAG [--division armour:10] [--planes 300 --mission CAS] [--war-days 30]
     evaluate.py supply --country TAG --enemy TAG [--motorization 2] [--division armour:6]
+    evaluate.py variant --country TAG [--date D] [--equipment KEY]   (production-cost clicks on mass lines)
+    evaluate.py convert FAMILY --country TAG --date D --to-date D     (base-and-convert: a base now, the design later)
+
+Output: text (default), --json (the whole answer), --lines (one JSON object per decision: evaluators/lines.py, the
+plan generator's and the companion's shape), --jsonl PATH or --run RUN (append those lines to PATH or
+RUN/evaluations.jsonl as well as printing).
 
 Common options: --game DIR (default HOI4_DIR), --mod PATH (repeatable; a .mod descriptor or a mod folder, layered over
 the install like the launcher), --mods none|auto (auto: also the mods enabled in the user folder), --state JSON (a live
@@ -249,6 +255,49 @@ def cmd_research(a, sit):
     return r, text_research(r)
 
 
+def text_variant(r):
+    out = [f"VARIANT cost clicks for {r.get('country', '')} at {r.get('date', '')}"]
+    if not r["clicks"]:
+        out.append("  no buildable equipment with a production-cost upgrade")
+    for x in r["clicks"]:
+        out.append(f"  {x['equipment']} ({x['upgrade']}): take {x['chosen']}: {x['why']}")
+        for row in x["levels"]:
+            out.append(f"    {row['level']} clicks: {row['ic']:g} IC, reliability {row['reliability']:g}, {row['xp']:g} XP,"
+                       f" {row['units_per_100_ic']:g} per 100 IC, value per IC {row['value_per_ic']:g}")
+        out.append("    rules: " + "; ".join(x["rules"]))
+    return out
+
+
+def cmd_variant(a, sit):
+    from hoi4facts.evaluators import variant
+    r = {"clicks": variant.cost_clicks(sit, a.equipment), "country": sit.tag, "date": sit.date}
+    return r, text_variant(r)
+
+
+def text_convert(r):
+    if r.get("note") and not r.get("base"):
+        return [f"CONVERT {r.get('family')}: {r['note']}"]
+    b, f = r["base"], r["final"]
+    out = [f"CONVERT {r['family']} for {r.get('country', '')}: base at {r['date']}, design at {r['to_date']} "
+           f"({r['techs_then']})",
+           f"  final ({f['stats'].get('build_cost_ic', 0):g} IC): {f['base']} " + ", ".join(sorted(f["modules"].values()))
+           + f"; upgrades {f['upgrades']}",
+           f"  base  ({b['stats'].get('build_cost_ic', 0):g} IC): {b['base']} " + ", ".join(sorted(b["modules"].values()))
+           + f"; upgrades {b['upgrades']}" + (f"; NOT LEGAL: {b['legal']}" if b["legal"] else "")]
+    for row in r["conversion_rows"]:
+        out.append(f"    {row['part']}: {row['ic']:g} IC" + (f", {row['xp']:g} XP" if row.get("xp") else "")
+                   + (f" ({row.get('how') or row.get('rule')})" if row.get("how") or row.get("rule") else ""))
+    out.append(f"  conversion {r['conversion_ic']:g} IC and {r['conversion_xp']:g} XP per vehicle: {r['why']}")
+    return out
+
+
+def cmd_convert(a, sit):
+    from hoi4facts.evaluators import variant
+    r = variant.base_and_convert(sit, a.family, a.to_date, role=a.role, enemies=a.enemy or None)
+    r["country"] = sit.tag
+    return r, text_convert(r)
+
+
 def text_production(r):
     e = r["efficiency"]
     out = [f"PRODUCTION for {r.get('country', '')} at {r.get('date', '')} to {r['need_date']} ({r['days']} days): "
@@ -462,7 +511,7 @@ def cmd_supply(a, sit):
     return r, text_supply(r)
 
 
-COMMANDS = {"force": cmd_force, "doctrine": cmd_doctrine, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template, "construction": cmd_construction, "fuel": cmd_fuel, "supply": cmd_supply}
+COMMANDS = {"force": cmd_force, "doctrine": cmd_doctrine, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template, "construction": cmd_construction, "fuel": cmd_fuel, "supply": cmd_supply, "variant": cmd_variant, "convert": cmd_convert}
 
 
 def parser():
@@ -487,6 +536,9 @@ def parser():
         p.add_argument("--state", default=None, help="live snapshot JSON")
         p.add_argument("--enemy", action="append", default=[])
         p.add_argument("--json", action="store_true")
+        p.add_argument("--lines", action="store_true", help="one JSON object per decision (evaluators/lines.py)")
+        p.add_argument("--jsonl", default=None, help="also append the decision lines to this file")
+        p.add_argument("--run", default=None, help="also append the decision lines to RUN/evaluations.jsonl")
         return p
 
     p = add("design", "role")
@@ -523,14 +575,28 @@ def parser():
     p.add_argument("--motorization", type=int, default=2, choices=(0, 1, 2))
     p.add_argument("--advance", type=int, default=2, help="provinces of advance to show")
     p.add_argument("--division", action="append", default=[], help="ROLE:N or TEMPLATE:N planned per axis")
+    p = add("variant")
+    p.add_argument("--equipment", default=None, help="one equipment (default: the newest of every archetype held)")
+    p = add("convert", "family")
+    p.add_argument("--to-date", required=True, help="the date of the final design (techs by on-time research)")
+    p.add_argument("--role", default="tank_main")
     return ap
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
     a = parser().parse_args(argv)
     sit = situation(a)
     data, text = COMMANDS[a.cmd](a, sit)
-    if a.json:
+    if a.lines or a.jsonl or a.run:
+        from hoi4facts.evaluators import lines
+        rows = lines.lines(a.cmd, data, argv, sit)
+        for path in [x for x in (a.jsonl, os.path.join(a.run, "evaluations.jsonl") if a.run else None) if x]:
+            lines.write(path, rows)
+    if a.lines:
+        for row in rows:
+            print(json.dumps(row, ensure_ascii=False, default=lambda o: sorted(o) if isinstance(o, set) else str(o)))
+    elif a.json:
         print(json.dumps(data, indent=1, ensure_ascii=False, default=lambda o: sorted(o) if isinstance(o, set) else str(o)))
     else:
         print("\n".join(text))
