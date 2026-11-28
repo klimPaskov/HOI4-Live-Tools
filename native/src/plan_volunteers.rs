@@ -5,7 +5,7 @@
 //! window the strategist computed from the defines (`send_until` = the first own war minus the arrival recall lock and
 //! the transfer days; `recall_from` = the first own war minus the recall days of the army and a margin; see
 //! scripts/hoi4facts/volunteers.py). The rule never reads a war the player could not see: it presses the diplomacy
-//! view's own action through `hoi4_volunteers` and the game's own legality answers (a war not started, the cap, the
+//! view's own action through `hoi4_diplomacy_act` (send_volunteers, recall_volunteers, send_attache) and the game's own legality answers (a war not started, the cap, the
 //! divisions-required floor, an ideology gate and the recall lock all refuse with nothing posted). Weekly retries; the
 //! rule sets decide (`volunteers`, `attaches`: allowed in FAIR on the agent's own initiative, owner 28 Nov).
 use serde_json::{json, Value};
@@ -83,9 +83,15 @@ pub(super) fn volunteers_step(
             if state.skipped(now, "volunteers_try", tag) {
                 continue;
             }
-            let args = json!({"action":action,"country":tag,"army":army,
+            // one diplomacy tool (owner, 28 Nov): the volunteer actions are keys of hoi4_diplomacy_act
+            let key = if action == "send" {
+                "send_volunteers"
+            } else {
+                "recall_volunteers"
+            };
+            let args = json!({"action":key,"country":tag,"army":army,
                 "request_id":format!("vol-{action}-{tag}-{now}"),"lease_token":lease});
-            match tools.call("hoi4_volunteers", &args) {
+            match tools.call("hoi4_diplomacy_act", &args) {
                 Ok(_) => {
                     if action == "send" {
                         // one force per war; it returns when the war ends (the game) or at recall_from (the rule)
@@ -117,9 +123,9 @@ pub(super) fn volunteers_step(
             if state.skipped(now, "attache_sent", tag) || state.skipped(now, "attache_try", tag) {
                 continue;
             }
-            let args = json!({"action":"attache","country":tag,
+            let args = json!({"action":"send_attache","country":tag,
                 "request_id":format!("vol-attache-{tag}-{now}"),"lease_token":lease});
-            match tools.call("hoi4_volunteers", &args) {
+            match tools.call("hoi4_diplomacy_act", &args) {
                 Ok(_) => {
                     state.skip(now, "attache_sent", tag, FOREVER);
                     super::plan_manage::note(state, "volunteers", format!("attache -> {tag}"));

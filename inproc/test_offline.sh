@@ -69,9 +69,9 @@ S2N=(regions_arr=0x2a8 regions_cnt=0x2b4 on:airwing.split=1 on:airwing.merge=1 o
      act_type:diplomacy.guarantee=0x28da act_type:diplomacy.military_access=0x2934 act_type:diplomacy.offer_military_access=0x2fc8
      act_type:diplomacy.non_aggression=0x2fbc act_type:diplomacy.improve_relations=0x2cd7 act_type:diplomacy.declare_war=0x277f
      act_size:diplomacy.guarantee=0x70 act_size:diplomacy.declare_war=0x78 act_goal_off:diplomacy.declare_war=0x6c
-     on:volunteers.send=1 on:volunteers.recall=1 on:volunteers.attache=1 act_type:volunteers.send=0x3415
-     act_type:volunteers.recall=0x2e3a act_type:volunteers.attache=0x38d9 act_units:volunteers.send=0x709002
-     act_units:volunteers.recall=0x709004 act_units:volunteers.attache=0
+     on:diplomacy.send_volunteers=1 on:diplomacy.recall_volunteers=1 on:diplomacy.send_attache=1 act_type:diplomacy.send_volunteers=0x3415
+     act_type:diplomacy.recall_volunteers=0x2e3a act_type:diplomacy.send_attache=0x38d9 act_units:diplomacy.send_volunteers=0x709002
+     act_units:diplomacy.recall_volunteers=0x709004 act_units:diplomacy.send_attache=0
      on:raids.execute=1 on:raids.cancel=1 type:raids.execute=19194 type:raids.cancel=19209
      on:holds.area_defense=1 type:holds.area_defense=13873 holds_ok=1 holds_kind=5 holds_area_off=0xe0 holds_area_cnt=0xec
      holds_setting_off=0xf8 on:construction.add=1 type:construction.add=12151 on:construction.remove=1 type:construction.remove=13088

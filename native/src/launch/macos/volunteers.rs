@@ -1,14 +1,15 @@
-//! Volunteers and the attaché through the in-process module (engineer 118, family `volunteers`): the diplomacy view's
+//! Volunteers and the attaché through the in-process module's diplomacy family (engineer 118; one diplomacy tool on the
+//! owner's rule, engineer 120: hoi4_diplomacy_act's send_volunteers / recall_volunteers keys come here): the diplomacy view's
 //! own actions, built as the view builds them (sender = the player, receiver = the named country, the game date) with
 //! the action class's own constructor, checked by the command's own "can do" (the action's legality: the gates the view
 //! greys its button by, among them the volunteer cap, the divisions-required floor and the recall lock) and posted.
 //! send and recall carry divisions; the module writes at most the action's inline places per action and posts one
 //! action per group, so a request of n divisions is ceil(n / places) commands. No dialog is opened, no mouse path.
-//! The family is off under `HOI4_BACKEND=auto` until its live session S25-VOLUNTEERS passes.
+//! These keys run only under `HOI4_BACKEND=inprocess` until the live session S25-VOLUNTEERS passes.
 use super::inproc::{self, Channel, Routed};
 use super::inproc_units::{request, routed};
 use crate::error::{Error, Result};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 /// Set when S25-VOLUNTEERS passes live (docs/LIVE_VALIDATION_QUEUE.md); the module's IPC_LIVE_PASSED entry moves with it.
 const LIVE_PASSED: bool = false;
@@ -20,30 +21,36 @@ pub(super) const MAX_DIVISIONS: usize = 64;
 pub(super) enum Action {
     Send,
     Recall,
-    Attache,
 }
 
 impl Action {
+    /// The hoi4_diplomacy_act keys this module path answers (send_attache keeps the view's own row).
+    pub(super) fn from_key(s: &str) -> Option<Self> {
+        match s {
+            "send_volunteers" => Some(Self::Send),
+            "recall_volunteers" | "return_volunteers" => Some(Self::Recall),
+            _ => None,
+        }
+    }
+    #[cfg(test)]
     pub(super) fn parse(s: &str) -> Result<Self> {
         match s {
             "send" => Ok(Self::Send),
             "recall" => Ok(Self::Recall),
-            "attache" => Ok(Self::Attache),
             _ => Err(Error::new(
                 "invalid_arguments",
-                "action must be send, recall or attache",
+                "action must be send or recall",
             )),
         }
     }
     pub(super) fn op(self) -> &'static str {
         match self {
-            Self::Send => "volunteers.send",
-            Self::Recall => "volunteers.recall",
-            Self::Attache => "volunteers.attache",
+            Self::Send => "diplomacy.send_volunteers",
+            Self::Recall => "diplomacy.recall_volunteers",
         }
     }
     pub(super) fn takes_divisions(self) -> bool {
-        self != Self::Attache
+        true
     }
 }
 
@@ -53,7 +60,7 @@ pub(super) fn allowed_mode(mode: inproc::Mode) -> Result<()> {
         inproc::Mode::Auto if LIVE_PASSED => Ok(()),
         _ => Err(Error::new(
             "volunteers_unvalidated",
-            "hoi4_volunteers runs through the in-process module only, and only with HOI4_BACKEND=inprocess until its \
+            "send_volunteers / recall_volunteers run through the in-process module only, and only with HOI4_BACKEND=inprocess until its \
              live session S25-VOLUNTEERS passes (docs/LIVE_VALIDATION_QUEUE.md); nothing was posted",
         )),
     }
@@ -112,47 +119,29 @@ pub(super) fn post(
     }
 }
 
-pub(super) fn schema() -> Value {
-    json!({
-        "name": "hoi4_volunteers",
-        "description": "Send or recall volunteer divisions, or send an attache, by the diplomacy view's own actions through the in-process module (family volunteers; HOI4_BACKEND=inprocess until S25-VOLUNTEERS passes). The game's own legality decides (the volunteer cap from the defines, the divisions-required floor, the recall lock, war and ideology gates); a refusal posts nothing. Divisions: an army's divisions, or division_ids within it. Air volunteers are a rebase of wings to an air base of the receiver (hoi4_air_rebase), not this tool.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "action": {"type": "string", "enum": ["send", "recall", "attache"]},
-                "country": {"type": "string", "description": "the receiving country's tag (the country at war; for recall the country the volunteers serve in)"},
-                "army": {"type": "string", "description": "send / recall: the army whose divisions go (all of them unless division_ids)"},
-                "division_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": MAX_DIVISIONS},
-                "request_id": {"type": "string"},
-                "lease_token": {"type": "string"}
-            },
-            "required": ["action", "country", "request_id", "lease_token"],
-            "additionalProperties": false
-        }
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn actions_map_to_the_module_ops() {
-        assert_eq!(Action::parse("send").unwrap().op(), "volunteers.send");
-        assert_eq!(Action::parse("recall").unwrap().op(), "volunteers.recall");
-        assert_eq!(Action::parse("attache").unwrap().op(), "volunteers.attache");
+        assert_eq!(
+            Action::parse("send").unwrap().op(),
+            "diplomacy.send_volunteers"
+        );
+        assert_eq!(
+            Action::parse("recall").unwrap().op(),
+            "diplomacy.recall_volunteers"
+        );
         assert!(Action::parse("expeditionary").is_err());
-        assert!(!Action::Attache.takes_divisions());
     }
 
     #[test]
     fn requests_carry_the_tag_and_the_divisions() {
         let r = module_request(Action::Send, 17, &[0x10, 0x20]).unwrap();
-        assert_eq!(r["cmd"], "volunteers.send");
+        assert_eq!(r["cmd"], "diplomacy.send_volunteers");
         assert_eq!(r["objs"], "0x0");
         assert_eq!(r["divs"], "0x10,0x20");
-        let a = module_request(Action::Attache, 17, &[0x10]).unwrap();
-        assert!(a.get("divs").is_none());
         assert!(module_request(Action::Send, 17, &[]).is_err());
         assert!(module_request(Action::Recall, 0, &[0x10]).is_err());
         assert!(module_request(Action::Send, 17, &[1; MAX_DIVISIONS + 1]).is_err());
@@ -166,14 +155,12 @@ mod tests {
     }
 
     #[test]
-    fn tags_and_schema() {
+    fn tags_and_diplomacy_keys() {
         assert!(valid_tag("SPR") && valid_tag("D01"));
         assert!(!valid_tag("spr") && !valid_tag("SPRR"));
-        let s = schema();
-        assert_eq!(s["name"], "hoi4_volunteers");
-        assert_eq!(
-            s["inputSchema"]["properties"]["action"]["enum"][2],
-            "attache"
-        );
+        assert_eq!(Action::from_key("send_volunteers"), Some(Action::Send));
+        assert_eq!(Action::from_key("recall_volunteers"), Some(Action::Recall));
+        assert_eq!(Action::from_key("send_attache"), None);
+        assert_eq!(Action::from_key("guarantee"), None);
     }
 }

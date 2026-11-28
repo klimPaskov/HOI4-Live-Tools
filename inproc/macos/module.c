@@ -1597,13 +1597,13 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
     j->n = parse_list_u64(objs, j->obj, J2_MAX);
     int nv = vals && *vals ? parse_list_i64(vals, j->val, J2_MAX) : 0;
     const char *why = NULL;
-    if (!strncmp(op, "volunteers.", 11)) {
+    if (!strcmp(op, "diplomacy.send_volunteers") || !strcmp(op, "diplomacy.recall_volunteers") || !strcmp(op, "diplomacy.send_attache")) {
         /* engineer 118: as diplomacy (objs = 0, vals = the receiving country's tag id); send / recall also name the
          * divisions (divs: hex addresses, at most 64), the attache none */
-        int wants_divs = strcmp(op, "volunteers.attache") != 0;
-        if (j->n != 1 || j->obj[0] != 0) why = "volunteers ops name no object: objs = 0 (vals: the receiving country's tag id)";
+        int wants_divs = strcmp(op, "diplomacy.send_attache") != 0;
+        if (j->n != 1 || j->obj[0] != 0) why = "these diplomacy ops name no object: objs = 0 (vals: the receiving country's tag id)";
         else if (nv != 1 || j->val[0] < 1 || j->val[0] > 100000) why = "vals: the receiving country's tag id";
-        else if (flag || (obj2 && *obj2) || (provs && *provs)) why = "volunteers ops take no flag, obj2 or provs";
+        else if (flag || (obj2 && *obj2) || (provs && *provs)) why = "these diplomacy ops take no flag, obj2 or provs";
         else if (!wants_divs && divs && *divs) why = "the attache takes no divs";
         else if (wants_divs && ((j->ndiv = parse_list_u64(divs ? divs : "", j->divs, 64)) < 1)) why = "divs: 1 to 64 comma-separated division addresses";
         for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a division is listed twice";

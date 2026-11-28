@@ -291,9 +291,6 @@ use std::{
 /// battles, reach by range and base.
 #[path = "plan_air.rs"]
 mod plan_air;
-/// Volunteers and the attaché as a standing opportunity rule (`volunteers`): the game's own legality answers.
-#[path = "plan_volunteers.rs"]
-mod plan_volunteers;
 /// Concentrated command: formations and their tasks, a general for every army, the army group.
 #[path = "plan_formations.rs"]
 mod plan_formations;
@@ -303,6 +300,9 @@ mod plan_manage;
 /// Military domains (army groups, navy, naval invasions, casualty ratio, air superiority).
 #[path = "plan_military.rs"]
 mod plan_military;
+/// Volunteers and the attaché as a standing opportunity rule (`volunteers`): the game's own legality answers.
+#[path = "plan_volunteers.rs"]
+mod plan_volunteers;
 
 /// State, economy and diplomacy affairs (designs, diplomacy, faction, trade, MIOs, intelligence,
 /// research bonuses).
@@ -459,7 +459,6 @@ fn bulk_paths(plan: &Value) -> HashSet<String> {
 }
 pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_skill_run",
-    "hoi4_volunteers",
     "hoi4_army_fallback",
     "hoi4_army_exercise",
     "hoi4_production_priority",

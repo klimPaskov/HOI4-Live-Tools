@@ -213,7 +213,8 @@ const cmd_spec CMD2_SPECS[] = {
      * whose target is the receiver (the list the dialog shows) */
     {"diplomacy", "diplomacy.declare_war", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_DIPLO_WAR, 0, 0x28,
      "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "17CDeclareWarAction"},
-    /* ---- volunteers (engineer 118, 28 Nov): the diplomacy view's volunteer and attache actions, one CDiplomaticActionCommand
+    /* ---- diplomacy, volunteers and the attache (engineer 118, 28 Nov; folded into the diplomacy family by engineer 120 on the
+     * owner's rule of one dynamic diplomacy tool): the diplomacy view's volunteer and attache actions, one CDiplomaticActionCommand
      * each, built as the family diplomacy builds its actions (read from 1.20.0.0). send: CSendVolunteerAction (type 0x3415,
      * its list of division handles at +0x70 with 2 inline places; the dialog's Send fills the list with the chosen
      * divisions through the action's own setter, which stores each division's handle) and a byte +0xa8 (serialized 0x3866,
@@ -222,11 +223,11 @@ const cmd_spec CMD2_SPECS[] = {
      * flag byte of its own (as improve relations). The module fills at most the inline places per action and posts one
      * action per group of divisions, so it never allocates inside a game object. A family of its own: OFF in auto until
      * its live session (S25-VOLUNTEERS) passes. */
-    {"volunteers", "volunteers.send", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_VOLUNTEER, 0, 0x28,
+    {"diplomacy", "diplomacy.send_volunteers", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_VOLUNTEER, 0, 0x28,
      "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "20CSendVolunteerAction"},
-    {"volunteers", "volunteers.recall", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_VOLUNTEER, 0, 0x28,
+    {"diplomacy", "diplomacy.recall_volunteers", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_VOLUNTEER, 0, 0x28,
      "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "22CRecallVolunteerAction"},
-    {"volunteers", "volunteers.attache", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_DIPLO_SIMPLE, 0, 0x28,
+    {"diplomacy", "diplomacy.send_attache", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_DIPLO_SIMPLE, 0, 0x28,
      "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "18CSendAttacheAction"},
     /* ---- raids (engineer 118, 28 Nov): a prepared raid's Launch and Cancel buttons (Götterdämmerung raids, common/raids).
      * Read from 1.20.0.0: NRaids::NNet::CExecuteRaidCommand and CCancelRaidCommand, 0x30 each, one handle +0x24 (0x4aef) of

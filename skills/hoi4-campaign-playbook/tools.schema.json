@@ -2164,45 +2164,56 @@
    "source": "--list-tools"
   },
   "hoi4_diplomacy_act": {
-   "description": "Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, call_to_arms, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices, e.g. volunteers groups), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt.",
+   "description": "Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, call_to_arms, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices the tool cannot make yet), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt. send_volunteers / recall_volunteers carry `army` (the army whose divisions go) and optionally `division_ids` within it, and go through the in-process module's diplomacy family (the view's own action; HOI4_BACKEND=inprocess until S25-VOLUNTEERS): the game's own check decides (volunteer cap, divisions required, recall lock, war and ideology gates; refused_by_game posts nothing). Air volunteers are a rebase of wings to the receiver's air base (hoi4_air_rebase).",
    "inputSchema": {
-    "additionalProperties": false,
+    "type": "object",
     "properties": {
-     "accept_widening": {
-      "type": "boolean"
+     "country": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]{3}$"
+     },
+     "army": {
+      "type": "string"
+     },
+     "division_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "minItems": 1,
+      "maxItems": 64
+     },
+     "state_id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4095
      },
      "action": {
       "type": "string"
      },
+     "war_goal": {
+      "type": "string"
+     },
+     "states": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 5
+     },
+     "try_anyway": {
+      "type": "boolean"
+     },
+     "accept_widening": {
+      "type": "boolean"
+     },
      "confirm": {
-      "type": "string"
-     },
-     "country": {
-      "pattern": "^[A-Z0-9]{3}$",
-      "type": "string"
-     },
-     "lease_token": {
       "type": "string"
      },
      "request_id": {
       "type": "string"
      },
-     "state_id": {
-      "maximum": 4095,
-      "minimum": 1,
-      "type": "integer"
-     },
-     "states": {
-      "items": {
-       "type": "string"
-      },
-      "maxItems": 5,
-      "type": "array"
-     },
-     "try_anyway": {
-      "type": "boolean"
-     },
-     "war_goal": {
+     "lease_token": {
       "type": "string"
      }
     },
@@ -2211,7 +2222,7 @@
      "request_id",
      "lease_token"
     ],
-    "type": "object"
+    "additionalProperties": false
    },
    "source": "--list-tools"
   },
@@ -5600,52 +5611,6 @@
       "type": "string"
      }
     },
-    "type": "object"
-   },
-   "source": "--list-tools"
-  },
-  "hoi4_volunteers": {
-   "description": "Send or recall volunteer divisions, or send an attache, by the diplomacy view's own actions through the in-process module (family volunteers; HOI4_BACKEND=inprocess until S25-VOLUNTEERS passes). The game's own legality decides (the volunteer cap from the defines, the divisions-required floor, the recall lock, war and ideology gates); a refusal posts nothing. Divisions: an army's divisions, or division_ids within it. Air volunteers are a rebase of wings to an air base of the receiver (hoi4_air_rebase), not this tool.",
-   "inputSchema": {
-    "additionalProperties": false,
-    "properties": {
-     "action": {
-      "enum": [
-       "send",
-       "recall",
-       "attache"
-      ],
-      "type": "string"
-     },
-     "army": {
-      "description": "send / recall: the army whose divisions go (all of them unless division_ids)",
-      "type": "string"
-     },
-     "country": {
-      "description": "the receiving country's tag (the country at war; for recall the country the volunteers serve in)",
-      "type": "string"
-     },
-     "division_ids": {
-      "items": {
-       "type": "string"
-      },
-      "maxItems": 64,
-      "minItems": 1,
-      "type": "array"
-     },
-     "lease_token": {
-      "type": "string"
-     },
-     "request_id": {
-      "type": "string"
-     }
-    },
-    "required": [
-     "action",
-     "country",
-     "request_id",
-     "lease_token"
-    ],
     "type": "object"
    },
    "source": "--list-tools"

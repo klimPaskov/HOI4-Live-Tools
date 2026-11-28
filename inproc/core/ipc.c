@@ -15,8 +15,8 @@
 #include <time.h>
 #include <unistd.h>
 
-const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics", "construction", "training", "mio", "navy", "doctrine", "projects", "navyhq", "move", "volunteers", "raids"};
-const int IPC_ALLOWED_COUNT = 25;
+const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics", "construction", "training", "mio", "navy", "doctrine", "projects", "navyhq", "move", "raids"};
+const int IPC_ALLOWED_COUNT = 24;
 /* airwing (engineer 71, 24 Nov): split, merge, disband, attach, detach, region by id / hold; OFF in auto until its
  * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
 const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */,
@@ -78,8 +78,6 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                    * read gives a headquarters' address yet) */,
                                 0 /* move (engineer 105, 28 Nov): a division's move order to a province, the right click's
                                    * CMoveCommand (S20-MOVE) */,
-                                0 /* volunteers (engineer 118, 28 Nov): send and recall volunteer divisions, send an attache,
-                                   * the diplomacy view's own actions (S25-VOLUNTEERS) */,
                                 0 /* raids (engineer 118, 28 Nov): a prepared raid's Launch and Cancel (S23-RAID; raid
                                    * creation and the raid instance read are not built yet) */};
 

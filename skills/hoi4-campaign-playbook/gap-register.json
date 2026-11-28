@@ -1007,7 +1007,7 @@
     "diplomacy[].action"
    ],
    "tools": [
-    "hoi4_volunteers",
+    "hoi4_diplomacy_act",
     "hoi4_diplomacy_act"
    ],
    "payoff": "medium",
@@ -1546,7 +1546,7 @@
     "diplomacy[].action"
    ],
    "tools": [
-    "hoi4_volunteers"
+    "hoi4_diplomacy_act"
    ],
    "payoff": "medium",
    "why": "army XP and veteran divisions before the main war",
@@ -1577,7 +1577,7 @@
    ],
    "plan": [],
    "tools": [
-    "hoi4_volunteers"
+    "hoi4_diplomacy_act"
    ],
    "payoff": "low",
    "why": "recover divisions before the main war",
