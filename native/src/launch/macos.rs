@@ -3860,13 +3860,28 @@ impl MacClock {
             let mut reply = Value::Null;
             // the read-back of volunteers abroad is mapped by S25-VOLUNTEERS; until then the module's posted count is
             // the verdict
-            let mut settle = || -> Result<journal::Outcome> { Ok(journal::Outcome::Unobservable) };
+            // engineer 125 (live 126, S27 D3): a refusal by the game's check closes as refused, not unconfirmed
+            let refused = std::cell::Cell::new(false);
+            let mut settle = || -> Result<journal::Outcome> {
+                if refused.get() {
+                    // the game's own check refused it inside the module: nothing was posted, the refusal is the answer
+                    Ok(journal::Outcome::Unchanged(
+                        json!({"refused_by_game_check": true}),
+                    ))
+                } else {
+                    Ok(journal::Outcome::Unobservable)
+                }
+            };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 let ch = route
                     .as_mut()
                     .ok_or_else(|| Error::new("in_process_unavailable", "no channel"))?;
-                reply = volunteers::post(ch, action, tag_index, &divisions)?;
+                reply = volunteers::post(ch, action, tag_index, &divisions).inspect_err(|e| {
+                    if e.code == "refused_by_game" {
+                        refused.set(true);
+                    }
+                })?;
                 Ok(())
             };
             let receipt = actions.execute(id, &epoch, what, &mut settle, &mut dispatch)?;
@@ -3983,7 +3998,18 @@ impl MacClock {
             let mut reply = Value::Null;
             // the justification in progress is not read yet: the module's posted count after the game's own check is the
             // verdict (S27 maps the read-back: the country's war goal list gains the target)
-            let mut settle = || -> Result<journal::Outcome> { Ok(journal::Outcome::Unobservable) };
+            // engineer 125 (live 126, S27 D3): a refusal by the game's check closes as refused, not unconfirmed
+            let refused = std::cell::Cell::new(false);
+            let mut settle = || -> Result<journal::Outcome> {
+                if refused.get() {
+                    // the game's own check refused it inside the module: nothing was posted, the refusal is the answer
+                    Ok(journal::Outcome::Unchanged(
+                        json!({"refused_by_game_check": true}),
+                    ))
+                } else {
+                    Ok(journal::Outcome::Unobservable)
+                }
+            };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 let ch = route
@@ -3994,7 +4020,10 @@ impl MacClock {
                         reply = body;
                         Ok(())
                     }
-                    inproc::Routed::Refused(what) => Err(inproc::refused_error(&what)),
+                    inproc::Routed::Refused(what) => {
+                        refused.set(true);
+                        Err(inproc::refused_error(&what))
+                    }
                     inproc::Routed::Gui => Err(Error::new(
                         "in_process_unavailable",
                         "the module did not post the justification (see its log): nothing was sent",
@@ -4069,7 +4098,18 @@ impl MacClock {
             let mut reply = Value::Null;
             // no relation read is mapped for these classes yet: the module's posted count after the game's own check is
             // the verdict (S27 maps the read-back per action)
-            let mut settle = || -> Result<journal::Outcome> { Ok(journal::Outcome::Unobservable) };
+            // engineer 125 (live 126, S27 D3): a refusal by the game's check closes as refused, not unconfirmed
+            let refused = std::cell::Cell::new(false);
+            let mut settle = || -> Result<journal::Outcome> {
+                if refused.get() {
+                    // the game's own check refused it inside the module: nothing was posted, the refusal is the answer
+                    Ok(journal::Outcome::Unchanged(
+                        json!({"refused_by_game_check": true}),
+                    ))
+                } else {
+                    Ok(journal::Outcome::Unobservable)
+                }
+            };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 let ch = route
@@ -4080,7 +4120,10 @@ impl MacClock {
                         reply = body;
                         Ok(())
                     }
-                    inproc::Routed::Refused(what) => Err(inproc::refused_error(&what)),
+                    inproc::Routed::Refused(what) => {
+                        refused.set(true);
+                        Err(inproc::refused_error(&what))
+                    }
                     inproc::Routed::Gui => Err(Error::new(
                         "in_process_unavailable",
                         "the module did not post the action (see its log); this action has no view row, so the mouse sent nothing",
