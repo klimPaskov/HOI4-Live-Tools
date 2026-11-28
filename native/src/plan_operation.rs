@@ -3994,9 +3994,14 @@ fn assemble(
                 .iter()
                 .filter(|d| text(&d["army"]) == name)
                 .collect();
+            // the fast templates keep up with the armour: they stay (w101a, 28 Nov 2026: the
+            // motorised divisions were sent out of Panzergruppe Ost into Army 2, and the
+            // armour's thrust into Luxembourg had no infantry of its own speed behind it)
+            let fast = fast_templates(state, tools, now);
             let mut strays: Vec<String> = own
                 .iter()
                 .filter(|d| !want.iter().any(|(t, _)| t == text(&d["template"])))
+                .filter(|d| !fast.contains(text(&d["template"])))
                 .filter_map(|d| d["id"].as_str().map(str::to_string))
                 .collect();
             if strays.len() == own.len() {
@@ -9496,6 +9501,80 @@ fn plan_axes(
 
 /// The width of each template (hoi4_template_get), read once a game day and kept in the memory
 /// (`opw:<template>` in hundredths).
+/// The speed of a template (pure, from a `hoi4_template_get` row): of its combat battalions
+/// (the regiment columns), the slowest, each battalion as fast as the fastest equipment it needs
+/// (a motorised battalion needs rifles and trucks and moves at the trucks' speed); None without
+/// the variants' speeds.
+fn template_speed(row: &Value) -> Option<f64> {
+    let speed: HashMap<&str, f64> = list(row, "equipment_variants")
+        .iter()
+        .filter_map(|v| {
+            Some((
+                v["archetype"].as_str()?,
+                v["per_piece_stats"]["maximum_speed"].as_f64()?,
+            ))
+        })
+        .collect();
+    let combat: HashSet<&str> = list(row, "columns")
+        .iter()
+        .flat_map(|c| {
+            c.as_array()
+                .map(Vec::as_slice)
+                .unwrap_or(&[])
+                .iter()
+                .filter_map(Value::as_str)
+        })
+        .collect();
+    list(row, "units")
+        .iter()
+        .filter(|u| combat.contains(text(&u["unit"])))
+        .map(|u| {
+            u["equipment_need"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .filter_map(|(a, _)| speed.get(a.as_str()).copied())
+                .fold(None, |m: Option<f64>, s| Some(m.map_or(s, |m| m.max(s))))
+        })
+        .try_fold(None, |m: Option<f64>, s| {
+            let s = s?;
+            Some(Some(m.map_or(s, |m| m.min(s))))
+        })
+        .flatten()
+}
+
+/// The own templates that move at least FAST_RATIO times as fast as our slowest template (by
+/// `template_speed`), read once a day; empty without a read.
+fn fast_templates(state: &mut State, tools: &dyn Tools, now: GameHour) -> HashSet<String> {
+    if !state.skipped(now, "opfast", "templates") {
+        state.skip(now, "opfast", "templates", DAY);
+        if let Ok(read) = tools.call("hoi4_template_get", &json!({})) {
+            let speeds: Vec<(String, f64)> = list(&read, "templates")
+                .iter()
+                .filter_map(|r| Some((text(&r["template"]).to_string(), template_speed(r)?)))
+                .filter(|(n, s)| !n.is_empty() && *s > 0.0)
+                .collect();
+            if let Some(slow) = speeds.iter().map(|(_, s)| *s).reduce(f64::min) {
+                state.done.retain(|k, _| !k.starts_with("opfast:"));
+                for (n, s) in &speeds {
+                    if *s >= FAST_RATIO * slow {
+                        state.done.insert(format!("opfast:{n}"), 1);
+                    }
+                }
+            }
+        }
+    }
+    state
+        .done
+        .keys()
+        .filter_map(|k| k.strip_prefix("opfast:").map(str::to_string))
+        .collect()
+}
+
+/// A fast template moves at least this many times as fast as our slowest (motorised 12 against
+/// infantry 4; cavalry 6 is not fast).
+const FAST_RATIO: f64 = 2.0;
+
 fn template_widths(state: &mut State, tools: &dyn Tools, now: GameHour) -> HashMap<String, f64> {
     if !state.skipped(now, "opwidth", "templates") {
         state.skip(now, "opwidth", "templates", DAY);

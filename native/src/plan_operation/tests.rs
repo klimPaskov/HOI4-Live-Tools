@@ -5806,3 +5806,87 @@ fn a_pile_on_a_full_battle_sheds_to_the_unattacked_enemy_province_beside_it() {
             .is_none()
     );
 }
+
+// FAST TEMPLATES STAY WITH THE ARMOUR (engineer 103, after w101a)
+
+fn template_row(
+    name: &str,
+    columns: &[&str],
+    kit: &[(&str, &[&str])],
+    speeds: &[(&str, f64)],
+) -> Value {
+    json!({"template": name, "totals": {"width": 20.0},
+           "columns": columns.iter().map(|c| json!([c, c])).collect::<Vec<_>>(),
+           "units": kit.iter().map(|(u, need)| json!({"unit": u,
+               "equipment_need": need.iter().map(|a| (a.to_string(), json!(10))).collect::<serde_json::Map<_, _>>()}))
+               .collect::<Vec<_>>(),
+           "equipment_variants": speeds.iter().map(|(a, s)| json!({"archetype": a, "variant": a,
+               "per_piece_stats": {"maximum_speed": s}})).collect::<Vec<_>>()})
+}
+
+fn three_templates() -> Value {
+    let kit: &[(&str, &[&str])] = &[
+        ("infantry", &["infantry_equipment"]),
+        ("motorized", &["infantry_equipment", "motorized_equipment"]),
+        ("light_armor", &["light_tank_chassis"]),
+        ("engineer", &["support_equipment"]),
+    ];
+    let speeds = [
+        ("infantry_equipment", 4.0),
+        ("motorized_equipment", 12.0),
+        ("light_tank_chassis", 12.0),
+        ("support_equipment", 4.0),
+    ];
+    json!({"templates": [
+        template_row("Inf", &["infantry"], kit, &speeds),
+        template_row("Mot", &["motorized"], kit, &speeds),
+        template_row("Pz", &["light_armor", "motorized"], kit, &speeds)]})
+}
+
+#[test]
+fn a_template_moves_at_its_slowest_battalion_s_fastest_equipment() {
+    let t = three_templates();
+    let rows = list(&t, "templates");
+    assert_eq!(template_speed(&rows[0]), Some(4.0));
+    // rifles and trucks: the trucks' speed; the engineers (support) do not count
+    assert_eq!(template_speed(&rows[1]), Some(12.0));
+    assert_eq!(template_speed(&rows[2]), Some(12.0));
+    assert_eq!(template_speed(&json!({"template": "X"})), None);
+}
+
+#[test]
+fn a_mobile_formation_keeps_its_motorised_and_sends_out_only_the_slow() {
+    // w101a: the motorised divisions went out of Panzergruppe Ost into Army 2
+    let game = Game::new();
+    *game.templates.borrow_mut() = Some(three_templates());
+    let d = |id: &str, army: &str, t: &str| (id.to_string(), army.to_string(), t.to_string());
+    *game.divs.borrow_mut() = vec![
+        d("p1", "Panzer", "Pz"),
+        d("i1", "Panzer", "Inf"),
+        d("x1", "Panzer", "Mot"),
+        d("m1", "Mitte", "Inf"),
+        d("s1", "Sued", "Inf"),
+    ];
+    let mut plan = plan();
+    plan["operations"][0]["formations"][0]["divisions"] = json!({"Inf": 2});
+    plan["operations"][0]["formations"][1]["divisions"] = json!({"Inf": 4});
+    plan["operations"][0]["formations"][2]["divisions"] = json!({"Pz": 1});
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let out: Vec<Value> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, a)| n == "hoi4_army_detach" && a["army"] == json!("Panzer"))
+        .map(|(_, a)| a)
+        .collect();
+    assert_eq!(
+        out.first(),
+        Some(&json!({"army": "Panzer", "divisions": ["i1"], "into": "Sued"})),
+        "{out:?}"
+    );
+    assert!(
+        !out.iter()
+            .any(|m| m["divisions"].as_array().unwrap().contains(&json!("x1"))),
+        "{out:?}"
+    );
+}
