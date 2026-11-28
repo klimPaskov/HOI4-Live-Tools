@@ -24,6 +24,10 @@ Per war whose fighters are required (force.py: fighters the plan can pay, at lea
                        the date it must fly (a plane design waits on its airframe).
   force.air_design     (error) a designer airframe flown or produced with no start variant of it and no designs[]
                        entry on it: the line cannot be set.
+  force.air_design_blind (warning) a plane designs[] entry on a designer airframe (module slots) with no modules
+                       and no upgrades named: the game keeps the airframe's empty or default modules, a blind design.
+                       Name every slot from computed stats (facts.py design-best / design-plan) against the role's
+                       requirement (range for the theatre: facts.py air-cover), or write `modules_why`.
   force.air_doctrine   (error) no air doctrine entry and no doctrine_defaults.air while the plan fights for the air.
   force.air_command    (warning) no air chief in the military staff.
   force.air_defence    (warning) the front flies bombers and the plan builds no radar station and no state anti-air.
@@ -216,6 +220,16 @@ def _research_and_designs(ctx):
             lint.add("error", "force.air_design", where,
                      f"{eq} is a designer airframe with no start variant and no designs[] entry on it: give it a "
                      "design (modules for the role, its air experience) before its line or wings")
+    for i, d in enumerate(lint.list_of("designs")):
+        base = d.get("base")
+        if (d.get("kind") or d.get("type")) != "plane" or not isinstance(base, str) or base not in defs:
+            continue
+        if not defs[base].get("slots") or d.get("modules") or d.get("upgrades") or d.get("modules_why"):
+            continue
+        lint.add("warning", "force.air_design_blind", f"designs[{i}]",
+                 f"{d.get('name') or d.get('id')} on {base} names no module: the designer keeps the base's modules. "
+                 "Choose each slot by computed stats for the role and theatre (facts.py design-plan "
+                 f"{lint.tag} --roles ... --need fighter:air_range=<facts.py air-cover>), or write modules_why")
 
 
 def _doctrine_command_defence(ctx, fought):

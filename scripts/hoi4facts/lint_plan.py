@@ -446,6 +446,7 @@ module's docstring has the detail:
   force.air_bases          a base in another country's land; fighters and CAS above the border air bases' capacity
   force.air_research       an airframe flown before the research plan unlocks it
   force.air_design         a designer airframe produced or flown with no variant and no design
+  force.air_design_blind   a plane design on a designer airframe naming no module (a blind design)
   force.air_doctrine       no air doctrine while the plan fights for the air
   force.air_fuel           wings with no fuel plan
   force.invasion           a landing without the fighters, or with a weaker fleet and no naval strike planes
@@ -632,7 +633,8 @@ NEW_RULES |= {"focus.condition", "focus.condition_unchecked", "decision.conditio
 NEW_RULES |= {"force.required", "force.breakthrough", "force.single_template", "force.air", "force.invasion",
               "force.unused_line", "force.template_late", "force.readiness", "force.budget", "force.air_support",
               "force.air_none", "force.air_use", "force.air_lost", "force.air_deploy", "force.air_losses",
-              "force.air_bases", "force.air_research", "force.air_design", "force.air_doctrine", "force.air_fuel"}
+              "force.air_bases", "force.air_research", "force.air_design", "force.air_doctrine", "force.air_fuel",
+              "force.air_design_blind"}
 # the navy as an arm (lint_force_navy.py)
 NEW_RULES |= {"force.sea_required", "force.sea_control", "force.sea_screens", "force.sea_lift", "force.sea_port",
               "force.sea_patrol", "force.sea_raid", "force.carrier_air", "force.navy_unused", "force.navy_readiness",
