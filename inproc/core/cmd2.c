@@ -429,6 +429,19 @@ const cmd_spec CMD2_SPECS[] = {
      OBJ2_PTR_EXACT, 0, AUTH_TAG_PTR, "N10NDoctrines20CSubDoctrineTemplateE", "N10NDoctrines15CFolderTemplateE"},
     {"navy", "navy.assign", "CSetFleetCommand", 0x48, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "6CFleet", 2,
      {{"fleet", 0x24, FK_REF, 0, 0x3b34, 0}, {"task_forces", 0x30, FK_REF_ARRAY, 0x3c, 0x3b35, 0}}, OBJ2_NONE, 0},
+    /* ---- navyhq (engineer 102, 28 Nov): an admiral to a naval headquarters (the NCNS building, up to
+     * MAX_ADMIRAL_HEADQUARTER_ASSIGNMENTS admirals; the game's alert_headquarter_admiral), read from 1.20.1.0:
+     * CAssignAdmiralToNavyHeadquarter 18857 (0x38; factory 0x1009566a0, vtable 0x10351a620): building item +0x24 (0x284f,
+     * a 25CCustomizableBuildingItem by handle), admiral +0x2c (0x3042, an 11CUnitLeader by handle). Constructor
+     * 0x10094f330 (cmd, item ref, admiral ref), called by the AI (0x100c5c0e0) and two UI sites (0x101c3eee2,
+     * 0x102015c19). "Can do" (0x10094f590): both handles resolve and cast, the leader's kind (+0xcb4) is 2 (an admiral).
+     * Auth (0x10094f6a0): the admiral's owner (resolver 0x10022db60 casts to CUnitLeader, owner 0x100135060) is the
+     * sender. The country's headquarters as the AI walks them: an own-country getter's result +0xd58 holds an array of
+     * 0x50-byte items (+0x28, count +0x34); an item's handle +0x8; its leader module +0x40, whose handle +0x8 is the
+     * admiral assigned (empty = vacant). Not run live: the family is off (ipc.c) until S-NAVYHQ passes. */
+    {"navyhq", "navyhq.admiral", "CAssignAdmiralToNavyHeadquarter", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x2c, "11CUnitLeader", 2,
+     {{"admiral", 0x2c, FK_REF, 0, 0x3042, 0}, {"headquarters", 0x24, FK_REF, 0, 0x284f, 0}},
+     OBJ2_CAST, 0, AUTH_HANDLE, NULL, "25CCustomizableBuildingItem", 0},
 };
 const int CMD2_NSPECS = (int)(sizeof CMD2_SPECS / sizeof CMD2_SPECS[0]);
 

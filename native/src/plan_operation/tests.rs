@@ -5261,3 +5261,84 @@ fn a_battle_stuck_for_days_is_attacked_by_the_idle_divisions_on_its_unused_side(
             .is_none()
     );
 }
+
+#[test]
+fn at_war_an_army_no_running_operation_owns_is_lent_to_the_one_with_room_until_its_own_starts() {
+    // w96d (28 Nov 2026): Army 1 (no formation) and Army 6 (op_weser's, waiting) stood on area
+    // defences while op_france's battles took more than stood there
+    let roster = json!({"armies": [
+        {"army": "Armee A", "division_count": 20, "states": {"10": 20}},
+        {"army": "Armee B", "division_count": 14, "states": {"11": 14}},
+        {"army": "Army 1", "division_count": 24, "states": {"3": 24}},
+        {"army": "Army 6", "division_count": 18, "states": {"4": 18}},
+        {"army": "Army 10", "division_count": 5, "states": {"5": 5}},
+        {"army": "Grenz", "division_count": 6, "states": {"50": 6}}]});
+    let wars = json!({"wars": {"at_war": true, "enemies": ["FRA"]},
+        "borders": [{"neighbour_tag": "FRA", "own_border_states": [50], "neighbour_states": [60]}]});
+    let ops = json!([
+        {"id": "op_france", "enemies": ["FRA"], "stacking": {"by_width": true},
+         "formations": [{"army": "Armee A", "role": "line"}, {"army": "Armee B", "role": "line"}]},
+        {"id": "op_weser", "enemies": ["DEN"], "formations": [{"army": "Army 6", "role": "line"}]}]);
+    let plan = json!({"war": {"land_orders": false}, "operations": ops,
+        "lend": {"keep": [{"army": "Army 10", "why": "the Danish coast garrison"}]}});
+    let now = 1000 * DAY;
+    let mut state = State::default();
+    for k in ["prep", "exec"] {
+        state.done.insert(key("op_france", k), now - 5 * DAY);
+    }
+    state.done.insert(key("op_france", "room"), 30);
+    state.done.insert(key("op_france", "room_at"), now - DAY);
+    for a in ["Armee A", "Armee B"] {
+        state.op_owned.insert(a.into(), "op_france".into());
+    }
+    let ops = list(&plan, "operations").to_vec();
+    let active = vec![("op_france".to_string(), ops[0].clone())];
+    lend_idle(&mut state, &plan, &ops, &active, &roster, &wars, now);
+    let note = state.op_notes["lend"].clone();
+    assert!(
+        note.contains("Army 1 (24): lent to op_france (room 30) as the echelon of Armee B"),
+        "{note}"
+    );
+    assert!(
+        note.contains("Army 6 (18): lent to op_france (room 6) as the echelon of Armee A, until op_weser starts its prepare"),
+        "{note}"
+    );
+    assert!(
+        note.contains("Army 10 (5): kept, the Danish coast garrison"),
+        "{note}"
+    );
+    assert!(note.contains("Grenz (6): meets an enemy"), "{note}");
+    assert_eq!(state.layout["echelon:op_france:Armee B"], "Army 1");
+    assert_eq!(state.op_owned["Army 6"], "op_france");
+    assert!(state.done.contains_key(&key("op_france", "lent:Army 1")));
+    // the loans count against the room until they are forward: nothing more is lent
+    lend_idle(
+        &mut state,
+        &plan,
+        &ops,
+        &active,
+        &roster,
+        &wars,
+        now + DAY / 2,
+    );
+    assert_eq!(echelons(&state, "op_france").len(), 2);
+    // op_weser starts its prepare: Army 6 goes back, Army 1 stays lent
+    state.done.insert(key("op_weser", "prep"), now + DAY);
+    lend_idle(&mut state, &plan, &ops, &active, &roster, &wars, now + DAY);
+    let note = state.op_notes["lend"].clone();
+    assert!(
+        note.contains("Army 6: the loan to op_france ends, its own operation op_weser has started"),
+        "{note}"
+    );
+    assert!(!state.done.contains_key(&key("op_france", "lent:Army 6")));
+    assert!(!state.op_owned.contains_key("Army 6"));
+    assert_eq!(
+        echelons(&state, "op_france"),
+        vec![("Armee B".to_string(), "Army 1".to_string())]
+    );
+    // in peace nothing is lent
+    let mut calm = State::default();
+    let peace = json!({"wars": {"at_war": false, "enemies": []}, "borders": []});
+    lend_idle(&mut calm, &plan, &ops, &active, &roster, &peace, now);
+    assert!(calm.layout.is_empty());
+}

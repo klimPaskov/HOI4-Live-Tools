@@ -29,6 +29,7 @@ its mouse path.
 | navy | S17-NAVY | passed 28 Nov |
 | doctrine | S18-DOCTRINE | not passed: takes the mouse path |
 | projects | S19-PROJECTS | not run |
+| navyhq | S20-NAVYHQ | not runnable yet: the command is found, but no read gives a headquarters' address |
 | multiplayer | S1-MP, S2-MP | not run (needs two clients); every post refuses outside single player |
 
 ## Proof state of the registered tools (23 November 2026)
