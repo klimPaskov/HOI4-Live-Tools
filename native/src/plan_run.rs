@@ -8595,7 +8595,13 @@ fn construction_plan_step(
             let set = state.bad_set.get(&lead).copied();
             for k in &siblings {
                 if let Some(b) = &blocked {
-                    state.plan_blocked.insert(k.clone(), b.clone());
+                    // the row keeps the sibling's own item: a row naming the leader's item reads
+                    // as "the plan revised it" on the next tick and the sibling came back at once
+                    let mut row = b.clone();
+                    if let Some(own) = items.iter().find(|i| key_of(i) == *k) {
+                        row["item"] = own.clone();
+                    }
+                    state.plan_blocked.insert(k.clone(), row);
                     state.plan_tries.remove(k);
                     continue;
                 }
