@@ -6086,9 +6086,9 @@ fn every_refinement_is_counted_in_the_operation_s_ledger() {
         &game,
         "l",
         "op",
-        "shed: 3 of Army 3 waiting where they cannot fight attack the unattacked province 11318",
+        "shed: 3 of Mitte waiting where they cannot fight attack the unattacked province 11318",
         "hoi4_army_move",
-        json!({"army": "Army 3", "divisions": ["a", "b", "c"], "province_id": 11318, "state_id": 36}),
+        json!({"army": "Mitte", "divisions": ["a", "b", "c"], "province_id": 11318, "state_id": 36}),
     )
     .unwrap();
     state.clock = START + 5 * DAY;
@@ -6097,9 +6097,9 @@ fn every_refinement_is_counted_in_the_operation_s_ledger() {
         &game,
         "l",
         "op",
-        "Army Group 2: 5 divisions sideways onto front 48: province 3488 holds 18 in reserve",
+        "Army Group 1: 5 divisions sideways onto front 48: province 3488 holds 18 in reserve",
         "hoi4_army_plan",
-        json!({"army": "Army Group 2", "assign": {"divisions": ["d", "e", "f", "g", "h"], "order": 48}}),
+        json!({"army": "Army Group 1", "assign": {"divisions": ["d", "e", "f", "g", "h"], "order": 48}}),
     )
     .unwrap();
     // the attack's own orders are not refinements
@@ -6108,9 +6108,9 @@ fn every_refinement_is_counted_in_the_operation_s_ledger() {
         &game,
         "l",
         "op",
-        "Army 7 is not executing: execute",
+        "Panzer is not executing: execute",
         "hoi4_army_plan",
-        json!({"army": "Army 7", "execute": true}),
+        json!({"army": "Panzer", "execute": true}),
     )
     .unwrap();
     let note = &state.op_notes["op:ledger"];
@@ -6119,7 +6119,7 @@ fn every_refinement_is_counted_in_the_operation_s_ledger() {
         note.contains("sideways 1 order(s), 5 division(s)"),
         "{note}"
     );
-    assert!(note.contains("W+3.0 shed Army 3 3"), "{note}");
-    assert!(note.contains("W+5.0 sideways Army Group 2 5"), "{note}");
+    assert!(note.contains("W+3.0 shed Mitte 3"), "{note}");
+    assert!(note.contains("W+5.0 sideways Army Group 1 5"), "{note}");
     assert!(!note.contains("execute"), "{note}");
 }
