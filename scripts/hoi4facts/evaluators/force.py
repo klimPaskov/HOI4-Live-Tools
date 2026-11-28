@@ -20,6 +20,7 @@ max_planning, army speed ...) and unit blocks, with its milestones, applied to o
 change in R and in the planning modifiers, side by side.
 """
 import math
+import os
 
 from .. import divstats, theatre
 from . import design, production, template
@@ -208,3 +209,151 @@ def _sum(a, b):
     for k, v in b.items():
         out[k] = out.get(k, 0.0) + v
     return out
+
+
+def subdoctrine_table(sit, folder="land"):
+    """{track: [subdoctrine rows]} of common/doctrines/subdoctrines/<folder>: track(s), xp cost, xor, the gate
+    (`available`), country modifiers of the activation and of each reward (in order)."""
+    def load():
+        from ..script import get1, parse_file
+        tracks = []
+        for p in sit.game.files("common/doctrines/tracks"):
+            if os.path.basename(p).startswith(folder):
+                tracks += [n for n, b in parse_file(p) if n and isinstance(b, list)]
+        rows = {}
+        for p in sit.game.files(f"common/doctrines/subdoctrines/{folder}"):
+            for name, body in parse_file(p):
+                if not name or not isinstance(body, list):
+                    continue
+                tr = get1(body, "track")
+                trs = [x for _, x in tr] if isinstance(tr, list) else [tr]
+                av = get1(body, "available")
+                gate = None
+                if isinstance(av, list) and av and not any(a == "always" and b == "yes" for a, b in av):
+                    gate = " ".join(f"{a}={b}" if isinstance(b, str) else str(a) for a, b in av)[:120]
+                rw = get1(body, "rewards")
+                xor = get1(body, "xor")
+
+                def nums(block):
+                    out = {}
+                    for k, v in block:
+                        if isinstance(v, str) and k not in ("xp_cost", "track", "xp_type"):
+                            try:
+                                out[k] = float(v)
+                            except ValueError:
+                                pass
+                    return out
+                row = {"name": name, "tracks": [t for t in trs if t], "xp_cost": float(get1(body, "xp_cost") or 0),
+                       "gate": gate, "xor": [x for _, x in xor] if isinstance(xor, list) else [],
+                       "modifiers": nums(body), "tactic": get1(body, "enable_tactic"),
+                       "rewards": [rk for rk, rb in (rw if isinstance(rw, list) else []) if rk and isinstance(rb, list)],
+                       "reward_modifiers": [nums(rb) for rk, rb in (rw if isinstance(rw, list) else [])
+                                            if rk and isinstance(rb, list)],
+                       "src": sit.world.rel(p)}
+                for t in row["tracks"]:
+                    rows.setdefault(t, []).append(row)
+        return {t: rows.get(t, []) for t in tracks} if tracks else rows
+    return sit.game.cached("eval:subdoctrines:" + folder, load)
+
+
+def subdoctrines(sit, enemies=None, folder="land", planning_days=14, reach=1, grand=None):
+    """One subdoctrine per track by value: R of our line (defending), attacker and armour templates (evaluator 2)
+    with the subdoctrine's activation blocks and its first `reach` rewards, against none on that track; attacking
+    roles carry the planning bonus (mean over the first planning_days of an offensive, the subdoctrine's
+    max_planning added). value = the summed relative R gain over the roles. A reward needs
+    NDoctrines.DEFAULT_REWARD_MASTERY mastery (combat, a tenth from training), so the choice counts the first
+    `reach` [?: the mastery rate to the war date is not modelled]; all rewards are shown beside it. grand: the grand
+    doctrine assumed (default the one held, e.g. the plan's choice before it is adopted). Keys that are
+    not unit stats (tactics, country modifiers other than planning) are listed as not valued. xor pairs: the best
+    pair across tracks is kept."""
+    tags, _ = sit.enemies(enemies)
+    b = template.Builder(sit, None, tags, designs=True)
+    est, ewhy = template.enemy_division(b)
+    roles = {}
+    for role in ("line", "attacker", "armour"):
+        try:
+            r = template.best(sit, role, enemies=tags)
+        except Exception:  # noqa: BLE001 - a role with no fieldable template: left out
+            continue
+        if r["templates"]:
+            t = r["templates"][0]
+            roles[role] = ([k for k, n in t["battalions"].items() for _ in range(n)], t["support"] + t["regimental"])
+    table = subdoctrine_table(sit, folder)
+    subs = {r["name"] for rows in table.values() for r in rows}
+    held = [d for d in sit.doctrines() if d not in subs]
+    if grand:
+        held = [d for d in held if d not in grand_doctrines(sit, folder)] + [grand]
+    base_mods = divstats.factors(b.data, sit.techs(), held)
+    pmax = float(_first(sit.define("PLANNING_MAX"), 0.0))
+    decay = float(_first(sit.define("PLANNING_DECAY"), 0.0))
+    mastery = float(_first(sit.define("DEFAULT_REWARD_MASTERY"), 100.0))
+    grand = [d for d in held if d in grand_doctrines(sit, folder)]
+    g_mods = grand_doctrines(sit, folder)[grand[0]]["modifiers"] if grand else {}
+
+    def score(extra, mods):
+        out = {}
+        for role, (bats, sup) in roles.items():
+            div = divstats.division(b.data, bats, sup, b.equipment, base_mods + extra)
+            if est is None or not div:
+                continue
+            attacking = role != "line"
+            if attacking:
+                cap = pmax + g_mods.get("max_planning", 0.0) + mods.get("max_planning", 0.0)
+                dec = decay * (1 + g_mods.get("planning_decay_rate_factor", 0.0)
+                               + mods.get("planning_decay_rate_factor", 0.0))
+                p = max(0.0, cap - dec * planning_days / 2.0)
+                div = dict(div, soft_attack=div["soft_attack"] * (1 + p), hard_attack=div["hard_attack"] * (1 + p))
+            r, _ = template.battle(b.rules, div, est, attacking, b.prof)
+            out[role] = round(r, 4)
+        return out
+
+    none = score([], {})
+    out_tracks = []
+    for track, rows in table.items():
+        cands = []
+        for row in rows:
+            d = b.data.doctrines.get(row["name"]) or {"base": [], "rewards": {}}
+            rw_blocks = list(d["rewards"].values())
+            res = {}
+            for label, n in (("base", 0), ("reach", reach), ("all", len(rw_blocks))):
+                extra = list(d["base"]) + [x for blk in rw_blocks[:n] for x in blk]
+                mods = dict(row["modifiers"])
+                for m in row["reward_modifiers"][:n]:
+                    for k, v in m.items():
+                        mods[k] = mods.get(k, 0.0) + v
+                rs = score(extra, mods)
+                res[label] = {"R": rs, "value": round(sum(rs[k] / none[k] - 1 for k in rs if none.get(k)), 4)}
+            unval = sorted({k for k in row["modifiers"] if k not in VALUED_DOCTRINE_KEYS}
+                           | {k for m in row["reward_modifiers"] for k in m if k not in VALUED_DOCTRINE_KEYS})
+            cands.append({"subdoctrine": row["name"], "xp_cost": row["xp_cost"], "gate": row["gate"],
+                          "xor": row["xor"], "tactic": row["tactic"], "rewards": row["rewards"], "results": res,
+                          "value": res["reach"]["value"], "not_valued": unval, "src": row["src"]})
+        cands.sort(key=lambda c: (c["gate"] is None, c["value"]), reverse=True)
+        open_ = [c for c in cands if c["gate"] is None]
+        out_tracks.append({"track": track, "chosen": open_[0]["subdoctrine"] if open_ else None,
+                           "candidates": cands})
+    # xor across tracks: when two chosen subdoctrines exclude each other, keep the pair with the higher total
+    def pick(t, avoid):
+        return next((x for x in t["candidates"] if x["gate"] is None and avoid not in x["xor"]
+                     and x["subdoctrine"] != avoid), None)
+
+    def cand(t, name):
+        return next((x for x in t["candidates"] if x["subdoctrine"] == name), None)
+    for i, t in enumerate(out_tracks):
+        for o in out_tracks[i + 1:]:
+            ct, co = cand(t, t["chosen"]), cand(o, o["chosen"])
+            if not ct or not co or (co["subdoctrine"] not in ct["xor"] and ct["subdoctrine"] not in co["xor"]):
+                continue
+            alt_o, alt_t = pick(o, ct["subdoctrine"]), pick(t, co["subdoctrine"])
+            keep = ct["value"] + (alt_o["value"] if alt_o else 0.0)
+            swap = (alt_t["value"] if alt_t else 0.0) + co["value"]
+            if keep >= swap:
+                o["chosen"] = alt_o["subdoctrine"] if alt_o else None
+                o["xor_note"] = f"xor with {ct['subdoctrine']} ({keep:.4f} against {swap:.4f})"
+            else:
+                t["chosen"] = alt_t["subdoctrine"] if alt_t else None
+                t["xor_note"] = f"xor with {co['subdoctrine']} ({swap:.4f} against {keep:.4f})"
+    return {"tracks": out_tracks, "none": none, "enemy_template": ewhy, "grand": grand, "reach": reach,
+            "planning_days": planning_days, "reward_mastery": mastery,
+            "roles": {k: v[0][:1] + [len(v[0])] for k, v in roles.items()},
+            "defines": [sit.define_src(k) for k in ("PLANNING_MAX", "PLANNING_DECAY", "DEFAULT_REWARD_MASTERY")]}

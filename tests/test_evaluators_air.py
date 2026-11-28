@@ -27,6 +27,29 @@ class AirFixtureTest(unittest.TestCase):
         self.assertEqual(r["fighters"], 180)                            # 120 x 1.5 (no designs to compare: quality 1)
 
 
+BBB_OOB = """
+division_template = { name = "Levy" regiments = { infantry = { x = 0 y = 0 } } }
+units = { division = { location = 20 division_template = "Levy" } }
+air_wings = { 2 = { fighter_equipment_1 = { owner = "BBB" amount = 10 } } }
+instant_effect = {
+    add_equipment_production = { equipment = { type = fighter_equipment_1 creator = "BBB" } requested_factories = 2 }
+}
+"""
+
+
+class AirGrowthTest(unittest.TestCase):
+    def test_enemy_fighters_grow_by_their_start_lines(self):
+        sit = fx.situation(extra={"history/units/BBB_1936.txt": BBB_OOB})
+        start, src0 = air.enemy_fighters(sit, ["BBB"])
+        self.assertEqual(start, {"BBB": 10})
+        grown, src = air.enemy_fighters(sit, ["BBB"], war_date="1937.1.1")
+        from hoi4facts.evaluators import production
+        made = int(2 * production.Efficiency(sit.other("BBB")).ic_per_factory(365) / 20)
+        self.assertEqual(grown["BBB"], 10 + made)
+        self.assertGreater(made, 0)
+        self.assertIn("start fighter lines", src)
+
+
 @unittest.skipUnless(fx.real_situation("GER") is not None, "installed game not found (HOI4_EVAL_GAME / HOI4_DIR)")
 class AirRealGameTest(unittest.TestCase):
     def test_germany_against_poland(self):

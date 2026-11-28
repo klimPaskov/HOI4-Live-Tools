@@ -11,8 +11,11 @@
     evaluate.py construction --country TAG [--date D] [--war-date D]
     evaluate.py force --country TAG --enemy TAG [--date D]
     evaluate.py doctrine --country TAG [--date D]
+    evaluate.py subdoctrine --country TAG --enemy TAG [--reach 1]  (one subdoctrine per track by value)
     evaluate.py focus --country TAG [--date D] [--goal ideology:fascism] [--goal no_war:FRA]
     evaluate.py refresh TECH --country TAG          (the design roles a finished technology re-opens)
+    evaluate.py fuel --country TAG --enemy TAG [--division armour:10] [--planes 300 --mission CAS] [--war-days 30]
+    evaluate.py supply --country TAG --enemy TAG [--motorization 2] [--division armour:6]
     evaluate.py variant --country TAG [--date D] [--equipment KEY]   (production-cost clicks on mass lines)
     evaluate.py convert FAMILY --country TAG --date D --to-date D     (base-and-convert: a base now, the design later)
 
@@ -159,7 +162,8 @@ def text_template(r):
         lg = t.get("logistics") or {}
         if lg:
             out.append(f"     logistics: speed {lg.get('speed', 0):g} km/h, supply {lg.get('supply', 0):g} a day, fuel "
-                       f"{lg.get('fuel', 0):g} (equipment fuel_consumption x amount; the game's time unit for it is not verified)")
+                       f"{lg.get('fuel', 0):g} an hour while moving or fighting, before ARMY_FUEL_COST_MULT (each needed equipment's "
+                       f"fuel_consumption once per battalion [?: one live division read])")
         if "provinces_per_day" in p:
             out.append(f"     why: {p['provinces_per_day']:g} provinces a day = 24 / (battle {p['battle_hours']:g} h + march "
                        f"{p['march_hours']:g} h at {p['speed']:g} km/h); R {p['R']:g}; supply ratio {p['supply_ratio']:g} "
@@ -267,7 +271,7 @@ def text_air(r):
 
 def cmd_air(a, sit):
     from hoi4facts.evaluators import air
-    r = air.need(sit, a.enemy or None, axes=a.axes, fighter_ratio=a.fighter_ratio)
+    r = air.need(sit, a.enemy or None, axes=a.axes, fighter_ratio=a.fighter_ratio, war_date=a.war_date)
     r["country"], r["date"] = sit.tag, sit.date
     return r, text_air(r)
 
@@ -417,6 +421,30 @@ def text_doctrine(r):
     return out
 
 
+def text_subdoctrine(r):
+    out = [f"SUBDOCTRINES ({len(r['tracks'])} land tracks) for {r.get('country', '')} at {r.get('date', '')}: grand "
+           f"{r['grand'] or '-'}; R against {r['enemy_template']} without a subdoctrine {r['none']}; chosen by the "
+           f"activation + the first {r['reach']} reward(s) (each needs {r['reward_mastery']:g} mastery), attacks with "
+           f"planning over {r['planning_days']} days"]
+    for t in r["tracks"]:
+        out.append(f"  track {t['track']}: CHOSEN {t['chosen']}" + (f" ({t['xor_note']})" if t.get("xor_note") else ""))
+        for c in t["candidates"][:4]:
+            res = c["results"]
+            out.append(f"     {c['subdoctrine']}: value {c['value']:+g} (base {res['base']['value']:+g}, every reward "
+                       f"{res['all']['value']:+g}); R {res['reach']['R']}" + (f"; gate {c['gate']}" if c["gate"] else "")
+                       + (f"; tactic {c['tactic']}" if c.get("tactic") else "")
+                       + (f"; not valued {c['not_valued'][:4]}" if c["not_valued"] else ""))
+    out.append("  defines: " + "; ".join(r["defines"]))
+    return out
+
+
+def cmd_subdoctrine(a, sit):
+    from hoi4facts.evaluators import force
+    r = force.subdoctrines(sit, a.enemy or None, planning_days=a.planning_days, reach=a.reach, grand=a.grand)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_subdoctrine(r)
+
+
 def cmd_doctrine(a, sit):
     from hoi4facts.evaluators import force
     r = force.doctrines(sit, a.enemy or None, planning_days=tuple(a.planning_days))
@@ -424,7 +452,159 @@ def cmd_doctrine(a, sit):
     return r, text_doctrine(r)
 
 
-COMMANDS = {"training": cmd_training, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template, "construction": cmd_construction, "variant": cmd_variant, "convert": cmd_convert, "force": cmd_force, "doctrine": cmd_doctrine, "air": cmd_air}
+def _divisions(a, sit):
+    """[{name, count, fuel, supply}] from --division ROLE:N / TEMPLATE:N, plus the fielded divisions that burn fuel."""
+    from hoi4facts import divstats
+    from hoi4facts.evaluators import template
+    out = []
+    b = template.Builder(sit, None, a.enemy or None, designs=False)
+    oob = sit.world.oob(sit.tag)
+    counts = {}
+    for d in oob.get("divisions") or []:
+        counts[d.get("template")] = counts.get(d.get("template"), 0) + 1
+    tpls = oob.get("templates") or {}
+    asked = {}
+    for x in a.division or []:
+        name, _, n = x.rpartition(":")
+        asked[name or x] = int(n) if n.isdigit() else 1
+    for name, n in sorted(counts.items(), key=lambda kv: str(kv[0])):
+        if name in asked:
+            continue
+        bats, sup = divstats.template_units(tpls.get(name) or {})
+        div = b.division(bats, sup) or {}
+        if div.get("fuel"):
+            out.append({"name": f"{name} (fielded)", "count": n, "fuel": div["fuel"], "supply": div.get("supply", 0.0)})
+    for name, n in asked.items():
+        if name in tpls:
+            bats, sup = divstats.template_units(tpls[name])
+            div = b.division(bats, sup) or {}
+            out.append({"name": name, "count": n, "fuel": div.get("fuel", 0.0), "supply": div.get("supply", 0.0)})
+            continue
+        r = template.best(sit, name, enemies=a.enemy or None)
+        if not r["templates"]:
+            raise SystemExit(f"--division {name}: no template of that role or name")
+        t = r["templates"][0]
+        lg = t.get("logistics") or {}
+        out.append({"name": f"{name} (evaluator 2: " + ", ".join(f"{c} {k}" for k, c in t["battalions"].items()) + ")",
+                    "count": n, "fuel": lg.get("fuel", 0.0), "supply": lg.get("supply", 0.0)})
+    return out
+
+
+def text_fuel(r):
+    out = [f"FUEL LEDGER for {r.get('country', '')} at {r.get('date', '')} (war {r.get('war_date') or 'now'})",
+           f"  capacity {r['capacity']:,} = {r['capacity_why']} (levels {r['levels']}, {r['levels_from']})",
+           f"  gain {r['gain_hour']:g} an hour = {r['gain_why']}; oil: {r['oil_from']}",
+           f"  stock now {r['stock_now']:,} ({r['stock_from']}); at the war date {r['stock_at_war']:,}"]
+    for x in r["rows"]:
+        out.append(f"  use: {x['name']}: {x['hour']:g} an hour ({x['why']})")
+    out.append(f"  use {r['use_hour']:g} an hour on the attack, net {r['net_hour']:+g} an hour = {r['per_war_day']:,} a war "
+               f"day (STOCK TARGET PER WAR DAY)")
+    if r.get("days_carried") is not None:
+        out.append(f"  the stock carries {r['days_carried']:g} days of offensive")
+    else:
+        out.append(f"  {r.get('days_why')}")
+    if r.get("war_days"):
+        out.append(f"  target for {r['war_days']:g} war days: {r['target']:,}; shortfall {r['shortfall']:,}")
+        for k in ("refineries_for_shortfall", "refineries_for_gap", "silos"):
+            if r.get(k):
+                out.append(f"  {k.replace('_', ' ')}: {r[k]}")
+    if r.get("capitulation_gain"):
+        c = r["capitulation_gain"]
+        out.append(f"  on {c['enemy']}'s capitulation: +{c['fuel']:,} ({c['why']})")
+    out.append(f"  UNVERIFIED: {r['unverified']}")
+    out.append("  defines: " + "; ".join(r["defines"]))
+    return out
+
+
+def cmd_fuel(a, sit):
+    from hoi4facts.evaluators import design, logistics
+    divs = _divisions(a, sit)
+    planes = []
+    if a.planes:
+        f = a.plane_fuel
+        how = "given"
+        if f is None:
+            d = design.best(sit, "fighter" if a.mission != "CAS" else "cas", enemies=a.enemy or None)
+            f = float(((d.get("designs") or [{}])[0].get("stats") or {}).get("fuel_consumption", 0.0))
+            how = f"evaluator 1's {'fighter' if a.mission != 'CAS' else 'cas'} design"
+        planes.append({"name": f"planes on {a.mission} (fuel {how})", "count": a.planes, "fuel": f,
+                       "mission": a.mission})
+    r = logistics.fuel(sit, divs, war_date=a.war_date, war_days=a.war_days, planes=planes, oil=a.oil,
+                       enemy=(a.enemy or [None])[0])
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_fuel(r)
+
+
+def text_supply(r):
+    out = [f"AXIS SUPPLY for {r.get('country', '')} at {r.get('date', '')} against {r['enemy']}: capital {r.get('capital')} "
+           f"supply {r.get('capital_supply')}, hubs motorised {r.get('motorization')}/2"]
+    if r.get("error"):
+        return out + [f"  {r['error']}"]
+    for x in r["axes"]:
+        src = ", ".join(f"{s['kind']} {s['province']} (railway {s['rail_level']}, {s['rail_steps']} steps, throughput "
+                        f"{s['throughput']:g}{', ' + s['fed_from'] if s.get('fed_from') else ''})" for s in x["sources"])
+        out.append(f"  axis {x['name']} ({x['enemy_state']}): supply {x['supply']:g} over {len(x['provinces'])} border "
+                   f"provinces ({x['supply_from']}); sources: {src or 'none'}")
+        if x["advance"]:
+            out.append("     advancing: " + "; ".join(f"{s['provinces_in']} in: best {s['best']:g}, mean {s['mean']:g}"
+                                                    for s in x["advance"]))
+        out.append(f"     trucks {x['trucks']}, trains {x['trains']:g} ({x['trains_why']})"
+                   + (f", divisions carried {x['divisions_carried']}" if x.get("divisions_carried") is not None else ""))
+        if x.get("enemy_hubs"):
+            out.append("     enemy hubs to take: " + ", ".join(f"{h['province']} (usable {h['usable_after_days']:g} days "
+                                                              f"after capture)" for h in x["enemy_hubs"]))
+        if x.get("railway"):
+            rw = x["railway"]
+            out.append(f"     RAILWAY: level {rw['level_needed']} needed ({rw['why']}); {rw['levels_to_build']} levels on "
+                       f"{len(rw['segments'])} segments, cost {rw['cost']}")
+        if x.get("hub_candidates"):
+            out.append("     new hub (last resort): " + ", ".join(f"{h['province']} (railway {h['rail_level']}, flow "
+                                                                 f"{h['flow_to_border']:g}, cost {h['cost']})"
+                                                                 for h in x["hub_candidates"]))
+    out.append(f"  mean flow per border province {r.get('per_province_mean')}")
+    out.append("  defines: " + "; ".join(r.get("defines") or []))
+    return out
+
+
+def cmd_supply(a, sit):
+    from hoi4facts.evaluators import logistics
+    if not a.enemy:
+        raise SystemExit("supply: --enemy TAG")
+    divs = _divisions(a, sit) if a.division else []
+    asked = [d for d in divs if "(fielded)" not in d["name"]]
+    div_supply = max((d["supply"] for d in asked), default=None)
+    per_axis = None
+    if asked:
+        per_axis = sum(d["count"] for d in asked)
+    r = logistics.axis_supply(sit, a.enemy[0], motorization=a.motorization, advance=a.advance,
+                              div_supply=div_supply, divisions=per_axis)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_supply(r)
+
+
+def text_focus(r):
+    out = [f"FOCUS for {r.get('country', '')} at {r.get('date', '')} (tree {r['tree']}); goals {r['goals'] or '-'}; "
+           f"horizon {r['horizon_years']:g} years; value base {r['base']}",
+           f"  prices: political power {r.get('pp_price', 0):g} factory-years a year held per point ({r.get('pp_price_idea')}); "
+           f"army experience {r.get('xp_price', 0):g} per point ({r.get('xp_price_idea')})"]
+    for o in r["order"]:
+        out.append(f"  day {o['start_day']:>4} {o['focus']} ({o['days']:g} days): value {o['value']:g} factory-years, "
+                   f"chain rate {o['rate']:g}/day via {' > '.join(o['chain'])}")
+        out.append(f"         parts {o['parts']}; unvalued {o['unvalued'] or '-'}"
+                   + (f"; gated: {o['gated'][:120]}" if o.get("gated") else ""))
+    for fid, why in list(r["dropped"].items())[:8]:
+        out.append(f"  dropped {fid}: {why}")
+    return out
+
+
+def cmd_focus(a, sit):
+    from hoi4facts.evaluators import focus
+    r = focus.evaluate(sit, goals=a.goal, horizon_years=a.horizon_years, count=a.count)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_focus(r)
+
+
+COMMANDS = {"force": cmd_force, "doctrine": cmd_doctrine, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template, "construction": cmd_construction, "fuel": cmd_fuel, "supply": cmd_supply, "variant": cmd_variant, "convert": cmd_convert, "subdoctrine": cmd_subdoctrine, "focus": cmd_focus, "training": cmd_training, "air": cmd_air}
 
 
 def parser():
@@ -462,9 +642,17 @@ def parser():
     p = add("force")
     p.add_argument("--war-date", default=None, help="the enemy grows by its factories to this date")
     p.add_argument("--axes", type=int, default=None, help="attack axes (default: the enemy's border states)")
+    p = add("subdoctrine")
+    p.add_argument("--planning-days", type=int, default=14, help="offensive length the planning bonus is averaged over")
+    p.add_argument("--reach", type=int, default=1, help="rewards counted in the choice (each needs the mastery)")
+    p.add_argument("--grand", default=None, help="the grand doctrine assumed (default: the one held)")
     p = add("doctrine")
     p.add_argument("--planning-days", type=int, nargs="+", default=[14, 30],
                    help="offensive lengths the planning bonus is averaged over")
+    p = add("focus")
+    p.add_argument("--goal", action="append", default=[], help="ideology:<name> or no_war:<TAG> (repeatable)")
+    p.add_argument("--count", type=int, default=12)
+    p.add_argument("--horizon-years", type=float, default=4.0)
     p = add("production")
     p.add_argument("--need-date", required=True, help="the date the equipment must be in the stockpile")
     p = add("training", "role")
@@ -476,12 +664,26 @@ def parser():
     p.add_argument("--picks", type=int, default=3, help="picks per slot")
     p.add_argument("--horizon-years", type=float, default=4.0, help="years the value is counted for")
     p = add("air")
+    p.add_argument("--war-date", default=None, help="grow the enemy fighters by their start lines to this date")
     p.add_argument("--axes", type=int, default=1, help="attack axes on the front (force sizing gives them)")
     p.add_argument("--fighter-ratio", type=float, default=None,
                    help="the plan's air_situation.fighter_ratio (default: parity)")
     p = add("construction")
     p.add_argument("--war-date", default=None, help="the planned war date (the 'standing' horizon)")
     p.add_argument("--war-years", type=float, default=2.0, help="the war's planned length (the 'output' horizon)")
+    p = add("fuel")
+    p.add_argument("--division", action="append", default=[],
+                   help="ROLE:N (evaluator 2's best of that role) or TEMPLATE:N (a fielded template) on the attack")
+    p.add_argument("--war-date", default=None, help="the war's start (the stock grows until then)")
+    p.add_argument("--war-days", type=float, default=None, help="the offensive's planned length")
+    p.add_argument("--planes", type=int, default=0)
+    p.add_argument("--plane-fuel", type=float, default=None, help="fuel per plane (default: evaluator 1's design)")
+    p.add_argument("--mission", default="AIR_SUPERIORITY", help="NAir mission name (MISSION_FUEL_COSTS)")
+    p.add_argument("--oil", type=float, default=None, help="excess oil (default: live, else the history's balance)")
+    p = add("supply")
+    p.add_argument("--motorization", type=int, default=2, choices=(0, 1, 2))
+    p.add_argument("--advance", type=int, default=2, help="provinces of advance to show")
+    p.add_argument("--division", action="append", default=[], help="ROLE:N or TEMPLATE:N planned per axis")
     p = add("variant")
     p.add_argument("--equipment", default=None, help="one equipment (default: the newest of every archetype held)")
     p = add("convert", "family")

@@ -34,10 +34,11 @@ taken per day x sqrt(width / IC), from the axis it attacks along (axis()):
   supply     the division's supply use (divstats: battalions' supply_consumption x (1 + companies'
              supply_consumption_factor), at least MIN_SUPPLY_CONSUMPTION) x the divisions that fill one battle (the
              axis' battle width / the template's width) against what the axis delivers: a live read
-             (state["logistics"]["axis_supply"]) or, from the defines, the flow one province from a fully motorised hub
-             (NODE_INITIAL_SUPPLY_FLOW - NODE_STARTING_PENALTY_PER_PROVINCE) x SUPPLY_HUB_FULL_MOTORIZATION_BONUS for each
-             province the attack is mounted from [?: the attack directions of the width rule; the live read replaces
-             it]. Supply ratio s = min(1, delivered / used); the shortfall (1 - s) scales COMBAT_SUPPLY_LACK_ATTACKER_ATTACK
+             (state["logistics"]["axis_supply"]) or the supply graph's mean flow at our border provinces with the
+             enemy (evaluators/logistics.axis_supply: hubs, railways, fully motorised hubs) for each province the attack
+             is mounted from [?: the attack directions of the width rule; the live read replaces it]; without a map
+             the flow one province from a motorised hub (NODE_INITIAL_SUPPLY_FLOW - NODE_STARTING_PENALTY_PER_PROVINCE
+             + SUPPLY_HUB_FULL_MOTORIZATION_BONUS, which is added to the initial flow). Supply ratio s = min(1, delivered / used); the shortfall (1 - s) scales COMBAT_SUPPLY_LACK_ATTACKER_ATTACK
              on our attacks, COMBAT_SUPPLY_LACK_ATTACKER_DEFEND on our breakthrough and OUT_OF_SUPPLY_SPEED on our speed
              [?: linear in the shortfall]
   battle     their endurance in hours under our attack (the battle model above, with the supply cuts); a thrust whose R is
@@ -48,7 +49,8 @@ taken per day x sqrt(width / IC), from the axis it attacks along (axis()):
              partner's (design.best_land(floor=...))
   advance    24 / (battle hours + march hours) provinces a day at the line of contact; exploitation behind it is the
              march alone (printed beside it)
-Fuel (equipment fuel_consumption x amount, the files' figure) is printed for the fuel ledger, not scored.
+Fuel (each needed equipment's fuel_consumption once per battalion, divstats) is printed for the fuel ledger
+(evaluators/logistics.py), not scored.
 """
 import math
 
@@ -379,11 +381,20 @@ def axis(sit, enemies, rules):
     if isinstance(live, (int, float)):
         out["supply"], out["supply_from"] = float(live), "live read (logistics.axis_supply)"
     else:
-        per = max(0.0, rules.node_flow - rules.node_start) * rules.motor_bonus
         n = sum(out["directions"]) / len(out["directions"])
+        per, how = None, ""
+        if tags and g is not None:
+            from . import logistics
+            ax = sit.cached(f"axis_supply:{tags[0]}", lambda: logistics.axis_supply(sit, tags[0], motorization=2))
+            per = ax.get("per_province_mean")
+            how = (f"{per:g} mean flow at our border provinces with {tags[0]} from the supply graph (hubs, railways, "
+                   f"fully motorised; evaluators/logistics.py)") if per is not None else ""
+        if per is None:
+            per = max(0.0, rules.node_flow - rules.node_start + rules.motor_bonus)
+            how = (f"({rules.node_flow:g} - {rules.node_start:g} + {rules.motor_bonus:g} motorised) one province from a "
+                   f"hub (no supply graph)")
         out["supply"] = round(per * n, 2)
-        out["supply_from"] = (f"({rules.node_flow:g} - {rules.node_start:g}) x {rules.motor_bonus:g} per province, "
-                              f"from {n:g} provinces (the mean attack directions)")
+        out["supply_from"] = f"{how}, x {n:g} provinces (the mean attack directions)"
     return out
 
 

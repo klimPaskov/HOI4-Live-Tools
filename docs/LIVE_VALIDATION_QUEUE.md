@@ -1363,6 +1363,21 @@ K3 refusals before input: `{"trait":"GER_mio_trait_nope"}` -> trait_unknown nami
 K4 the window's ORDER: hover the tree icon the listing calls index 0 and index 3: their tooltip names match the keys'
 localisation (this settles whether the mouse path's indices equal the module's; record it either way).
 Pass: K1-K3 (K4 recorded). Then the plan's `mio[].traits` may carry keys.
+## Session S26-FUEL: one division's fuel use, the unit the fuel ledger rests on (read only; about 10 minutes) -- any time
+What it proves: the fuel ledger (`evaluate.py fuel`, evaluators/logistics.py) counts a division's fuel the way the game
+does: each needed equipment's fuel_consumption ONCE per battalion (not times the amount), per hour while moving or
+fighting, x ARMY_FUEL_COST_MULT x (ARMY_COMBAT_FUEL_MULT + ARMY_MOVEMENT_FUEL_MULT). Until it passes the ledger marks
+its division fuel unverified.
+F1 the 1939 bed (Germany at war), paused: open the division view of ONE armoured division (a Panzer-Division) and
+write down its template (battalions and companies) and the "Fuel Usage" and "Fuel Capacity" rows of its stats tooltip.
+Run `evaluate.py template` or `divstats.py --battalions ... --support ...` offline for the same template: the fuel row
+must equal the game's Fuel Usage (to the game's rounding). Same for one motorised division.
+F2 the burn: with every army idle and no air mission running, read `hoi4_economy_detail` fuel.stock twice 24 game
+hours apart (speed 2, nothing ordered): the daily gain G. Then order only that Panzer-Division to move 3+ provinces
+(no combat) and read fuel.stock again 24 game hours later: (G - the new delta) / 24 = its use an hour while moving;
+it must be close to Fuel Usage x ARMY_FUEL_COST_MULT x ARMY_MOVEMENT_FUEL_MULT (0.5 x 1 on 1.20.1).
+Pass: F1 equal and F2 within 10%. A mismatch: record the tooltip numbers, the template and the deltas (the ledger's
+unit is then wrong by the ratio). Nothing is posted except the one move order.
 
 ## Session S28-REFUSALS: the refusal classes of g115a do not repeat (no new input path; part of the next short 1936 study) -- any time
 What it proves (engineer 123, 28 Nov): a refusal changes the next decision instead of being retried. Read from the study's
