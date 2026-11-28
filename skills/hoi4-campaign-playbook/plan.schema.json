@@ -2373,6 +2373,10 @@
                     "minimum": 1,
                     "maximum": 48,
                     "description": "the most divisions one push sends; default 6"
+                  },
+                  "shed": {
+                    "type": "boolean",
+                    "description": "with no stuck battle to push, the divisions waiting where they cannot fight (the reserve of a full or over-reserved battle, the fit idle ones on the line) attack the unattacked enemy province beside them, within the army's refinement cool-down; default true"
                   }
                 },
                 "additionalProperties": false

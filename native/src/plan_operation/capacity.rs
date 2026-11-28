@@ -230,6 +230,16 @@ pub(super) fn unbalanced(rooms: &[Room], slack: i64) -> bool {
     rooms.iter().any(|r| r.free() <= -slack) && rooms.iter().any(|r| r.free() >= slack)
 }
 
+/// The weight a stretch is spread by: its cap, at least one while it faces an enemy, none when it
+/// faces no enemy province (a front the line has left behind keeps no division the game can move).
+pub(super) fn weight(r: &Room) -> i64 {
+    if r.facing == 0 {
+        0
+    } else {
+        r.cap.max(1)
+    }
+}
+
 /// A battle whose reserve outnumbers its engaged divisions, with our divisions waiting in it.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(super) struct Pile {
@@ -543,6 +553,160 @@ pub(super) fn stuck_push(
         }
     }
     out
+}
+
+/// SHED TO THE UNATTACKED (pure): the divisions that wait where they cannot fight (the reserve of
+/// a battle whose width is full or whose reserve outnumbers its engaged, and the fit idle ones
+/// standing on the line) attack an enemy province beside them that no battle of ours attacks, at
+/// most what one direction of its width takes (`width` of a division) and `most`: the province
+/// with the most of them first (the better ground on a tie), the one army with most of them
+/// there. `enemy`: the enemy provinces; `skip`: provinces pushed lately. w101a (28 Nov 2026, W+10):
+/// province 3488 held 21 divisions for a width of 7; 4 of the 7 enemy provinces in reach were
+/// attacked; the stuck push never fired (every long battle read "winning: attacker" or full).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn shed(
+    battles: &Value,
+    g: &HashMap<i64, Prov>,
+    read: &Value,
+    armies: &HashSet<String>,
+    enemy: &HashSet<i64>,
+    width: f64,
+    most: usize,
+    skip: &dyn Fn(i64) -> bool,
+) -> Option<Push> {
+    let army_of: HashMap<String, String> = list(read, "divisions")
+        .iter()
+        .filter(|d| armies.contains(text(&d["army"])))
+        .filter_map(|d| Some((id_of(&d["id"])?, text(&d["army"]).to_string())))
+        .collect();
+    let org_of: HashMap<String, f64> = list(read, "divisions")
+        .iter()
+        .filter_map(|d| Some((id_of(&d["id"])?, d["organisation"].as_f64()?)))
+        .collect();
+    let mut attacked: HashSet<i64> = HashSet::new();
+    let mut fighting: HashSet<String> = HashSet::new();
+    // own province -> (army, id, organisation) of the divisions waiting there
+    let mut waiting: HashMap<i64, Vec<(String, String, f64)>> = HashMap::new();
+    for b in list(battles, "list") {
+        for side in ["attacker", "defender"] {
+            for d in list(&b[side], "engaged_divisions") {
+                fighting.extend(id_of(&d["id"]));
+            }
+        }
+        if text(&b["our_side"]) != "attacker" {
+            for d in list(&b["defender"], "reserve_divisions") {
+                fighting.extend(id_of(&d["id"]));
+            }
+            continue;
+        }
+        if let Some(p) = b["province"].as_i64() {
+            attacked.insert(p);
+        }
+        let side = &b["attacker"];
+        let engaged = side["engaged"].as_i64().unwrap_or(0);
+        let reserve = side["reserve"].as_i64().unwrap_or(0);
+        let stuck = b["width"]["full"] == serde_json::json!(true) || reserve > engaged;
+        for d in list(side, "reserve_divisions") {
+            let Some(id) = id_of(&d["id"]) else { continue };
+            fighting.insert(id.clone());
+            let (Some(army), Some(p), true) = (army_of.get(&id), d["province"].as_i64(), stuck)
+            else {
+                continue;
+            };
+            let org = org_of.get(&id).copied().unwrap_or(0.0);
+            waiting.entry(p).or_default().push((army.clone(), id, org));
+        }
+    }
+    // the fit idle divisions on the line (no battle, no march)
+    let mut best_org: HashMap<String, f64> = HashMap::new();
+    let mine: Vec<&Value> = list(read, "divisions")
+        .iter()
+        .filter(|d| armies.contains(text(&d["army"])))
+        .collect();
+    for d in &mine {
+        let o = d["organisation"].as_f64().unwrap_or(0.0);
+        let e = best_org
+            .entry(text(&d["template"]).to_string())
+            .or_insert(0.0);
+        *e = e.max(o);
+    }
+    for d in &mine {
+        let (Some(id), Some(p)) = (id_of(&d["id"]), d["province_id"].as_i64()) else {
+            continue;
+        };
+        let top = best_org.get(text(&d["template"])).copied().unwrap_or(0.0);
+        let org = d["organisation"].as_f64().unwrap_or(0.0);
+        if top > 0.0
+            && org >= FIT_ORG * top
+            && d["heading_province"].is_null()
+            && !fighting.contains(&id)
+        {
+            waiting
+                .entry(p)
+                .or_default()
+                .push((text(&d["army"]).to_string(), id, org));
+        }
+    }
+    let mut targets: Vec<i64> = enemy
+        .iter()
+        .copied()
+        .filter(|e| !attacked.contains(e) && !skip(*e) && g.contains_key(e))
+        .collect();
+    targets.sort_unstable();
+    let mut out: Option<(usize, f64, Push)> = None;
+    for e in targets {
+        let row = &g[&e];
+        let mut by_army: HashMap<String, Vec<(String, f64, i64)>> = HashMap::new();
+        let mut sides = 0;
+        for (q, _) in &row.borders {
+            if enemy.contains(q) {
+                continue;
+            }
+            let Some(here) = waiting.get(q) else { continue };
+            sides += 1;
+            for (army, id, org) in here {
+                by_army
+                    .entry(army.clone())
+                    .or_default()
+                    .push((id.clone(), *org, *q));
+            }
+        }
+        let Some((army, mut cands)) = by_army
+            .into_iter()
+            .max_by(|a, b| a.1.len().cmp(&b.1.len()).then(b.0.cmp(&a.0)))
+        else {
+            continue;
+        };
+        cands.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        let takes = if width > 0.0 && row.width > 0.0 {
+            ((row.width / width).floor() as usize).max(1)
+        } else {
+            most
+        };
+        let n = cands.len().min(most).min(takes);
+        let pick: Vec<(String, f64, i64)> = cands.into_iter().take(n).collect();
+        let mut from: Vec<i64> = pick.iter().map(|(_, _, q)| *q).collect();
+        from.sort_unstable();
+        from.dedup();
+        let push = Push {
+            province: e,
+            state: row.state,
+            army,
+            divisions: pick.into_iter().map(|(id, _, _)| id).collect(),
+            from,
+            hours: 0,
+            sides,
+            used: 0,
+        };
+        let rank = (push.divisions.len(), row.attack);
+        if out
+            .as_ref()
+            .is_none_or(|(n, a, _)| rank.0 > *n || (rank.0 == *n && rank.1 > *a))
+        {
+            out = Some((rank.0, rank.1, push));
+        }
+    }
+    out.map(|(_, _, p)| p)
 }
 
 /// A move of divisions onto another stretch.
@@ -973,6 +1137,32 @@ mod tests {
         let mut won = battles.clone();
         won["list"][0]["winning"] = json!("attacker");
         assert!(stuck_push(&won, &g, &read, &armies, 72, 6, &|_| false).is_none());
+    }
+
+    #[test]
+    fn a_front_facing_no_enemy_weighs_nothing_in_a_spread() {
+        // p101a W+10: Army 2's front 14 faces 7 enemy provinces (cap 51, 14 there), its front 169
+        // none (9 there)
+        let rooms = [
+            Room {
+                id: 14,
+                cap: 51,
+                divisions: 14,
+                facing: 7,
+                ..Default::default()
+            },
+            Room {
+                id: 169,
+                cap: 0,
+                divisions: 9,
+                facing: 0,
+                ..Default::default()
+            },
+        ];
+        assert_eq!(weight(&rooms[1]), 0);
+        let mut thin = rooms[0].clone();
+        thin.cap = 0;
+        assert_eq!(weight(&thin), 1);
     }
 
     #[test]
