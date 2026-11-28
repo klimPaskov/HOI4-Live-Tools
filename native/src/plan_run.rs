@@ -7867,6 +7867,7 @@ fn layout_top_up(
             continue;
         };
         if state.done.contains_key(&format!("layouttopped:{hint}"))
+            || plan_operation::sizes_army(state, &army)
             || state.skipped(now, "layouttop", hint)
             || state
                 .done
@@ -7888,7 +7889,7 @@ fn layout_top_up(
         // its army); a role's army keeps more than it gives
         let usable: Vec<Cand> = cands
             .into_iter()
-            .filter(|(d, _, _, _)| d != &army)
+            .filter(|(d, _, _, _)| d != &army && !plan_operation::sizes_army(state, d))
             .collect();
         // the top-up keeps to the role's share of each template too (layoutquota:)
         let usable = if state.done.contains_key(&format!("layoutquota:{hint}")) {
@@ -26577,5 +26578,55 @@ mod tests {
         assert_eq!(result["strategy"]["phase"], "build", "{result}");
         assert!(result.get("strategy_changes").is_none(), "{result}");
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn a_started_operation_sizes_its_armies_and_the_layout_top_up_leaves_them() {
+        // w126a (28 Nov 2026): the choke cap took 3 off Armee West Süd, the opening sent them to
+        // Army 7, and West Süd's top-up took the same 3 back out of Army 7
+        let plan = json!({
+            "army_layout": [{"name_hint": "West", "templates": ["Inf"]}],
+            "operations": [{"id": "op_lowlands",
+                "formations": [{"army": "West"}, {"army": "Army 7"}]}]});
+        let full = vec![
+            json!({"army": "Armee West Süd", "division_count": 11}),
+            json!({"army": "Army 7", "division_count": 16}),
+        ];
+        let supply = json!({"divisions": (0..4)
+            .map(|i| json!({"id": format!("d{i}"), "army": "Army 7", "template": "Inf"}))
+            .collect::<Vec<_>>()});
+        let fresh = || {
+            let mut state = State::default();
+            state.layout.insert("West".into(), "Armee West Süd".into());
+            state.done.insert("layouttarget:West".into(), 14);
+            for a in ["Armee West Süd", "Army 7"] {
+                state.op_owned.insert(a.into(), "op_lowlands".into());
+            }
+            state
+        };
+        let mut state = fresh();
+        let detaches = |tools: &Fake| {
+            tools
+                .calls
+                .borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_army_detach")
+                .count()
+        };
+        // before the operation's prepare the layout still forms the role
+        let tools = fake(vec![("hoi4_supply", supply.clone())]);
+        let out = layout_top_up(&mut fresh(), &tools, &plan, "l", START, &full).unwrap();
+        assert!(out.is_some_and(|l| l.contains("top-up of West")));
+        assert_eq!(detaches(&tools), 1);
+        // once it began, the operation sizes both: no top-up, no donor
+        assert!(!plan_operation::sizes_army(&state, "Army 7"));
+        state
+            .done
+            .insert("op:op_lowlands:prep".into(), START);
+        assert!(plan_operation::sizes_army(&state, "Army 7"));
+        let tools = fake(vec![("hoi4_supply", supply)]);
+        let out = layout_top_up(&mut state, &tools, &plan, "l", START, &full).unwrap();
+        assert_eq!(out, None);
+        assert_eq!(detaches(&tools), 0);
     }
 }

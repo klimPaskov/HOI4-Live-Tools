@@ -218,6 +218,18 @@ fn op_id(op: &Value, index: usize) -> String {
     item_id(op).unwrap_or_else(|| format!("#{index}"))
 }
 
+/// Whether a started operation sizes `army` (it owns the army and its prepare began): its
+/// opening, choke cap, feed-forward and refinements move divisions in and out of it, so the
+/// layout's top-up neither refills it nor takes from it. w126a (28 Nov 2026): the choke cap
+/// took 3 divisions off Armee West Süd, the opening sent them on to Army 7, and the layout's
+/// top-up of West Süd's role took the same 3 back out of Army 7 in the next steps.
+pub(super) fn sizes_army(state: &State, army: &str) -> bool {
+    state
+        .op_owned
+        .get(army)
+        .is_some_and(|id| started(state, id))
+}
+
 fn started(state: &State, id: &str) -> bool {
     state.done.contains_key(&key(id, "prep")) && !state.done.contains_key(&key(id, "end"))
 }
