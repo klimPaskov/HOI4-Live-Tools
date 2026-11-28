@@ -107,46 +107,45 @@ pub(super) fn train(
     };
     let lines_of = |qs: &[Queue]| qs.iter().find(|x| x.address == q).map(|x| x.lines);
     let mut replies = vec![created];
-    let mut filled =
-        |route: &mut Option<Channel>, replies: &mut Vec<Value>| -> Result<(i32, usize)> {
-            if queue.amount == 0 {
-                replies.push(step(
-                    route,
-                    "training.series",
-                    &[1],
-                    "one division per line",
-                )?);
-                until(process, "the series amount", |qs| {
-                    qs.iter().any(|x| x.address == q && x.amount == 1)
-                })?;
-            }
-            // the lines: one Add Unit post at a time, the queue read after each, only the remainder
-            // posted (S15-TRAINING, 28 Nov 2026: 7 asked, the module posted 5 and 1 at once and the
-            // queue stood at 9)
-            let got = fill_lines(count, queue.lines.max(1), |v| {
-                let before = lines_of(&ui::read(process, deployment::queues)?).unwrap_or(0);
-                replies.push(step(
-                    route,
-                    "training.add_lines",
-                    &[v],
-                    "more lines for this queue",
-                )?);
-                let now = until(process, "the added lines", |qs| {
-                    lines_of(qs).is_some_and(|n| n > before)
-                })?;
-                Ok(lines_of(&now).unwrap_or(before))
-            })?;
+    let filled = |route: &mut Option<Channel>, replies: &mut Vec<Value>| -> Result<(i32, usize)> {
+        if queue.amount == 0 {
             replies.push(step(
                 route,
-                "training.location",
-                &[i64::from(province)],
-                "this deployment location",
+                "training.series",
+                &[1],
+                "one division per line",
             )?);
-            until(process, "the deployment location", |qs| {
-                qs.iter().any(|x| x.address == q && x.location == province)
+            until(process, "the series amount", |qs| {
+                qs.iter().any(|x| x.address == q && x.amount == 1)
             })?;
-            Ok(got)
-        };
+        }
+        // the lines: one Add Unit post at a time, the queue read after each, only the remainder
+        // posted (S15-TRAINING, 28 Nov 2026: 7 asked, the module posted 5 and 1 at once and the
+        // queue stood at 9)
+        let got = fill_lines(count, queue.lines.max(1), |v| {
+            let before = lines_of(&ui::read(process, deployment::queues)?).unwrap_or(0);
+            replies.push(step(
+                route,
+                "training.add_lines",
+                &[v],
+                "more lines for this queue",
+            )?);
+            let now = until(process, "the added lines", |qs| {
+                lines_of(qs).is_some_and(|n| n > before)
+            })?;
+            Ok(lines_of(&now).unwrap_or(before))
+        })?;
+        replies.push(step(
+            route,
+            "training.location",
+            &[i64::from(province)],
+            "this deployment location",
+        )?);
+        until(process, "the deployment location", |qs| {
+            qs.iter().any(|x| x.address == q && x.location == province)
+        })?;
+        Ok(got)
+    };
     match filled(&mut *route, &mut replies) {
         Ok((lines, posts)) => Ok(Some(
             json!({"backend":"inprocess","queue":format!("{q:#x}"),
