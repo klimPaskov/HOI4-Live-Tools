@@ -527,6 +527,75 @@ fn close_offer(process: &dyn Process, keys: &dyn GameInput) {
     }
 }
 
+/// The partner list's visible band in game pixels: from under the sort buttons (the list's
+/// header in the view's own layout) to the bottom of the screen. Without a readable header the
+/// band starts at the top of the screen.
+fn list_band(r: &Reader<'_>, image: u64) -> Result<(i32, i32)> {
+    let root = view_root(r, image)?;
+    let top = match find(r, image, root, "sort_country", 0)? {
+        Some(w) => gui_tree::rect_unclipped(r, image, w, GAME)
+            .map(|b| b.y + b.h)
+            .unwrap_or(0),
+        None => 0,
+    };
+    Ok((top.max(0), GAME.1 as i32))
+}
+/// Where a row stands against the visible band: 0 inside, 1 below it, -1 above it.
+fn row_side(row: &Rect, band: (i32, i32)) -> i32 {
+    if row.y < band.0 {
+        -1
+    } else if row.y + row.h > band.1 {
+        1
+    } else {
+        0
+    }
+}
+/// The rectangle of `country`'s row once it is wholly inside the visible band, scrolling the
+/// list toward it (one wheel step at a time) while it lies outside. A row the wheel does not move
+/// is refused with partner_row_offscreen, never clicked.
+fn partner_row_in_view(process: &dyn Process, keys: &dyn GameInput, country: &str) -> Result<Rect> {
+    let mut last: Option<Rect> = None;
+    for _ in 0..64 {
+        let (row, band) = settled(process, "partner row", |r, i| {
+            let row = partners(r, i)?
+                .into_iter()
+                .find(|p| p.country == country)
+                .and_then(|p| p.flag)
+                .ok_or_else(|| {
+                    Error::new(
+                        "gui_target_unavailable",
+                        format!("{country}'s row is not in the partner list"),
+                    )
+                })?;
+            Ok((row, list_band(r, i)?))
+        })?;
+        let side = row_side(&row, band);
+        if side == 0 {
+            return Ok(row);
+        }
+        if last.as_ref().is_some_and(|l| l.y == row.y) {
+            return Err(Error::new(
+                "partner_row_offscreen",
+                format!(
+                    "{country}'s row stays outside the partner list's visible part (y {} against {}..{}) after a wheel step; nothing was sent",
+                    row.y, band.0, band.1
+                ),
+            ));
+        }
+        last = Some(row);
+        let at = (
+            f64::from(row.x + row.w / 2),
+            f64::from(band.0 + (band.1 - band.0) / 2),
+        );
+        keys.scroll(GAME, at, if side > 0 { -120 } else { 120 })?;
+        crate::phase::sleep(std::time::Duration::from_millis(120));
+    }
+    Err(Error::new(
+        "partner_row_offscreen",
+        format!("{country}'s row did not come into view in 64 wheel steps; nothing was sent"),
+    ))
+}
+
 /// Open the partner's offer window, set the amount and Send. `sent` is set
 /// just before the Send click.
 pub(super) fn execute(
@@ -536,23 +605,10 @@ pub(super) fn execute(
     amount: &Amount,
     sent: &std::cell::Cell<bool>,
 ) -> Result<Value> {
-    // the list may have scrolled or been re-sorted since the plan
-    let rect = settled(process, "partner row", |r, i| {
-        partners(r, i)?
-            .into_iter()
-            .find(|p| p.country == plan.country)
-            .and_then(|p| p.flag)
-            .ok_or_else(|| Error::new("gui_target_unavailable", "Partner row not on screen"))
-    })
-    .map_err(|e| {
-        Error::new(
-            e.code,
-            format!(
-                "{} (scroll the partner list so that {} is visible, or sort it)",
-                e.message, plan.country
-            ),
-        )
-    })?;
+    // the list may have scrolled or been re-sorted since the plan; a row below the screen's edge
+    // is scrolled into the list's visible band first (g126b: Italy's row lay under the screen and
+    // the click was refused as "Point outside the owned game client area" three times)
+    let rect = partner_row_in_view(process, keys, &plan.country)?;
     let (x, y) = rect.center();
     keys.click(GAME, x, y)?;
     wait(process, "offer window", offer_open)?;
@@ -719,6 +775,20 @@ mod tests {
             "invalid_arguments"
         );
         assert_eq!(resource_index("7").unwrap_err().code, "invalid_arguments");
+    }
+    #[test]
+    fn a_row_outside_the_band_is_scrolled_toward() {
+        let band = (560, 1080);
+        let row = |y| Rect {
+            x: 40,
+            y,
+            w: 30,
+            h: 30,
+        };
+        assert_eq!(row_side(&row(600), band), 0);
+        assert_eq!(row_side(&row(1060), band), 1);
+        assert_eq!(row_side(&row(1100), band), 1);
+        assert_eq!(row_side(&row(540), band), -1);
     }
     #[test]
     fn the_delivered_column_gives_the_contracted_units() {
