@@ -3753,6 +3753,10 @@ struct HeldSlot {
     why: String,
     days_held: i64,
     days_max: i64,
+    /// The juggle: the technology the held slot runs while it waits (its progress is kept when
+    /// it is switched out), and whether the slot runs it now.
+    fill: Option<String>,
+    filled: bool,
 }
 
 /// The idle slots the plan's `research_waits` hold now. A wait is over (for good) when its
@@ -3788,19 +3792,30 @@ fn held_research_slots(
             state.done.insert(over, now);
             continue;
         }
+        let fill = w["fill"]
+            .as_str()
+            .filter(|t| !t.is_empty())
+            .map(String::from);
+        let running_fill = fill
+            .as_ref()
+            .and_then(|f| slots.iter().position(|s| s.as_ref() == Some(f)));
         let slot = match w["slot"].as_u64() {
             Some(s) => s as usize,
-            None => match slots.iter().rposition(Option::is_none) {
+            None => match running_fill.or_else(|| slots.iter().rposition(Option::is_none)) {
                 Some(s) => s,
                 None => continue,
             },
         };
-        if slots.get(slot).is_none_or(Option::is_some) || out.iter().any(|h| h.slot == slot) {
+        let filled = fill.is_some() && slots.get(slot).and_then(|s| s.as_ref()) == fill.as_ref();
+        if (!filled && slots.get(slot).is_none_or(Option::is_some))
+            || out.iter().any(|h| h.slot == slot)
+        {
             continue;
         }
         let since = *state.done.entry(format!("rwait:{index}")).or_insert(now);
         let days_max = w["days"].as_f64().map_or(30, |d| d.ceil() as i64);
-        if now - since > days_max * DAY {
+        // a filled slot banks nothing: the days bound only an empty slot
+        if !filled && now - since > days_max * DAY {
             state.done.insert(over, now);
             continue;
         }
@@ -3815,9 +3830,76 @@ fn held_research_slots(
             why: text(&w["why"]).to_string(),
             days_held: (now - since) / DAY,
             days_max,
+            fill,
+            filled,
         });
     }
     out
+}
+
+/// The juggle's switch: a held slot that runs its filler (`research_waits[].fill`) is switched to
+/// the technology it waits for the moment that one can start (replace: the filler's progress is
+/// kept by the game and it resumes through the plan's order later). Reads the startable list only
+/// while a filler runs.
+fn research_juggle_swap(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    slots: &[Option<String>],
+) -> Result<Option<String>> {
+    let busy: HashSet<String> = slots.iter().flatten().cloned().collect();
+    let held: Vec<HeldSlot> = held_research_slots(state, plan, now, slots, &HashSet::new(), &busy)
+        .into_iter()
+        .filter(|h| h.filled && h.tech.is_some())
+        .collect();
+    if held.is_empty() {
+        return Ok(None);
+    }
+    let Some(startable) = tools
+        .call("hoi4_technology_list", &json!({"available": true}))
+        .ok()
+        .filter(|v| v["available_only"] == json!(true))
+        .map(|v| {
+            strings(&v, "technologies")
+                .into_iter()
+                .collect::<HashSet<String>>()
+        })
+    else {
+        return Ok(None);
+    };
+    for h in held {
+        let tech = h.tech.clone().unwrap_or_default();
+        if !startable.contains(&tech) || state.skipped(now, "tech", &tech) {
+            continue;
+        }
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_research_start",
+            json!({"technology": tech, "slot": h.slot, "replace": true}),
+            "rj",
+        )?;
+        if ok {
+            state.done.insert(format!("rwait:{}:over", h.index), now);
+        } else {
+            state.skip(now, "tech", &tech, DAY);
+        }
+        let fill = h.fill.clone().unwrap_or_default();
+        state.stages.research = Some((
+            format!(
+                "research: slot {} switched from {fill} to {tech} ({}): {ok}",
+                h.slot, h.why
+            ),
+            false,
+        ));
+        return Ok(Some(format!(
+            "research {tech} slot {} (switched from the filler {fill}, its progress kept): {ok} {why}",
+            h.slot
+        )));
+    }
+    Ok(None)
 }
 
 /// Research (a lane): an idle slot gets the plan's next startable technology, else the in-time
@@ -3834,6 +3916,9 @@ fn research_lane(
         .iter()
         .map(|s| s["researching"].as_str().map(String::from))
         .collect();
+    if let Some(line) = research_juggle_swap(state, tools, plan, lease, now, &slots)? {
+        return Ok(Some(line));
+    }
     if slots.iter().any(Option::is_none) {
         let idle_slots = slots.iter().filter(|s| s.is_none()).count();
         let mut done: HashSet<String> = HashSet::new();
@@ -3901,6 +3986,32 @@ fn research_lane(
                 return Ok(Some(format!(
                     "research {tech} slot {} (the slot research_waits held for it): {ok} {why}",
                     h.slot
+                )));
+            }
+            // the juggle: the held slot runs its filler until the target can start
+            if let Some(fill) = h.fill.as_ref().filter(|f| {
+                !h.filled
+                    && !done.contains(*f)
+                    && !busy.contains(*f)
+                    && startable.as_ref().is_none_or(|s| s.contains(*f))
+            }) {
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_research_start",
+                    json!({"technology": fill, "slot": h.slot}),
+                    "rw",
+                )?;
+                state.stages.research = Some((
+                    format!(
+                        "research: slot {} runs {fill} while it waits for {} ({}): {ok}",
+                        h.slot, h.target, h.why
+                    ),
+                    false,
+                ));
+                return Ok(Some(format!(
+                    "research {fill} slot {} (filler while it waits for {}): {ok} {why}",
+                    h.slot, h.target
                 )));
             }
             state.stages.research = Some((
@@ -15299,6 +15410,73 @@ mod tests {
             !sent.is_empty() && sent.iter().all(|t| t == "radio"),
             "{sent:?}"
         );
+    }
+
+    /// The juggle (guide rows G093, G097): a held slot runs its filler while it waits, and is
+    /// switched to the awaited technology with replace the moment that one can start.
+    #[test]
+    fn a_held_slot_runs_its_filler_then_switches_to_the_awaited_tech() {
+        let sent = |tools: &Fake| -> Vec<Value> {
+            tools
+                .calls
+                .borrow()
+                .iter()
+                .filter(|(n, a)| n == "hoi4_research_start" && a.get("request_id").is_some())
+                .map(|(_, a)| {
+                    json!({"t": a["technology"], "s": a["slot"], "r": a.get("replace").cloned()})
+                })
+                .collect()
+        };
+        let plan = json!({"research_waits": [
+            {"tech": "radio", "slot": 1, "fill": "tools1", "why": "the focus bonus lands"}]});
+        // waiting: the held slot gets the filler
+        let tools = fake(vec![
+            (
+                "hoi4_research",
+                json!({"slots": [{"researching": "construction1"}, {"researching": null}],
+                    "researched": []}),
+            ),
+            (
+                "hoi4_technology_list",
+                json!({"available_only": true, "technologies": ["tools1"]}),
+            ),
+        ]);
+        let mut state = State::default();
+        research_lane(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            sent(&tools),
+            vec![json!({"t": "tools1", "s": 1, "r": null})]
+        );
+        // the awaited tech opens: the filler's slot switches to it with replace
+        let tools = fake(vec![
+            (
+                "hoi4_research",
+                json!({"slots": [{"researching": "construction1"}, {"researching": "tools1"}],
+                    "researched": []}),
+            ),
+            (
+                "hoi4_technology_list",
+                json!({"available_only": true, "technologies": ["radio", "tools1"]}),
+            ),
+        ]);
+        research_lane(&mut state, &tools, &plan, "l", START + 5 * DAY).unwrap();
+        assert_eq!(sent(&tools), vec![json!({"t": "radio", "s": 1, "r": true})]);
+        // not yet open: the filler keeps running, nothing is sent, past the empty-slot days too
+        let tools = fake(vec![
+            (
+                "hoi4_research",
+                json!({"slots": [{"researching": "construction1"}, {"researching": "tools1"}],
+                    "researched": []}),
+            ),
+            (
+                "hoi4_technology_list",
+                json!({"available_only": true, "technologies": ["tools1"]}),
+            ),
+        ]);
+        let mut fresh = State::default();
+        research_lane(&mut fresh, &tools, &plan, "l", START).unwrap();
+        research_lane(&mut fresh, &tools, &plan, "l", START + 40 * DAY).unwrap();
+        assert!(sent(&tools).is_empty());
     }
 
     /// t1939n (27 Nov 2026): the trade judge shared the name `trade` with the plan's deals and
