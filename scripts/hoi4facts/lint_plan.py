@@ -1030,7 +1030,13 @@ class Lint:
                 elif x.get("tech") and x["tech"] not in planned_techs:
                     self.add("error", "research.idle", where,
                              f"the slot waits for {x['tech']}, which no research_path block or research_priority lists")
-                if isinstance(x.get("days"), (int, float)) and bank and x["days"] > bank:
+                if x.get("fill") and x["fill"] not in planned_techs:
+                    self.add("error", "research.idle", where,
+                             f"the slot runs {x['fill']} while it waits, which no research_path block or "
+                             f"research_priority lists (the filler resumes through them after the switch)")
+                # a filled slot (the juggle) is busy while it waits: nothing is banked or lost
+                if (not x.get("fill") and isinstance(x.get("days"), (int, float)) and bank
+                        and x["days"] > bank):
                     self.add("warning", "research.idle", where,
                              f"a slot left empty {x['days']:g} days banks only {bank:g} of them "
                              f"(BASE_RESEARCH_POINTS_SAVED): the rest is lost research")
