@@ -5890,3 +5890,28 @@ fn a_mobile_formation_keeps_its_motorised_and_sends_out_only_the_slow() {
         "{out:?}"
     );
 }
+
+#[test]
+fn a_start_province_short_by_less_than_one_division_gets_no_railway() {
+    // w101a: the France prepare built a railway to 3444 at 96% of its need
+    let game = Game::new();
+    let divisions: Vec<Value> = (0..8)
+        .map(|i| json!({"id": format!("a{i}"), "army": "Mitte"}))
+        .collect();
+    let ids: Vec<Value> = (0..8).map(|i| json!(format!("a{i}"))).collect();
+    *game.supply.borrow_mut() = Some(json!({"divisions": divisions, "provinces": [
+        {"province_id": 3444, "state_id": 51, "divisions": 8, "division_ids": ids,
+         "supply": 4.8, "demand": 5.0, "railway_level": 0, "flows": []}]}));
+    let units = vec![unit("Mitte".into(), Role::Line, &Value::Null, &Value::Null)];
+    let roster = game.roster.borrow().clone();
+    let mut state = State::default();
+    let op = json!({"id": "op"});
+    assert!(
+        prepare_supply(&mut state, &game, "op", &op, &units, &roster, "l", START)
+            .unwrap()
+            .is_none()
+    );
+    assert!(!game.orders().iter().any(|(n, _)| n == "hoi4_railway_build"));
+    // the note still names it
+    assert!(state.op_notes["op:supply_prepare"].contains("3444 (state 51): 8 divisions at 96%"));
+}

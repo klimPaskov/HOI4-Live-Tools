@@ -8076,6 +8076,15 @@ fn prepare_supply(
             .get(&key(id, &format!("prail:{q}")))
             .is_some_and(|t| now.saturating_sub(*t) < 30 * DAY)
     };
+    // WORTH A RAILWAY: a province short by less than one of its divisions' share of the need is
+    // short by its stack, not by its line (the capacity spread takes one division off it); a
+    // railway goes only where more than that is missing (w101a, 28 Nov 2026: the France prepare
+    // built railways to 3444 at 96% of its need)
+    let worth = |n: i64, r: f64| n as f64 * (1.0 - r) >= 1.0;
+    let starved: Vec<(i64, i64, i64, f64, i64)> = starved
+        .into_iter()
+        .filter(|(_, _, n, r, _)| worth(*n, *r))
+        .collect();
     let due = starved.iter().find_map(|(p, s, n, r, _)| {
         feeders(&read, *p)
             .into_iter()
