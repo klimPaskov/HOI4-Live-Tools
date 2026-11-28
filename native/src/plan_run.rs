@@ -8572,13 +8572,6 @@ fn construction_plan_step(
                 state.skip(now, "cplan", k, 2 * DAY);
             }
         }
-        // the game's own check refused the building in that state (no free slot, not allowed):
-        // the other items of that building there share the leader's verdict below instead of
-        // each spending tries of its own on the same refusal (w126a: three refinery items in one
-        // state refused nine times)
-        let game_refused = !ok
-            && tool == "hoi4_construction_add"
-            && (why.starts_with("refused_by_game_check") || why.starts_with("NotApplied"));
         let legs = item["legs"] == json!(true) && tool == "hoi4_railway_build";
         let leg_wait = item["leg_days"].as_i64().unwrap_or(LEG_DAYS).max(1) * DAY;
         if legs && (ok || why.starts_with("leg_built")) {
@@ -8591,17 +8584,31 @@ fn construction_plan_step(
         } else {
             state.skip(now, "cplan", &key, 2 * DAY);
             item_failed(state, item, &key, &label, &why, now);
-            if game_refused {
-                let blocked = state.plan_blocked.get(&key).cloned();
-                let tries = state.plan_tries.get(&key).map_or(1, |t| t.0.max(1));
-                for k in &siblings {
-                    match &blocked {
-                        Some(b) => {
-                            state.plan_blocked.insert(k.clone(), b.clone());
-                            state.plan_tries.remove(k);
-                        }
-                        None => state.skip(now, "cplan", k, 7 * DAY * GameHour::from(tries)),
-                    }
+            // the other items of the order share the leader's verdict whatever it was: its rest,
+            // its tries and its give-up, so they stay one order and one try is one order (w126a:
+            // three refinery items of one state rested two days each while the leader rested a
+            // week, split off, and the game's refusal was met nine times instead of three)
+            let blocked = state.plan_blocked.get(&key).cloned();
+            let tries = state.plan_tries.get(&key).cloned();
+            let lead = skip_key("cplan", &key);
+            let until = state.bad.get(&lead).copied();
+            let set = state.bad_set.get(&lead).copied();
+            for k in &siblings {
+                if let Some(b) = &blocked {
+                    state.plan_blocked.insert(k.clone(), b.clone());
+                    state.plan_tries.remove(k);
+                    continue;
+                }
+                match &tries {
+                    Some(t) => state.plan_tries.insert(k.clone(), t.clone()),
+                    None => state.plan_tries.remove(k),
+                };
+                let mine = skip_key("cplan", k);
+                if let Some(u) = until {
+                    state.bad.insert(mine.clone(), u);
+                }
+                if let Some(at) = set {
+                    state.bad_set.insert(mine, at);
                 }
             }
         }
