@@ -5389,7 +5389,7 @@
           "maximum": 1,
           "description": "fuel / capacity below which training wings are held and no wing starts training"
         },
-        "air_training_days": {"type": "number", "x-rule": "air_idle", "exclusiveMinimum": 0, "description": "Days a wing trains before training stops giving experience: the game's AIR_WING_XP_TRAINING_MAX / AIR_WING_XP_TRAINING_MISSION_GAIN_DAILY (facts.py air-training); the wing trains again once new aircraft joined it. Absent: no limit."},
+        "air_training_days": {"type": ["number", "null"], "default": null, "x-rule": "air_idle", "exclusiveMinimum": 0, "description": "Days a wing trains before training stops giving experience: the game's AIR_WING_XP_TRAINING_MAX / AIR_WING_XP_TRAINING_MISSION_GAIN_DAILY (facts.py air-training); the wing trains again once new aircraft joined it. Absent: no limit."},
         "fuel_days_floor": {
           "type": "number",
           "x-rule": "air_idle",
