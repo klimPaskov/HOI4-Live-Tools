@@ -368,6 +368,11 @@ typedef struct {
     uint64_t fg_got;
     uint32_t fg_data_off, fg_mask_off, fg_probe_off, fg_stride, fg_dist_off, fg_tok_off, fg_val_off;
     uint32_t fg_holder_off, fg_faction_off, fg_goals_off, fg_goals_cnt_off, fg_goal_stride;
+    /* engineer 133: the continuous focus database the continuous focus command's own reader resolves a focus through by
+     * its name (the GOT slot holding the database pointer; a pointer array +cf_arr_off, count +cf_cnt_off; an item's
+     * FNV-1a name hash +cf_hash_off and its name (a std::string) +cf_name_off) */
+    uint64_t cf_got;
+    uint32_t cf_arr_off, cf_cnt_off, cf_hash_off, cf_name_off;
     int n;
     cmd_type t[CMD2_MAX];
     /* engineer 122: the diplomatic action catalog and the specs of its rows (the rows are t[n - ndyn .. n - 1]) */

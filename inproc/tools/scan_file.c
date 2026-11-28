@@ -167,6 +167,9 @@ int main(int argc, char **argv) {
                                                  ((uint64_t)t.st2.fg_stride << 24) | ((uint64_t)t.st2.fg_dist_off << 16) | ((uint64_t)t.st2.fg_tok_off << 8) | t.st2.fg_val_off;
         else if (!strcmp(argv[a], "fg_list")) got = ((uint64_t)t.st2.fg_holder_off << 48) | ((uint64_t)t.st2.fg_faction_off << 32) | ((uint64_t)t.st2.fg_goals_off << 16) | t.st2.fg_goals_cnt_off;
         else if (!strcmp(argv[a], "fg_stride")) got = t.st2.fg_goal_stride;
+        /* engineer 133: the continuous focus database (CSetContinuousFocusCommand's reader) */
+        else if (!strcmp(argv[a], "cf_got")) { const cmd_type *cf = stage2_find(&t.st2, "cfocus.set"); got = t.st2.cf_got; fprintf(stderr, "cfocus.set: %s\n", cf ? cf->evidence : "?"); }
+        else if (!strcmp(argv[a], "cf_offs")) got = ((uint64_t)t.st2.cf_arr_off << 24) | ((uint64_t)t.st2.cf_cnt_off << 16) | ((uint64_t)t.st2.cf_hash_off << 8) | t.st2.cf_name_off;
         else if (!strcmp(argv[a], "holds_ok")) { got = (uint64_t)t.st2.holds.ok; fprintf(stderr, "holds: %s\n", t.st2.holds.evidence); }
         else if (!strcmp(argv[a], "holds_kind")) got = t.st2.holds.kind_area;
         else if (!strcmp(argv[a], "holds_area_off")) got = t.st2.holds.area_off;

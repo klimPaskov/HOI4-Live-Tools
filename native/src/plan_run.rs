@@ -5078,7 +5078,7 @@ const FAIR_BUDGET: std::time::Duration = std::time::Duration::from_millis(1500);
 /// choosin a research, spending pp, etc"). HEAVY: many inputs or reads, or orders whose timing
 /// matters within a day: speed 3 from its first action until it has been quiet for a while.
 /// A lane not listed is heavy. (lane, minor, why)
-pub(super) const LANE_WEIGHT: [(&str, bool, &str); 51] = [
+pub(super) const LANE_WEIGHT: [(&str, bool, &str); 52] = [
     ("research", true, "one pick in the research view"),
     (
         "factories",
@@ -5099,6 +5099,7 @@ pub(super) const LANE_WEIGHT: [(&str, bool, &str); 51] = [
         "an agency upgrade or operative: one pick",
     ),
     ("country", true, "a country-wide setting: one click"),
+    ("continuous_focus", true, "one continuous focus pick"),
     ("occupation", true, "an occupation law: one pick"),
     ("import_budget", true, "a trade budget setting: one click"),
     ("fuel", true, "a fuel setting: one click"),

@@ -104,6 +104,12 @@
 //!                with "rejustify":true the plan's justify items for the target run again. Tools: justify
 //!                and declare live 1-2 Nov with 10 DLC; guarantee, NAP, access 1.19.3 only; hoi4_war_risk
 //!                never live-verified; hoi4_diplomacy_countries and hoi4_diplomacy_state read live
+//!   continuous_focus [ID | {"focus","when"?}] (engineer 133): the first entry whose `when` holds is
+//!                the continuous focus (hoi4_focus_start continuous set, the module's cfocus family);
+//!                "none" drops the active one. Asked again every 30 days (nothing_to_change costs no
+//!                input), so a focus the game reset comes back; the game's refusal (the palette not
+//!                unlocked, the focus not allowed or available) rests that entry 7 days and the next
+//!                goes; an unknown id is settled with a note; the module not serving waits 30 days
 //!   faction      {"join"?:TAG|"ANY","create"?:{"name","template"?,"invite"?:[country names]},"when"?}: when
 //!                `when` holds and hoi4_diplomacy_state says the player is in no faction (in one: both
 //!                done; unreadable: waits), `join` first: an open faction invitation from that country
@@ -327,7 +333,7 @@ type Section = fn(&mut State, &Run<'_>) -> Result<Option<String>>;
 /// The affairs sections as lanes of the pass (plan_run.rs `lanes`), in their old chain order;
 /// the design companies are three lanes: lines first, the plan's organisations, then the traits
 /// of every organisation on a line.
-pub(super) const LANES: [super::Lane; 13] = [
+pub(super) const LANES: [super::Lane; 14] = [
     ("diplomacy", |s, t, p, l, n| {
         diplomacy_step(s, &Run::new(t, p, l, n))
     }),
@@ -367,6 +373,9 @@ pub(super) const LANES: [super::Lane; 13] = [
     ("intelligence", |s, t, p, l, n| {
         intelligence_step(s, &Run::new(t, p, l, n))
     }),
+    ("continuous_focus", |s, t, p, l, n| {
+        continuous_focus_step(s, &Run::new(t, p, l, n))
+    }),
 ];
 
 /// The affairs sections in one chain (the tests' view of the old domain).
@@ -381,7 +390,7 @@ pub fn step(
     // a direct call stands for a tick at `now` (the ledger counts game hours)
     state.clock = now;
     let run = Run::new(tools, plan, lease, now);
-    let sections: [Section; 11] = [
+    let sections: [Section; 12] = [
         diplomacy_step,
         faction_step,
         faction_choices_step,
@@ -393,6 +402,7 @@ pub fn step(
         decommission_step,
         mio_step,
         intelligence_step,
+        continuous_focus_step,
     ];
     for section in sections {
         if let Some(done) = section(state, &run)? {
@@ -2750,6 +2760,54 @@ fn choice_answer(ok: bool, code: &str) -> ChoiceAnswer {
 /// first (once), then the first goal whose `when` holds and that is not set, one a tick. An answer
 /// changes the next decision: a refused goal waits a week while the next goal is tried, an unknown
 /// key is settled with a note, the module not serving stops the section for 30 days.
+/// `continuous_focus` (engineer 133): the continuous focus the plan names for now.
+fn continuous_focus_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
+    let (tools, plan, now) = (run.tools, run.plan, run.now);
+    let entries = list(plan, "continuous_focus");
+    if entries.is_empty() || state.skipped(now, "mcfocus", "x") {
+        return Ok(None);
+    }
+    for entry in entries {
+        let id = match entry {
+            Value::String(s) => s.trim().to_string(),
+            _ => text(&entry["focus"]).trim().to_string(),
+        };
+        if id.is_empty() || state.skipped(now, "cfocus", &id) {
+            continue;
+        }
+        if when_holds(state, tools, &entry["when"], now) != Truth::True {
+            continue;
+        }
+        let key = format!("cfocus:{id}");
+        if state.done.get(&key).is_some_and(|at| now - *at < 30 * DAY) {
+            return Ok(None);
+        }
+        let args = if id == "none" {
+            json!({"continuous": {"action": "drop"}})
+        } else {
+            json!({"continuous": {"action": "set", "focus": id}})
+        };
+        let (ok, why) = state.act(tools, run.lease, "hoi4_focus_start", args, "cf")?;
+        match (ok, code(&why)) {
+            (true, _) | (false, "nothing_to_change") => {
+                state.done.retain(|k, _| !k.starts_with("cfocus:"));
+                state.done.insert(key, now);
+            }
+            (false, "continuous_focus_unknown" | "invalid_arguments") => {
+                note(state, "continuous_focus", format!("{id}: {why}"));
+                state.skip(now, "cfocus", &id, 365 * DAY);
+            }
+            (false, "in_process_unavailable") => {
+                note(state, "continuous_focus", format!("{id}: {why}"));
+                state.skip(now, "mcfocus", "x", 30 * DAY);
+            }
+            _ => state.skip(now, "cfocus", &id, 7 * DAY),
+        }
+        return Ok(Some(format!("continuous focus {id}: {ok} {why}")));
+    }
+    Ok(None)
+}
+
 fn faction_choices_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     let (tools, plan, now) = (run.tools, run.plan, run.now);
     let cfg = &plan["faction"];
@@ -6851,6 +6909,45 @@ mod tests {
         let no = json!({"intelligence": {"operatives": 0}});
         let out = intelligence_step(&mut state, &Run::new(&tools, &no, "l", START)).unwrap();
         assert_eq!(out, None);
+    }
+
+    #[test]
+    fn the_continuous_focus_follows_the_first_entry_that_holds_and_a_refusal_moves_on() {
+        let tools = fake(vec![]);
+        let plan = json!({"continuous_focus": [
+            {"focus": "war_economy_focus", "when": "date >= 2100.1.1"},
+            "industrial_focus", "political_power_focus"]});
+        let mut state = State::default();
+        // the game refuses industrial_focus (the palette not unlocked yet): it rests, the next goes
+        tools.refuse("hoi4_focus_start", "refused_by_game_check");
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("continuous focus industrial_focus: false"),
+            "{out}"
+        );
+        tools.accept("hoi4_focus_start");
+        let out = step(&mut state, &tools, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert_eq!(out, "continuous focus political_power_focus: true Verified");
+        // a week on, industrial_focus is asked again and replaces it
+        let out = step(&mut state, &tools, &plan, "l", START + 8 * DAY)
+            .unwrap()
+            .unwrap();
+        assert_eq!(out, "continuous focus industrial_focus: true Verified");
+        // then nothing until the 30-day check
+        assert!(step(&mut state, &tools, &plan, "l", START + 9 * DAY)
+            .unwrap()
+            .is_none_or(|o| !o.starts_with("continuous focus")));
+        let sent: Vec<Value> = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_focus_start")
+            .map(|(_, a)| a["continuous"].clone())
+            .collect();
+        assert_eq!(sent.len(), 3, "{sent:?}");
+        assert_eq!(sent[1]["focus"], "political_power_focus");
     }
 
     #[test]

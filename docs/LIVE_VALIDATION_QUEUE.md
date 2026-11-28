@@ -34,6 +34,7 @@ its mouse path.
 | leader | S31-TRAIT | not run: a general's trait by its key and the promotion to field marshal (hoi4_general_trait trait / promote:true), off under `auto` |
 | faction | S32-FACTION | not run: a faction goal by its key and the spymaster role (hoi4_diplomacy_act faction_goal / become_spymaster), off under `auto` |
 | decrypt | S33-DECRYPT | not run: start / stop decrypting a country and activate a broken cipher (hoi4_agency_upgrade decryption), off under `auto` |
+| cfocus | S34-CFOCUS | not run: set and drop the continuous focus (hoi4_focus_start continuous), off under `auto` |
 | multiplayer | S1-MP, S2-MP | not run (needs two clients); every post refuses outside single player |
 
 ## Proof state of the registered tools (23 November 2026)
@@ -1503,3 +1504,25 @@ T8 the executor: intelligence.decrypt [<broken one>, <open one>] with no country
 and waiting 30 days while the second starts; intelligence.activate [{target: <broken one>, operation: <an op id whose
 execute_on holds now>}]: activated once, no repeat.
 Pass: T0-T8, no window opened by the tool, the read matching the view. Then IPC_LIVE_PASSED for decrypt may be set to 1.
+
+## Session S34-CFOCUS: the continuous focus by command and its read (in process, family `cfocus`; about 15 minutes) -- any time
+Build: e133 (tools 133). Module family `cfocus` named in HOI4_INPROC_POST and HOI4_BACKEND=inprocess. A 1.20.x save whose
+focus tree is finished far enough to unlock the continuous focus palette (s129a's 1940 bed does for Germany; any country),
+and for T6 a save where it is still locked (a 1936.01.01 start). No mouse path: every step either posts or refuses.
+T0 hello: families.cfocus resolved (on true with the family named), live_passed false; the scan evidence of cfocus.set names
+CSetContinuousFocusCommand size 0x30, type 14048, and "continuous focus db got 0x10347ad30 items +0x30 count +0x3c hash +0x10
+name +0x18" (1.20.0.0/1.20.1.0); cfocus.drop type 14050.
+T1 hoi4_focus_start {continuous: {action: list}}: every focus of common/continuous_focus with id, name and palette; `active`
+equals the palette's highlighted focus (or null); active_read true.
+T2 {action: set, focus: <an allowed focus, e.g. industrial_focus>}: backend inprocess, posted 1, Verified by memory within the
+window; the palette shows it active and its daily political power cost runs. Note the time.
+T3 the same call again: nothing_to_change before any post.
+T4 set another focus while one runs: posted 1, Verified (the game swaps it; note whether a swap cost or wait applies).
+T5 by localised name ("Industrial Focus"): the same as T2; an unknown name: continuous_focus_unknown naming close ids.
+T6 a focus whose `available` fails for us (another country's, e.g. DEN_undermine_overlord_continuous_focus outside Denmark),
+and any set on the locked-palette save: refused_by_game_check, nothing posted, no crash.
+T7 {action: drop}: posted 1, Verified (active null); the palette agrees. Drop again: nothing_to_change.
+T8 plain load of a save made after T4: the same focus active, read the same.
+T9 the executor: continuous_focus [<locked or refused one>, industrial_focus]: the first refused and resting 7 days while the
+second is set once; no repeat within 30 days.
+Pass: T0-T9, no window opened by the tool, the read matching the palette. Then IPC_LIVE_PASSED for cfocus may be set to 1.

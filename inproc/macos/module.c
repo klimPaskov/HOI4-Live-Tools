@@ -856,6 +856,22 @@ static uint64_t hashdb_item_by_key(const stage2_table *t, const char *key) {
     }
     return 0;
 }
+/* engineer 133: a continuous focus by its name, as the set command's own reader resolves it: the database's pointer
+ * array, each item's FNV-1a name hash first, then its name. Bounded by the database's own count. */
+static uint64_t cfocus_by_key(const stage2_table *t, const char *key) {
+    uint64_t slot = 0, db = 0, arr = 0; int32_t cnt = 0;
+    if (!t->cf_got || !sq(t->cf_got + (uint64_t)g_slide, &slot) || !plausible(slot) || !sq(slot, &db) || !plausible(db) ||
+        !sread(db + t->cf_cnt_off, &cnt, 4) || cnt <= 0 || cnt > 4096 || !sq(db + t->cf_arr_off, &arr) || !plausible(arr))
+        return 0;
+    uint32_t want = 0x811c9dc5u;
+    for (const char *c = key; *c; c++) want = (want ^ (uint8_t)*c) * 0x1000193u;
+    for (int32_t i = 0; i < cnt; i++) {
+        uint64_t it = 0; uint32_t hash = 0; char nm[64];
+        if (!sq(arr + 8 * (uint64_t)i, &it) || !plausible(it) || !sread(it + t->cf_hash_off, &hash, 4) || hash != want) continue;
+        if (read_string(it + t->cf_name_off, nm, sizeof nm) && !strcmp(nm, key)) return it;
+    }
+    return 0;
+}
 static uint64_t war_goal_type(const char *key) {
     const diplo_facts *d = &g_t.st2.diplo;
     return db_item_by_key(d->wgt_got, d->wgt_arr_off, d->wgt_cnt_off, d->wgt_tok_off, key);
@@ -1177,6 +1193,13 @@ static void run_job2(void *ctx) {
         else if (g_t.st2.fg_got && sq((uint64_t)(uintptr_t)pcn + g_t.st2.fg_holder_off, &hold) && plausible(hold) &&
                  !(sq(hold + g_t.st2.fg_faction_off, &j->faction) && plausible(j->faction)))
             j->faction = 0;
+    }
+    if (!strcmp(ct->spec->op, "cfocus.drop")) {
+        /* engineer 133: the object is the player's own country (the command carries only the tag) */
+        uint64_t cf = g_t.st2.diplo.country_of + (uint64_t)g_slide;
+        void *pcn = g_t.st2.diplo.country_of && code_ptr(cf) ? ((country_of_fn)(uintptr_t)cf)(&j->player_tag) : NULL;
+        if (!pcn) { j->res[0] = R_BAD_OBJ; snprintf(j->reason, sizeof j->reason, "the player's country is unreadable"); finish2(j); return; }
+        j->obj[0] = (uint64_t)(uintptr_t)pcn;
     }
     if (!strncmp(ct->spec->op, "decrypt.", 8)) {
         /* engineer 133: the object is the TARGET country (exactly a CCountry, the class the type's check names), taken from
@@ -2074,6 +2097,29 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         else if (act ? nv != 1 : nv != 2) why = act ? "vals: the target country's tag id" : "vals: the target country's tag id, then 1 (start) or 0 (stop)";
         else if (j->val[0] < 1 || j->val[0] > 100000) why = "the target's tag id is outside 1..100000";
         else if (!act && j->val[1] != 0 && j->val[1] != 1) why = "start is 1, stop is 0";
+    } else if (!strncmp(op, "cfocus.", 7)) {
+        /* engineer 133: the continuous focus.
+         *   set:  objs = 0 (one placeholder); vals = the focus's name as character codes (1..39); the focus comes from the
+         *         game's own continuous focus database by that name and must be exactly a CContinuousNationalFocus; the
+         *         game's own "can do" decides the rest (the palette unlocked, the focus allowed and available)
+         *   drop: objs = 0; nothing else: the module takes the player's own country (the command carries only the tag) */
+        int set = !strcmp(op, "cfocus.set");
+        if (!set && strcmp(op, "cfocus.drop")) why = "unknown cfocus op";
+        else if (j->n != 1 || j->obj[0] != 0) why = "cfocus ops name no object: objs = 0";
+        else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "cfocus ops take no flag, obj2, provs or divs";
+        else if (!set && nv) why = "cfocus.drop takes no vals";
+        else if (set && (nv < 1 || nv >= (int)sizeof j->wgkey)) why = "vals: the focus's name as character codes (1..39)";
+        for (int k = 0; set && !why && k < nv; k++) {
+            int64_t ch = j->val[k];
+            if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_')) why = "the focus name is letters, digits and _ only";
+            else j->wgkey[k] = (char)ch;
+        }
+        if (set && !why) {
+            j->wgkey[nv] = 0;
+            j->obj[0] = cfocus_by_key(&g_t.st2, j->wgkey);
+            if (!j->obj[0]) why = "no continuous focus of that name in the game's continuous focus database";
+        }
+        nv = 0;
     } else if (!strncmp(op, "navyhq.", 7)) {
         /* engineer 102: a naval headquarters' admiral, as the game's own command (its AI and two UI sites build it).
          *   admiral: objs = ONE own admiral (CUnitLeader, the auth object); obj2 = the headquarters building item
