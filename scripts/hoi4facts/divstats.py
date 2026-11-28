@@ -45,7 +45,8 @@ ROWS = ("width", "hp", "organisation", "soft_attack", "hard_attack", "defense", 
         "hardness", "air_attack")
 # logistics: equipment maximum_speed (km/h) and fuel_consumption; a sub-unit's supply_consumption (per battalion),
 # supply_consumption_factor (a support company's, on the whole division) and maximum_speed (a factor on its equipment)
-LOGISTIC = ("maximum_speed", "fuel_consumption", "supply_consumption", "supply_consumption_factor")
+LOGISTIC = ("maximum_speed", "fuel_consumption", "supply_consumption", "supply_consumption_factor",
+            "fuel_consumption_factor", "own_equipment_fuel_consumption_mult")
 LOGI_ROWS = ("speed", "supply", "fuel")
 
 
@@ -336,8 +337,11 @@ def _logistic(data, u, equipment, pct):
     the sub-unit's own maximum_speed factor + technology and doctrine factors); supply: its supply_consumption plus the
     technology and doctrine supply_consumption on it (a flat amount per battalion [?: the files give small negative
     numbers such as -0.02 against a base of 0.32]); supply_factor: its supply_consumption_factor plus technology
-    factors (a support company's, applied to the whole division); fuel: the needed equipment's fuel_consumption x
-    the amount needed (the files' figure; the game's time unit for it is not verified [?])."""
+    factors (a support company's, applied to the whole division); fuel: the needed equipment's fuel_consumption, each
+    needed equipment once (not times the amount: the division view's tables give a motorised anti-tank battalion,
+    36 trucks of 1.2, a fuel usage of 1.2 [?: until one live division read]), x the sub-unit's
+    own_equipment_fuel_consumption_mult; fuel_factor: its fuel_consumption_factor plus technology factors (a support
+    company's, applied to the whole division, as supply_factor)."""
     speeds, fuel = {}, 0.0
     for need, amount in u["need"].items():
         arch = data.archetype(need)
@@ -345,8 +349,10 @@ def _logistic(data, u, equipment, pct):
         lg = dict(pick) if isinstance(pick, dict) else data.base_logistic(pick or need)
         if lg.get("maximum_speed"):
             speeds[arch] = lg["maximum_speed"]
-        fuel += float(lg.get("fuel_consumption") or 0.0) * float(amount or 0.0)
+        if amount:
+            fuel += float(lg.get("fuel_consumption") or 0.0)
     own = u.get("logistic") or {}
+    fuel *= own.get("own_equipment_fuel_consumption_mult", 1.0)
     tr = u.get("transport")
     if tr:
         pick = equipment.get(data.archetype(tr)) or equipment.get(tr)
@@ -357,7 +363,8 @@ def _logistic(data, u, equipment, pct):
     speed = base * (1 + own.get("maximum_speed", 0.0) + pct.get("maximum_speed", 0.0))
     return {"speed": speed, "supply": max(0.0, own.get("supply_consumption", 0.0) + pct.get("supply_consumption", 0.0)),
             "supply_factor": own.get("supply_consumption_factor", 0.0) + pct.get("supply_consumption_factor", 0.0),
-            "fuel": fuel}
+            "fuel": fuel,
+            "fuel_factor": own.get("fuel_consumption_factor", 0.0) + pct.get("fuel_consumption_factor", 0.0)}
 
 
 def division(data, battalions, support, equipment, mods):
@@ -378,11 +385,11 @@ def division(data, battalions, support, equipment, mods):
     out["hardness"] = round(sum(hard) / len(hard), 3)
     # logistics: the division moves at its slowest sub-unit, except those marked affects_speed = no (most support
     # companies); supply = the battalions' and companies' supply consumption x (1 + the companies'
-    # supply_consumption_factor); fuel summed
+    # supply_consumption_factor); fuel likewise x (1 + the companies' fuel_consumption_factor)
     sp = [r["speed"] for r in rows if r.get("speed") and r.get("affects_speed", True)]
     out["speed"] = round(min(sp), 2) if sp else 0.0
     out["supply"] = round(sum(r["supply"] for r in rows) * max(0.0, 1 + sum(r["supply_factor"] for r in rows)), 3)
-    out["fuel"] = round(sum(r["fuel"] for r in rows), 1)
+    out["fuel"] = round(sum(r["fuel"] for r in rows) * max(0.0, 1 + sum(r.get("fuel_factor", 0.0) for r in rows)), 3)
     return out
 
 
