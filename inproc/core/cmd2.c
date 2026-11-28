@@ -530,6 +530,21 @@ const cmd_spec CMD2_SPECS[] = {
      OBJ2_NONE, 0, AUTH_TAG_PTR, "8CCountry"},
     {"decrypt", "decrypt.activate", "CActivateActiveDecryptionBonuses", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "8CCountry", 2,
      {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"target", 0x28, FK_I32, 0, 0x6b, 0, 1}}, OBJ2_NONE, 0, AUTH_TAG_PTR, "8CCountry"},
+    /* ---- cfocus (engineer 133, 28 Nov): the continuous focus, as the continuous focus palette posts it. Read from
+     * 1.20.0.0 (1.20.1.0 and 1.19.4.1 the same code).
+     * set: CSetContinuousFocusCommand (0x30; factory 1.20 0x10022d3d0, vtable 0x1034bddf0): tag +0x24 (0x289a), the
+     * continuous focus by POINTER +0x28 (written by its name as 0x33b7; the reader resolves the name through the
+     * continuous focus database: GOT -> database, pointer array +0x30, count +0x3c, the item's FNV-1a name hash +0x10 and
+     * name +0x18). "Can do" (vtable +0x50, 0x1002150a0 -> 0x1013a7620(focus, country)): the focus allowed and available
+     * for the country, the palette unlocked. Auth: the sender controls the tag. The focus comes from the game's own
+     * database by its name (the module looks it up) and must be exactly a CContinuousNationalFocus.
+     * drop: CDropContinuousFocusCommand (0x28; factory 1.20 0x10022d420, vtable 0x1034bdec0): tag +0x24 only; "can do":
+     * a continuous focus is active. The request's object is the player's own country (exactly a CCountry). */
+    {"cfocus", "cfocus.set", "CSetContinuousFocusCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "24CContinuousNationalFocus", 2,
+     {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}, {"focus", 0x28, FK_PTR, 0, 0x33b7, 0}}, OBJ2_NONE, 0,
+     AUTH_TAG_PTR, "24CContinuousNationalFocus"},
+    {"cfocus", "cfocus.drop", "CDropContinuousFocusCommand", 0x28, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "8CCountry", 1,
+     {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}}, OBJ2_NONE, 0, AUTH_TAG_PTR, "8CCountry"},
     /* ---- move (engineer 105, 28 Nov): a division's move order, as the right click on a province posts it. Read from
      * 1.20.0.0 and 1.19.4.1 (identical code): CMoveCommand 10402 (0x88; factory 1.20 0x100b403b0, vtable 0x103526f28)
      * holds a unit action at +0x28 (its own serializer writes everything through that action, so no field of the command
@@ -1635,6 +1650,7 @@ static void scan_mio_facts(const scan_image *im, const stage2_table *t, mio_fact
 static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stage2_table *t);
 static int scan_trait_db(const scan_image *im, const post_layout *pl, cmd_type *ct, stage2_table *t);
 static int scan_faction_goals(const scan_image *im, const post_layout *pl, cmd_type *ct, stage2_table *t);
+static int scan_cfocus_db(const scan_image *im, const post_layout *pl, cmd_type *ct, stage2_table *t);
 int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global, stage2_table *t) {
     memset(t, 0, sizeof *t);
     scan_stage2_common(im, pl, gs_global, &t->common);
@@ -1661,6 +1677,7 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
     scan_mio_facts(im, t, &t->mio); /* engineer 84 */
     on -= scan_trait_db(im, pl, (cmd_type *)stage2_find(t, "leader.learn_trait"), t); /* engineer 127 */
     on -= scan_faction_goals(im, pl, (cmd_type *)stage2_find(t, "faction.goal"), t); /* engineer 131 */
+    on -= scan_cfocus_db(im, pl, (cmd_type *)stage2_find(t, "cfocus.set"), t); /* engineer 133 */
     /* every type must agree on the "sender controls" check and the generic lookup (one game, one rule) */
     for (int i = 1; i < t->n; i++)
         if (t->t[i].ok && t->t[0].ok &&
@@ -1918,6 +1935,50 @@ off:
     if (!ct->ok) return 0;
     ct->ok = 0;
     snprintf(ct->evidence + strlen(ct->evidence), sizeof ct->evidence - strlen(ct->evidence), "; faction goal database not found (step %d)", step);
+    return 1; /* one type fewer on */
+}
+
+/* engineer 133: the continuous focus database, each fact from the set command's own code. The reader (vtable: the auth
+ * slot + 0x18) loads the database through a GOT slot (mov rax,[GOT]; mov rdi,[rax]) and resolves the focus field through
+ * a lookup by name (call LOOKUP; mov [rbx+FOCUS],rax); the lookup walks a pointer array (count, data) comparing each
+ * item's FNV-1a name hash, then its name (a std::string). The type stays off without every fact. */
+static int scan_cfocus_db(const scan_image *im, const post_layout *pl, cmd_type *ct, stage2_table *t) {
+    int step = 0;
+    t->cf_got = 0;
+    if (!ct || !(ct->conf & C_SLOTS)) return 0;
+    uint32_t off = 0;
+    for (int i = 0; i < ct->spec->nf; i++) if (ct->spec->f[i].kind == FK_PTR) off = ct->spec->f[i].off;
+    uint64_t rd = 0, fn = 0;
+    long call_at = -1;
+    if (!off || !scan_q(im, ct->vtable + pl->auth_slot + 0x18, &rd) || !in_text(im, rd)) { step = __LINE__; goto off; }
+    const uint8_t *b = scan_ptr(im, rd, 0x180);
+    for (size_t k = 0; b && k + 9 <= 0x180 && !fn; k++) {
+        uint32_t d[2];
+        if (!cmd_pmatch(b + k, 9, "e8 D 48 89 43 B", d, 2) || d[1] != off) continue;
+        uint64_t f = rd + k + 5 + (int64_t)(int32_t)d[0];
+        if (in_text(im, f)) { fn = f; call_at = (long)k; }
+    }
+    if (!fn) { step = __LINE__; goto off; }
+    uint32_t g[1], c[2], a[1], h[1], nm[1];
+    unsigned m1 = 0, m2 = 0, m3 = 0, m4 = 0, m5 = 0;
+    long p1 = pfind_at(im, rd, 0x180, "48 8b 05 D 48 8b 38", g, 1, &m1);
+    if (p1 < 0 || m1 != 1 || p1 > call_at) { step = __LINE__; goto off; }
+    if (pfind_at(im, fn, 0x80, "8b 47 B 48 89 45 B 85 c0", c, 2, &m2) < 0 || m2 != 1) { step = __LINE__; goto off; }
+    if (pfind_at(im, fn, 0x80, "48 8b 47 B 48 89 45", a, 1, &m3) < 0 || m3 != 1) { step = __LINE__; goto off; }
+    if (pfind_at(im, fn, 0xc0, "45 39 6e B 75", h, 1, &m4) < 0 || m4 != 1) { step = __LINE__; goto off; }
+    if (pfind_at(im, fn, 0xc0, "45 0f b6 7e B 41 f6 c7 01", nm, 1, &m5) < 0 || m5 != 1) { step = __LINE__; goto off; }
+    if (a[0] + 0xc != c[0] || nm[0] < h[0] + 4) { step = __LINE__; goto off; }
+    t->cf_got = rd + (uint64_t)p1 + 7 + (int64_t)(int32_t)g[0];
+    t->cf_arr_off = a[0]; t->cf_cnt_off = c[0]; t->cf_hash_off = h[0]; t->cf_name_off = nm[0];
+    snprintf(ct->evidence + strlen(ct->evidence), sizeof ct->evidence - strlen(ct->evidence),
+             "; continuous focus db got 0x%llx items +0x%x count +0x%x hash +0x%x name +0x%x",
+             (unsigned long long)t->cf_got, t->cf_arr_off, t->cf_cnt_off, t->cf_hash_off, t->cf_name_off);
+    return 0;
+off:
+    t->cf_got = 0;
+    if (!ct->ok) return 0;
+    ct->ok = 0;
+    snprintf(ct->evidence + strlen(ct->evidence), sizeof ct->evidence - strlen(ct->evidence), "; continuous focus database not found (step %d)", step);
     return 1; /* one type fewer on */
 }
 

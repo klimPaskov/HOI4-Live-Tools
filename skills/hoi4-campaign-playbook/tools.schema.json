@@ -3164,13 +3164,34 @@
    "source": "--list-tools"
   },
   "hoi4_focus_start": {
-   "description": "Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).",
+   "description": "Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one). CONTINUOUS FOCUS (instead of focus): `continuous` {action: list} lists the game's continuous focuses (common/continuous_focus, mods included: id, name, palette) and the active one (read from memory); {action: set, focus: ID or name} makes it the continuous focus; {action: drop} stops the active one. Set and drop go only through the in-process module's cfocus family (no mouse path; HOI4_BACKEND=inprocess until S34-CFOCUS): nothing_to_change and continuous_focus_unknown before any post, then the game's own check (refused_by_game_check: the palette not unlocked yet, the focus not allowed or available for us, nothing active to drop; nothing posted). Verified by memory (the active continuous focus).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "focus": {
       "maxLength": 128,
       "type": "string"
+     },
+     "continuous": {
+      "type": "object",
+      "properties": {
+       "action": {
+        "type": "string",
+        "enum": [
+         "list",
+         "set",
+         "drop"
+        ]
+       },
+       "focus": {
+        "type": "string",
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "action"
+      ],
+      "additionalProperties": false
      },
      "lease_token": {
       "type": "string"
@@ -3180,7 +3201,6 @@
      }
     },
     "required": [
-     "focus",
      "request_id",
      "lease_token"
     ],

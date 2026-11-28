@@ -4110,6 +4110,32 @@
       "x-owner": "executor",
       "description": "diplomatic actions in list order, each once per id (plan_affairs.rs diplomacy_step, W2-3, rules 29 and 30) through hoi4_diplomacy_act. A declaration waits for the target's justify items (and justify_days), Declare war enabled in the target's view and the widening check (hoi4_war_risk); already at war with the target counts as done"
     },
+    "continuous_focus": {
+      "type": "array",
+      "x-owner": "executor",
+      "description": "engineer 133: the continuous focus, in order: the first entry whose `when` holds is set (hoi4_focus_start continuous set, the module's cfocus family, off in auto until S34-CFOCUS); \"none\" drops the active one. Asked again every 30 days; a game refusal (palette not unlocked, focus not allowed or available) rests that entry 7 days and the next goes. Ids from common/continuous_focus (hoi4_focus_start continuous list)",
+      "items": {
+        "type": [
+          "string",
+          "object"
+        ],
+        "pattern": "^[A-Za-z0-9_]{1,39}$",
+        "properties": {
+          "focus": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_]{1,39}$"
+          },
+          "when": {},
+          "why": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "focus"
+        ],
+        "additionalProperties": false
+      }
+    },
     "faction": {
       "type": "object",
       "properties": {
