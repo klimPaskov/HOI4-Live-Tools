@@ -15,7 +15,10 @@
 //! defaults"): `_rules` {"multiplayer": {switch: bool}, "roleplay": {switch: bool}} in the plan; per
 //! switch the multiplayer value wins over the roleplay value, which wins over the FAIR default
 //! (`FAIR_DEFAULTS`). A switch named after a guarded rule (naval_mines, access, factions, timing,
-//! space_marines, paratroopers, submarines) set true lets that rule's actions through; the
+//! space_marines, paratroopers) set true lets that rule's actions through. `submarines` is on by
+//! default (the owner, 28 Nov: no submarine limit in single-player FAIR); a multiplayer rule set
+//! with the usual limit (nothing above Submarine II, no AIP or coating) writes `submarines: false`
+//! and the guard below applies; the
 //! allowances (collaboration, volunteers, air_volunteers, lend_lease, attaches, eben_emael_raid,
 //! propaganda, strategic_bombing_war_support: on; paradrops, refinery_bombing: off)
 //! are read by the lanes and tools that own them through `Run::allows`.
@@ -36,6 +39,7 @@
 //!   hoi4_faction_leave          when the plan creates the faction it leaves (fair.factions)
 //!   hoi4_template_create/_edit  space marines (fair.space_marines) and paratrooper templates
 //!                               below 20 width (fair.paratroopers), from the unit files
+//!   (fair.submarines only under a rule set with `submarines: false`)
 //!   hoi4_research_start         a technology that unlocks a submarine above Submarine II or an
 //!                               AIP or coating module (fair.submarines)
 //!   hoi4_special_project_assign a project that unlocks them (fair.submarines)
@@ -103,7 +107,7 @@ fn rule_text(rule: &str) -> &'static str {
             "paratrooper divisions are at least 20 width and a nation has at most 18 of them"
         }
         "fair.submarines" => {
-            "submarines: nothing above Submarine II, no special submarine modules (AIP, coating), at least 5 per submarine fleet, no always engage"
+            "submarines (a multiplayer rule set with submarines: false): nothing above Submarine II, no special submarine modules (AIP, coating)"
         }
         _ => "a FAIR rule",
     }
@@ -132,7 +136,9 @@ pub const FAIR_DEFAULTS: &[(&str, bool)] = &[
     ("timing", false),
     ("space_marines", false),
     ("paratroopers", false),
-    ("submarines", false),
+    // the owner, 28 Nov: "do whatever is best" on submarines: single-player FAIR has no submarine
+    // limit; a multiplayer rule set that has one turns it on with `submarines: false`
+    ("submarines", true),
     ("paradrops", false),
     ("collaboration", true),
     ("volunteers", true),
@@ -395,7 +401,7 @@ fn breach(
                 )
             })
         }
-        "hoi4_design_create" => design(args, facts?),
+        "hoi4_design_create" => design(args, facts?, run.allows("submarines")),
         "hoi4_production_add" | "hoi4_design_set_production" => {
             let facts = facts?;
             ["equipment", "design"]
@@ -481,8 +487,10 @@ fn template(args: &Value, facts: &Facts) -> Option<(&'static str, String)> {
     None
 }
 
-fn design(args: &Value, facts: &Facts) -> Option<(&'static str, String)> {
-    if let Some(base) = args["base"].as_str() {
+/// `subs_free`: no submarine limit in this run, so only a mine-laying module is a breach (a later
+/// hull with a mine module must not pass because the submarine rule is lifted).
+fn design(args: &Value, facts: &Facts, subs_free: bool) -> Option<(&'static str, String)> {
+    if let Some(base) = args["base"].as_str().filter(|_| !subs_free) {
         if let Some(why) = facts.sub_equipment.get(base.trim()) {
             return Some(("fair.submarines", format!("base {base}: {why}")));
         }
@@ -491,7 +499,7 @@ fn design(args: &Value, facts: &Facts) -> Option<(&'static str, String)> {
         let Some(module) = module.as_str() else {
             continue;
         };
-        if let Some(why) = facts.sub_modules.get(module) {
+        if let Some(why) = facts.sub_modules.get(module).filter(|_| !subs_free) {
             return Some(("fair.submarines", format!("slot {slot}: {why}")));
         }
         if facts.mine_modules.contains(module) {
@@ -891,8 +899,44 @@ mod tests {
     }
 
     #[test]
+    fn submarines_are_free_under_fair_and_limited_only_by_a_rule_set() {
+        let plain = fair("GER");
+        assert!(plain.allows("submarines"));
+        allowed(
+            "hoi4_research_start",
+            json!({"technology": "improved_submarine", "slot": 0}),
+            &plain,
+        );
+        allowed(
+            "hoi4_production_add",
+            json!({"equipment": "ship_hull_submarine_3", "factories": 1}),
+            &plain,
+        );
+        // the mine-laying module stays guarded: naval mines are their own rule, also on a later hull
+        assert_eq!(
+            refused(
+                "hoi4_design_create",
+                json!({"kind": "ship", "base": "ship_hull_submarine_3", "modules": {"a": "ship_anechoic_tiles", "rear_1_custom_slot": "ship_mine_layer_sub"}}),
+                &plain
+            ),
+            "fair.naval_mines"
+        );
+        assert_eq!(
+            refused(
+                "hoi4_design_create",
+                json!({"kind": "ship", "base": 12, "modules": {"rear_1_custom_slot": "ship_mine_layer_sub"}}),
+                &plain
+            ),
+            "fair.naval_mines"
+        );
+    }
+
+    #[test]
     fn submarines_research_projects_designs_and_production() {
-        let run = fair("GER");
+        // a multiplayer rule set with the submarine limit
+        let run = Run::from_plan(
+            &json!({"_meta": {"tag": "GER"}, "_rules": {"multiplayer": {"submarines": false}}}),
+        );
         assert_eq!(
             refused(
                 "hoi4_research_start",
