@@ -5431,6 +5431,59 @@ fn a_battle_stuck_for_days_is_attacked_by_the_idle_divisions_on_its_unused_side(
 }
 
 #[test]
+fn the_opening_s_need_against_a_small_enemy_is_room_for_a_loan_whatever_the_width_reads() {
+    // w101a W+5 (28 Nov 2026): op_lowlands' battles took 51 divisions and 75 stood there (room
+    // -24), Luxembourg had 8 facing it against 13 French; Army 1 (24) and Army 10 (4) stood at home
+    let roster = json!({"armies": [
+        {"army": "Army 7", "division_count": 8, "states": {"42": 8}},
+        {"army": "Armee West Süd", "division_count": 14, "states": {"42": 14}},
+        {"army": "Army 2", "division_count": 10, "states": {"51": 10}},
+        {"army": "Army 1", "division_count": 24, "states": {"68": 24}},
+        {"army": "Army 10", "division_count": 4, "states": {"64": 4}}]});
+    let wars = json!({"wars": {"at_war": true, "enemies": ["LUX", "BEL", "HOL", "FRA"]},
+        "borders": [{"neighbour_tag": "LUX", "own_border_states": [42], "neighbour_states": [8]}]});
+    let ops = json!([
+        {"id": "op_lowlands", "enemies": ["BEL", "HOL", "LUX"], "stacking": {"by_width": true},
+         "opening": {"deadline_days": {"LUX": 4}, "ratio": 2},
+         "formations": [{"army": "Army 2", "role": "line"},
+                        {"army": "Army 7", "role": "mobile"},
+                        {"army": "Armee West Süd", "role": "wing"}]}]);
+    let plan = json!({"war": {"land_orders": false}, "operations": ops});
+    let now = 1000 * DAY;
+    let mut state = State::default();
+    for k in ["prep", "exec"] {
+        state.done.insert(key("op_lowlands", k), now - 5 * DAY);
+    }
+    state.done.insert(key("op_lowlands", "room"), -24);
+    state.done.insert(key("op_lowlands", "room_at"), now - DAY);
+    for a in ["Army 7", "Armee West Süd", "Army 2"] {
+        state.op_owned.insert(a.into(), "op_lowlands".into());
+    }
+    let ops = list(&plan, "operations").to_vec();
+    let active = vec![("op_lowlands".to_string(), ops[0].clone())];
+    // without the opening's need: no room, nothing lent
+    lend_idle(&mut state, &plan, &ops, &active, &roster, &wars, now);
+    let note = state.op_notes["lend"].clone();
+    assert!(
+        note.contains(
+            "Army 1 (24): idle, no executing operation has room on its front (op_lowlands -24)"
+        ),
+        "{note}"
+    );
+    assert!(echelons(&state, "op_lowlands").is_empty());
+    // the opening read Luxembourg short: 2 x 13 - 8 = 18
+    state.done.insert(key("op_lowlands", "need"), 18);
+    state.done.insert(key("op_lowlands", "need_at"), now);
+    lend_idle(&mut state, &plan, &ops, &active, &roster, &wars, now + 1);
+    let note = state.op_notes["lend"].clone();
+    assert!(
+        note.contains("Army 1 (24): lent to op_lowlands (room 18) as the echelon of Army 2"),
+        "{note}"
+    );
+    assert_eq!(state.layout["echelon:op_lowlands:Army 2"], "Army 1");
+}
+
+#[test]
 fn at_war_an_army_no_running_operation_owns_is_lent_to_the_one_with_room_until_its_own_starts() {
     // w96d (28 Nov 2026): Army 1 (no formation) and Army 6 (op_weser's, waiting) stood on area
     // defences while op_france's battles took more than stood there
@@ -5509,4 +5562,130 @@ fn at_war_an_army_no_running_operation_owns_is_lent_to_the_one_with_room_until_i
     let peace = json!({"wars": {"at_war": false, "enemies": []}, "borders": []});
     lend_idle(&mut calm, &plan, &ops, &active, &roster, &peace, now);
     assert!(calm.layout.is_empty());
+}
+
+// LUXEMBOURG: A SMALL ENEMY INSIDE THE OPENING (engineer 103, after w101a)
+
+/// The Rhineland (42) borders Luxembourg (8), the Belgian Ardennes (980) and Alsace (28):
+/// Panzergruppe Ost's root 59 lies along the French border, root 60 faces Belgium and Luxembourg.
+fn rhineland_graph() -> Value {
+    json!({"provinces": [
+        graph_row(9575, 42, "plains", &[(549, 0.0), (11640, 0.0)]),
+        graph_row(11640, 978, "plains", &[(549, 0.0), (9575, 0.0)]),
+        graph_row(11435, 42, "forest", &[(6583, 0.0), (3488, 0.0), (3547, 0.0)]),
+        graph_row(3547, 51, "plains", &[(3488, 0.0), (11435, 0.0)]),
+        graph_row(6583, 8, "forest", &[(11435, 0.0)]),
+        graph_row(3488, 980, "forest", &[(11435, 0.0), (3547, 0.0)]),
+        graph_row(549, 28, "plains", &[(9575, 0.0), (11640, 0.0)])]})
+}
+
+fn rhineland_wars(at_war: &[&str]) -> Value {
+    json!({"wars": {"enemies": at_war}, "borders": [
+        {"neighbour_tag": "LUX", "own_border_states": [42], "neighbour_states": [8]},
+        {"neighbour_tag": "BEL", "own_border_states": [42, 51], "neighbour_states": [980]},
+        {"neighbour_tag": "FRA", "own_border_states": [42, 978], "neighbour_states": [28]}]})
+}
+
+#[test]
+fn draws_spent_in_peace_do_not_hold_the_war() {
+    // four draws refused in peace: spent in peace, not at war
+    assert!(draws_spent(4, 0, true));
+    assert!(!draws_spent(4, 0, false));
+    // at war the line gets REDRAWS draws of its own
+    assert!(!draws_spent(5, 1, false));
+    assert!(draws_spent(6, 2, false));
+    // a line drawn only at war counts as before
+    assert!(!draws_spent(3, 3, false));
+    assert!(draws_spent(4, 4, false));
+}
+
+#[test]
+fn a_spearhead_goes_under_the_root_that_faces_its_state() {
+    let game = Game::new();
+    *game.graph.borrow_mut() = Some(rhineland_graph());
+    let f59 =
+        json!({"kind": "front", "id": 59, "line": {"states": [978, 42], "ids": [11640, 9575]}});
+    let f60 =
+        json!({"kind": "front", "id": 60, "line": {"states": [42, 51], "ids": [11435, 3547]}});
+    assert_eq!(facing_front(&game, &[&f59, &f60], &[8]), Some(60));
+    assert_eq!(facing_front(&game, &[&f59, &f60], &[28]), Some(59));
+    // one root: the caller's first front
+    assert_eq!(facing_front(&game, &[&f59], &[8]), None);
+}
+
+#[test]
+fn a_wing_on_a_state_bordering_another_enemy_of_the_opening_takes_its_piece_at_war() {
+    // w101a: Armee West Süd stood in the Rhineland against Belgium; Luxembourg, an enemy of the
+    // same operation, borders the Rhineland too and had no front but the armour's
+    let game = Game::new();
+    *game.graph.borrow_mut() = Some(rhineland_graph());
+    game.unit("Nord", |r| {
+        r["plan"] = json!([{"kind": "front", "id": 61, "executing": true, "divisions": 14,
+            "line": {"states": [42, 51], "ids": [3547]}, "offensives": []}]);
+    });
+    let mut u = unit(
+        "Nord".into(),
+        Role::Wing,
+        &json!({"enemy": "BEL", "own_states": [42]}),
+        &Value::Null,
+    );
+    u.enemy = "BEL".into();
+    u.own_states = vec![42];
+    let mut units = vec![u];
+    let enemies: Vec<String> = ["BEL", "HOL", "LUX"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    // in peace: the piece is noted, no root is drawn against a country at peace
+    let peace = rhineland_wars(&["FRA"]);
+    widen_wings(&mut units, &enemies, &peace);
+    assert_eq!(units[0].enemies, vec!["LUX".to_string()]);
+    let op = json!({"id": "op", "enemies": enemies});
+    let mut state = State::default();
+    state.done.insert(key("op", "by_command"), 1);
+    let roster = game.roster.borrow().clone();
+    let out = border_fronts(
+        &mut state, &game, "op", &op, &units, &roster, &peace, "l", START,
+    )
+    .unwrap();
+    assert!(
+        !game.orders().iter().any(|(n, _)| n == "hoi4_army_front"),
+        "{out:?}"
+    );
+    assert!(state.op_notes["op:piece:Nord:LUX"].contains("when the war on LUX is on"));
+    // at war with Luxembourg: a root of its own against it, on its own states
+    let war = rhineland_wars(&["FRA", "BEL", "LUX"]);
+    let line = border_fronts(
+        &mut state,
+        &game,
+        "op",
+        &op,
+        &units,
+        &roster,
+        &war,
+        "l",
+        START + DAY,
+    )
+    .unwrap()
+    .expect("a front against Luxembourg");
+    assert!(line.contains("no front of it faces LUX"), "{line}");
+    let front = game
+        .orders()
+        .into_iter()
+        .find(|(n, _)| n == "hoi4_army_front")
+        .unwrap();
+    assert_eq!(front.1["against"], json!("LUX"));
+    assert_eq!(front.1["own_states"], json!([42]));
+    assert_eq!(front.1["state_id"], json!(8));
+    // a spearhead army keeps its one narrow front
+    let mut spear = unit(
+        "Panzer".into(),
+        Role::Mobile,
+        &json!({"enemy": "LUX"}),
+        &Value::Null,
+    );
+    spear.own_states = vec![42];
+    let mut only = vec![spear];
+    widen_wings(&mut only, &enemies, &war);
+    assert!(only[0].enemies.is_empty());
 }
