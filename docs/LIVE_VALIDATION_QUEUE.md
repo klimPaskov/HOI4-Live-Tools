@@ -1091,3 +1091,16 @@ the row: unit_wrong_slot.
 M4 `hoi4_template_edit` changing only `support` on a template with a regimental row: the row is unchanged (read back).
 Stop at once on: a slot clicked that is not the row's, a mismatch error naming regimental, or Save with another layout.
 Pass: M1-M4. Then delete the test template (hoi4_template_delete).
+## Session S25-MIOKEY: organisation traits by key (in process, family `mio`; about 5 minutes) -- any time
+What it proves: hoi4_mio_trait `trait` / `traits` resolve the scripts' trait keys to the tree through the module's
+organisations read, and the executor's `mio[].traits` keys reach the game.
+K1 Germany 1936, paused, `HOI4_BACKEND=auto` (mio passed live): `hoi4_mio_trait {"organization":"GER_henschel_organization",
+"list":true}`: write the first five entries' `trait` keys. Then `hoi4_mio_trait {"organization":"GER_henschel_organization",
+"trait":"<the key of an entry with unlockable_now true>"}`: Verified; the tree window shows that trait (by its icon and
+tooltip name) unlocked or queued, the index in the receipt is the entry's index from the listing.
+K2 `{"traits":["<two keys not held>","<one key already queued>"]}`: Verified, the held one counted as reached.
+K3 refusals before input: `{"trait":"GER_mio_trait_nope"}` -> trait_unknown naming Henschel's keys; with
+`HOI4_BACKEND=gui` -> trait_key_unresolved; nothing posted in either case.
+K4 the window's ORDER: hover the tree icon the listing calls index 0 and index 3: their tooltip names match the keys'
+localisation (this settles whether the mouse path's indices equal the module's; record it either way).
+Pass: K1-K3 (K4 recorded). Then the plan's `mio[].traits` may carry keys.

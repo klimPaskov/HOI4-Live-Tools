@@ -376,15 +376,16 @@ Facts: dossier §0 (Arms Against Tyranny active), `F mio <TAG>` (organisations a
 trees, policies, defines).
 1. Which organisation per big line (best efficiency trait on the biggest line), the trait order, the
    policies (25 PP each, 180-day lock), the design-team slot.
-2. A trait is its 0-based `trait_index` as `hoi4_mio_trait {"list":true}` numbers the tree (trait entries
-   carry no text); a line's MIO cannot be chosen by a tool: `mio[].line` and plan.md say "no tool
-   for this").
+2. A trait is its key, the trait's `token` in the organisation's script (`F mio <TAG> --id <org>` lists them,
+   include and remove_trait applied), e.g. `GER_mio_trait_technical_superiority`; hoi4_mio_trait resolves keys
+   through the in-process organisations read. A 0-based `trait_index` as `hoi4_mio_trait {"list":true}`
+   numbers the tree is still read. A line's organisation is `mio[].line` (hoi4_mio_line).
 3. Not applicable when AAT is not active (dossier §0).
 4. Trait order: production first (cap, then cost or output, growth last), then the role stat; combat MIO on
    the design, production MIO on the line; queue traits so the policy prompt appears (RE13-RE17).
-Resolution: executor `mio` (`organisation`, `traits` [trait_index, ...] in queue order, `policy`,
+Resolution: executor `mio` (`organisation`, `traits` [trait key or trait_index, ...] in queue order, `policy`,
 `design_team` true or a slot, `slot`, `when`); plan.md §15. Check: validate_plan (organisation allowed for
-the tag, policy, trait index range); rubric row 6.
+the tag, policy, trait keys in the tree, trait index range); rubric row 6.
 
 ## D. Economy and research
 

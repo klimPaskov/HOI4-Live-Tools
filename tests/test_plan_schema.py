@@ -570,7 +570,7 @@ class CoverageKeys(unittest.TestCase):
                                             {"mission": "counter_intelligence", "target": "ETH"},
                                             {"mission": "propaganda", "country": "ETH"}], "when": "1936.6.1",
                              "decryption_target": "ETH"},
-            "mio": [{"organisation": "ITA_ansaldo_organization", "traits": [0, "3"], "when": "1936.2.1", "slot": 1,
+            "mio": [{"organisation": "ITA_ansaldo_organization", "traits": [0, "3", "ITA_mio_trait_x"], "when": "1936.2.1", "slot": 1,
                      "design_team": True, "policy": "mio_policy_x", "line": "infantry_equipment_1"},
                     {"organization": "ITA_fiat_organization", "design_team": 2}],
             "trade": [{"id": "t", "resource": "steel", "amount": "needed", "from": "USA", "when": "1936.1.1"},

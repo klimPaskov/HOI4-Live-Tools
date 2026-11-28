@@ -6471,10 +6471,15 @@
                 {
                   "type": "string",
                   "pattern": "^[0-9]+$"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                  "maxLength": 128
                 }
               ]
             },
-            "description": "0-based trait_index values in queue order, as hoi4_mio_trait list:true numbers the tree (trait entries carry no text)"
+            "description": "traits in queue order: each a trait key (the scripts' trait token, e.g. GER_mio_trait_technical_superiority; hoi4_mio_trait resolves it through the in-process organisations read) or a 0-based trait_index as hoi4_mio_trait list:true numbers the tree"
           },
           "when": {
             "$ref": "#/definitions/predicate"
