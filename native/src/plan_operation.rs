@@ -2089,8 +2089,14 @@ pub(super) fn step(
         }
     }
     // nothing differs: look again in six game hours (a declaration or a loss wakes it sooner
-    // through `wake`)
-    state.skip(now, "opstep", "x", 6);
+    // through `wake`); every game hour while an attacker the declaration waits for is not read
+    // executing (its execute is sent again once its own rest is over)
+    let again = if pre_pending(state, now).is_empty() {
+        6
+    } else {
+        1
+    };
+    state.skip(now, "opstep", "x", again);
     Ok(None)
 }
 
