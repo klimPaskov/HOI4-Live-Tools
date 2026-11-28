@@ -553,7 +553,10 @@ fn every_attacker_a_wing_too_executes_before_the_declaration_and_the_declaration
         .collect();
     assert!(executed.contains(&"Nord".to_string()), "{executed:?}");
     assert!(executed.contains(&"Panzer".to_string()), "{executed:?}");
-    assert!(executed.contains(&"Army Group 1".to_string()), "{executed:?}");
+    assert!(
+        executed.contains(&"Army Group 1".to_string()),
+        "{executed:?}"
+    );
     assert!(
         state.op_notes["op_pol:guard:Nord"].contains("ATTACKS together with"),
         "{:?}",
@@ -5106,9 +5109,7 @@ fn at_war_a_front_facing_no_enemy_province_gives_its_divisions_to_the_front_that
     let mut state = State::default();
     state.done.insert(key("op", "by_command"), 1);
     state.done.insert(key("op", "exec"), START);
-    state
-        .done
-        .insert(key("op", "spread:Army Group 1:2"), START);
+    state.done.insert(key("op", "spread:Army Group 1:2"), START);
     let roster = game.roster.borrow().clone();
     let line = border_fronts(
         &mut state,
