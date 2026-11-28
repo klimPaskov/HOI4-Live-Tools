@@ -103,10 +103,21 @@ pub(super) fn parse(entries: &[Entry]) -> Vec<Ability> {
 /// DLC tests. `NOT`, `OR` and the like count as one condition each.
 fn country_requires(allowed: &[Entry]) -> Vec<String> {
     let mut out = Vec::new();
-    let text = |e: &Entry| match &e.val {
-        Val::Scalar(v) => format!("{} = {}", e.key, v.trim_matches('"')),
-        Val::Block(_) => format!("{} = {{..}}", e.key),
-    };
+    // a block is written out in full (s126a: 22 entries read 'OR = {..}', the condition unseen)
+    fn text(e: &Entry) -> String {
+        match &e.val {
+            Val::Scalar(v) => format!("{} = {}", e.key, v.trim_matches('"')),
+            Val::Block(inner) => {
+                let body: Vec<String> = inner.iter().map(text).collect();
+                let full = format!("{} = {{ {} }}", e.key, body.join(" "));
+                if full.chars().count() > 240 {
+                    format!("{}...", full.chars().take(237).collect::<String>())
+                } else {
+                    full
+                }
+            }
+        }
+    }
     for e in allowed {
         let key = e.key.to_ascii_lowercase();
         if key == "tag" || key == "original_tag" {
@@ -326,9 +337,15 @@ mod tests {
           jap_better_staff_office_plan = { type = army_leader allowed = { is_border_war = no OWNER = { has_completed_focus = JAP_the_art_of_warfare } }
             cost = 0.06 duration = 168 unit_modifiers = { planning_speed = 4.0 } }
           quinine = { type = army_leader allowed = { OWNER = { has_country_flag = has_quinine } } cost = 0.1 duration = 168 unit_modifiers = { no_supply_grace = 168 } }
+          either = { type = army_leader allowed = { OWNER = { OR = { tag = ITA has_completed_focus = ITA_x } } } cost = 0.1 duration = 168 unit_modifiers = { attack = 0.1 } }
         }";
         let all = parse(&script::parse(file));
         assert!(all[0].country_requires.is_empty());
+        // s126a: a block condition is written out, not 'OR = {..}'
+        assert_eq!(
+            all[3].country_requires,
+            vec!["OR = { tag = ITA has_completed_focus = ITA_x }".to_string()]
+        );
         assert_eq!(
             all[1].country_requires,
             vec!["has_completed_focus = JAP_the_art_of_warfare".to_string()]

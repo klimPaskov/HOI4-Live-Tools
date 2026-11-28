@@ -2024,7 +2024,9 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             why = "vals: the option's shown place (0..7) and the shown option count (1..8)";
         else if (flag || (obj2 && *obj2) || (provs && *provs)) why = "events.answer takes no flag, obj2 or provs";
     } else if (nv) why = "this op takes no vals";
-    if (!why && divs && *divs && strncmp(op, "orders2.", 8) && strncmp(op, "units.", 6) && strcmp(op, "navy.assign")) why = "only orders2, units and navy.assign take divs";
+    /* engineer 125 (live 126, S25 V1): the diplomatic division lists (send / recall volunteers, expeditionary force) are
+     * checked in the diplomacy branch above (its own allow-list by constructor); this generic rule refused them */
+    if (!why && divs && *divs && ct->spec->auth_kind != AUTH_DIPLO && strncmp(op, "orders2.", 8) && strncmp(op, "units.", 6) && strcmp(op, "navy.assign")) why = "only orders2, units, navy.assign and the diplomatic division lists take divs";
     if (!why && !strcmp(op, "airwing.merge") && j->n < 2) why = "a merge takes at least two wings";
     if (!why && (!strcmp(op, "air.transfer") || !strcmp(op, "air.enable_mission") || !strcmp(op, "airwing.attach"))) {
         uint64_t o2[1];

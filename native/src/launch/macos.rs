@@ -838,7 +838,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_decisions_list","description":"Open the decisions panel and list offered decisions (key, enabled by the game, whether a timer for it is running). Changes nothing.","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_decision_take","description":"Take an own decision with ordinary input (decisions panel, its row, select; the game's confirmation for exactly this decision is accepted). Verified when the decision view shows it taken (timer started, entry gone or disabled). Refuses decisions the game disables, and before input with insufficient_political_power a decision whose script cost (common/decisions, a plain number) is above the political power held: the game draws it enabled and a click does nothing. A targeted decision has one row per target: pass `target` (part of the row title as hoi4_decisions_list shows it, e.g. the target country's name) to pick that row.","inputSchema":{"type":"object","properties":{"decision":{"type":"string","maxLength":128},"target":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["decision","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_division_templates","description":"Own division template names (for hoi4_train) and how many training lines each has queued. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
-        json!({"name":"hoi4_train","description":"Queue `count` divisions of an own template in ONE training queue with ordinary input: the template's Train button creates the queue, its + sets each line to train one division (the game's default is infinite: a line that trains forever), then Add Unit adds the other lines in parallel; the queue gets the own state deploy_state_id as location (a queue without a location never deploys). Each step is verified on the queue in memory (amount, line count).","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"count":{"type":"integer","minimum":1,"maximum":24},"deploy_state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","count","deploy_state_id","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_train","description":"Queue `count` divisions of an own template in ONE training queue with ordinary input: the template's Train button creates the queue, its + sets each line to train one division (the game's default is infinite: a line that trains forever), then Add Unit adds the other lines in parallel; the queue gets the own state deploy_state_id as location (a queue without a location never deploys). Each step is verified on the queue in memory (amount, line count). In process (family training) the template's standing queue that deploys to the same state takes the new lines instead (one queue per template; reply reused_queue, lines_before).","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"count":{"type":"integer","minimum":1,"maximum":24},"deploy_state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","count","deploy_state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_deploy_locations","description":"Give every training line without a deployment location the own state state_id (Find view, the line's location button, one click on the state). Lines without a location never deploy. Verified by the lines' deployment provinces.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_armies","description":"Own armies (name, division ids, division_limit: the divisions its commander leads without penalty, the game's base plus his traits; per army group army_limit: the armies its field marshal leads; threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids (unassigned_by_state: per state the ids and shared_with, the armies standing in the same provinces and how many of them each shares). Per army `planning` {mean, min, max} is its divisions' planning bonus (0..1, 0.3 = 30%); it grows while the army holds a front or plan and stops at a cap the game computes from generals, technology and the HQ distance (not stored: a value that has stopped rising has reached it). threat:false skips the threat reads. Per army and per army group `plan` reads every battle-plan order from the game itself (what the battle-plan bar and the map arrows show): kind (front, offensive, fallback, area_defense), id, executing, divisions assigned; for a line its provinces count, its two end provinces, the states along it, the owner's divisions standing on it and the most in one province; per front its offensives with the arrow's states and the target line (provinces, ends, states, i.e. how deep and wide the advance goes); an area defence lists its states. An army inside an army group whose own plan is [] follows the group's orders. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).","inputSchema":{"type":"object","properties":{"threat":{"type":"boolean"}},"additionalProperties":false}}),
         json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border; with from_state (an own state touching state_id) a drag along that stretch of border only, a narrow front for a mobile army; with from_states (2-12 own states side by side) a drag along the border between those states and the land of state_id's controller only: one army group's own piece of a border that two groups share. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"from_state":{"type":"integer","minimum":1,"maximum":4095},"from_states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":2,"maxItems":12},"provinces":{"type":"array","items":{"type":"integer","minimum":1,"maximum":99999},"minItems":1,"maxItems":1024,"description":"in-process only (family orders): the front's own provinces in drawing order; no drag. Each piece of the line on one theatre front section (the border against one enemy) becomes its own plan root (family orders2: one line per border for the whole group, the Shift+click form), all created in this call, each with its share of the group's divisions by length and place (the fronts the group already has included). Provinces no section holds are reported in in_process.coverage.uncovered and the receipt is Diverged (front_cut), never Verified"},"against":{"description":"in-process only: the front along the whole own border against this tag, or against each of several tags in one call (own_states narrows it): one plan root per border section, each with its share of the divisions; a tag with no border in the states is named in coverage.no_border","oneOf":[{"type":"string","minLength":3,"maxLength":3},{"type":"array","items":{"type":"string","minLength":3,"maxLength":3},"minItems":1,"maxItems":16}]},"own_states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":64},"parent_order":{"type":"integer","minimum":1,"description":"in-process only: the plan order the new front hangs under (default: the army's one top order)"},"replace_order":{"type":"integer","minimum":1,"description":"in-process only: give this existing front order the new province path instead of adding a front (keeps its id)"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
@@ -2970,7 +2970,8 @@ impl MacClock {
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
             self.keys.preflight()?;
-            return template_edit::options(process, &self.keys);
+            let content = mapdata::game_dir(&epoch.game.exe).ok();
+            return template_edit::options(process, &self.keys, content.as_deref());
         }
         if matches!(
             name,
@@ -3860,13 +3861,28 @@ impl MacClock {
             let mut reply = Value::Null;
             // the read-back of volunteers abroad is mapped by S25-VOLUNTEERS; until then the module's posted count is
             // the verdict
-            let mut settle = || -> Result<journal::Outcome> { Ok(journal::Outcome::Unobservable) };
+            // engineer 125 (live 126, S27 D3): a refusal by the game's check closes as refused, not unconfirmed
+            let refused = std::cell::Cell::new(false);
+            let mut settle = || -> Result<journal::Outcome> {
+                if refused.get() {
+                    // the game's own check refused it inside the module: nothing was posted, the refusal is the answer
+                    Ok(journal::Outcome::Unchanged(
+                        json!({"refused_by_game_check": true}),
+                    ))
+                } else {
+                    Ok(journal::Outcome::Unobservable)
+                }
+            };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 let ch = route
                     .as_mut()
                     .ok_or_else(|| Error::new("in_process_unavailable", "no channel"))?;
-                reply = volunteers::post(ch, action, tag_index, &divisions)?;
+                reply = volunteers::post(ch, action, tag_index, &divisions).inspect_err(|e| {
+                    if e.code == "refused_by_game" {
+                        refused.set(true);
+                    }
+                })?;
                 Ok(())
             };
             let receipt = actions.execute(id, &epoch, what, &mut settle, &mut dispatch)?;
@@ -3983,7 +3999,18 @@ impl MacClock {
             let mut reply = Value::Null;
             // the justification in progress is not read yet: the module's posted count after the game's own check is the
             // verdict (S27 maps the read-back: the country's war goal list gains the target)
-            let mut settle = || -> Result<journal::Outcome> { Ok(journal::Outcome::Unobservable) };
+            // engineer 125 (live 126, S27 D3): a refusal by the game's check closes as refused, not unconfirmed
+            let refused = std::cell::Cell::new(false);
+            let mut settle = || -> Result<journal::Outcome> {
+                if refused.get() {
+                    // the game's own check refused it inside the module: nothing was posted, the refusal is the answer
+                    Ok(journal::Outcome::Unchanged(
+                        json!({"refused_by_game_check": true}),
+                    ))
+                } else {
+                    Ok(journal::Outcome::Unobservable)
+                }
+            };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 let ch = route
@@ -3994,7 +4021,10 @@ impl MacClock {
                         reply = body;
                         Ok(())
                     }
-                    inproc::Routed::Refused(what) => Err(inproc::refused_error(&what)),
+                    inproc::Routed::Refused(what) => {
+                        refused.set(true);
+                        Err(inproc::refused_error(&what))
+                    }
                     inproc::Routed::Gui => Err(Error::new(
                         "in_process_unavailable",
                         "the module did not post the justification (see its log): nothing was sent",
@@ -4069,7 +4099,18 @@ impl MacClock {
             let mut reply = Value::Null;
             // no relation read is mapped for these classes yet: the module's posted count after the game's own check is
             // the verdict (S27 maps the read-back per action)
-            let mut settle = || -> Result<journal::Outcome> { Ok(journal::Outcome::Unobservable) };
+            // engineer 125 (live 126, S27 D3): a refusal by the game's check closes as refused, not unconfirmed
+            let refused = std::cell::Cell::new(false);
+            let mut settle = || -> Result<journal::Outcome> {
+                if refused.get() {
+                    // the game's own check refused it inside the module: nothing was posted, the refusal is the answer
+                    Ok(journal::Outcome::Unchanged(
+                        json!({"refused_by_game_check": true}),
+                    ))
+                } else {
+                    Ok(journal::Outcome::Unobservable)
+                }
+            };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 let ch = route
@@ -4080,7 +4121,10 @@ impl MacClock {
                         reply = body;
                         Ok(())
                     }
-                    inproc::Routed::Refused(what) => Err(inproc::refused_error(&what)),
+                    inproc::Routed::Refused(what) => {
+                        refused.set(true);
+                        Err(inproc::refused_error(&what))
+                    }
                     inproc::Routed::Gui => Err(Error::new(
                         "in_process_unavailable",
                         "the module did not post the action (see its log); this action has no view row, so the mouse sent nothing",

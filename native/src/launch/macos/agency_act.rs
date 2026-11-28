@@ -396,6 +396,21 @@ pub(super) fn recruit_check(
     Ok(())
 }
 
+/// Free for a new mission without replace: no mission, or counter-intelligence at home (the
+/// target, when read, is one of the operative's own nationalities). An unread mission is not free.
+fn home_default(o: &intel_live::Operative) -> bool {
+    match o.mission.as_deref() {
+        Some("no_mission") => true,
+        Some("counter_intelligence") => {
+            o.mission_state.is_none()
+                && o.mission_target
+                    .as_ref()
+                    .is_none_or(|t| o.nationalities.contains(t))
+        }
+        _ => false,
+    }
+}
+
 /// Refusals of `hoi4_operative_assign` from memory.
 /// `replace`: the caller means to end the operative's running mission (live 115, 28 Nov 2026: a
 /// running mission was replaced silently). Without it, an operative on any mission other than the
@@ -438,15 +453,7 @@ pub(super) fn assign_check(a: &intel_live::Agency, plan: &AssignPlan, replace: b
         ));
     }
     if let Some(running) = o.mission.as_deref() {
-        // free: no mission, or counter-intelligence at home (the target, when read, is one of
-        // the operative's own nationalities)
-        let home_default = running == "no_mission"
-            || (running == "counter_intelligence"
-                && o.mission_state.is_none()
-                && o.mission_target
-                    .as_ref()
-                    .is_none_or(|t| o.nationalities.contains(t)));
-        if !replace && !home_default {
+        if !replace && !home_default(o) {
             let at = o
                 .mission_target
                 .clone()
@@ -992,6 +999,7 @@ fn assign(
     keys: &dyn GameInput,
     plan: &AssignPlan,
     state: Option<i32>,
+    replace: bool,
 ) -> Driven {
     clear_notices(process, keys)?;
     let result: Driven = (|| {
@@ -1019,9 +1027,26 @@ fn assign(
                 ),
             ));
         };
-        // A new operative starts on counter-intelligence at home; the game lets the order bar
-        // switch any operative to another mission, so a running mission is no refusal.
+        // A new operative starts on counter-intelligence at home; any other mission the bar shows
+        // running is ended only on replace:true. The memory check before input names the missions
+        // it reads; one it could not read but the bar shows is refused here (s126a: a mission the
+        // bed's save gave the operative was replaced silently, observed replaced_running_mission).
         let was_on_mission = slot.on_mission;
+        if was_on_mission && !replace {
+            let free = mem(process)?
+                .operatives
+                .get(plan.operative)
+                .is_some_and(home_default);
+            if !free {
+                return Err(refuse(
+                    "mission_running",
+                    format!(
+                        "The operative bar shows operative {} on a mission the memory read does not name as counter-intelligence at home; pass replace:true to end it for {}; nothing was clicked",
+                        plan.operative, plan.mission
+                    ),
+                ));
+            }
+        }
         let position = plan.operative;
         pk::click(process, keys, "operative portrait", |r, i| {
             let slot = bar_slots(r, i)?
@@ -1287,18 +1312,7 @@ pub(super) fn call(
             ui_action::run(job, id, token, process, keys, guard, authority, actions)
         }
         "hoi4_operative_assign" => {
-            super::allowed(
-                args,
-                &[
-                    "operative",
-                    "mission",
-                    "operation",
-                    "state_id",
-                    "country",
-                    "request_id",
-                    "lease_token",
-                ],
-            )?;
+            super::allowed(args, OPERATIVE_ASSIGN_ARGS)?;
             if args.contains_key("operation") {
                 return Err(Error::new(
                     "operation_not_built",
@@ -1349,7 +1363,9 @@ pub(super) fn call(
                     }
                     Ok(())
                 }),
-                dispatch: Box::new(|process, keys| assign(process, keys, &plan, *chosen.borrow())),
+                dispatch: Box::new(|process, keys| {
+                    assign(process, keys, &plan, *chosen.borrow(), replace)
+                }),
                 settle: Box::new(|process, _| {
                     let a = mem(process)?;
                     let Some(o) = a.operatives.get(plan.operative) else {
@@ -1384,6 +1400,19 @@ pub(super) const TOOLS: [&str; 4] = [
     "hoi4_operative_assign",
 ];
 
+/// Every argument hoi4_operative_assign takes: the schema's properties and the dispatch's allow-list are
+/// both checked against this list (g126b: the schema offered `replace`, the allow-list refused it, and the
+/// executor's replace:true failed as invalid_arguments 4 times).
+const OPERATIVE_ASSIGN_ARGS: &[&str] = &[
+    "operative",
+    "mission",
+    "operation",
+    "state_id",
+    "country",
+    "replace",
+    "request_id",
+    "lease_token",
+];
 pub(super) fn tools() -> Vec<Value> {
     vec![
         json!({"name":"hoi4_agency_create","description":"Create the intelligence agency with ordinary input: Shift+W agency view, Create Agency, the name/logo window (default name kept, the first logo chosen when Create is disabled), Create. Refusals from a fresh memory read before any input: agency_exists, agency_creation_in_progress; agency_creation_unavailable when the game disables the button. Verified by memory (creating or created). Live-verified on 1.19.4. Creation takes civilian factories for the define's number of days.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
@@ -1404,6 +1433,66 @@ mod tests {
             creation_button_enabled: enabled,
             upgrading: upgrading.map(str::to_string),
             recruiting: false,
+        }
+    }
+
+    #[test]
+    fn only_a_read_home_default_mission_is_free_without_replace() {
+        let op = |mission: Option<&str>, state: Option<i32>, target: Option<&str>| {
+            intel_live::Operative {
+                name: "x".into(),
+                codename: String::new(),
+                nationalities: vec!["GER".into()],
+                mission: mission.map(str::to_string),
+                mission_target: target.map(str::to_string),
+                mission_state: state,
+                address: 0,
+                id: 0,
+                operation: None,
+                operation_id: None,
+            }
+        };
+        assert!(home_default(&op(Some("no_mission"), None, None)));
+        assert!(home_default(&op(
+            Some("counter_intelligence"),
+            None,
+            Some("GER")
+        )));
+        assert!(!home_default(&op(
+            Some("counter_intelligence"),
+            None,
+            Some("HOL")
+        )));
+        assert!(!home_default(&op(
+            Some("build_intel_network"),
+            Some(7),
+            None
+        )));
+        // s126a: a mission the save gave the operative and memory did not name is no free slot
+        assert!(!home_default(&op(None, None, None)));
+    }
+
+    #[test]
+    fn operative_assign_takes_every_schema_argument() {
+        let defs = tools();
+        let def = defs
+            .iter()
+            .find(|d| d["name"] == "hoi4_operative_assign")
+            .expect("definition");
+        let props = def["inputSchema"]["properties"]
+            .as_object()
+            .expect("properties");
+        for key in props.keys() {
+            assert!(
+                OPERATIVE_ASSIGN_ARGS.contains(&key.as_str()),
+                "schema offers {key} but the dispatch refuses it"
+            );
+        }
+        for key in OPERATIVE_ASSIGN_ARGS {
+            assert!(
+                props.contains_key(*key),
+                "{key} is allowed but not in the schema"
+            );
         }
     }
 

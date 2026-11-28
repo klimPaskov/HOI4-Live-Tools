@@ -42,7 +42,7 @@ pub(super) fn delete_tool() -> Value {
     json!({"name":"hoi4_template_delete","description":"Delete an own division template (its Delete button in the U panel and the game's confirmation). The game refuses a template used by divisions (also as garrison template) or by training lines; that is reported as template_in_use (with the division and line counts) before any click. Verified when the template is gone from the own list.","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn options_tool() -> Value {
-    json!({"name":"hoi4_template_options","description":"Battalion and company types the Division Designer offers now (unlocked), read from its selection window (opens the designer on an empty draft and closes it again; nothing is saved and no experience is spent): per type the key, game name, group, army experience to add, width, hit points, organisation, manpower, supply use and equipment need from the definitions. Also the extra experience for a new column per group and the army experience held.","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_template_options","description":"Battalion and company types the Division Designer offers now (unlocked), read from its selection window (opens the designer on an empty draft and closes it again; nothing is saved and no experience is spent): per type the key, game name, group, army experience to add, width, hit points, organisation, manpower, supply use and equipment need from the definitions. Also the extra experience for a new column per group and the army experience held, and regimental_companies: the companies the regimental support row takes (unit files: allowed battalion groups, manpower, equipment need, enabling technologies, unlocked for this country).","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}})
 }
 
 // ---- arguments ----------------------------------------------------------------------------
@@ -835,10 +835,81 @@ fn delete_inner(process: &dyn Process, keys: &dyn GameInput, name: &str) -> Resu
 
 // ---- options ---------------------------------------------------------------------------------------
 /// What the designer offers: opens it on an empty draft, reads both selection levels, closes.
-pub(super) fn options(process: &dyn Process, keys: &dyn GameInput) -> Result<Value> {
-    let result = options_inner(process, keys);
+pub(super) fn options(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    content: Option<&std::path::Path>,
+) -> Result<Value> {
+    let result = options_inner(process, keys).map(|mut out| {
+        // the regimental row's companies: its slot opens only under a column of
+        // REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS battalions, so an empty draft's selection window
+        // never offers them (s126a); they come from the unit files and the own completed research
+        if let Some(dir) = content {
+            let completed = super::research::assignments(process)
+                .map(|a| a.completed)
+                .unwrap_or_default();
+            out["regimental_companies"] = json!(regimental_companies(
+                &crate::script::parse_dir(&dir.join("common/units")),
+                &crate::script::parse_dir(&dir.join("common/technologies")),
+                &completed,
+            ));
+        }
+        out
+    });
     designer::leave(process, keys);
     result
+}
+
+/// The companies the regimental support row takes, from the game's unit files (a sub-unit in
+/// category_regimental_support_battalions), each with the battalion groups its column must hold
+/// (allowed_battalion_groups), its manpower and equipment need, the technologies that enable it
+/// and whether this country has it (active from the start, or an enabling technology completed);
+/// pure.
+pub(super) fn regimental_companies(
+    units: &[crate::script::Entry],
+    technologies: &[crate::script::Entry],
+    completed: &std::collections::BTreeSet<String>,
+) -> Vec<Value> {
+    use crate::script::Block;
+    let mut enables: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for top in technologies.iter().filter(|e| e.key == "technologies") {
+        for tech in top.val.block() {
+            for unit in tech.val.block().words("enable_subunits") {
+                enables.entry(unit).or_default().push(tech.key.clone());
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for top in units.iter().filter(|e| e.key == "sub_units") {
+        for unit in top.val.block() {
+            let body = unit.val.block();
+            if !body
+                .words("categories")
+                .iter()
+                .any(|c| c == "category_regimental_support_battalions")
+            {
+                continue;
+            }
+            let by = enables.get(&unit.key).cloned().unwrap_or_default();
+            let active = body.text("active") == Some("yes");
+            let need: serde_json::Map<String, Value> = body
+                .find_val("need")
+                .map(|v| v.block())
+                .unwrap_or(&[])
+                .iter()
+                .filter_map(|e| Some((e.key.clone(), json!(e.val.scalar()?.parse::<f64>().ok()?))))
+                .collect();
+            out.push(json!({
+                "key": unit.key,
+                "allowed_battalion_groups": body.words("allowed_battalion_groups"),
+                "manpower": body.number("manpower"),
+                "equipment_need": need,
+                "enabled_by": by,
+                "unlocked": active || by.iter().any(|t| completed.contains(t)),
+            }));
+        }
+    }
+    out
 }
 fn options_inner(process: &dyn Process, keys: &dyn GameInput) -> Result<Value> {
     designer::open_new_designer(process, keys)?;
@@ -879,7 +950,7 @@ fn options_inner(process: &dyn Process, keys: &dyn GameInput) -> Result<Value> {
         "new_column_cost": battalions.groups.iter().map(|g| json!({"group":g.0,"experience_for_new_column":g.1})).collect::<Vec<_>>(),
         "support_companies": detail(&companies)?,
         "army_experience": t.experience,
-        "note": "Companies already in the open template are not offered again; this listing is for an empty draft. Locked units (not researched) are absent, the designer does not draw them.",
+        "note": "Companies already in the open template are not offered again; this listing is for an empty draft. Locked units (not researched) are absent, the designer does not draw them. regimental_companies (the regimental row under the columns) comes from the unit files and the own completed research, with unlocked per company.",
     }))
 }
 
@@ -888,6 +959,36 @@ mod tests {
     use super::*;
     fn s(v: &[&str]) -> Vec<String> {
         v.iter().map(|x| x.to_string()).collect()
+    }
+
+    #[test]
+    fn regimental_companies_come_from_the_unit_files_with_their_unlock() {
+        let units = crate::script::parse(
+            "sub_units = {
+               field_guns = { group = support allowed_battalion_groups = { infantry mobile }
+                 categories = { category_support_battalions category_regimental_support_battalions }
+                 need = { artillery_equipment = 6 } manpower = 180 }
+               engineer = { group = support categories = { category_support_battalions } }
+               mortar_crew = { active = yes categories = { category_regimental_support_battalions } }
+             }",
+        );
+        let techs = crate::script::parse(
+            "technologies = { gw_artillery = { enable_subunits = { field_guns } } }",
+        );
+        let done: std::collections::BTreeSet<String> = ["gw_artillery".to_string()].into();
+        let rows = regimental_companies(&units, &techs, &done);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["key"], "field_guns");
+        assert_eq!(rows[0]["unlocked"], true);
+        assert_eq!(rows[0]["enabled_by"], json!(["gw_artillery"]));
+        assert_eq!(rows[0]["equipment_need"]["artillery_equipment"], 6.0);
+        assert_eq!(
+            rows[0]["allowed_battalion_groups"],
+            json!(["infantry", "mobile"])
+        );
+        assert_eq!(rows[1]["unlocked"], true, "active = yes");
+        let none = regimental_companies(&units, &techs, &Default::default());
+        assert_eq!(none[0]["unlocked"], false);
     }
     fn defs() -> Vec<Def> {
         let d = |key: &str, group: i32, width: f64| Def {

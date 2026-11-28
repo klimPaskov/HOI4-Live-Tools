@@ -336,7 +336,7 @@ pub(super) fn bad(d: &Day) -> bool {
     d.mud >= 0.5 || d.ground != "none"
 }
 /// The forecast for one region from `day` over `horizon` days: today, the worst attack factor, when bad ground
-/// clears (None: not bad today; Some(None): not within the horizon).
+/// clears (null: not bad today, or bad all the modelled year; a day past the horizon is flagged).
 pub(super) fn outlook(days: &[Day], day: usize, horizon: usize) -> Value {
     if days.len() != 365 {
         return Value::Null;
@@ -345,11 +345,14 @@ pub(super) fn outlook(days: &[Day], day: usize, horizon: usize) -> Value {
     let today = at(0);
     let attack = |d: &Day| d.expected.get("army_attack_factor").copied().unwrap_or(0.0);
     let worst = (0..=horizon).map(|k| attack(at(k))).fold(0.0f64, f64::min);
-    let clears = if bad(today) {
-        json!((1..=horizon).find(|k| !bad(at(*k))))
-    } else {
-        Value::Null
+    // bad ground that lasts past the horizon is still dated, from the whole modelled year, and
+    // said to lie beyond the horizon (S23, s126a: null everywhere read as "no answer")
+    let clears_at = bad(today).then(|| (1..365).find(|k| !bad(at(*k))));
+    let clears = match clears_at {
+        Some(found) => json!(found),
+        None => Value::Null,
     };
+    let clears_beyond = clears_at.flatten().is_some_and(|k| k > horizon);
     let turns_bad = if bad(today) {
         Value::Null
     } else {
@@ -367,6 +370,8 @@ pub(super) fn outlook(days: &[Day], day: usize, horizon: usize) -> Value {
         "expected_modifiers": today.expected,
         "worst_attack_factor_in_horizon": (worst * 1000.0).round() / 1000.0,
         "bad_ground_clears_in_days": clears,
+        "bad_ground_clears_beyond_horizon": clears_beyond,
+        "bad_ground_all_year": clears_at == Some(None),
         "bad_ground_starts_in_days": turns_bad,
     })
 }
@@ -588,5 +593,15 @@ mod tests {
         assert_eq!(a["summary"]["bad_ground_regions"], json!([131]));
         let june = answer(&w, &[131], day_of_date(6, 22).unwrap(), 30);
         assert_eq!(june["summary"]["bad_ground_clears_in_days"], 0);
+        // S23 (s126a): a clearing past the horizon is still dated and flagged, never null
+        let short = answer(&w, &[131], march, 10);
+        let row = &short["regions"][0]["outlook"];
+        assert_eq!(
+            row["bad_ground_clears_in_days"].as_u64(),
+            Some(clears),
+            "{row}"
+        );
+        assert_eq!(row["bad_ground_clears_beyond_horizon"], true);
+        assert_eq!(row["bad_ground_all_year"], false);
     }
 }

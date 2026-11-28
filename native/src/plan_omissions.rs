@@ -241,7 +241,7 @@ pub(super) fn trains_no_line(read: &Value) -> Option<String> {
     let row = list(read, "equipment")
         .iter()
         .find(|r| text(&r["archetype"]) == "train_equipment")?;
-    if row["lines"].as_u64().unwrap_or(0) > 0
+    if row["production_lines"].as_u64().unwrap_or(0) > 0
         || row["produced_per_day"].as_f64().unwrap_or(0.0) > 0.0
     {
         return None;
@@ -651,7 +651,7 @@ mod tests {
     fn a_missing_train_line_and_a_starving_army_on_low_trucks_are_named() {
         let read = |lines: u64| {
             json!({"equipment": [{"archetype": "train_equipment",
-            "stockpile": 71.0, "lines": lines, "produced_per_day": 0.0}]})
+            "stockpile": 71.0, "production_lines": lines, "produced_per_day": 0.0}]})
         };
         assert!(trains_no_line(&read(0))
             .unwrap()

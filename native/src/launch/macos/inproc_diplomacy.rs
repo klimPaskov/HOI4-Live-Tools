@@ -20,6 +20,9 @@ pub(super) fn op_of(key: &str) -> Option<&'static str> {
         "non_aggression_pact" => "diplomacy.non_aggression",
         "improve_relations" => "diplomacy.improve_relations",
         "declare_war" => "diplomacy.declare_war",
+        // engineer 125 (live 126, S25 V7): the attaché went by mouse under the in-process backend (no op here) and
+        // clicked a province; the module's hand row diplomacy.send_attache sends it as the view does
+        "send_attache" => "diplomacy.send_attache",
         // engineer 122: view rows whose action class the module's catalog builds (family diplomacy2, off under `auto`
         // until S27-DIPLOMACY-ANY passes); the toggled counterparts (lift_embargo, revoke_docking_rights) keep the mouse
         "embargo" => "diplomacy2.embargo",
@@ -210,6 +213,7 @@ mod tests {
     fn the_simple_actions_and_declare_war_have_an_op_and_dialog_actions_do_not() {
         assert_eq!(op_of("guarantee"), Some("diplomacy.guarantee"));
         assert_eq!(op_of("declare_war"), Some("diplomacy.declare_war"));
+        assert_eq!(op_of("send_attache"), Some("diplomacy.send_attache"));
         assert_eq!(
             op_of("non_aggression_pact"),
             Some("diplomacy.non_aggression")
