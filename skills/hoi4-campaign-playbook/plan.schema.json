@@ -2347,6 +2347,39 @@
             ],
             "description": "fronts by attack capacity (by command, a unit with two or more fronts): each front's weight in the spread is what its stretch can fight with and feed (the width its battles take from the directions we border them, the supply reaching it, the hostile divisions seen facing it), not its length; in the prepare a spread far from that is spread again; at war the reserve of a battle beyond its engaged divisions moves sideways to the front with most room (within refine_days). false switches it off"
           },
+          "push": {
+            "oneOf": [
+              {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "min_hours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "hours a battle stands not won before its unused sides attack it; default 72"
+                  },
+                  "days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "days before the same battle is pushed again; default 5"
+                  },
+                  "divisions": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 48,
+                    "description": "the most divisions one push sends; default 6"
+                  }
+                },
+                "additionalProperties": false
+              }
+            ],
+            "description": "THE STUCK POINT (default on): once a game day at war, a battle of ours that has stood min_hours, is not being won and has width to spare, bordered by own provinces whose fit divisions stand idle, is attacked from those sides by a direct order (hoi4_army_move with the divisions); one battle in days; false switches it off"
+          },
           "armour_ground": {
             "type": "boolean",
             "description": "default true: at war a spearhead formation whose divisions wait in the reserves of rough-ground battles (terrain or river penalty, forts) leaves the state the operation gave it to the infantry (the plan's own thrust is kept), and its next objective is the state of the line or the enemy's contact its armour reaches cheapest by the ground model, not the nearest"

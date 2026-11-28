@@ -2513,6 +2513,10 @@ fn one(
         spear_pockets(
             state, tools, plan, op, &mut units, roster, &enemies, &at_war, now,
         )?;
+        // THE STUCK POINT: a battle not won for days with idle fit divisions on its unused sides
+        if let Some(line) = stuck_push_step(state, tools, id, op, &units, roster, lease, now)? {
+            return Ok(Some(line));
+        }
         // the strike formations first: their orders are quick whole-army moves, and behind the
         // line work they got no turn while a line order kept failing (qb1, 19 Nov 2026: the
         // column stood in Lodz from day 28 to day 56 while the burst ended on resting redraws)
@@ -7290,6 +7294,122 @@ fn starved_start(read: &Value, armies: &HashSet<String>) -> Vec<(i64, i64, i64, 
     out
 }
 
+/// The armies whose divisions attack in the operation: its attackers and line formations, a
+/// group's member armies with them.
+fn attacking_armies(units: &[Unit], roster: &Value) -> HashSet<String> {
+    let mut armies: HashSet<String> = HashSet::new();
+    for u in units.iter().filter(|u| attacker(u) || u.role == Role::Line) {
+        armies.insert(u.name.clone());
+        armies.extend(u.members.iter().cloned());
+        if u.role == Role::Group {
+            armies.extend(
+                list(roster, "armies")
+                    .iter()
+                    .filter(|r| r["army_group"].as_str() == Some(u.name.as_str()))
+                    .map(|r| text(&r["army"]).to_string()),
+            );
+        }
+    }
+    armies
+}
+
+/// THE STUCK POINT (`push`, on unless `false`; `push.min_hours` default 72, `push.days` 5,
+/// `push.divisions` 6): once a game day at war, a battle of ours that has stood `min_hours`, is
+/// not being won and has width to spare, bordered by own provinces whose fit divisions stand idle
+/// beside it, is attacked from those sides by a direct order (`hoi4_army_move` with the
+/// divisions, the province as target): the one place besides a pocket where a direct order breaks
+/// a stuck point (the owner's model); the plan's lines stay as they are; one battle in `days`
+/// (`capacity::stuck_push`). The battle plan attacks a province from the sides its divisions'
+/// own scores choose (o96a, 28 Nov 2026: 3-7 of the 7-11 enemy provinces in reach attacked).
+#[allow(clippy::too_many_arguments)]
+fn stuck_push_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    op: &Value,
+    units: &[Unit],
+    roster: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let cfg = &op["push"];
+    if *cfg == json!(false) || state.skipped(now, "oppush", id) {
+        return Ok(None);
+    }
+    state.skip(now, "oppush", id, DAY);
+    let Ok(battles) = tools.call("hoi4_battles", &json!({"divisions": true})) else {
+        return Ok(None);
+    };
+    let states: Vec<i64> = {
+        let mut v: Vec<i64> = list(&battles, "list")
+            .iter()
+            .filter(|b| text(&b["our_side"]) == "attacker")
+            .filter_map(|b| b["state"].as_i64())
+            .collect();
+        v.sort_unstable();
+        v.dedup();
+        v.truncate(64);
+        v
+    };
+    if states.is_empty() {
+        return Ok(None);
+    }
+    let Ok(read) = tools.call("hoi4_supply", &json!({})) else {
+        return Ok(None);
+    };
+    let Ok(graph) = tools.call("hoi4_province_graph", &json!({"states": states})) else {
+        return Ok(None);
+    };
+    let g = ground::read_graph(&graph);
+    let armies = attacking_armies(units, roster);
+    let days = cfg["days"].as_i64().filter(|d| *d >= 1).unwrap_or(5);
+    let pushed = |p: i64| {
+        state
+            .done
+            .get(&key(id, &format!("push:{p}")))
+            .is_some_and(|t| now.saturating_sub(*t) < days * DAY)
+    };
+    let Some(push) = capacity::stuck_push(
+        &battles,
+        &g,
+        &read,
+        &armies,
+        cfg["min_hours"].as_i64().filter(|h| *h >= 1).unwrap_or(72),
+        cfg["divisions"]
+            .as_u64()
+            .filter(|n| (1..=48).contains(n))
+            .unwrap_or(6) as usize,
+        &pushed,
+    ) else {
+        return Ok(None);
+    };
+    state
+        .done
+        .insert(key(id, &format!("push:{}", push.province)), now);
+    let what = format!(
+        "stuck point: the battle at {} stood {} days not won, attacked from {} of the {} own sides: {} of {} attack it from {:?}",
+        push.province,
+        push.hours / 24,
+        push.used,
+        push.sides,
+        push.divisions.len(),
+        push.army,
+        push.from
+    );
+    state
+        .op_notes
+        .insert(format!("{id}:push"), format!("operation {id}: {what}"));
+    Ok(Some(order(
+        state,
+        tools,
+        lease,
+        id,
+        &what,
+        "hoi4_army_move",
+        json!({"army": push.army, "divisions": push.divisions, "province_id": push.province}),
+    )?))
+}
+
 /// SUPPLY BEFORE THE ATTACK (`supply.prepare`, on unless `false`): once a game day while the
 /// operation prepares, the provinces where its attackers' divisions stand are read: the most
 /// starved one with no railway gets a railway from the nearest node the network feeds
@@ -7314,19 +7434,7 @@ fn prepare_supply(
         return Ok(None);
     }
     state.skip(now, "opprepsup", id, DAY);
-    let mut armies: HashSet<String> = HashSet::new();
-    for u in units.iter().filter(|u| attacker(u) || u.role == Role::Line) {
-        armies.insert(u.name.clone());
-        armies.extend(u.members.iter().cloned());
-        if u.role == Role::Group {
-            armies.extend(
-                list(roster, "armies")
-                    .iter()
-                    .filter(|r| r["army_group"].as_str() == Some(u.name.as_str()))
-                    .map(|r| text(&r["army"]).to_string()),
-            );
-        }
-    }
+    let armies = attacking_armies(units, roster);
     let Ok(read) = tools.call("hoi4_supply", &json!({})) else {
         return Ok(None);
     };

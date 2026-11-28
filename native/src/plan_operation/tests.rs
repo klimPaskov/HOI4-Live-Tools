@@ -5180,3 +5180,71 @@ fn before_the_attack_the_most_starved_start_province_without_a_railway_gets_one(
             .is_none()
     );
 }
+
+// THE STUCK POINT (engineer 99, after o96a)
+
+#[test]
+fn a_battle_stuck_for_days_is_attacked_by_the_idle_divisions_on_its_unused_side() {
+    let game = Game::new();
+    *game.battles.borrow_mut() = Some(json!({"list": [
+        {"province": 6583, "state": 8, "hours": 100, "our_side": "attacker", "winning": "defender",
+         "width": {"attacker_max": 60.0, "attacker_engaged": 20.0, "full": false},
+         "attacker": {"engaged_divisions": [{"id": "m1", "province": 6600, "width": 10.0},
+                                            {"id": "m2", "province": 6600, "width": 10.0}]},
+         "defender": {}}]}));
+    let d = |id: &str, p: i64| json!({"id": id, "army": "Mitte", "template": "Inf", "province_id": p, "organisation": 60.0});
+    *game.supply.borrow_mut() = Some(json!({"divisions": [
+        d("m1", 6600), d("m2", 6600), d("m3", 6601), d("m4", 6601), d("m5", 6601)]}));
+    *game.graph.borrow_mut() = Some(json!({"provinces": [
+        {"province": 6583, "state_id": 8, "borders": [{"province": 6600}, {"province": 6601}]}]}));
+    let units = vec![unit("Mitte".into(), Role::Line, &Value::Null, &Value::Null)];
+    let roster = game.roster.borrow().clone();
+    let op = json!({"id": "op"});
+    let mut state = State::default();
+    let line = stuck_push_step(&mut state, &game, "op", &op, &units, &roster, "l", START)
+        .unwrap()
+        .expect("a push");
+    assert!(
+        line.contains("stuck point: the battle at 6583 stood 4 days"),
+        "{line}"
+    );
+    let mv = game
+        .orders()
+        .into_iter()
+        .find(|(n, _)| n == "hoi4_army_move")
+        .unwrap();
+    assert_eq!(mv.1["province_id"], json!(6583));
+    assert_eq!(mv.1["divisions"], json!(["m3", "m4", "m5"]));
+    // once a day; the same battle not again within 5 days; off by the plan
+    assert!(stuck_push_step(
+        &mut state,
+        &game,
+        "op",
+        &op,
+        &units,
+        &roster,
+        "l",
+        START + 1
+    )
+    .unwrap()
+    .is_none());
+    assert!(stuck_push_step(
+        &mut state,
+        &game,
+        "op",
+        &op,
+        &units,
+        &roster,
+        "l",
+        START + DAY
+    )
+    .unwrap()
+    .is_none());
+    let mut state = State::default();
+    let off = json!({"id": "op", "push": false});
+    assert!(
+        stuck_push_step(&mut state, &game, "op", &off, &units, &roster, "l", START)
+            .unwrap()
+            .is_none()
+    );
+}
