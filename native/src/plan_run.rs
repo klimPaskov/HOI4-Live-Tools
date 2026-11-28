@@ -45,6 +45,9 @@
 //!                          and the next key is tried (two refused keys per tick); `focus_blocked:[key:reason]`
 //!                          is in the digest
 //!   focus_fallback         focus keys tried only after every focus_path key is completed or skipped
+//!   focus_when             {focus key: predicate}: that focus is kept for its window: not started
+//!                          while the predicate does not hold (false or unknown); the keys after it
+//!                          go on meanwhile; the focus line names the keys kept and why
 //!   skip_hours             {"tech":72,"tech_fallback":168,"focus":24,"focus_blocked":240,"focus_unavailable":24}:
 //!                          game hours a refused key is left alone (defaults shown); all optional
 //!                          The digest carries one `research` line and one `focus` line per run (like `construction`)
@@ -291,6 +294,9 @@ use std::{
 /// battles, reach by range and base.
 #[path = "plan_air.rs"]
 mod plan_air;
+/// Airborne drops as a standing opportunity rule (`airborne`): reach, the air over the target, FAIR link-up.
+#[path = "plan_airborne.rs"]
+mod plan_airborne;
 /// Concentrated command: formations and their tasks, a general for every army, the army group.
 #[path = "plan_formations.rs"]
 mod plan_formations;
@@ -456,6 +462,7 @@ fn bulk_paths(plan: &Value) -> HashSet<String> {
 }
 pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_skill_run",
+    "hoi4_paradrop",
     "hoi4_army_fallback",
     "hoi4_army_exercise",
     "hoi4_production_priority",
@@ -4158,6 +4165,43 @@ fn focus_lane(
     out
 }
 
+/// The plan's `focus_when` {focus key: predicate}: the not yet completed keys whose window is not
+/// open now, with why (the predicate's false or unknown atoms).
+fn focus_windows(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    completed: &[String],
+    now: GameHour,
+) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    let Some(windows) = plan["focus_when"].as_object() else {
+        return out;
+    };
+    for (key, when) in windows {
+        if completed.contains(key) {
+            continue;
+        }
+        match judge(state, tools, when, now) {
+            Truth::True => {}
+            Truth::False => {
+                out.insert(key.clone(), format!("until {}", when_text(when)));
+            }
+            Truth::Unknown => {
+                out.insert(key.clone(), format!("unreadable: {}", when_text(when)));
+            }
+        }
+    }
+    out
+}
+
+fn when_text(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        other => other.to_string(),
+    }
+}
+
 /// The focus order of one tick: a missed checkpoint's focuses first, then the path, keys the
 /// GUI failed to start FOCUS_GUI_FAILS times in a row behind the rest; pure.
 fn focus_order(
@@ -4231,12 +4275,20 @@ fn focus_lane_inner(
                         .is_none_or(|n| *n < FOCUS_GUI_FAILS)
             })
             .cloned();
+        // `focus_when`: a focus kept for its window (a one-shot benefit taken when it pays, e.g.
+        // a focus held after its prerequisite until a date or a state): not started while its
+        // predicate does not hold; the keys after it go on meanwhile
+        let window = focus_windows(state, tools, plan, &completed, now);
         let startable = |state: &State, keys: &[String]| -> Vec<String> {
             if held.is_some() {
                 return Vec::new();
             }
             keys.iter()
-                .filter(|f| !completed.contains(*f) && !state.skipped(now, "focus", f))
+                .filter(|f| {
+                    !completed.contains(*f)
+                        && !state.skipped(now, "focus", f)
+                        && !window.contains_key(*f)
+                })
                 .cloned()
                 .collect()
         };
@@ -4463,6 +4515,16 @@ fn focus_lane_inner(
                         )
                     }
                 )
+            };
+            let line = if window.is_empty() {
+                line
+            } else {
+                let mut w: Vec<String> = window
+                    .iter()
+                    .map(|(k, why)| format!("{k} ({why})"))
+                    .collect();
+                w.sort();
+                format!("{line}; kept for their window: {}", w.join(", "))
             };
             state.stages.focus = Some((line, left == 0));
         }
@@ -23548,6 +23610,37 @@ mod tests {
                 d
             );
         }
+    }
+
+    #[test]
+    fn a_focus_kept_for_its_window_lets_the_next_keys_go_first_then_starts_in_it() {
+        let plan = json!({"focus_path": ["Done", "A", "B"], "focus_when": {"A": "1936.6.1"}});
+        let reads = focus_reads();
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([Ok(json!({"receipt": {"status": "Verified"}}))].into()),
+        };
+        let mut state = State::default();
+        let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(step, Tick::Acted("focus B".into()));
+        assert_eq!(tools.actions.borrow().len(), 1);
+        let window = focus_windows(&mut state, &reads, &plan, &["Done".into()], START);
+        assert_eq!(window["A"], "until 1936.6.1");
+        // the window opens: A starts
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([Ok(json!({"receipt": {"status": "Verified"}}))].into()),
+        };
+        let mut state = State::default();
+        let later = crate::plan_predicate::date_hour("1936.6.2").unwrap();
+        let step = tick(&mut state, &tools, &plan, "l", later).unwrap();
+        assert_eq!(step, Tick::Acted("focus A".into()));
+        // an unreadable window keeps the focus too, and says so
+        let plan = json!({"focus_path": ["A"], "focus_when": {"A": "var:x > 1"}});
+        let window = focus_windows(&mut state, &reads, &plan, &[], later);
+        assert!(window["A"].starts_with("unreadable"));
     }
 
     #[test]

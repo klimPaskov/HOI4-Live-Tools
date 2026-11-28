@@ -11,6 +11,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// CoreFoundation's CFRange (location, length) in UTF-16 units.
+#[repr(C)]
+struct CFRange {
+    location: isize,
+    length: isize,
+}
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
     fn CFGetTypeID(value: CFTypeRef) -> usize;
@@ -21,7 +27,7 @@ extern "C" {
     fn CFStringGetTypeID() -> usize;
     fn CFBooleanGetValue(value: CFTypeRef) -> bool;
     fn CFStringGetLength(value: CFTypeRef) -> isize;
-    fn CFStringGetCString(value: CFTypeRef, out: *mut u8, size: isize, encoding: u32) -> bool;
+    fn CFStringGetCharacters(value: CFTypeRef, range: CFRange, out: *mut u16);
 }
 #[link(name = "CoreGraphics", kind = "framework")]
 extern "C" {
@@ -62,8 +68,10 @@ unsafe fn integer(dict: CFTypeRef, key: CFTypeRef) -> Result<i32> {
     Ok(result)
 }
 /// The longest window label decoded, in UTF-16 units. A window at the point may carry a long title (a terminal's
-/// title holds its whole command line: 259 units on 28 Nov ended every click with input_window_metadata); the bound
-/// keeps the read finite, and the buffer holds it in UTF-8 (at most 4 bytes a unit) with its terminator.
+/// title holds its whole command line or prompt: 259 units on 28 Nov ended every click with input_window_metadata,
+/// then 1095 units the same day after the bound was raised to 1024). A longer label is read up to the bound, not
+/// refused: the occlusion rules compare names only with short exact names ("Cursor", "Notification Center"), which
+/// a cut prefix of 1024 units can never equal.
 const LABEL_UNITS: isize = 1024;
 unsafe fn optional_text(dict: CFTypeRef, key: CFTypeRef) -> Result<Option<String>> {
     let value = super::CFDictionaryGetValue(dict, key);
@@ -73,24 +81,27 @@ unsafe fn optional_text(dict: CFTypeRef, key: CFTypeRef) -> Result<Option<String
     label(value).map(Some)
 }
 unsafe fn label(value: CFTypeRef) -> Result<String> {
-    if CFGetTypeID(value) != CFStringGetTypeID()
-        || !(0..=LABEL_UNITS).contains(&CFStringGetLength(value))
-    {
+    if CFGetTypeID(value) != CFStringGetTypeID() {
         return Err(invalid());
     }
-    let mut buffer = vec![0u8; LABEL_UNITS as usize * 4 + 1];
-    if !CFStringGetCString(
-        value,
-        buffer.as_mut_ptr(),
-        buffer.len() as isize,
-        0x08000100,
-    ) {
+    let length = CFStringGetLength(value);
+    if length < 0 {
         return Err(invalid());
     }
-    let end = buffer.iter().position(|b| *b == 0).ok_or_else(invalid)?;
-    Ok(std::str::from_utf8(&buffer[..end])
-        .map_err(|_| invalid())?
-        .into())
+    let units = length.min(LABEL_UNITS);
+    let mut buffer = vec![0u16; units as usize];
+    if units > 0 {
+        CFStringGetCharacters(
+            value,
+            CFRange {
+                location: 0,
+                length: units,
+            },
+            buffer.as_mut_ptr(),
+        );
+    }
+    // a cut inside a surrogate pair leaves one replacement character at the end
+    Ok(String::from_utf16_lossy(&buffer))
 }
 fn cursor_point() -> Result<[f64; 2]> {
     let event = Owned(unsafe { super::CGEventCreate(std::ptr::null()) });

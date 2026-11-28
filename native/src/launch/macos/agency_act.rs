@@ -397,7 +397,10 @@ pub(super) fn recruit_check(
 }
 
 /// Refusals of `hoi4_operative_assign` from memory.
-pub(super) fn assign_check(a: &intel_live::Agency, plan: &AssignPlan) -> Result<()> {
+/// `replace`: the caller means to end the operative's running mission (live 115, 28 Nov 2026: a
+/// running mission was replaced silently). Without it, an operative on any mission other than the
+/// starting counter-intelligence at home is refused with mission_running, naming the mission.
+pub(super) fn assign_check(a: &intel_live::Agency, plan: &AssignPlan, replace: bool) -> Result<()> {
     if !a.created {
         return Err(no(
             "agency_not_created",
@@ -433,6 +436,30 @@ pub(super) fn assign_check(a: &intel_live::Agency, plan: &AssignPlan) -> Result<
             "already_on_mission",
             format!("{} already runs {} there", o.name, plan.mission),
         ));
+    }
+    if let Some(running) = o.mission.as_deref() {
+        // free: no mission, or counter-intelligence at home (the target, when read, is one of
+        // the operative's own nationalities)
+        let home_default = running == "no_mission"
+            || (running == "counter_intelligence"
+                && o.mission_state.is_none()
+                && o.mission_target
+                    .as_ref()
+                    .is_none_or(|t| o.nationalities.contains(t)));
+        if !replace && !home_default {
+            let at = o
+                .mission_target
+                .clone()
+                .or(o.mission_state.map(|s| format!("state {s}")))
+                .unwrap_or_default();
+            return Err(no(
+                "mission_running",
+                format!(
+                    "{} runs {running} {at}; pass replace:true to end it for {}",
+                    o.name, plan.mission
+                ),
+            ));
+        }
     }
     Ok(())
 }
@@ -1302,12 +1329,18 @@ pub(super) fn call(
                     })?),
                 };
             let plan = plan_assign(operative, mission, state_id, country)?;
+            let replace = match args.get("replace") {
+                None => false,
+                Some(v) => v.as_bool().ok_or_else(|| {
+                    Error::new("invalid_arguments", "replace must be true or false")
+                })?,
+            };
             let chosen: RefCell<Option<i32>> = RefCell::new(None);
             let job = Job {
                 kind: "operative_assign",
                 action: json!({"kind":"operative_assign","operative":operative,"mission":mission,"state_id":state_id,"country":country}),
                 plan: Box::new(|process| {
-                    assign_check(&mem(process)?, &plan)?;
+                    assign_check(&mem(process)?, &plan, replace)?;
                     if let Aim::Country(tag) = &plan.aim {
                         *chosen.borrow_mut() = Some(target_state(process, tag)?);
                     }
@@ -1356,7 +1389,7 @@ pub(super) fn tools() -> Vec<Value> {
         json!({"name":"hoi4_agency_create","description":"Create the intelligence agency with ordinary input: Shift+W agency view, Create Agency, the name/logo window (default name kept, the first logo chosen when Create is disabled), Create. Refusals from a fresh memory read before any input: agency_exists, agency_creation_in_progress; agency_creation_unavailable when the game disables the button. Verified by memory (creating or created). Live-verified on 1.19.4. Creation takes civilian factories for the define's number of days.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_agency_upgrade","description":"Start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals before input: branch_unknown, upgrade_unknown (loaded database); agency_not_created, upgrade_in_progress, upgrade_maxed, upgrade_locked (missing required upgrade) from memory; upgrade_needs_factories when the upgrade's civilian factory use (scripts) is above the factories free for projects (the game would only queue it); upgrade_unavailable when the game disables the entry. Verified by memory (the running upgrade equals the request). Live-verified on 1.19.4.","inputSchema":{"type":"object","properties":{"branch":{"type":"string","maxLength":96},"upgrade":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["branch","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_operative_recruit","description":"Recruit an operative into a free slot of the operative bar: Shift+W agency view, the empty slot, then the candidate `candidate` (0-based index into hoi4_intelligence's candidate list, default 0), picked in the recruitment window by its name. Typed refusals before input, from memory: agency_not_created, no_free_operative_slot, operative_slot_locked (says in how many days candidates are offered: AGENCY_OPERATIVE_RECRUITMENT_TIME counts from creation), unknown_candidate; candidate_not_shown and operative_bar_unavailable from the window. Verified by memory: Reached when the operative count grew, Diverged when someone else was recruited. Live-verified on 1.19.4.","inputSchema":{"type":"object","properties":{"candidate":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_operative_assign","description":"Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` refuse with mission_not_built / operation_not_built (operations are started with hoi4_operation_start). Typed refusals before input: invalid_arguments, target_required, country_has_no_states, unknown_country; agency_not_created, operative_unknown, operative_busy (on an operation), already_on_mission from memory; operative_bar_unavailable, mission_unavailable (the game disables the button) from the windows. Verified by memory (mission and target). Live-verified on 1.19.4.","inputSchema":{"type":"object","properties":{"operative":{"type":"integer","minimum":0,"maximum":31},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"country":{"type":"string","minLength":3,"maxLength":3},"operation":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["operative","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_operative_assign","description":"Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` refuse with mission_not_built / operation_not_built (operations are started with hoi4_operation_start). Typed refusals before input: invalid_arguments, target_required, country_has_no_states, unknown_country; agency_not_created, operative_unknown, operative_busy (on an operation), already_on_mission, mission_running (the operative runs another mission than the starting counter-intelligence at home: pass replace:true to end it) from memory; operative_bar_unavailable, mission_unavailable (the game disables the button) from the windows. Verified by memory (mission and target). Live-verified on 1.19.4.","inputSchema":{"type":"object","properties":{"operative":{"type":"integer","minimum":0,"maximum":31},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"country":{"type":"string","minLength":3,"maxLength":3},"operation":{"type":"string"},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["operative","request_id","lease_token"],"additionalProperties":false}}),
     ]
 }
 
@@ -1636,18 +1669,22 @@ mod tests {
         };
         let a = agency(true, None, 1, 2);
         assert_eq!(
-            code(assign_check(&a, &plan(1, Aim::State(842)))),
+            code(assign_check(&a, &plan(1, Aim::State(842)), false)),
             "operative_unknown"
         );
         assert_eq!(
-            code(assign_check(&a, &plan(0, Aim::State(842)))),
+            code(assign_check(&a, &plan(0, Aim::State(842)), false)),
             "already_on_mission"
         );
-        assert_eq!(code(assign_check(&a, &plan(0, Aim::State(843)))), "");
+        assert_eq!(
+            code(assign_check(&a, &plan(0, Aim::State(843)), false)),
+            "mission_running"
+        );
+        assert_eq!(code(assign_check(&a, &plan(0, Aim::State(843)), true)), "");
         let mut busy = a.clone();
         busy.operatives[0].operation = Some("operation_collaboration_government".into());
         assert_eq!(
-            code(assign_check(&busy, &plan(0, Aim::State(843)))),
+            code(assign_check(&busy, &plan(0, Aim::State(843)), true)),
             "operative_busy"
         );
     }

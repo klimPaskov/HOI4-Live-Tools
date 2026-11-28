@@ -183,16 +183,17 @@
     },
     "airborne": {
       "type": "object",
-      "x-owner": "player",
-      "description": "paratroop drops and airborne raids. Owner, 28 Nov: drops are off by default in FAIR (\"paratroopers yes, aren't considered for fair play\"), META may use them, a roleplay goal switches them on. enabled false keeps every drop and raid row inert; the trace lint reports paratrooper templates or drops while it is false",
-      "additionalProperties": false,
+      "x-owner": "executor",
+      "description": "paratroop drops and airborne raids, one key for the plan and the executor. standing opportunity rule for paratroopers (plan_airborne.rs): at war, once a day, the first target whose `when` holds, that a transport wing reaches from one of the air bases, whose region's air is ours by the region window's estimate (min_air_share), and in FAIR mode lies within link_up_km of one of our battles, gets hoi4_paradrop with `army`; then the rule rests cooldown_days. The game's own checks still decide. Absent or enabled:false: off (a roleplay goal switches it off). FAIR: off unless roleplay_request (the owner's rule); META: on. hoi4_paradrop is off in auto until S21-PARADROP passes. The plan's `drops[]` rows (target_province/target_state, when) are read as targets after `targets[]`; `raids[]` are the raid rows (their own `switch`, e.g. eben_emael_raid, which FAIR allows: `enabled` governs drops only). Owner, 28 Nov: drops are off by default in FAIR (\"paratroopers yes, aren't considered for fair play\"), META may use them, a roleplay goal switches them on.",
       "properties": {
         "enabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "switch": {
+          "x-owner": "lint",
           "type": "string",
-          "description": "the constraints key that sets enabled"
+          "description": "the constraints key that sets enabled (lint_trace reads it)"
         },
         "drops": {
           "type": "array",
@@ -217,6 +218,8 @@
                 "type": "integer"
               },
               "transports": {
+                "x-owner": "text",
+                "description": "transport planes the drop needs (the strategist sizes production by it; the executor counts the live wings)",
                 "type": "integer"
               },
               "air_superiority": {
@@ -235,6 +238,8 @@
           }
         },
         "raids": {
+          "x-owner": "text",
+          "description": "raid rows (common/raids, facts.py raids TAG): the preparation goes through research, templates, training and production rows; creating and launching a raid waits for the raid tool (gap air.raids); each row keeps its own rule switch (eben_emael_raid is allowed in FAIR), independent of `enabled`",
           "type": "array",
           "items": {
             "type": "object",
@@ -275,12 +280,93 @@
           }
         },
         "why": {
-          "type": "string"
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
         },
         "note": {
-          "type": "string"
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "army": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the army of paratrooper divisions (hoi4_armies name)"
+        },
+        "from_states": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/state_id"
+          },
+          "description": "air base states to drop from; absent: every own air base"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "province": {
+                "$ref": "#/definitions/province_id"
+              },
+              "state": {
+                "$ref": "#/definitions/state_id"
+              },
+              "when": {
+                "$ref": "#/definitions/predicate"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "required": [
+              "province",
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          "description": "drop targets in order (victory points, ports, air fields from the game files), each dropped once"
+        },
+        "min_air_share": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.7,
+          "description": "our least share of the region's air (1 - the region window's enemy estimate)"
+        },
+        "link_up_km": {
+          "type": "number",
+          "minimum": 0,
+          "default": 300,
+          "description": "FAIR: the most a target lies from our nearest battle (MX12, MX43); META ignores it"
+        },
+        "cooldown_days": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 14
+        },
+        "roleplay_request": {
+          "type": "boolean",
+          "default": false,
+          "description": "FAIR: drops are off by default; true when the player asked for them (META drops without it)"
+        },
+        "min_transports": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 50,
+          "description": "the game's MIN_PLANE_COUNT_PARADROP of the game and mod in use"
+        },
+        "transports_per_division": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 45,
+          "description": "the game's BASE_UNIT_WEIGHT_IN_TRANSPORT_PLANES of the game and mod in use"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "_meta": {
       "type": "object",
@@ -867,6 +953,14 @@
     "research_blind_catalogue": {
       "type": "boolean",
       "x-owner": "executor"
+    },
+    "focus_when": {
+      "type": "object",
+      "x-owner": "executor",
+      "description": "{focus key: predicate}: the focus is kept for its window (a one-shot benefit taken when it pays): not started while the predicate does not hold (false or unknown); the focus_path keys after it go on meanwhile; the digest's focus line names the keys kept and why",
+      "additionalProperties": {
+        "$ref": "#/definitions/predicate"
+      }
     },
     "focus_path": {
       "type": "array",
@@ -6375,6 +6469,109 @@
           "note": {
             "type": "string",
             "description": "Free text for people and the player; never read by the executor."
+          },
+          "refresh": {
+            "type": "object",
+            "x-owner": "executor",
+            "description": "the design follows the technology: after the item's design is made, a new version is made whenever a better candidate becomes available (its tech researched, its when holding); the item's production line moves to each new version. Candidate lists come from the designer evaluator (facts.py design-refresh), best first",
+            "properties": {
+              "slots": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "module": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "base": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "tech": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "when": {
+                            "$ref": "#/definitions/predicate"
+                          },
+                          "why": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "description": "slot -> candidate modules, best first: a module key or {module, tech?, when?}"
+              },
+              "bases": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "module": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "base": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "tech": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "when": {
+                          "$ref": "#/definitions/predicate"
+                        },
+                        "why": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "minItems": 1,
+                "description": "candidate bases (equipment type keys), best first: a key or {base, tech?, when?}; a better available base makes the next version from that type with every wanted slot"
+              },
+              "xp": {
+                "type": "number",
+                "minimum": 0,
+                "description": "held experience of the kind's branch needed for a version (default 5 per changed slot)"
+              },
+              "names": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                },
+                "description": "names of versions 2, 3, ..; else '<name> <n>'"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false
           },
           "switch_mature": {
             "type": "boolean",

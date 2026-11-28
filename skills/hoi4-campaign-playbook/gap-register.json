@@ -1547,14 +1547,14 @@
    "tools": [
     "hoi4_diplomacy_act"
    ],
-   "blocked": "send_volunteers dialog needs a division group choice: dialog_unsupported",
+   "blocked": "send_volunteers dialog needs a division group choice: dialog_unsupported. Statically: the action is CSendVolunteerAction (recall CRecallVolunteerAction), chosen in CDiplomacySendVolunteersController; the in-process diplomacy family leaves dialog actions to the mouse",
    "blocked_terms": [
     "volunteer"
    ],
    "payoff": "medium",
    "why": "army XP and veteran divisions before the main war",
    "closing": "both",
-   "owner": "volunteer dialog support, then live"
+   "owner": "engineer 108 (strategy): a volunteers opportunity rule (any war we may join as volunteers, ideology and tension gates as the diplomacy view shows them, recall lock 180 days, stop before our own war); then a typed tool: CSendVolunteerAction with the chosen divisions through the diplomacy family, live"
   },
   {
    "id": "lendlease.air_volunteers",
@@ -1565,7 +1565,7 @@
    ],
    "plan": [],
    "tools": [],
-   "blocked": "no tool for air volunteers",
+   "blocked": "no tool for air volunteers; no air-volunteer command class found by name in the executable (the land action is CSendVolunteerAction); the air wing view's send path is not mapped",
    "payoff": "low",
    "why": "air XP only",
    "closing": "both",
@@ -5594,19 +5594,38 @@
    "owner": "Decide whether carrier wings need orders (game assigns them to the carrier); map carrier wings in hoi4_air"
   },
   {
-   "id": "air.paradrop_and_raids",
+   "id": "air.paradrop",
    "domain": "air",
-   "capability": "Paratrooper drops and Gotterdammerung raids (lock, dam, oilfield bombing; paratrooper sabotage)",
+   "capability": "Paratrooper drops on victory points, ports and air fields when transports reach, the region's air is ours and (FAIR) the front can link up",
+   "playbook": [
+    "exploits.md#paradrop rows (META only)"
+   ],
+   "plan": [
+    "airborne",
+    "airborne.targets"
+   ],
+   "tools": [
+    "hoi4_paradrop"
+   ],
+   "payoff": "low",
+   "why": "A drop costs 50 transports a division (90 for two, 135 for three) and 70% air superiority: worth it only where it decides a capitulation VP, a port an invasion needs, or a pocket",
+   "closing": "live",
+   "owner": "S21-PARADROP (docs/LIVE_VALIDATION_QUEUE.md), then paradrop::LIVE_PASSED; para template, transport line and special-forces doctrine (S18 D2) in the strategist's plan"
+  },
+  {
+   "id": "air.raids",
+   "domain": "air",
+   "capability": "Gotterdammerung raids (air raids, paratrooper raids, custom raids such as GER_eben_emael_raid and the pathfinder raid before an invasion)",
    "playbook": [
     "exploits.md#paradrop rows (META only)"
    ],
    "plan": [],
    "tools": [],
-   "blocked": "hoi4_air_mission has no paradrop mission (MISSIONS lacks it, unknown mission -> invalid_arguments); no tool for raids; playbook does not know raids (common/raids, Gotterdammerung active)",
-   "payoff": "low",
-   "why": "Niche in FAIR play; raids are an extra lever for majors with bombers",
+   "blocked": "no tool for raids and no read of raid types or instances. The game's commands are found statically and not mapped: NRaids::NNet::CCreateRaidCommand (type 19192, 0xa8 bytes; serializer ids tag +0x24, 0xe1 +0x28, 0x6b +0x30, target block 0x288f +0x58, units 0x28a3 +0x90, 0x4afc/0x27ab +0xa0/+0xa4), CExecuteRaidCommand, CCancelRaidCommand, CRemoveRaidCommand, CSetRaidAutoComplete, CSetRaidAutoLaunchOption, CSetRaidRiskLevelCommand (layouts not read), CSetCountryRaidsPriorityCommand (0x30)",
+   "payoff": "medium",
+   "why": "Custom raids are one-shot levers on an operation's axis (Eben-Emael: Belgian forts -50 to -75% for 180 days); the raid types are in common/raids for any country and mod",
    "closing": "both",
-   "owner": "Playbook: assess common/raids/air_raids.txt for FAIR value; tool only if worth it"
+   "owner": "in-process module: map the raid commands' layouts and the NRaids::CRaidInstance list (a read of allowed and visible raids), a raids family and tool (create, prepare, launch, read), then plan key raids; live session"
   },
   {
    "id": "navy.patrol_dominance",

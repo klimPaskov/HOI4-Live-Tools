@@ -30,6 +30,20 @@
 //!                branch; an unreadable XP leaves the check to the tool (insufficient_experience). A design
 //!                `name` that already exists (hoi4_designs) counts as done. Tool: tank and plane live 1-2 Nov
 //!                with 10 DLC, ship 31 Oct with 3 DLC
+//!   designs[].refresh  {"slots"?:{slot:[candidate, ..best first]},"bases"?:[candidate, ..best first],
+//!                "xp"?,"names"?:[..]}: the design follows the technology. A candidate is a module key (a
+//!                base: a type key) or {"module"|"base", "tech"?, "when"?}: it is available once its `tech`
+//!                is researched (tech_done) and its `when` holds. After the item's design is made, each look
+//!                (weekly, and at once after a research completes) compares the best available candidate per
+//!                slot with the modules of the newest version (hoi4_designs detail) and the best available
+//!                base with its hull or chassis; when one differs, a new version is made through
+//!                hoi4_design_create from the newest version (only the changed slots) or, for a better base,
+//!                from that base type (every wanted slot). Version names: `names` in order, else
+//!                "<name> <n>" from 2. The candidate lists come from the designer evaluator (designer.py
+//!                refresh), so nothing is ranked here. The item's production line (`designs[].production`, or
+//!                a production entry whose `design` is the item's id) moves to each new version through the
+//!                line switch below, with its mature-line guard. XP guard as for the item (default 5 per
+//!                changed slot). Done keys: drefresh:<id>:<n> (n = 2, 3, ..)
 //!   production[].design  a design (a `designs` id, a design name or a design id number) the line of
 //!                that `equipment` switches to, once, through hoi4_design_set_production (line index from
 //!                hoi4_production_lines, design id from hoi4_designs; `accept_progress_loss` default true).
@@ -512,11 +526,275 @@ fn designs_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         }
         return Ok(Some(format!("design {kind} {label}: {ok} {why}")));
     }
+    if let Some(done) = refresh_step(state, run, &mut waits)? {
+        return Ok(Some(done));
+    }
     if !waits.is_empty() {
         note(state, "designs", waits.join("; "));
         state.skip(now, "mdes", "x", DAY);
     }
     Ok(None)
+}
+
+// ---------------------------------------------------------------------------------------------
+// W1-02: the design follows the technology (designs[].refresh).
+
+/// One ranked candidate of a refresh list: the module or base key, its tech gate and its `when`.
+fn refresh_candidate(v: &Value, field: &str) -> Option<(String, Option<String>, Value)> {
+    match v {
+        Value::String(k) if !k.trim().is_empty() => Some((k.trim().to_string(), None, Value::Null)),
+        Value::Object(o) => {
+            let key = o
+                .get(field)
+                .map(|v| text(v).trim().to_string())
+                .unwrap_or_default();
+            if key.is_empty() {
+                return None;
+            }
+            let tech = o
+                .get("tech")
+                .map(|t| text(t).trim().to_string())
+                .filter(|t| !t.is_empty());
+            Some((key, tech, o.get("when").cloned().unwrap_or(Value::Null)))
+        }
+        _ => None,
+    }
+}
+
+/// The first candidate of a ranked list that is available now: Ok(Some(key)), Ok(None) when none
+/// is, Err(()) when a gate cannot be read (the look waits).
+fn best_available(
+    state: &mut State,
+    tools: &dyn Tools,
+    list: &[Value],
+    field: &str,
+    now: GameHour,
+) -> std::result::Result<Option<String>, ()> {
+    for v in list {
+        let Some((key, tech, when)) = refresh_candidate(v, field) else {
+            continue;
+        };
+        let mut all = Vec::new();
+        if let Some(t) = tech {
+            all.push(json!(format!("tech_done:{t}")));
+        }
+        if !when.is_null() {
+            all.push(when);
+        }
+        let gate = if all.is_empty() {
+            Truth::True
+        } else {
+            when_holds(state, tools, &json!({ "all": all }), now)
+        };
+        match gate {
+            Truth::True => return Ok(Some(key)),
+            Truth::False => continue,
+            Truth::Unknown => return Err(()),
+        }
+    }
+    Ok(None)
+}
+
+/// The name of version `n` (2, 3, ..) of a design: `names[n-2]`, else "<name> <n>", kept within
+/// the designer's 40 characters.
+fn version_name(entry: &Value, name: &str, n: usize) -> String {
+    if let Some(given) = entry["refresh"]["names"]
+        .as_array()
+        .and_then(|a| a.get(n.wrapping_sub(2)))
+        .map(|v| text(v).trim().to_string())
+        .filter(|v| !v.is_empty())
+    {
+        return given.chars().take(40).collect();
+    }
+    let suffix = format!(" {n}");
+    let room = 40usize.saturating_sub(suffix.chars().count());
+    let stem: String = name.chars().take(room).collect();
+    format!("{}{suffix}", stem.trim_end())
+}
+
+/// Versions of a refreshed item made so far (1 = only the item's own design).
+fn versions_made(state: &State, id: &str) -> usize {
+    let prefix = format!("drefresh:{id}:");
+    1 + state.done.keys().filter(|k| k.starts_with(&prefix)).count()
+}
+
+/// The newest version's name of a designs item (the item's own name before any refresh).
+fn newest_version(state: &State, entry: &Value) -> String {
+    let name = text(&entry["name"]).trim().to_string();
+    match item_id(entry) {
+        Some(id) if entry["refresh"].is_object() => {
+            let n = versions_made(state, &id);
+            if n > 1 {
+                version_name(entry, &name, n)
+            } else {
+                name
+            }
+        }
+        _ => name,
+    }
+}
+
+/// Researched technologies count at the last refresh look (a completed research looks again at
+/// once instead of waiting for the weekly look).
+fn researched_count(tools: &dyn Tools) -> Option<usize> {
+    let mut ctx = crate::plan_predicate::Ctx::new(tools, 0);
+    ctx.researched().map(HashSet::len)
+}
+
+fn refresh_step(
+    state: &mut State,
+    run: &Run<'_>,
+    waits: &mut Vec<String>,
+) -> Result<Option<String>> {
+    let (tools, plan, now) = (run.tools, run.plan, run.now);
+    let items: Vec<&Value> = list(plan, "designs")
+        .iter()
+        .filter(|e| e["refresh"].is_object())
+        .collect();
+    if items.is_empty() {
+        return Ok(None);
+    }
+    // weekly, or at once when the researched count changed since the last look
+    let count = researched_count(tools);
+    let count_key = format!("drefresh_count:{}", count.unwrap_or(0));
+    let fresh_research = count.is_some() && !state.seen.contains_key(&count_key);
+    if !fresh_research && state.skipped(now, "drefw", "x") {
+        return Ok(None);
+    }
+    if count.is_some() {
+        state.seen.retain(|k, _| !k.starts_with("drefresh_count:"));
+        state.seen.insert(count_key, now);
+    }
+    let mut acted: Option<String> = None;
+    for entry in items {
+        let Some(id) = item_id(entry) else {
+            waits.push("refresh: an item without id".into());
+            continue;
+        };
+        let name = text(&entry["name"]).trim().to_string();
+        let kind = entry["kind"]
+            .as_str()
+            .or(entry["type"].as_str())
+            .unwrap_or("")
+            .trim()
+            .to_lowercase();
+        if name.is_empty() || !state.done.contains_key(&format!("design:id:{id}")) {
+            continue;
+        }
+        if state.skipped(now, "dref", &id) {
+            waits.push(format!("{id} refresh: waiting after a refusal"));
+            continue;
+        }
+        let r = &entry["refresh"];
+        let n = versions_made(state, &id);
+        let current = newest_version(state, entry);
+        let Some(row) = tools
+            .call("hoi4_designs", &json!({"name": current, "detail": true}))
+            .ok()
+            .and_then(|v| list(&v, "designs").first().cloned())
+        else {
+            waits.push(format!("{id} refresh: {current} not listed yet"));
+            continue;
+        };
+        let have: HashMap<String, String> = list(&row, "modules")
+            .iter()
+            .filter_map(|m| {
+                let slot = text(&m["slot"]).trim().to_string();
+                (!slot.is_empty()).then(|| (slot, text(&m["module"]).trim().to_string()))
+            })
+            .collect();
+        let mut wanted: Map<String, Value> = Map::new();
+        let mut unknown = false;
+        if let Some(slots) = r["slots"].as_object() {
+            for (slot, cands) in slots {
+                let Some(cands) = cands.as_array() else {
+                    continue;
+                };
+                match best_available(state, tools, cands, "module", now) {
+                    Ok(Some(m)) => {
+                        wanted.insert(slot.clone(), json!(m));
+                    }
+                    Ok(None) => {}
+                    Err(()) => unknown = true,
+                }
+            }
+        }
+        let new_base = match r["bases"].as_array() {
+            Some(bases) => match best_available(state, tools, bases, "base", now) {
+                Ok(b) => b.filter(|b| b != text(&row["hull_or_chassis"]).trim()),
+                Err(()) => {
+                    unknown = true;
+                    None
+                }
+            },
+            None => None,
+        };
+        if unknown {
+            waits.push(format!("{id} refresh: a tech gate is unknown"));
+            continue;
+        }
+        let changed: Map<String, Value> = wanted
+            .iter()
+            .filter(|(slot, m)| have.get(*slot).map(String::as_str) != m.as_str())
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        if changed.is_empty() && new_base.is_none() {
+            continue;
+        }
+        let (base, modules) = match &new_base {
+            Some(b) => (json!(b), wanted.clone()),
+            None => (json!(current), changed.clone()),
+        };
+        let need = r["xp"]
+            .as_f64()
+            .unwrap_or(5.0 * modules.len().max(1) as f64);
+        if let Some(b) = xp_branch(&kind) {
+            let have_xp = tools
+                .call("hoi4_doctrines", &json!({}))
+                .ok()
+                .and_then(|d| d["experience"][b]["value"].as_f64());
+            if have_xp.is_some_and(|x| x < need) {
+                waits.push(format!(
+                    "{id} refresh: {b} XP {:.0} < {need:.0}",
+                    have_xp.unwrap_or(0.0)
+                ));
+                continue;
+            }
+        }
+        let next = version_name(entry, &name, n + 1);
+        let mut args = Map::new();
+        args.insert("kind".into(), json!(kind));
+        args.insert("base".into(), base);
+        args.insert("name".into(), json!(next));
+        if !modules.is_empty() {
+            args.insert("modules".into(), Value::Object(modules));
+        }
+        let (ok, why) = state.act(
+            tools,
+            run.lease,
+            "hoi4_design_create",
+            Value::Object(args),
+            "dz",
+        )?;
+        let c = code(&why);
+        if ok || c == "name_taken" {
+            state.done.insert(format!("drefresh:{id}:{}", n + 1), now);
+        } else {
+            let days = if c == "insufficient_experience" {
+                7
+            } else {
+                30
+            };
+            note(state, "designs", format!("{id} refresh {next}: {why}"));
+            state.skip(now, "dref", &id, days * DAY);
+        }
+        acted = Some(format!("design refresh {id} -> {next}: {ok} {why}"));
+        break;
+    }
+    if acted.is_none() {
+        state.skip(now, "drefw", "x", 7 * DAY);
+    }
+    Ok(acted)
 }
 
 /// One wanted switch of a production line to another design: `production[].design`,
@@ -555,7 +833,7 @@ fn cover_days(v: &Value, default: Option<f64>) -> Option<f64> {
     }
 }
 
-fn wanted_switches(plan: &Value) -> Vec<Switch> {
+fn wanted_switches(plan: &Value, state: &State) -> Vec<Switch> {
     let designs = list(plan, "designs");
     let mut out: Vec<Switch> = Vec::new();
     for line in list(plan, "production") {
@@ -579,9 +857,10 @@ fn wanted_switches(plan: &Value) -> Vec<Switch> {
                 .find(|e| item_id(e).as_deref() == Some(d.trim()))
         });
         let (label, wanted, gate, mature, cover) = match (item, design) {
+            // a refreshed item: its newest version
             (Some(e), _) => (
-                text(&e["name"]).trim().to_string(),
-                json!(text(&e["name"]).trim()),
+                newest_version(state, e),
+                json!(newest_version(state, e)),
                 item_id(e).map(|id| format!("design:id:{id}")),
                 mature || e["switch_mature"] == json!(true),
                 if own_cover.is_null() {
@@ -630,7 +909,7 @@ fn wanted_switches(plan: &Value) -> Vec<Switch> {
     }
     for e in designs {
         let equipment = text(&e["production"]).trim().to_string();
-        let name = text(&e["name"]).trim().to_string();
+        let name = newest_version(state, e);
         if equipment.is_empty()
             || out
                 .iter()
@@ -699,7 +978,7 @@ fn old_gear_covers(
 
 fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     let (tools, plan, now) = (run.tools, run.plan, run.now);
-    let wanted = wanted_switches(plan);
+    let wanted = wanted_switches(plan, state);
     if wanted.is_empty() || state.skipped(now, "mpdes", "x") {
         return Ok(None);
     }
@@ -3638,6 +3917,8 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
                     }
                 }
             }
+            // the plan names this operative's mission: it may end the one running
+            args["replace"] = json!(true);
             let (ok, why) = state.act(tools, run.lease, "hoi4_operative_assign", args, "io")?;
             let c = code(&why);
             if ok || c == "operative_busy" {
@@ -3838,6 +4119,10 @@ fn intel_networks(
             continue;
         };
         let mut args = json!({"operative": i, "mission": "build_intel_network"});
+        if net["operative"].is_u64() {
+            // the plan named the operative: its running mission may end
+            args["replace"] = json!(true);
+        }
         match net["state_id"].as_u64() {
             Some(id) => args["state_id"] = json!(id),
             None => args["country"] = json!(target),
@@ -4255,6 +4540,129 @@ mod tests {
             None
         );
         assert_eq!(actions(&tools).len(), 2);
+    }
+
+    #[test]
+    fn a_design_follows_the_technology_and_its_line_moves_to_the_new_version() {
+        let tools = fake(vec![
+            (
+                "hoi4_production_lines",
+                json!({"lines": [
+                {"entry_index": 2, "line_kind": "military", "equipment_id": "medium_tank_chassis_1",
+                    "line_handle": "0x10"}]}),
+            ),
+            (
+                "hoi4_designs",
+                json!({"designs": [{"design_id": 5194, "name": "Panzer III S",
+                    "hull_or_chassis": "medium_tank_chassis_1", "production_lines": [],
+                    "modules": [{"slot": "main_armament_slot", "module": "tank_medium_cannon"},
+                                {"slot": "engine_type_slot", "module": "tank_gasoline_engine"}]}]}),
+            ),
+            (
+                "hoi4_research",
+                json!({"researched": [{"id": "basic_machine_tools"}]}),
+            ),
+            (
+                "hoi4_doctrines",
+                json!({"experience": {"army": {"value": 50.0}}}),
+            ),
+        ]);
+        let plan = json!({"manage": {"off": ["mio_lines"]},
+            "designs": [{"id": "t1", "kind": "tank", "base": "Panzer III", "name": "Panzer III S", "xp": 0,
+                "refresh": {"slots": {
+                    "main_armament_slot": [{"module": "tank_medium_cannon_2", "tech": "gun2"}, "tank_medium_cannon"],
+                    "engine_type_slot": ["tank_gasoline_engine"]}}}],
+            "production": [{"equipment": "medium_tank_chassis_1", "factories": 5, "design": "t1"}]});
+        let mut state = State::default();
+        state.done.insert("design:id:t1".into(), START);
+        state
+            .done
+            .insert("pdes:medium_tank_chassis_1:Panzer III S".into(), START);
+        // the cannon 2 tech is not researched: the newest version already has the best modules
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert!(actions(&tools).is_empty());
+        // within the week nothing is looked at again while the research is unchanged
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
+            None
+        );
+        // the tech lands: version 2 from the newest version, only the changed slot
+        tools.reply(
+            "hoi4_research",
+            json!({"researched": [{"id": "basic_machine_tools"}, {"id": "gun2"}]}),
+        );
+        let out = step(&mut state, &tools, &plan, "l", START + 2 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("design refresh t1 -> Panzer III S 2: true Verified")
+        );
+        let sent = actions(&tools);
+        assert_eq!(sent[0].0, "hoi4_design_create");
+        assert_eq!(sent[0].1["base"], "Panzer III S");
+        assert_eq!(sent[0].1["name"], "Panzer III S 2");
+        assert_eq!(
+            sent[0].1["modules"],
+            json!({"main_armament_slot": "tank_medium_cannon_2"})
+        );
+        assert!(state.done.contains_key("drefresh:t1:2"));
+        // the line moves to the newest version
+        let switches = wanted_switches(&plan, &state);
+        assert_eq!(switches.len(), 1);
+        assert_eq!(switches[0].label, "Panzer III S 2");
+        assert_eq!(
+            newest_version(&state, &list(&plan, "designs")[0]),
+            "Panzer III S 2"
+        );
+        // given names win over the numbered default, within 40 characters
+        let named = json!({"name": "X", "refresh": {"names": ["Panzer III J"]}});
+        assert_eq!(version_name(&named, "X", 2), "Panzer III J");
+        assert_eq!(version_name(&named, "X", 3), "X 3");
+        let long = "A".repeat(45);
+        assert_eq!(version_name(&json!({}), &long, 12).chars().count(), 40);
+    }
+
+    #[test]
+    fn a_refresh_to_a_better_base_sends_every_wanted_slot_and_an_unknown_gate_waits() {
+        let tools = fake(vec![
+            (
+                "hoi4_designs",
+                json!({"designs": [{"design_id": 4532, "name": "Bf 109 N",
+                    "hull_or_chassis": "small_plane_airframe_1",
+                    "modules": [{"slot": "fixed_main_weapon_slot", "module": "light_mg_2x"}]}]}),
+            ),
+            (
+                "hoi4_research",
+                json!({"researched": [{"id": "early_fighter"}, {"id": "fighter1"}]}),
+            ),
+        ]);
+        let plan = json!({"designs": [{"id": "f1", "kind": "plane", "base": 4532, "name": "Bf 109 N", "xp": 0,
+            "refresh": {"bases": [{"base": "small_plane_airframe_2", "tech": "fighter1"}, "small_plane_airframe_1"],
+                        "slots": {"fixed_main_weapon_slot": ["light_mg_2x"]}, "xp": 0}}]});
+        let mut state = State::default();
+        state.done.insert("design:id:f1".into(), START);
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("design refresh f1 -> Bf 109 N 2: true Verified")
+        );
+        let sent = actions(&tools);
+        assert_eq!(sent[0].1["base"], "small_plane_airframe_2");
+        assert_eq!(
+            sent[0].1["modules"],
+            json!({"fixed_main_weapon_slot": "light_mg_2x"})
+        );
+        // research unreadable: the tech gate is unknown, nothing is sent and the look waits
+        let tools = fake(vec![(
+            "hoi4_designs",
+            json!({"designs": [{"design_id": 4532, "name": "Bf 109 N",
+                "hull_or_chassis": "small_plane_airframe_1", "modules": []}]}),
+        )]);
+        tools.unreadable.borrow_mut().insert("hoi4_research".into());
+        let mut state = State::default();
+        state.done.insert("design:id:f1".into(), START);
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert!(actions(&tools).is_empty());
+        assert!(state.affairs.notes["designs"].contains("f1 refresh: a tech gate is unknown"));
     }
 
     #[test]
