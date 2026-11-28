@@ -312,7 +312,9 @@ def training(sit, role, count=None, need_date=None, enemies=None):
         flow = eq[bind]["divisions"]
         terms["equipment"] = int(flow)
         why["equipment"] = (f"{bind}: ({eq[bind]['stock']:g} stock + {eq[bind]['per_day']:g} a day x {T:g} days) / "
-                            f"{eq[bind]['need']:g} per division")
+                            f"{eq[bind]['need']:g} per division"
+                            + ("" if sit.state.get("stockpile") else " [no stockpile read: the stock counts 0; read "
+                               "the live stockpile]"))
     # manpower on hand and the training cap
     fielded = 0.0
     oob = sit.world.oob(sit.tag)
