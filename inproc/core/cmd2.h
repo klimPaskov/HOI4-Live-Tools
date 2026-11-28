@@ -88,7 +88,23 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
        /* engineer 105: a division's move (CMoveCommand): (cmd, CUnit *, province id, normal 1, kind 2, 1, four stack bytes
         * 0), the constants of the right click's own call for a reachable province (the province helper of the division's
         * move virtual); the constructor builds the unit action at +auth_off with a one-province path */
-       CTOR_UNIT_PROVINCE = 24 };
+       CTOR_UNIT_PROVINCE = 24,
+       /* engineer 118 (28 Nov): volunteers. The action's own constructor has the SIMPLE signature (action, const tag *sender,
+        * const tag *receiver, const CDate *) and also builds a division handle list (CPdxArray with an inline buffer:
+        * {data -> inline, capacity, count} and its allocator) that the diplomacy view's dialog fills with the chosen
+        * divisions: send (CSendVolunteerAction) and recall (CRecallVolunteerAction) */
+       CTOR_VOLUNTEER = 25,
+       /* engineer 125 (28 Nov): justify a war goal (CGenerateWarGoalAction). Its player constructor is (action, const tag
+        * *sender, const tag *receiver, CWarGoalType *, const CDate *): the type pointer is stored at act_goal_off, an empty
+        * state id list (CPdxArray<int> {data, capacity, size} and its allocator) at act_units_off, and the constructor
+        * sets byte +0xe. The type comes from the game's war goal type database by its key (each type's token named
+        * through the game's own token-to-name function); the states (for take-state goals) are filled through the
+        * list's own allocator, as the battle-plan province lists are */
+       CTOR_DIPLO_JUSTIFY = 26,
+       /* engineer 125: an action with the SIMPLE signature whose division handle list has NO inline places (the
+        * expeditionary force: CSendExpeditionaryForceAction, list +0x70, allocator +0x80); the divisions are filled
+        * through the list's own allocator */
+       CTOR_DIPLO_DIVLIST = 27 };
 /* engineer 74: BUILD_FIELDS also fills CPdxArray fields (a division handle list, a province list): the fresh object's
  * array is empty ({data 0, capacity 0, size 0} and its allocator set by the factory); the module allocates the
  * elements through THAT allocator's own allocate slot (read from the game's array growth code), so the command's
@@ -171,6 +187,9 @@ typedef struct {
      * of its flag bytes (act_flag_off: +0 normal, +1, +2, +3, +4, +5, +8 kind (i32), +0xc), each read from the action's
      * own constructors; act_ctor = that province constructor */
     uint32_t act_handle_off, act_path_off, act_path_cnt_off, act_path2_off;
+    /* engineer 118, CTOR_VOLUNTEER: the action's division handle list: data pointer offset, the inline buffer it points to
+     * after construction, and the inline capacity (the list's count is at +0xc of the list), each from the constructor */
+    uint32_t act_units_off, act_units_inline, act_units_cap;
     unsigned conf, need;
     char evidence[300];
 } cmd_type;
@@ -243,6 +262,12 @@ typedef struct {
     uint32_t date_off, act_date_off;
     uint64_t country_of;
     uint32_t wg_holder_off, wg_list_off, wg_count_off, wg_target_off;
+    /* engineer 125: the war goal type database the justify action's own reader resolves a type through (its slot +0x28:
+     * mov rax,[rip+GOT]; mov rdi,[rax]; ...; call lookup; mov [rbx+TYPE],rax): the GOT slot holding the database
+     * pointer's address, and from the lookup function the type list (data +wgt_arr_off, count +wgt_cnt_off; entry 0 is
+     * the default the lookup falls back to) and a type's token (+wgt_tok_off) */
+    uint64_t wgt_got;
+    uint32_t wgt_arr_off, wgt_cnt_off, wgt_tok_off;
     char evidence[300];
 } diplo_facts;
 
@@ -303,7 +328,23 @@ typedef struct {
     char evidence[400];
 } mio_facts;
 
-#define CMD2_MAX 96
+#define CMD2_MAX 160
+/* engineer 122: every diplomatic action class the game has (the RTTI subclasses of CDiplomaticAction, two levels), with
+ * the shape its player constructor has. A buildable shape becomes one row of the table, family `diplomacy2`, op
+ * "diplomacy2.<key>" (key = the class name in snake case without C and Action), built through the same spec machinery
+ * as the hand-written diplomacy rows; a class a hand-written row already covers is listed with that row's op; any other
+ * class is listed "unsupported:<shape>" with its evidence, never hidden. A new game version's new action class appears
+ * without a code change when its constructor has a known shape. */
+#define DIPLO_CAT_MAX 64
+typedef struct {
+    char cls[72];        /* the Itanium name ("16CGuaranteeAction") */
+    char key[64];        /* "guarantee" */
+    char op[80];         /* the op that posts it ("diplomacy.guarantee" or "diplomacy2.embargo"); empty = unsupported */
+    char shape[48];      /* simple | divisions | war_goal | unsupported:<why> */
+    uint32_t act_type;   /* the type id its constructor stamps (0 when not read) */
+    int on;              /* the op resolved on this build */
+} diplo_class;
+
 typedef struct {
     stage2_common common;
     orders_facts orders;      /* engineer 73: the battle-plan order tree (core/orders.c) */
@@ -316,6 +357,10 @@ typedef struct {
     mio_facts mio;            /* engineer 84: the organisations */
     int n;
     cmd_type t[CMD2_MAX];
+    /* engineer 122: the diplomatic action catalog and the specs of its rows (the rows are t[n - ndyn .. n - 1]) */
+    diplo_class dcat[DIPLO_CAT_MAX];
+    cmd_spec dspec[DIPLO_CAT_MAX];
+    int ndcat, ndyn;
 } stage2_table;
 
 extern const cmd_spec CMD2_SPECS[];
@@ -326,6 +371,8 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
 /* Resolve every spec; returns the number of types on. */
 int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global, stage2_table *t);
 const cmd_type *stage2_find(const stage2_table *t, const char *op);
+/* engineer 122: the catalog as JSON members ("actions":[...]) for the module's diplomacy_actions read */
+const char *stage2_diplo_json(const stage2_table *t, char *buf, size_t n);
 /* 1 if every type of the family is on */
 int stage2_family_on(const stage2_table *t, const char *family);
 const char *stage2_json(const stage2_table *t, char *buf, size_t n);

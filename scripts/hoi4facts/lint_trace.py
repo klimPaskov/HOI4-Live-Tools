@@ -13,8 +13,9 @@ Rules (added to lint_plan.Lint by check()):
                    the entry waits for) or without `why`; each well-formed row is listed as info so the
                    inert work stays visible.
   trace.goals      a `goals` row without a source, or a `constraints` switch without value or why.
-  trace.airborne   `airborne.enabled` false while the plan still has paratrooper templates, drops or raids
-                   outside `_inert`; enabled true in a FAIR plan without a roleplay goal or an owner switch
+  trace.airborne   `airborne.enabled` false while the plan still has drops, or paratrooper templates no raid
+                   row needs, outside `_inert` (a raid row has its own rule switch: eben_emael_raid is allowed in
+                   FAIR); enabled true in a FAIR plan without a roleplay goal or an owner switch
                    (owner, 28 Nov: "paratroopers yes, aren't considered for fair play").
   trace.volunteers a `volunteers` row without divisions (land) or planes (air), or an air row above 20% of
                    the planes the plan's air_plan fields (AIR_VOLUNTEER_PLANES_RATIO).
@@ -113,8 +114,11 @@ def check(lint):
 
     air = plan.get("airborne") if isinstance(plan.get("airborne"), dict) else None
     if air is not None:
-        live = [x for x in _paratroopers(plan) if x.split(" ", 1)[1] not in inert_ids]
-        live += ["airborne.%s %s" % (k, r.get("id")) for k in ("drops", "raids") for r in air.get(k) or []
+        # a raid row keeps its own rule switch (eben_emael_raid is allowed in FAIR): its paratroopers are not drops
+        raids = [r for r in air.get("raids") or [] if isinstance(r, dict) and str(r.get("id")) not in inert_ids
+                 and (cons.get(str(r.get("switch"))) or {}).get("value", True) is not False]
+        live = [] if raids else [x for x in _paratroopers(plan) if x.split(" ", 1)[1] not in inert_ids]
+        live += ["airborne.drops %s" % r.get("id") for r in air.get("drops") or []
                  if isinstance(r, dict) and str(r.get("id")) not in inert_ids]
         if not air.get("enabled") and live:
             lint.add("warning", "trace.airborne", "airborne", "drops are switched off but the plan still has: "

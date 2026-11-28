@@ -16,11 +16,15 @@ Value in factory-years earned between the technology's completion and the horizo
   country modifiers     evaluators/value.py (the pick_value weights): held T years; construction speed also counts the
                         factories it builds (compounding, T^2); research_speed_factor counts the research it speeds up:
                         x x slots x 365 x the mean value per research day of the best candidates, per year
-  the army              the technology is added to our techs and every fielded template is rebuilt (divstats): its
-                        endurance ratio R against the enemy template moves by x (IC-weighted over the army). A unit or
-                        category modifier lifts the whole army: x x (army IC / IC per factory-year) once plus x x
-                        military factories x T for what is built later; a new equipment variant only lifts what is
-                        built after it: x x military factories x T
+  the army              the technology is added to our techs and the templates are rebuilt (divstats): the endurance
+                        ratio R against the enemy template moves by x. The army standing (start OOB or snapshot,
+                        IC-weighted) gains x_mod x (army IC / IC per factory-year) once from a unit or category
+                        modifier (new equipment does not reach divisions already equipped); what is built later is
+                        the line template evaluator 2 computes now (the army the plan fields, not the start's), and
+                        gains (x_mod + x_eq) per military factory-year
+  military factories    grow over the horizon: today's plus what the civilian factories not on consumer goods build
+                        (build_rate per year each), integrated from the technology's completion to the horizon; the
+                        country modifiers weighted by military factories use the same integral
   unlocks               sub-units, buildings, modules and designer chassis are listed; their worth arrives through the
                         technologies after them (the chain rate) and through evaluators 1 and 2 when fielded
 Rank: the chain rate, the best (value / days) over chains of up to three technologies starting here, so a gateway is
@@ -65,9 +69,25 @@ class Army:
         self.archs = sorted({self.b.data.archetype(e) for r in self.rows for x in r["bats"] + r["sup"]
                              for e in (self.b.data.units.get(x) or {}).get("need", {})})
         self.ic = sum(r["n"] * r["ic"] for r in self.rows)
+        # what is built from now on: the line template computed for today's techs and enemy
+        self.future = []
+        try:
+            t = (template.best(sit, "line", enemies=enemies, top=1).get("templates") or [None])[0]
+        except Exception:  # noqa: BLE001 - no fieldable template: the standing army stands in
+            t = None
+        if t:
+            bats = [k for k, n in t["battalions"].items() for _ in range(n)]
+            sup = list(t["support"]) + list(t["regimental"])
+            if all(self.b.fieldable(x) for x in bats + sup):
+                ic, _, _ = self.b.cost(bats, sup)
+                self.future = [{"template": "computed line", "n": 1, "bats": bats, "sup": sup, "ic": ic}]
+        self.archs = sorted(set(self.archs) | {self.b.data.archetype(e) for r in self.future
+                                               for x in r["bats"] + r["sup"]
+                                               for e in (self.b.data.units.get(x) or {}).get("need", {})})
         self.base_mods = divstats.factors(self.b.data, self.have, self.doctrines)
         self.base_eq = dict(self.b.equipment)
         self.r0 = [self._r(r, self.base_mods, self.base_eq) for r in self.rows]
+        self.f0 = [self._r(r, self.base_mods, self.base_eq) for r in self.future]
 
     def _r(self, row, mods, eq):
         if self.enemy is None:
@@ -80,9 +100,10 @@ class Army:
         return (r_def * r_att) ** 0.5
 
     def lift(self, tech):
-        """(x from unit and category modifiers, x from new equipment, [equipment it brings to the army])."""
+        """(x from unit and category modifiers on the standing army, x from new equipment on it, [equipment it brings],
+        x of what is built later: the computed line template with both, or the standing army's when there is none)."""
         if not self.rows or self.ic <= 0:
-            return 0.0, 0.0, []
+            return 0.0, 0.0, [], 0.0
         techs = self.have | {tech}
         mods_new = self.b.data.techs.get(tech)
         eq = dict(self.base_eq)
@@ -93,7 +114,7 @@ class Army:
                 eq[a] = n
                 changed.append(n)
         if not mods_new and not changed:
-            return 0.0, 0.0, []
+            return 0.0, 0.0, [], 0.0
         mods = divstats.factors(self.b.data, techs, self.doctrines) if mods_new else self.base_mods
         x_mod = x_eq = 0.0
         for row, r0 in zip(self.rows, self.r0):
@@ -102,7 +123,11 @@ class Army:
             r_all = self._r(row, mods, eq) if changed else r_mod
             x_mod += w * (r_mod / r0 - 1)
             x_eq += w * (r_all / r_mod - 1)
-        return x_mod, x_eq, changed
+        x_new = x_mod + x_eq
+        if self.future:
+            row, f0 = self.future[0], self.f0[0]
+            x_new = self._r(row, mods, eq) / f0 - 1 if f0 else 0.0
+        return x_mod, x_eq, changed, x_new
 
 
 def unlocks(sit):
@@ -142,6 +167,12 @@ class Model:
         self.horizon = horizon_years * 365.0
         self.overrides = overrides
         self.army = Army(sit, enemies)
+        from .construction import consumer_goods
+        cg, _ = consumer_goods(sit)
+        # military factories added a year: every civilian factory not on consumer goods building them [?: the
+        # construction evaluator's civilian years first are not modelled here; they add more later]
+        self.cg = cg
+        self.mil_growth = self.rate * max(0.0, self.base["Civilian"] * (1 - cg))
         self.mods = {t: m for t, m in _tech_mods(sit).items()}
         self.unl = unlocks(sit)
         self.coef = {}
@@ -164,6 +195,7 @@ class Model:
         lin = quad = stock = 0.0
         parts = {}
         unvalued = []
+        per_mil = 0.0  # factory-years per military factory-year (integrated over the growing count)
         for k, v in mods.items():
             if k == "research_speed_factor":
                 continue
@@ -171,17 +203,24 @@ class Model:
             if w is None:
                 unvalued.append(k)
                 continue
-            lin += v * w
+            if value.WEIGHTS.get(k, ("",))[0] == "Military" and not (self.overrides and k in self.overrides):
+                per_mil += v * value.WEIGHTS[k][1]
+                lin += v * w
+            else:
+                lin += v * w
             parts[k] = v * w
             if value.WEIGHTS.get(k, ("",))[0] == "Civilian":
                 quad += v * w * self.rate / 2.0
-        x_mod, x_eq, eq = self.army.lift(tid)
-        if x_mod or x_eq:
+        x_mod, x_eq, eq, x_new = self.army.lift(tid)
+        if x_mod or x_eq or x_new:
             stock += x_mod * self.army.ic / self.icfy
-            lin += (x_mod + x_eq) * self.base["Military"]
-            parts["army"] = round(x_mod + x_eq, 4)
-        return {"lin": lin, "quad": quad, "stock": stock, "parts": parts, "unvalued": unvalued,
-                "x_mod": x_mod, "x_eq": x_eq, "equipment": eq, "unlocks": self.unl.get(tid, [])}
+            lin += x_new * self.base["Military"]
+            per_mil += x_new
+            parts["army"] = round(x_new, 4)
+            if x_mod:
+                parts["army_standing"] = round(x_mod, 4)
+        return {"lin": lin, "quad": quad, "stock": stock, "parts": parts, "unvalued": unvalued, "per_mil": per_mil,
+                "x_mod": x_mod, "x_eq": x_eq, "x_new": x_new, "equipment": eq, "unlocks": self.unl.get(tid, [])}
 
     def years_left(self, day_done):
         return max(0.0, (self.horizon - day_done) / 365.0)
@@ -189,7 +228,11 @@ class Model:
     def _value_at(self, tid, day_done):
         c = self.coef[tid]
         T = self.years_left(day_done)
-        return c["lin"] * T + c["quad"] * T * T + (c["stock"] if T > 0 else 0.0)
+        if T <= 0:
+            return 0.0
+        h, t0 = self.horizon / 365.0, day_done / 365.0
+        grown = c.get("per_mil", 0.0) * self.mil_growth * (h * h - t0 * t0) / 2.0  # the factories added meanwhile
+        return c["lin"] * T + c["quad"] * T * T + c["stock"] + grown
 
     def days(self, tid, day, bonus=0.0, ahead_reduction=0.0):
         t = self.table[tid]
@@ -324,6 +367,9 @@ def evaluate(sit, slots=None, picks=3, horizon_years=4.0, enemies=None, override
                         for r, t, d in ranked[:8]],
             "model": {"research_speed": m.speed, "base": m.base, "ic_per_factory_year": round(m.icfy, 1),
                       "build_rate": round(m.rate, 3), "build_rate_why": m.rate_why, "horizon_years": horizon_years,
+                      "military_growth_per_year": round(m.mil_growth, 2), "consumer_goods": m.cg,
+                      "future_template": (m.army.future[0]["bats"][:1] + [len(m.army.future[0]["bats"])] +
+                                          m.army.future[0]["sup"]) if m.army.future else None,
                       "mean_rate": round(m.mean_rate, 4), "army_ic": round(m.army.ic), "army_templates":
                       len(m.army.rows), "enemy_template": m.army.enemy_why,
                       "defines": [sit.define_src(k) for k in ("BASE_TECH_COST", "BASE_YEAR_AHEAD_PENALTY_FACTOR",

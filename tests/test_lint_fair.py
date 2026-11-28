@@ -175,7 +175,14 @@ class Seeded(unittest.TestCase):
                          "fair.ghost_divisions")
 
     # ------------------------------------------------------------------ navy and air
+    def test_submarines_are_free_without_a_rule_set(self):
+        p = self.italy(production=[{"equipment": "ship_hull_submarine_3", "factories": 1}])
+        self.assertEqual(self.hits(p, "fair.submarines", "error", ""), [])
+        self.assertHit(p, "fair.submarines", "info", "tier-3")
+
     def test_submarines(self):
+        mp = {"_rules": {"multiplayer": {"submarines": False}}}
+        self.italy = (lambda f: lambda **kw: f(**{**mp, **kw}))(self.italy)
         p = self.italy()
         p["research_path"][0]["techs"].append("improved_submarine")
         self.assertHit(p, "fair.submarines", text="improved_submarine")
@@ -196,7 +203,7 @@ class Seeded(unittest.TestCase):
 
     def test_small_submarine_fleet(self):
         navy = {"posture": "coastal", "fleets": [{"fleet": "Latvijas Kara Flote", "missions": [{"mission": "patrol"}]}]}
-        self.assertHit(plan("LAT", navy=navy), "fair.submarines", text="2 submarines")
+        self.assertHit(plan("LAT", navy=navy), "fair.submarine_fleets", text="2 submarines")
 
     def test_naval_mines_and_blockade(self):
         navy = {"posture": "coastal", "fleets": [{"fleet": "Kriegsmarine", "missions": [

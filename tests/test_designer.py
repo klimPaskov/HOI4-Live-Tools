@@ -44,6 +44,25 @@ duplicate_archetypes = {
         variant_name = { small_plane_cas_airframe_1 = CAS_equipment_1 } }
 }
 equipments = { CAS_equipment_1 = { archetype = small_plane_cas_airframe year = 1936 } }
+equipments = {
+    ship_hull_light = {
+        year = 1922
+        is_archetype = yes
+        type = screen_ship
+        module_slots = {
+            fixed_ship_engine_slot = { required = yes allowed_module_categories = { engine } }
+            fixed_ship_battery_slot = { required = yes allowed_module_categories = { fixed_gun } }
+        }
+        build_cost_ic = 100
+    }
+    ship_hull_light_1 = { archetype = ship_hull_light year = 1922 module_slots = inherit }
+    ship_hull_light_2 = { archetype = ship_hull_light parent = ship_hull_light_1 year = 1936
+        module_slots = {
+            fixed_ship_engine_slot = inherit
+            mid_1_custom_slot = { required = no allowed_module_categories = { fuel } }
+        }
+    }
+}
 """
 MODULES = """
 equipment_modules = {
@@ -101,6 +120,21 @@ class DesignerTest(unittest.TestCase):
         self.assertIn("small_plane_cas_airframe_2", self.cat.equip)  # duplicated family
         self.assertEqual(self.cat.base_stats("small_plane_cas_airframe_1")["air_range"], 650)
         self.assertEqual(len(self.cat.slots("small_plane_cas_airframe_2")), 4)
+
+    def test_slot_inherit_whole_and_per_slot(self):
+        # module_slots = inherit: the archetype's slots
+        self.assertEqual([s["slot"] for s in self.cat.slots("ship_hull_light_1")],
+                         ["fixed_ship_engine_slot", "fixed_ship_battery_slot"])
+        # fixed_ship_engine_slot = inherit: that slot as the archetype defines it; a slot it does not list is gone
+        s2 = self.cat.slots("ship_hull_light_2")
+        self.assertEqual([s["slot"] for s in s2], ["fixed_ship_engine_slot", "mid_1_custom_slot"])
+        self.assertEqual(s2[0]["categories"], ["engine"])
+        self.assertTrue(s2[0]["required"])
+        ev = designer.evaluate(self.cat, "ship_hull_light_2",
+                               {"fixed_ship_engine_slot": "engine_1", "mid_1_custom_slot": "fuel_tank"})
+        self.assertEqual(ev["problems"], [])
+        ev = designer.evaluate(self.cat, "ship_hull_light_2", {"mid_1_custom_slot": "fuel_tank"})
+        self.assertIn("required slot fixed_ship_engine_slot empty", " ".join(ev["problems"]))
 
     def test_stat_rule_add_then_multiply(self):
         ev = designer.evaluate(self.cat, "small_plane_airframe_2",
@@ -182,6 +216,28 @@ class DesignerTest(unittest.TestCase):
         self.assertIn("computed:", row["why"])
 
 
+    def test_plan_fragment_refresh_follows_the_techs(self):
+        tech_year = {"early_fighter": 1936, "better_fighter": 1940}
+        dated = designer.plan_fragment(self.cat, "GER", {"early_fighter"}, [1936, 1940], ["fighter"], tech_year,
+                                        objective="value")
+        self.assertEqual(len(dated["designs"]), 2)
+        frag = designer.plan_fragment(self.cat, "GER", {"early_fighter"}, [1936, 1940], ["fighter"], tech_year,
+                                      objective="value", refresh=True)
+        self.assertEqual(len(frag["designs"]), 1)
+        row = frag["designs"][0]
+        self.assertEqual(row["base"], "small_plane_airframe_1")
+        r = row["refresh"]
+        # the later year's base first, gated by the tech that unlocks it; the start base needs no tech
+        self.assertEqual(r["bases"][0], {"base": "small_plane_airframe_2", "tech": "better_fighter"})
+        self.assertEqual(r["bases"][-1], "small_plane_airframe_1")
+        # every slot of the first design has candidates; a later module carries its tech
+        for slot in row["modules"]:
+            self.assertIn(slot, r["slots"])
+        later = [c for cands in r["slots"].values() for c in cands if isinstance(c, dict)]
+        self.assertTrue(later)
+        self.assertTrue(all(c["tech"] == "better_fighter" for c in later))
+        self.assertIn("refresh:", row["why"])
+
     def test_mio_bonus_and_rank(self):
         orgs = [{"id": "range_co", "equipment_type": ["mio_cat_small"],
                  "initial_trait": {"equipment_bonus": {"air_range": 0.5}},
@@ -254,6 +310,15 @@ class Golden(unittest.TestCase):
         self.assertIn("small_plane_cas_airframe_2", bases)
         self.assertNotIn("CAS_equipment_2", bases)
         self.assertNotIn("fighter_equipment_2", bases)
+
+    def test_recon_role_puts_the_camera_on_a_small_airframe(self):
+        # G250: the scout plane is a small airframe with the recon camera (it adds the scout_plane type); its weapon
+        # slots keep their own weapons
+        bases, _ = designer.available(self.cat, {"basic_small_airframe"})
+        out = designer.best(self.cat, "recon", bases, set(self.cat.modules), top=1)
+        self.assertTrue(out["designs"], out.get("rejected_by"))
+        self.assertIn("recon_camera", out["designs"][0]["modules"].values())
+        self.assertIn("scout_plane", out["designs"][0]["types"])
 
     def test_turret_opens_the_main_armament_and_duplicates_evaluate(self):
         # the three-man turret adds tank_medium_main_armament to main_armament_slot; the tank-destroyer chassis is a

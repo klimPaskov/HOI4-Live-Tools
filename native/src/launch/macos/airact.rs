@@ -484,9 +484,14 @@ pub(super) fn settle_merge(plan: &MergePlan, wings: &[Wing]) -> Verdict {
         Verdict::Diverged
     }
 }
+/// Whether a wing flies training (pilot exercises) and nothing else: the game gives training no
+/// region, so Hold has no region to clear; the training is stopped by its own mission button.
+pub(super) fn training_only(region_id: i32, mission_mask: i32) -> bool {
+    region_id <= 0 && airread::training(mission_mask)
+}
 pub(super) fn plan_hold(wings: &[Wing], wing: &str) -> Result<WingSnap> {
     let w = find_wing(wings, wing)?;
-    if w.region_id <= 0 {
+    if w.region_id <= 0 && !training_only(w.region_id, w.mission_mask) {
         return Err(Error::new(
             "nothing_to_change",
             format!("{} is standing by (no assigned region)", w.name),
@@ -495,6 +500,16 @@ pub(super) fn plan_hold(wings: &[Wing], wing: &str) -> Result<WingSnap> {
     Ok(snap(w))
 }
 pub(super) fn settle_hold(before: &WingSnap, now: Option<&WingSnap>) -> Verdict {
+    if training_only(before.region_id, before.mission_mask) {
+        return match now {
+            Some(n) if n.region_id <= 0 && !airread::training(n.mission_mask) => Verdict::Reached,
+            Some(n) if n.mission_mask == before.mission_mask && n.region_id <= 0 => {
+                Verdict::Unchanged
+            }
+            Some(_) => Verdict::Diverged,
+            None => Verdict::Unknown,
+        };
+    }
     match now {
         Some(n) if n.region_id <= 0 => Verdict::Reached,
         Some(n) if n.region_id == before.region_id => Verdict::Unchanged,
@@ -1442,6 +1457,37 @@ pub(super) fn hold(process: &dyn Process, keys: &dyn GameInput, wing: &str) -> R
                 "The selection is not exactly this wing; nothing was held",
             ));
         }
+        // training has no region for Hold to clear: its own mission button toggles it off (the
+        // button of a mission every selected wing flies takes it away), read back by the mask
+        if read(process, |r, i| own_wing(r, i, wing))?
+            .is_some_and(|w| training_only(w.region_id, w.mission_mask))
+        {
+            let frame = air::mission_frame("training")
+                .ok_or_else(|| Error::new("invalid_arguments", "No training mission frame"))?;
+            let bit = 1 << (frame - 1);
+            let buttons = settled(process, "mission buttons", air::mission_buttons)?;
+            let Some((_, button, enabled, _)) =
+                buttons.iter().find(|(f, _, _, _)| *f == frame).cloned()
+            else {
+                return Err(Error::new(
+                    "hold_unavailable",
+                    "The training button is not shown for this wing",
+                ));
+            };
+            if !enabled {
+                return Err(Error::new(
+                    "hold_unavailable",
+                    "The game disables the training button for this wing",
+                ));
+            }
+            let (x, y) = button.center();
+            click(keys, x, y)?;
+            let name = wing.to_string();
+            wait(process, "training stopped", move |r, i| {
+                Ok(own_wing(r, i, &name)?.is_some_and(|w| w.mission_mask & bit == 0))
+            })?;
+            return Ok(json!({"wing":wing,"held":true,"training_stopped":true}));
+        }
         let (rect, state) = settled(process, "hold button", |r, i| {
             airui::toolbar(r, i, "btn_hold")
         })?;
@@ -2246,6 +2292,15 @@ mod tests {
         held.mission_mask = 0;
         held.region_id = 0;
         assert_eq!(settle_hold(&b, Some(&held)), Verdict::Reached);
+        // a training wing has no region: Hold stops it by the training button, judged by the mask
+        let tbit = 1 << (air::mission_frame("training").unwrap() - 1);
+        w[0].mission_mask = tbit;
+        w[0].region_id = 0;
+        let t = plan_hold(&w, "Jagdgeschwader 132").unwrap();
+        assert_eq!(settle_hold(&t, Some(&snap(&w[0]))), Verdict::Unchanged);
+        let mut stopped = snap(&w[0]);
+        stopped.mission_mask = 0;
+        assert_eq!(settle_hold(&t, Some(&stopped)), Verdict::Reached);
         let nothing = snap(&fixture().1[0]);
         assert_eq!(
             settle_mission(&nothing, Some(&b), 1, Some(7)),

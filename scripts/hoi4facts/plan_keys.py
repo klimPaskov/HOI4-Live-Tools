@@ -55,7 +55,8 @@ EXECUTOR_SOURCES = [PLAN_RUN] + [os.path.join(ROOT, "native", "src", name)
                                               "plan_affairs.rs", "plan_war.rs", "plan_route.rs",
                                               "plan_seams.rs", "plan_encircle.rs", "plan_strike.rs", "plan_operation.rs",
                                               "plan_ship.rs", "plan_speed.rs", "plan_omissions.rs",
-                                              "plan_divisions.rs", "plan_logistics.rs", "plan_air.rs")]
+                                              "plan_divisions.rs", "plan_logistics.rs", "plan_air.rs",
+                                              "plan_airborne.rs", "plan_volunteers.rs")]
 # Sources searched for a key's name when no read pattern finds it (helpers with their own variables).
 LITERAL_SOURCES = EXECUTOR_SOURCES + [os.path.join(ROOT, "native", "src", name)
                                       for name in ("plan_formations.rs", "alarms.rs", "watch.rs",

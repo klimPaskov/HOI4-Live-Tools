@@ -30,6 +30,20 @@
 //!                branch; an unreadable XP leaves the check to the tool (insufficient_experience). A design
 //!                `name` that already exists (hoi4_designs) counts as done. Tool: tank and plane live 1-2 Nov
 //!                with 10 DLC, ship 31 Oct with 3 DLC
+//!   designs[].refresh  {"slots"?:{slot:[candidate, ..best first]},"bases"?:[candidate, ..best first],
+//!                "xp"?,"names"?:[..]}: the design follows the technology. A candidate is a module key (a
+//!                base: a type key) or {"module"|"base", "tech"?, "when"?}: it is available once its `tech`
+//!                is researched (tech_done) and its `when` holds. After the item's design is made, each look
+//!                (weekly, and at once after a research completes) compares the best available candidate per
+//!                slot with the modules of the newest version (hoi4_designs detail) and the best available
+//!                base with its hull or chassis; when one differs, a new version is made through
+//!                hoi4_design_create from the newest version (only the changed slots) or, for a better base,
+//!                from that base type (every wanted slot). Version names: `names` in order, else
+//!                "<name> <n>" from 2. The candidate lists come from the designer evaluator (designer.py
+//!                refresh), so nothing is ranked here. The item's production line (`designs[].production`, or
+//!                a production entry whose `design` is the item's id) moves to each new version through the
+//!                line switch below, with its mature-line guard. XP guard as for the item (default 5 per
+//!                changed slot). Done keys: drefresh:<id>:<n> (n = 2, 3, ..)
 //!   production[].design  a design (a `designs` id, a design name or a design id number) the line of
 //!                that `equipment` switches to, once, through hoi4_design_set_production (line index from
 //!                hoi4_production_lines, design id from hoi4_designs; `accept_progress_loss` default true).
@@ -61,8 +75,9 @@
 //!                Against Tyranny the design click opens the MIO chooser (not live-verified)
 //!   diplomacy    [{"id","action","target":TAG,"when"?,"world_tension_max"?,..}] in list order, each done once
 //!                per `id` (else action and target) through hoi4_diplomacy_act. `action`: "justify"
-//!                (justify_war_goal; needs "war_goal" (a type, e.g. "Conquer") and "states" (1-5 names as
-//!                hoi4_diplomacy lists them); a goal against the target in hoi4_diplomacy_state
+//!                (justify_war_goal; needs "war_goal_key" (the game's key, e.g. "take_state") with "state_ids"
+//!                for a goal on states (by command), or "war_goal" (a type, e.g. "Conquer") and "states" (1-5
+//!                names as hoi4_diplomacy lists them; the dialog); a goal against the target in hoi4_diplomacy_state
 //!                own_war_goals, or a war with it, counts as done), "declare" (declare_war, below),
 //!                "guarantee", "non_aggression" (or "nap"), "access" (ask_military_access),
 //!                "offer_access", "docking", "improve_relations", "send_attache", "invite_to_faction",
@@ -140,9 +155,11 @@
 //!                (rule mio_lines, manage.off "mio_lines"); an empty `traits` list (or "auto") keeps one
 //!                trait queued (rule mio_traits, monthly listing);
 //!                `policy` attaches that policy once (hoi4_mio_policy), then the traits are queued in list
-//!                order, one per action (hoi4_mio_trait). Trait entries carry no text in the game, so a trait
-//!                is its 0-based trait_index as hoi4_mio_trait list:true numbers it (a numeric string is
-//!                read too; another string stops that organisation's traits with a note).
+//!                order, one per action (hoi4_mio_trait). A trait is its key (the scripts' trait token, e.g.
+//!                GER_mio_trait_technical_superiority; hoi4_mio_trait resolves it through the module's
+//!                organisations read, refused trait_key_unresolved without it) or its 0-based trait_index
+//!                as hoi4_mio_trait list:true numbers it (a numeric string is read too; any other string
+//!                stops that organisation's traits with a note).
 //!                trait_already_queued counts as done; trait_unavailable/trait_not_visible leave the
 //!                organisation 14 game days; mio_system_absent leaves the whole key 30 days. No tool reads
 //!                trait points (hoi4_mios state_read:false), and the game's `mio_traits` alert still wakes
@@ -297,10 +314,11 @@ type Section = fn(&mut State, &Run<'_>) -> Result<Option<String>>;
 /// The affairs sections as lanes of the pass (plan_run.rs `lanes`), in their old chain order;
 /// the design companies are three lanes: lines first, the plan's organisations, then the traits
 /// of every organisation on a line.
-pub(super) const LANES: [super::Lane; 12] = [
+pub(super) const LANES: [super::Lane; 13] = [
     ("diplomacy", |s, t, p, l, n| {
         diplomacy_step(s, &Run::new(t, p, l, n))
     }),
+    ("volunteers", super::plan_volunteers::volunteers_step),
     ("faction", |s, t, p, l, n| {
         faction_step(s, &Run::new(t, p, l, n))
     }),
@@ -510,11 +528,275 @@ fn designs_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         }
         return Ok(Some(format!("design {kind} {label}: {ok} {why}")));
     }
+    if let Some(done) = refresh_step(state, run, &mut waits)? {
+        return Ok(Some(done));
+    }
     if !waits.is_empty() {
         note(state, "designs", waits.join("; "));
         state.skip(now, "mdes", "x", DAY);
     }
     Ok(None)
+}
+
+// ---------------------------------------------------------------------------------------------
+// W1-02: the design follows the technology (designs[].refresh).
+
+/// One ranked candidate of a refresh list: the module or base key, its tech gate and its `when`.
+fn refresh_candidate(v: &Value, field: &str) -> Option<(String, Option<String>, Value)> {
+    match v {
+        Value::String(k) if !k.trim().is_empty() => Some((k.trim().to_string(), None, Value::Null)),
+        Value::Object(o) => {
+            let key = o
+                .get(field)
+                .map(|v| text(v).trim().to_string())
+                .unwrap_or_default();
+            if key.is_empty() {
+                return None;
+            }
+            let tech = o
+                .get("tech")
+                .map(|t| text(t).trim().to_string())
+                .filter(|t| !t.is_empty());
+            Some((key, tech, o.get("when").cloned().unwrap_or(Value::Null)))
+        }
+        _ => None,
+    }
+}
+
+/// The first candidate of a ranked list that is available now: Ok(Some(key)), Ok(None) when none
+/// is, Err(()) when a gate cannot be read (the look waits).
+fn best_available(
+    state: &mut State,
+    tools: &dyn Tools,
+    list: &[Value],
+    field: &str,
+    now: GameHour,
+) -> std::result::Result<Option<String>, ()> {
+    for v in list {
+        let Some((key, tech, when)) = refresh_candidate(v, field) else {
+            continue;
+        };
+        let mut all = Vec::new();
+        if let Some(t) = tech {
+            all.push(json!(format!("tech_done:{t}")));
+        }
+        if !when.is_null() {
+            all.push(when);
+        }
+        let gate = if all.is_empty() {
+            Truth::True
+        } else {
+            when_holds(state, tools, &json!({ "all": all }), now)
+        };
+        match gate {
+            Truth::True => return Ok(Some(key)),
+            Truth::False => continue,
+            Truth::Unknown => return Err(()),
+        }
+    }
+    Ok(None)
+}
+
+/// The name of version `n` (2, 3, ..) of a design: `names[n-2]`, else "<name> <n>", kept within
+/// the designer's 40 characters.
+fn version_name(entry: &Value, name: &str, n: usize) -> String {
+    if let Some(given) = entry["refresh"]["names"]
+        .as_array()
+        .and_then(|a| a.get(n.wrapping_sub(2)))
+        .map(|v| text(v).trim().to_string())
+        .filter(|v| !v.is_empty())
+    {
+        return given.chars().take(40).collect();
+    }
+    let suffix = format!(" {n}");
+    let room = 40usize.saturating_sub(suffix.chars().count());
+    let stem: String = name.chars().take(room).collect();
+    format!("{}{suffix}", stem.trim_end())
+}
+
+/// Versions of a refreshed item made so far (1 = only the item's own design).
+fn versions_made(state: &State, id: &str) -> usize {
+    let prefix = format!("drefresh:{id}:");
+    1 + state.done.keys().filter(|k| k.starts_with(&prefix)).count()
+}
+
+/// The newest version's name of a designs item (the item's own name before any refresh).
+fn newest_version(state: &State, entry: &Value) -> String {
+    let name = text(&entry["name"]).trim().to_string();
+    match item_id(entry) {
+        Some(id) if entry["refresh"].is_object() => {
+            let n = versions_made(state, &id);
+            if n > 1 {
+                version_name(entry, &name, n)
+            } else {
+                name
+            }
+        }
+        _ => name,
+    }
+}
+
+/// Researched technologies count at the last refresh look (a completed research looks again at
+/// once instead of waiting for the weekly look).
+fn researched_count(tools: &dyn Tools) -> Option<usize> {
+    let mut ctx = crate::plan_predicate::Ctx::new(tools, 0);
+    ctx.researched().map(HashSet::len)
+}
+
+fn refresh_step(
+    state: &mut State,
+    run: &Run<'_>,
+    waits: &mut Vec<String>,
+) -> Result<Option<String>> {
+    let (tools, plan, now) = (run.tools, run.plan, run.now);
+    let items: Vec<&Value> = list(plan, "designs")
+        .iter()
+        .filter(|e| e["refresh"].is_object())
+        .collect();
+    if items.is_empty() {
+        return Ok(None);
+    }
+    // weekly, or at once when the researched count changed since the last look
+    let count = researched_count(tools);
+    let count_key = format!("drefresh_count:{}", count.unwrap_or(0));
+    let fresh_research = count.is_some() && !state.seen.contains_key(&count_key);
+    if !fresh_research && state.skipped(now, "drefw", "x") {
+        return Ok(None);
+    }
+    if count.is_some() {
+        state.seen.retain(|k, _| !k.starts_with("drefresh_count:"));
+        state.seen.insert(count_key, now);
+    }
+    let mut acted: Option<String> = None;
+    for entry in items {
+        let Some(id) = item_id(entry) else {
+            waits.push("refresh: an item without id".into());
+            continue;
+        };
+        let name = text(&entry["name"]).trim().to_string();
+        let kind = entry["kind"]
+            .as_str()
+            .or(entry["type"].as_str())
+            .unwrap_or("")
+            .trim()
+            .to_lowercase();
+        if name.is_empty() || !state.done.contains_key(&format!("design:id:{id}")) {
+            continue;
+        }
+        if state.skipped(now, "dref", &id) {
+            waits.push(format!("{id} refresh: waiting after a refusal"));
+            continue;
+        }
+        let r = &entry["refresh"];
+        let n = versions_made(state, &id);
+        let current = newest_version(state, entry);
+        let Some(row) = tools
+            .call("hoi4_designs", &json!({"name": current, "detail": true}))
+            .ok()
+            .and_then(|v| list(&v, "designs").first().cloned())
+        else {
+            waits.push(format!("{id} refresh: {current} not listed yet"));
+            continue;
+        };
+        let have: HashMap<String, String> = list(&row, "modules")
+            .iter()
+            .filter_map(|m| {
+                let slot = text(&m["slot"]).trim().to_string();
+                (!slot.is_empty()).then(|| (slot, text(&m["module"]).trim().to_string()))
+            })
+            .collect();
+        let mut wanted: Map<String, Value> = Map::new();
+        let mut unknown = false;
+        if let Some(slots) = r["slots"].as_object() {
+            for (slot, cands) in slots {
+                let Some(cands) = cands.as_array() else {
+                    continue;
+                };
+                match best_available(state, tools, cands, "module", now) {
+                    Ok(Some(m)) => {
+                        wanted.insert(slot.clone(), json!(m));
+                    }
+                    Ok(None) => {}
+                    Err(()) => unknown = true,
+                }
+            }
+        }
+        let new_base = match r["bases"].as_array() {
+            Some(bases) => match best_available(state, tools, bases, "base", now) {
+                Ok(b) => b.filter(|b| b != text(&row["hull_or_chassis"]).trim()),
+                Err(()) => {
+                    unknown = true;
+                    None
+                }
+            },
+            None => None,
+        };
+        if unknown {
+            waits.push(format!("{id} refresh: a tech gate is unknown"));
+            continue;
+        }
+        let changed: Map<String, Value> = wanted
+            .iter()
+            .filter(|(slot, m)| have.get(*slot).map(String::as_str) != m.as_str())
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        if changed.is_empty() && new_base.is_none() {
+            continue;
+        }
+        let (base, modules) = match &new_base {
+            Some(b) => (json!(b), wanted.clone()),
+            None => (json!(current), changed.clone()),
+        };
+        let need = r["xp"]
+            .as_f64()
+            .unwrap_or(5.0 * modules.len().max(1) as f64);
+        if let Some(b) = xp_branch(&kind) {
+            let have_xp = tools
+                .call("hoi4_doctrines", &json!({}))
+                .ok()
+                .and_then(|d| d["experience"][b]["value"].as_f64());
+            if have_xp.is_some_and(|x| x < need) {
+                waits.push(format!(
+                    "{id} refresh: {b} XP {:.0} < {need:.0}",
+                    have_xp.unwrap_or(0.0)
+                ));
+                continue;
+            }
+        }
+        let next = version_name(entry, &name, n + 1);
+        let mut args = Map::new();
+        args.insert("kind".into(), json!(kind));
+        args.insert("base".into(), base);
+        args.insert("name".into(), json!(next));
+        if !modules.is_empty() {
+            args.insert("modules".into(), Value::Object(modules));
+        }
+        let (ok, why) = state.act(
+            tools,
+            run.lease,
+            "hoi4_design_create",
+            Value::Object(args),
+            "dz",
+        )?;
+        let c = code(&why);
+        if ok || c == "name_taken" {
+            state.done.insert(format!("drefresh:{id}:{}", n + 1), now);
+        } else {
+            let days = if c == "insufficient_experience" {
+                7
+            } else {
+                30
+            };
+            note(state, "designs", format!("{id} refresh {next}: {why}"));
+            state.skip(now, "dref", &id, days * DAY);
+        }
+        acted = Some(format!("design refresh {id} -> {next}: {ok} {why}"));
+        break;
+    }
+    if acted.is_none() {
+        state.skip(now, "drefw", "x", 7 * DAY);
+    }
+    Ok(acted)
 }
 
 /// One wanted switch of a production line to another design: `production[].design`,
@@ -553,7 +835,7 @@ fn cover_days(v: &Value, default: Option<f64>) -> Option<f64> {
     }
 }
 
-fn wanted_switches(plan: &Value) -> Vec<Switch> {
+fn wanted_switches(plan: &Value, state: &State) -> Vec<Switch> {
     let designs = list(plan, "designs");
     let mut out: Vec<Switch> = Vec::new();
     for line in list(plan, "production") {
@@ -577,9 +859,10 @@ fn wanted_switches(plan: &Value) -> Vec<Switch> {
                 .find(|e| item_id(e).as_deref() == Some(d.trim()))
         });
         let (label, wanted, gate, mature, cover) = match (item, design) {
+            // a refreshed item: its newest version
             (Some(e), _) => (
-                text(&e["name"]).trim().to_string(),
-                json!(text(&e["name"]).trim()),
+                newest_version(state, e),
+                json!(newest_version(state, e)),
                 item_id(e).map(|id| format!("design:id:{id}")),
                 mature || e["switch_mature"] == json!(true),
                 if own_cover.is_null() {
@@ -628,7 +911,7 @@ fn wanted_switches(plan: &Value) -> Vec<Switch> {
     }
     for e in designs {
         let equipment = text(&e["production"]).trim().to_string();
-        let name = text(&e["name"]).trim().to_string();
+        let name = newest_version(state, e);
         if equipment.is_empty()
             || out
                 .iter()
@@ -697,7 +980,7 @@ fn old_gear_covers(
 
 fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     let (tools, plan, now) = (run.tools, run.plan, run.now);
-    let wanted = wanted_switches(plan);
+    let wanted = wanted_switches(plan, state);
     if wanted.is_empty() || state.skipped(now, "mpdes", "x") {
         return Ok(None);
     }
@@ -1575,20 +1858,25 @@ fn justify(
     }
     let war_goal = text(&item["war_goal"]).trim().to_string();
     let states = strings(item, "states");
-    if war_goal.is_empty() || states.is_empty() {
+    // engineer 125: by the game's own war goal key and state ids (the module's justify by command), else by the
+    // view's names (the dialog)
+    let goal_key = text(&item["war_goal_key"]).trim().to_string();
+    let args = if !goal_key.is_empty() {
+        let ids: Vec<i64> = item["state_ids"]
+            .as_array()
+            .map(|a| a.iter().filter_map(Value::as_i64).collect())
+            .unwrap_or_default();
+        json!({"action": "justify_war_goal", "country": target, "war_goal_key": goal_key, "state_ids": ids})
+    } else if war_goal.is_empty() || states.is_empty() {
         waits.push(format!(
-            "{label}: justify needs war_goal and states (names as hoi4_diplomacy lists them)"
+            "{label}: justify needs war_goal_key (and state_ids for a goal on states) or war_goal and states (names as hoi4_diplomacy lists them)"
         ));
         state.skip(now, "dip", key, 30 * DAY);
         return Ok(None);
-    }
-    let (ok, why) = state.act(
-        run.tools,
-        run.lease,
-        "hoi4_diplomacy_act",
-        json!({"action": "justify_war_goal", "country": target, "war_goal": war_goal, "states": states}),
-        "dp",
-    )?;
+    } else {
+        json!({"action": "justify_war_goal", "country": target, "war_goal": war_goal, "states": states})
+    };
+    let (ok, why) = state.act(run.tools, run.lease, "hoi4_diplomacy_act", args, "dp")?;
     if ok || code(&why) == "nothing_to_change" {
         state.done.insert(key.to_string(), now);
     } else {
@@ -2781,6 +3069,46 @@ fn trait_index(v: &Value) -> Option<u64> {
         .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
 }
 
+/// A plan trait: its 0-based index in the tree, or its key (the scripts' trait token: letters, digits, `_`), which
+/// hoi4_mio_trait resolves through the organisations read. Anything else is not a trait.
+#[derive(Clone, Debug, PartialEq)]
+enum TraitRef {
+    Index(u64),
+    Key(String),
+}
+
+impl TraitRef {
+    fn of(v: &Value) -> Option<TraitRef> {
+        if let Some(i) = trait_index(v) {
+            return Some(TraitRef::Index(i));
+        }
+        let k = v.as_str()?.trim();
+        (!k.is_empty()
+            && k.len() <= 128
+            && k.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_'))
+        .then(|| TraitRef::Key(k.to_string()))
+    }
+    /// The done key of this trait (indices keep their old keys).
+    fn done(&self, org: &str) -> String {
+        match self {
+            TraitRef::Index(i) => format!("mio:{org}:t{i}"),
+            TraitRef::Key(k) => format!("mio:{org}:k{k}"),
+        }
+    }
+    fn arg(&self) -> Value {
+        match self {
+            TraitRef::Index(i) => json!(i),
+            TraitRef::Key(k) => json!(k),
+        }
+    }
+    fn label(&self) -> String {
+        match self {
+            TraitRef::Index(i) => i.to_string(),
+            TraitRef::Key(k) => k.clone(),
+        }
+    }
+}
+
 /// The skip after a refused MIO order. `kind` keeps the design-team, policy and trait orders of one
 /// organisation apart: a refused policy no longer holds its traits (sk2, 10 Nov: 33 refused policies
 /// and not one trait queued).
@@ -2807,6 +3135,10 @@ fn mio_refused(state: &mut State, now: GameHour, kind: &str, org: &str, why: &st
         | "policy_not_offered"
         | "trait_unavailable"
         | "trait_not_visible" => 14,
+        "trait_key_unresolved" => {
+            note(state, "mio", format!("{org}: {why}"));
+            14
+        }
         _ => 3,
     };
     state.skip(now, kind, org, days * DAY);
@@ -2854,21 +3186,21 @@ fn mio_plan(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         let want_policy = !policy.is_empty()
             && !state.done.contains_key(&policy_key)
             && !state.skipped(now, "miopol", &org);
-        let mut next: Option<u64> = None;
+        let mut next: Option<TraitRef> = None;
         // with manage.bulk mio_queue_many: every listed trait still to queue, in ONE visit
-        let mut rest: Vec<u64> = Vec::new();
+        let mut rest: Vec<TraitRef> = Vec::new();
         let mut bad: Option<String> = None;
         for t in list(entry, "traits") {
-            match trait_index(t) {
-                Some(i) if state.done.contains_key(&format!("mio:{org}:t{i}")) => {}
-                Some(i) if next.is_some() => {
+            match TraitRef::of(t) {
+                Some(r) if state.done.contains_key(&r.done(&org)) => {}
+                Some(r) if next.is_some() => {
                     if rest.len() < 16 {
-                        rest.push(i);
+                        rest.push(r);
                     }
                 }
-                Some(i) => {
-                    next = Some(i);
-                    rest.push(i);
+                Some(r) => {
+                    next = Some(r.clone());
+                    rest.push(r);
                     if !state.bulk_on("mio_queue_many") {
                         break;
                     }
@@ -2881,7 +3213,7 @@ fn mio_plan(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         }
         if let Some(b) = &bad {
             waits.push(format!(
-                "{org}: trait {b} is not a trait_index (hoi4_mio_trait list:true numbers them)"
+                "{org}: trait {b} is neither a trait key nor a trait_index (hoi4_mio_trait list:true lists both)"
             ));
         }
         let next = next.filter(|_| !state.skipped(now, "mio", &org));
@@ -2929,28 +3261,38 @@ fn mio_plan(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             return Ok(Some(format!("mio {org} policy {policy}: {ok} {why}")));
         }
         if next.is_some() && rest.len() > 1 {
-            args["trait_indices"] = json!(rest);
+            let keys = rest.iter().any(|r| matches!(r, TraitRef::Key(_)));
+            let labels: Vec<String> = rest.iter().map(TraitRef::label).collect();
+            if keys {
+                args["traits"] = Value::Array(rest.iter().map(TraitRef::arg).collect());
+            } else {
+                args["trait_indices"] = Value::Array(rest.iter().map(TraitRef::arg).collect());
+            }
             let (ok, why) = state.act(tools, run.lease, "hoi4_mio_trait", args, "mi")?;
             if ok {
-                for i in &rest {
-                    state.done.insert(format!("mio:{org}:t{i}"), now);
+                for r in &rest {
+                    state.done.insert(r.done(&org), now);
                 }
             } else {
                 mio_refused(state, now, "mio", &org, &why);
             }
             return Ok(Some(format!(
-                "mio {org} traits {rest:?} in one visit: {ok} {why}"
+                "mio {org} traits [{}] in one visit: {ok} {why}",
+                labels.join(", ")
             )));
         }
-        if let Some(index) = next {
-            args["trait_index"] = json!(index);
+        if let Some(r) = next {
+            match &r {
+                TraitRef::Index(i) => args["trait_index"] = json!(i),
+                TraitRef::Key(k) => args["trait"] = json!(k),
+            }
             let (ok, why) = state.act(tools, run.lease, "hoi4_mio_trait", args, "mi")?;
             if ok || code(&why) == "trait_already_queued" {
-                state.done.insert(format!("mio:{org}:t{index}"), now);
+                state.done.insert(r.done(&org), now);
             } else {
                 mio_refused(state, now, "mio", &org, &why);
             }
-            return Ok(Some(format!("mio {org} trait {index}: {ok} {why}")));
+            return Ok(Some(format!("mio {org} trait {}: {ok} {why}", r.label())));
         }
     }
     if !waits.is_empty() {
@@ -3582,6 +3924,8 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
                     }
                 }
             }
+            // the plan names this operative's mission: it may end the one running
+            args["replace"] = json!(true);
             let (ok, why) = state.act(tools, run.lease, "hoi4_operative_assign", args, "io")?;
             let c = code(&why);
             if ok || c == "operative_busy" {
@@ -3782,6 +4126,10 @@ fn intel_networks(
             continue;
         };
         let mut args = json!({"operative": i, "mission": "build_intel_network"});
+        if net["operative"].is_u64() {
+            // the plan named the operative: its running mission may end
+            args["replace"] = json!(true);
+        }
         match net["state_id"].as_u64() {
             Some(id) => args["state_id"] = json!(id),
             None => args["country"] = json!(target),
@@ -4199,6 +4547,129 @@ mod tests {
             None
         );
         assert_eq!(actions(&tools).len(), 2);
+    }
+
+    #[test]
+    fn a_design_follows_the_technology_and_its_line_moves_to_the_new_version() {
+        let tools = fake(vec![
+            (
+                "hoi4_production_lines",
+                json!({"lines": [
+                {"entry_index": 2, "line_kind": "military", "equipment_id": "medium_tank_chassis_1",
+                    "line_handle": "0x10"}]}),
+            ),
+            (
+                "hoi4_designs",
+                json!({"designs": [{"design_id": 5194, "name": "Panzer III S",
+                    "hull_or_chassis": "medium_tank_chassis_1", "production_lines": [],
+                    "modules": [{"slot": "main_armament_slot", "module": "tank_medium_cannon"},
+                                {"slot": "engine_type_slot", "module": "tank_gasoline_engine"}]}]}),
+            ),
+            (
+                "hoi4_research",
+                json!({"researched": [{"id": "basic_machine_tools"}]}),
+            ),
+            (
+                "hoi4_doctrines",
+                json!({"experience": {"army": {"value": 50.0}}}),
+            ),
+        ]);
+        let plan = json!({"manage": {"off": ["mio_lines"]},
+            "designs": [{"id": "t1", "kind": "tank", "base": "Panzer III", "name": "Panzer III S", "xp": 0,
+                "refresh": {"slots": {
+                    "main_armament_slot": [{"module": "tank_medium_cannon_2", "tech": "gun2"}, "tank_medium_cannon"],
+                    "engine_type_slot": ["tank_gasoline_engine"]}}}],
+            "production": [{"equipment": "medium_tank_chassis_1", "factories": 5, "design": "t1"}]});
+        let mut state = State::default();
+        state.done.insert("design:id:t1".into(), START);
+        state
+            .done
+            .insert("pdes:medium_tank_chassis_1:Panzer III S".into(), START);
+        // the cannon 2 tech is not researched: the newest version already has the best modules
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert!(actions(&tools).is_empty());
+        // within the week nothing is looked at again while the research is unchanged
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
+            None
+        );
+        // the tech lands: version 2 from the newest version, only the changed slot
+        tools.reply(
+            "hoi4_research",
+            json!({"researched": [{"id": "basic_machine_tools"}, {"id": "gun2"}]}),
+        );
+        let out = step(&mut state, &tools, &plan, "l", START + 2 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("design refresh t1 -> Panzer III S 2: true Verified")
+        );
+        let sent = actions(&tools);
+        assert_eq!(sent[0].0, "hoi4_design_create");
+        assert_eq!(sent[0].1["base"], "Panzer III S");
+        assert_eq!(sent[0].1["name"], "Panzer III S 2");
+        assert_eq!(
+            sent[0].1["modules"],
+            json!({"main_armament_slot": "tank_medium_cannon_2"})
+        );
+        assert!(state.done.contains_key("drefresh:t1:2"));
+        // the line moves to the newest version
+        let switches = wanted_switches(&plan, &state);
+        assert_eq!(switches.len(), 1);
+        assert_eq!(switches[0].label, "Panzer III S 2");
+        assert_eq!(
+            newest_version(&state, &list(&plan, "designs")[0]),
+            "Panzer III S 2"
+        );
+        // given names win over the numbered default, within 40 characters
+        let named = json!({"name": "X", "refresh": {"names": ["Panzer III J"]}});
+        assert_eq!(version_name(&named, "X", 2), "Panzer III J");
+        assert_eq!(version_name(&named, "X", 3), "X 3");
+        let long = "A".repeat(45);
+        assert_eq!(version_name(&json!({}), &long, 12).chars().count(), 40);
+    }
+
+    #[test]
+    fn a_refresh_to_a_better_base_sends_every_wanted_slot_and_an_unknown_gate_waits() {
+        let tools = fake(vec![
+            (
+                "hoi4_designs",
+                json!({"designs": [{"design_id": 4532, "name": "Bf 109 N",
+                    "hull_or_chassis": "small_plane_airframe_1",
+                    "modules": [{"slot": "fixed_main_weapon_slot", "module": "light_mg_2x"}]}]}),
+            ),
+            (
+                "hoi4_research",
+                json!({"researched": [{"id": "early_fighter"}, {"id": "fighter1"}]}),
+            ),
+        ]);
+        let plan = json!({"designs": [{"id": "f1", "kind": "plane", "base": 4532, "name": "Bf 109 N", "xp": 0,
+            "refresh": {"bases": [{"base": "small_plane_airframe_2", "tech": "fighter1"}, "small_plane_airframe_1"],
+                        "slots": {"fixed_main_weapon_slot": ["light_mg_2x"]}, "xp": 0}}]});
+        let mut state = State::default();
+        state.done.insert("design:id:f1".into(), START);
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("design refresh f1 -> Bf 109 N 2: true Verified")
+        );
+        let sent = actions(&tools);
+        assert_eq!(sent[0].1["base"], "small_plane_airframe_2");
+        assert_eq!(
+            sent[0].1["modules"],
+            json!({"fixed_main_weapon_slot": "light_mg_2x"})
+        );
+        // research unreadable: the tech gate is unknown, nothing is sent and the look waits
+        let tools = fake(vec![(
+            "hoi4_designs",
+            json!({"designs": [{"design_id": 4532, "name": "Bf 109 N",
+                "hull_or_chassis": "small_plane_airframe_1", "modules": []}]}),
+        )]);
+        tools.unreadable.borrow_mut().insert("hoi4_research".into());
+        let mut state = State::default();
+        state.done.insert("design:id:f1".into(), START);
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert!(actions(&tools).is_empty());
+        assert!(state.affairs.notes["designs"].contains("f1 refresh: a tech gate is unknown"));
     }
 
     #[test]
@@ -4678,6 +5149,24 @@ mod tests {
         json!({"country": "ETH", "actions": [
             {"action": "Declare war", "key": "declare_war", "enabled": enabled},
             {"action": "Guarantee independence", "key": "guarantee", "enabled": true}]})
+    }
+
+    #[test]
+    fn a_justification_by_the_games_war_goal_key_passes_the_key_and_the_state_ids() {
+        let tools = fake(vec![(
+            "hoi4_diplomacy_state",
+            json!({"own_war_goals": [], "world_tension": {"value": 0.1}}),
+        )]);
+        let plan = json!({"diplomacy": [
+            {"id": "wg", "action": "justify", "target": "ETH", "war_goal_key": "take_state",
+                "state_ids": [271, 272]}]});
+        let mut state = State::default();
+        step(&mut state, &tools, &plan, "l", START).unwrap();
+        let sent = actions(&tools);
+        assert_eq!(sent[0].1["action"], "justify_war_goal");
+        assert_eq!(sent[0].1["war_goal_key"], "take_state");
+        assert_eq!(sent[0].1["state_ids"], json!([271, 272]));
+        assert!(sent[0].1.get("war_goal").is_none());
     }
 
     #[test]
@@ -5503,7 +5992,7 @@ mod tests {
     fn mio_traits_queue_in_order_once_and_a_refused_one_waits() {
         let tools = fake(vec![]);
         let plan = json!({"mio": [{"organisation": "ITA_ansaldo_organization",
-            "traits": [3, "5", "armor_focus"], "design_team": true, "slot": 1}]});
+            "traits": [3, "5", "armor_focus", "best trait"], "design_team": true, "slot": 1}]});
         let mut state = State::default();
         // the politics view's design-team slot only browses: settled without input
         let out = step(&mut state, &tools, &plan, "l", START + 1).unwrap();
@@ -5524,17 +6013,66 @@ mod tests {
         let out = step(&mut state, &tools, &plan, "l", START + 15 * DAY).unwrap();
         assert!(out.unwrap().contains("trait 5: false trait_already_queued"));
         assert!(state.done.contains_key("mio:ITA_ansaldo_organization:t5"));
-        // the text trait stops the list with a note; nothing more is sent, also after a restart
+        // a trait key goes as `trait` (the tool resolves it through the organisations read), after a restart too
         let mut again = restarted(&state, START + 16 * DAY);
+        tools.accept("hoi4_mio_trait");
+        let out = step(&mut again, &tools, &plan, "l", START + 16 * DAY).unwrap();
         assert_eq!(
-            step(&mut again, &tools, &plan, "l", START + 16 * DAY).unwrap(),
+            out.as_deref(),
+            Some("mio ITA_ansaldo_organization trait armor_focus: true Verified")
+        );
+        assert!(again
+            .done
+            .contains_key("mio:ITA_ansaldo_organization:karmor_focus"));
+        // a text that is no key stops the list with a note; nothing more is sent
+        assert_eq!(
+            step(&mut again, &tools, &plan, "l", START + 17 * DAY).unwrap(),
             None
         );
-        assert!(again.affairs.notes["mio"].contains("armor_focus"));
+        assert!(again.affairs.notes["mio"].contains("best trait"));
         let sent = actions(&tools);
-        assert_eq!(sent.len(), 3);
+        assert_eq!(sent.len(), 4);
         assert_eq!(sent[0].1["trait_index"], 3);
         assert_eq!(sent[0].1["slot"], 1);
+        assert_eq!(sent[3].1["trait"], "armor_focus");
+        assert!(sent[3].1.get("trait_index").is_none());
+    }
+
+    #[test]
+    fn trait_keys_go_in_one_visit_with_the_bulk_path_and_an_unresolved_key_waits_with_a_note() {
+        let tools = fake(vec![]);
+        let plan = json!({"manage": {"bulk": ["mio_queue_many"]},
+            "mio": [{"organisation": "GER_henschel_organization",
+                     "traits": ["GER_mio_trait_technical_superiority", 5]}]});
+        let mut state = State {
+            bulk: super::super::bulk_paths(&plan),
+            ..State::default()
+        };
+        tools.refuse("hoi4_mio_trait", "trait_key_unresolved");
+        let out = step(&mut state, &tools, &plan, "l", START + 1).unwrap();
+        assert!(out.unwrap().contains("false trait_key_unresolved"));
+        assert!(state.affairs.notes["mio"].contains("trait_key_unresolved"));
+        // the organisation waits 14 days: nothing is sent again before
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 13 * DAY).unwrap(),
+            None
+        );
+        tools.accept("hoi4_mio_trait");
+        let out = step(&mut state, &tools, &plan, "l", START + 15 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("mio GER_henschel_organization traits [GER_mio_trait_technical_superiority, 5] in one visit: true Verified")
+        );
+        assert!(state
+            .done
+            .contains_key("mio:GER_henschel_organization:kGER_mio_trait_technical_superiority"));
+        assert!(state.done.contains_key("mio:GER_henschel_organization:t5"));
+        let sent = actions(&tools);
+        assert_eq!(
+            sent.last().unwrap().1["traits"],
+            json!(["GER_mio_trait_technical_superiority", 5])
+        );
+        assert!(sent.last().unwrap().1.get("trait_indices").is_none());
     }
 
     #[test]
