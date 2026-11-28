@@ -5,6 +5,32 @@ many probes. Each probe names its question, its calls and the read that answers 
 that answered it and move the tool's evidence into `LIVE_VERIFICATION_1_19_4.md`. Navy, sea landings and trade
 have their own queue.
 
+## The in-process module: family state (28 November 2026, macOS 1.20.1.0)
+
+The module (`inproc/`, see `inproc/README.md`) is macOS only, single player only, and loaded only by a
+maintainer's launcher. Under `HOI4_BACKEND=auto` (the default), a family goes in process only when its
+`IPC_LIVE_PASSED` entry in `inproc/core/ipc.c` is 1. Otherwise, and on Windows and Linux, the tool takes
+its mouse path.
+
+| family | session | state |
+|---|---|---|
+| set_game_speed | S1 | passed 23 Nov |
+| production, air | S2 | passed 24 Nov |
+| airwing, production2 | S3-AIRWING, S3-PROD2 | passed 28 Nov (1940 and 1936 beds) |
+| orders, orders2 | S4-ORDERS, S5-PLAN | passed 27 Nov |
+| units | S6-UNITS | passed 24 Nov |
+| picks | S7-PICKS | passed (F1/F2a/F4 24 Nov, F3 28 Nov) |
+| events | S8-EVENTS | stopped 24 Nov: the answer executes, the window stays open |
+| decisions, diplomacy | S9, S10 | passed 24 Nov |
+| holds, research, politics | S11, S12, S13 | passed 24 Nov |
+| construction | S14-CONSTRUCTION | passed 28 Nov (a count over the free slots reads Diverged) |
+| training | S15-TRAINING | stopped 28 Nov: the line count was not exact, and a refused add left a queue. The remainder-per-read fix is merged, and its re-run is owed |
+| mio | S16-MIO | passed 27 Nov |
+| navy | S17-NAVY | passed 28 Nov |
+| doctrine | S18-DOCTRINE | not passed: takes the mouse path |
+| projects | S19-PROJECTS | not run |
+| multiplayer | S1-MP, S2-MP | not run (needs two clients); every post refuses outside single player |
+
 ## Proof state of the registered tools (23 November 2026)
 
 Counted from the action receipts and read replies of every recorded run since the 1.19.4 migration (31
