@@ -2820,6 +2820,9 @@ fn tick_inner(
     state.pcache = None;
     let merged = strategy_step(state, tools, plan, now);
     let plan = merged.as_ref().unwrap_or(plan);
+    // production lines whose `until` held close from that day (read as remove rows)
+    let ended = production_until(state, tools, plan, now);
+    let plan = ended.as_ref().unwrap_or(plan);
     // command concentrated in a few formations; small roles are tasks inside them
     // (plan_formations.rs)
     let concentrated = plan_formations::concentrate(plan);
@@ -12467,6 +12470,71 @@ fn judge(state: &mut State, tools: &dyn Tools, predicate: &Value, now: GameHour)
     }
     state.pcache = Some((now, ctx.into_cache()));
     truth
+}
+
+/// `production[].until` (a predicate, e.g. "stock:infantry_equipment >= 9000"): once it holds
+/// (judged at most once a game day after the entry's `from`), the lines of that entry's equipment
+/// close from that day: the entry is read as a remove row dated then (`remove`, `from`; recorded
+/// as `produntil:<index>:<equipment>`, so it survives a restart and is not judged again). A later
+/// floor of the same equipment family (a newer gun on its own row) starts its line again, as for
+/// any remove row. None when no entry carries `until` or none has held.
+fn production_until(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    now: GameHour,
+) -> Option<Value> {
+    let rows = plan["production"].as_array()?;
+    if rows.iter().all(|e| e["until"].is_null()) {
+        return None;
+    }
+    let mut out = plan.clone();
+    let mut changed = false;
+    for (i, e) in rows.iter().enumerate() {
+        if e["until"].is_null() {
+            continue;
+        }
+        let key = format!("produntil:{i}:{}", text(&e["equipment"]));
+        let at = match state.done.get(&key) {
+            Some(h) => Some(*h),
+            None if !reached(e, now) || state.skipped(now, "produntil", &key) => None,
+            None => {
+                if judge(state, tools, &e["until"], now).is_true() {
+                    state.done.insert(key.clone(), now);
+                    Some(now)
+                } else {
+                    state.skip(now, "produntil", &key, DAY);
+                    None
+                }
+            }
+        };
+        let Some(hour) = at else {
+            continue;
+        };
+        let row = &mut out["production"][i];
+        row["remove"] = json!(true);
+        row["from"] = json!(hour_ymd(hour));
+        if let Some(o) = row.as_object_mut() {
+            o.remove("until");
+            o.remove("factories");
+        }
+        changed = true;
+    }
+    changed.then_some(out)
+}
+
+/// "YYYY.M.D" of a game hour (the game's 365-day calendar from year -5000, as `date_hour`).
+fn hour_ymd(hour: GameHour) -> String {
+    const DAYS: [i64; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let days = hour.div_euclid(24);
+    let year = days.div_euclid(365) - 5000;
+    let mut day = days.rem_euclid(365);
+    let mut month = 0;
+    while day >= DAYS[month] {
+        day -= DAYS[month];
+        month += 1;
+    }
+    format!("{year}.{}.{}", month + 1, day + 1)
 }
 
 /// 0. The strategy layer (reads only, never input): `goal`, `phases`, `checkpoints` and
@@ -23520,6 +23588,47 @@ mod tests {
             ["A:focus_not_available"]
         );
         assert!(focus_blocked(&state, &plan, START + 10 * DAY).is_empty());
+    }
+
+    #[test]
+    fn a_production_line_closes_from_the_day_its_until_holds() {
+        let plan = json!({"production": [
+            {"equipment": "infantry_equipment_1", "factories": 12,
+             "until": "stock:infantry_equipment >= 5000"},
+            {"equipment": "infantry_equipment_2", "factories": 10, "from": "1938.2.1"}]});
+        let stock = |n: i64| {
+            fake(vec![(
+                "hoi4_stockpile",
+                json!({"equipment": [{"archetype": "infantry_equipment", "cover_after_shortfall": n}]}),
+            )])
+        };
+        let mut state = State::default();
+        let now = crate::plan_predicate::date_hour("1937.6.1").unwrap();
+        assert!(production_until(&mut state, &stock(4000), &plan, now).is_none());
+        // judged at most once a game day
+        assert!(production_until(&mut state, &stock(6000), &plan, now + 2).is_none());
+        let out = production_until(&mut state, &stock(6000), &plan, now + DAY).unwrap();
+        let row = &out["production"][0];
+        assert_eq!(row["remove"], true);
+        assert_eq!(row["from"], "1937.6.2");
+        assert!(row.get("factories").is_none() && row.get("until").is_none());
+        assert_eq!(out["production"][1], plan["production"][1]);
+        // recorded: the same rewrite after a restart, without a read
+        let mut again = State::default();
+        again.restore(&state.memory(now + DAY), now + DAY);
+        let out2 = production_until(&mut again, &fake(vec![]), &plan, now + 30 * DAY).unwrap();
+        assert_eq!(out2["production"][0]["from"], "1937.6.2");
+        assert!(production_until(&mut state, &stock(0), &json!({"production": []}), now).is_none());
+    }
+
+    #[test]
+    fn game_hours_print_back_as_their_dates() {
+        for d in ["1936.1.1", "1937.6.2", "1939.12.31", "1941.6.22"] {
+            assert_eq!(
+                hour_ymd(crate::plan_predicate::date_hour(d).unwrap() + 13),
+                d
+            );
+        }
     }
 
     #[test]
