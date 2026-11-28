@@ -287,13 +287,25 @@ class Seeded(unittest.TestCase):
         p["trade"][0]["when"] = "1939.09.02"
         self.assertClean(p, "fair.timing")
 
+    def test_rule_switch_collaboration(self):
+        # owner, 28 Nov: allowed in single-player FAIR; a multiplayer or roleplay switch turns it off
+        op = {"intelligence": {"operations": [{"operation": "operation_collaboration_government", "target": "SOV"}]}}
+        self.assertClean(plan("GER", **op), "fair.collaboration")
+        off = dict(op, _rules={"multiplayer": {"collaboration": False}})
+        self.assertHit(plan("GER", **off), "fair.collaboration")
+        bad = dict(op, constraints={"rule.collaboration_sov": {"value": True, "source": "host", "why": "x"}})
+        self.assertHit(plan("GER", **bad), "fair.rules", "warning")
+
     def test_invasion_prerequisites(self):
         inv = [{"id": "sealion", "from_state": 64, "target_state": 126, "armies": ["A"]}]
         self.assertHit(plan("GER", invasions=inv), "fair.invasions", text="Sea Lion")
+        # owner, 28 Nov: Sea Lion only during or after Barbarossa and with the USA in the Allies
         held = dict(inv[0], when=["controls_state:118", "controls_state:116"])
-        self.assertClean(plan("GER", invasions=[held]), "fair.invasions")
+        self.assertHit(plan("GER", invasions=[held]), "fair.invasions", text="at_war_with:SOV")
         barb = dict(inv[0], when=["controls_state:446", "at_war_with:SOV"])
-        self.assertClean(plan("GER", invasions=[barb]), "fair.invasions")
+        self.assertHit(plan("GER", invasions=[barb]), "fair.invasions", text="at_war_with:USA")
+        both = dict(inv[0], when=["at_war_with:SOV", "at_war_with:USA"])
+        self.assertClean(plan("GER", invasions=[both]), "fair.invasions")
         france = [{"id": "bef", "from_state": 126, "target_state": 16, "armies": ["A"]}]
         self.assertHit(plan("ENG", invasions=france), "fair.invasions", text="capitulates")
         self.assertClean(plan("ENG", invasions=[dict(france[0], when="capitulated:FRA")]), "fair.invasions")

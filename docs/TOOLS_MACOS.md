@@ -187,6 +187,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_battles` (R): Read-only (memory, no input, no pause):
 - `hoi4_fact_list` (R): Read-only:
 - `hoi4_fact_save` (R): Keep one fact learned about this game or mod (a statement and where it comes from:
+- `hoi4_army_hq` (R): Read-only, files of the running game only: whether army headquarters (deployable generals, 1.20) are in force (the executable gates every HQ scaling on the Thunder at Our Gates DLC and returns 1.0 without it), and what they are worth per proximity setting from the defines (planning cap and speed, leader modifiers, abilities), deploy days, HQ battalions. No per-army state and no deploy action yet (needs a session with the DLC).
 - `hoi4_general_trait` (A): Live-verified: give an own army general an assignable trait for command power (NDefines UNIT_LEADER_ASSIGN_TRAIT_COST, read from the game's defines;
 - `hoi4_input_geometry` (R): Read-only own GUI dimensions and scale diagnostics.
 - `hoi4_map_daynight` (A): Turn the map's day/night shading off (on:false, the default) or on:

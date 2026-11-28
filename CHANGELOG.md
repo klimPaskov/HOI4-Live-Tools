@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+Windows reader: the full ownership census (owner, parent, executable files, module list) runs at the snapshot
+boundaries instead of around every read batch. Between them each read checks the held process handles: the
+zero-timeout wait refuses a game or supervisor that has exited, and the PID and creation time confirm the pinned
+handle. An overview of a running Windows 1.20.0.0 game now takes about 50 ms instead of 4-5 s and no longer tears
+on the moving clock.
+
 Overhaul and total-conversion mods ([guide](docs/LEGACY_WINDOWS_USAGE.md#overhaul-and-total-conversion-mods)): the
 Windows Python runtime resolves an interface profile for the enabled playset, so a mod that replaces the main menu,
 renames the pause menu, the panel titles or the months no longer stalls `hoi4_launch` or stops `hoi4_time`,

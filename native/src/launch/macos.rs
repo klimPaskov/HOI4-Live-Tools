@@ -15,6 +15,7 @@ mod airread;
 mod airui;
 mod alerts;
 mod armies;
+mod army_hq;
 mod army_roles;
 mod bop;
 mod command_limit;
@@ -917,6 +918,7 @@ pub fn mac_tool_list() -> Vec<Value> {
     .chain(leader_act::tools())
     .chain(learn_tools::tools())
     .chain(std::iter::once(doctrine_act::officer_tool()))
+    .chain(std::iter::once(army_hq::tool()))
     .collect()
 }
 
@@ -936,6 +938,7 @@ impl Commands for MacClock {
             || faction::handles(name)
             || name == invasion::TOOL
             || name == weather::TOOL
+            || name == army_hq::TOOL
             || name == abilities::TOOL
             || matches!(
                 name,
@@ -1749,6 +1752,9 @@ impl MacClock {
         }
         if name == weather::TOOL {
             return weather::call(process, args);
+        }
+        if name == army_hq::TOOL {
+            return army_hq::call(process, args);
         }
         if name == abilities::TOOL {
             return abilities::call(process, args);

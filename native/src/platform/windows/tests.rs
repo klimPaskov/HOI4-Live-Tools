@@ -60,6 +60,9 @@ struct State {
     short: bool,
     read_error: bool,
     after: Option<&'static str>,
+    /// The game process has exited: its retained handle is signalled (the zero-timeout wait
+    /// answers), while it still reports the original PID and creation time.
+    game_exited: bool,
     region_changed: bool,
     loaded_changed: bool,
     game_file: FileIdentity,
@@ -129,6 +132,7 @@ impl Fake {
             short: false,
             read_error: false,
             after: None,
+            game_exited: false,
             region_changed: false,
             loaded_changed: false,
             race_open: false,
@@ -183,7 +187,9 @@ impl Api for Fake {
     fn inspect(&self, h: &Handle) -> Result<Metadata> {
         let mut s = self.0.lock().unwrap();
         s.trace.push(format!("inspect:{}", h.pid));
-        if s.after == Some("supervisor_exit") && s.payload_reads > 0 && h.pid == 6 {
+        if (s.after == Some("supervisor_exit") && s.payload_reads > 0 && h.pid == 6)
+            || (s.game_exited && h.pid == 7)
+        {
             return Err(changed());
         }
         Ok(if h.pid == 7 {
@@ -201,6 +207,7 @@ impl Api for Fake {
             &s.supervisor.identity
         };
         if (h.pid == 6 && s.after == Some("supervisor_exit") && s.payload_reads > 0)
+            || (h.pid == 7 && s.game_exited)
             || actual.pid != expected.pid
             || actual.creation_filetime != expected.creation_filetime
         {
@@ -362,7 +369,7 @@ fn elevated_current_or_foreign_supervisor_is_refused_without_vm_reads() {
     }
 }
 #[test]
-fn every_original_process_and_image_edge_is_validated_before_payload() {
+fn every_original_process_and_image_edge_is_validated_by_the_snapshot_census() {
     for which in 0..7 {
         let (f, r) = Fake::reader();
         f.mutate(|v| match which {
@@ -374,24 +381,49 @@ fn every_original_process_and_image_edge_is_validated_before_payload() {
             5 => v.game.image_base += 65536,
             _ => v.game_file.id = [99; 16],
         });
+        // The census at the snapshot boundary refuses, and the reader stays refused.
+        assert_eq!(r.check().unwrap_err().code, "ownership_changed");
         assert_eq!(r.read(PAYLOAD, 8).unwrap_err().code, "ownership_changed");
         assert_eq!(f.reads(), 0);
     }
 }
 #[test]
-fn ownership_change_during_read_discards_bytes_and_remains_sticky() {
-    for which in [
-        "creation",
-        "parent",
-        "module",
-        "image",
-        "owner",
-        "supervisor_exit",
-    ] {
+fn a_replaced_or_exited_process_is_refused_at_the_next_read_without_a_census() {
+    for which in ["creation", "supervisor_exit"] {
         let (f, r) = Fake::reader();
         f.mutate(|v| v.after = Some(which));
         assert!(r.read(PAYLOAD, 8).is_err());
         assert_eq!(f.reads(), 1);
+        assert!(!f.trace().iter().any(|v| v.starts_with("inspect:")));
+        f.reset();
+        assert!(r.read(PAYLOAD, 8).is_err());
+        assert!(f.trace().is_empty(), "sticky {which}");
+    }
+}
+#[test]
+fn a_process_that_exits_mid_snapshot_is_refused_at_the_next_batch() {
+    let (f, r) = Fake::reader();
+    r.check().unwrap();
+    assert_eq!(r.read(PAYLOAD, 8).unwrap(), vec![0x42; 8]);
+    // The game exits. Its retained handle still names the same PID and creation time; only
+    // the zero-timeout wait on the handle shows the exit.
+    f.mutate(|v| v.game_exited = true);
+    f.reset();
+    assert_eq!(
+        r.read(PAYLOAD + 8, 8).unwrap_err().code,
+        "ownership_changed"
+    );
+    assert_eq!(f.reads(), 0);
+    assert!(r.check().is_err());
+}
+#[test]
+fn an_edge_changed_during_a_snapshot_is_refused_by_its_closing_census_and_stays_refused() {
+    for which in ["parent", "module", "image", "owner"] {
+        let (f, r) = Fake::reader();
+        f.mutate(|v| v.after = Some(which));
+        // Between the boundaries only the handles are checked.
+        assert!(r.read(PAYLOAD, 8).is_ok(), "{which}");
+        assert_eq!(r.check().unwrap_err().code, "ownership_changed", "{which}");
         f.reset();
         assert!(r.read(PAYLOAD, 8).is_err());
         assert!(f.trace().is_empty(), "sticky {which}");
@@ -404,7 +436,7 @@ fn post_read_identity_check_also_runs_when_transfer_fails() {
     assert_eq!(r.read(PAYLOAD, 8).unwrap_err().code, "windows_api");
     let t = f.trace();
     let a = t.iter().position(|v| v.starts_with("read:")).unwrap();
-    assert!(t[a + 1..].iter().any(|v| v == "inspect:7"));
+    assert!(t[a + 1..].iter().any(|v| v == "fast:7"));
 }
 #[test]
 fn zero_oversized_overflow_and_entire_batch_are_refused_before_api_access() {
@@ -546,20 +578,12 @@ fn pe_parser_rejects_truncation_wrap_section_overlap_and_invalid_optional_layout
 }
 
 #[test]
-fn a_batch_has_two_full_checks_per_process_not_one_census_per_field() {
+fn a_batch_runs_no_census_only_handle_checks_around_each_read() {
     let (f, r) = Fake::reader();
     let requests: Vec<_> = (0..64).map(|i| (PAYLOAD + i * 8, 8)).collect();
     assert_eq!(r.read_many(&requests).unwrap().len(), 64);
     let trace = f.trace();
-    for pid in [6, 7] {
-        assert_eq!(
-            trace
-                .iter()
-                .filter(|v| **v == format!("inspect:{pid}"))
-                .count(),
-            2
-        );
-    }
+    assert!(!trace.iter().any(|v| v.starts_with("inspect:")));
     assert_eq!(f.reads(), 64);
     assert!(trace.iter().filter(|v| v.starts_with("fast:")).count() >= 256);
 }
@@ -577,18 +601,19 @@ fn caller_cancellation_between_transfers_discards_entire_batch_without_a_retry()
         .unwrap_err();
     assert_eq!(error.code, "session_closed");
     assert_eq!(f.reads(), 1);
-    assert_eq!(f.trace().iter().filter(|v| **v == "inspect:7").count(), 2);
+    assert_eq!(f.trace().iter().filter(|v| **v == "inspect:7").count(), 0);
     f.reset();
     assert!(r.read(PAYLOAD, 8).is_err());
     assert!(f.trace().is_empty());
 }
 #[test]
-fn late_full_owner_failure_discards_every_previously_read_batch_value() {
+fn late_owner_change_is_refused_by_the_closing_census() {
     let (f, r) = Fake::reader();
     f.mutate(|s| s.after = Some("owner")); // not a PID/creation change
-    assert!(r.read_many(&[(PAYLOAD, 8), (PAYLOAD + 8, 8)]).is_err());
+    assert!(r.read_many(&[(PAYLOAD, 8), (PAYLOAD + 8, 8)]).is_ok());
     assert_eq!(f.reads(), 2);
     assert!(r.check().is_err());
+    assert!(r.read(PAYLOAD, 8).is_err());
 }
 
 #[test]
