@@ -408,8 +408,19 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
     // 1.19.4.1: a running project's facility link is its SProjectHistory at +0x68 (facility
     // id at +0x18, scientist handle at +0x20); the program's own project field stays 0
     // (read live 2 November 2026: Military Engineering Vehicles in facility 3499).
+    // The history record outlives the run: a project whose stop has no day left has ended, and
+    // its record names the facility it last ran in (live 126, s126a 28 Nov 2026: three idle
+    // facilities read "stopping, 0 days, 0%" for four months while their cards showed no project
+    // and offered new ones). Such a project gives its facility no running project.
     for index in 0..count.min(MAX_PROJECTS) as u64 {
         let project = data + index * stride;
+        if out
+            .projects
+            .get(index as usize)
+            .is_some_and(|p| p.stopping_days.is_some_and(|d| d <= 0))
+        {
+            continue;
+        }
         let history = r.u64(project + at(r, &PROJECT, 0x68)?)?;
         if history == 0 || r.u64(history)? != vt(r, image, VT_PROJECT_HISTORY)? {
             continue;
@@ -648,7 +659,7 @@ fn facility_json(snap: &Snapshot, f: &Facility) -> Value {
         });
     let project = f.project.map(|id| match snap.project_by_id(id) {
         Some(p) => {
-            json!({"key": p.key, "template_id": p.id, "base_days": p.days, "stopping": p.stopping_days.is_some(), "stop_duration_days": p.stopping_days, "progress_percent": p.progress_percent, "iterations_completed": p.iterations, "iteration_gain_percent": [p.gain.0, p.gain.1]})
+            json!({"key": p.key, "template_id": p.id, "base_days": p.days, "stopping": p.stopping_days.is_some_and(|d| d > 0), "stopped": p.stopping_days.is_some_and(|d| d <= 0), "stop_duration_days": p.stopping_days, "progress_percent": p.progress_percent, "iterations_completed": p.iterations, "iteration_gain_percent": [p.gain.0, p.gain.1]})
         }
         None => json!({"key": null, "template_id": id}),
     });
@@ -700,7 +711,7 @@ pub(super) fn to_json(snap: &Snapshot) -> Value {
                 "specialization": spec_name(p.spec),
                 "base_days": p.days,
                 "running_in_facility_id": snap.facility_running(p.id).map(|f| f.id),
-                "stopping": p.stopping_days.is_some(),
+                "stopping": p.stopping_days.is_some_and(|d| d > 0), "stopped": p.stopping_days.is_some_and(|d| d <= 0),
             })
         })
         .collect();
