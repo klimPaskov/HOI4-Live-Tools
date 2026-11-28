@@ -842,13 +842,19 @@ mod tests {
             cat["GER_hermann_hoth"],
             json!({"any": ["unread_trigger:has_global_flag", "focus_completed:GER_bribe_senior_officers"]})
         );
-        assert_eq!(cat["GER_erwin_rommel"], json!("focus_completed:GER_adopt_new_panzer_doctrine"));
+        assert_eq!(
+            cat["GER_erwin_rommel"],
+            json!("focus_completed:GER_adopt_new_panzer_doctrine")
+        );
         assert_eq!(
             cat["GER_kurt_x"],
             json!({"not": {"any": ["unread_trigger:has_government", "focus_completed:GER_a"]}})
         );
         assert!(!cat.contains_key("GER_erich_von_manstein"));
-        assert!(!cat.contains_key("GER_both"), "a role without a trigger is always visible");
+        assert!(
+            !cat.contains_key("GER_both"),
+            "a role without a trigger is always visible"
+        );
         assert!(!cat.contains_key("GER_adviser"));
         let mut rows = vec![
             json!({"name": "Hermann Hoth", "id": "GER_hermann_hoth"}),

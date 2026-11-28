@@ -344,7 +344,12 @@ fn pickable<'a>(rows: &'a [Value], tag: &str) -> Vec<&'a Value> {
 /// takes him off the army: Armee Pommern got eight generals in 150 days, Hoth, Rommel,
 /// Manteuffel, Student, Hausser, Dietrich and Hell all hidden until a focus (g92b, 27 Nov 2026).
 /// Only a trigger that holds counts: an unreadable one (a global flag) keeps the leader out.
-pub(super) fn role_visible(state: &mut State, tools: &dyn Tools, row: &Value, now: GameHour) -> bool {
+pub(super) fn role_visible(
+    state: &mut State,
+    tools: &dyn Tools,
+    row: &Value,
+    now: GameHour,
+) -> bool {
     match &row["visible_when"] {
         Value::Null => true,
         when => super::judge(state, tools, when, now) == crate::plan_predicate::Truth::True,
@@ -352,7 +357,12 @@ pub(super) fn role_visible(state: &mut State, tools: &dyn Tools, row: &Value, no
 }
 
 /// The names of the rows whose army role the game hides now ([`role_visible`]).
-pub(super) fn hidden_now(state: &mut State, tools: &dyn Tools, rows: &[Value], now: GameHour) -> HashSet<String> {
+pub(super) fn hidden_now(
+    state: &mut State,
+    tools: &dyn Tools,
+    rows: &[Value],
+    now: GameHour,
+) -> HashSet<String> {
     rows.iter()
         .filter(|c| !c["visible_when"].is_null() && c["assigned_to"].is_null())
         .filter(|c| !role_visible(state, tools, c, now))
@@ -1676,13 +1686,21 @@ mod tests {
         assert_eq!(picks, ["Gotthard Heinrici", "Arno von Lenski"], "{picks:?}");
         assert!(state.done.contains_key("cgenstop:Armee Pommern"));
         let note = plan_military::note_of(&state, "command_lost").unwrap();
-        assert!(note.contains("FAULT") && note.contains("no churn"), "{note}");
+        assert!(
+            note.contains("FAULT") && note.contains("no churn"),
+            "{note}"
+        );
         // a hidden leader's trigger that holds makes him a candidate again (Rommel's focus done)
         let mut state = State::default();
         let row = hidden("Erwin Rommel", "GER_erwin_rommel", 4, json!(true));
         let tools = game(vec![]);
         assert!(role_visible(&mut state, &tools, &row, at));
-        let row = hidden("Hermann Hoth", "GER_hermann_hoth", 3, json!("unread_trigger:has_global_flag"));
+        let row = hidden(
+            "Hermann Hoth",
+            "GER_hermann_hoth",
+            3,
+            json!("unread_trigger:has_global_flag"),
+        );
         assert!(!role_visible(&mut state, &tools, &row, at));
     }
 
