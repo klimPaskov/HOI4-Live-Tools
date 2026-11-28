@@ -2,8 +2,9 @@
 //! checked by the game's own "can do" (and, for the Train button, the game's "can train" the view calls first).
 //! - hoi4_train: CreateConveyor(template) as the template row's Train button; the new queue read back from the own
 //!   deployment status; SetConveyorSeries(queue, 1) as its + (a new queue trains forever); AddConveyorLine(queue, n)
-//!   as Add Unit clicks, one post at a time with the queue's lines read after each and only the remainder asked
-//!   (at most 5 a post; a surplus the game added is taken off the next ask); SetConveyorLocation(queue, a province of
+//!   as Add Unit clicks, ONE LINE a post, the queue's lines read after each until they stand still, and posted
+//!   again only while short (S15-TRAINING on master: a post of 5 left the queue at 9 for 7 asked; posts of 1 and 2
+//!   were exact, so a line a post is the exact path); SetConveyorLocation(queue, a province of
 //!   the deploy state) as the map click in the queue's location mode. A failure after the queue was made cancels it
 //!   (training.remove), so no empty queue is left behind.
 //! - hoi4_deploy_locations: SetConveyorLocation(every queue without a province, a province of the state).
@@ -119,9 +120,9 @@ pub(super) fn train(
                 qs.iter().any(|x| x.address == q && x.amount == 1)
             })?;
         }
-        // the lines: one Add Unit post at a time, the queue read after each, only the remainder
-        // posted (S15-TRAINING, 28 Nov 2026: 7 asked, the module posted 5 and 1 at once and the
-        // queue stood at 9)
+        // the lines: one Add Unit post of ONE line at a time, the queue read after each until it
+        // stands still, and posted again only while short (S15-TRAINING, 28 Nov 2026: 7 asked, posts
+        // of 5 and then the remainder left the queue at 9; asks of 1 and 2 were exact)
         let got = fill_lines(count, queue.lines.max(1), |v| {
             let before = lines_of(&ui::read(process, deployment::queues)?).unwrap_or(0);
             replies.push(step(
@@ -133,7 +134,13 @@ pub(super) fn train(
             let now = until(process, "the added lines", |qs| {
                 lines_of(qs).is_some_and(|n| n > before)
             })?;
-            Ok(lines_of(&now).unwrap_or(before))
+            let first = lines_of(&now).unwrap_or(before);
+            // a post may show its lines over more than one frame: the count it answers is the one
+            // that stands still over two reads
+            settled(first, || {
+                crate::phase::sleep(Duration::from_millis(SETTLE_MS));
+                Ok(lines_of(&ui::read(process, deployment::queues)?).unwrap_or(first))
+            })
         })?;
         replies.push(step(
             route,
@@ -176,42 +183,49 @@ pub(super) fn train(
     }
 }
 
-/// The most lines one Add Unit post asks for (the Shift-click's five).
-const LINES_PER_POST: i64 = 5;
-/// Posts that add no line before the queue is given up.
-const LINE_POSTS_MAX: usize = 12;
+/// The lines one Add Unit post asks for: one (S15-TRAINING: a post of 5 overshot, asks of 1 and 2 were exact).
+const LINES_PER_POST: i64 = 1;
+/// The wait between two reads of a queue's lines after a post (about three game frames).
+const SETTLE_MS: u64 = 50;
+/// Reads after a post before its count is taken as it stands.
+const SETTLE_READS: usize = 6;
+
+/// The lines a queue stands at after a post: re-read (`read`) until two reads agree, at most
+/// SETTLE_READS times; the last read is the answer when they never agree.
+pub(super) fn settled(first: i32, mut read: impl FnMut() -> Result<i32>) -> Result<i32> {
+    let mut last = first;
+    for _ in 0..SETTLE_READS {
+        let now = read()?;
+        if now == last {
+            return Ok(now);
+        }
+        last = now;
+    }
+    Ok(last)
+}
 
 /// The queue's lines filled up to `count`, from `lines` standing: each `post(v)` asks for `v` more
-/// lines and returns the lines the queue holds after it. Only the remainder is asked for, at most
-/// five a post; when a post adds more than it asked (the game's own rounding), the surplus is
-/// taken off the next ask. Returns (lines, posts). An overshoot of the last post stands (no
-/// command takes a line off a queue); it is in the reply.
+/// lines and returns the lines the queue holds after it (settled). One line is asked a post, and
+/// a post is made only while the queue is short, so the queue never passes `count` by more than
+/// the game adds to a single one-line post (which is in the reply as `over`; no command takes a
+/// line off a queue). Returns (lines, posts).
 pub(super) fn fill_lines(
     count: usize,
     mut lines: i32,
     mut post: impl FnMut(i64) -> Result<i32>,
 ) -> Result<(i32, usize)> {
-    let mut surplus = 0i64;
     let mut posts = 0usize;
     while (lines as i64) < count as i64 {
-        if posts >= LINE_POSTS_MAX {
-            return Err(Error::new(
-                "input_readback_failed",
-                format!("The training queue holds {lines} of {count} lines after {posts} posts"),
-            ));
-        }
         let left = count as i64 - lines as i64;
-        let ask = (left - surplus).clamp(1, LINES_PER_POST);
+        let ask = left.clamp(1, LINES_PER_POST);
         let now = post(ask)?;
         posts += 1;
-        let added = (now - lines) as i64;
-        if added <= 0 {
+        if now <= lines {
             return Err(Error::new(
                 "input_readback_failed",
                 format!("An Add Unit post for {ask} line(s) added none ({lines} of {count})"),
             ));
         }
-        surplus = (added - ask).max(0);
         lines = now;
     }
     Ok((lines, posts))
@@ -263,40 +277,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lines_are_posted_as_the_remainder_after_each_read() {
-        // the game as S15-TRAINING saw it: each post added one line more than it asked
+    fn lines_are_posted_one_a_post_while_the_queue_is_short() {
+        // S15-TRAINING on master (s96c): 7 asked from a 1-line queue; one post a line, each exact,
+        // gives 7 in 6 posts (never 9)
         let mut asked = Vec::new();
         let mut q = 1;
         let (lines, posts) = fill_lines(7, 1, |v| {
-            asked.push(v);
-            q += v as i32 + 1;
-            Ok(q)
-        })
-        .unwrap();
-        assert_eq!((lines, posts), (7, 1));
-        assert_eq!(asked, vec![5]);
-        // an exact game: 12 asked from 1 is 5, 5, 1
-        let mut asked = Vec::new();
-        let mut q = 1;
-        let got = fill_lines(12, 1, |v| {
             asked.push(v);
             q += v as i32;
             Ok(q)
         })
         .unwrap();
-        assert_eq!(got, (12, 3));
-        assert_eq!(asked, vec![5, 5, 1]);
-        // the surplus learnt on the first post is taken off the next ask
-        let mut asked = Vec::new();
+        assert_eq!((lines, posts), (7, 6));
+        assert!(asked.iter().all(|&v| v == 1));
+        // a game that adds two for one post: no further post once the count is reached, the
+        // overshoot is at most that one post's extra (8 for 7, not 9)
         let mut q = 1;
-        let got = fill_lines(12, 1, |v| {
-            asked.push(v);
-            q += v as i32 + 1;
+        let got = fill_lines(7, 1, |v| {
+            q += if q == 5 { 2 } else { v as i32 };
             Ok(q)
         })
         .unwrap();
-        assert_eq!(got, (12, 2));
-        assert_eq!(asked, vec![5, 4]);
+        assert_eq!(got, (7, 5));
+        let mut q = 1;
+        let got = fill_lines(6, 1, |v| {
+            q += if q == 5 { 2 } else { v as i32 };
+            Ok(q)
+        })
+        .unwrap();
+        assert_eq!(got, (7, 5));
         // nothing to add, or a post that adds nothing
         assert_eq!(fill_lines(1, 1, |_| unreachable!()).unwrap(), (1, 0));
         assert!(fill_lines(3, 1, |_| Ok(1)).is_err());
@@ -306,6 +315,25 @@ mod tests {
         })
         .unwrap_err();
         assert_eq!(e.code, "refused_by_game_check");
+    }
+
+    #[test]
+    fn a_post_s_lines_are_the_count_that_stands_still() {
+        // the first read after a post saw part of it (6 of 8): the next reads settle on 8
+        let mut reads = vec![8, 8].into_iter();
+        assert_eq!(settled(6, || Ok(reads.next().unwrap())).unwrap(), 8);
+        // already still
+        assert_eq!(settled(3, || Ok(3)).unwrap(), 3);
+        // never still: the last read
+        let mut n = 0;
+        assert_eq!(
+            settled(0, || {
+                n += 1;
+                Ok(n)
+            })
+            .unwrap(),
+            SETTLE_READS as i32
+        );
     }
 
     #[test]

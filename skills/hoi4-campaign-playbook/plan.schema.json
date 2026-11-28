@@ -5154,6 +5154,44 @@
       "x-owner": "executor",
       "minimum": 0
     },
+    "lend": {
+      "type": "object",
+      "x-owner": "executor",
+      "additionalProperties": false,
+      "description": "At war, an army with divisions that no running operation owns, that meets no enemy and that the plan does not keep is lent to the executing operation whose front has room (its stacking.by_width reading), as the echelon of one of its line armies, until the operation that names it starts its prepare. The armies of defense_lines are kept too.",
+      "properties": {
+        "keep": {
+          "type": "array",
+          "description": "armies never lent: a named reserve or garrison, each with its reason",
+          "items": {
+            "type": "object",
+            "required": ["army", "why"],
+            "additionalProperties": false,
+            "properties": {
+              "army": {
+                "type": "string",
+                "minLength": 1,
+                "description": "army name or army_layout name_hint"
+              },
+              "why": {
+                "type": "string",
+                "minLength": 1,
+                "description": "the role it holds instead"
+              }
+            }
+          }
+        },
+        "off": {
+          "type": "boolean",
+          "description": "true: no army is lent"
+        },
+        "why": {
+          "type": "string",
+          "x-owner": "executor",
+          "description": "the reason for off, said in the lend note"
+        }
+      }
+    },
     "sea_transfer": {
       "type": "object",
       "properties": {
@@ -5428,6 +5466,16 @@
           "type": "boolean",
           "default": false,
           "description": "true keeps the reserve fleet's task forces where they are; false (default) sends each one the plan does not keep in navy.reserve to a fleet with an admiral by its role (submarines to the raiders, surface ships to the surface fleet)"
+        },
+        "by_composition": {
+          "type": "boolean",
+          "default": true,
+          "description": "at war a task force on hold that no planned mission covers takes the mission its composition calls for (submarines convoy raiding, capital ships and heavy cruisers strike force, screens patrol) in its fleet's sea regions; false leaves them to the plan"
+        },
+        "by_composition_why": {
+          "type": "string",
+          "x-owner": "executor",
+          "description": "the reason for by_composition false, said in the navy_composition note"
         },
         "reserve": {
           "type": "array",

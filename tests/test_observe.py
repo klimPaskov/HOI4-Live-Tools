@@ -138,6 +138,22 @@ class FindingFixtures(unittest.TestCase):
         peace = F.findings(snap(land=land, wars={"at_war": False}), [])
         self.assertFalse([f for f in peace if f["code"] in ("arrow_not_executing", "army_outside_group_front")])
 
+    def test_armies_on_holds_at_war_are_named_with_their_loans(self):
+        # w96d (28 Nov 2026): Army 1 (24) and Armee West Sued (18) on area defences at home all war
+        hold = [{"kind": "area_defense", "states": [3], "offensives": []}]
+        land = {"armies": [army("Army 1", 24, hold), army("Armee West Sued", 18, hold),
+                           army("Army 6", 24, [front([978, 42], 24)])],
+                "groups": [], "divisions": [], "unassigned": 0}
+        s = snap(land=land)
+        s["executor"] = {"operations": {"op_france": {"lent": ["Army 1"]}}}
+        hit = [f for f in F.findings(s, []) if f["code"] == "armies_idle_at_war"]
+        self.assertEqual(len(hit), 1)
+        self.assertEqual(hit[0]["numbers"]["divisions"], 42)
+        self.assertIn("Army 1 (24, lent to op_france)", hit[0]["text"])
+        self.assertIn("Armee West Sued (18)", hit[0]["text"])
+        peace = F.findings(snap(land=land, wars={"at_war": False}), [])
+        self.assertFalse([f for f in peace if f["code"] == "armies_idle_at_war"])
+
     def test_free_field_marshal_and_a_group_without_one(self):
         land = {"armies": [army("Armee Pommern", 23, [front([980], 23)], group="Army Group 2")],
                 "groups": [{"group": "Army Group 2", "field_marshal": None, "orders": []}],

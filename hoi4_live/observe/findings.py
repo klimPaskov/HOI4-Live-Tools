@@ -70,9 +70,12 @@ def from_omissions(snap):
         if o.get("note_contradicts_read"):
             text += " (the rule's note contradicts the read)"
         sev = "high" if (days or 0) >= 14 else "medium"
+        if o.get("left_by_plan"):
+            text += " (left by the plan)"
         out.append(F(o.get("item") or "omission", sev, text, owner="server omissions",
                      days_open=days, owner_rule=o.get("owner"),
-                     owner_note=str(o["owner_note"])[:300] if o.get("owner_note") else None))
+                     owner_note=str(o["owner_note"])[:300] if o.get("owner_note") else None,
+                     left_by_plan=bool(o.get("left_by_plan"))))
         seen[sig] = out[-1]
     return out
 
@@ -202,6 +205,42 @@ def _idle_arrows(out, name, order):
                      f"does (targets {[x.get('target_states') for x in idle][:3]}): those divisions stand still",
                      subject=name, divisions=held))
 
+HOLD_KINDS = ("area_defense", "fallback")
+
+
+def _idle_at_war(out, snap, group_orders):
+    """At war: the armies standing only on holds (area defence, fallback line) outside any group
+    front, named with their divisions at every gate, with the loans the executor has made (w96a,
+    w96c, w96d: 40-58 divisions on area defences at home through the whole West)."""
+    lent = {}
+    for op, o in (g(snap, "executor", "operations", default={}) or {}).items():
+        for army in o.get("lent") or []:
+            lent[army] = op
+    rows = []
+    for a in g(snap, "land", "armies", default=[]):
+        n = a.get("divisions") or 0
+        orders = a.get("orders") or []
+        if not n or not orders:
+            continue
+        if any(o.get("offensives") or o.get("executing") for o in orders):
+            continue
+        if not all(o.get("kind") in HOLD_KINDS for o in orders):
+            continue
+        if a.get("group") and any(o.get("kind") == "front" for o in group_orders.get(a.get("group")) or []):
+            continue  # army_outside_group_front names it
+        rows.append((n, a["army"]))
+    if not rows:
+        return
+    rows.sort(key=lambda r: (-r[0], r[1]))
+    total = sum(n for n, _ in rows)
+    named = ", ".join(f"{name} ({n}{', lent to ' + lent[name] if name in lent else ''})" for n, name in rows)
+    out.append(F("armies_idle_at_war", "high" if total >= 10 else "medium",
+                 f"{total} divisions in {len(rows)} army(ies) stand on holds away from any attack at war: {named}; "
+                 f"each should be lent to the operation whose front has room, or kept as a named reserve or "
+                 f"garrison with its reason (the executor's lend note)",
+                 divisions=total, armies=[name for _, name in rows], lent=sorted(lent)))
+
+
 def land(snap, prev):
     out = []
     for grp in g(snap, "land", "groups", default=[]):
@@ -280,6 +319,7 @@ def land(snap, prev):
                          f"({', '.join(kinds)}) while the group has a front: its divisions take no part in the "
                          f"group's attack", subject=a["army"], divisions=n))
     if at_war:
+        _idle_at_war(out, snap, group_orders)
         for grp in g(snap, "land", "groups", default=[]):
             for o in grp.get("orders") or []:
                 _idle_arrows(out, grp.get("group"), o)

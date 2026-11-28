@@ -443,6 +443,34 @@ class MonitorTest(unittest.TestCase):
         assert "officer_corps 145 turns: waiting 1, cannot 3" in row, row
         assert "Logistical Focus" in row
 
+    def test_an_equipment_the_plan_leaves_with_its_why_is_listed_apart_from_idle_days(self):
+        # g96a, 28 Nov 2026: the naval bomber line the plan opens on 1939.1.1 counted 153 idle days
+        from hoi4_live.observe.escalation import gate_packet
+        from hoi4_live.observe.findings import from_omissions
+        det = Detector(str(self.tmp), write=False)
+        det._set_date("1936.01.01.12")
+        note = ("missing equipment: small_plane_naval_bomber_airframe_1 left by the plan "
+                "(the plan opens its line on 1939.1.1: not in 1936)")
+        fs = from_omissions({"omissions": [{"item": "missing_equipment_production", "days_open": 0,
+                                            "owner": "production", "owner_note": note,
+                                            "left_by_plan": True}]})
+        assert fs[0]["numbers"]["left_by_plan"] is True and "(left by the plan)" in fs[0]["text"]
+        det.raise_issue("missing_equipment_production", "missing_equipment_production", fs[0]["text"],
+                        "medium", fs[0]["numbers"], origin="omission")
+        det._set_date("1936.01.11.12")
+        rows = {r[0]: r for r in det.idle.rows()}
+        assert rows["equipment without a line"][1] == 0
+        text = gate_packet("run_end", {"date": "1936.01.11.12"}, det, 0)
+        row = next(l for l in text.splitlines() if l.startswith("| equipment without a line |"))
+        assert "left by the plan 10 days" in row and "1939.1.1" in row, row
+        # the plan wants it now: idle again
+        fs[0]["numbers"]["left_by_plan"] = False
+        det.raise_issue("missing_equipment_production", "missing_equipment_production", "x", "medium",
+                        fs[0]["numbers"], origin="omission")
+        det._set_date("1936.01.21.12")
+        rows = {r[0]: r for r in det.idle.rows()}
+        assert rows["equipment without a line"][1] == 10
+
     def test_a_declaration_gate_lists_equipment_fill_per_army(self):
         # w92b, 28 Nov 2026: a template edit at war left the West's infantry at fill 0.27
         from hoi4_live.observe.escalation import gate_packet
