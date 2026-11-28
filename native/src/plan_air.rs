@@ -37,8 +37,10 @@
 //! the nearest; a wing short of reach is rebased as above. An entry other than interception or air superiority waits
 //! while the enemy fighters our region window last showed there exceed ours there / `fighter_ratio`, unless
 //! `ignore_air` (the rules engine fills entries from its opportunity rules: logistics strike, interception,
-//! strategic bombing). A stopped entry's wings are free again. `front:<army>` targets are not built yet (the note says
-//! so).
+//! strategic bombing). A stopped entry's wings are free again. A `target` (or `region`) of `front:<army>` (engineer
+//! 132) flies over that army's front: the air region holding most of its divisions (hoi4_armies `states`, the army's
+//! standing states by division count; an army_layout name hint means the army playing that role), read each turn, so
+//! the wings follow the army as it advances.
 //!
 //! Plan key: `air_situation` {} (all defaults) or {"enabled":true,"fighter_ratio":1.5,"min_coverage":0.5,
 //! "every_days":3,"probe_regions":2,"probe_days":7,"stay_out":true,"roles":["fighter","cas"]}; a
@@ -463,8 +465,67 @@ pub(super) fn claim(
     (orders, taken, notes)
 }
 
-/// The entry's region: `region` (id), or the region of `state`; None with the reason.
-fn entry_region(state: &State, e: &Value) -> std::result::Result<i64, String> {
+/// The army a `front:<army>` target names (in `target` or `region`).
+fn front_army(e: &Value) -> Option<&str> {
+    [&e["target"], &e["region"]]
+        .into_iter()
+        .find_map(|v| v.as_str()?.strip_prefix("front:"))
+        .map(str::trim)
+        .filter(|a| !a.is_empty())
+}
+
+/// The air region over an army's front: the region holding most of its divisions (its standing
+/// states by division count, hoi4_armies `states`); ties go to the lower region id.
+fn front_region(state: &State, roster: &Value, hint: &str) -> std::result::Result<i64, String> {
+    let army = state
+        .layout
+        .get(hint)
+        .filter(|a| !a.is_empty())
+        .map_or(hint, String::as_str);
+    let Some(row) = list(roster, "armies")
+        .iter()
+        .find(|a| text(&a["army"]) == army)
+    else {
+        return Err(format!("front:{hint}: no army {army} in hoi4_armies"));
+    };
+    let mut by: BTreeMap<i64, f64> = BTreeMap::new();
+    if let Some(states) = row["states"].as_object() {
+        for (s, n) in states {
+            let Some(r) = s
+                .parse::<i32>()
+                .ok()
+                .and_then(|s| state.regions.get(&s).copied())
+            else {
+                continue;
+            };
+            *by.entry(r).or_default() += n.as_f64().unwrap_or(1.0).max(0.0);
+        }
+    }
+    by.into_iter()
+        .fold(None::<(i64, f64)>, |best, (r, n)| match best {
+            Some((_, b)) if b >= n => best,
+            _ => Some((r, n)),
+        })
+        .filter(|(_, n)| *n > 0.0)
+        .map(|(r, _)| r)
+        .ok_or_else(|| {
+            format!("front:{hint}: the regions of army {army}'s states are not known yet")
+        })
+}
+
+/// The entry's region: `region` (id), the region of `state`, or the region over an army's front
+/// (`front:<army>`, from `roster`); None with the reason.
+fn entry_region(
+    state: &State,
+    e: &Value,
+    roster: Option<&Value>,
+) -> std::result::Result<i64, String> {
+    if let Some(army) = front_army(e) {
+        return match roster {
+            Some(roster) => front_region(state, roster, army),
+            None => Err(format!("front:{army}: hoi4_armies unreadable")),
+        };
+    }
     if let Some(r) = e["region"]
         .as_i64()
         .or_else(|| e["region"].as_str().and_then(|s| s.parse().ok()))
@@ -478,10 +539,7 @@ fn entry_region(state: &State, e: &Value) -> std::result::Result<i64, String> {
             .copied()
             .ok_or_else(|| format!("the region of state {s} is not known yet"));
     }
-    if text(&e["target"]).starts_with("front:") {
-        return Err("front:<army> targets are not built yet: name region or state".into());
-    }
-    Err("names no region or state".into())
+    Err("names no region, state or front:<army>".into())
 }
 
 fn reaches(geo: &Geo<'_>, cfg: &Config, w: &Wing, r: &Region) -> Option<bool> {
@@ -653,6 +711,12 @@ pub(super) fn air_situation_step(
     // engineer 125: the mission entries claim their wings first (the fighters and CAS below take the rest)
     let mut entries = Vec::new();
     let mut mnotes = Vec::new();
+    // the armies' standing states, read once a turn when an entry flies over an army's front
+    let roster = list(&plan["air_situation"], "missions")
+        .iter()
+        .any(|e| front_army(e).is_some())
+        .then(|| tools.call("hoi4_armies", &json!({})).ok())
+        .flatten();
     for (k, e) in list(&plan["air_situation"], "missions").iter().enumerate() {
         let id = e["id"]
             .as_str()
@@ -674,7 +738,7 @@ pub(super) fn air_situation_step(
         {
             continue;
         }
-        let rid = match entry_region(state, e) {
+        let rid = match entry_region(state, e, roster.as_ref()) {
             Ok(r) => r,
             Err(why) => {
                 mnotes.push(format!("{id}: {why}"));
@@ -1094,6 +1158,30 @@ mod tests {
         assert!(notes[0].contains("no battle"));
         let (orders, _) = allocate(&[w], &[region(6, 3.0, 10, None)], &mut geo, &cfg());
         assert!(orders.is_empty(), "already over the region: no order");
+    }
+
+    #[test]
+    fn a_front_target_flies_over_the_region_holding_most_of_the_armys_divisions() {
+        let mut state = State::default();
+        for (s, r) in [(64, 7), (65, 7), (66, 9), (10, 12)] {
+            state.regions.insert(s, r);
+        }
+        state.layout.insert("north".into(), "1. Armee".into());
+        let roster = json!({"armies": [
+            {"army": "1. Armee", "states": {"64": 3, "65": 4, "66": 6}},
+            {"army": "4. Armee", "states": {"10": 2, "999": 9}}]});
+        // 7 divisions in region 7 against 6 in region 9; a layout hint names the role's army
+        let e = json!({"mission": "cas", "target": "front:north"});
+        assert_eq!(entry_region(&state, &e, Some(&roster)), Ok(7));
+        let e = json!({"mission": "cas", "region": "front:4. Armee"});
+        assert_eq!(entry_region(&state, &e, Some(&roster)), Ok(12));
+        let e = json!({"mission": "cas", "target": "front:Ghost"});
+        assert!(entry_region(&state, &e, Some(&roster))
+            .unwrap_err()
+            .contains("no army Ghost"));
+        assert!(entry_region(&state, &e, None).is_err());
+        // a plain region id still wins without a roster
+        assert_eq!(entry_region(&state, &json!({"region": "5"}), None), Ok(5));
     }
 
     #[test]

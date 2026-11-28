@@ -8,8 +8,9 @@
 //! These keys run only under `HOI4_BACKEND=inprocess` until the live session S25-VOLUNTEERS passes.
 use super::inproc::{self, Channel, Routed};
 use super::inproc_units::{request, routed};
+use super::journal;
 use crate::error::{Error, Result};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 /// Set when S25-VOLUNTEERS passes live (docs/LIVE_VALIDATION_QUEUE.md); the module's IPC_LIVE_PASSED entry moves with it.
 const LIVE_PASSED: bool = false;
@@ -79,12 +80,30 @@ pub(super) fn allowed_mode(mode: inproc::Mode) -> Result<()> {
     }
 }
 
-/// A country tag as the game writes it (three upper-case letters or digits).
+/// The verdict of a send or an expedition from how many of the divisions asked left our army: all of them reached,
+/// none not yet (the game applies commands as it runs), some: the game took fewer than asked (the volunteer cap or
+/// the expedition limit it checks per action against the same state) and dropped the rest.
+pub(super) fn transfer_outcome(gone: usize, asked: usize) -> journal::Outcome {
+    if gone == 0 {
+        journal::Outcome::Unknown
+    } else if gone >= asked {
+        journal::Outcome::Reached(json!({"divisions_left_our_army": gone}))
+    } else {
+        journal::Outcome::Diverged(
+            json!({"divisions_left_our_army": gone, "not_taken": asked - gone,
+            "why": "the game took fewer divisions than asked (its cap); the rest stay in the army"}),
+        )
+    }
+}
+
+/// A country tag as the game writes it (three upper-case letters or digits), or `?<index>` for a
+/// country created during the game, as the readers print it.
 pub(super) fn valid_tag(tag: &str) -> bool {
-    tag.len() == 3
+    (tag.len() == 3
         && tag
             .bytes()
-            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()))
+        || super::diplomacy_state::dynamic_index(tag).is_some()
 }
 
 /// The module's request for one call: objs = 0 (no object), vals = the receiver's tag index, divs = the divisions.
@@ -171,6 +190,18 @@ mod tests {
     fn tags_and_diplomacy_keys() {
         assert!(valid_tag("SPR") && valid_tag("D01"));
         assert!(!valid_tag("spr") && !valid_tag("SPRR"));
+        // a country created during the game, as the readers print it (s129e: the Spanish Republic)
+        assert!(valid_tag("?440") && !valid_tag("?") && !valid_tag("?44x") && !valid_tag("?0"));
+        // s129e V3: 3 asked, the cap took 2
+        assert!(matches!(
+            transfer_outcome(2, 3),
+            journal::Outcome::Diverged(_)
+        ));
+        assert!(matches!(
+            transfer_outcome(3, 3),
+            journal::Outcome::Reached(_)
+        ));
+        assert!(matches!(transfer_outcome(0, 3), journal::Outcome::Unknown));
         assert_eq!(Action::from_key("send_volunteers"), Some(Action::Send));
         assert_eq!(Action::from_key("recall_volunteers"), Some(Action::Recall));
         assert_eq!(Action::from_key("send_attache"), None);

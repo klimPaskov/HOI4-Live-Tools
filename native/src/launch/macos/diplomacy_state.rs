@@ -921,6 +921,21 @@ pub(super) fn tag_index_of(r: &Reader<'_>, image: u64, tag: &str) -> Result<i32>
     let g = game::layout(r);
     let db = r.u64(image + g.tag_db_global)?;
     let (_, data, count) = r.array_header(db)?;
+    // engineer 132: a country created during the game (a civil war side, a released nation) has an
+    // index past the static tag table and the readers print it as `?<index>` (states::tag_name;
+    // s129e: the Spanish Republic '?440'): that spelling addresses it, when a country with a
+    // production stands at that index.
+    if let Some(index) = dynamic_index(tag) {
+        if (index as usize) < count {
+            return Err(Error::new(
+                "unknown_country",
+                format!("{tag} is inside the static tag table: use its tag"),
+            ));
+        }
+        return crate::economy::production_of(r, image, index)
+            .map(|_| index)
+            .map_err(|_| Error::new("unknown_country", format!("No country at index {tag}")));
+    }
     for index in 1..count.min(TAG_BUDGET) {
         if let Ok(name) = r.string(data + index as u64 * g.tag_stride) {
             if name == tag {
@@ -932,6 +947,15 @@ pub(super) fn tag_index_of(r: &Reader<'_>, image: u64, tag: &str) -> Result<i32>
         "unknown_country",
         format!("No country with the tag {tag}"),
     ))
+}
+
+/// The index of a `?<index>` spelling (a country created during the game).
+pub(super) fn dynamic_index(tag: &str) -> Option<i32> {
+    let digits = tag.strip_prefix('?')?;
+    if digits.is_empty() || digits.len() > 5 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse().ok().filter(|i| *i > 0)
 }
 
 /// (state id, owner tag index) of every state in the catalog.

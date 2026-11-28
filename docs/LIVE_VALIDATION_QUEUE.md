@@ -1097,6 +1097,14 @@ Stop at once on: a crash, any `unexplained`, a drop on a province not named, div
 a paradrop order the game's own tool would not draw.
 Pass -> set `LIVE_PASSED` true in native/src/launch/macos/paradrop.rs (auto then runs it).
 
+## Air mission entries over an army's front (engineer 132, written; with the next war bed; about 10 game days)
+`air_situation.missions[]` entries may name `target:"front:<army>"` (or an army_layout name hint): the region holding most
+of that army's divisions, read each turn. Bed: 1939 Germany at war with Poland (w92b), plan with `air_situation:{}` and
+one entry `{"id":"cas-n","mission":"cas","target":"front:<the northern army>","share":0.5}`. F1 the executor's note names
+the entry with a region id; that region holds most of the army's divisions (hoi4_armies states vs the air map). F2 after
+the army advances into another region, within `every_days` the entry's wings fly over the new region. F3 an unknown army:
+the note says "no army ..." and no wing moves. Record the regions and the days.
+
 ## Air reads and the air plan (engineer 106, 28 Nov 2026): live checks, no new command
 
 - air-coverage: `hoi4_air {}` per wing `air_range_km` and `coverage` against the game's own "Coverage in this region"
@@ -1262,6 +1270,16 @@ Stop at once on: any post the game did not refuse while the view greys the butto
 named, an attaché or volunteers to a country not named, a module `unexplained` result.
 Pass: V0, V1, V3, V5, V7 (V2, V4, V6 recorded). Then set LIVE_PASSED in native/src/launch/macos/volunteers.rs and the
 `volunteers` entry of IPC_LIVE_PASSED in inproc/core/ipc.c to 1, with the session's numbers in the comment.
+AFTER s129e (engineer 132, written): (a) V3 READ-BACK: a send (and an expedition) now settles by the divisions that left
+the army: all left = Reached, some = Diverged {divisions_left_our_army, not_taken} (the game's cap took fewer), none yet =
+Unknown until the settlement window. Rerun V3 on the s129e bed's start (or g126b's end save, to the Civil War) with 3
+divisions against a cap of 2: the reply must be Diverged with 2 left and 1 not_taken. (b) DYNAMIC TAGS: a country created
+in the game is addressed as the readers print it, `?<index>` (s129e: the Republic '?440'): `hoi4_diplomacy {catalog:true,
+country:"?440"}` lists rows with can_do; `{action:"send_volunteers", country:"?440", army:...}` reaches the game's check;
+a `?<index>` inside the static tag table or with no country is refused unknown_country. (c) STILL OPEN (not fixed): V5
+recall needs volunteer divisions readable abroad; V7 the attaché after volunteers to the same country is accepted by the
+module's check and dropped by the game, and send_attache ETH went the mouse path: record whether that call reused a
+request_id (a retry takes the mouse path by design) and the route the reply names.
 
 ## Session S27-DIPLOMACY-ANY: every diplomatic action by its key, the catalog and the game's own answer (module family `diplomacy2`; about 30 minutes) -- part of the diplomacy session, with S25-VOLUNTEERS
 Owner, 28 Nov: ONE dynamic diplomacy tool for any diplomatic action. What it proves: `hoi4_diplomacy {catalog:true}` lists
