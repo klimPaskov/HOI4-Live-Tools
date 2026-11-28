@@ -8177,7 +8177,7 @@ impl MacClock {
                 Ok(if retry {
                     journal::Outcome::Diverged(detail)
                 } else {
-                    settle::queue_growth(0, added as i64, count as i64).outcome(detail)
+                    settle::lines_added_exactly(added as i64, count as i64).outcome(detail)
                 })
             };
             let mut train_reply = None;
