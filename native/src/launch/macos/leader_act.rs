@@ -1025,6 +1025,78 @@ fn drive(process: &dyn Process, keys: &dyn GameInput, p: &Planned, list_only: bo
     result
 }
 
+// ------------------------------------------------------------------- in process
+
+/// The longest trait key the module takes (its request carries the key as character codes, at most 32).
+const MODULE_KEY_MAX: usize = 32;
+
+/// The trait key as the module's character codes; None when the module cannot carry it (the mouse path); pure.
+fn key_codes(key: &str) -> Option<Vec<i64>> {
+    let ok = !key.is_empty()
+        && key.len() <= MODULE_KEY_MAX
+        && key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_');
+    ok.then(|| key.bytes().map(i64::from).collect())
+}
+
+/// engineer 127: the trait tree's own command (CLearnTraitCommand, module family `leader`): the general by name
+/// (units::leader_address), the trait by its key from the game's own trait database (the module looks it up). The game's
+/// own "can do" decides (not owned, prerequisites, slots, command power): its refusal is the answer, nothing is clicked.
+/// None: the family is off or the module cannot take it (the mouse path runs in this same call). Off under
+/// `HOI4_BACKEND=auto` until its live session (S31-TRAIT) passes.
+fn learn_in_process(
+    process: &dyn Process,
+    general: &str,
+    key: &str,
+    shown: &str,
+) -> std::result::Result<Option<Value>, Fail> {
+    let Some(vals) = key_codes(key) else {
+        return Ok(None);
+    };
+    let Some(mut ch) = super::inproc::route("leader") else {
+        return Ok(None);
+    };
+    let Ok(leader) =
+        super::units::snapshot(process, |r, i| super::units::leader_address(r, i, general))
+    else {
+        return Ok(None);
+    };
+    let req = super::inproc_units::request("leader.learn_trait", &[leader], &[], &vals, None);
+    let routed = match req.and_then(|r| ch.post_raw(r)) {
+        Ok(reply) => super::inproc_units::routed(reply, "learn this trait"),
+        Err(_) => super::inproc::Routed::Gui,
+    };
+    match routed {
+        super::inproc::Routed::Gui => Ok(None),
+        super::inproc::Routed::Refused(what) => {
+            Err(Fail::Refused(super::inproc::refused_error(&what)))
+        }
+        super::inproc::Routed::Done(body) => {
+            // the general's own trait list shows the trait once the command ran (a game day at most)
+            let deadline = Instant::now() + Duration::from_millis(2500);
+            let mut owned =
+                owned_traits(process, general).is_some_and(|t| t.contains(&key.to_string()));
+            while !owned && Instant::now() < deadline {
+                pause(150);
+                owned =
+                    owned_traits(process, general).is_some_and(|t| t.contains(&key.to_string()));
+            }
+            let mut out = json!({
+                "general": general,
+                "trait": shown,
+                "key": key,
+                "backend": "inprocess",
+                "module": body["module"],
+                "verification": "own_trait_list",
+            });
+            // unseen yet: settle decides from the general's trait list
+            if owned {
+                out["assigned"] = json!(true);
+            }
+            Ok(Some(out))
+        }
+    }
+}
+
 // ------------------------------------------------------------------- tools
 
 fn name_arg<'a>(args: &'a serde_json::Map<String, Value>, name: &str) -> Result<&'a str> {
@@ -1120,6 +1192,13 @@ pub(super) fn call(
             let p = resolved.borrow().clone().ok_or_else(|| {
                 Fail::Failed(Error::new("action_uncertain", "Plan missing at dispatch"))
             })?;
+            if !list_only {
+                if let Some((key, shown)) = p.want.as_ref() {
+                    if let Some(done) = learn_in_process(process, &p.general, key, shown)? {
+                        return Ok(done);
+                    }
+                }
+            }
             drive(process, keys, &p, list_only)
         }),
         settle: Box::new(|process, seen| {
@@ -1169,13 +1248,33 @@ pub(super) fn call(
 
 pub(super) fn tools() -> Vec<Value> {
     vec![
-        json!({"name":"hoi4_general_trait","description":"Live-verified (pp13, 17 Nov 2026: a list and an assignment): give an own army general an assignable trait for command power (NDefines UNIT_LEADER_ASSIGN_TRAIT_COST, read from the game's defines; 15 in 1.19.4) with the game's own trait tree window: the card's trait button when the general leads an army or army group, else an own army's panel, its commander list and the general's Traits button; then the trait's entry in the tree. `general` is the name hoi4_commanders lists; `trait` is an assignable trait's script key or localised name (from common/unit_leader, so mods work); without `trait` the first trait the tree lets the general pick is taken, the earliest of `prefer` (keys or names) first. list:true opens the tree and returns every entry (name, script key, assignable, state owned/available/locked, can_pick), the free trait slots shown, command power and the cost, changing nothing. Typed refusals before input: unknown_commander (closest names), trait_unknown, trait_not_assignable (a trait the game grants), insufficient_command_power (\"costs N command power and M are held\"), catalog_unavailable; from the window before the click: no_own_army, general_not_listed, wrong_leader, trait_not_offered (lists the tree), trait_owned, trait_unavailable, no_free_trait_slot, no_enabled_trait, trait_not_visible. Verified by the entry turning to the owned state, else by command power dropping by about the cost.","inputSchema":{"type":"object","properties":{"general":{"type":"string","maxLength":128},"trait":{"type":"string","maxLength":128},"prefer":{"type":"array","items":{"type":"string","maxLength":128},"maxItems":24},"list":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["general","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_general_trait","description":"Live-verified (pp13, 17 Nov 2026: a list and an assignment): give an own army general an assignable trait for command power (NDefines UNIT_LEADER_ASSIGN_TRAIT_COST, read from the game's defines; 15 in 1.19.4) with the game's own trait tree window: the card's trait button when the general leads an army or army group, else an own army's panel, its commander list and the general's Traits button; then the trait's entry in the tree. `general` is the name hoi4_commanders lists; `trait` is an assignable trait's script key or localised name (from common/unit_leader, so mods work); without `trait` the first trait the tree lets the general pick is taken, the earliest of `prefer` (keys or names) first. list:true opens the tree and returns every entry (name, script key, assignable, state owned/available/locked, can_pick), the free trait slots shown, command power and the cost, changing nothing. Typed refusals before input: unknown_commander (closest names), trait_unknown, trait_not_assignable (a trait the game grants), insufficient_command_power (\"costs N command power and M are held\"), catalog_unavailable; from the window before the click: no_own_army, general_not_listed, wrong_leader, trait_not_offered (lists the tree), trait_owned, trait_unavailable, no_free_trait_slot, no_enabled_trait, trait_not_visible. Verified by the entry turning to the owned state, else by command power dropping by about the cost. With the in-process module family `leader` on, the trait is learned by the trait tree's own command (the trait by its key from the game's trait database; the game's own check decides and a refusal is refused_by_game_check with nothing clicked), verified from the general's own trait list; otherwise, or when the module cannot take it, the window path runs in the same call.","inputSchema":{"type":"object","properties":{"general":{"type":"string","maxLength":128},"trait":{"type":"string","maxLength":128},"prefer":{"type":"array","items":{"type":"string","maxLength":128},"maxItems":24},"list":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["general","request_id","lease_token"],"additionalProperties":false}}),
     ]
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_trait_key_goes_to_the_module_as_character_codes_or_not_at_all() {
+        assert_eq!(
+            key_codes("desert_fox"),
+            Some("desert_fox".bytes().map(i64::from).collect())
+        );
+        assert_eq!(key_codes(""), None);
+        assert_eq!(
+            key_codes("bad key"),
+            None,
+            "the module takes letters, digits and _ only"
+        );
+        assert_eq!(
+            key_codes(&"x".repeat(33)),
+            None,
+            "the module takes at most 32 codes"
+        );
+        assert!(key_codes(&"x".repeat(32)).is_some());
+    }
 
     fn catalog() -> Catalog {
         let entries = script::parse(

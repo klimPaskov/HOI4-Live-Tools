@@ -31,6 +31,7 @@ its mouse path.
 | projects | S19-PROJECTS | not run |
 | navyhq | S20-NAVYHQ | not runnable yet: the command is found, but no read gives a headquarters' address |
 | move | S20-MOVE | not run: division moves by command (hoi4_army_move), off under `auto` |
+| leader | S31-TRAIT | not run: a general's trait by its key (hoi4_general_trait), off under `auto` |
 | multiplayer | S1-MP, S2-MP | not run (needs two clients); every post refuses outside single player |
 
 ## Proof state of the registered tools (23 November 2026)
@@ -1422,3 +1423,17 @@ F10 abilities: hoi4_abilities: a country-limited ability shows its full requirem
 F11 weather: hoi4_weather on a state in mud: clears_in_days a number, or bad_ground_clears_beyond_horizon true with the date;
 bad_ground_all_year true only for a state whose files give bad ground the whole year.
 Pass: F1-F11. Open (not built): the weather map mode; army_move by mouse in auto (needs S20 M6).
+
+## Session S31-TRAIT: a general's trait by command (in process, family `leader`; about 15 minutes) -- any time
+Build: e127 (tools 127). Module family `leader` named in HOI4_INPROC_POST and HOI4_BACKEND=inprocess. Any save with an own
+general who has a free trait slot and enough command power (hoi4_general_trait list:true shows can_pick).
+T0 hello: families.leader resolved (on true with the family named), live_passed false. scan evidence names "trait db got".
+T1 hoi4_general_trait {general, trait: <a can_pick trait key>}: expect backend inprocess, assigned true within 2.5 s, the
+trait in hoi4_commanders' trait list, command power down by the game's cost (UNIT_LEADER_ASSIGN_TRAIT_COST); no window
+opened. The trait tree window afterwards shows it owned.
+T2 the same call again: refused_by_game_check (already owned), nothing posted, no window.
+T3 a trait whose prerequisite is missing, or with too little command power: refused_by_game_check, command power unchanged.
+T4 an unknown key: trait_unknown before any post (the catalog); a key the module's trait database lacks (a mod trait not
+loaded): the module refuses and the window path runs in the same call.
+T5 by localised name (trait: "Desert Fox"): the same as T1 (the catalog gives the key).
+Pass: T1-T5, no window opened in T1-T3. Then IPC_LIVE_PASSED for leader may be set to 1.
