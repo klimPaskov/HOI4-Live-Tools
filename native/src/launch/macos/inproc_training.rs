@@ -1,9 +1,11 @@
 //! Training through the in-process module (engineer 82, family `training`): the deployment view's own posts, each
 //! checked by the game's own "can do" (and, for the Train button, the game's "can train" the view calls first).
 //! - hoi4_train: CreateConveyor(template) as the template row's Train button; the new queue read back from the own
-//!   deployment status; SetConveyorSeries(queue, 1) as its + (a new queue trains forever); AddConveyorLine(queue,
-//!   count - 1) as Shift-clicks on Add Unit (5 lines each at most); SetConveyorLocation(queue, a province of the deploy
-//!   state) as the map click in the queue's location mode.
+//!   deployment status; SetConveyorSeries(queue, 1) as its + (a new queue trains forever); AddConveyorLine(queue, n)
+//!   as Add Unit clicks, one post at a time with the queue's lines read after each and only the remainder asked
+//!   (at most 5 a post; a surplus the game added is taken off the next ask); SetConveyorLocation(queue, a province of
+//!   the deploy state) as the map click in the queue's location mode. A failure after the queue was made cancels it
+//!   (training.remove), so no empty queue is left behind.
 //! - hoi4_deploy_locations: SetConveyorLocation(every queue without a province, a province of the state).
 //!
 //! The module also carries the queue's deploy and cancel buttons (training.deploy / training.remove): no MCP tool
@@ -19,11 +21,6 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
-
-/// The lines a train request adds to its new queue (the queue starts with one).
-pub(super) fn extra_lines(count: usize) -> i64 {
-    count.saturating_sub(1) as i64
-}
 
 fn post(
     route: &mut Option<Channel>,
@@ -108,43 +105,116 @@ pub(super) fn train(
             )
         })
     };
+    let lines_of = |qs: &[Queue]| qs.iter().find(|x| x.address == q).map(|x| x.lines);
     let mut replies = vec![created];
-    if queue.amount == 0 {
+    let filled = |route: &mut Option<Channel>, replies: &mut Vec<Value>| -> Result<(i32, usize)> {
+        if queue.amount == 0 {
+            replies.push(step(
+                route,
+                "training.series",
+                &[1],
+                "one division per line",
+            )?);
+            until(process, "the series amount", |qs| {
+                qs.iter().any(|x| x.address == q && x.amount == 1)
+            })?;
+        }
+        // the lines: one Add Unit post at a time, the queue read after each, only the remainder
+        // posted (S15-TRAINING, 28 Nov 2026: 7 asked, the module posted 5 and 1 at once and the
+        // queue stood at 9)
+        let got = fill_lines(count, queue.lines.max(1), |v| {
+            let before = lines_of(&ui::read(process, deployment::queues)?).unwrap_or(0);
+            replies.push(step(
+                route,
+                "training.add_lines",
+                &[v],
+                "more lines for this queue",
+            )?);
+            let now = until(process, "the added lines", |qs| {
+                lines_of(qs).is_some_and(|n| n > before)
+            })?;
+            Ok(lines_of(&now).unwrap_or(before))
+        })?;
         replies.push(step(
             route,
-            "training.series",
-            &[1],
-            "one division per line",
+            "training.location",
+            &[i64::from(province)],
+            "this deployment location",
         )?);
-        until(process, "the series amount", |qs| {
-            qs.iter().any(|x| x.address == q && x.amount == 1)
+        until(process, "the deployment location", |qs| {
+            qs.iter().any(|x| x.address == q && x.location == province)
         })?;
+        Ok(got)
+    };
+    match filled(&mut *route, &mut replies) {
+        Ok((lines, posts)) => Ok(Some(
+            json!({"backend":"inprocess","queue":format!("{q:#x}"),
+            "province":province,"lines":lines,"asked":count,"line_posts":posts,
+            "over":(lines as i64 - count as i64).max(0),"posts":replies}),
+        )),
+        Err(e) => {
+            // a refusal after the queue was made: the queue it made is cancelled (S15-TRAINING: a
+            // refused add left a one-line queue behind)
+            let removed = post(route, "training.remove", &[q], &[], "cancel this queue")
+                .ok()
+                .flatten()
+                .is_some()
+                && until(process, "the cancelled queue", |qs| lines_of(qs).is_none()).is_ok();
+            Err(Error::new(
+                e.code,
+                format!(
+                    "{} ({})",
+                    e.message,
+                    if removed {
+                        "the queue this call had created was cancelled"
+                    } else {
+                        "the queue this call had created could not be cancelled: it stands in the deployment view"
+                    }
+                ),
+            ))
+        }
     }
-    let extra = extra_lines(count);
-    if extra > 0 {
-        replies.push(step(
-            route,
-            "training.add_lines",
-            &[extra],
-            "more lines for this queue",
-        )?);
-        until(process, "the added lines", |qs| {
-            qs.iter()
-                .any(|x| x.address == q && x.lines as usize >= count)
-        })?;
+}
+
+/// The most lines one Add Unit post asks for (the Shift-click's five).
+const LINES_PER_POST: i64 = 5;
+/// Posts that add no line before the queue is given up.
+const LINE_POSTS_MAX: usize = 12;
+
+/// The queue's lines filled up to `count`, from `lines` standing: each `post(v)` asks for `v` more
+/// lines and returns the lines the queue holds after it. Only the remainder is asked for, at most
+/// five a post; when a post adds more than it asked (the game's own rounding), the surplus is
+/// taken off the next ask. Returns (lines, posts). An overshoot of the last post stands (no
+/// command takes a line off a queue); it is in the reply.
+pub(super) fn fill_lines(
+    count: usize,
+    mut lines: i32,
+    mut post: impl FnMut(i64) -> Result<i32>,
+) -> Result<(i32, usize)> {
+    let mut surplus = 0i64;
+    let mut posts = 0usize;
+    while (lines as i64) < count as i64 {
+        if posts >= LINE_POSTS_MAX {
+            return Err(Error::new(
+                "input_readback_failed",
+                format!("The training queue holds {lines} of {count} lines after {posts} posts"),
+            ));
+        }
+        let left = count as i64 - lines as i64;
+        let ask = (left - surplus).clamp(1, LINES_PER_POST);
+        let now = post(ask)?;
+        posts += 1;
+        let added = (now - lines) as i64;
+        if added <= 0 {
+            return Err(Error::new(
+                "input_readback_failed",
+                format!("An Add Unit post for {ask} line(s) added none ({lines} of {count})"),
+            ));
+        }
+        surplus = (added - ask).max(0);
+        lines = now;
     }
-    replies.push(step(
-        route,
-        "training.location",
-        &[i64::from(province)],
-        "this deployment location",
-    )?);
-    until(process, "the deployment location", |qs| {
-        qs.iter().any(|x| x.address == q && x.location == province)
-    })?;
-    Ok(Some(
-        json!({"backend":"inprocess","queue":format!("{q:#x}"),"province":province,"posts":replies}),
-    ))
+    Ok((lines, posts))
 }
 
 /// Every own queue without a deployment province gets `province`. Ok(None): nothing was posted.
@@ -193,10 +263,49 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_queue_starts_with_one_line_and_the_rest_are_added() {
-        assert_eq!(extra_lines(1), 0);
-        assert_eq!(extra_lines(6), 5);
-        assert_eq!(extra_lines(24), 23);
+    fn lines_are_posted_as_the_remainder_after_each_read() {
+        // the game as S15-TRAINING saw it: each post added one line more than it asked
+        let mut asked = Vec::new();
+        let mut q = 1;
+        let (lines, posts) = fill_lines(7, 1, |v| {
+            asked.push(v);
+            q += v as i32 + 1;
+            Ok(q)
+        })
+        .unwrap();
+        assert_eq!((lines, posts), (7, 1));
+        assert_eq!(asked, vec![5]);
+        // an exact game: 12 asked from 1 is 5, 5, 1
+        let mut asked = Vec::new();
+        let mut q = 1;
+        let got = fill_lines(12, 1, |v| {
+            asked.push(v);
+            q += v as i32;
+            Ok(q)
+        })
+        .unwrap();
+        assert_eq!(got, (12, 3));
+        assert_eq!(asked, vec![5, 5, 1]);
+        // the surplus learnt on the first post is taken off the next ask
+        let mut asked = Vec::new();
+        let mut q = 1;
+        let got = fill_lines(12, 1, |v| {
+            asked.push(v);
+            q += v as i32 + 1;
+            Ok(q)
+        })
+        .unwrap();
+        assert_eq!(got, (12, 2));
+        assert_eq!(asked, vec![5, 4]);
+        // nothing to add, or a post that adds nothing
+        assert_eq!(fill_lines(1, 1, |_| unreachable!()).unwrap(), (1, 0));
+        assert!(fill_lines(3, 1, |_| Ok(1)).is_err());
+        // a refusal is passed on (the caller cancels the queue)
+        let e = fill_lines(6, 1, |_| {
+            Err(Error::new("refused_by_game_check", "more lines"))
+        })
+        .unwrap_err();
+        assert_eq!(e.code, "refused_by_game_check");
     }
 
     #[test]
