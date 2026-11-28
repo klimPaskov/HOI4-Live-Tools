@@ -59,6 +59,8 @@ EXECUTOR_SOURCES = [PLAN_RUN] + [os.path.join(ROOT, "native", "src", name)
 # Sources searched for a key's name when no read pattern finds it (helpers with their own variables).
 LITERAL_SOURCES = EXECUTOR_SOURCES + [os.path.join(ROOT, "native", "src", name)
                                       for name in ("plan_formations.rs", "alarms.rs", "watch.rs",
+                                                   # the operation's execution rule (execution_rule.*)
+                                                   os.path.join("plan_operation", "pace.rs"),
                                                    # alarms.<code>: the hoi4_wars alert codes are the keys
                                                    os.path.join("launch", "macos", "wars.rs"))]
 # The planning tools: what reads a lint key.

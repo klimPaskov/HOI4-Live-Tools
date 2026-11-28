@@ -2282,9 +2282,37 @@
             "enum": [
               "careful",
               "balanced",
-              "rush"
+              "rush",
+              "auto"
             ],
-            "description": "battle-plan execution mode of every executed order"
+            "description": "battle-plan execution mode of the operation's attackers. auto: the operation chooses it at war per executing attacker every execution_rule.days by its battles and the losses against the countries it fights: rush while our losses cost the enemy at least as much (every province of the plan is attacked, divisions attack down to 45% organisation), balanced when ours outrun theirs (only provinces scored even or better, 70%), careful when they cost us twice theirs and most battles are lost; an attack that wins on its losses is not stopped by the supply pace. careful, balanced or rush: that mode, sent once in the prepare"
+          },
+          "execution_rule": {
+            "type": "object",
+            "properties": {
+              "rush_ratio": {
+                "type": "number",
+                "minimum": 0,
+                "description": "enemy losses per own loss at or above which the attack presses (rush); default 1.0"
+              },
+              "careful_ratio": {
+                "type": "number",
+                "minimum": 0,
+                "description": "enemy losses per own loss under which, with most battles lost, the attack turns careful; default 0.5"
+              },
+              "min_losses": {
+                "type": "number",
+                "minimum": 0,
+                "description": "own plus enemy losses the days since the last reading need before their ratio is read (else the war's); default 1500"
+              },
+              "days": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "game days between two readings of one attacker; default 2"
+              }
+            },
+            "additionalProperties": false,
+            "description": "the numbers of execution auto (every key optional)"
           },
           "group": {
             "type": "string",
