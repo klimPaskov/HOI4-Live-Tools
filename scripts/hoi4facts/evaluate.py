@@ -390,7 +390,6 @@ def parser():
     p = add("doctrine")
     p.add_argument("--planning-days", type=int, nargs="+", default=[14, 30],
                    help="offensive lengths the planning bonus is averaged over")
-    add("doctrine")
     p = add("focus")
     p.add_argument("--goal", action="append", default=[], help="ideology:<name> or no_war:<TAG> (repeatable)")
     p.add_argument("--count", type=int, default=12)
