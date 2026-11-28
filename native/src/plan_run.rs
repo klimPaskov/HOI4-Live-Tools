@@ -294,6 +294,9 @@ use std::{
 /// battles, reach by range and base.
 #[path = "plan_air.rs"]
 mod plan_air;
+/// Airborne drops as a standing opportunity rule (`airborne`): reach, the air over the target, FAIR link-up.
+#[path = "plan_airborne.rs"]
+mod plan_airborne;
 /// Concentrated command: formations and their tasks, a general for every army, the army group.
 #[path = "plan_formations.rs"]
 mod plan_formations;
@@ -459,6 +462,7 @@ fn bulk_paths(plan: &Value) -> HashSet<String> {
 }
 pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_skill_run",
+    "hoi4_paradrop",
     "hoi4_army_fallback",
     "hoi4_army_exercise",
     "hoi4_production_priority",

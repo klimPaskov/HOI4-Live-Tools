@@ -1048,6 +1048,54 @@ Stop at once on: a crash, any `unexplained`, a division moving that was not name
 differs from the right click's, a battle that a right click would not open, or a post the game's check refused.
 Pass -> IPC_LIVE_PASSED entry 23 (move) = 1.
 
+## Session S21-PARADROP: the in-process module, paradrops (family `orders2`, tool `hoi4_paradrop`; about 30 minutes) -- after S20-MOVE
+
+Built by engineer 106 (28 Nov 2026), offline-proven only: `orders2.paradrop_source` (COrderSetParadropSourceCommand 12729,
+0x50 bytes) resolves at full confidence on 1.19.4.1 and 1.20.0.0 macOS with the same field offsets as the existing
+`orders2.paradrop_target` (`inproc/test_offline.sh`). The orders2 family itself passed live (S5-PLAN), so the gate is in
+the tool: `hoi4_paradrop` refuses `paradrop_unvalidated` unless `HOI4_BACKEND=inprocess` until this session passes
+(`paradrop::LIVE_PASSED` in native/src/launch/macos/paradrop.rs). There is no mouse path.
+- What it posts: source with order 0 and the army's divisions (the paradrop tool's first click: the game removes the
+  army's area-defence orders, makes a kind-4 order, sets the departure province and assigns the divisions; the module
+  reads the new order's id back from the group's top list), then `orders2.paradrop_target` with that id and the drop
+  province, then `orders.execute` (flag 1) unless `execute:false`. Each through the game's own "can do".
+- The executor's `airborne` opportunity rule (native/src/plan_airborne.rs) sends it when transports reach, the region's
+  air is ours by the region window's estimate, and (FAIR) a battle of ours lies within `link_up_km`.
+Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,orders2 ./inproc_stage2.sh <save> s21p`: a save at war with an
+own army of trained paratrooper divisions (Germany 1940 with Fallschirmjäger, or train 2-3 para divisions first),
+transport-plane wings at an own air base within range of an enemy province, and the region's air superiority ours
+(fighters on air superiority first). `HOI4_BACKEND=inprocess`.
+P1 paused: `hoi4_air {}` (transport wing, its `air_range_km`), `hoi4_air_regions {}` (coverage of the target region).
+`hoi4_paradrop {"army":"<para army>","from_state":<base state>,"target_province":<enemy province in range>,
+"execute":false}`: Verified; the receipt's `in_process.order_id`; the plan bar shows a paradrop arrow from the base to
+the province, exactly as the tool's two clicks draw it; the army's other orders are gone only where the game's own
+source click removes them (area defence). RECORD: hoi4_armies orders row `kind` = "paradrop".
+P2 running at speed 2: the same with `execute` default: the divisions take off (the unit's paradrop state), land on
+the province, a battle opens. RECORD the transport wings' mission and how many divisions dropped.
+P3 refusals: a province beyond the transports' range; a region where the enemy holds the air
+(PARADROP_AIR_SUPERIORITY_RATIO); an army without paratroopers: `paradrop_refused` (the game's check) or an inproc
+refusal, nothing posted, no order drawn. Unexpected success on any of these = stop.
+P4 `division_ids` naming 2 of 3 para divisions: only those 2 are on the order.
+P5 save + reload; a plain load without the module.
+Stop at once on: a crash, any `unexplained`, a drop on a province not named, divisions of another army on the order,
+a paradrop order the game's own tool would not draw.
+Pass -> set `LIVE_PASSED` true in native/src/launch/macos/paradrop.rs (auto then runs it).
+
+## Air reads and the air plan (engineer 106, 28 Nov 2026): live checks, no new command
+
+- air-coverage: `hoi4_air {}` per wing `air_range_km` and `coverage` against the game's own "Coverage in this region"
+  (the region tooltip over a wing's base). Coverage is computed from map/unitstacks.txt land positions within the range
+  of the base province at MAP_SCALE_PIXEL_TO_KM; record both numbers for 3 wings (short, medium, long range), and
+  whether a range MIO's bonus shows in `air_range_km` (the variant's stats at fleetmem 0x260).
+- air-superiority-read: the enemy's share per region is read only through the region window (hoi4_air_region_probe).
+  Static lead for a direct read: routine 0x1009f8460 (1.20.0.0), stride 0xb0 entries at +0xe0, fields +0x88/+0x90/+0xa8;
+  owner unconfirmed. Confirm against the region window for 2 regions, then the probe can be replaced.
+- air-situation (plan key `air_situation`): a war save; record each executor turn's orders against the region window
+  (fighters sized to the ratio or kept out; CAS only over regions not lost; one forward rebase when out of range).
+- designs: `scripts/hoi4facts/facts.py design-best GER --role fighter --need air_range=1100` and the owner's Fw 190
+  (1235 km): the designer's shown range, agility, attack and cost against the computed numbers for the same modules.
+- S18-DOCTRINE also adopts a special-forces grand doctrine (D2): the paratrooper line needs it.
+
 ## Session S23-WEATHER: the weather evaluator against the game's own weather (read only; about 10 minutes) -- any time
 What it proves: hoi4_weather's estimate agrees with what the game shows, so the operation step's ground gate
 (`operations[].weather_gate`) holds a declaration only for real mud or snow.

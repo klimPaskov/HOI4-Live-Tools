@@ -120,6 +120,12 @@ const cmd_spec CMD2_SPECS[] = {
     {"orders2", "orders2.invasion_target", "CAddNavalInvasionTargetCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "12COrdersGroup", 3,
      {{"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0, 1}, {"province", 0x30, FK_I32, 0, 0x2840, 0, 2}},
      OBJ2_NONE, 0},
+    /* engineer 106: the paradrop tool's first click (the departure air base province). 1.20.0.0 exec 0x10094bba0: order id 0
+     * removes the group's kind-5 orders, creates a NEW kind-4 (paradrop) order, writes the source province at order +0xb8
+     * and assigns the divisions; an existing order id only moves its source. Then paradrop_target and orders.execute. */
+    {"orders2", "orders2.paradrop_source", "COrderSetParadropSourceCommand", 0x50, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "12COrdersGroup", 4,
+     {{"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0, 1}, {"province", 0x30, FK_I32, 0, 0x2840, 0, 2},
+      {"divisions", 0x38, FK_REF_ARRAY, 0x44, 0x28a3, 0}}, OBJ2_NONE, 0},
     /* the drop province of an existing paradrop order */
     {"orders2", "orders2.paradrop_target", "COrderSetParadropTargetCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "12COrdersGroup", 3,
      {{"group", 0x24, FK_REF, 0, 0x3f, 0}, {"order_id", 0x2c, FK_I32, 0, 0x3036, 0, 1}, {"province", 0x30, FK_I32, 0, 0x2840, 0, 2}},

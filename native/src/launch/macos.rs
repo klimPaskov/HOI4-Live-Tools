@@ -40,6 +40,7 @@ mod inproc_research;
 mod inproc_training;
 mod inproc_units;
 mod operation_act;
+mod paradrop;
 mod railway;
 // Internal prospective click opener; no tool/configuration registration.
 mod construction_find_open;
@@ -797,6 +798,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         stockpile::tool(),
         airread::schema(),
         designs::schema(),
+        paradrop::schema(),
         doctrines::tool(),
         mios::tool(),
         intelligence::tool(),
@@ -1022,6 +1024,7 @@ impl Commands for MacClock {
                     | "hoi4_army_offensive"
                     | "hoi4_army_fallback"
                     | "hoi4_army_area_defense"
+                    | "hoi4_paradrop"
                     | "hoi4_army_exercise"
                     | "hoi4_army_move"
                     | "hoi4_army_commander"
@@ -6813,6 +6816,125 @@ impl MacClock {
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_paradrop" {
+            // engineer 106: the paradrop tool's source and target clicks and the plan bar's execute, by the game's own
+            // commands through the module (family orders2; off in auto until S21-PARADROP); no mouse path
+            allowed(
+                args,
+                &[
+                    "army",
+                    "from_state",
+                    "target_province",
+                    "division_ids",
+                    "execute",
+                    "request_id",
+                    "lease_token",
+                ],
+            )?;
+            paradrop::allowed_mode(inproc::mode())?;
+            let army = string(args, "army")?;
+            if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
+                return Err(Error::new("invalid_arguments", "Invalid army name"));
+            }
+            let from = args
+                .get("from_state")
+                .and_then(Value::as_i64)
+                .filter(|v| (1..4096).contains(v))
+                .ok_or_else(|| {
+                    Error::new(
+                        "invalid_arguments",
+                        "from_state must be a state id (1..4095)",
+                    )
+                })? as i32;
+            let target = args
+                .get("target_province")
+                .and_then(Value::as_i64)
+                .filter(|v| (1..100_000).contains(v))
+                .ok_or_else(|| {
+                    Error::new("invalid_arguments", "target_province must be a province id")
+                })? as i32;
+            let ids: Option<Vec<String>> = match args.get("division_ids") {
+                None | Some(Value::Null) => None,
+                Some(v) => Some(
+                    v.as_array()
+                        .filter(|a| (1..=64).contains(&a.len()))
+                        .and_then(|a| {
+                            a.iter()
+                                .map(|x| {
+                                    x.as_str()
+                                        .filter(|s| !s.is_empty() && s.len() <= 64)
+                                        .map(String::from)
+                                })
+                                .collect::<Option<Vec<String>>>()
+                        })
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", "division_ids: 1..64 division ids")
+                        })?,
+                ),
+            };
+            let execute = args.get("execute").and_then(Value::as_bool).unwrap_or(true);
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let observed = guard.observe(process)?;
+            let epoch = observed.epoch;
+            authority.authorize(token, &epoch)?;
+            let mut route = inproc::route("orders2");
+            if route.is_none() {
+                return Err(Error::new(
+                    "in_process_unavailable",
+                    "the in-process module's orders2 family is not serving: nothing was posted",
+                ));
+            }
+            let (bases, _) = airact::own(process)?;
+            let source = paradrop::source_province(&bases, from)?;
+            let group = ui::read(process, |r, i| armies::group_address(r, i, army))?;
+            let in_group = ui::read(process, |r, i| armies::group_division_ptrs(r, i, group))?;
+            let divisions = match &ids {
+                Some(ids) => {
+                    let ptrs = ui::read(process, |r, i| armies::division_ptrs(r, i, ids))?;
+                    if let Some(k) = ptrs.iter().position(|p| !in_group.contains(p)) {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            format!("division {} is not in {army}", ids[k]),
+                        ));
+                    }
+                    ptrs
+                }
+                None => in_group,
+            };
+            let action = json!({"kind":"paradrop","army":army,"source_province":source,
+                "target_province":target,"divisions":divisions.len(),"execute":execute});
+            let order: std::cell::Cell<Option<i32>> = std::cell::Cell::new(None);
+            let mut reply = Value::Null;
+            let mut settle = || {
+                let Some(o) = order.get() else {
+                    return Ok(journal::Outcome::Unknown);
+                };
+                let tops: Vec<(i32, i32, bool)> =
+                    ui::read(process, |r, i| armies::orders::group_orders(r, i, group))?
+                        .into_iter()
+                        .map(|(_, n)| (n.kind, n.id, n.executing))
+                        .collect();
+                let detail = json!({"army":army,"order_id":o,"orders":tops.len()});
+                Ok(match paradrop::settled(&tops, o, execute) {
+                    Some(true) => journal::Outcome::Reached(detail),
+                    Some(false) => journal::Outcome::Diverged(detail),
+                    None => journal::Outcome::Unchanged(detail),
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let ch = route
+                    .as_mut()
+                    .ok_or_else(|| Error::new("in_process_unavailable", "no channel"))?;
+                let (o, r) = paradrop::drop(ch, group, source, target, &divisions, execute)?;
+                order.set(Some(o));
+                reply = r;
+                Ok(())
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt,"in_process":reply}));
         }
         if name == "hoi4_army_fallback" || name == "hoi4_army_area_defense" {
             let fallback = name == "hoi4_army_fallback";

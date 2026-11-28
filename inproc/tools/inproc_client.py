@@ -20,7 +20,8 @@
   inproc_client.py SOCK post2 orders2.OP GROUP [--vals V,..] [--provs P,..] [--divs D,..] [--obj2 FRONT]
         orders2.new_root (--vals SECTION,FROM,TO,SPLIT --obj2 FRONT [--divs]) / orders2.assign (--vals ORDER --divs) /
         orders2.unassign (--divs) / orders2.fallback (--provs [--divs]) / orders2.edit_root (--vals ORDER,FROM,TO) /
-        orders2.invasion_target and orders2.paradrop_target (--vals ORDER,PROVINCE) / orders2.spearhead (--vals PARENT
+        orders2.invasion_target and orders2.paradrop_target (--vals ORDER,PROVINCE) / orders2.paradrop_source
+        (--vals 0,PROVINCE --divs: a new paradrop order, its id read back; or --vals ORDER,PROVINCE) / orders2.spearhead (--vals PARENT
   inproc_client.py SOCK post2 units.OP OBJS [--divs D,..] [--vals V,..] [--obj2 ADDR]   (engineer 75: army structure)
         units.new_army FIRST_DIV --divs D1,D2,.. (FIRST_DIV = D1: its theatre, as the UI reads it) / units.transfer ARMY
         --divs D,.. / units.leader GROUP [--obj2 LEADER] (none = unassign) / units.rename GROUP --vals 65,114,.. (the
