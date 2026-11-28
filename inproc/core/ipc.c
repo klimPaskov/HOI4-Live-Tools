@@ -15,8 +15,8 @@
 #include <time.h>
 #include <unistd.h>
 
-const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics", "construction", "training", "mio", "navy", "doctrine", "projects", "navyhq", "move", "raids", "diplomacy2"};
-const int IPC_ALLOWED_COUNT = 25;
+const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwing", "production2", "orders", "orders2", "units", "picks", "events", "decisions", "diplomacy", "holds", "research", "politics", "construction", "training", "mio", "navy", "doctrine", "projects", "navyhq", "move", "raids", "diplomacy2", "leader"};
+const int IPC_ALLOWED_COUNT = 26;
 /* airwing (engineer 71, 24 Nov): split, merge, disband, attach, detach, region by id / hold; OFF in auto until its
  * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
 const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */,
@@ -83,7 +83,9 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                 0 /* diplomacy2 (engineer 122, 28 Nov): every other diplomatic action class the game has
                                    * whose player constructor has a known shape, found by the module's catalog (embargo,
                                    * docking rights, air base access, licences access, autonomy, peace proposal ...);
-                                   * the diplomacy session S27-DIPLOMACY-ANY) */};
+                                   * the diplomacy session S27-DIPLOMACY-ANY) */,
+                                0 /* leader (engineer 127, 28 Nov): a general's assignable trait by its key, the trait
+                                   * tree's own CLearnTraitCommand (S31-TRAIT) */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;

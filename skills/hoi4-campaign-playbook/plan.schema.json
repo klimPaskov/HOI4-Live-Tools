@@ -6673,12 +6673,15 @@
     "commanders": {
       "type": "array",
       "x-owner": "executor",
-      "description": "traits to buy with command power per general (rule cp_spend, hoi4_general_trait), in order",
+      "description": "traits to buy with command power per general (rule cp_spend, hoi4_general_trait), in order; promote:true promotes the general to field marshal first (hoi4_general_trait promote:true, the game's own promote command; guide row G004), once, before his traits",
       "items": {
         "type": "object",
         "properties": {
           "general": {
             "type": "string"
+          },
+          "promote": {
+            "type": "boolean"
           },
           "traits": {
             "type": "array",
