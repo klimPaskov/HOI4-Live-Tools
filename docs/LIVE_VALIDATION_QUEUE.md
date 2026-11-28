@@ -31,7 +31,7 @@ its mouse path.
 | projects | S19-PROJECTS | not run |
 | navyhq | S20-NAVYHQ | not runnable yet: the command is found, but no read gives a headquarters' address |
 | move | S20-MOVE | not run: division moves by command (hoi4_army_move), off under `auto` |
-| leader | S31-TRAIT | not run: a general's trait by its key (hoi4_general_trait), off under `auto` |
+| leader | S31-TRAIT | not run: a general's trait by its key and the promotion to field marshal (hoi4_general_trait trait / promote:true), off under `auto` |
 | multiplayer | S1-MP, S2-MP | not run (needs two clients); every post refuses outside single player |
 
 ## Proof state of the registered tools (23 November 2026)
@@ -1436,4 +1436,16 @@ T3 a trait whose prerequisite is missing, or with too little command power: refu
 T4 an unknown key: trait_unknown before any post (the catalog); a key the module's trait database lacks (a mod trait not
 loaded): the module refuses and the window path runs in the same call.
 T5 by localised name (trait: "Desert Fox"): the same as T1 (the catalog gives the key).
-Pass: T1-T5, no window opened in T1-T3. Then IPC_LIVE_PASSED for leader may be set to 1.
+PROMOTION (engineer 131, G004; the same family: it passes with T1-T9 or not at all). A save with an own general who is not a
+field marshal (hoi4_commanders: Promote shown in the army panel's commander list) and command power at or above
+PROMOTE_LEADER_CP_COST (40 on 1.20.1).
+T6 hoi4_general_trait {general: <that general>, promote: true}: expect backend inprocess, promoted true within 2.5 s,
+command power down by the cost; the army panel's commander list shows him with no Promote button (field marshal); he can
+now be made an army group's commander (hoi4_army_commander on a group: no promotion step). No window opened by the tool.
+T7 the same call again: promotion_refused (already a field marshal), command power unchanged, nothing posted.
+T8 another general with command power below the cost (spend it first, or a save short of it): insufficient_command_power
+"costs 40 command power and N are held", nothing posted.
+T9 a field-marshal trait (for example logistics_wizard or offensive_doctrine, can_pick in list:true) on the general of T6:
+assigned (T1's path); before T6 the same trait is refused for a corps commander.
+Pass: T1-T9, no window opened in T1-T3 and T6-T8. Then IPC_LIVE_PASSED for leader may be set to 1 (the executor then
+promotes the plan's commanders[].promote:true generals before their traits).

@@ -1974,19 +1974,26 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
          *                codes (1..32, as justify passes its war goal key); the trait comes from the game's own leader
          *                trait database by that key and must be exactly a CUnitLeaderTrait; the game's own "can do"
          *                decides the rest (not owned yet, prerequisites, slots, command power) */
-        if (strcmp(op, "leader.learn_trait")) why = "unknown leader op";
-        else if (j->n != 1) why = "exactly one leader";
-        else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "leader.learn_trait takes no flag, obj2, provs or divs";
-        else if (nv < 1 || nv >= (int)sizeof j->wgkey) why = "vals: the trait's key as character codes (1..32)";
-        for (int k = 0; !why && k < nv; k++) {
-            int64_t ch = j->val[k];
-            if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_')) why = "the trait key is letters, digits and _ only";
-            else j->wgkey[k] = (char)ch;
-        }
-        if (!why) {
-            j->wgkey[nv] = 0;
-            j->obj2 = db_item_by_key(g_t.st2.trait_got, g_t.st2.trait_arr_off, g_t.st2.trait_cnt_off, g_t.st2.trait_tok_off, j->wgkey);
-            if (!j->obj2) why = "no unit-leader trait of that key in the game's trait database";
+        /*   promote:     objs = ONE own unit leader; nothing else (engineer 131: CPromoteUnitLeaderCommand; the game's own
+         *                can-promote decides: a general, not yet a field marshal, command power for the cost) */
+        if (!strcmp(op, "leader.promote")) {
+            if (j->n != 1) why = "exactly one leader";
+            else if (nv || flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "leader.promote takes no vals, flag, obj2, provs or divs";
+        } else {
+            if (strcmp(op, "leader.learn_trait")) why = "unknown leader op";
+            else if (j->n != 1) why = "exactly one leader";
+            else if (flag || (obj2 && *obj2) || (provs && *provs) || (divs && *divs)) why = "leader.learn_trait takes no flag, obj2, provs or divs";
+            else if (nv < 1 || nv >= (int)sizeof j->wgkey) why = "vals: the trait's key as character codes (1..32)";
+            for (int k = 0; !why && k < nv; k++) {
+                int64_t ch = j->val[k];
+                if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_')) why = "the trait key is letters, digits and _ only";
+                else j->wgkey[k] = (char)ch;
+            }
+            if (!why) {
+                j->wgkey[nv] = 0;
+                j->obj2 = db_item_by_key(g_t.st2.trait_got, g_t.st2.trait_arr_off, g_t.st2.trait_cnt_off, g_t.st2.trait_tok_off, j->wgkey);
+                if (!j->obj2) why = "no unit-leader trait of that key in the game's trait database";
+            }
         }
         nv = 0;
     } else if (!strncmp(op, "navyhq.", 7)) {

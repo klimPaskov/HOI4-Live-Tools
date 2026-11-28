@@ -85,6 +85,9 @@ pub(super) struct Catalog {
     pub names: HashMap<String, String>,
     pub assign_cost: f64,
     pub base_max: f64,
+    /// NDefines PROMOTE_LEADER_CP_COST (a general to field marshal; the game multiplies it by the
+    /// leader's own cost modifier); None when the defines do not give it.
+    pub promote_cost: Option<f64>,
 }
 impl Catalog {
     pub(super) fn display(&self, key: &str) -> String {
@@ -162,6 +165,7 @@ fn load(dir: &Path) -> Catalog {
         names,
         assign_cost: define(&defines, "UNIT_LEADER_ASSIGN_TRAIT_COST")
             .unwrap_or(ASSIGN_COST_FALLBACK),
+        promote_cost: define(&defines, "PROMOTE_LEADER_CP_COST"),
         base_max: define(&defines, "BASE_MAX_COMMAND_POWER").unwrap_or(BASE_MAX_FALLBACK),
     }
 }
@@ -1097,6 +1101,92 @@ fn learn_in_process(
     }
 }
 
+/// engineer 131: what the game's refusal of a promotion means; pure. The game's own can-promote
+/// (CUnitLeader, 1.20) refuses a leader who is not a general (already a field marshal) or a country
+/// short of the cost (PROMOTE_LEADER_CP_COST times the leader's own cost modifier). The message
+/// carries the cost first and the held power second, the order `plan_military::cp_wait_days` reads.
+pub(super) fn promote_refused(cost: Option<f64>, held: Option<f64>, general: &str) -> Error {
+    match (cost, held) {
+        (Some(c), Some(cp)) if cp < c => Error::new(
+            "insufficient_command_power",
+            format!(
+                "Promoting {general} to field marshal costs {c} command power and {cp:.0} are held; nothing was posted"
+            ),
+        ),
+        _ => Error::new(
+            "promotion_refused",
+            format!(
+                "The game's own check refused promoting {general} to field marshal: already a field marshal, or a leader whose own promotion cost is above the {} command power held; nothing was posted",
+                held.map_or_else(|| "unread".to_string(), |h| format!("{h:.0}"))
+            ),
+        ),
+    }
+}
+
+/// Whether the command power read after a posted promotion shows it was paid; pure. Command power
+/// only grows by itself, so any drop after the post is the promotion (None: unread).
+pub(super) fn promotion_paid(before: Option<f64>, after: Option<f64>) -> Option<bool> {
+    match (before, after) {
+        (Some(b), Some(a)) => Some(a < b),
+        _ => None,
+    }
+}
+
+/// engineer 131: a general promoted to field marshal by the game's own command (CPromoteUnitLeaderCommand,
+/// module family `leader`, the command the leader list's Promote button posts). The game's own can-promote
+/// decides; its refusal is the answer and nothing is clicked. No mouse path: without the family the call is
+/// refused in_process_unavailable (off under `HOI4_BACKEND=auto` until S31-TRAIT's promotion step passes).
+fn promote_in_process(
+    process: &dyn Process,
+    general: &str,
+    cost: Option<f64>,
+) -> std::result::Result<Value, Fail> {
+    let Some(mut ch) = super::inproc::route("leader") else {
+        return Err(Fail::Refused(Error::new(
+            "in_process_unavailable",
+            "A promotion goes by the game's own promote command (module family `leader`), which this launch cannot use (the module is absent, or the family is off or not live-passed under HOI4_BACKEND=auto); nothing was changed",
+        )));
+    };
+    let leader =
+        super::units::snapshot(process, |r, i| super::units::leader_address(r, i, general))
+            .map_err(Fail::Refused)?;
+    let before = read(process, country_status::command_power).ok().flatten();
+    let req = super::inproc_units::request("leader.promote", &[leader], &[], &[], None);
+    let routed = match req.and_then(|r| ch.post_raw(r)) {
+        Ok(reply) => super::inproc_units::routed(reply, "promote this general"),
+        Err(_) => super::inproc::Routed::Gui,
+    };
+    match routed {
+        super::inproc::Routed::Gui => Err(Fail::Refused(Error::new(
+            "module_refused",
+            format!("The module did not post the promotion of {general} (not an own live leader, or the posting policy); nothing was changed"),
+        ))),
+        super::inproc::Routed::Refused(_) => Err(Fail::Refused(promote_refused(cost, before, general))),
+        super::inproc::Routed::Done(body) => {
+            // the power is paid when the command runs (the next frame; a game hour at most while running)
+            let deadline = Instant::now() + Duration::from_millis(2500);
+            let mut paid = promotion_paid(before, read(process, country_status::command_power).ok().flatten());
+            while paid != Some(true) && Instant::now() < deadline {
+                pause(150);
+                paid = promotion_paid(before, read(process, country_status::command_power).ok().flatten());
+            }
+            let mut out = json!({
+                "general": general,
+                "promote": true,
+                "backend": "inprocess",
+                "module": body["module"],
+                "command_power_before": before,
+                "cost": cost,
+                "verification": "command_power_paid",
+            });
+            if let Some(p) = paid {
+                out["promoted"] = json!(p);
+            }
+            Ok(out)
+        }
+    }
+}
+
 // ------------------------------------------------------------------- tools
 
 fn name_arg<'a>(args: &'a serde_json::Map<String, Value>, name: &str) -> Result<&'a str> {
@@ -1160,6 +1250,7 @@ pub(super) fn call(
             "trait",
             "prefer",
             "list",
+            "promote",
             "request_id",
             "lease_token",
         ],
@@ -1167,6 +1258,15 @@ pub(super) fn call(
     let id = super::string(args, "request_id")?;
     let token = super::string(args, "lease_token")?;
     let general = name_arg(args, "general")?;
+    if mgmt::flag(args, "promote")? {
+        if args.contains_key("trait") || args.contains_key("prefer") || mgmt::flag(args, "list")? {
+            return Err(Error::new(
+                "invalid_arguments",
+                "promote:true takes no trait, prefer or list (promote first; a field marshal's trait is the next call)",
+            ));
+        }
+        return promote_call(general, id, token, process, keys, guard, authority, actions);
+    }
     let asked = match args.get("trait") {
         None => None,
         Some(_) => Some(name_arg(args, "trait")?),
@@ -1246,9 +1346,67 @@ pub(super) fn call(
     ui_action::run_bounded(job, 90, id, token, process, keys, guard, authority, actions)
 }
 
+/// engineer 131: hoi4_general_trait promote:true (guide row G004: promote generals while command power
+/// is spare): the general by the name hoi4_commanders lists, the cost from the defines; the game's own
+/// promote command posts it (module family `leader`), verified by the command power it took.
+#[allow(clippy::too_many_arguments)]
+fn promote_call(
+    general: &str,
+    id: &str,
+    token: &str,
+    process: &(dyn Process + Send + Sync),
+    keys: &dyn GameInput,
+    guard: &mut Guard,
+    authority: &InputAuthority,
+    actions: &mut super::journal::GameJournal,
+) -> Result<Value> {
+    let resolved: RefCell<Option<(String, Option<f64>)>> = RefCell::new(None);
+    let job = Job {
+        kind: "general_promote",
+        action: json!({"kind":"general_promote","general":general}),
+        plan: Box::new(|process| {
+            let cost = catalog(process).ok().and_then(|c| c.promote_cost);
+            let snap = commanders::snapshot(process)?;
+            let known: Vec<String> = snap
+                .leaders
+                .iter()
+                .flatten()
+                .map(|l| l.name.clone())
+                .collect();
+            let name = match known.iter().find(|n| n.eq_ignore_ascii_case(general)) {
+                Some(n) => n.clone(),
+                None if known.is_empty() => general.to_string(),
+                None => {
+                    return Err(Error::new(
+                        "unknown_commander",
+                        format!(
+                            "No own army leader named {general:?}. Closest: {}",
+                            commanders::closest_names(general, &known, 5).join(", ")
+                        ),
+                    ))
+                }
+            };
+            *resolved.borrow_mut() = Some((name, cost));
+            Ok(())
+        }),
+        dispatch: Box::new(|process, _keys| {
+            let (name, cost) = resolved
+                .borrow()
+                .clone()
+                .unwrap_or_else(|| (general.to_string(), None));
+            promote_in_process(process, &name, cost)
+        }),
+        settle: Box::new(|_process, seen| {
+            let detail = json!({"tool":"general_promote","general":general,"seen":seen.cloned()});
+            Ok(ui_action::effect(seen, "promoted", detail))
+        }),
+    };
+    ui_action::run_bounded(job, 30, id, token, process, keys, guard, authority, actions)
+}
+
 pub(super) fn tools() -> Vec<Value> {
     vec![
-        json!({"name":"hoi4_general_trait","description":"Live-verified (pp13, 17 Nov 2026: a list and an assignment): give an own army general an assignable trait for command power (NDefines UNIT_LEADER_ASSIGN_TRAIT_COST, read from the game's defines; 15 in 1.19.4) with the game's own trait tree window: the card's trait button when the general leads an army or army group, else an own army's panel, its commander list and the general's Traits button; then the trait's entry in the tree. `general` is the name hoi4_commanders lists; `trait` is an assignable trait's script key or localised name (from common/unit_leader, so mods work); without `trait` the first trait the tree lets the general pick is taken, the earliest of `prefer` (keys or names) first. list:true opens the tree and returns every entry (name, script key, assignable, state owned/available/locked, can_pick), the free trait slots shown, command power and the cost, changing nothing. Typed refusals before input: unknown_commander (closest names), trait_unknown, trait_not_assignable (a trait the game grants), insufficient_command_power (\"costs N command power and M are held\"), catalog_unavailable; from the window before the click: no_own_army, general_not_listed, wrong_leader, trait_not_offered (lists the tree), trait_owned, trait_unavailable, no_free_trait_slot, no_enabled_trait, trait_not_visible. Verified by the entry turning to the owned state, else by command power dropping by about the cost. With the in-process module family `leader` on, the trait is learned by the trait tree's own command (the trait by its key from the game's trait database; the game's own check decides and a refusal is refused_by_game_check with nothing clicked), verified from the general's own trait list; otherwise, or when the module cannot take it, the window path runs in the same call.","inputSchema":{"type":"object","properties":{"general":{"type":"string","maxLength":128},"trait":{"type":"string","maxLength":128},"prefer":{"type":"array","items":{"type":"string","maxLength":128},"maxItems":24},"list":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["general","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_general_trait","description":"Live-verified (pp13, 17 Nov 2026: a list and an assignment): give an own army general an assignable trait for command power (NDefines UNIT_LEADER_ASSIGN_TRAIT_COST, read from the game's defines; 15 in 1.19.4) with the game's own trait tree window: the card's trait button when the general leads an army or army group, else an own army's panel, its commander list and the general's Traits button; then the trait's entry in the tree. `general` is the name hoi4_commanders lists; `trait` is an assignable trait's script key or localised name (from common/unit_leader, so mods work); without `trait` the first trait the tree lets the general pick is taken, the earliest of `prefer` (keys or names) first. list:true opens the tree and returns every entry (name, script key, assignable, state owned/available/locked, can_pick), the free trait slots shown, command power and the cost, changing nothing. Typed refusals before input: unknown_commander (closest names), trait_unknown, trait_not_assignable (a trait the game grants), insufficient_command_power (\"costs N command power and M are held\"), catalog_unavailable; from the window before the click: no_own_army, general_not_listed, wrong_leader, trait_not_offered (lists the tree), trait_owned, trait_unavailable, no_free_trait_slot, no_enabled_trait, trait_not_visible. Verified by the entry turning to the owned state, else by command power dropping by about the cost. With the in-process module family `leader` on, the trait is learned by the trait tree's own command (the trait by its key from the game's trait database; the game's own check decides and a refusal is refused_by_game_check with nothing clicked), verified from the general's own trait list; otherwise, or when the module cannot take it, the window path runs in the same call. promote:true (alone, no trait/prefer/list) promotes the general to field marshal by the game's own promote command (module family `leader` only, no mouse path; cost NDefines PROMOTE_LEADER_CP_COST times the leader's modifier, read from the game): refusals insufficient_command_power (\"costs N command power and M are held\"), promotion_refused (already a field marshal), unknown_commander, in_process_unavailable; verified by the command power it took (promoted).","inputSchema":{"type":"object","properties":{"general":{"type":"string","maxLength":128},"trait":{"type":"string","maxLength":128},"prefer":{"type":"array","items":{"type":"string","maxLength":128},"maxItems":24},"list":{"type":"boolean"},"promote":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["general","request_id","lease_token"],"additionalProperties":false}}),
     ]
 }
 
@@ -1274,6 +1432,24 @@ mod tests {
             "the module takes at most 32 codes"
         );
         assert!(key_codes(&"x".repeat(32)).is_some());
+    }
+
+    #[test]
+    fn a_refused_promotion_says_short_power_with_cost_first_else_why() {
+        let e = promote_refused(Some(40.0), Some(12.0), "Fedor von Bock");
+        assert_eq!(e.code, "insufficient_command_power");
+        assert!(e.message.contains("costs 40 command power and 12 are held"));
+        let e = promote_refused(Some(40.0), Some(75.0), "Fedor von Bock");
+        assert_eq!(e.code, "promotion_refused");
+        assert!(e.message.contains("already a field marshal"));
+        assert_eq!(promote_refused(None, None, "X").code, "promotion_refused");
+    }
+
+    #[test]
+    fn a_promotion_is_seen_paid_when_command_power_drops() {
+        assert_eq!(promotion_paid(Some(60.0), Some(20.5)), Some(true));
+        assert_eq!(promotion_paid(Some(60.0), Some(60.2)), Some(false));
+        assert_eq!(promotion_paid(None, Some(1.0)), None);
     }
 
     fn catalog() -> Catalog {
@@ -1304,6 +1480,7 @@ mod tests {
             names,
             assign_cost: 15.0,
             base_max: 80.0,
+            promote_cost: Some(40.0),
         }
     }
 

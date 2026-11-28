@@ -484,6 +484,15 @@ const cmd_spec CMD2_SPECS[] = {
     {"leader", "leader.learn_trait", "CLearnTraitCommand", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "11CUnitLeader", 2,
      {{"leader", 0x24, FK_REF, 0, 0x28b7, 0}, {"trait", 0x30, FK_PTR2, 0, 0x2e8e, 0}},
      OBJ2_PTR_EXACT, 0, AUTH_HANDLE, NULL, "16CUnitLeaderTrait"},
+    /* engineer 131 (28 Nov): a general promoted to field marshal, the leader list's Promote button's own command. Read
+     * from 1.20.0.0 (1.20.1.0 byte-identical at the same addresses; 1.19.4.1 factory 0x100b406d0 the same shape):
+     * CPromoteUnitLeaderCommand (0x30; factory 0x100b41800, vtable 0x103528038): unit leader +0x24 (0x28b7, a handle,
+     * the factory's empty handle). "Can do" (0x100b3bd00): the leader resolves and casts to CUnitLeader, then the
+     * leader's own can-promote (0x101945810: rank +0xcb4 == 1, a general, and the country's command power >= the
+     * promote cost from the defines times the leader's cost modifier). Execution sets the rank to 0 (field marshal,
+     * 0x101945980) and takes the power. Auth (0x100b3be00): the leader's owner is the sender, as learn_trait. */
+    {"leader", "leader.promote", "CPromoteUnitLeaderCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "11CUnitLeader", 1,
+     {{"leader", 0x24, FK_REF, 0, 0x28b7, 0}}, OBJ2_NONE, 0, AUTH_HANDLE},
     /* ---- move (engineer 105, 28 Nov): a division's move order, as the right click on a province posts it. Read from
      * 1.20.0.0 and 1.19.4.1 (identical code): CMoveCommand 10402 (0x88; factory 1.20 0x100b403b0, vtable 0x103526f28)
      * holds a unit action at +0x28 (its own serializer writes everything through that action, so no field of the command

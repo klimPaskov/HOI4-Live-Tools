@@ -1,5 +1,5 @@
 #!/bin/zsh
-# test_offline.sh [EXE_1_19_4_1] [EXE_1_19_3] [EXE_1_20_0_0]: the module's scanner run over the game's executable FILES, checked
+# test_offline.sh [EXE_1_19_4_1] [EXE_1_19_3] [EXE_1_20_0_0] [EXE_1_20_1_0]: the module's scanner run over the game's executable FILES, checked
 # against values found by hand in the disassembly and against the external runtime's tables (native/src/game.rs
 # MACOS layout: idler_global 0x372afc0, gs_vtable 0x35044e8, idler_vtable 0x35089d8). Never touches a running game.
 # Also the load test: the module injected into a stand-in x86_64 host (not the game) through DYLD_INSERT_LIBRARIES.
@@ -10,6 +10,7 @@ cd "${0:A:h}"
 NEW=${1:-$HOI4_VERSIONS/1.19.4.1-f584/hoi4.bin}
 OLD=${2:-$HOI4_VERSIONS/1.19.3-c01a/hoi4.bin}
 V120=${3:-$HOI4_V120}
+V1201=${4:-$HOI4_V1201} # engineer 131: the 1.20.1.0 macOS executable (optional; its code sits at the 1.20.0.0 addresses)
 [ -f "$NEW" ] && [ -f "$OLD" ] || { echo "usage: test_offline.sh EXE_1_19_4_1 EXE_1_19_3 [EXE_1_20_0_0] (or set HOI4_VERSIONS)"; exit 2; }
 S1=(auth_slot=0x98 speed_type_id=0x2f42 speed_payload=0x24 speed_field=0x47c speed_range=5 speed_gs_global=0x10372b040 forbid_desc=0x103715808)
 # stage 2 (hand-found in the 1.19.4.1 disassembly, 23 Nov e68): 5 command types on; the UI's validity slot; Post's
@@ -46,6 +47,8 @@ S2=(valid_slot=0x50 exec_flag=0x624 player_tag=0x4d8 line_factories=0xe8 region_
 # (engineer 127, 28 Nov: leader = CLearnTraitCommand, a general's assignable trait (factory 1.20 0x100956440, constructor
 #  0x10094d730 (cmd, leader, trait)); the trait by key from the leader trait database its own reader resolves through
 #  (GOT 1.20 0x10347aca8 / 1.19.4.1 0x103476ca8, list +0x58, count +0x64, token +0x8); hand-checked in both disassemblies)
+# (engineer 131, 28 Nov: leader.promote = CPromoteUnitLeaderCommand (0x30, leader handle +0x24, factory 1.20 0x100b41800,
+#  1.19.4.1 0x100b406d0), the leader list's Promote button's command; the same resolver/owner as learn_trait)
 # (engineer 122, 28 Nov: the diplomacy catalog = every RTTI subclass of CDiplomaticAction (43 on 1.19.4.1 and 1.20), 12 more
 #  buildable as family diplomacy2 by the hand-written rows' shapes; type ids hand-checked in the 1.20.0.0 constructors)
 # stage 2, the next families (engineer 71, 24 Nov; hand-found in both disassemblies, identical payloads): the rest of
@@ -102,9 +105,9 @@ S2N=(regions_arr=0x2a8 regions_cnt=0x2b4 on:airwing.split=1 on:airwing.merge=1 o
      conf:projects.start=0x7f on:projects.stop=1 type:projects.stop=16403 conf:projects.stop=0x7f on:projects.attach=1
      type:projects.attach=16398 conf:projects.attach=0x7f on:projects.unattach=1 type:projects.unattach=16399
      conf:projects.unattach=0x7f on:move.division=1 type:move.division=10402 act_offs:move.division=0xc18243050)
-S2_1194=(stage2_on=80 trait_got=0x103476ca8 trait_offs=0x5800640008 on:leader.learn_trait=1 type:leader.learn_trait=14525 mio_fns=0x101ed5ba0 ctor:construction.add=0x1001f9740 ctor:politics.add=0x1002059f0 ctor:politics.replace=0x1002096b0 ctor:research.start=0x1001fff00 ctor:holds.area_defense=0x100949320 diplo_make_cmd=0x100f80940 diplo_country_of=0x101277b90 diplo_date_vt=0x103503020 ctor:diplomacy.guarantee=0x100f99c60 ctor:diplomacy.declare_war=0x100f8bce0 ctor:events.answer=0x1005ecc00 events_vt_window=0x1035e5c40 events_avail=0x1005f4230 ctor:units.new_army=0x1009287a0 ctor:units.leader=0x100946ae0 ctor:units.rename=0x100926280 ctor:units.army_group_new=0x100929ed0 ctor:units.to_army_group=0x10092b5f0 ctor:units.from_army_group=0x10092c110 orders_vt=0x103512bf0 orders_lookup=0x10095a510 ctor:orders.set_path=0x1009355a0 ctor:orders.new_front=0x100940c60 ctor:production2.add_line=0x1001eef30 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
+S2_1194=(stage2_on=81 on:leader.promote=1 type:leader.promote=13306 trait_got=0x103476ca8 trait_offs=0x5800640008 on:leader.learn_trait=1 type:leader.learn_trait=14525 mio_fns=0x101ed5ba0 ctor:construction.add=0x1001f9740 ctor:politics.add=0x1002059f0 ctor:politics.replace=0x1002096b0 ctor:research.start=0x1001fff00 ctor:holds.area_defense=0x100949320 diplo_make_cmd=0x100f80940 diplo_country_of=0x101277b90 diplo_date_vt=0x103503020 ctor:diplomacy.guarantee=0x100f99c60 ctor:diplomacy.declare_war=0x100f8bce0 ctor:events.answer=0x1005ecc00 events_vt_window=0x1035e5c40 events_avail=0x1005f4230 ctor:units.new_army=0x1009287a0 ctor:units.leader=0x100946ae0 ctor:units.rename=0x100926280 ctor:units.army_group_new=0x100929ed0 ctor:units.to_army_group=0x10092b5f0 ctor:units.from_army_group=0x10092c110 orders_vt=0x103512bf0 orders_lookup=0x10095a510 ctor:orders.set_path=0x1009355a0 ctor:orders.new_front=0x100940c60 ctor:production2.add_line=0x1001eef30 ctor:airwing.merge=0x100a24a70 ctor:airwing.disband=0x100a27100 ctor:airwing.attach=0x100a28940
          ctor:airwing.detach=0x100a293b0 ti_orders_group=0x103516d08 ctor:move.division=0x100b2dc30 act_ctor:move.division=0x100b2b440)
-S2_120=(stage2_on=80 trait_got=0x10347aca8 trait_offs=0x5800640008 on:leader.learn_trait=1 type:leader.learn_trait=14525 mio_fns=0x101ed8bf0 train_can=0x1014876a0 ctor:construction.add=0x1001f9e80 build_ref_vt=0x1035341c0 ctor:politics.add=0x100206130 ctor:politics.replace=0x100209df0 ctor:research.start=0x100200640 ctor:holds.area_defense=0x10094a330 diplo_make_cmd=0x100f83c10 diplo_country_of=0x10127b0c0 diplo_date_vt=0x1035074c0 ctor:diplomacy.guarantee=0x100f9cf30 ctor:diplomacy.declare_war=0x100f8efb0 ctor:events.answer=0x1005ed6d0 events_vt_window=0x1035ead60 events_avail=0x1005f4d00 ctor:units.new_army=0x1009297b0 ctor:units.leader=0x100947af0 ctor:units.rename=0x100927290 ctor:units.army_group_new=0x10092aee0 ctor:units.to_army_group=0x10092c600 ctor:units.from_army_group=0x10092d120 orders_vt=0x1035173b8 orders_lookup=0x10095b520 ctor:orders.set_path=0x1009365b0 ctor:orders.new_front=0x100941c70 ctor:production2.add_line=0x1001ef670 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
+S2_120=(stage2_on=81 on:leader.promote=1 type:leader.promote=13306 trait_got=0x10347aca8 trait_offs=0x5800640008 on:leader.learn_trait=1 type:leader.learn_trait=14525 mio_fns=0x101ed8bf0 train_can=0x1014876a0 ctor:construction.add=0x1001f9e80 build_ref_vt=0x1035341c0 ctor:politics.add=0x100206130 ctor:politics.replace=0x100209df0 ctor:research.start=0x100200640 ctor:holds.area_defense=0x10094a330 diplo_make_cmd=0x100f83c10 diplo_country_of=0x10127b0c0 diplo_date_vt=0x1035074c0 ctor:diplomacy.guarantee=0x100f9cf30 ctor:diplomacy.declare_war=0x100f8efb0 ctor:events.answer=0x1005ed6d0 events_vt_window=0x1035ead60 events_avail=0x1005f4d00 ctor:units.new_army=0x1009297b0 ctor:units.leader=0x100947af0 ctor:units.rename=0x100927290 ctor:units.army_group_new=0x10092aee0 ctor:units.to_army_group=0x10092c600 ctor:units.from_army_group=0x10092d120 orders_vt=0x1035173b8 orders_lookup=0x10095b520 ctor:orders.set_path=0x1009365b0 ctor:orders.new_front=0x100941c70 ctor:production2.add_line=0x1001ef670 ctor:airwing.merge=0x100a25a80 ctor:airwing.disband=0x100a28110 ctor:airwing.attach=0x100a29950
         ctor:airwing.detach=0x100a2a3c0 ti_orders_group=0x10351b6b0 ctor:move.division=0x100b2ed60 act_ctor:move.division=0x100b2c570)
 fail=0
 echo "== 1.19.4.1 f584 ($NEW)"
@@ -122,6 +125,14 @@ echo "   (1.19.3's Post has no authorisation step: post_layout and speed_command
 if [ -f "$V120" ]; then
   echo "== 1.20.0.0 macOS ($V120): every scan incl. stage 1 resolves; the field table (fields unchanged, tag array root moved)"
   ./build/scan_file $V120 command_post=0x1028505d0 queue_root=0x103730150 queue_slot=0x90 research_factory=0x10022c2b0 \
+    research_vtable=0x1034bc180 research_type_id=0x2f70 gamestate_vtable=0x103508988 idler_vtable=0x10350cea0 fields=1 \
+    auth_slot=0xa0 speed_type_id=0x2f42 speed_payload=0x24 speed_field=0x47c speed_range=5 speed_gs_global=0x1037301d0 \
+    forbid_desc=0x10371a988 $S2 $S2N $S2_120 | grep -E "^expect|resolved" || fail=1
+  [ ${pipestatus[1]} = 0 ] || fail=1
+fi
+if [ -f "$V1201" ]; then
+  echo "== 1.20.1.0 macOS ($V1201): the 1.20.0.0 expectations (the command code is at the same addresses)"
+  ./build/scan_file $V1201 command_post=0x1028505d0 queue_root=0x103730150 queue_slot=0x90 research_factory=0x10022c2b0 \
     research_vtable=0x1034bc180 research_type_id=0x2f70 gamestate_vtable=0x103508988 idler_vtable=0x10350cea0 fields=1 \
     auth_slot=0xa0 speed_type_id=0x2f42 speed_payload=0x24 speed_field=0x47c speed_range=5 speed_gs_global=0x1037301d0 \
     forbid_desc=0x10371a988 $S2 $S2N $S2_120 | grep -E "^expect|resolved" || fail=1
