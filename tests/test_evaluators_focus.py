@@ -72,6 +72,49 @@ ideas = {
         self.assertNotIn("add_political_power", out["unvalued"])
 
 
+    def test_army_experience_at_the_power_it_costs(self):
+        ideas = """
+ideas = {
+    economy = { e_cheap = { cost = 50 modifier = { industrial_capacity_factory = 0.1 } } }
+}
+"""
+        traits = """
+@e_gain = 0.25
+leader_traits = {
+    e_chief_trait = { experience_gain_army = @e_gain }
+    e_better_trait = { experience_gain_army = 1.0 }
+}
+"""
+        chars = """
+characters = {
+    AAA_chief = { name = AAA_chief advisor = { slot = army_chief idea_token = AAA_chief cost = 100
+        traits = { e_chief_trait } } }
+    AAA_later = { name = AAA_later advisor = { slot = army_chief idea_token = AAA_later cost = 50
+        available = { OR = { has_completed_focus = AAA_root has_completed_focus = AAA_left } }
+        traits = { e_better_trait } } }
+}
+"""
+        sit = fx.situation(extra=dict(BUILDINGS, **{"common/ideas/e121.txt": ideas,
+                                                    "common/country_leader/e121.txt": traits,
+                                                    "common/characters/AAA.txt": chars,
+                                                    "common/defines/zz_pp.lua":
+                                                    "NDefines.NCountry.BASE_POLITICAL_POWER_INCREASE = 2\n"}),
+                           state={"factories": {"civilian": 10, "military": 10, "naval": 0}})
+        names = {n for n, _, _, _ in focus.pp_sinks(sit)}
+        self.assertIn("AAA_chief", names)
+        self.assertNotIn("AAA_later", names)                            # its OR of focuses is closed now
+        pp, _ = focus.pp_price(sit, focus.value.bases(sit), years=4.0)
+        xp, how = focus.xp_price(sit, pp, years=4.0)
+        self.assertAlmostEqual(xp, 100 / (0.25 * 365 * 4) * pp)          # the @constant resolved
+        self.assertIn("AAA_chief", how)
+        w = focus.Walker(sit)
+        out = {"lin": 0.0, "quad": 0.0, "stock": 0.0, "parts": {}, "unvalued": [], "ideologies": set(),
+               "war_with": set()}
+        w.walk([("army_experience", "25")], 1.0, out)
+        self.assertAlmostEqual(out["lin"], 25 * xp)
+        self.assertNotIn("army_experience", out["unvalued"])
+
+
 @unittest.skipUnless(fx.real_situation("GER") is not None, "installed game not found (HOI4_EVAL_GAME / HOI4_DIR)")
 class FocusRealGameTest(unittest.TestCase):
     def test_focus_germany_goals_and_hungary(self):

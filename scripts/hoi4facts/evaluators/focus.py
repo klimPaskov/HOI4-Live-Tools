@@ -19,8 +19,10 @@ Rewards valued (factory-years earned from the focus's completion to the horizon,
                 shown only after a flag or a focus), at the mean value per power of the sinks the horizon's
                 power buys best first (pp_price); power at completion buys an idea held for the years left (per
                 year); a daily gain buys ideas through the years (per year squared / 2)
+  army_experience, experience_gain_army   army experience at the power it costs to buy (xp_price: the cheapest
+                daily army experience among the power sinks open now, an army chief's trait among them)
   scopes (if, every_owned_state, random_owned_controlled_state, a tag, a state) are walked; everything else is named
-  in `unvalued` (army experience, events, wargoals, claims): the player's or the plan's judgement
+  in `unvalued` (navy and air experience, events, wargoals, claims): the player's or the plan's judgement
 Goals and constraints: ideology:<ideology> drops focuses that set another ruling party or add another ideology's
 popularity; no_war:<TAG> drops focuses that lead to war with the tag or declare war on it or create a wargoal on it.
 Order: one focus at a time, the best chain rate (value / days over chains of up to three focuses) among those whose
@@ -63,6 +65,7 @@ class Walker:
                     self.var_mods.setdefault(raw, []).append(k)
         self.vars = sit.variables()
         self.pp_price, self.pp_idea = pp_price(sit, self.base, horizon_years)
+        self.xp_price, self.xp_idea = xp_price(sit, self.pp_price, horizon_years)
 
     def mods_coef(self, mods):
         """(per year held, per year squared from construction compounding, unvalued keys)."""
@@ -72,6 +75,9 @@ class Walker:
         if "political_power_gain" in unvalued and self.pp_price:
             unvalued = [u for u in unvalued if u != "political_power_gain"]
             quad += mods["political_power_gain"] * 365 * self.pp_price / 2.0
+        if "experience_gain_army" in unvalued and self.xp_price:
+            unvalued = [u for u in unvalued if u != "experience_gain_army"]
+            quad += mods["experience_gain_army"] * 365 * self.xp_price / 2.0
         return lin, quad, unvalued
 
     @staticmethod
@@ -100,6 +106,8 @@ class Walker:
                 self._tech_bonus(v, out)
             elif k == "add_political_power" and _num(v) is not None and self.pp_price:
                 self.add(out, f"political power {_num(v):g} (at {self.pp_idea})", lin=_num(v) * self.pp_price)
+            elif k == "army_experience" and _num(v) is not None and self.xp_price:
+                self.add(out, f"army experience {_num(v):g} (at {self.xp_idea})", lin=_num(v) * self.xp_price)
             elif k in ("set_politics", "add_popularity") and isinstance(v, list):
                 ideo = get1(v, "ruling_party") or get1(v, "ideology")
                 if ideo and ideo.islower():
@@ -194,10 +202,15 @@ def _gate_open(block):
     """False when a visible/available block needs a flag or a focus not had now (top-level, not under NOT)."""
     if not isinstance(block, list):
         return True
+    gates = ("has_country_flag", "has_completed_focus", "has_global_flag")
     for a, b in block:
-        if (a or "").lower() in ("has_country_flag", "has_completed_focus", "has_global_flag"):
+        if (a or "").lower() in gates:
             return False
         if (a or "").lower() == "always" and b == "no":
+            return False
+        # an OR whose every branch is a flag or a focus is closed now too
+        if (a or "").upper() == "OR" and isinstance(b, list) and b and all(
+                (x or "").lower() in gates for x, _ in b if x):
             return False
     return True
 
@@ -222,11 +235,23 @@ def pp_sinks(sit):
     def traits():
         out = {}
         for f in sit.game.files("common/country_leader"):
-            for k, v in parse_file(f):
+            items = parse_file(f)
+            consts = {k: _num(v) for k, v in items if k and k.startswith("@") and _num(v) is not None}
+
+            def val(b):
+                return _num(b) if _num(b) is not None else consts.get(b) if isinstance(b, str) else None
+            for k, v in items:
                 if k == "leader_traits" and isinstance(v, list):
                     for name, body in v:
                         if name and isinstance(body, list):
-                            out[name] = {a: _num(b) for a, b in body if _num(b) is not None}
+                            row = {}
+                            for a, b in body:
+                                x = val(b)
+                                if x is None and isinstance(b, list) and a == "modifier":
+                                    row.update({c: val(d) for c, d in b if val(d) is not None})
+                                elif x is not None:
+                                    row[a] = x
+                            out[name] = row
         return out
 
     def ideas():
@@ -264,7 +289,8 @@ def pp_sinks(sit):
                                 mods[mk] = mods.get(mk, 0.0) + mv
                         rows.append((get1(adv, "idea_token") or name, get1(adv, "slot"), _num(get1(adv, "cost")),
                                      _tags_of(get1(adv, "allowed")) or {owner},
-                                     _gate_open(get1(adv, "allowed")) and _gate_open(get1(adv, "visible")), mods))
+                                     _gate_open(get1(adv, "allowed")) and _gate_open(get1(adv, "visible"))
+                                     and _gate_open(get1(adv, "available")), mods))
         return rows
     rows = sit.game.cached("eval:priced_ideas", ideas) + sit.game.cached("eval:advisors", advisors)
     have = set(sit.state.get("ideas") or ())
@@ -305,6 +331,25 @@ def pp_price(sit, base, years=4.0):
         return 0.0, None
     return got / spent, (f"mean of {len(names)} sinks the {budget:.0f} PP of {years:g} years buys, best first "
                          f"({', '.join(names[:3])}{', ...' if len(names) > 3 else ''}; {spent:.0f} PP valued)")
+
+
+def xp_price(sit, pp, years=4.0):
+    """(factory-years per year held per army experience point, how): army experience at the political power it costs
+    to buy: the cheapest army experience among the power sinks open now (pp_sinks with a daily experience_gain_army,
+    an army chief's trait among them) = its cost / (its daily gain x 365 x years) political power per point, at the
+    power's price pp [?: the whole cost is put on the experience, so the price is an upper bound; doctrine and
+    template value is not read directly]. (0, None) without such a sink."""
+    best = None
+    for name, kind, cost, mods in pp_sinks(sit):
+        g = mods.get("experience_gain_army") or 0.0
+        if g > 0 and cost:
+            per_point = cost / (g * 365 * years)
+            if best is None or per_point < best[0]:
+                best = (per_point, name, g, cost)
+    if not best or not pp:
+        return 0.0, None
+    per_point, name, g, cost = best
+    return per_point * pp, f"{name}: {cost:g} PP for {g:g} a day over {years:g} years = {per_point:.3f} PP a point"
 
 
 def _first_num(v, default):
@@ -415,4 +460,5 @@ def evaluate(sit, goals=(), horizon_years=4.0, count=12, done=(), research_model
         day += d
     return {"order": order, "dropped": dropped, "goals": list(goals), "tree": tree.get("id"),
             "horizon_years": horizon_years, "base": walker.base, "build_rate": round(walker.rate, 3),
-            "pp_price": round(walker.pp_price, 4), "pp_price_idea": walker.pp_idea}
+            "pp_price": round(walker.pp_price, 4), "pp_price_idea": walker.pp_idea,
+            "xp_price": round(walker.xp_price, 4), "xp_price_idea": walker.xp_idea}

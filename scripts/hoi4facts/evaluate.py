@@ -331,7 +331,9 @@ def cmd_doctrine(a, sit):
 
 def text_focus(r):
     out = [f"FOCUS for {r.get('country', '')} at {r.get('date', '')} (tree {r['tree']}); goals {r['goals'] or '-'}; "
-           f"horizon {r['horizon_years']:g} years; value base {r['base']}"]
+           f"horizon {r['horizon_years']:g} years; value base {r['base']}",
+           f"  prices: political power {r.get('pp_price', 0):g} factory-years a year held per point ({r.get('pp_price_idea')}); "
+           f"army experience {r.get('xp_price', 0):g} per point ({r.get('xp_price_idea')})"]
     for o in r["order"]:
         out.append(f"  day {o['start_day']:>4} {o['focus']} ({o['days']:g} days): value {o['value']:g} factory-years, "
                    f"chain rate {o['rate']:g}/day via {' > '.join(o['chain'])}")
