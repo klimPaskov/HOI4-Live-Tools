@@ -29,6 +29,13 @@
     facts.py ports <TAG> [--enemy E]   naval bases, overseas theatres, sea routes, coastal port candidates
     facts.py designs <TAG> [--kind tank|plane|ship] [--date D]   chassis/hulls/airframes and modules the date's
                                  techs unlock, module XP costs, start variants
+    facts.py design-best <TAG> --role R [--techs a,b] [--need air_range=900] [--rival BASE:slot=mod,...]
+                                 best module-by-module designs for a role by computed stats (designer.py)
+    facts.py design-eval BASE slot=module ... [--mission M]   one design's stats and problems
+    facts.py design-plan <TAG> [--roles fighter,cas] [--years 1936,1940] [--need fighter:air_range=900]
+                                 plan designs[] by year and the research they need (designer.plan_fragment)
+    facts.py air-cover --regions 131,133 (--states 1,2 | --provinces 9,10) [--ranges 550,650,825]
+                                 region radius, coverage per range, the range for 90% (aircover.py)
     facts.py mio <TAG> [--id ORG]   military-industrial organisations, trait trees, policies
     facts.py projects <TAG>      special projects, facilities, scientists
     facts.py diplomacy <TAG>     world tension, ideology gates (justify, guarantee, volunteers, lend-lease, faction), war goals
@@ -1305,6 +1312,108 @@ def cmd_designs(args):
 XP_NAME = {"tank": "army", "plane": "air", "ship": "navy"}
 
 
+def _design_mods(pairs):
+    out = {}
+    for x in pairs or []:
+        if "=" in x:
+            k, v = x.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+def cmd_design_eval(args):
+    from hoi4facts import designer
+    w = world(args)
+    cat = designer.Catalog(w.game)
+    if args.BASE not in cat.equip:
+        return fail(f"unknown equipment {args.BASE}")
+    ev = designer.evaluate(cat, args.BASE, _design_mods(args.modules), args.mission)
+    return emit(args, ev, lambda x: [f"{x['base']} {x['modules']}: types {x['types']}",
+                                     "stats " + ", ".join(f"{k} {v:g}" for k, v in sorted(x["stats"].items())),
+                                     "problems " + ("; ".join(x["problems"]) or "none"), designer.__doc__.split("\n\n")[1]])
+
+
+def cmd_design_best(args):
+    from hoi4facts import designer
+    w = world(args, args.TAG)
+    if args.role not in designer.ROLES:
+        return fail(f"role {args.role}: one of {', '.join(designer.ROLES)}")
+    cat = designer.Catalog(w.game)
+    techs = set(w.country(args.TAG)["techs"]) | set(x for x in (args.techs or "").split(",") if x)
+    bases, mods = designer.available(cat, techs)
+    need = {}
+    for x in args.need or []:
+        k, _, v = x.partition("=")
+        need[k] = float(v)
+    rival = None
+    if args.rival:
+        base, _, rest = args.rival.partition(":")
+        rival = designer.evaluate(cat, base, _design_mods(rest.split(",")), designer.ROLES[args.role]["mission"])["stats"]
+    r = designer.best(cat, args.role, bases, mods, need=need, top=args.top, max_cost=args.max_cost, rival=rival,
+                      min_exchange=args.min_exchange, objective=args.objective)
+    r.update(role=args.role, need=need, method=designer.__doc__.split("\n\n")[1])
+    if args.mio:
+        m = designer.mio_rank(cat, w.mio(args.TAG)["organisations"], args.role, bases, mods, need=need,
+                              objective=args.objective)
+        r["mio"] = [{k: o[k] for k in ("id", "name", "initial_bonus", "initial_score", "ceiling_score")}
+                    for o in m["organisations"]]
+        r["mio_without"] = m["without"]
+
+    def text(x):
+        out = [f"{args.TAG} {x['role']} designs (need {x['need'] or 'none'}):"]
+        for d in x["designs"]:
+            s = d["stats"]
+            out.append(f"- {d['base']}: " + ", ".join(f"{k}={v}" for k, v in sorted(d["modules"].items())))
+            out.append("  " + ", ".join(f"{k} {s[k]:g}" for k in designer.STAT_KEYS_PLANE + ("soft_attack", "hard_attack",
+                                        "armor_value", "breakthrough") if k in s)
+                       + f"; score {d['score']}" + (f"; exchange vs rival {d['exchange']}" if d.get("exchange") else ""))
+        if not x["designs"]:
+            out.append(f"none fits; rejected by {x['rejected_by']}")
+        if x.get("mio") is not None:
+            out.append(f"MIO for this line by the best design each makes reachable (none: {x['mio_without']}):")
+            out += [f"- {o['id']}: initial {o['initial_bonus']} score {o['initial_score']}, all traits "
+                    f"{o['ceiling_score']}" for o in x["mio"]]
+        out.append("method: " + x["method"])
+        return out
+
+    return emit(args, r, text)
+
+
+def cmd_design_plan(args):
+    from hoi4facts import derive, designer
+    w = world(args, args.TAG)
+    cat = designer.Catalog(w.game)
+    meta = derive.tech_meta(w.game)
+    tech_year = {t: m.get("year") for t, m in meta.items()}
+    roles = [r for r in (args.roles or "fighter,cas,naval_bomber").split(",") if r in designer.ROLES]
+    needs = {}
+    for x in args.need or []:
+        role, _, kv = x.partition(":")
+        k, _, v = kv.partition("=")
+        needs.setdefault(role, {})[k] = float(v)
+    years = [int(y) for y in (args.years or "1936,1938,1940,1942,1944").split(",")]
+    frag = designer.plan_fragment(cat, args.TAG, set(w.country(args.TAG)["techs"]), years, roles, tech_year, needs)
+    return emit(args, frag, lambda x: [f"{d['id']}: {d['base']} {d['modules']} when {d.get('when')} xp<={d['xp']}"
+                                       f" production {d.get('production')}\n  {d['why']}" for d in x["designs"]]
+                + ["research: " + ", ".join(x["research_needed"]), x["method"]])
+
+
+def cmd_air_cover(args):
+    from hoi4facts import aircover
+    w = world(args)
+    g = w.graph()
+    if g is None:
+        return fail("no map graph")
+    km = float(w.define("MAP_SCALE_PIXEL_TO_KM", aircover.DEFAULT_KM_PER_PIXEL)[0] or aircover.DEFAULT_KM_PER_PIXEL)
+    ints = lambda s: [int(x) for x in (s or "").split(",") if x.strip()]  # noqa: E731
+    bases = aircover.base_points(g, states=ints(args.states), provinces=ints(args.provinces))
+    rows = aircover.table(g, ints(args.regions), bases, ints(args.ranges) or [550, 650, 825, 975, 1100, 1300], km)
+    data = {"km_per_pixel": km, "bases": len(bases), "regions": rows, "d": aircover.__doc__.split("\n\n")[1]}
+    return emit(args, data, lambda x: [f"region {r['region']}: radius {r['radius_km']} km; coverage "
+                                       + " ".join(f"{k}km {v:.0%}" for k, v in r["coverage"].items())
+                                       + f"; 90% at {r['range_for_90']} km" for r in x["regions"]] + [x["d"]])
+
+
 def cmd_mio(args):
     w = world(args, args.TAG)
     data = w.mio(args.TAG)
@@ -1761,6 +1870,28 @@ def parser():
     p.add_argument("--below", type=int, default=3, help="list naval bases below this level as candidates")
     p = add("designs", cmd_designs, "TAG")
     p.add_argument("--kind", choices=("tank", "plane", "ship"))
+    p = add("design-eval", cmd_design_eval, "BASE")
+    p.add_argument("modules", nargs="*", help="slot=module pairs")
+    p.add_argument("--mission", help="mission for mission_type_stats (air_superiority, cas, naval_bomber, ...)")
+    p = add("design-best", cmd_design_best, "TAG")
+    p.add_argument("--role", required=True)
+    p.add_argument("--techs", help="extra researched techs (comma list) beyond the start techs at --date")
+    p.add_argument("--need", action="append", help="stat=minimum (repeat), e.g. air_range=900")
+    p.add_argument("--rival", help="BASE:slot=module,... the enemy design a fighter must beat")
+    p.add_argument("--min-exchange", type=float, default=1.0)
+    p.add_argument("--max-cost", type=float)
+    p.add_argument("--top", type=int, default=3)
+    p.add_argument("--objective", choices=("per_ic", "value"), default="per_ic")
+    p.add_argument("--mio", action="store_true", help="also rank the organisations that can take the line")
+    p = add("design-plan", cmd_design_plan, "TAG")
+    p.add_argument("--roles", help="comma list of designer roles (default fighter,cas,naval_bomber)")
+    p.add_argument("--years", help="comma list of years (default 1936,1938,1940,1942,1944)")
+    p.add_argument("--need", action="append", help="role:stat=minimum, e.g. fighter:air_range=900")
+    p = add("air-cover", cmd_air_cover)
+    p.add_argument("--regions", required=True)
+    p.add_argument("--states")
+    p.add_argument("--provinces")
+    p.add_argument("--ranges")
     p = add("mio", cmd_mio, "TAG")
     p.add_argument("--id", help="one organisation with its whole trait tree")
     add("projects", cmd_projects, "TAG")
