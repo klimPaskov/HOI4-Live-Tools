@@ -1089,7 +1089,15 @@ Pass -> set `LIVE_PASSED` true in native/src/launch/macos/paradrop.rs (auto then
   whether a range MIO's bonus shows in `air_range_km` (the variant's stats at fleetmem 0x260).
 - air-superiority-read: the enemy's share per region is read only through the region window (hoi4_air_region_probe).
   Static lead for a direct read: routine 0x1009f8460 (1.20.0.0), stride 0xb0 entries at +0xe0, fields +0x88/+0x90/+0xa8;
-  owner unconfirmed. Confirm against the region window for 2 regions, then the probe can be replaced.
+  owner unconfirmed. Engineer 125's reading of the routine (static): rsi is the region (index at +0x58, size term at
+  +0xd8); it walks two per-region wing lists of rdi (rdi+0x98 and rdi+0x140, each a {data,size} pair per region index,
+  stride 0x18), takes only live wings (wing+0x14 != 0) and sums each wing's fixed-point value at wing+0xe8: the sum goes to
+  entry+0x88 (capped), the sum over (region size term x a global define) to entry+0x90 (scaled, capped at 100000, at least
+  1 when the sum is positive) and the wing count to entry+0xa8 (16 bit). So +0x88 is the region's air superiority value
+  of rdi's side, +0x90 its share of what the region needs (x 100000), +0xa8 its wings. The caller 0x100a18e10 runs it per
+  (object, region) next to the CStrategicAir allocator's type info: rdi is likely one country's strategic air object.
+  Confirm against the region window for 2 regions (ours and the enemy's numbers), then the probe can be replaced; FAIR:
+  read the enemy's entry only for regions our air map shows.
 - air-situation (plan key `air_situation`): a war save; record each executor turn's orders against the region window
   (fighters sized to the ratio or kept out; CAS only over regions not lost; one forward rebase when out of range).
   Mission entries (engineer 125, written): `air_situation.missions:[{"id":"ls","mission":"logistics_strike","region":<a
