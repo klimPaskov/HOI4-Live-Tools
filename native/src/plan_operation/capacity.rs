@@ -391,6 +391,62 @@ pub(super) fn dead_fronts(
     out
 }
 
+/// FRONTS OVER THEIR CAP (engineer 104): at war a stretch holding more divisions than its cap by
+/// `slack` or more, while it faces an enemy, is a pile whose surplus is the count beyond its cap
+/// (the standing divisions on it may go), so `sideways` sends them to the stretch with room. The
+/// battles' reserves and the province stacks see only what stands on one battle or one province:
+/// w101c (28 Nov 2026, W+5.8 to W+10): Panzergruppe Ost stood 18 on its Luxembourg front 59 (cap
+/// 5-7, one forest province attacked from one side) while its front 60 read 6 of 33-38, and the
+/// only move in five days was 1 division off a 4-for-3 battle. The fullest first. Pure.
+pub(super) fn over_rooms(
+    read: &Value,
+    rooms: &[Room],
+    root_of: &dyn Fn(i64) -> Option<i64>,
+    ours: &HashSet<String>,
+    slack: i64,
+) -> Vec<Pile> {
+    let over: HashMap<i64, &Room> = rooms
+        .iter()
+        .filter(|r| r.facing > 0 && r.free() <= -slack.max(1))
+        .map(|r| (r.id, r))
+        .collect();
+    if over.is_empty() {
+        return Vec::new();
+    }
+    let mut at: HashMap<i64, (i64, Waiting)> = HashMap::new();
+    for d in list(read, "divisions") {
+        let (Some(id), Some(p)) = (id_of(&d["id"]), d["province_id"].as_i64()) else {
+            continue;
+        };
+        if !ours.contains(&id) || !d["heading_province"].is_null() {
+            continue;
+        }
+        let Some(root) = root_of(p).filter(|r| over.contains_key(r)) else {
+            continue;
+        };
+        let e = at.entry(root).or_insert((p, Vec::new()));
+        e.1.push((id, d["organisation"].as_f64().unwrap_or(0.0), Some(p)));
+    }
+    let mut out: Vec<Pile> = at
+        .into_iter()
+        .map(|(root, (p, waiting))| {
+            let r = over[&root];
+            Pile {
+                province: p,
+                engaged: r.cap,
+                reserve: r.divisions,
+                waiting,
+            }
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        (b.reserve - b.engaged)
+            .cmp(&(a.reserve - a.engaged))
+            .then(a.province.cmp(&b.province))
+    });
+    out
+}
+
 /// A direct attack on a stuck battle from a side the plan leaves unused.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Push {
@@ -717,15 +773,19 @@ pub(super) struct Move {
     pub why: String,
 }
 
-/// SIDEWAYS: from the fullest pile, its surplus (reserve beyond the engaged; at most `most`)
-/// goes to the stretch with the most free room that is not the pile's own (`root_of` a
-/// province), the freshest divisions first. None while no other stretch has room. Pure.
+/// SIDEWAYS: a pile's surplus (reserve beyond the engaged; at most `most`) goes to the stretch
+/// with the most free room that is not the pile's own (`root_of` a province), the freshest
+/// divisions first. A front facing no enemy goes first; else the pile that can send the most (the
+/// first on a tie): one move per refinement cool-down, so it is the largest one (w101c, 28 Nov
+/// 2026: a 4-for-3 battle sent 1 while the front beside it stood 18 for 7). None while no other
+/// stretch has room. Pure.
 pub(super) fn sideways(
     piles: &[Pile],
     rooms: &[Room],
     root_of: &dyn Fn(i64) -> Option<i64>,
     most: usize,
 ) -> Option<Move> {
+    let mut best: Option<(usize, bool, Move)> = None;
     for pile in piles {
         let from = pile
             .waiting
@@ -764,7 +824,7 @@ pub(super) fn sideways(
                 pile.province, pile.reserve, pile.engaged
             )
         };
-        return Some(Move {
+        let mv = Move {
             to: target.id,
             divisions: fresh.into_iter().take(n).map(|(id, _, _)| id).collect(),
             why: format!(
@@ -774,9 +834,16 @@ pub(super) fn sideways(
                 target.divisions,
                 target.cap
             ),
-        });
+        };
+        let better = match &best {
+            None => true,
+            Some((bn, bdead, _)) => (dead && !bdead) || (dead == *bdead && n > *bn),
+        };
+        if better {
+            best = Some((n, dead, mv));
+        }
     }
-    None
+    best.map(|(_, _, m)| m)
 }
 
 /// The breadth of the attack: (enemy provinces touching ours, those with a battle of ours, those
@@ -1096,6 +1163,87 @@ mod tests {
         .unwrap();
         assert_eq!(m.to, 91);
         assert_eq!(m.divisions, vec!["b".to_string(), "a".to_string()]);
+    }
+
+    #[test]
+    fn at_war_a_front_over_its_cap_sends_its_surplus_to_the_front_with_room_the_largest_move_first()
+    {
+        // w101c W+8 (28 Nov 2026): Army 7's Luxembourg front 59 stood 18 for a cap of 5 (one
+        // forest province, attacked from one side), its front 60 6 of 33; the battle at 9575 held
+        // 4 in reserve behind 3 engaged; the only move went 1 off that battle
+        let mut divs: Vec<Value> = (0..18)
+            .map(|i| {
+                json!({"id": format!("l{i}"), "province_id": if i < 4 { 9575 } else { 11435 },
+                            "organisation": 30.0 + i as f64})
+            })
+            .collect();
+        divs.extend((0..6).map(|i| {
+            json!({"id": format!("b{i}"), "province_id": 11470,
+                                         "organisation": 50.0})
+        }));
+        let read = json!({"divisions": divs});
+        let ours: HashSet<String> = read["divisions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|d| d["id"].as_str().unwrap().to_string())
+            .collect();
+        let root_of = |q: i64| match q {
+            9575 | 11435 => Some(59),
+            11470 => Some(60),
+            _ => None,
+        };
+        let rooms = vec![
+            Room {
+                id: 59,
+                cap: 5,
+                divisions: 18,
+                facing: 1,
+                ..Default::default()
+            },
+            Room {
+                id: 60,
+                cap: 33,
+                divisions: 6,
+                facing: 5,
+                ..Default::default()
+            },
+        ];
+        let battle_pile = Pile {
+            province: 6583,
+            engaged: 3,
+            reserve: 4,
+            waiting: vec![("l0".into(), 30.0, Some(9575))],
+        };
+        let mut piles = vec![battle_pile];
+        piles.extend(over_rooms(&read, &rooms, &root_of, &ours, 3));
+        let m = sideways(&piles, &rooms, &root_of, 18).unwrap();
+        assert_eq!(m.to, 60);
+        // the surplus beyond the cap (13), the freshest first, not the one off the battle
+        assert_eq!(m.divisions.len(), 13, "{m:?}");
+        assert_eq!(m.divisions[0], "l17");
+        // within the slack: no pile
+        assert!(over_rooms(&read, &rooms, &root_of, &ours, 14).is_empty());
+        // a front facing nobody still goes first
+        let dead = Pile {
+            province: 1,
+            engaged: 0,
+            reserve: 2,
+            waiting: vec![("d1".into(), 60.0, Some(1)), ("d2".into(), 60.0, Some(1))],
+        };
+        let mut rooms2 = rooms.clone();
+        rooms2.push(Room {
+            id: 7,
+            cap: 0,
+            divisions: 2,
+            facing: 0,
+            ..Default::default()
+        });
+        let root2 = |q: i64| if q == 1 { Some(7) } else { root_of(q) };
+        let mut all = vec![dead];
+        all.extend(piles);
+        let m = sideways(&all, &rooms2, &root2, 18).unwrap();
+        assert_eq!(m.divisions, vec!["d1".to_string(), "d2".to_string()]);
     }
 
     #[test]

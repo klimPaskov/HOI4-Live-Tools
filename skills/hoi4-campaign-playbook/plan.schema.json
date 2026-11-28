@@ -2340,6 +2340,10 @@
                     "type": "integer",
                     "minimum": 1,
                     "description": "divisions a front may stand over its room (with another as far under) before the prepare spreads again; default a fifth of the divisions on the fronts, at least 3"
+                  },
+                  "over_cap": {
+                    "type": "boolean",
+                    "description": "at war, from the third day of the war on, a front standing over its room by the slack sends its surplus sideways to the army's front with most room (one move per refinement cool-down, the largest first); default true"
                   }
                 },
                 "additionalProperties": false
