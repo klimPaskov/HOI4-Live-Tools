@@ -2881,7 +2881,11 @@ fn fleet_shape(
             break;
         }
     }
-    if order.is_none() && cfg["reserve_stays"] != json!(true) {
+    // the tool answered that no task force leaves the reserve fleet on this backend: the cause is
+    // the route, not the task force, so no other reserve task force is tried either (g115a, 28 Nov
+    // 2026: five moves out of the reserve, each refused reserve_fleet)
+    let reserve_route_shut = state.skipped(now, "nres", RESERVE_ROUTE_SHUT);
+    if order.is_none() && cfg["reserve_stays"] != json!(true) && !reserve_route_shut {
         order = reserve_out(state, cfg, fleets, invasion, now);
     }
     let Some((tool, args, key, what)) = order else {
@@ -2897,8 +2901,23 @@ fn fleet_shape(
     if !ok && code(&why) == "nothing_to_change" {
         note(state, "navy_shape", format!("{what}: nothing to change"));
     }
+    if !ok && code(&why) == "reserve_fleet" && what.contains("out of the reserve fleet") {
+        // the whole class rests as a given-up order rests (the ledger's own span)
+        let rest = super::ledger_rest(false, super::GIVE_UP_AFTER, 0, false).0;
+        state.skip(now, "nres", RESERVE_ROUTE_SHUT, rest);
+        note(
+            state,
+            "navy_shape",
+            "reserve fleet: its task forces cannot be moved on this backend (reserve_fleet); new ships \
+             stay there (tried again after the ledger's given-up rest)"
+                .to_string(),
+        );
+    }
     Ok(Some(format!("navy shape: {what}: {ok} {why}")))
 }
+
+/// Skip key: the fleet tool refused a move out of the reserve fleet for its route (reserve_fleet).
+const RESERVE_ROUTE_SHUT: &str = "route_shut";
 
 /// Submarines in a task force's `ships_by_type` (the unit type names the hull: "submarine").
 fn subs_of(tf: &Value) -> (u64, u64) {
@@ -5005,6 +5024,43 @@ mod tests {
             .map(|(_, a)| a["task_force"].clone())
             .collect();
         assert_eq!(moved, vec![json!("New subs")]);
+    }
+
+    #[test]
+    fn a_route_refusal_out_of_the_reserve_stops_every_reserve_move_not_one_task_force() {
+        // g115a (28 Nov 2026): the moves out of the reserve fleet were refused reserve_fleet five
+        // times, each a new task force or the same one after its week
+        let fleets = json!([
+            {"fleet": "U-Boote", "admiral": "Dönitz", "task_forces": [
+                {"task_force": "Wolf", "mission": {"name": "convoy_raiding"},
+                 "ships_by_type": {"submarine": 12}}]},
+            {"fleet": "Reserve fleet 1", "admiral": null, "task_forces": [
+                {"task_force": "New subs", "mission": {"name": "reserve"},
+                 "ships_by_type": {"submarine": 4}},
+                {"task_force": "More subs", "mission": {"name": "reserve"},
+                 "ships_by_type": {"submarine": 2}}]}]);
+        let tools = fake(vec![("hoi4_fleets", json!({"fleets": fleets}))]);
+        tools.refusing("hoi4_fleet_assign", "reserve_fleet");
+        let plan = json!({"navy": {"posture": "coastal"}});
+        let mut state = State::default();
+        for day in 0..30 {
+            navy_step(&mut state, &tools, &plan, "l", START + day * DAY).unwrap();
+        }
+        let sent = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_fleet_assign")
+            .count();
+        assert_eq!(sent, 1);
+        // the rest survives a restart (the skip timers are the run's memory)
+        let mut again = restarted(&state, START + 30 * DAY);
+        navy_step(&mut again, &tools, &plan, "l", START + 31 * DAY).unwrap();
+        assert_eq!(
+            actions(&tools)
+                .into_iter()
+                .filter(|(n, _)| n == "hoi4_fleet_assign")
+                .count(),
+            1
+        );
     }
 
     #[test]

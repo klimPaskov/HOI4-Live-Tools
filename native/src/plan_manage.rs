@@ -1455,7 +1455,7 @@ pub(super) fn training_step(
             );
             continue;
         };
-        let queue = tr["queue"].as_u64().unwrap_or(6);
+        let queue = row_queue(tr, now);
         if when_holds(state, tools, &tr["when"], now) != Truth::True {
             tell(
                 &mut quiet,
@@ -1486,7 +1486,16 @@ pub(super) fn training_step(
             );
             continue;
         }
-        let mut count = tr["batch"].as_u64().unwrap_or(2).min(target - have);
+        // one train action fills the template's whole gap in ONE queue (the deployment view shows
+        // one queue per action); `batch` still caps it when the plan names one (owner, 28 Nov 2026:
+        // "why is the player making so many infantry training lanes?": a batch of 2 per action made
+        // a new queue every few days)
+        let gap = target - have;
+        let mut count = tr["batch"]
+            .as_u64()
+            .unwrap_or(gap)
+            .min(gap)
+            .min(TRAIN_MAX_LINES);
         let cap = tr["cap"].as_u64().or_else(|| {
             rules["cap_template"]
                 .as_str()
@@ -1755,6 +1764,25 @@ fn batch_short(
         let need = per * count as f64;
         (held + made * cover_days < need).then_some((archetype, held.max(0.0), need))
     })
+}
+
+/// The most lines one hoi4_train call takes (its schema's `count` maximum).
+const TRAIN_MAX_LINES: u64 = 24;
+
+/// A training row's lines to keep queued now: the last `queue_from` entry whose `from` date has
+/// come (a schedule, so one row per template serves every stage), else `queue` (default 6).
+fn row_queue(tr: &Value, now: GameHour) -> u64 {
+    let mut out = tr["queue"].as_u64().unwrap_or(6);
+    for step in list(tr, "queue_from") {
+        let due = step["from"]
+            .as_str()
+            .and_then(crate::plan_predicate::date_hour)
+            .is_some_and(|at| at <= now);
+        if let (true, Some(q)) = (due, step["queue"].as_u64()) {
+            out = q;
+        }
+    }
+    out
 }
 
 /// The game days a division of `template` takes to train: the longest of its battalions' and
@@ -5313,6 +5341,9 @@ fn air_idle_step(
                 // a wing already training reads region null too: it is not idle (sk27a, 18 Nov
                 // 2026: 17 wings were sent "training" again every 30 days, 4 times each)
                 let done = &state.manage.training_done;
+                // an aircraft type the game refused training for (by its own rules) is not
+                // tried on its other wings either (g115a, 28 Nov 2026: the transport wing LG
+                // 'Greifswald' refused_by_game_check twice, a month apart)
                 let pick = idle.iter().copied().filter(usable).find(|w| {
                     !strings(w, "missions").iter().any(|m| m == "training")
                         && w["air_base"]["state_id"].as_i64().is_some()
@@ -5321,6 +5352,7 @@ fn air_idle_step(
                         && done
                             .get(text(&w["wing"]))
                             .is_none_or(|p| w["aircraft"].as_i64().unwrap_or(0) > *p)
+                        && !state.skipped(now, "airtype", text(&w["aircraft_type"]))
                 });
                 if let Some(w) = pick {
                     let name = text(&w["wing"]).to_string();
@@ -5344,6 +5376,21 @@ fn air_idle_step(
                         &name,
                         if none_offered { 180 } else { 30 } * DAY,
                     );
+                    let kind = text(&w["aircraft_type"]).to_string();
+                    let by_rule = !ok
+                        && (super::plan_military::code(&why) == "refused_by_game_check"
+                            || none_offered)
+                        && w["aircraft"].as_u64().is_some_and(|n| n > 0);
+                    if by_rule && !kind.is_empty() {
+                        // the class rests as a given-up order rests (the ledger's span)
+                        let rest = super::ledger_rest(false, super::GIVE_UP_AFTER, 0, false).0;
+                        state.skip(now, "airtype", &kind, rest);
+                        note(
+                            state,
+                            "air_idle",
+                            format!("{kind}: the game refuses training for it ({name}); its wings are not sent"),
+                        );
+                    }
                     return Ok(Some(format!(
                         "air {name} trains over its base (state {base}){}: {ok} {why}",
                         if war {
@@ -9058,12 +9105,32 @@ fn balance_once(
                 m
             })
             .unwrap_or_default();
+        // the game's template list first: a template it does not have is not asked for by name
+        // (g115a, 28 Nov 2026: template_get refused template_unknown twice for a row whose
+        // design comes later)
+        let known: Option<HashSet<String>> = tools
+            .call("hoi4_division_templates", &json!({}))
+            .ok()
+            .filter(|r| r["templates"].is_array())
+            .map(|r| {
+                list(&r, "templates")
+                    .iter()
+                    .map(|t| text(&t["template"]).to_string())
+                    .collect()
+            });
         for (template, cap) in training {
             let fresh = state
                 .manage
                 .tpl_need
                 .get(&template)
                 .is_some_and(|(at, _, _)| now - *at < 30 * DAY);
+            if !fresh && known.as_ref().is_some_and(|k| !k.contains(&template)) {
+                state
+                    .manage
+                    .tpl_need
+                    .insert(template.clone(), (now, HashMap::new(), HashMap::new()));
+                continue;
+            }
             if !fresh {
                 // A template the game does not have yet (a row waiting for the design a focus or
                 // the designer makes) adds no need: the refusal is kept like a read for the same
@@ -9965,6 +10032,26 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("Old deleted: false"));
+    }
+
+    #[test]
+    fn one_train_action_fills_the_gap_in_one_queue_and_queue_from_sets_the_lines_by_date() {
+        // owner, 28 Nov 2026: "why is the player making so many infantry training lanes?"
+        let tools = fake(vec![(
+            "hoi4_division_templates",
+            templates_read(&[("Inf", 1)]),
+        )]);
+        let plan = json!({"training": {"template": "Inf", "queue": 4, "deploy_state": 5,
+            "queue_from": [{"from": "1936.1.1", "queue": 3}, {"from": "1937.1.1", "queue": 9}]}});
+        let mut state = State::default();
+        let now = crate::plan_predicate::date_hour("1936.6.1").unwrap();
+        let step = tick(&mut state, &tools, &plan, "l", now).unwrap();
+        assert_eq!(step, Tick::Acted("train 2 Inf: true Verified".into()));
+        assert_eq!(actions(&tools)[0].1["count"], 2);
+        let later = crate::plan_predicate::date_hour("1937.2.1").unwrap();
+        assert_eq!(row_queue(&plan["training"], later), 9);
+        assert_eq!(row_queue(&json!({"queue": 5}), later), 5);
+        assert_eq!(row_queue(&json!({}), later), 6);
     }
 
     #[test]
@@ -12094,6 +12181,35 @@ mod tests {
 
     fn peace_plan() -> Value {
         json!({"manage": {"fuel_floor": 0.3}, "war": {"enemies": ["POL"]}})
+    }
+
+    #[test]
+    fn a_type_the_game_refuses_training_is_not_sent_on_its_other_wings() {
+        let mut read = air_read();
+        read["wings"][2]["aircraft_type"] = json!("small_plane_airframe_0");
+        let tools = fake(vec![
+            ("hoi4_air", read),
+            (
+                "hoi4_resources",
+                json!({"fuel": {"ratio": 0.9, "stock": 90000.0}}),
+            ),
+        ]);
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_air_mission".into(), "refused_by_game_check");
+        let mut state = State::default();
+        air_idle_step(&mut state, &tools, &peace_plan(), "l", START).unwrap();
+        assert!(state.manage.notes["air_idle"].contains("refuses training"));
+        for day in 1..40 {
+            air_idle_step(&mut state, &tools, &peace_plan(), "l", START + day * DAY).unwrap();
+        }
+        let sent: Vec<Value> = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_air_mission")
+            .map(|(_, a)| a["wing"].clone())
+            .collect();
+        assert_eq!(sent, vec![json!("1. Stormo")]);
     }
 
     #[test]

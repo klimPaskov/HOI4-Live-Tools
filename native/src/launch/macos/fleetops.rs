@@ -114,6 +114,9 @@ pub(super) struct Plan {
     pub ship_ids: BTreeSet<i32>,
     /// The starting fleet's task forces as sorted ship id lists.
     pub partition: BTreeSet<Vec<i32>>,
+    /// Assign: the task force leaves the reserve fleet (by command only).
+    #[serde(default)]
+    pub from_reserve: bool,
 }
 fn ids(f: &Fleet) -> BTreeSet<i32> {
     f.task_forces
@@ -168,11 +171,22 @@ fn base_plan(fleets: &[Fleet], op: Op, index: usize, task_force: Option<&TaskFor
         task_forces_before: f.task_forces.len(),
         ship_ids: ids(f),
         partition: partition(f),
+        from_reserve: false,
     }
 }
 /// Refusals decided from reads alone. `subject` is a fleet name (merge, balance) or a task force
 /// name (split, reserve, delete, assign); `to` is the receiving fleet of an assignment.
-pub(super) fn plan(fleets: &[Fleet], op: Op, subject: &str, to: Option<&str>) -> Result<Plan> {
+/// `by_command`: the in-process `navy` family is usable, so a task force of the reserve fleet can be
+/// put into a real fleet by the game's own command (the mouse path does not drive the reserve
+/// fleet's entries; g115a, 28 Nov 2026: the executor's moves out of the reserve were refused
+/// reserve_fleet five times).
+pub(super) fn plan(
+    fleets: &[Fleet],
+    op: Op,
+    subject: &str,
+    to: Option<&str>,
+    by_command: bool,
+) -> Result<Plan> {
     let reserve = reserve_index(fleets);
     if op.fleet_level() {
         let index = fleet_index(fleets, subject)?;
@@ -201,9 +215,14 @@ pub(super) fn plan(fleets: &[Fleet], op: Op, subject: &str, to: Option<&str>) ->
             "nothing_to_change",
             format!("{} is already in the reserve fleet", tf.name),
         )),
-        Op::Reserve | Op::Split | Op::Delete | Op::Assign if home_is_reserve => Err(Error::new(
+        Op::Reserve | Op::Split | Op::Delete if home_is_reserve => Err(Error::new(
             "reserve_fleet",
             "The reserve fleet's task forces are not driven; reserve ships are placed with the game's own reserve controls",
+        )),
+        Op::Assign if home_is_reserve && !by_command => Err(Error::new(
+            "reserve_fleet",
+            "A task force of the reserve fleet moves into a fleet only by command (in-process family navy); the mouse \
+             path does not drive the reserve fleet's entries",
         )),
         Op::Split if tf.ships.len() < 2 => Err(Error::new(
             "task_force_too_small",
@@ -226,6 +245,7 @@ pub(super) fn plan(fleets: &[Fleet], op: Op, subject: &str, to: Option<&str>) ->
             }
             let mut plan = base_plan(fleets, op, index, Some(tf));
             plan.target = Some(fleets[target].name.clone());
+            plan.from_reserve = home_is_reserve;
             Ok(plan)
         }
         _ => Ok(base_plan(fleets, op, index, Some(tf))),
@@ -545,7 +565,8 @@ pub(super) fn call(name: &str, args: &Map<String, Value>, env: Env<'_>) -> Resul
         },
         &|p| {
             let fleets = navalact::own_fleets(p)?;
-            let planned = plan(&fleets, op, &subject, to.as_deref())?;
+            let by_command = super::inproc::route("navy").is_some();
+            let planned = plan(&fleets, op, &subject, to.as_deref(), by_command)?;
             kit::remember(&id, &planned);
             Ok(planned)
         },
@@ -569,6 +590,14 @@ pub(super) fn call(name: &str, args: &Map<String, Value>, env: Env<'_>) -> Resul
             if let Some(v) = in_process(p, planned)? {
                 navy_posted.set(Some(std::time::Instant::now()));
                 return Ok(v);
+            }
+            // out of the reserve fleet only by command: the mouse never drives its entries
+            if planned.from_reserve {
+                return Err(Error::new(
+                    "reserve_fleet",
+                    "The task force of the reserve fleet could not be paired with the game's objects for the \
+                     command; nothing was posted and the mouse path does not drive the reserve fleet",
+                ));
             }
             drive(p, keys, planned, drag)
         },
@@ -666,7 +695,7 @@ pub(super) fn tools() -> Vec<Value> {
         schema("hoi4_fleet_balance", &format!("Rebalance the ships of one own fleet's task forces with the toolbar's Task-force-o-matic button (btn_taskforce_o_matic; the button's meaning is inferred from its name, hover it first). Verified by the same ships grouped differently. {refusals}"), json!({"fleet":tf}), &["fleet"]),
         schema("hoi4_fleet_reserve", &format!("Send one own task force to the reserve fleet with the toolbar's set-as-reserve button (btn_exclude); a confirmation dialog is accepted. Verified by the task force being in the reserve fleet. {refusals}"), json!({"task_force":tf}), &["task_force"]),
         schema("hoi4_fleet_delete", &format!("DESTROY one own task force and its ships with the toolbar delete button (btn_delete) and the 'Delete task force' confirmation. Needs confirm:\"destroy_ships\" (else confirmation_required, nothing sent). Verified by the task force being gone. {refusals}"), json!({"task_force":tf,"confirm":{"type":"string","enum":["destroy_ships"]}}), &["task_force", "confirm"]),
-        schema("hoi4_fleet_assign", &format!("Move one own task force into another own fleet: select the task force, then RIGHT-click the receiving fleet's card (route right_click, the army cards' convention) or drag the entry onto the card (route drag); a reassign confirmation is accepted. Verified by the task force being in the receiving fleet. Adds refusal target_is_reserve. {refusals}"), json!({"task_force":tf,"to_fleet":tf,"route":{"type":"string","enum":["right_click","drag"]}}), &["task_force", "to_fleet"]),
+        schema("hoi4_fleet_assign", &format!("Move one own task force into another own fleet: select the task force, then RIGHT-click the receiving fleet's card (route right_click, the army cards' convention) or drag the entry onto the card (route drag); a reassign confirmation is accepted. Verified by the task force being in the receiving fleet. Adds refusal target_is_reserve. A task force of the reserve fleet moves only by command (in-process family navy; refused reserve_fleet without it, never by the mouse). {refusals}"), json!({"task_force":tf,"to_fleet":tf,"route":{"type":"string","enum":["right_click","drag"]}}), &["task_force", "to_fleet"]),
     ]
 }
 
@@ -725,69 +754,77 @@ mod tests {
     fn plans_refuse_before_input() {
         let f = world();
         assert_eq!(
-            plan(&f, Op::Merge, "kriegsmarine", None)
+            plan(&f, Op::Merge, "kriegsmarine", None, false)
                 .unwrap()
                 .task_forces_before,
             2
         );
         assert_eq!(
-            plan(&f, Op::Merge, "U-Flotte", None).unwrap_err().code,
+            plan(&f, Op::Merge, "U-Flotte", None, false)
+                .unwrap_err()
+                .code,
             "nothing_to_change"
         );
         assert_eq!(
-            plan(&f, Op::Merge, "Reserve", None).unwrap_err().code,
+            plan(&f, Op::Merge, "Reserve", None, false)
+                .unwrap_err()
+                .code,
             "reserve_fleet"
         );
         assert_eq!(
-            plan(&f, Op::Merge, "Nope", None).unwrap_err().code,
+            plan(&f, Op::Merge, "Nope", None, false).unwrap_err().code,
             "fleet_unknown"
         );
         assert_eq!(
-            plan(&f, Op::Balance, "Kriegsmarine", None)
+            plan(&f, Op::Balance, "Kriegsmarine", None, false)
                 .unwrap()
                 .partition
                 .len(),
             2
         );
         assert_eq!(
-            plan(&f, Op::Split, "Hochseeflotte", None)
+            plan(&f, Op::Split, "Hochseeflotte", None, false)
                 .unwrap()
                 .ship_ids
                 .len(),
             6
         );
         assert_eq!(
-            plan(&f, Op::Split, "I. U-Boots", None).unwrap_err().code,
+            plan(&f, Op::Split, "I. U-Boots", None, false)
+                .unwrap_err()
+                .code,
             "task_force_too_small"
         );
         assert_eq!(
-            plan(&f, Op::Split, "Reserve fleet 1", None)
+            plan(&f, Op::Split, "Reserve fleet 1", None, false)
                 .unwrap_err()
                 .code,
             "reserve_fleet"
         );
         assert_eq!(
-            plan(&f, Op::Split, "Nope", None).unwrap_err().code,
+            plan(&f, Op::Split, "Nope", None, false).unwrap_err().code,
             "task_force_unknown"
         );
         assert_eq!(
-            plan(&f, Op::Reserve, "Reserve fleet 1", None)
+            plan(&f, Op::Reserve, "Reserve fleet 1", None, false)
                 .unwrap_err()
                 .code,
             "nothing_to_change"
         );
         assert_eq!(
-            plan(&f, Op::Reserve, "Ostseeflotte", None).unwrap().fleet,
+            plan(&f, Op::Reserve, "Ostseeflotte", None, false)
+                .unwrap()
+                .fleet,
             "Kriegsmarine"
         );
         assert_eq!(
-            plan(&f, Op::Delete, "Reserve fleet 1", None)
+            plan(&f, Op::Delete, "Reserve fleet 1", None, false)
                 .unwrap_err()
                 .code,
             "reserve_fleet"
         );
         assert_eq!(
-            plan(&f, Op::Delete, "I. U-Boots", None)
+            plan(&f, Op::Delete, "I. U-Boots", None, false)
                 .unwrap()
                 .task_force
                 .as_deref(),
@@ -797,33 +834,59 @@ mod tests {
     #[test]
     fn assign_plans() {
         let f = world();
-        let p = plan(&f, Op::Assign, "Ostseeflotte", Some("u-flotte")).unwrap();
+        let p = plan(&f, Op::Assign, "Ostseeflotte", Some("u-flotte"), false).unwrap();
         assert_eq!(p.target.as_deref(), Some("U-Flotte "));
         assert_eq!(p.order, vec!["Kriegsmarine", "U-Flotte ", "Reserve"]);
         assert_eq!(
-            plan(&f, Op::Assign, "Ostseeflotte", Some("Kriegsmarine"))
+            plan(&f, Op::Assign, "Ostseeflotte", Some("Kriegsmarine"), false)
                 .unwrap_err()
                 .code,
             "nothing_to_change"
         );
         assert_eq!(
-            plan(&f, Op::Assign, "Ostseeflotte", Some("Reserve"))
+            plan(&f, Op::Assign, "Ostseeflotte", Some("Reserve"), false)
                 .unwrap_err()
                 .code,
             "target_is_reserve"
         );
         assert_eq!(
-            plan(&f, Op::Assign, "Ostseeflotte", Some("Nope"))
+            plan(&f, Op::Assign, "Ostseeflotte", Some("Nope"), false)
                 .unwrap_err()
                 .code,
             "fleet_unknown"
         );
         assert_eq!(
-            plan(&f, Op::Assign, "Ostseeflotte", None).unwrap_err().code,
+            plan(&f, Op::Assign, "Ostseeflotte", None, false)
+                .unwrap_err()
+                .code,
             "invalid_arguments"
         );
         assert_eq!(
-            plan(&f, Op::Assign, "Reserve fleet 1", Some("Kriegsmarine"))
+            plan(
+                &f,
+                Op::Assign,
+                "Reserve fleet 1",
+                Some("Kriegsmarine"),
+                false
+            )
+            .unwrap_err()
+            .code,
+            "reserve_fleet"
+        );
+        // by command (family navy usable) a reserve task force goes into a real fleet
+        let out = plan(
+            &f,
+            Op::Assign,
+            "Reserve fleet 1",
+            Some("Kriegsmarine"),
+            true,
+        )
+        .unwrap();
+        assert!(out.from_reserve);
+        assert!(!p.from_reserve);
+        // the other reserve operations stay refused either way
+        assert_eq!(
+            plan(&f, Op::Split, "Reserve fleet 1", None, true)
                 .unwrap_err()
                 .code,
             "reserve_fleet"
@@ -832,7 +895,7 @@ mod tests {
     #[test]
     fn merge_split_balance_settlement() {
         let f = world();
-        let merge = plan(&f, Op::Merge, "Kriegsmarine", None).unwrap();
+        let merge = plan(&f, Op::Merge, "Kriegsmarine", None, false).unwrap();
         assert_eq!(settle(&merge, &f), Verdict::Unchanged);
         let mut after = world();
         let moved = after[0].task_forces.remove(1);
@@ -842,7 +905,7 @@ mod tests {
         after[0].task_forces[0].ships.pop();
         assert_eq!(settle(&merge, &after), Verdict::Diverged);
 
-        let split = plan(&f, Op::Split, "Hochseeflotte", None).unwrap();
+        let split = plan(&f, Op::Split, "Hochseeflotte", None, false).unwrap();
         assert_eq!(settle(&split, &f), Verdict::Unchanged);
         let mut after = world();
         let half = after[0].task_forces[0].ships.split_off(2);
@@ -850,7 +913,7 @@ mod tests {
         after[0].task_forces[2].ships = half;
         assert_eq!(settle(&split, &after), Verdict::Reached);
 
-        let balance = plan(&f, Op::Balance, "Kriegsmarine", None).unwrap();
+        let balance = plan(&f, Op::Balance, "Kriegsmarine", None, false).unwrap();
         assert_eq!(settle(&balance, &f), Verdict::Unchanged);
         let mut after = world();
         let s = after[0].task_forces[0].ships.pop().unwrap();
@@ -861,7 +924,7 @@ mod tests {
     #[test]
     fn reserve_delete_assign_settlement() {
         let f = world();
-        let reserve = plan(&f, Op::Reserve, "Ostseeflotte", None).unwrap();
+        let reserve = plan(&f, Op::Reserve, "Ostseeflotte", None, false).unwrap();
         assert_eq!(settle(&reserve, &f), Verdict::Unchanged);
         let mut after = world();
         let moved = after[0].task_forces.remove(1);
@@ -874,11 +937,11 @@ mod tests {
         gone[0].task_forces.remove(1);
         assert_eq!(settle(&reserve, &gone), Verdict::Unknown);
 
-        let delete = plan(&f, Op::Delete, "Ostseeflotte", None).unwrap();
+        let delete = plan(&f, Op::Delete, "Ostseeflotte", None, false).unwrap();
         assert_eq!(settle(&delete, &f), Verdict::Unchanged);
         assert_eq!(settle(&delete, &gone), Verdict::Reached);
 
-        let assign = plan(&f, Op::Assign, "Ostseeflotte", Some("U-Flotte")).unwrap();
+        let assign = plan(&f, Op::Assign, "Ostseeflotte", Some("U-Flotte"), false).unwrap();
         assert_eq!(settle(&assign, &f), Verdict::Unchanged);
         let mut after = world();
         let moved = after[0].task_forces.remove(1);
@@ -920,7 +983,14 @@ mod tests {
     }
     #[test]
     fn plans_survive_the_baseline_round_trip() {
-        let p = plan(&world(), Op::Assign, "Ostseeflotte", Some("U-Flotte")).unwrap();
+        let p = plan(
+            &world(),
+            Op::Assign,
+            "Ostseeflotte",
+            Some("U-Flotte"),
+            false,
+        )
+        .unwrap();
         kit::remember("fleetops-test-1", &p);
         assert_eq!(kit::recall::<Plan>("fleetops-test-1"), Some(p));
         assert_eq!(kit::recall::<Plan>("fleetops-test-missing"), None);
