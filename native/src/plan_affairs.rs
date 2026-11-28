@@ -82,6 +82,9 @@
 //!                "guarantee", "non_aggression" (or "nap"), "access" (ask_military_access),
 //!                "offer_access", "docking", "improve_relations", "send_attache", "invite_to_faction",
 //!                "call_to_arms" (a faction member into our war; the ally decides),
+//!                "call_to_arms" / "join_allies" with "enemy":TAG (the war, by command), "request_licence_production"
+//!                with "equipment":[the licensor's design names or equipment type keys] (by command; target = the
+//!                licensor),
 //!                or any other canonical key or exact row name of hoi4_diplomacy; "try_anyway":true sends a
 //!                row the AI would refuse. `world_tension_max` (fraction or percent): only while world
 //!                tension is at most that (rule 30; unknown waits). A declaration is sent only when
@@ -1444,6 +1447,14 @@ fn dip_action(action: &str) -> Option<String> {
         "attache" | "send_attache" => "send_attache",
         "invite" | "invite_to_faction" => "invite_to_faction",
         "call" | "call_ally" | "call_to_arms" | "call_to_war" => "call_to_arms",
+        // engineer 132
+        "join_ally" | "join_allies" | "join_war" => "join_allies",
+        "licence"
+        | "license"
+        | "request_licence"
+        | "request_license"
+        | "request_licence_production"
+        | "request_licensed_production" => "request_licence_production",
         _ => return Some(action.trim().to_string()),
     };
     Some(key.to_string())
@@ -2413,6 +2424,16 @@ fn relation(
     let mut args = json!({"action": action, "country": target});
     if item["try_anyway"] == json!(true) {
         args["try_anyway"] = json!(true);
+    }
+    // engineer 132: a licence request names the licensor's designs (`equipment`) and a call to arms / joining the
+    // ally's war names the enemy (`enemy`): the module builds them by command (hoi4_diplomacy_act)
+    let equipment = strings(item, "equipment");
+    if !equipment.is_empty() {
+        args = json!({"action": action, "country": target, "equipment": equipment});
+    }
+    let enemy = text(&item["enemy"]).trim().to_string();
+    if !enemy.is_empty() {
+        args = json!({"action": action, "country": target, "enemy": enemy});
     }
     let (ok, why) = state.act(run.tools, run.lease, "hoi4_diplomacy_act", args, "dp")?;
     if ok || code(&why) == "nothing_to_change" {
@@ -5242,6 +5263,37 @@ mod tests {
         assert_eq!(sent[0].1["war_goal_key"], "take_state");
         assert_eq!(sent[0].1["state_ids"], json!([271, 272]));
         assert!(sent[0].1.get("war_goal").is_none());
+    }
+
+    #[test]
+    fn a_licence_names_the_designs_and_a_call_to_arms_names_the_enemy() {
+        let tools = fake(vec![(
+            "hoi4_diplomacy_state",
+            json!({"own_war_goals": [], "world_tension": {"value": 0.1}}),
+        )]);
+        let plan = json!({"diplomacy": [
+            {"id": "lic", "action": "licence", "target": "ITA", "equipment": ["Ba.88 Lince"]},
+            {"id": "cta", "action": "call_to_arms", "target": "HUN", "enemy": "POL"}]});
+        let mut state = State::default();
+        step(&mut state, &tools, &plan, "l", START).unwrap();
+        step(&mut state, &tools, &plan, "l", START + DAY).unwrap();
+        let sent: Vec<Value> = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_diplomacy_act")
+            .map(|(_, a)| a)
+            .collect();
+        let lic = sent
+            .iter()
+            .find(|a| a["action"] == "request_licence_production")
+            .expect("licence sent");
+        assert_eq!(lic["country"], "ITA");
+        assert_eq!(lic["equipment"], json!(["Ba.88 Lince"]));
+        let cta = sent
+            .iter()
+            .find(|a| a["action"] == "call_to_arms")
+            .expect("call sent");
+        assert_eq!(cta["enemy"], "POL");
+        assert_eq!(cta["country"], "HUN");
     }
 
     #[test]

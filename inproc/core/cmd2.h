@@ -104,7 +104,21 @@ enum { CTOR_NONE = 0, CTOR_WING_I32_U8 = 1, CTOR_WING_I32_NULL = 2,
        /* engineer 125: an action with the SIMPLE signature whose division handle list has NO inline places (the
         * expeditionary force: CSendExpeditionaryForceAction, list +0x70, allocator +0x80); the divisions are filled
         * through the list's own allocator */
-       CTOR_DIPLO_DIVLIST = 27 };
+       CTOR_DIPLO_DIVLIST = 27,
+       /* engineer 132 (28 Nov): a licence request (CRequestLicensedProductionAction). Its player constructor has the SIMPLE
+        * signature and builds two EMPTY handle lists without inline places ({data, capacity, size} and an allocator each:
+        * act_units_off and act_goal_off) and one byte (act_flag_off) set to 0. The action's own validity casts every
+        * element of the first list to CEquipmentVariant and asks that its owner is the RECEIVER (the licensor): the
+        * licensor's designs the player asks to produce. The module fills that list with the variants' handles through its
+        * own allocator; the second list and the byte stay as the constructor left them (C-LICENCE confirms the dialog
+        * leaves them so) */
+       CTOR_DIPLO_LICENCE = 28,
+       /* engineer 132: an action whose player constructor is (action, const tag *sender, const tag *receiver, const int
+        * *tag, const CDate *) and stores the ONE tag at *tag into an int list (act_units_off, allocator after it): call to
+        * arms (CCallAllyAction) and join the ally's war (CJoinAllyAction). The game's own automatic call (the declare-war
+        * path) passes the ENEMY's tag (the declared-on country) and the actions' validity reads each element as a country
+        * tag: the list names the enemy whose war the ally is called into / joins */
+       CTOR_DIPLO_TAGLIST = 29 };
 /* engineer 74: BUILD_FIELDS also fills CPdxArray fields (a division handle list, a province list): the fresh object's
  * array is empty ({data 0, capacity 0, size 0} and its allocator set by the factory); the module allocates the
  * elements through THAT allocator's own allocate slot (read from the game's array growth code), so the command's

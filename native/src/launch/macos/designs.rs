@@ -185,6 +185,57 @@ pub(super) fn read_all(process: &dyn Process) -> Result<Vec<Design>> {
         designs(r, image, production)
     })
 }
+/// engineer 132: another country's designs as its licence dialog lists them (the licensor's own design list, the same
+/// layout as ours): (address, shown name, equipment type key). Only what the licence dialog shows the player.
+pub(super) fn designs_of_country(process: &dyn Process, tag_index: i32) -> Result<Vec<Variant>> {
+    super::ui::read(process, |r, image| {
+        let (_, production) = economy::production_of(r, image, tag_index)?;
+        let abi = r.string_abi();
+        let mut out = Vec::new();
+        for address in pointers(
+            r,
+            production + fld(abi, &PRODUCTION, PRODUCTION_VARIANTS)?,
+            VARIANT_LIMIT,
+        )? {
+            out.push(fleetmem::variant(r, image, address)?);
+        }
+        Ok(out)
+    })
+}
+
+/// engineer 132: the licensor's designs a licence request names, matched by shown name (exact), else by equipment type
+/// key (the newest design of that type: the highest id). Unknown names are an error that lists what the licensor has.
+pub(super) fn pick_for_licence(all: &[Variant], wanted: &[String]) -> Result<Vec<u64>> {
+    let mut out = Vec::new();
+    for w in wanted {
+        let by_name = all.iter().find(|v| display(v) == *w);
+        let by_type = || {
+            all.iter()
+                .filter(|v| v.type_key == *w && !v.obsolete)
+                .max_by_key(|v| v.id)
+        };
+        match by_name.or_else(by_type) {
+            Some(v) if !out.contains(&v.address) => out.push(v.address),
+            Some(_) => {}
+            None => {
+                let mut names: Vec<String> =
+                    all.iter().filter(|v| !v.obsolete).map(display).collect();
+                names.sort();
+                names.dedup();
+                names.truncate(40);
+                return Err(Error::new(
+                    "invalid_target",
+                    format!(
+                        "the licensor has no design or equipment type '{w}'; its designs: {}",
+                        names.join(", ")
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Detail rows (as `hoi4_designs` with detail) for the given designs of one list.
 pub(super) fn rows_json(all: &[Design], pick: impl Fn(&Design) -> bool) -> Vec<Value> {
     let names: Vec<(i32, String)> = all
@@ -227,6 +278,45 @@ pub(super) fn schema() -> Value {
 mod tests {
     use super::super::testmem::{Mem, IMAGE};
     use super::*;
+
+    fn lv(address: u64, id: i32, name: &str, key: &str, obsolete: bool) -> Variant {
+        Variant {
+            address,
+            id,
+            name: name.into(),
+            class_suffix: String::new(),
+            type_key: key.into(),
+            parent_id: None,
+            manpower: 0,
+            max_strength: 0.0,
+            obsolete,
+        }
+    }
+
+    #[test]
+    fn a_licence_picks_the_licensors_design_by_name_or_its_newest_of_a_type() {
+        let all = vec![
+            lv(0x10, 1, "", "small_plane_strike_airframe_1", false),
+            lv(
+                0x20,
+                7,
+                "Ba.88 Lince",
+                "small_plane_strike_airframe_1",
+                false,
+            ),
+            lv(0x30, 9, "", "anti_air_equipment_1", true),
+        ];
+        assert_eq!(
+            pick_for_licence(&all, &["Ba.88 Lince".into()]).unwrap(),
+            vec![0x20]
+        );
+        assert_eq!(
+            pick_for_licence(&all, &["small_plane_strike_airframe_1".into()]).unwrap(),
+            vec![0x20]
+        );
+        let e = pick_for_licence(&all, &["anti_air_equipment_1".into()]).unwrap_err();
+        assert!(format!("{e:?}").contains("Ba.88 Lince"), "{e:?}");
+    }
 
     fn variant(mem: &Mem, id: i32, name: &str, key: &str, parent: u64) -> u64 {
         let v = mem.alloc(0x500);

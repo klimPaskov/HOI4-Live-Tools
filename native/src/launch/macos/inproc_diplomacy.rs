@@ -205,9 +205,106 @@ pub(super) fn justify(
     }
 }
 
+/// engineer 132: the module op of a licence request (the catalog's request_licensed_production row, shape variant_list).
+pub(super) const LICENCE_OP: &str = "diplomacy2.request_licensed_production";
+/// engineer 132: the most designs one licence request names (the module's own bound).
+pub(super) const LICENCE_MAX: usize = 16;
+
+/// engineer 132: the module request for a licence: vals = the licensor's tag index, divs = the licensor's designs
+/// (CEquipmentVariant addresses, read from the licensor's own design list, as the licence dialog lists them). The module
+/// checks each is a live design and the game's own check decides whether the licensor's designs may be licensed now.
+pub(super) fn licence_request(tag_index: i32, designs: &[u64]) -> Result<Value> {
+    use crate::error::Error;
+    if tag_index <= 0 {
+        return Err(Error::new(
+            "invalid_target",
+            "the licensor has no tag index",
+        ));
+    }
+    if designs.is_empty() || designs.len() > LICENCE_MAX {
+        return Err(Error::new(
+            "invalid_arguments",
+            format!("a licence request names 1..{LICENCE_MAX} of the licensor's designs"),
+        ));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    if designs.iter().any(|d| *d == 0 || !seen.insert(*d)) {
+        return Err(Error::new(
+            "invalid_arguments",
+            "a design is missing or listed twice",
+        ));
+    }
+    request(LICENCE_OP, &[0], designs, &[i64::from(tag_index)], None)
+}
+
+/// engineer 132: the module op of a one-tag action (call to arms, join the ally's war), by the tool's key.
+pub(super) fn tag_list_op(key: &str) -> Option<&'static str> {
+    match key {
+        "call_to_arms" | "call_ally" => Some("diplomacy2.call_ally"),
+        "join_allies" | "join_ally" => Some("diplomacy2.join_ally"),
+        _ => None,
+    }
+}
+
+/// engineer 132: the module request of a one-tag action: vals = the receiver's tag index (the ally), then the enemy's
+/// (the war the ally is called into, or joins). The game's own check decides (an ally, a war against that enemy, the
+/// faction rules).
+pub(super) fn tag_list_request(op: &str, tag_index: i32, enemy_index: i32) -> Result<Value> {
+    use crate::error::Error;
+    if tag_index <= 0 || enemy_index <= 0 {
+        return Err(Error::new(
+            "invalid_target",
+            "the ally or the enemy has no tag index",
+        ));
+    }
+    if tag_index == enemy_index {
+        return Err(Error::new(
+            "invalid_arguments",
+            "the enemy is the ally itself",
+        ));
+    }
+    request(
+        op,
+        &[0],
+        &[],
+        &[i64::from(tag_index), i64::from(enemy_index)],
+        None,
+    )
+}
+
+/// engineer 132: post one prepared request; the module's reply on success.
+pub(super) fn post_prepared(ch: &mut Channel, req: Value, what: &str) -> Routed {
+    match ch.post_raw(req) {
+        Ok(reply) => routed(reply, what),
+        Err(_) => Routed::Gui,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_licence_names_the_licensors_designs_and_a_call_to_arms_names_the_enemy() {
+        let r = licence_request(42, &[0x6000_0000_1000, 0x6000_0000_2000]).unwrap();
+        assert_eq!(r["cmd"], LICENCE_OP);
+        assert_eq!(r["objs"], "0x0");
+        assert_eq!(r["divs"], "0x600000001000,0x600000002000");
+        assert!(r["vals"].to_string().contains("42"));
+        assert!(licence_request(42, &[]).is_err());
+        assert!(licence_request(42, &[1, 1]).is_err());
+        assert!(licence_request(0, &[1]).is_err());
+        assert!(licence_request(42, &vec![7u64; LICENCE_MAX + 1]).is_err());
+        assert_eq!(tag_list_op("call_to_arms"), Some("diplomacy2.call_ally"));
+        assert_eq!(tag_list_op("join_allies"), Some("diplomacy2.join_ally"));
+        assert_eq!(tag_list_op("guarantee"), None);
+        let c = tag_list_request("diplomacy2.call_ally", 12, 30).unwrap();
+        assert_eq!(c["cmd"], "diplomacy2.call_ally");
+        let v = c["vals"].to_string();
+        assert!(v.contains("12") && v.contains("30"), "{v}");
+        assert!(tag_list_request("diplomacy2.call_ally", 12, 12).is_err());
+        assert!(tag_list_request("diplomacy2.call_ally", 12, 0).is_err());
+    }
 
     #[test]
     fn the_simple_actions_and_declare_war_have_an_op_and_dialog_actions_do_not() {

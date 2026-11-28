@@ -43,6 +43,10 @@ S2=(valid_slot=0x50 exec_flag=0x624 player_tag=0x4d8 line_factories=0xe8 region_
 # (engineer 125, 28 Nov: justify (generate_war_goal: type pointer +0x88, state list +0x70, the war goal type database
 #  list +0x40 / count +0x4c / token +0x8 from the action's own reader and lookup) and the expeditionary force (an allocated
 #  division list +0x70, proven by the volunteers' element serializer) join the buildable rows; hand-checked in 1.20.0.0)
+# (engineer 132, 28 Nov: the licence request (request_licensed_production: two empty handle lists +0x70 / +0x88 and the byte
+#  +0xa0 from its own constructor; the first list's elements cast to CEquipmentVariant by the action's own validity) and the
+#  one-tag list (call_ally, join_ally: the enemy's tag appended to the int list +0x70 by their constructors) join the
+#  buildable rows; hand-checked in 1.20.0.0: 0x100fc9ad0, 0x100fca35d, 0x100fa28f0, 0x100fac3c0)
 # (engineer 122, 28 Nov: the diplomacy catalog = every RTTI subclass of CDiplomaticAction (43 on 1.19.4.1 and 1.20), 12 more
 #  buildable as family diplomacy2 by the hand-written rows' shapes; type ids hand-checked in the 1.20.0.0 constructors)
 # stage 2, the next families (engineer 71, 24 Nov; hand-found in both disassemblies, identical payloads): the rest of
@@ -77,11 +81,15 @@ S2N=(regions_arr=0x2a8 regions_cnt=0x2b4 on:airwing.split=1 on:airwing.merge=1 o
      on:diplomacy.send_volunteers=1 on:diplomacy.recall_volunteers=1 on:diplomacy.send_attache=1 act_type:diplomacy.send_volunteers=0x3415
      act_type:diplomacy.recall_volunteers=0x2e3a act_type:diplomacy.send_attache=0x38d9 act_units:diplomacy.send_volunteers=0x709002
      act_units:diplomacy.recall_volunteers=0x709004 act_units:diplomacy.send_attache=0
-     diplo_classes=43 diplo_buildable=14 wgt_offs=0x404c08 on:diplomacy2.generate_war_goal=1 act_type:diplomacy2.generate_war_goal=0x341b
+     diplo_classes=43 diplo_buildable=17 wgt_offs=0x404c08 on:diplomacy2.generate_war_goal=1 act_type:diplomacy2.generate_war_goal=0x341b
      act_goal_off:diplomacy2.generate_war_goal=0x88 act_units:diplomacy2.generate_war_goal=0x700000 on:diplomacy2.send_expeditionary_force=1
      act_type:diplomacy2.send_expeditionary_force=0x33fe act_units:diplomacy2.send_expeditionary_force=0x700000 on:diplomacy2.embargo=1 act_type:diplomacy2.embargo=0x3274
      act_type:diplomacy2.docking_rights=0x3afa act_type:diplomacy2.request_access_to_license_production=0x4b99
      act_type:diplomacy2.peace_proposal=0x30ba
+     on:diplomacy2.request_licensed_production=1 act_type:diplomacy2.request_licensed_production=0x37bf
+     act_units:diplomacy2.request_licensed_production=0x700000 act_goal_off:diplomacy2.request_licensed_production=0x88
+     act_offs:diplomacy2.request_licensed_production=0xa0 on:diplomacy2.call_ally=1 act_type:diplomacy2.call_ally=0x2fc9
+     act_units:diplomacy2.call_ally=0x700000 on:diplomacy2.join_ally=1 act_type:diplomacy2.join_ally=0x355f act_units:diplomacy2.join_ally=0x700000
      on:raids.execute=1 on:raids.cancel=1 type:raids.execute=19194 type:raids.cancel=19209
      on:holds.area_defense=1 type:holds.area_defense=13873 holds_ok=1 holds_kind=5 holds_area_off=0xe0 holds_area_cnt=0xec
      holds_setting_off=0xf8 on:construction.add=1 type:construction.add=12151 on:construction.remove=1 type:construction.remove=13088

@@ -1305,15 +1305,36 @@ faction ally): `{action:"expeditionary_force", country:<the ally>, army:<an army
 divisions posted; the divisions turn to the ally's control (the army card's flag, or hoi4_units owner); then
 `{action:"return_expeditions", country:<the ally>}` returns them. Not at war or no ally: refused_by_game, nothing posted.
 Record the division count before and after.
+D9 a licence by command (engineer 132; written, catalog row request_licensed_production, shape variant_list): D1's catalog
+shows request_licensed_production with shape variant_list and route in_process. Toward a country with a licensable design
+we lack and good relations (1936/1939 Germany: ITA, or HUN / SWE as the plan's rows G251/G264/G271 name): first open the
+diplomacy view's Request licence row by mouse and read the dialog's list (screenshot; no send), then
+`{action:"request_licence_production", country:"ITA", equipment:["<one design name exactly as the dialog lists it>"]}`: the
+reply shows 1 posted; within 2 game days the AI's answer (a news/event line or the licence under the equipment in the
+production view: the licensed design appears in the production selection with the licensor's flag); record PP, civilian
+factories in use (the licence fee) and the answer. Then a design name the licensor does not have: invalid_target listing
+its designs, nothing posted. Then the same licence again while it is held: refused_by_game, nothing posted. Then
+`equipment:["<an equipment type key, e.g. small_plane_strike_airframe_1>"]`: the newest design of that type is asked. Stop
+at once if the licence names another design than asked, or if a licence of ours is cancelled.
+D10 call to arms / join the ally's war by command (engineer 132; written, catalog rows call_ally and join_ally, shape
+tag_list: the enemy's tag): only on a bed at war with a faction ally not yet in that war (1939 Germany at war with POL and
+Italy or Hungary in our faction, else any faction war). `{action:"call_to_arms", country:<the ally>, enemy:"POL"}`: the reply
+shows 1 posted; within 2 game days the ally joins the war against POL or refuses (record which); the same call with an
+enemy we are not at war with: refused_by_game, nothing posted. join_allies: as the ally's member when the ally is at war
+(`{action:"join_allies", country:<the ally at war>, enemy:<its enemy>}`); record when the bed allows it.
 Stop at once on: any post while the view greys the button, any change after D1/D2, a module `unexplained` result, a
 toggle that removed a relation we had.
-Pass: D0-D4, D6, D7 (D5 and D8 recorded; D8 when the bed allows it). Then set the `diplomacy2` entry of IPC_LIVE_PASSED in
-inproc/core/ipc.c to 1 with the numbers. D0's type count is 14 with engineer 125's module (generate_war_goal and
-send_expeditionary_force added).
+Pass: D0-D4, D6, D7, D9 (D5, D8 and D10 recorded; D8/D10 when the bed allows it). Then set the `diplomacy2` entry of
+IPC_LIVE_PASSED in inproc/core/ipc.c to 1 with the numbers. D0's type count is 17 with engineer 132's module
+(generate_war_goal, send_expeditionary_force, request_licensed_production, call_ally, join_ally added).
 
 ## Capture C-LICENCE: what the licence request action carries (read only plus one licence request; about 15 minutes) -- with the diplomacy session
-Not pass/fail: it gives the offline engineer the meaning of CRequestLicensedProductionAction's two equipment lists
-(+0x70 and +0x88) and its byte +0xa0, which the binary alone left open (one list is executed with 100000, the other with 0).
+OPTIONAL since engineer 132 (28 Nov): the binary settled the first list: the action's own validity (1.20.0.0 0x100fca35d)
+casts every element of +0x70 to CEquipmentVariant and requires the RECEIVER (the licensor) to own it, and its cost routine
+compares each with our designs of the same archetype: +0x70 = the licensor's designs asked. The module builds the request by
+command with that list only (S27 D9). Still open, and this capture answers it: what the dialog puts in +0x88 (also cast to
+designs, no owner check) and the byte +0xa0 (read only under game rule 6). Run C-LICENCE only if D9 is refused by the
+game's check while the mouse request of the same design is accepted.
 Server env: `HOI4_BACKEND=inprocess HOI4_TRACE=1`, module log on. Bed: 1939 Germany or 1936 Germany, paused; a country with
 a licensable design we lack (Italy, Japan, the USA: the view's Request licence row).
 L1 open the diplomacy view on that country, Request licence production: the dialog lists equipment; screenshot it.
