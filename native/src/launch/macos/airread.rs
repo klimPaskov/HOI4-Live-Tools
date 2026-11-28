@@ -88,6 +88,8 @@ pub(super) struct Wing {
     /// The army the wing is attached to (hoi4_air_attach), by name; None when not attached or the
     /// link reads 0 (a wing loaded attached from a save reads unlinked until attached again).
     pub attached_army: Option<String>,
+    /// The variant's air_range (km) as the variant carries it; None when unread.
+    pub range_km: Option<f64>,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Base {
@@ -108,12 +110,15 @@ fn wing(r: &Reader<'_>, image: u64, address: u64, base: &Base) -> Result<Wing> {
     let abi = r.string_abi();
     let w = |offset: u64| fld(abi, &WING, offset);
     let variants = pointers(r, address + w(WING_VARIANTS)?, 64)?;
-    let (variant, equipment) = match variants.first() {
+    let (variant, equipment, range_km) = match variants.first() {
         Some(v) if *v != 0 => {
+            let range = fleetmem::stats(r, *v)
+                .ok()
+                .and_then(|s| s.get("air_range").and_then(Value::as_f64));
             let v = fleetmem::variant(r, image, *v)?;
-            (v.name, v.type_key)
+            (v.name, v.type_key, range)
         }
-        _ => (String::new(), String::new()),
+        _ => (String::new(), String::new(), None),
     };
     let (region_id, region_name) = match r.u64(address + w(WING_REGION_PTR)?)? {
         0 => (0, None),
@@ -159,6 +164,7 @@ fn wing(r: &Reader<'_>, image: u64, address: u64, base: &Base) -> Result<Wing> {
             .filter(|a| *a != 0)
             .and_then(|a| super::armies::army_name(r, a).ok())
             .filter(|n| !n.is_empty()),
+        range_km,
     })
 }
 /// Own air bases and the wings stationed at each, from `strategic`.
@@ -303,7 +309,9 @@ fn view(
     wings: &[Wing],
     names: &BTreeMap<i32, String>,
     filter: Option<&str>,
+    geo: Option<&super::aircover::RegionGeometry>,
 ) -> Value {
+    let province_of = |id: i32| bases.iter().find(|b| b.id == id).map(|b| b.province);
     let wanted = filter.map(str::to_lowercase);
     let wing_rows: Vec<Value> = wings
         .iter()
@@ -319,7 +327,8 @@ fn view(
                 "transfer_to_base_id":(w.transfer_base_id > 0).then_some(w.transfer_base_id),
                 "missions":if w.region_id > 0 { missions_in(w.mission_mask) } else if training(w.mission_mask) { vec!["training"] } else { Vec::new() },
                 "standing_by":w.region_id <= 0 && !training(w.mission_mask),"last_mission_selection":missions_in(w.mission_mask),
-                "attached_army":w.attached_army,
+                "attached_army":w.attached_army,"air_range_km":w.range_km,
+                "coverage":geo.zip(province_of(w.base_id)).map_or(Value::Null, |(g, p)| super::aircover::wing_row(g, w.region_id, p, w.range_km)),
                 "region":(w.region_id > 0).then(|| json!({"id":w.region_id,"name":w.region_name.as_ref().or_else(|| names.get(&w.region_id))}))})
         })
         .collect();
@@ -332,13 +341,15 @@ fn view(
                 "region":b.region_id.map(|id| json!({"id":id,"name":names.get(&id)})),
                 "level":b.capacity / CAPACITY_PER_LEVEL,"capacity":b.capacity,
                 "aircraft_stationed":used,"free":b.capacity - used,
+                "over_capacity":super::aircover::over_capacity(b.capacity, used),
                 "wings":here.iter().map(|w| w.name.as_str()).collect::<Vec<_>>()})
         })
         .collect();
     json!({"wings":wing_rows,"air_bases":base_rows,
         "validated":{"wing_names_and_bases":true,"base_capacity":true,"aircraft_count":"matches the 40/80 aircraft of the 1936 history once reinforced; current values unverified",
             "missions":"mask bits 1 (air superiority) and 2 (CAS) read after own orders, 26 October 2026","region":"pointer at wing +0xb8 (file id +0x40, template name); null while standing by; matched the overview's Area text for Western and Eastern Germany, North-West Germany and Western Poland","level":"capacity / 200, matches states 50 and 51"},
-        "unavailable":{"organisation":"wings have none","fuel":"not mapped","range":"see hoi4_designs air_range of the variant",
+        "coverage_method":super::aircover::METHOD,"km_per_pixel":geo.map(|g| g.km_per_pixel),
+        "unavailable":{"organisation":"wings have none","fuel":"not mapped",
             "aces":"not mapped","air_superiority_by_region":"not mapped"}})
 }
 
@@ -352,12 +363,12 @@ pub(super) fn tool(process: &dyn Process, args: &Map<String, Value>) -> Result<V
         let own = fleetmem::own_strategic(r, image, GS_AIR_MANAGER, AIR_BY_COUNTRY)?;
         bases_and_wings(r, image, own)
     })?;
-    let names = process
+    let dir = process
         .identity()
-        .and_then(|i| super::mapdata::game_dir(&i.exe).ok())
-        .map(|d| region_names(&d))
-        .unwrap_or_default();
-    Ok(view(&bases, &wings, &names, filter))
+        .and_then(|i| super::mapdata::game_dir(&i.exe).ok());
+    let names = dir.as_ref().map(|d| region_names(d)).unwrap_or_default();
+    let geo = dir.as_ref().and_then(|d| super::aircover::geometry(d));
+    Ok(view(&bases, &wings, &names, filter, geo.as_deref()))
 }
 pub(super) fn schema() -> Value {
     json!({"name":"hoi4_air","description":"Own air wings and air bases read from game memory (no panel, no input, never pauses). Per wing: name, unit type (light/medium/heavy plane), aircraft type and variant, aircraft count, manpower, air base (id and state), missions set (bitmask decoded with the toolbar order) and assigned strategic region. Per air base: state, level (capacity/200), capacity, aircraft stationed, free capacity and the wings there. Mission mask bits (air superiority 1, CAS 2, interception 4, strategic bombing 8) and the region (pointer at wing +0xb8, null while the wing stands by after Hold) were validated against the Air Forces Overview after own orders on 26 October 2026; the mask keeps the last mission after Hold, so judge by `region`; `transfer_to_base_id` is the destination base id while a wing flies a transfer (arrival moves the base). Orders: hoi4_air_mission, hoi4_air_rebase, hoi4_air_wing_create/disband/split/merge, hoi4_air_hold; hoi4_air_regions groups the same data by region.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":64,"description":"Only wings whose name contains this text"}},"additionalProperties":false}})
@@ -456,13 +467,13 @@ mod tests {
         );
         let mut names = BTreeMap::new();
         names.insert(127, "Sahara Desert".to_string());
-        let v = view(&bases, &wings, &names, None);
+        let v = view(&bases, &wings, &names, None, None);
         assert_eq!(v["wings"][0]["missions"][0], "cas");
         assert_eq!(v["wings"][0]["region"]["name"], "Sahara Desert");
         assert_eq!(v["wings"][0]["region"]["id"], 127);
         assert_eq!(v["air_bases"][0]["level"], 6);
         assert_eq!(v["air_bases"][0]["free"], 1130);
-        assert!(view(&bases, &wings, &names, Some("zz"))["wings"]
+        assert!(view(&bases, &wings, &names, Some("zz"), None)["wings"]
             .as_array()
             .unwrap()
             .is_empty());

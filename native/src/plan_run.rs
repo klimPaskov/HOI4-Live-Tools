@@ -296,6 +296,10 @@ mod plan_manage;
 /// Military domains (army groups, navy, naval invasions, casualty ratio, air superiority).
 #[path = "plan_military.rs"]
 mod plan_military;
+/// The air war by situation (`air_situation`): fighters sized to win or stay out, CAS over our
+/// battles, reach by range and base.
+#[path = "plan_air.rs"]
+mod plan_air;
 
 /// State, economy and diplomacy affairs (designs, diplomacy, faction, trade, MIOs, intelligence,
 /// research bonuses).
