@@ -205,7 +205,9 @@ def text_research(r):
            f"{m['research_speed']:+g}; techs: {r['techs']}",
            f"  value base: {m['base']}; IC per factory-year {m['ic_per_factory_year']:g}; a civilian factory builds "
            f"{m['build_rate']:g} military factories a year ({m['build_rate_why']}); horizon {m['horizon_years']:g} years",
-           f"  army: {m['army_templates']} fielded templates, {m['army_ic']:g} IC, against {m['enemy_template']}",
+           f"  army: {m['army_templates']} fielded templates, {m['army_ic']:g} IC, against {m['enemy_template']}; "
+           f"built later: {m.get('future_template') or 'the fielded templates'}; military factories grow "
+           f"{m.get('military_growth_per_year', 0):g} a year (consumer goods {m.get('consumer_goods', 0):g})",
            f"  days: {r['method']}; " + "; ".join(m["defines"])]
     for i, sl in enumerate(r["picks"], 1):
         out.append(f"  slot {i}:")
