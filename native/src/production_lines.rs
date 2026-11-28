@@ -66,6 +66,8 @@ const WINDOWS: Layout = Layout {
 /// One own equipment line as the input adapters see it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct OwnLine {
+    /// The line object's address (the in-process backend names it; the module re-checks it with the game's resolver).
+    pub address: u64,
     pub handle: u64,
     pub naval: bool,
     pub key: Option<String>,
@@ -106,6 +108,7 @@ pub(crate) fn own_lines(r: &Reader<'_>, base: u64) -> Result<Vec<OwnLine>> {
             None
         };
         out.push(OwnLine {
+            address: line,
             handle: r.u64(line + 8)?,
             naval,
             key,

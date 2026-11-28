@@ -108,7 +108,11 @@ pub const SLOW_STEP: std::time::Duration = std::time::Duration::from_secs(5);
 /// One executor step on the input lane when it is idle (see `hoi4_autopilot`). True when it ran.
 pub fn autopilot_step(server: &Server, commands: &dyn crate::protocol::Commands) -> bool {
     use crate::{autopilot::autopilot, watch::feed};
-    let Some(token) = autopilot().due() else {
+    // a quiet executor looks again on the next game hour (the memory clock, no input)
+    let Some(token) = autopilot().due_at(|| {
+        read_tool(server, commands, "hoi4_overview", serde_json::json!({}))
+            .and_then(|o| o["date"]["raw"].as_i64())
+    }) else {
         return false;
     };
     autopilot().set_in_step(true);
@@ -162,6 +166,24 @@ pub fn autopilot_step(server: &Server, commands: &dyn crate::protocol::Commands)
             }
         }
     }
+    // The operations' notes (width, planning, axis, opening) likewise, once a game day at most:
+    // what the live reader checks on days 1, 5, 10 and 20 of a war
+    if body["operations"]["notes"].is_object() {
+        static LAST_OPS: std::sync::Mutex<(i64, String)> =
+            std::sync::Mutex::new((i64::MIN, String::new()));
+        let now = body["operations"]["notes"].to_string();
+        let day = body["game_hour"].as_i64().unwrap_or(0) / 24;
+        if let Ok(mut last) = LAST_OPS.lock() {
+            if last.1 != now && last.0 != day {
+                eprintln!(
+                    "[ops] {}",
+                    serde_json::json!({"game_hour": body["game_hour"],
+                        "notes": body["operations"]["notes"]})
+                );
+                *last = (day, now);
+            }
+        }
+    }
     if result["isError"] == serde_json::json!(true) {
         let code = body["error"]["code"].as_str().unwrap_or("");
         if autopilot_stops_on(code) {
@@ -210,7 +232,12 @@ pub fn autopilot_step(server: &Server, commands: &dyn crate::protocol::Commands)
         }
     }
     let succeeded = actions.iter().filter(|a| !a.contains(": false")).count();
-    autopilot().ran_with(actions.len(), succeeded, actions.last().cloned());
+    autopilot().ran_at(
+        actions.len(),
+        succeeded,
+        actions.last().cloned(),
+        body["game_hour"].as_i64(),
+    );
     true
 }
 

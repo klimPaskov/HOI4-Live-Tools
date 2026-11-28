@@ -8,9 +8,17 @@
 //! still need is held back for them, as long as such an entry is DUE (its `when` holds once its
 //! own experience clause is left out), not yet done, and not resting after a refusal (a spend
 //! the game refuses never blocks the rest). A spend the budget does not list comes after every
-//! listed one.
-use super::{item_id, list, text, GameHour, State, Tools, Truth};
-use serde_json::Value;
+//! listed one. A listed spend the pool could already pay that its own lane has not made within
+//! [`HOLD_GRACE`] holds nothing back any more: the reserve then serves a spend nobody makes
+//! (cmps1/cmph1, 27 Nov 2026: a 15-experience garrison template held the doctrine back for the
+//! last three weeks of the run with 96-119 army experience banked and a subdoctrine affordable).
+use super::{item_id, list, text, GameHour, State, Tools, Truth, DAY};
+use serde_json::{json, Value};
+
+/// How long an earlier spend the pool can already pay may hold the later spends back: a few game
+/// days cover its own lane's turn (owner, 27 Nov 2026: nothing assignable idle for more than a
+/// few game days).
+pub(super) const HOLD_GRACE: GameHour = 7 * DAY;
 
 /// What spends experience, as the budget's `ref` names it.
 pub(super) enum Spender<'a> {
@@ -133,6 +141,25 @@ fn pending(state: &State, plan: &Value, entry: &Value, now: GameHour) -> bool {
     }
 }
 
+/// The `when` of the plan row a budget entry spends on (`template:<id>` in `templates`,
+/// `design:<id>` in `designs`, `doctrine:<id>` in `doctrines`), Null when there is none. Pure.
+fn spender_when(plan: &Value, entry: &Value) -> Value {
+    let reference = text(&entry["ref"]);
+    let Some((kind, id)) = reference.split_once(':') else {
+        return Value::Null;
+    };
+    let rows = match kind {
+        "template" => "templates",
+        "design" => "designs",
+        "doctrine" => "doctrines",
+        _ => return Value::Null,
+    };
+    list(plan, rows)
+        .iter()
+        .find(|r| item_id(r).as_deref() == Some(id))
+        .map_or(Value::Null, |r| r["when"].clone())
+}
+
 /// The experience of `pool` (army, air, navy) the spends listed before `who` still need, and
 /// their ids: a spender waits until the pool holds that much plus its own price.
 pub(super) fn ahead(
@@ -167,8 +194,37 @@ pub(super) fn ahead(
         if due != Truth::True {
             continue;
         }
+        // the spender itself must be due too: a template, design or doctrine row whose own
+        // `when` does not hold yet cannot spend, so it holds nothing back (t1939k, 24 Nov 2026:
+        // the budget held 30 army experience from August for a template row dated 15 October,
+        // and the officer corps and every doctrine waited behind it through the Polish war)
+        let own = spender_when(plan, entry);
+        if !own.is_null() && super::judge(state, tools, &without_xp(&own), now) != Truth::True {
+            continue;
+        }
+        let id = item_id(entry).unwrap_or_else(|| text(&entry["ref"]).to_string());
+        // payable now (the pool covers it after the spends before it): its lane has had the
+        // experience since then; past the grace it holds nothing back
+        let payable = super::judge(
+            state,
+            tools,
+            &json!(format!("xp:{pool} >= {}", held + cost)),
+            now,
+        ) == Truth::True;
+        if payable {
+            let since = *state
+                .manage
+                .xp_payable_since
+                .entry(id.clone())
+                .or_insert(now);
+            if now.saturating_sub(since) > HOLD_GRACE {
+                continue;
+            }
+        } else {
+            state.manage.xp_payable_since.remove(&id);
+        }
         held += cost;
-        names.push(item_id(entry).unwrap_or_else(|| text(&entry["ref"]).to_string()));
+        names.push(id);
     }
     (held, names)
 }
@@ -192,6 +248,28 @@ mod tests {
         assert_eq!(
             without_xp(&json!("tech_researched:x")),
             json!("tech_researched:x")
+        );
+    }
+
+    #[test]
+    fn a_budget_entry_finds_the_when_of_the_row_it_spends_on() {
+        let plan = json!({"templates": [{"id": "t_inf_art", "when": "date >= 1939.10.15"}],
+                          "designs": [{"id": "d1"}]});
+        assert_eq!(
+            spender_when(&plan, &json!({"ref": "template:t_inf_art"})),
+            json!("date >= 1939.10.15")
+        );
+        assert_eq!(
+            spender_when(&plan, &json!({"ref": "design:d1"})),
+            Value::Null
+        );
+        assert_eq!(
+            spender_when(&plan, &json!({"ref": "spirit:x"})),
+            Value::Null
+        );
+        assert_eq!(
+            spender_when(&plan, &json!({"ref": "template:none"})),
+            Value::Null
         );
     }
 

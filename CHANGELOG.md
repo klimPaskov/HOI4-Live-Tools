@@ -8,6 +8,23 @@ zero-timeout wait refuses a game or supervisor that has exited, and the PID and 
 handle. An overview of a running Windows 1.20.0.0 game now takes about 50 ms instead of 4-5 s and no longer tears
 on the moving clock.
 
+Overhaul and total-conversion mods ([guide](docs/LEGACY_WINDOWS_USAGE.md#overhaul-and-total-conversion-mods)): the
+Windows Python runtime resolves an interface profile for the enabled playset, so a mod that replaces the main menu,
+renames the pause menu, the panel titles or the months no longer stalls `hoi4_launch` or stops `hoi4_time`,
+`hoi4_sweep_loc`, `hoi4_decisions` and `hoi4_shutdown`.
+
+- Derived from the mod's own files: month names from the localisation keys `Jan`..`Dec` and
+  `January`..`December`; button labels and window titles from the mod's `interface/*.gui` element of the vanilla
+  element's name (in the same window) and its localisation (game, then mods in load order, `replace/` last, the
+  language of settings.txt); the buttons of a rebuilt main menu become its anchors.
+- A profile, `hoi4_live_profile.json` in a mod's root folder or `ui_profile` in config.json /
+  `HOI4_LIVE_UI_PROFILE`, adds what cannot be derived (a menu drawn as images); it is validated and every problem is
+  named. `"off"` keeps vanilla.
+- Named failures instead of timeouts: `main_menu_unrecognised` (the anchors looked for, the text seen),
+  `unrecognised_month` (the month word read), `pause_menu_unrecognised`, and the expected titles of a panel that
+  does not open. `hoi4_status` shows the resolved profile and its sources.
+- With no mod, or mods that rename nothing, every regex and the date parser stay exactly the vanilla ones.
+
 Decide only (`python -m hoi4_live.play.decide`, opt-in): the executor's lanes judged on a supplied snapshot, in the
 executor's order and with its lane weights, and the actions they would take returned as data instead of input
 (tool, arguments, the plan's reason, minor or heavy, from the state or from the plan alone), with the phase in force,

@@ -30,10 +30,10 @@ pub(super) const MAX_WIDTH: f64 = 40.0;
 pub(super) const MAX_NAME: usize = 40;
 
 pub(super) fn create_tool() -> Value {
-    json!({"name":"hoi4_template_create","description":"Create a new own division template with ordinary input (U panel, Division Designer button, Create Empty, battalion slots, name box, Save). `regiments` is up to 5 columns of up to 5 battalion keys from common/units (infantry, mountaineers, cavalry, motorized, artillery_brigade, anti_tank_brigade, light_armor, ...; one list per column, top to bottom, no gaps); `support` is up to 5 company keys (engineer, recon, artillery, logistics_company, ...). Saving spends army experience (5 per battalion, 10 per company, 25 per extra column on this build; the cost is read from the window and returned). Refused before any input: name_taken, name_not_typable, unit_unknown, unit_wrong_slot (a company in a column or a battalion in support), column_mixed_groups (one column holds one group: infantry/mountaineers together, cavalry or artillery in their own column), template_too_wide (> 40), regiments_gap, support_duplicate, empty_template, insufficient_experience (checked before Save). unit_not_unlocked and slot_locked are found while building (nothing is saved; the draft is dropped). Returns the receipt and the resulting hoi4_template_get row (width, hit points, organisation, manpower, equipment need, ...). `regimental_support` (the regimental support row, one company per column) is not yet built: refused with not_yet_built.","inputSchema":{"type":"object","properties":{"name":{"type":"string","maxLength":40},"regiments":{"type":"array","maxItems":5,"items":{"type":"array","maxItems":5,"items":{"type":"string","maxLength":64}}},"support":{"type":"array","maxItems":5,"items":{"type":"string","maxLength":64}},"regimental_support":{"type":"array","maxItems":5,"items":{"type":"string","maxLength":64}},"priority":{"type":"string","enum":["reserve","regular","elite"]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["name","regiments","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_template_create","description":"Create a new own division template with ordinary input (U panel, Division Designer button, Create Empty, battalion slots, name box, Save). `regiments` is up to 5 columns of up to 5 battalion keys from common/units (infantry, mountaineers, cavalry, motorized, artillery_brigade, anti_tank_brigade, light_armor, ...; one list per column, top to bottom, no gaps); `support` is up to 5 company keys (engineer, recon, artillery, logistics_company, ...). Saving spends army experience (5 per battalion, 10 per company, 25 per extra column on this build; the cost is read from the window and returned). Refused before any input: name_taken, name_not_typable, unit_unknown, unit_wrong_slot (a company in a column or a battalion in support), column_mixed_groups (one column holds one group: infantry/mountaineers together, cavalry or artillery in their own column), template_too_wide (> 40), regiments_gap, support_duplicate, empty_template, insufficient_experience (checked before Save). unit_not_unlocked and slot_locked are found while building (nothing is saved; the draft is dropped). Returns the receipt and the resulting hoi4_template_get row (width, hit points, organisation, manpower, equipment need, ...). `regimental_support` is the regimental support row under the regiment columns: up to 5 entries, one per column (a company key such as heavy_weapons_company / field_guns, or \"\" for none); a column's slot opens with REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS battalions (3 on 1.20.1.0, read from the defines): regimental_slot_closed before any input otherwise; omitted on edit = unchanged. Verified from the template data's regimental row.","inputSchema":{"type":"object","properties":{"name":{"type":"string","maxLength":40},"regiments":{"type":"array","maxItems":5,"items":{"type":"array","maxItems":5,"items":{"type":"string","maxLength":64}}},"support":{"type":"array","maxItems":5,"items":{"type":"string","maxLength":64}},"regimental_support":{"type":"array","maxItems":5,"items":{"type":"string","maxLength":64}},"priority":{"type":"string","enum":["reserve","regular","elite"]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["name","regiments","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn edit_tool() -> Value {
-    json!({"name":"hoi4_template_edit","description":"Edit an own division template in place through its Edit button: give the complete new `regiments` and/or `support` layout (omitted = unchanged), `priority` (reserve, regular, elite) and/or `new_name`. Only the differing slots are touched (Shift+click removes, slot click plus a choice replaces or adds). Verified from the designer's working copy and from the saved template. Templates used by divisions or training lines are refused (template_in_use) for layout changes unless allow_in_use is true: the game then reorganises those divisions at the new composition. Same refusals as hoi4_template_create plus template_unknown, nothing_to_change. `regimental_support` (the regimental support row, one company per column) is not yet built: refused with not_yet_built.","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"regiments":{"type":"array","maxItems":5,"items":{"type":"array","maxItems":5,"items":{"type":"string","maxLength":64}}},"support":{"type":"array","maxItems":5,"items":{"type":"string","maxLength":64}},"regimental_support":{"type":"array","maxItems":5,"items":{"type":"string","maxLength":64}},"priority":{"type":"string","enum":["reserve","regular","elite"]},"new_name":{"type":"string","maxLength":40},"allow_in_use":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_template_edit","description":"Edit an own division template in place through its Edit button: give the complete new `regiments` and/or `support` layout (omitted = unchanged), `priority` (reserve, regular, elite) and/or `new_name`. Only the differing slots are touched (Shift+click removes, slot click plus a choice replaces or adds). Verified from the designer's working copy and from the saved template. Templates used by divisions or training lines are refused (template_in_use) for layout changes unless allow_in_use is true: the game then reorganises those divisions at the new composition. Same refusals as hoi4_template_create plus template_unknown, nothing_to_change. `regimental_support` is the regimental support row under the regiment columns: up to 5 entries, one per column (a company key such as heavy_weapons_company / field_guns, or \"\" for none); a column's slot opens with REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS battalions (3 on 1.20.1.0, read from the defines): regimental_slot_closed before any input otherwise; omitted on edit = unchanged. Verified from the template data's regimental row.","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"regiments":{"type":"array","maxItems":5,"items":{"type":"array","maxItems":5,"items":{"type":"string","maxLength":64}}},"support":{"type":"array","maxItems":5,"items":{"type":"string","maxLength":64}},"regimental_support":{"type":"array","maxItems":5,"items":{"type":"string","maxLength":64}},"priority":{"type":"string","enum":["reserve","regular","elite"]},"new_name":{"type":"string","maxLength":40},"allow_in_use":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn rename_tool() -> Value {
     json!({"name":"hoi4_template_rename","description":"Rename an own division template (designer name box, Update). Refused with name_taken, name_not_typable or template_unknown before input. Divisions keep using the template.","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"new_name":{"type":"string","maxLength":40},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","new_name","request_id","lease_token"],"additionalProperties":false}})
@@ -104,6 +104,84 @@ pub(super) fn parse_support(v: &Value) -> Result<Vec<String>> {
     }
     Ok(out)
 }
+/// `regimental_support`: up to 5 entries, one per regiment column, a company key or "" / null for no
+/// company under that column; trailing empties dropped.
+pub(super) fn parse_regimental(v: &Value) -> Result<Vec<String>> {
+    let rows = v.as_array().filter(|r| r.len() <= 5).ok_or_else(|| {
+        Error::new(
+            "invalid_arguments",
+            "regimental_support holds at most 5 entries, one per regiment column",
+        )
+    })?;
+    let mut out = rows
+        .iter()
+        .map(|x| match x {
+            Value::Null => Ok(String::new()),
+            Value::String(t) if t.is_empty() => Ok(String::new()),
+            other => unit_key(other),
+        })
+        .collect::<Result<Vec<_>>>()?;
+    while out.last().is_some_and(String::is_empty) {
+        out.pop();
+    }
+    Ok(out)
+}
+/// NDefines.NMilitary.REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS (a table: the first row's need) from a defines
+/// text; None when the files do not carry it (the designer's own lock then decides).
+pub(super) fn regimental_required(defines: &str) -> Option<usize> {
+    defines
+        .lines()
+        .filter_map(|l| {
+            let l = l.split("--").next()?.trim();
+            let (lhs, rhs) = l.split_once('=')?;
+            let lhs = lhs.trim();
+            (lhs == "REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS"
+                || lhs.ends_with(".REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS"))
+            .then(|| {
+                rhs.split(|c: char| !c.is_ascii_digit())
+                    .find(|t| !t.is_empty())
+                    .and_then(|t| t.parse().ok())
+            })
+            .flatten()
+        })
+        .next_back()
+}
+/// The regimental row against the catalog and the columns: each entry is a company, sits under a column
+/// that exists and holds at least `required` battalions (when the defines name the need).
+pub(super) fn check_regimental(
+    defs: &[Def],
+    want: &Desired,
+    required: Option<usize>,
+) -> Result<()> {
+    for (c, key) in want.regimental.iter().enumerate() {
+        if key.is_empty() {
+            continue;
+        }
+        let d = defs.iter().find(|d| &d.key == key).ok_or_else(|| {
+            Error::new(
+                "unit_unknown",
+                format!("No company {key:?} for the regimental row"),
+            )
+        })?;
+        if !is_company(defs, d) {
+            return Err(Error::new(
+                "unit_wrong_slot",
+                format!("{key} is a battalion; the regimental row takes support companies"),
+            ));
+        }
+        let have = want.columns.get(c).map_or(0, Vec::len);
+        if have == 0 || required.is_some_and(|n| have < n) {
+            return Err(Error::new(
+                "regimental_slot_closed",
+                format!(
+                    "Column {c} holds {have} battalion(s); its regimental slot opens with {} (REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS)",
+                    required.unwrap_or(1)
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
 pub(super) fn name_arg(v: Option<&Value>, what: &str) -> Result<Option<String>> {
     let Some(v) = v else { return Ok(None) };
     let s = v
@@ -147,12 +225,15 @@ pub(super) fn priority_arg(v: Option<&Value>) -> Result<Option<i32>> {
 pub(super) struct Desired {
     pub columns: Vec<Vec<String>>,
     pub support: Vec<String>,
+    /// One company per regiment column ("" = none), trailing empties dropped.
+    pub regimental: Vec<String>,
 }
 impl Desired {
     pub(super) fn of(l: &Layout5) -> Self {
         Self {
             columns: l.columns.clone(),
             support: l.support.clone(),
+            regimental: l.regimental.clone(),
         }
     }
 }
@@ -276,6 +357,23 @@ pub(super) enum Op {
 pub(super) fn plan(cur: &Desired, want: &Desired) -> Vec<Op> {
     let mut ops = Vec::new();
     let empty: Vec<String> = Vec::new();
+    // A regimental company goes first when it is not wanted there, or when its column changes (a column
+    // that loses battalions can close the slot under it); it is chosen again after the columns are built.
+    for c in (0..cur.regimental.len()).rev() {
+        let have = &cur.regimental[c];
+        if have.is_empty() {
+            continue;
+        }
+        let keep =
+            want.regimental.get(c) == Some(have) && cur.columns.get(c) == want.columns.get(c);
+        if !keep {
+            ops.push(Op::Remove {
+                grid: Grid::Regimental,
+                col: c,
+                row: 0,
+            });
+        }
+    }
     for c in (0..5).rev() {
         let have = cur.columns.get(c).unwrap_or(&empty).len();
         let need = want.columns.get(c).unwrap_or(&empty).len();
@@ -314,6 +412,20 @@ pub(super) fn plan(cur: &Desired, want: &Desired) -> Vec<Op> {
                 grid: Grid::Support,
                 col: 0,
                 row: r,
+                key: key.clone(),
+            });
+        }
+    }
+    for (c, key) in want.regimental.iter().enumerate() {
+        if key.is_empty() {
+            continue;
+        }
+        let kept = cur.regimental.get(c) == Some(key) && cur.columns.get(c) == want.columns.get(c);
+        if !kept {
+            ops.push(Op::Choose {
+                grid: Grid::Regimental,
+                col: c,
+                row: 0,
                 key: key.clone(),
             });
         }
@@ -413,6 +525,9 @@ pub(super) struct Input<'a> {
     pub name: Option<String>,
     pub regiments: Option<Vec<Vec<String>>>,
     pub support: Option<Vec<String>>,
+    pub regimental: Option<Vec<String>>,
+    /// REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS from the game's defines (None: not read).
+    pub regimental_min: Option<usize>,
     pub priority: Option<i32>,
     pub allow_in_use: bool,
 }
@@ -440,6 +555,7 @@ pub(super) fn build_want(
         name: String::new(),
         columns: Vec::new(),
         support: Vec::new(),
+        regimental: Vec::new(),
         priority: 1,
     });
     let mut changes = Vec::new();
@@ -460,6 +576,12 @@ pub(super) fn build_want(
             changes.push("support");
         }
         want.support = s.clone();
+    }
+    if let Some(g) = &input.regimental {
+        if *g != want.regimental {
+            changes.push("regimental_support");
+        }
+        want.regimental = g.clone();
     }
     if let Some(p) = input.priority {
         if p != want.priority {
@@ -496,9 +618,12 @@ pub(super) fn plan_request(
         ));
     }
     let width = check_units(defs, &Desired::of(&want))?;
+    check_regimental(defs, &Desired::of(&want), input.regimental_min)?;
     if let (Some(u), true) = (
         usage,
-        changes.contains(&"regiments") || changes.contains(&"support"),
+        changes.contains(&"regiments")
+            || changes.contains(&"support")
+            || changes.contains(&"regimental_support"),
     ) {
         if (u.divisions > 0 || u.training_lines > 0) && !input.allow_in_use {
             return Err(Error::new(
@@ -524,8 +649,8 @@ fn mismatch(what: &str, want: &Layout5, got: &Layout5) -> Error {
     Error::new(
         "input_readback_failed",
         format!(
-            "{what}: the designer holds {:?} / {:?} (priority {}) instead of {:?} / {:?} (priority {})",
-            got.columns, got.support, got.priority, want.columns, want.support, want.priority
+            "{what}: the designer holds {:?} / {:?} / regimental {:?} (priority {}) instead of {:?} / {:?} / regimental {:?} (priority {})",
+            got.columns, got.support, got.regimental, got.priority, want.columns, want.support, want.regimental, want.priority
         ),
     )
 }
@@ -581,7 +706,10 @@ fn apply_inner(process: &dyn Process, keys: &dyn GameInput, plan: &Planned) -> R
         }
     }
     let after_slots = read(process, designer::draft)?;
-    if after_slots.columns != plan.want.columns || after_slots.support != plan.want.support {
+    if after_slots.columns != plan.want.columns
+        || after_slots.support != plan.want.support
+        || after_slots.regimental != plan.want.regimental
+    {
         return Err(mismatch("after the slot steps", &plan.want, &after_slots));
     }
     designer::set_priority(process, keys, plan.want.priority)?;
@@ -617,7 +745,7 @@ fn apply_inner(process: &dyn Process, keys: &dyn GameInput, plan: &Planned) -> R
         "operations": ops.len(),
         "changes": plan.changes,
         "combat_width_planned": plan.width,
-        "template_before": plan.before.as_ref().map(|b| json!({"name":b.name,"regiments":b.columns,"support":b.support,"priority":units::priority_name(b.priority)})),
+        "template_before": plan.before.as_ref().map(|b| json!({"name":b.name,"regiments":b.columns,"support":b.support,"regimental_support":b.regimental,"priority":units::priority_name(b.priority)})),
         "placed": spent,
         "experience_cost": texts.save_cost,
         "experience_before": texts.experience,
@@ -781,7 +909,89 @@ mod tests {
         Desired {
             columns: cols.iter().map(|c| s(c)).collect(),
             support: s(sup),
+            regimental: Vec::new(),
         }
+    }
+    #[test]
+    fn the_regimental_row_parses_per_column_and_its_need_comes_from_the_defines() {
+        assert_eq!(
+            parse_regimental(&json!(["", "engineer", null])).unwrap(),
+            s(&["", "engineer"])
+        );
+        assert!(parse_regimental(&json!(["a", "b", "c", "d", "e", "f"])).is_err());
+        let defines = "\tREGIMENTAL_SUPPORT_REQUIRED_BATTALIONS = { 3 }, -- per row\n";
+        assert_eq!(regimental_required(defines), Some(3));
+        assert_eq!(
+            regimental_required(
+                "NDefines.NMilitary.REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS = { 2 }"
+            ),
+            Some(2)
+        );
+        assert_eq!(regimental_required("OTHER = 1"), None);
+    }
+    #[test]
+    fn the_regimental_row_is_checked_before_input() {
+        let d = defs();
+        let mut w = desired(&[&["infantry", "infantry", "infantry"], &["infantry"]], &[]);
+        w.regimental = s(&["engineer"]);
+        assert!(check_regimental(&d, &w, Some(3)).is_ok());
+        w.regimental = s(&["", "engineer"]);
+        assert_eq!(
+            check_regimental(&d, &w, Some(3)).unwrap_err().code,
+            "regimental_slot_closed"
+        );
+        w.regimental = s(&["infantry"]);
+        assert_eq!(
+            check_regimental(&d, &w, Some(3)).unwrap_err().code,
+            "unit_wrong_slot"
+        );
+        w.regimental = s(&["", "", "engineer"]);
+        assert_eq!(
+            check_regimental(&d, &w, None).unwrap_err().code,
+            "regimental_slot_closed",
+            "no column, no slot"
+        );
+    }
+    #[test]
+    fn regimental_companies_go_first_when_their_column_changes_and_come_back_last() {
+        let mut cur = desired(&[&["infantry", "infantry", "infantry"]], &[]);
+        cur.regimental = s(&["engineer"]);
+        let mut want = desired(&[&["infantry", "infantry", "infantry", "infantry"]], &[]);
+        want.regimental = s(&["engineer"]);
+        let ops = plan(&cur, &want);
+        assert_eq!(
+            ops.first(),
+            Some(&Op::Remove {
+                grid: Grid::Regimental,
+                col: 0,
+                row: 0
+            })
+        );
+        assert_eq!(
+            ops.last(),
+            Some(&Op::Choose {
+                grid: Grid::Regimental,
+                col: 0,
+                row: 0,
+                key: "engineer".into()
+            })
+        );
+        // unchanged column and company: nothing to do for the row
+        let same = plan(&cur, &cur);
+        assert!(same.is_empty(), "{same:?}");
+        // a company moved to another column of 3
+        let mut two = desired(
+            &[
+                &["infantry", "infantry", "infantry"],
+                &["infantry", "infantry", "infantry"],
+            ],
+            &[],
+        );
+        two.regimental = s(&["recon"]);
+        let mut moved = two.clone();
+        moved.regimental = s(&["", "recon"]);
+        let ops = plan(&two, &moved);
+        assert_eq!(ops.len(), 2, "{ops:?}");
     }
     #[test]
     fn regiments_parse_and_gaps_are_typed() {
@@ -966,6 +1176,7 @@ mod tests {
             name: name.into(),
             columns: cols.iter().map(|c| s(c)).collect(),
             support: s(sup),
+            regimental: Vec::new(),
             priority: p,
         }
     }
@@ -983,6 +1194,8 @@ mod tests {
                     name: Some(name.into()),
                     regiments: Some(cols),
                     support: Some(vec![]),
+                    regimental: None,
+                    regimental_min: None,
                     priority: None,
                     allow_in_use: false,
                 },
@@ -1007,6 +1220,8 @@ mod tests {
                     name: new_name.map(str::to_string),
                     regiments: regs,
                     support: None,
+                    regimental: None,
+                    regimental_min: None,
                     priority: None,
                     allow_in_use: allow,
                 },

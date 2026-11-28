@@ -29,6 +29,7 @@ import time
 from collections import defaultdict, deque
 
 from . import findings as findings_mod
+from . import idle_days as idle_mod
 from . import sinks as sinks_mod
 from . import issue_rules as R
 from .runlogs import date_of_days, game_days
@@ -38,6 +39,10 @@ QUIET_DAYS = 14          # a log issue not seen again for two game weeks is take
 DUP_WINDOW = 7           # identical verified orders within a game week are duplicates
 FAIL_STREAK = 2          # failures of one (tool, code) before it is an issue
 LIGHT_ORIGINS = ("omission",)
+# "acted" is a remedy in flight: an issue still seen this many game days after the lane's last
+# verified order is open again (the order did not fix it), and counts as a remedy that did not
+# hold when it passes its deadline (owner, 27 Nov 2026: issues marked acted sat open for weeks)
+ACT_EFFECT_DAYS = 3
 
 
 # log issues whose second sighting is the same refusal of the same order again
@@ -107,6 +112,7 @@ class Detector:
         self.unpaused_since = None            # (date, utc) the clock was last seen moving
         self.ops_executing = False
         self.overhead_ms = []                 # per snapshot
+        self.idle = idle_mod.IdleDays()       # idle game days per sink (the gate packet's table)
 
     # --- issue lifecycle ---------------------------------------------------------------------
 
@@ -144,6 +150,13 @@ class Detector:
             self._emit("open", it)
             return it
         it["last_seen"], it["text"], it["numbers"] = self.date, text, numbers or it["numbers"]
+        if it["state"] == "acted" and self.days is not None and it.get("acted_days") is not None and \
+                self.days - it["acted_days"] > ACT_EFFECT_DAYS:
+            # the lane's verified order did not make it go: the remedy did not hold
+            it["state"] = "open"
+            it["no_effect"] = it.get("no_effect", 0) + 1
+            self._emit("acted_no_effect", it, days_since_act=round(self.days - it["acted_days"], 1),
+                       tried=it["tried"][-3:])
         it["severity"] = severity if SEV_ORDER.get(severity, 3) < SEV_ORDER.get(it["severity"], 3) else it["severity"]
         it["seen"] += 1
         if it["state"] == "resolved":
@@ -191,6 +204,7 @@ class Detector:
                 if it["state"] != "resolved":
                     self.counts[year][it["class"]]["open_days"] += step
             self.date, self.days = date, d
+            self.idle.step(self.issues.values(), step)
             self._deadlines()
         elif self.days is None:
             self.date, self.days = date, d
@@ -224,6 +238,8 @@ class Detector:
                 if len(it["tried"]) < 8:
                     it["tried"].append(f"{'ok' if ok else 'refused'} {key[:120]}")
                 # "acted" means an order of the lane passed, not that the lane had a turn
+                if ok:
+                    it["acted_days"] = self.days
                 if ok and it["state"] == "open":
                     it["state"] = "acted"
                     self._emit("acted", it, action=key[:160])
@@ -259,10 +275,14 @@ class Detector:
             sev = f.get("severity") or "medium"
             esc = True
             if code.startswith("frame_") or code.startswith("game_alert"):
-                sev, esc = "low", False
+                # a game alert a lane owns escalates once its deadline passes acted-but-open (the
+                # lane acted and the flag stayed); an alert no lane owns stays a quiet row
+                sev, esc = "low", R.lane_of(code) not in (None, "alerts")
             if code in ("executor_repeated_refusal", "plan_item_blocked"):
                 esc = False  # the executor's ledger: answered by lessons, reported at the gate
-            lane = R.lane_of(f.get("subject") or "") if code == "lane_wait_outlived" else None
+            lane = R.executor_owner_lane(f.get("numbers") or {})
+            if lane is None and code in ("lane_wait_outlived", "lane_silent"):
+                lane = R.lane_of(f.get("subject") or "")
             it = self.raise_issue(key, code, f.get("text") or code, sev, f.get("numbers"), origin=origin,
                                   subject=f.get("subject"), escalate=esc, lane=lane)
             note = (f.get("numbers") or {}).get("owner_note") or (f.get("numbers") or {}).get("note")
@@ -363,7 +383,7 @@ class Detector:
                 self.raise_issue(key, "checkpoint_missed",
                                  f"checkpoint {cp['id']} (by {cp['by']}: {', '.join(map(str, cp.get('must') or []))[:120]}) "
                                  f"is past and not met; the plan says: {cp.get('else') or 'nothing'}", "high",
-                                 subject=cp["id"])
+                                 subject=cp["id"], lane=R.checkpoint_lane(cp.get("must")))
                 out.append(key)
         fielded = (snap.get("land") or {}).get("division_count")
         rows = (self.plan.get("force_design") or {}).get("land") if isinstance(self.plan.get("force_design"), dict) else None
@@ -461,6 +481,7 @@ class Detector:
                 it["lane_outcome"] = {k: rec.get(k) for k in ("outcome", "reason", "lane", "hour")}
                 if rec.get("reason"):
                     it["lane_reason"] = str(rec["reason"])[:300]
+                self.idle.answer(it, rec.get("outcome"), rec.get("reason"))
                 if rec.get("outcome") in ("waiting", "cannot"):
                     self._emit("lane_answer", it, outcome=rec.get("outcome"), reason=str(rec.get("reason"))[:200])
                 return it
@@ -662,7 +683,7 @@ class Detector:
             "date": self.date, "at_war": self.at_war,
             "issues": [dict({k: i.get(k) for k in ("id", "key", "code", "class", "severity", "lane", "tool", "actor",
                                                     "first_seen", "deadline", "deadline_reason", "overdue", "state",
-                                                    "text", "lesson", "packet")},
+                                                    "text", "lesson", "packet", "answer", "no_effect")},
                             cause=(i.get("numbers") or {}).get("code"))
                        for i in rows[:60]]}, ensure_ascii=False, indent=1))
         _atomic(os.path.join(self.out, "issues_counts.json"), json.dumps(self.count_table(), indent=1))
@@ -683,6 +704,8 @@ class Detector:
         for i in rows[:limit]:
             mark = "OVERDUE " if i["overdue"] else ""
             st = "" if i["state"] == "open" else f" [{i['state']}]"
+            if i.get("no_effect") and i["state"] == "open":
+                st = f" [acted {i['no_effect']}x, no effect]"
             lines.append(f"- {mark}{i['id']} {i['class']} {i['severity']} {i['first_seen']} -> {i['deadline']} "
                          f"{i.get('lane') or i.get('tool') or '-'}{st}: {i['text'][:180]}")
         if len(rows) > limit:

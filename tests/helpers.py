@@ -10,6 +10,9 @@ if ROOT not in sys.path:
 
 FIXTURES = os.path.join(ROOT, "tests", "fixtures")
 EXTERNAL_POPUPS = os.environ.get("HOI4_LIVE_POPUP_FIXTURES", "")
+# Tests never take the interface profile (month names, menu labels) from the machine's real playset: a mod enabled
+# there would change what the vanilla tests read. The profile tests build their profiles from fixtures.
+os.environ.setdefault("HOI4_LIVE_UI_PROFILE", "off")
 
 
 def needs_fixture(*parts):

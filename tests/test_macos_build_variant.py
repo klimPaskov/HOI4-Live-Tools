@@ -155,6 +155,22 @@ class CommittedMapTest(unittest.TestCase):
         self.assertGreater(sum(s['kind'] == 'image' for s in sites), 600)
         self.assertEqual(sum(s['kind'] == 'identity' for s in sites) >= 3, True)
 
+    def test_every_committed_macos_map_covers_the_sources_and_names_a_supported_build(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        builds = (root / 'native/src/builds.rs').read_text(encoding='utf-8')
+        maps = sorted((root / 'native/layouts/migrations').glob('macos-DFA875A5-to-*.json'))
+        self.assertGreaterEqual(len(maps), 2)
+        for path in maps:
+            m = V.load_map(path)
+            _, sites, problems = V.plan(root / 'native', m)
+            self.assertEqual(problems, [], path.name)
+            self.assertIn(f'build_id: "{m["to"]["build_id"]}"', builds, path.name)
+            self.assertIn(f'sha256: "{m["to"]["sha256"]}"', builds, path.name)
+        same = V.load_map(root / 'native/layouts/migrations/macos-DFA875A5-to-B8BF4554.json')
+        base = V.load_map(root / 'native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json')
+        self.assertEqual(same['image'], base['image'])
+        self.assertEqual(same['to']['game_version'], '1.20.1.0')
+
     def test_the_focus_and_widget_addresses_e69_patched_by_hand_are_generated(self):
         root = pathlib.Path(__file__).resolve().parents[1]
         m = json.loads((root / 'native/layouts/migrations/macos-DFA875A5-to-ED135FE5.json').read_text(encoding='utf-8'))

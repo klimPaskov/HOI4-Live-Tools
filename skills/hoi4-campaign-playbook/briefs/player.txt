@@ -86,7 +86,8 @@ READS (exact calls; no other arguments exist — never guess one):
     repeats it only in more detail, and hoi4_alerts is the one read every wake makes. The win check and hoi4_war_stats: once, for the final reply.
     THE WAR RESULT: {CALL} hoi4_wars '{}' gives each war a `result` ("WON: ..." or "ongoing: ...") and
     wars.wars_won / wars.fighting. That line is the answer. An enemy that owns no land is beaten even if the
-    game keeps the war open (a government in exile). A country_capitulated event can be about ANY country:
+    game keeps the war open (a government in exile); "ongoing, no land front" is an enemy with no land touching
+    ours (overseas, or a capitulated country's colonies). A country_capitulated event can be about ANY country:
     read its text for the name before you log anything about your war.
 
 NO TOOL FOR IT (a mod's own panel or mechanic, an alert nothing names): learn it, never guess.

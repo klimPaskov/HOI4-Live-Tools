@@ -251,10 +251,24 @@ pub(super) fn formations_step(
     now: GameHour,
 ) -> Result<Option<String>> {
     let cfg = &plan["formations"];
-    if cfg["act"] != json!(true) || state.skipped(now, "formations", "read") {
+    if cfg["act"] != json!(true) {
+        super::plan_manage::note(
+            state,
+            "formations",
+            "formations.act is off: weak templates are named, never converted or disbanded",
+        );
+        return Ok(None);
+    }
+    if state.skipped(now, "formations", "read") {
         return Ok(None);
     }
     if !cfg["when"].is_null() && !super::judge(state, tools, &cfg["when"], now).is_true() {
+        super::plan_manage::note(
+            state,
+            "formations",
+            format!("waits for formations.when ({})", cfg["when"]),
+        );
+        state.skip(now, "formations", "read", DAY);
         return Ok(None);
     }
     let read = tools.call("hoi4_template_get", &json!({}))?;
@@ -324,6 +338,13 @@ pub(super) fn formations_step(
     let out = super::disband_step(state, tools, &with, lease, now)?;
     if out.is_none() {
         state.skip(now, "formations", "read", 7 * DAY);
+        // the verdicts with the disband rule's own reason for leaving them (t1939n, 27 Nov 2026:
+        // the row repeated "disband" for 150 days and never said why nothing was disbanded)
+        let why = super::plan_manage::note_of(state, "disband")
+            .unwrap_or("the disband rule wrote no reason")
+            .to_string();
+        let verdicts = verdicts.iter().map(describe).collect::<Vec<_>>().join("; ");
+        super::plan_manage::note(state, "formations", format!("{verdicts}; disband: {why}"));
     }
     Ok(out)
 }

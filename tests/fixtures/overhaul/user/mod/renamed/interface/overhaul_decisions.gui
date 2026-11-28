@@ -1,0 +1,10 @@
+guiTypes = {
+	containerWindowType = {
+		name = "countrydecisionview"
+		instantTextboxType = { name = "decisionview_title" text = "OVH_EDICTS_TITLE" }
+	}
+	containerWindowType = {
+		name = "some_other_window"
+		instantTextboxType = { name = "decisionview_title" text = "OVH_NOT_THIS_ONE" }
+	}
+}

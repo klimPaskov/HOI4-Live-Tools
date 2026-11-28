@@ -3854,11 +3854,10 @@
     "hoi4_template_create",
     "hoi4_template_edit"
    ],
-   "blocked": "hoi4_template_create/edit refuse `regimental_support` with not_yet_built (held back in plan_run::UNBUILT_ARGS); the template step makes the template without the row and says so",
    "payoff": "medium",
    "why": "AT/AA batteries against armour and CAS without extra width",
-   "closing": "both",
-   "owner": "offline done: the argument in both tool schemas (refused before input), template step sends it once built, validate_plan checks the companies against common/units (regimental = no, 3-battalion columns); live: fill the designer's regiment_support_grid, read it back in hoi4_template_get, drop the UNBUILT_ARGS rows, then live-verify"
+   "closing": "live",
+   "owner": "offline done (engineer 110, 28 Nov): hoi4_template_create/edit fill the designer's regiment_support_grid (one company per column, regimental_slot_closed below REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS from the defines), Verified from the template data's regimental row (support array + 0x20, read from the executable); the template step sends the plan's row; live: S22-REGIMENTAL"
   },
   {
    "id": "templates.reinforcement_priority",
@@ -5940,6 +5939,24 @@
    "why": "Small combat bonuses",
    "closing": "none",
    "owner": "nothing open"
+  },
+  {
+   "id": "navy.hq_admiral",
+   "domain": "navy",
+   "capability": "Put a free admiral on each naval headquarters the game offers one (the admiral_assignable alert)",
+   "playbook": [
+    "war-air-naval-peace.md#17 NA50"
+   ],
+   "plan": [],
+   "tools": [
+    "hoi4_fleets",
+    "hoi4_fleet_admiral"
+   ],
+   "blocked": "hoi4_fleet_admiral assigns fleet admirals only; no tool reads naval headquarters or assigns an admiral to one (the game command is CAssignAdmiralToNavyHeadquarter, the GUI path the headquarters map icon's roster)",
+   "payoff": "medium",
+   "why": "The admiral_assignable alert stays open all run while every fleet is led (g92a 1936 study: 150.8 idle days on the task forces row); the headquarters bonus and admiral experience are lost",
+   "closing": "both",
+   "owner": "live: read own naval headquarters (province, admiral) from memory and assign by the headquarters roster or the in-process module's command; offline: the navy lane then fills each headquarters with the best free admiral within the game's cap"
   },
   {
    "id": "navy.repair",

@@ -130,6 +130,10 @@ class PlanSchemaCoverage(unittest.TestCase):
     def test_operation_keys_the_executor_reads_are_in_the_schema(self):
         op = _deref(self.schema["properties"]["operations"], self.schema)["items"]["properties"]
         self.assertIn("replace_arrows", op)
+        for k in ("orders_by", "axis_by", "planning_gate", "spear_pockets", "flank_guard", "opening"):
+            self.assertIn(k, op)
+        self.assertEqual(set(op["stacking"]["properties"]) >= {"by_width", "keep", "battle_reserve"}, True)
+        self.assertIn("axis_by", op["formations"]["items"]["properties"]["offensive"]["properties"])
         self.assertEqual(op["offensive"]["properties"]["deep"]["type"], "boolean")
         observed = _deref(self.schema["properties"]["force_design"], self.schema)["properties"]["observed"]
         self.assertEqual(set(observed["properties"]) >= {"date", "divisions", "economy", "army_xp"}, True)
@@ -456,7 +460,9 @@ class CoverageKeys(unittest.TestCase):
                 # plan_military.rs: wings to the attacking armies (air_attach_rule)
                 "air_attach": {},
                 # plan_run.rs: the game's bulk paths, each off until its live probe passes
-                "bulk": []}
+                "bulk": [],
+                # plan_manage.rs: equipment the missing-equipment response leaves without a line
+                "unproduced_ok": [], "unproduced_ok_why": {}}
         for k, v in want.items():
             self.assertEqual(m[k]["default"], v, k)
         for k in ("casualty_ratio_max", "casualty_window_days", "casualty_min_losses", "casualty_rest_days"):

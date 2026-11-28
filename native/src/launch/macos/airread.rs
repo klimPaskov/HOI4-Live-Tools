@@ -68,7 +68,7 @@ pub(super) const WING: xlayout::Class = xlayout::Class::new("CAirWing", WING_VTA
 /// Aircraft capacity of one air base level.
 const CAPACITY_PER_LEVEL: i32 = 200;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(super) struct Wing {
     pub name: String,
     pub unit: String,
@@ -97,6 +97,10 @@ pub(super) struct Base {
     pub capacity: i32,
     /// File id of the strategic region the base lies in.
     pub region_id: Option<i32>,
+    /// The base object's address and its region object's (0: none); the in-process backend names them and the
+    /// module re-checks each by its exact class.
+    pub address: u64,
+    pub region_address: u64,
 }
 
 fn wing(r: &Reader<'_>, image: u64, address: u64, base: &Base) -> Result<Wing> {
@@ -184,16 +188,19 @@ pub(super) fn bases_and_wings_owned(
         expect(r, b, BASE_VTABLE, image, "Air base")?;
         let state = r.u64(b + f(&BASE, BASE_STATE)?)?;
         let province = r.u64(b + f(&BASE, BASE_PROVINCE)?)?;
-        let region_id = if province == 0 {
-            None
+        let region_address = if province == 0 {
+            0
         } else {
-            match r.u64(province + f(&fleetmem::PROVINCE, fleetmem::PROVINCE_REGION)?)? {
-                0 => None,
-                region => Some(r.i32(region + f(&fleetmem::REGION, REGION_FILE)?)?),
-            }
+            r.u64(province + f(&fleetmem::PROVINCE, fleetmem::PROVINCE_REGION)?)?
+        };
+        let region_id = match region_address {
+            0 => None,
+            region => Some(r.i32(region + f(&fleetmem::REGION, REGION_FILE)?)?),
         };
         let base = Base {
             region_id,
+            address: b,
+            region_address,
             id: r.i32(b + f(&BASE, BASE_ID)?)?,
             state: if state == 0 {
                 None

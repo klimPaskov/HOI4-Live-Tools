@@ -253,6 +253,90 @@ fn spec_index(ids: &[i32; 4], id: i32) -> Option<usize> {
 pub(super) fn snapshot(process: &dyn Process) -> Result<Snapshot> {
     read(process, snapshot_from)
 }
+/// engineer 85: the object addresses the in-process module takes (family `projects`), by the ids the snapshot uses:
+/// the facility id and its NProject::CProgram, a project's template id and its NProject::CProject (the pool's entry),
+/// a scientist's character id and its CCharacter. The same walk and type checks as the snapshot.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct Objects {
+    pub facilities: Vec<(i32, u64)>,
+    pub projects: Vec<(u32, u64)>,
+    pub scientists: Vec<(u32, u64)>,
+}
+impl Objects {
+    pub(super) fn facility(&self, id: i32) -> Option<u64> {
+        unique(
+            self.facilities
+                .iter()
+                .filter(|(f, _)| *f == id)
+                .map(|x| x.1),
+        )
+    }
+    pub(super) fn project(&self, id: u32) -> Option<u64> {
+        unique(self.projects.iter().filter(|(p, _)| *p == id).map(|x| x.1))
+    }
+    pub(super) fn scientist(&self, character: u32) -> Option<u64> {
+        unique(
+            self.scientists
+                .iter()
+                .filter(|(c, _)| *c == character)
+                .map(|x| x.1),
+        )
+    }
+}
+fn unique(mut it: impl Iterator<Item = u64>) -> Option<u64> {
+    let first = it.next()?;
+    it.next().is_none().then_some(first)
+}
+pub(super) fn objects(process: &dyn Process) -> Result<Objects> {
+    read(process, objects_from)
+}
+fn objects_from(r: &Reader<'_>, image: u64) -> Result<Objects> {
+    let country = own_country(r, image)?;
+    let status = r.u64(country + at(r, &COUNTRY, COUNTRY_PROGRAMS)?)?;
+    typed(r, image, status, VT_PROGRAM_STATUS, "program status")?;
+    let mut out = Objects::default();
+    let (_, data, count) = r.array_header(status + at(r, &STATUS, 0x20)?)?;
+    for index in 0..count.min(MAX_PROGRAMS) as u64 {
+        let program = r.u64(data + index * 8)?;
+        typed(r, image, program, VT_PROGRAM, "program")?;
+        out.facilities
+            .push((r.i32(program + at(r, &PROGRAM, 0x18)?)?, program));
+    }
+    let pool = r.u64(status + at(r, &STATUS, 0x18)?)?;
+    typed(r, image, pool, VT_PROJECT_POOL, "project pool")?;
+    let (_, data, count) = r.array_header(pool + at(r, &POOL, 0x10)?)?;
+    let stride = at(r, &PROJECT_SIZE, PROJECT_STRIDE)?;
+    for index in 0..count.min(MAX_PROJECTS) as u64 {
+        let project = data + index * stride;
+        typed(r, image, project, VT_PROJECT, "project")?;
+        let template = project_template(r, project)?;
+        typed(r, image, template, VT_PROJECT_TEMPLATE, "project template")?;
+        out.projects
+            .push((r.i32(template + at(r, &TEMPLATE, 8)?)? as u32, project));
+    }
+    let characters = r.u64(country + at(r, &COUNTRY, COUNTRY_CHARACTERS)?)?;
+    typed(
+        r,
+        image,
+        characters,
+        VT_COUNTRY_CHARACTERS,
+        "country characters",
+    )?;
+    let (_, data, count) =
+        r.array_header(characters + at(r, &CHARACTERS, CHARACTERS_SCIENTISTS)?)?;
+    for index in 0..count.min(MAX_SCIENTISTS) as u64 {
+        let scientist = r.u64(data + index * 8)?;
+        if scientist == 0 {
+            continue;
+        }
+        typed(r, image, scientist, VT_SCIENTIST, "scientist")?;
+        let character = r.u64(scientist + at(r, &SCIENTIST, 8)?)?;
+        typed(r, image, character, VT_CHARACTER, "character")?;
+        out.scientists
+            .push((hi(r.u64(character + at(r, &CHARACTER, 8)?)?), character));
+    }
+    Ok(out)
+}
 fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
     let country = own_country(r, image)?;
     // specialization ids

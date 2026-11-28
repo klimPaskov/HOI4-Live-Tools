@@ -131,6 +131,10 @@ ALERTS = {
     "operative_recruitable": (["intelligence"], "operatives"),
     "special_project_available": (["special_projects"], "special_projects"),
     "scientist_unassigned": (["special_projects"], "special_projects"),
+    "deployment_ready": (["training"], "training"),
+    "raid_available": ([], None),
+    "raid_launchable": ([], None),
+    "raid_detected": (None, None),
 }
 
 

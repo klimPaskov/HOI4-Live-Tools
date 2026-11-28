@@ -1,0 +1,6 @@
+guiTypes = {
+	containerWindowType = {
+		name = "countrydecisionview"
+		instantTextboxType = { name = "decisionview_title" text = "DECISIONVIEW_TITLE" }
+	}
+}

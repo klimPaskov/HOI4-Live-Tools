@@ -107,13 +107,16 @@ RULES = {
     "lane_wait_outlived": ("idling", None, 0, 0,
                            "the owning rule has said the same thing past the row's own deadline: the wait "
                            "outlived its reason"),
+    "lane_silent": ("technical", None, 0, 0,
+                    "a rule past the row's deadline that neither acts nor states why is a fault of the rule: "
+                    "the gate counts it"),
     "officer_corps_slot_empty": ("idling", "officer_corps", 14, 30, "an empty spirit slot gives no bonus"),
-    "weak_formation_fielded": ("gameplay", "war", 30, 60,
+    "weak_formation_fielded": ("gameplay", "formations", 30, 60,
                                "a weak formation takes width, supply and a place in an army; a month covers "
                                "converting it"),
-    "train_line_missing": ("gameplay", "war", 30, 60,
+    "train_line_missing": ("gameplay", "logistics", 30, 60,
                            "the start trains cover only the start network; fronts and strikes eat them"),
-    "trains_falling": ("gameplay", "war", 14, 30, "short trains cut supply up to half"),
+    "trains_falling": ("gameplay", "logistics", 14, 30, "short trains cut supply up to half"),
     "starving_hubs_low": ("gameplay", "war", 7, 14,
                           "an army under its supply floor with hubs not motorised loses strength daily"),
     "special_project_facility_idle": ("idling", "extras", 7, 14,
@@ -140,6 +143,12 @@ RULES = {
                                     "the declaration came before the attacking armies had planned: the first "
                                     "battles are fought without the bonus"),
     "order_not_executing": ("gameplay", "war", 7, 30, "a battle plan that never executes"),
+    "arrow_not_executing": ("gameplay", "war", 1, 3,
+                            "divisions on an arrow that does not execute stand still; a day is the bar for "
+                            "the operation's repair (stop and execute)"),
+    "army_outside_group_front": ("gameplay", "war", 1, 3,
+                                 "an army with its own order inside a group takes no part in the group's front; "
+                                 "a day is the bar for the operation to clear it"),
     "air_away_from_front": ("gameplay", "air_plan", 3, 14,
                             "planes flying land missions where no front of ours lies do not help the war"),
     "supply_collapsing": ("gameplay", "war", 7, 14,
@@ -206,7 +215,7 @@ LANE_KINDS = {
     "war": ("army", "air"), "intelligence": ("operative", "intel"), "designs": ("design",),
     "trade": ("trade",), "occupation": ("occupation",), "events": ("event",), "training": ("train", "template"),
     "strategy": (), "plan": (), "gate": (), "peace": ("peace",), "alerts": (), "ledger": (), "saves": ("save",),
-    "executor": (),
+    "executor": (), "logistics": ("army_motorization",), "formations": ("division_disband", "template_edit"),
 }
 
 # tools a response may use, by lane (the allowed responses of an escalation packet)
@@ -224,6 +233,8 @@ LANE_TOOLS = {
     "intelligence": ["hoi4_operative_assign"], "designs": ["hoi4_design_set_production"],
     "trade": ["hoi4_trade"], "occupation": ["hoi4_occupation_law"], "events": ["hoi4_event_choose"],
     "training": ["hoi4_train"], "saves": ["hoi4_save"], "focus": ["hoi4_focus_start"],
+    "logistics": ["hoi4_production_add", "hoi4_production_set", "hoi4_army_motorization"],
+    "formations": ["hoi4_division_disband", "hoi4_template_edit"],
 }
 
 # judgement calls: the named alternatives a rule cannot rank (the escalation offers them)
@@ -273,7 +284,31 @@ def family(code):
     return FAMILY.get(code, code)
 
 
+# game alerts the rules above do not name under the alert's own code
+ALERT_RULES = {
+    "operative_recruitable": ("idling", "intelligence", 14, 30, "an operative slot left empty builds no network"),
+    "no_divisions_in_training": ("idling", "training", 14, 30, "manpower and factories make no division"),
+    "not_enough_garrison": ("gameplay", "occupation", 14, 30, "resistance grows where the garrison is short"),
+    "research_slot_available": ("idling", "research", 1, 1, "a day without research in a slot is lost"),
+    "can_assign_field_marshal": ("idling", "command", 3, 14, "a group without a field marshal plans and fights without him"),
+}
+
+
+def alert_name(code):
+    """The game alert a `game_alert:<name>[:<subject>]` issue code stands for, else None."""
+    if not code.startswith("game_alert:"):
+        return None
+    return code.split(":", 2)[1] or None
+
+
 def rule(code):
+    # a game alert is owned by the lane of its own rule (or its sitrep family's): with the prefix
+    # every alert fell to the default "alerts" lane no executor lane owns, and doctrines, MIO
+    # traits, the officer corps, decisions, operatives and dockyards stayed flagged for a whole
+    # war (t1939k, 24 Nov 2026)
+    name = alert_name(code)
+    if name:
+        return RULES.get(name) or RULES.get(family(name)) or ALERT_RULES.get(name) or DEFAULT_RULE
     base = code.split(":", 1)[0]
     return RULES.get(code) or RULES.get(base) or DEFAULT_RULE
 
@@ -293,6 +328,18 @@ def lane_of(code, tool=None):
             if any(t.startswith(k) for k in kinds if k):
                 return name
     return None
+
+
+def executor_owner_lane(numbers):
+    """The executor lane an omission row names as its owner (`owner_rule` of a row, `owner` of a
+    lane-wait finding), or None for the player's rows and findings without one. The executor knows
+    which of its rules owns a row; the code's default lane does not (t1939n, 27 Nov 2026: the
+    training, intelligence and decryption rows went to the lane "alerts", which no executor lane
+    answers, and stayed open 118-158 days)."""
+    owner = str((numbers or {}).get("owner_rule") or (numbers or {}).get("owner") or "").strip()
+    if not owner or owner.startswith("player") or owner == "server omissions":
+        return None
+    return owner
 
 
 def class_of(code):
@@ -319,3 +366,26 @@ def error_kind(code):
     if any(c.startswith(p) for p in PRECONDITION_CODES):
         return "precondition"
     return "technical"
+
+
+# the executor lane that acts on a checkpoint's first must, by its predicate's kind: a missed
+# checkpoint whose must is a focus goes to the focus lane (the executor puts that focus first,
+# plan_run revise_missed), not to the gate alone (t1939n, 27 Nov 2026: missed checkpoints sat in
+# lane "gate" with "no reason given" while their focuses waited behind others)
+CHECKPOINT_LANES = (
+    ("focus_completed", "focus"), ("focus", "focus"), ("has_tech", "research"), ("research", "research"),
+    ("decision", "decisions"), ("controls_state", "war"), ("capitulated", "war"), ("at_war_with", "war"),
+    ("owns_state", "war"), ("divisions", "training"), ("fielded", "training"), ("factories", "construction"),
+    ("building", "construction"), ("idea", "politics"), ("law", "politics"), ("advisor", "politics"),
+)
+
+
+def checkpoint_lane(musts):
+    """The executor lane owning a missed checkpoint: the first must whose predicate kind is known,
+    else "gate" (the plan itself must change)."""
+    for m in musts or []:
+        head = str(m).split(":", 1)[0].strip().lower()
+        for kind, lane in CHECKPOINT_LANES:
+            if head.startswith(kind):
+                return lane
+    return "gate"

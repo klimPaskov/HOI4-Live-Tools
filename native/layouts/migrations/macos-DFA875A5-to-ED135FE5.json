@@ -1968,6 +1968,11 @@
    "confidence": "high",
    "how": "game_migrate"
   },
+  "0x3703950": {
+   "new": "0x3708ad0",
+   "confidence": "high",
+   "how": "macos_build_migrate:symbol"
+  },
   "0x3706540": {
    "new": "0x370b6c0",
    "confidence": "high",
@@ -2204,6 +2209,16 @@
    "new": "0x36e1ef8",
    "confidence": "high",
    "how": "e70:aligned-rip-refs+neighbour-delta"
+  },
+  "0x3703a00": {
+   "new": "0x3708b80",
+   "confidence": "high",
+   "how": "macos_build_migrate:symbol"
+  },
+  "0x3703a90": {
+   "new": "0x3708c10",
+   "confidence": "high",
+   "how": "macos_build_migrate:symbol"
   }
  },
  "fields": {

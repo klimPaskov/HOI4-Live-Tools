@@ -53,6 +53,19 @@ pub(super) fn queue_growth(start: i64, now: i64, want: i64) -> Verdict {
     }
 }
 
+/// Training lines added by one call to new queues of its own: exactly `want` is Reached; more is
+/// Diverged (the game queued divisions nobody asked for: S15-TRAINING read 9 for 7 as Verified
+/// under `queue_growth`); none is Unchanged; fewer is Diverged.
+pub(super) fn lines_added_exactly(added: i64, want: i64) -> Verdict {
+    if added == want {
+        Verdict::Reached
+    } else if added == 0 {
+        Verdict::Unchanged
+    } else {
+        Verdict::Diverged
+    }
+}
+
 /// Battle-plan orders of one army. Only an order drawn by this action raises
 /// the count; executing plans consume orders on their own, so a fall is
 /// `Diverged` (the action may or may not have added one).
@@ -523,6 +536,10 @@ mod tests {
         assert_eq!(queue_growth(2, 2, 3), Verdict::Unchanged);
         assert_eq!(queue_growth(2, 3, 3), Verdict::Diverged);
         assert_eq!(queue_growth(2, 1, 3), Verdict::Diverged);
+        assert_eq!(lines_added_exactly(7, 7), Verdict::Reached);
+        assert_eq!(lines_added_exactly(9, 7), Verdict::Diverged);
+        assert_eq!(lines_added_exactly(0, 7), Verdict::Unchanged);
+        assert_eq!(lines_added_exactly(5, 7), Verdict::Diverged);
         assert_eq!(order_growth(2, 3), Verdict::Reached);
         assert_eq!(order_growth(2, 2), Verdict::Unchanged);
         assert_eq!(order_growth(2, 1), Verdict::Diverged);

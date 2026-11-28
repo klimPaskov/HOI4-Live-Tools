@@ -168,11 +168,12 @@ class Recorder:
                 self.fought.add(t)
         pol = snap.get("politics")
         if isinstance(pol, dict) and pol.get("political_power") is not None:
-            # the derived read "laws affordable now" (game files + this snapshot; no game read)
+            # the derived read of the laws on offer (the loaded files + this snapshot; no game read;
+            # the files' base cost only: whether the power pays is the game's enabled state)
             try:
                 from . import gamerules
                 pol["laws_affordable"] = [
-                    {k: r[k] for k in ("group", "law", "cost", "affordable", "available", "why")}
+                    {k: r[k] for k in ("group", "law", "base_cost", "available", "why")}
                     for r in gamerules.laws_affordable(pol, g(snap, "wars", "at_war"), self.game_dir)]
             except Exception:  # the files are optional; a broken parse never stops a snapshot
                 pass

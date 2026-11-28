@@ -9,8 +9,9 @@ import unittest
 from pathlib import Path
 
 from hoi4_live.observe import issue_rules as R
-from hoi4_live.observe.escalation import MAX_PACKET_CHARS, Escalator, build_packet, gate_kind, validate_answer
+from hoi4_live.observe.escalation import ACTED, MAX_PACKET_CHARS, Escalator, build_packet, gate_kind, validate_answer
 from hoi4_live.observe.issues import Detector
+from hoi4_live.observe.runlogs import game_days
 from hoi4_live.observe.lessons import LessonStore, lessons_from_issue, walk
 from hoi4_live.observe.monitor import Monitor
 from hoi4_live.observe.runlogs import date_of_days, game_days
@@ -173,6 +174,23 @@ class MonitorTest(unittest.TestCase):
         it = det.issues["frame_4"]
         assert it["severity"] == "low" and it["escalate"] is False
 
+    def test_game_alerts_go_to_the_lane_that_owns_them(self):
+        # t1939k (24 Nov 2026): with the game_alert: prefix every alert fell to the "alerts" lane
+        # no executor lane owns; doctrines, MIO traits, officer corps, decisions, operatives and
+        # dockyards stayed flagged through the war
+        want = {"doctrines_available": "extras", "mio_traits": "mio_traits",
+                "modify_officer_corps": "officer_corps", "decisions_available": "decisions",
+                "operative_recruitable": "intelligence", "free_dockyards": "dockyards",
+                "admiral_assignable": "navy", "no_divisions_in_training": "training"}
+        for name, lane in want.items():
+            self.assertEqual(R.lane_of(f"game_alert:{name}:{name}"), lane, name)
+        self.assertEqual(R.lane_of("game_alert:some_mod_alert:x"), "alerts")
+        det = Detector(str(self.tmp))
+        det.snapshot(snap("1940.05.08.22", [finding("game_alert:mio_traits", "the game flags mio_traits",
+                                                    subject="mio_traits")]))
+        it = det.issues["game_alert:mio_traits:mio_traits"]
+        assert it["lane"] == "mio_traits" and it["severity"] == "low" and it["escalate"] is True
+
 
     # --- detection: logs (calls, executor orders, refusals) ------------------------------------------------
 
@@ -315,6 +333,20 @@ class MonitorTest(unittest.TestCase):
         assert it2["lane"] == "gate" and esc.trigger("overdue", it2) is None
 
 
+    def test_a_missed_checkpoint_goes_to_the_lane_of_its_first_must(self):
+        # t1939n (27 Nov 2026): missed focus checkpoints sat in lane "gate" with no reason given
+        assert R.checkpoint_lane(["focus_completed:GER_danzig_or_war"]) == "focus"
+        assert R.checkpoint_lane(["capitulated:POL", "focus_completed:x"]) == "war"
+        assert R.checkpoint_lane(["something_new:1"]) == "gate"
+        assert R.checkpoint_lane(None) == "gate"
+        plan = {"checkpoints": [{"id": "cp_f", "by": "1939.9.1", "must": ["focus_completed:GER_x"]}]}
+        det = Detector(str(self.tmp), plan=plan)
+        det.date = "1939.10.01.00"
+        det.days = game_days(det.date)
+        det._plan_rules({})
+        assert det.issues["checkpoint_missed:cp_f"]["lane"] == "focus"
+
+
     def test_answers_are_constrained_to_allowed_actions(self):
         tmp_path = self.tmp
         _, it = overdue_issue(tmp_path)
@@ -338,6 +370,178 @@ class MonitorTest(unittest.TestCase):
         assert rec["answered"] and rec["answer"]["kind"] == "leave"
         assert rec["tokens"]["input"] == 900 and rec["seconds"] >= 0
 
+
+    def test_an_answer_reaches_the_issue_and_a_leave_is_its_written_reason(self):
+        # cmps1/cmph1 (27 Nov 2026): 24 answers were logged in escalations.jsonl and reached no one
+        tmp_path = self.tmp
+        _, it = overdue_issue(tmp_path)
+        env = {"result": '{"kind":"leave","why":"the attack ends tomorrow"}',
+               "usage": {"input_tokens": 900, "output_tokens": 30}, "total_cost_usd": 0.0002}
+        script = tmp_path / "answer.py"
+        script.write_text("import sys\nsys.stdin.read()\nprint(%r)\n" % json.dumps(env))
+        esc = Escalator(str(tmp_path), answer_cmd=f'"{sys.executable}" "{script}"')
+        esc.consider("overdue", it, "1940.05.20.00", True)
+        assert it["answer"]["kind"] == "leave"
+        assert it["packet"].startswith("MODEL ANSWER: ")
+        assert it["lane_reason"] == "model: the attack ends tomorrow"
+
+    def test_acted_is_a_remedy_in_flight_and_reopens_when_the_issue_stays(self):
+        det = Detector(str(self.tmp), write=False)
+        det._set_date("1939.08.14.12")
+        it = det.raise_issue("doctrine_affordable", "doctrine_affordable", "x", "medium")
+        det.action({"id": "a1", "action": {"kind": "doctrine_adopt", "folder": "land"}, "status": "Verified"})
+        assert it["state"] == "acted"
+        det._set_date("1939.08.16.12")
+        det.raise_issue("doctrine_affordable", "doctrine_affordable", "x", "medium")
+        assert it["state"] == "acted"           # within the effect window
+        det._set_date("1939.08.20.12")
+        det.raise_issue("doctrine_affordable", "doctrine_affordable", "x", "medium")
+        assert it["state"] == "open" and it["no_effect"] == 1
+        assert "[acted 1x, no effect]" in det.render()
+        packet = build_packet(dict(it, acts=1), date="1939.08.20.12")
+        assert "did not fix it" in packet and "is no reason to leave it" in packet
+
+    def test_the_gate_packet_carries_idle_days_per_sink(self):
+        from hoi4_live.observe.escalation import gate_packet
+        det = Detector(str(self.tmp), write=False)
+        det._set_date("1939.08.14.12")
+        det.raise_issue("experience_unspent:army", "experience_unspent", "army xp", "medium", subject="army")
+        det.raise_issue("game_alert:mio_traits:mio_traits", "game_alert:mio_traits", "mio", "low")
+        det._set_date("1939.08.24.12")
+        rows = {r[0]: r for r in det.idle.rows()}
+        assert rows["army experience"][1] == 10 and rows["navy experience"][1] == 0
+        assert rows["MIO points"][1] == 10 and rows["game alerts (any)"][1] == 10
+        text = gate_packet("run_end", {"date": "1939.08.24.12"}, det, 0)
+        assert "| army experience | 10 | 10 |" in text
+        assert "Silent lanes past their deadline (FAIL while any): 0" in text
+
+    def test_each_idle_row_shows_its_lanes_turns_and_answers_and_counts_the_right_issues(self):
+        # g92b, 27 Nov 2026: every military factory worked while missing_equipment_production stood
+        # open; decisions_available lit for unwanted decisions; the naval HQ admiral sat in task forces
+        from hoi4_live.observe.escalation import gate_packet
+        from hoi4_live.observe.idle_days import sink_of
+        assert sink_of({"code": "missing_equipment_production"}) == "equipment without a line"
+        assert sink_of({"code": "decisions_available"}) is None
+        assert sink_of({"code": "admiral_assignable"}) == "leaders"
+        assert sink_of({"code": "free_military_factories"}) == "military factories"
+        det = Detector(str(self.tmp), write=False)
+        det._set_date("1936.01.01.12")
+        det.raise_issue("modify_officer_corps", "modify_officer_corps", "a spirit can be picked", "medium")
+        it = det.issues["modify_officer_corps"]
+        it["lane"] = "officer_corps"
+        for _ in range(3):
+            det.outcome({"id": it["id"], "outcome": "cannot", "lane": "officer_corps",
+                         "reason": "lane officer_corps had its turn and found nothing to do or wait for"})
+        det.outcome({"id": it["id"], "outcome": "waiting", "lane": "officer_corps",
+                     "reason": "waiting: Logistical Focus needs 350 army xp"})
+        det._set_date("1936.01.11.12")
+        snap_ = {"date": "1936.01.11.12", "lane_turns": [
+            {"lane": "officer_corps", "turns": 145, "days_since": 0},
+            {"kind": "ticks", "lane": "(ticks)", "ticks": 300}]}
+        text = gate_packet("run_end", snap_, det, 0)
+        row = next(l for l in text.splitlines() if l.startswith("| officer corps |"))
+        assert "officer_corps 145 turns: waiting 1, cannot 3" in row, row
+        assert "Logistical Focus" in row
+
+    def test_an_equipment_the_plan_leaves_with_its_why_is_listed_apart_from_idle_days(self):
+        # g96a, 28 Nov 2026: the naval bomber line the plan opens on 1939.1.1 counted 153 idle days
+        from hoi4_live.observe.escalation import gate_packet
+        from hoi4_live.observe.findings import from_omissions
+        det = Detector(str(self.tmp), write=False)
+        det._set_date("1936.01.01.12")
+        note = ("missing equipment: small_plane_naval_bomber_airframe_1 left by the plan "
+                "(the plan opens its line on 1939.1.1: not in 1936)")
+        fs = from_omissions({"omissions": [{"item": "missing_equipment_production", "days_open": 0,
+                                            "owner": "production", "owner_note": note,
+                                            "left_by_plan": True}]})
+        assert fs[0]["numbers"]["left_by_plan"] is True and "(left by the plan)" in fs[0]["text"]
+        det.raise_issue("missing_equipment_production", "missing_equipment_production", fs[0]["text"],
+                        "medium", fs[0]["numbers"], origin="omission")
+        det._set_date("1936.01.11.12")
+        rows = {r[0]: r for r in det.idle.rows()}
+        assert rows["equipment without a line"][1] == 0
+        text = gate_packet("run_end", {"date": "1936.01.11.12"}, det, 0)
+        row = next(l for l in text.splitlines() if l.startswith("| equipment without a line |"))
+        assert "left by the plan 10 days" in row and "1939.1.1" in row, row
+        # the plan wants it now: idle again
+        fs[0]["numbers"]["left_by_plan"] = False
+        det.raise_issue("missing_equipment_production", "missing_equipment_production", "x", "medium",
+                        fs[0]["numbers"], origin="omission")
+        det._set_date("1936.01.21.12")
+        rows = {r[0]: r for r in det.idle.rows()}
+        assert rows["equipment without a line"][1] == 10
+
+    def test_a_declaration_gate_lists_equipment_fill_per_army(self):
+        # w92b, 28 Nov 2026: a template edit at war left the West's infantry at fill 0.27
+        from hoi4_live.observe.escalation import gate_packet
+        det = Detector(str(self.tmp), write=False)
+        land = {"armies": [{"army": "1. Armee"}, {"army": "6. Armee", "equipment_fill_min": 0.9}],
+                "divisions": [{"army": "1. Armee", "equipment_fill": 0.27},
+                              {"army": "1. Armee", "equipment_fill": 0.31}],
+                "division_count": 2}
+        text = gate_packet("war_declared", {"date": "1939.09.01.00", "trigger": "war_declared:POL",
+                                            "land": land}, det, 0)
+        lines = text.splitlines()
+        at = lines.index("Equipment fill per army (lowest first):")
+        assert lines[at + 1] == "- 1. Armee: equipment fill mean 0.29, lowest 0.27, 2 of 2 division(s) below 0.75"
+        assert lines[at + 2].startswith("- 6. Armee: equipment fill lowest 0.90")
+        assert "Equipment fill" not in gate_packet("run_end", {"date": "1939.09.01.00", "land": land}, det, 0)
+
+    def test_the_gate_packet_counts_a_silent_lane_and_the_issue_goes_to_the_row_owner(self):
+        from hoi4_live.observe.escalation import gate_packet
+        det = Detector(str(self.tmp), write=False)
+        det.snapshot(snap("1939.10.01.00", [finding(
+            "lane_silent", "no_divisions_in_training open 40 days, past its 14-day deadline, and lane "
+            "training states no reason", subject="no_divisions_in_training", owner="training"), finding(
+            "operative_recruitable", "an operative can be recruited", owner_rule="intelligence")]))
+        it = det.issues["lane_silent:no_divisions_in_training"]
+        assert it["lane"] == "training" and it["class"] == "technical"
+        assert det.issues["operative_recruitable"]["lane"] == "intelligence"
+        text = gate_packet("run_end", {"date": "1939.10.01.00"}, det, 0)
+        assert "Silent lanes past their deadline (FAIL while any): 1" in text
+        assert "SILENT " in text and "lane training" in text
+
+    def test_every_acted_but_open_issue_and_every_overdue_high_one_is_asked_once(self):
+        tmp_path = self.tmp
+        esc = Escalator(str(tmp_path), live=False)
+        base = {"class": "tool_use", "severity": "low", "lane": "construction", "state": "open", "text": "x"}
+        acted = [dict(base, id=f"I{i}", key=f"k{i}", code="construction_refused", acts=2) for i in range(3)]
+        recs = [esc.consider("overdue", it, "1940.05.20.00") for it in acted]
+        assert all(r and r["why"] == ACTED and r["tier"] == 1 for r in recs)
+        assert esc.consider("overdue", acted[0], "1940.05.21.00") is None   # one answer per issue
+        high = dict(base, id="I9", key="k9", code="supply_short", severity="high", lane="construction")
+        rec = esc.consider("overdue", high, "1940.05.20.00")
+        assert rec["tier"] == 2 and rec["why"] == "high severity and past its deadline"
+
+    def test_a_gate_every_60_game_days_between_the_event_gates(self):
+        assert gate_kind("1940.03.01.00", {"date": "1940.03.02.00"}, last_gate="1940.01.01.00") == "days_60"
+        assert gate_kind("1940.03.01.00", {"date": "1940.03.02.00"}, last_gate="1940.02.02.00") is None
+        assert gate_kind("1940.03.01.00", {"date": "1940.03.02.00"}) is None
+
+    def test_the_segment_review_reads_issues_gate_and_the_runs_lessons(self):
+        from hoi4_live.observe import segment_review as SR
+        run = self.tmp / "runs" / "t1"
+        run.mkdir(parents=True)
+        (run / "ISSUES.md").write_text("# Issues\n- I1 overdue supply_short", encoding="utf-8")
+        (run / "GATE.md").write_text("# GATE capitulated at 1939.10.14.02", encoding="utf-8")
+        les = self.tmp / "learned" / "lessons"
+        les.mkdir(parents=True)
+        (les / "l1.json").write_text(json.dumps({"id": "l1", "statement": "spread the stack", "confidence": 0.6,
+                                                 "evidence": ["t1 1939.10.01 3 tries"]}), encoding="utf-8")
+        (les / "l2.json").write_text(json.dumps({"id": "l2", "statement": "other run", "evidence": ["t0 x"]}),
+                                     encoding="utf-8")
+        packet = SR.build_packet(str(run))
+        assert "I1 overdue supply_short" in packet and "GATE capitulated" in packet
+        assert "spread the stack" in packet and "other run" not in packet
+        calls = []
+
+        def ask(packet, tier, run, role):
+            calls.append((tier, run, role))
+            return {"result": "1. PLAN supply", "usage": {"input_tokens": 900, "output_tokens": 300},
+                    "model": "claude-opus-5-5", "usd": 0.02, "seconds": 3.0}
+        path, row = SR.review(str(run), ask=ask)
+        assert calls == [(3, "t1", "segment_review")] and row["usd"] == 0.02
+        assert "1. PLAN supply" in Path(path).read_text(encoding="utf-8")
 
     def test_gate_kinds(self):
         assert gate_kind("1939.12.30.00", {"date": "1940.01.01.00"}) == "new_year"
@@ -470,6 +674,53 @@ class MonitorTest(unittest.TestCase):
             with open(os.path.join(run, "calls.jsonl"), "a") as f:
                 f.write(bad + "\n")
             Monitor(run, str(base / "out"), replay=True, store=str(base / "s")).replay()
+
+
+class LaneTurnsAtTheGate(unittest.TestCase):
+    def test_a_starved_lane_is_listed_first_with_its_turns(self):
+        # t1939o (27 Nov 2026): decisions, resources and intelligence had no turn in 56 days
+        from hoi4_live.observe import escalation as E
+        line = E.lane_turns_line({"lane_turns": [
+            {"lane": "production", "turns": 9, "days_since": 0, "silent": False},
+            {"lane": "decisions", "turns": 0, "days_since": None, "silent": True},
+            {"lane": "dockyards", "turns": 1, "days_since": 29, "silent": True}]})
+        self.assertTrue(line.startswith("Turns per lane"))
+        self.assertLess(line.index("decisions 0 (never"), line.index("dockyards 1 (29d ago"))
+        self.assertLess(line.index("dockyards"), line.index("production 9"))
+        self.assertEqual(E.lane_turns_line({}), "")
+
+    def test_the_pace_and_the_starved_lanes_show(self):
+        # e93 (28 Nov 2026): ticks and lane turns per game day, each lane's rate, starved lanes fail
+        from hoi4_live.observe import escalation as E
+        snap = {"lane_turns": [
+            {"lane": "production", "turns": 30, "per_day": 2.5, "input": False, "days_since": 0,
+             "starved": False, "silent": False},
+            {"lane": "decisions", "turns": 2, "per_day": 0.1, "input": True, "days_since": 9,
+             "starved": True, "silent": False},
+            {"kind": "ticks", "lane": "(ticks)", "ticks": 120, "ticks_per_day": 10.0,
+             "lane_turns": 900, "lane_turns_per_day": 75.0}]}
+        line = E.lane_turns_line(snap)
+        self.assertTrue(line.startswith("Executor pace: 10.0 ticks and 75.0 lane turns per game day"), line)
+        self.assertIn("production 30 (0d ago, 2.5/day)", line)
+        self.assertIn("decisions 2 (9d ago, 0.1/day, input)", line)
+        self.assertNotIn("(ticks) 120", line)
+        self.assertEqual([r["lane"] for r in E.starved_lanes(snap)], ["decisions"])
+
+    def test_a_war_step_idle_past_its_limit_is_a_fail_line_with_what_ran_instead(self):
+        # p101b (28 Nov 2026): 353 game hours between two war turns of op_poland
+        from hoi4_live.observe import escalation as E
+        snap = {"lane_turns": [
+            {"lane": "production", "turns": 3, "days_since": 0, "silent": False},
+            {"kind": "war_idle", "lane": "(war)", "limit_hours": 24, "over": 2, "longest_hours": 353,
+             "from": 60791653, "to": 60792006, "instead": "fair mio_lines 3.9 s, fast factories 3.2 s",
+             "longest_acted_hours": 353}]}
+        line = E.war_idle_line(snap)
+        self.assertTrue(line.startswith(
+            "War step idle more than 24 game hours during an executing operation (FAIL while any): 2"), line)
+        self.assertIn("longest 353 h", line)
+        self.assertIn("fair mio_lines 3.9 s", line)
+        self.assertNotIn("(war)", E.lane_turns_line(snap))
+        self.assertEqual(E.war_idle_line({"lane_turns": []}), "")
 
 
 if __name__ == "__main__":

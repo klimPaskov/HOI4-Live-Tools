@@ -345,6 +345,7 @@ mod plan_issues;
 // Game speed by the war the country manages (peace 3, a war to manage 2; a human's choice kept).
 #[path = "plan_speed.rs"]
 mod plan_speed;
+pub use plan_speed::note_agent_speed;
 // One spending order per experience pool (plan key `xp_budget`).
 #[path = "plan_xp.rs"]
 mod plan_xp;
@@ -387,9 +388,6 @@ pub const UNBUILT_ARGS: &[(&str, &str)] = &[
     // the law of one occupied state (gap register occupation.per_state_law): the tool sets the
     // default law only
     ("hoi4_occupation_law", "state"),
-    // the Division Designer's regimental support row (gap register templates.regimental_support)
-    ("hoi4_template_create", "regimental_support"),
-    ("hoi4_template_edit", "regimental_support"),
     // swapping a chosen doctrine (gap register doctrines.replace_doctrine)
     ("hoi4_doctrine_adopt", "replace"),
     // the peace conference's force-government demand (gap register peace.force_government)
@@ -554,35 +552,132 @@ impl Tools for Timed<'_> {
     }
 }
 
-/// The reads one tick shares: the same read with the same arguments is answered from the first
-/// answer for up to `TICK_READ_FRESH`, and every action (a call with a request_id) forgets them
-/// all, so a read after an order is always fresh. g17i (18 Nov 2026): one tick read hoi4_states
-/// 8 times, hoi4_wars 5 and hoi4_armies 5.
+/// The tick's snapshot of the game: every read without the input lease (a memory read: no panel,
+/// no click) with the same arguments is answered from its first answer for up to
+/// `TICK_READ_FRESH`, whichever lane asks. An order forgets only the reads its family can change
+/// ([`read_survives`]), so the lanes after an order by command still share the rest. g17i (18 Nov
+/// 2026): one tick read hoi4_states 8 times, hoi4_wars 5 and hoi4_armies 5; w92b (27 Nov 2026):
+/// 1341 repeated hoi4_states, 403 hoi4_events and 356 hoi4_armies calls within ticks, because only
+/// twelve tools were shared and every order cleared them all.
 struct TickReads<'a> {
     inner: &'a dyn Tools,
     seen: std::cell::RefCell<HashMap<String, (std::time::Instant, Value)>>,
 }
 const TICK_READ_FRESH: Duration = Duration::from_secs(2);
-const TICK_SHARED_READS: [&str; 12] = [
-    "hoi4_economy",
-    "hoi4_production_lines",
-    "hoi4_stockpile",
+/// Reads that are never shared: the change feed and the date stop's state.
+const TICK_UNSHARED_READS: [&str; 3] = ["hoi4_observe", "hoi4_wait_change", "hoi4_date_stop"];
+/// Memory reads an order cannot move, whatever it is: the map's province graph.
+const STATIC_READS: [&str; 1] = ["hoi4_province_graph"];
+/// What armies, wars and the diplomacy view show: an economy, research or air order leaves them.
+const LAND_READS: [&str; 12] = [
     "hoi4_armies",
-    "hoi4_research",
-    "hoi4_overview",
-    "hoi4_country_status",
-    "hoi4_states",
     "hoi4_wars",
-    "hoi4_template_get",
+    "hoi4_commanders",
     "hoi4_division_templates",
-    "hoi4_doctrines",
+    "hoi4_template_get",
+    "hoi4_diplomacy_state",
+    "hoi4_diplomacy_incoming",
+    "hoi4_occupation",
+    "hoi4_war_stats",
+    "hoi4_war_risk",
+    "hoi4_battles",
+    "hoi4_fleets",
 ];
+/// What production, construction and trade show.
+const ECONOMY_READS: [&str; 16] = [
+    "hoi4_production_lines",
+    "hoi4_economy",
+    "hoi4_stockpile",
+    "hoi4_production_shortages",
+    "hoi4_designs",
+    "hoi4_mios",
+    "hoi4_construction_queue",
+    "hoi4_resources",
+    "hoi4_trade",
+    "hoi4_special_projects",
+    "hoi4_naval_production_options",
+    "hoi4_convoys",
+    "hoi4_country_status",
+    "hoi4_supply",
+    "hoi4_states",
+    "hoi4_alerts",
+];
+/// What the research view shows.
+const RESEARCH_READS: [&str; 5] = [
+    "hoi4_research",
+    "hoi4_research_extras",
+    "hoi4_doctrines",
+    "hoi4_focus_available",
+    "hoi4_focus_completed",
+];
+/// The order families whose reach is known: an order outside them forgets every read.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum OrderFamily {
+    Economy,
+    Research,
+    Air,
+}
+fn order_family(action: &str) -> Option<OrderFamily> {
+    const ECONOMY: [&str; 10] = [
+        "hoi4_production_",
+        "hoi4_design_",
+        "hoi4_mio_",
+        "hoi4_construction_",
+        "hoi4_special_project_",
+        "hoi4_railway_build",
+        "hoi4_trade_set",
+        "hoi4_auto_import",
+        "hoi4_agency_",
+        "hoi4_operative_",
+    ];
+    if ECONOMY.iter().any(|p| action.starts_with(p)) {
+        return Some(OrderFamily::Economy);
+    }
+    if matches!(action, "hoi4_research_start" | "hoi4_doctrine_adopt") {
+        return Some(OrderFamily::Research);
+    }
+    // a wing attached to an army changes the army: not this family
+    if action.starts_with("hoi4_air_") && action != "hoi4_air_attach" {
+        return Some(OrderFamily::Air);
+    }
+    None
+}
+/// Whether the read `read` stays valid in the tick's snapshot after the order `action`; pure. An
+/// order of a known family leaves the reads of the other families (and the open events: no
+/// production, research or air order opens one); any other order forgets everything, so a read
+/// after it is always fresh.
+fn read_survives(action: &str, read: &str) -> bool {
+    if STATIC_READS.contains(&read) {
+        return true;
+    }
+    let Some(family) = order_family(action) else {
+        return false;
+    };
+    let land = LAND_READS.contains(&read) || read == "hoi4_events";
+    let economy = ECONOMY_READS.contains(&read);
+    let research = RESEARCH_READS.contains(&read);
+    let air = matches!(read, "hoi4_air" | "hoi4_air_regions");
+    match family {
+        // a factory, a line or a building moves the economy reads (and the alerts, the supply
+        // and the states a building stands in); experience paid for a doctrine is in the
+        // country status
+        OrderFamily::Economy => land || research || air,
+        OrderFamily::Research => {
+            land || air || (economy && !matches!(read, "hoi4_country_status" | "hoi4_alerts"))
+        }
+        OrderFamily::Air => land || research || (economy && read != "hoi4_alerts"),
+    }
+}
 impl Tools for TickReads<'_> {
     fn call(&self, name: &str, args: &Value) -> Result<Value> {
-        if args.get("request_id").is_some() || !TICK_SHARED_READS.contains(&name) {
-            if args.get("request_id").is_some() {
-                self.seen.borrow_mut().clear();
-            }
+        if args.get("request_id").is_some() {
+            self.seen.borrow_mut().retain(|key, _| {
+                read_survives(name, key.split_once(' ').map_or(key.as_str(), |(n, _)| n))
+            });
+            return self.inner.call(name, args);
+        }
+        // a read through the interface (it takes the lease: a panel, a click) is never shared
+        if args.get("lease_token").is_some() || TICK_UNSHARED_READS.contains(&name) {
             return self.inner.call(name, args);
         }
         let key = format!("{name} {args}");
@@ -596,6 +691,73 @@ impl Tools for TickReads<'_> {
             .borrow_mut()
             .insert(key, (std::time::Instant::now(), out.clone()));
         Ok(out)
+    }
+}
+
+thread_local! {
+    /// The executor's tool calls that needed the game's input (see [`Metered`]).
+    static INPUT_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// The executor's orders that the tool answered as sent in process (see [`reply_in_process`]).
+    static IN_PROCESS_ORDERS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Tool -> whether its last order on this thread needed the input (see [`Metered`]): what the
+    /// war's turn by command alone defers (see `State::act`, `Sched::input_yield`).
+    static TOOL_INPUT: std::cell::RefCell<HashMap<String, bool>> = std::cell::RefCell::new(HashMap::new());
+}
+/// Whether tool `name`'s last order needed the input (None: no order of it yet on this thread).
+fn tool_last_input(name: &str) -> Option<bool> {
+    TOOL_INPUT.with(|m| m.borrow().get(name).copied())
+}
+/// Records whether tool `name`'s order needed the input.
+fn note_tool_input(name: &str, input: bool) {
+    TOOL_INPUT.with(|m| {
+        m.borrow_mut().insert(name.to_string(), input);
+    });
+}
+/// How many tool calls on this thread needed the input so far (see [`Metered`]).
+fn input_calls() -> u64 {
+    INPUT_CALLS.with(|c| c.get())
+}
+/// How many orders on this thread went in process so far.
+fn in_process_orders() -> u64 {
+    IN_PROCESS_ORDERS.with(|c| c.get())
+}
+/// Whether a tool's reply says the change went through the game's own command in process (the
+/// tools add `in_process`, or `backend: "inprocess"` in the result); pure.
+fn reply_in_process(body: &Value) -> bool {
+    body.get("in_process").is_some_and(|v| !v.is_null())
+        || body["backend"] == json!("inprocess")
+        || body["result"]["backend"] == json!("inprocess")
+}
+/// The tick's cost meter: a call needed the input when it sent keys or clicks through the watched
+/// binding, or when it takes the input lease and the reply does not say it went in process (a
+/// mouse order, a read through a panel). A memory read or an order by the game's own command
+/// costs milliseconds; an input call costs seconds and holds the window. The scheduler runs every
+/// lane whose turn needs no input in the same tick and rations the input ones (see `tick`).
+struct Metered<'a> {
+    inner: &'a dyn Tools,
+}
+impl Tools for Metered<'_> {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        let sent = crate::pause_guard::sent_on_this_thread();
+        let out = self.inner.call(name, args);
+        let moved = crate::pause_guard::sent_on_this_thread() != sent;
+        let by_command = match &out {
+            Ok(body) => reply_in_process(body),
+            // the game's own check refused a command: nothing was clicked (only where the binding
+            // is watched can the meter know that no input went out)
+            Err(e) => e.code == "refused_by_game_check" && crate::pause_guard::input_watched(),
+        };
+        let input = moved || (args.get("lease_token").is_some() && !by_command);
+        if input {
+            INPUT_CALLS.with(|c| c.set(c.get() + 1));
+        }
+        if args.get("request_id").is_some() && out.is_ok() {
+            note_tool_input(name, input);
+        }
+        if args.get("request_id").is_some() && out.as_ref().is_ok_and(reply_in_process) {
+            IN_PROCESS_ORDERS.with(|c| c.set(c.get() + 1));
+        }
+        out
     }
 }
 
@@ -782,6 +944,8 @@ pub struct State {
     op_events_now: bool,
     /// Each operation's last status line (digest).
     op_notes: BTreeMap<String, String>,
+    /// The slow panel reads kept across ticks (see [`SlowReads`]).
+    slow_reads: SlowCache,
 }
 
 /// What `run` knows about the persisted memory next to plan.json.
@@ -808,6 +972,428 @@ struct Sched {
     /// Open omissions the executor could act on at the last alert read (rows without a written
     /// reason to wait): the speed rule never waits at speed 4 over one.
     omissions: usize,
+    /// What each lane said at its turns (see [`record_turn`]): the reason an omission row quotes
+    /// when the owning rule wrote no note of its own.
+    said: HashMap<String, LaneSaid>,
+    /// Lane -> the game hour the fairness turn first saw it waiting (see [`overdue_turns`]).
+    fair_seen: HashMap<&'static str, GameHour>,
+    /// Lanes ticks so far, the tick of the last fairness turn that acted (and its game hour), and
+    /// the tick the war was last offered (see [`fair_turn_open`]).
+    tick_no: u64,
+    fair_tick: Option<(u64, GameHour)>,
+    war_tick: Option<u64>,
+    /// Lanes (and the war, the speed rule, the declaration) that had their turn in this tick:
+    /// each at most one turn a tick (see [`lanes_turns`]).
+    tick_turned: HashSet<&'static str>,
+    /// Lane -> whether its last turn needed the input (see [`Metered`]): a lane whose last turn
+    /// needed none is offered in every tick's sweep.
+    lane_input: HashMap<&'static str, bool>,
+    /// The objects ordered in this tick, each with the lane that ordered it (see `State::act`).
+    claims: HashMap<String, &'static str>,
+    /// The lane whose turn runs now ("" outside a lane turn), and the turn's number.
+    cur_lane: &'static str,
+    turn_seq: u64,
+    /// The orders (tool and arguments) sent in this tick, each with the turn that sent it.
+    sent: HashMap<String, u64>,
+    /// An order of the running turn was deferred by another lane's claim.
+    deferred: bool,
+    /// The tick's lines after the first (the run reports each).
+    more: Vec<String>,
+    /// A dated declaration is due or near in this tick: no sweep (the war's orders go first).
+    hold_sweep: bool,
+    /// Ticks and lane turns since the first tick at `first_hour` (the gate's rates per game day).
+    ticks: u64,
+    lane_turn_count: u64,
+    first_hour: Option<GameHour>,
+    /// Lane -> the game hour of its first turn (its turns per game day).
+    first_turn: HashMap<&'static str, GameHour>,
+    /// The pass's lanes (the ones the fairness promises a turn; see `lane_turns`' `starved`).
+    pass_names: HashSet<&'static str>,
+    /// The war's turn runs while the lanes are owed the input: its orders by command go, an order
+    /// whose tool last needed the input is deferred (see `State::act`).
+    input_yield: bool,
+    /// Orders deferred by `input_yield` so far, and orders the executor dispatched so far.
+    yielded: u64,
+    acts_sent: u64,
+    /// The war step's offers while an operation executes (the gate's watchdog, see [`WarWatch`]).
+    war_watch: WarWatch,
+}
+
+/// THE WAR STEP'S WATCHDOG (engineer 105): the game hours between two offers of the war's turn
+/// while an operation executes, the longest such gap with what ran in it instead, and how many
+/// gaps passed the limit (`scheduler.war_idle_hours`, default [`WAR_IDLE_HOURS`]). The gate packet
+/// reads it from `lane_turns` (a FAIL line while any gap passed the limit). p101b (28 Nov 2026):
+/// 353 game hours between two war turns of op_poland while five ticks went to fast lanes and the
+/// fairness.
+#[derive(Default, Clone, Debug)]
+pub(super) struct WarWatch {
+    /// The hour of the last offer while an operation executed (None outside one).
+    last_offer: Option<GameHour>,
+    /// The hour of the last war turn that acted.
+    last_acted: Option<GameHour>,
+    /// The limit in force (game hours).
+    limit: GameHour,
+    /// Gaps between offers past the limit, and the longest gap (hours, from, to, what ran).
+    over: u32,
+    longest: Option<(GameHour, GameHour, GameHour, String)>,
+    /// The longest gap between two acting war turns while an operation executed.
+    longest_acted: GameHour,
+    /// Wall seconds per lane (and the war's own turn) since the last offer.
+    instead: BTreeMap<String, f64>,
+}
+
+/// The longest the war step may wait for its turn while an operation executes (game hours).
+const WAR_IDLE_HOURS: GameHour = DAY;
+
+impl WarWatch {
+    /// Wall seconds `secs` went to `what` since the war's last offer.
+    fn spent(&mut self, what: &str, secs: f64) {
+        *self.instead.entry(what.to_string()).or_insert(0.0) += secs;
+    }
+
+    /// What ran since the last offer, the costliest first; pure.
+    fn instead_line(&self) -> String {
+        let mut rows: Vec<(&String, &f64)> = self.instead.iter().collect();
+        rows.sort_by(|a, b| b.1.total_cmp(a.1));
+        if rows.is_empty() {
+            return "no turn ran (no tick)".into();
+        }
+        rows.iter()
+            .take(6)
+            .map(|(k, v)| format!("{k} {v:.1} s"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// The war's turn is offered at `now`; `executing`: an operation executes; `limit`: game hours.
+    fn offered(&mut self, now: GameHour, executing: bool, limit: GameHour) {
+        self.limit = limit;
+        if !executing {
+            self.last_offer = None;
+            self.last_acted = None;
+            self.instead.clear();
+            return;
+        }
+        if let Some(prev) = self.last_offer {
+            let gap = now.saturating_sub(prev);
+            if gap > limit {
+                self.over += 1;
+            }
+            if self.longest.as_ref().is_none_or(|l| gap > l.0) {
+                self.longest = Some((gap, prev, now, self.instead_line()));
+            }
+        }
+        self.last_offer = Some(now);
+        self.instead.clear();
+    }
+
+    /// The war's turn acted at `now` while an operation executed.
+    fn acted(&mut self, now: GameHour) {
+        if let Some(prev) = self.last_acted {
+            self.longest_acted = self.longest_acted.max(now.saturating_sub(prev));
+        }
+        self.last_acted = Some(now);
+    }
+
+    /// The gate's row; None before any offer while an operation executed; pure.
+    fn row(&self) -> Option<Value> {
+        let (gap, from, to, instead) = self.longest.clone()?;
+        Some(json!({"kind": "war_idle", "lane": "(war)",
+            "limit_hours": self.limit,
+            "over": self.over,
+            "longest_hours": gap,
+            "from": from,
+            "to": to,
+            "instead": instead,
+            "longest_acted_hours": self.longest_acted}))
+    }
+}
+
+impl Sched {
+    /// A new tick at `now`: no lane has had its turn, no object is claimed.
+    fn begin_tick(&mut self, now: GameHour) {
+        self.tick_turned.clear();
+        self.claims.clear();
+        self.sent.clear();
+        self.more.clear();
+        self.cur_lane = "";
+        self.deferred = false;
+        self.hold_sweep = false;
+        self.ticks += 1;
+        self.first_hour.get_or_insert(now);
+    }
+}
+
+/// The meter's counts when a lane's turn opened (see [`open_turn`]).
+#[derive(Clone, Copy)]
+struct Opened {
+    inputs: u64,
+    orders: u64,
+}
+
+/// A lane's turn opens: it counts as turned in this tick, its orders claim their objects in its
+/// name.
+fn open_turn(state: &mut State, name: &'static str, now: GameHour) -> Opened {
+    state.sched.tick_turned.insert(name);
+    state.sched.cur_lane = name;
+    state.sched.turn_seq += 1;
+    state.sched.deferred = false;
+    state.sched.lane_turn_count += 1;
+    state.sched.first_turn.entry(name).or_insert(now);
+    Opened {
+        inputs: input_calls(),
+        orders: in_process_orders(),
+    }
+}
+
+/// A lane's turn closes: whether it needed the input is its cost for the next tick's sweep. A
+/// lane whose turn sent an order by command that took, and needed no input, may have more of the
+/// same work: it can be offered again in this tick. An order the turn lost to another lane's
+/// claim on the same object (and nothing else sent) makes the turn quiet; the lane is offered
+/// again in the next tick. Returns (result, input used).
+fn close_turn(
+    state: &mut State,
+    name: &'static str,
+    opened: Opened,
+    result: Option<String>,
+) -> (Option<String>, bool) {
+    let input = input_calls() != opened.inputs;
+    state.sched.lane_input.insert(name, input);
+    state.sched.cur_lane = "";
+    let result = if state.sched.deferred && state.last_ok == Some(false) {
+        None
+    } else {
+        result
+    };
+    if result.is_some()
+        && !input
+        && state.last_ok == Some(true)
+        && in_process_orders() != opened.orders
+    {
+        state.sched.tick_turned.remove(name);
+    }
+    state.sched.deferred = false;
+    (result, input)
+}
+
+/// A lane's stated reason: its last line that said something (an order, a refusal, a note it
+/// wrote), when, and how many turns it has had; `silent` while no turn has said anything.
+#[derive(Clone, Debug, Default)]
+pub(super) struct LaneSaid {
+    pub at: GameHour,
+    pub line: String,
+    pub turns: u32,
+    pub silent: bool,
+}
+
+/// Every status line the lanes write (manage, affairs, military, seams rules and the focus and
+/// research stages), flattened under one key each; pure.
+fn all_notes(state: &State) -> BTreeMap<String, String> {
+    let mut out: BTreeMap<String, String> = BTreeMap::new();
+    for (k, v) in plan_manage::notes(state) {
+        out.insert(format!("manage:{k}"), v.clone());
+    }
+    for (k, v) in plan_affairs::notes(state) {
+        out.insert(format!("affairs:{k}"), v.clone());
+    }
+    for (k, v) in plan_military::notes(state) {
+        out.insert(format!("military:{k}"), v.clone());
+    }
+    for (k, v) in plan_seams::notes(state) {
+        out.insert(format!("seams:{k}"), v.clone());
+    }
+    if let Some((line, _)) = &state.stages.focus {
+        out.insert("stage:focus".into(), line.clone());
+    }
+    if let Some((line, _)) = &state.stages.research {
+        out.insert("stage:research".into(), line.clone());
+    }
+    out
+}
+
+/// After a lane's turn: what it said. An order (passed or refused) is said; so is any note the
+/// turn wrote or changed, or the lane's own standing note (a rule that writes the same reason
+/// each turn). A turn that says nothing keeps the last thing said (a rest timer is the earlier
+/// reason still running); a lane that has never said anything stays `silent`, which the
+/// omission rows and the run monitor count as a failure of the rule (t1939n, 27 Nov 2026: 20 rows
+/// past their deadline read "lane training says: no reason given").
+fn record_turn(
+    state: &mut State,
+    name: &str,
+    result: Option<&String>,
+    before: &BTreeMap<String, String>,
+    now: GameHour,
+) {
+    let after = all_notes(state);
+    let changed: Vec<String> = after
+        .iter()
+        .filter(|(k, v)| before.get(*k) != Some(*v))
+        .map(|(k, v)| format!("{}: {v}", k.split_once(':').map_or(k.as_str(), |(_, r)| r)))
+        .collect();
+    let own = ["manage", "affairs", "military", "seams", "stage"]
+        .iter()
+        .find_map(|m| after.get(&format!("{m}:{name}")))
+        .cloned();
+    let line = match (result, state.last_ok) {
+        (Some(l), Some(false)) => Some(format!("refused: {l}")),
+        (Some(l), _) => Some(format!("acted: {l}")),
+        (None, _) if !changed.is_empty() => Some(changed.join("; ")),
+        (None, _) => own,
+    };
+    let entry = state
+        .sched
+        .said
+        .entry(name.to_string())
+        .or_insert(LaneSaid {
+            silent: true,
+            ..Default::default()
+        });
+    entry.turns += 1;
+    if let Some(line) = line {
+        entry.line = line.chars().take(400).collect();
+        entry.at = now;
+        entry.silent = false;
+    } else if entry.silent {
+        entry.at = now;
+    }
+}
+
+/// Turns per lane for the gate packet: every lane the scheduler offered (or first saw waiting),
+/// its turns, the game days since its last one, and whether it ever said anything; pure.
+pub(super) fn lane_turns(state: &State, now: GameHour) -> Value {
+    let mut names: Vec<String> = state
+        .sched
+        .turns
+        .keys()
+        .chain(state.sched.fair_seen.keys())
+        .map(|n| n.to_string())
+        .chain(state.sched.said.keys().cloned())
+        .collect();
+    names.sort();
+    names.dedup();
+    // a rate over at least one game day (a lane first seen this hour has no rate yet)
+    let per_day = |count: u64, since: Option<GameHour>| {
+        since
+            .map(|at| now.saturating_sub(at))
+            .filter(|span| *span >= DAY)
+            .map(|span| (count as f64 * DAY as f64 / span as f64 * 10.0).round() / 10.0)
+    };
+    let mut rows: Vec<Value> = names
+        .iter()
+        .map(|n| {
+            let said = state.sched.said.get(n);
+            let last = state.sched.turns.get(n.as_str()).copied();
+            let first = state.sched.first_turn.get(n.as_str()).copied();
+            let turns = said.map_or(0, |s| s.turns);
+            // a pass lane past the longest wait any rule gives it (the fairness, an attack's
+            // deferral)
+            let waited = last
+                .or_else(|| state.sched.fair_seen.get(n.as_str()).copied())
+                .map(|at| now.saturating_sub(at));
+            let starved = state.sched.pass_names.contains(n.as_str())
+                && waited.is_some_and(|w| w > FAIR_MAX_WAIT.max(DEFERRED_MAX_WAIT));
+            json!({"lane": n,
+                "turns": turns,
+                "per_day": per_day(u64::from(turns), first),
+                "input": state.sched.lane_input.get(n.as_str()),
+                "days_since": last.map(|at| now.saturating_sub(at) / DAY),
+                "starved": starved,
+                "silent": said.is_none_or(|s| s.silent)})
+        })
+        .collect();
+    // the executor's pace: ticks and lane turns per game day since its first tick
+    rows.push(json!({"kind": "ticks", "lane": "(ticks)",
+        "ticks": state.sched.ticks,
+        "ticks_per_day": per_day(state.sched.ticks, state.sched.first_hour),
+        "lane_turns": state.sched.lane_turn_count,
+        "lane_turns_per_day": per_day(state.sched.lane_turn_count, state.sched.first_hour)}));
+    if let Some(row) = state.sched.war_watch.row() {
+        rows.push(row);
+    }
+    Value::Array(rows)
+}
+
+/// The owner names omission rows carry that are not lane names (the rule writes under one name,
+/// its lane runs under another).
+const OWNER_LANES: [(&str, &str); 4] = [
+    ("doctrines", "extras"),
+    ("special_projects", "extras"),
+    ("air", "air_plan"),
+    ("cp_spend", "seams"),
+];
+
+/// Why the rule `owner` has not acted, from its lane's turns (see [`record_turn`]): the reason and
+/// whether it is a silence (the lane never had a turn, or never said anything). None for the
+/// player's rows.
+pub(super) fn lane_reason(state: &State, owner: &str, now: GameHour) -> Option<(String, bool)> {
+    if owner.is_empty() || owner.starts_with("player") {
+        return None;
+    }
+    let lane = OWNER_LANES
+        .iter()
+        .find(|(o, _)| *o == owner)
+        .map_or(owner, |(_, l)| *l);
+    let days = |at: GameHour| (now - at).max(0) / DAY;
+    Some(match state.sched.said.get(lane) {
+        Some(s) if !s.silent => (
+            format!(
+                "lane {lane} (its last word {} day(s) ago): {}",
+                days(s.at),
+                s.line
+            ),
+            false,
+        ),
+        Some(s) => (
+            format!(
+                "SILENT: lane {lane} had {} turn(s), the last {} day(s) ago, and never stated a \
+                 reason or sent an order: the rule has a path that neither acts nor says why",
+                s.turns,
+                days(s.at)
+            ),
+            true,
+        ),
+        None => match state.sched.turns.get(lane) {
+            Some(at) => (
+                format!(
+                    "SILENT: lane {lane} last had a turn {} day(s) ago and stated nothing",
+                    days(*at)
+                ),
+                true,
+            ),
+            // The lanes have run for less than the fair wait (every lane is offered within it):
+            // not a silence yet. The day-0 alert read runs before any lane's first turn, and its
+            // "no turn in this run" stayed on the issue for the whole run (g92a, 27 Nov 2026:
+            // decisions offered 143 times, the issue still read SILENT).
+            None if scheduler_age(state, now).is_none_or(|age| age <= FAIR_MAX_WAIT) => (
+                format!(
+                    "lane {lane} not offered a turn yet: the lanes have run {} day(s), and every \
+                     lane is offered within {} days",
+                    scheduler_age(state, now).map_or(0, |a| a / DAY),
+                    FAIR_MAX_WAIT / DAY
+                ),
+                false,
+            ),
+            None => (
+                format!(
+                    "SILENT: lane {lane} has had no turn in this run (the scheduler never offered \
+                     it, or the rule {owner} runs inside another step that writes no note)"
+                ),
+                true,
+            ),
+        },
+    })
+}
+
+/// How long the lanes have been offered turns in this run: from the earliest turn (or the first
+/// hour the fairness saw a lane waiting) to `now`; None before any; pure.
+fn scheduler_age(state: &State, now: GameHour) -> Option<GameHour> {
+    state
+        .sched
+        .turns
+        .values()
+        .chain(state.sched.fair_seen.values())
+        .min()
+        .map(|first| now.saturating_sub(*first))
 }
 
 /// What the research and focus stages saw this tick (the digest lines).
@@ -835,10 +1421,21 @@ struct Stages {
     /// Game hour since which a research slot (0) or the focus slot (1) the plan's lists own has
     /// been seen empty at the end of a run; None while it is busy.
     owned_empty_since: [Option<GameHour>; 2],
+    /// Starts of a focus that failed in a row on the GUI path (not refused by the game: the
+    /// detail window did not open, a torn read). At FOCUS_GUI_FAILS the key goes behind every
+    /// other startable key, so one focus the mouse cannot reach never leaves the slot empty
+    /// (t1939n, 27 Nov 2026: GER_autonomy_in_the_kriegsschulen failed six times with
+    /// focus_detail_not_opened and no focus ran for 81 days).
+    focus_gui_fails: HashMap<String, u32>,
+    /// Focuses a missed checkpoint needs (`focus_completed:` rows of its `must`), started ahead of
+    /// the path until done: the plan's "revise" for a focus is the focus lane's order.
+    focus_urgent: Vec<String>,
 }
 
 /// Refused focuses one tick may open (each look costs seconds of the input lane).
 const FOCUS_PROBES_PER_TICK: u32 = 2;
+/// GUI failures in a row after which a focus goes behind the other startable ones.
+const FOCUS_GUI_FAILS: u32 = 2;
 /// A focus refused again waits `2^n` times the blocked window, up to this many doublings.
 const FOCUS_REFUSAL_DOUBLINGS: u32 = 3;
 /// Skip window in game hours: `skip_hours.<key>` of the plan, else `default`.
@@ -962,6 +1559,7 @@ impl Default for State {
             op_acting: false,
             op_events_now: false,
             op_notes: BTreeMap::new(),
+            slow_reads: SlowCache::new(),
         }
     }
 }
@@ -1438,6 +2036,62 @@ impl State {
             self.last_ok = Some(false);
             return Ok((false, why));
         }
+        // One lane per object in a tick: an object another lane ordered in this tick waits for
+        // the next tick (it reads that order's effect then), so two lanes never act on the same
+        // army, wing, line or slot in one tick. Not a failure: the ledger does not count it.
+        let lane = self.sched.cur_lane;
+        if !lane.is_empty() {
+            // the same order a turn earlier in this tick already sent is not sent again (a lane
+            // offered again while it sends orders by command, or two lanes deciding alike)
+            let seq = self.sched.turn_seq;
+            if self.sched.sent.get(&signature).is_some_and(|at| *at != seq) {
+                self.sched.deferred = true;
+                self.last_ok = Some(false);
+                return Ok((
+                    false,
+                    "deferred: the same order was sent in this tick already".to_string(),
+                ));
+            }
+            self.sched.sent.insert(signature.clone(), seq);
+            let keys = claim_keys(name, &args);
+            let taken = keys.iter().find_map(|k| {
+                self.sched
+                    .claims
+                    .get(k)
+                    .filter(|owner| **owner != lane)
+                    .map(|owner| (k.clone(), *owner))
+            });
+            if let Some((key, owner)) = taken {
+                self.sched.deferred = true;
+                self.last_ok = Some(false);
+                return Ok((
+                    false,
+                    format!(
+                        "deferred: {key} was ordered by lane {owner} in this tick; offered again \
+                         next tick"
+                    ),
+                ));
+            }
+            for key in keys {
+                self.sched.claims.entry(key).or_insert(lane);
+            }
+        }
+        // THE WAR'S TURN BY COMMAND ALONE (see `Sched::input_yield`): while the lanes are owed the
+        // input, the war is still offered in the tick; its orders by the game's own command go now
+        // (milliseconds), an order whose tool needed the input last time waits for the war's next
+        // input tick. Not a failure: the ledger does not count it.
+        if self.sched.input_yield && tool_last_input(name) == Some(true) {
+            self.sched.deferred = true;
+            self.sched.yielded += 1;
+            self.last_ok = Some(false);
+            return Ok((
+                false,
+                "deferred: the lanes have this tick's input; the order goes in the war's next \
+                 input turn"
+                    .to_string(),
+            ));
+        }
+        self.sched.acts_sent += 1;
         let clock = self.clock;
         if war_order(name) && self.war_bursting {
             if let Some(army) = args["army"].as_str().filter(|a| !a.is_empty()) {
@@ -1830,7 +2484,23 @@ impl State {
                             .collect();
                         Ok((false, format!("Diverged: drawn to {}", to.join(" "))))
                     }
-                    "NotApplied" | "Diverged" => Ok((false, status)),
+                    // a tool's own refusal before input names its code and message in the
+                    // receipt: the rule reads them after the status (the officer corps price,
+                    // g96a 28 Nov 2026: "NotApplied" alone hid "costs 20 army experience")
+                    "NotApplied" | "Diverged" => {
+                        let detail = &body["receipt"]["detail"];
+                        Ok((
+                            false,
+                            match detail["refused"].as_str() {
+                                Some(code) => {
+                                    let msg: String =
+                                        text(&detail["message"]).chars().take(160).collect();
+                                    format!("{status}: {code}: {msg}")
+                                }
+                                None => status,
+                            },
+                        ))
+                    }
                     _ => Err(Error::new(
                         "action_uncertain",
                         format!("{name} returned no terminal receipt; settle request {} before new input", args["request_id"]),
@@ -1839,6 +2509,71 @@ impl State {
             }
         }
     }
+}
+
+/// The objects an order acts on, for the per-tick claim (see `State::act`); pure. An army, a
+/// wing, a fleet, a division, an event, a decision, a focus, a template, a design company or an
+/// operative by its name or id; a production line, an equipment, a slot, a seat or a state
+/// within the order's own family (a research slot is not a law seat).
+fn claim_keys(name: &str, args: &Value) -> Vec<String> {
+    let family = name
+        .strip_prefix("hoi4_")
+        .unwrap_or(name)
+        .split('_')
+        .next()
+        .unwrap_or("");
+    let scalar = |v: &Value| match v {
+        Value::String(s) if !s.is_empty() => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    };
+    let mut out = Vec::new();
+    for (field, kind) in [
+        ("army", "army"),
+        ("wing", "wing"),
+        ("fleet", "fleet"),
+        ("task_force", "fleet"),
+        ("division", "division"),
+        ("event", "event"),
+        ("decision", "decision"),
+        ("focus", "focus"),
+        ("template", "template"),
+        ("organisation", "mio"),
+        ("organization", "mio"),
+        ("operative", "operative"),
+    ] {
+        if let Some(v) = args.get(field).and_then(scalar) {
+            out.push(format!("{kind}:{v}"));
+        }
+    }
+    for (field, kind) in [
+        ("armies", "army"),
+        ("wings", "wing"),
+        ("divisions", "division"),
+        ("task_forces", "fleet"),
+        ("fleets", "fleet"),
+    ] {
+        for v in args
+            .get(field)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(v) = scalar(v) {
+                out.push(format!("{kind}:{v}"));
+            }
+        }
+    }
+    for field in ["line", "equipment", "state_id"] {
+        if let Some(v) = args.get(field).and_then(scalar) {
+            out.push(format!("{family}:{field}:{v}"));
+        }
+    }
+    if let Some(slot) = args.get("slot").and_then(scalar) {
+        let seat = args.get("category").and_then(scalar).unwrap_or_default();
+        out.push(format!("{family}:slot:{seat}:{slot}"));
+    }
+    out
 }
 
 fn text(v: &Value) -> &str {
@@ -1895,6 +2630,122 @@ fn strings(v: &Value, key: &str) -> Vec<String> {
 
 /// One pass over the plan: the first thing that can be done is done.
 pub fn tick(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Tick> {
+    // every call of the tick through the cost meter (see `Metered`, `lanes_turns`); the slow
+    // panel reads answered from the game hour's or day's first answer (see `SlowReads`) outside
+    // it, so an answer kept costs no input
+    let metered = Metered { inner: tools };
+    let cache = std::cell::RefCell::new(std::mem::take(&mut state.slow_reads));
+    let slow = SlowReads {
+        inner: &metered,
+        cache: &cache,
+        now,
+        // at war and while an operation runs (the ticks the war's turn waits on); in peace every
+        // read is fresh
+        on: plan["scheduler"]["slow_reads"] != json!(false)
+            && (state.war_active
+                || plan_operation::executing_any(state)
+                || plan_operation::preparing(state)),
+    };
+    let out = tick_inner(state, &slow, plan, lease, now);
+    state.slow_reads = cache.into_inner();
+    out
+}
+
+/// The slow reads through a panel (seconds of input each) and how long one answer stands: the
+/// politics view's options of a seat (0.9-10 s a read; the power and the picks change with an
+/// order of the lane, which forgets them), the air map's enemy superiority probe (4.4-13.6 s), and
+/// the diplomacy view's actions of a country (1.6-8.8 s; a declaration's readiness matters by the
+/// hour, so it stands a quarter day). w101b/w101c (28 Nov 2026): 26 politics reads (26 s), 10
+/// probes (41 s) and 18 diplomacy reads (72 s) in the war's ticks.
+const SLOW_READS: [(&str, GameHour); 3] = [
+    ("hoi4_politics_options", DAY),
+    ("hoi4_air_region_probe", DAY),
+    ("hoi4_diplomacy", DAY / 4),
+];
+
+/// The orders that change what a slow read shows (tool prefix -> the reads they forget).
+const SLOW_FORGET: [(&str, &str); 6] = [
+    ("hoi4_politics_", "hoi4_politics_options"),
+    ("hoi4_event_choose", "hoi4_politics_options"),
+    ("hoi4_decision_take", "hoi4_politics_options"),
+    ("hoi4_air_", "hoi4_air_region_probe"),
+    ("hoi4_diplomacy_act", "hoi4_diplomacy"),
+    ("hoi4_event_choose", "hoi4_diplomacy"),
+];
+
+/// (tool, arguments without the lease) -> (the hour read, the answer).
+type SlowCache = HashMap<String, (GameHour, Value)>;
+
+/// The executor's slow panel reads (SLOW_READS), answered from their first answer while it
+/// stands: until the end of the game day it was read in (a quarter day for the diplomacy view),
+/// or until an order that changes it (SLOW_FORGET). A failed read is not kept. `scheduler.
+/// slow_reads: false` reads every time.
+struct SlowReads<'a> {
+    inner: &'a dyn Tools,
+    cache: &'a std::cell::RefCell<SlowCache>,
+    now: GameHour,
+    on: bool,
+}
+
+/// The cache key of a slow read (None: not a slow read); pure.
+fn slow_key(name: &str, args: &Value) -> Option<(String, GameHour)> {
+    let (_, stands) = SLOW_READS.iter().find(|(n, _)| *n == name)?;
+    if args.get("request_id").is_some() {
+        return None;
+    }
+    let mut args = args.clone();
+    if let Some(o) = args.as_object_mut() {
+        o.remove("lease_token");
+    }
+    Some((format!("{name} {args}"), *stands))
+}
+
+/// Whether an answer read at `at` still stands at `now` for a read that stands `stands` hours:
+/// within the same span of `stands` hours of the game calendar; pure.
+fn slow_fresh(at: GameHour, now: GameHour, stands: GameHour) -> bool {
+    let stands = stands.max(1);
+    now >= at && now.div_euclid(stands) == at.div_euclid(stands)
+}
+
+impl Tools for SlowReads<'_> {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        if args.get("request_id").is_some() {
+            let forget: Vec<&str> = SLOW_FORGET
+                .iter()
+                .filter(|(p, _)| name.starts_with(p))
+                .map(|(_, r)| *r)
+                .collect();
+            if !forget.is_empty() {
+                self.cache
+                    .borrow_mut()
+                    .retain(|k, _| !forget.iter().any(|r| k.split(' ').next() == Some(*r)));
+            }
+            return self.inner.call(name, args);
+        }
+        let Some((key, stands)) = slow_key(name, args).filter(|_| self.on) else {
+            return self.inner.call(name, args);
+        };
+        if let Some((at, v)) = self.cache.borrow().get(&key) {
+            if slow_fresh(*at, self.now, stands) {
+                return Ok(v.clone());
+            }
+        }
+        let out = self.inner.call(name, args)?;
+        let now = self.now;
+        let mut cache = self.cache.borrow_mut();
+        cache.retain(|_, (at, _)| now >= *at && now - *at < 2 * DAY);
+        cache.insert(key, (now, out.clone()));
+        Ok(out)
+    }
+}
+
+fn tick_inner(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,
@@ -2088,15 +2939,164 @@ pub fn tick(
         }
         waiting.get_or_insert((key, new));
     }
-    if let Some((event, new)) = waiting {
-        return Ok(Tick::Waiting { event, new });
+    // A new event waiting for the model ends the run so the model sees it. Once seen, the wait
+    // holds the event only, never the other lanes: the game runs on under an open event, and a
+    // step whose click an event covers is refused as event_covered and rests. Waiting blocked
+    // every lane for its patience and longer (dg86b, 27 Nov 2026: one tick in 14 game days while
+    // an unruled choice and two events covered by it waited; the pass never ran, political power
+    // and experience banked, nothing trained).
+    if let Some((event, true)) = waiting.as_ref() {
+        return Ok(Tick::Waiting {
+            event: event.clone(),
+            new: true,
+        });
     }
     // 1a. day 0, paused before the first unpause: free military factories to the starting lines
     // the plan keeps, before anything else (plan_manage.rs)
     if let Some(step) = plan_manage::day0_step(state, tools, plan, lease, now)? {
         return Ok(Tick::Acted(step));
     }
-    lanes_tick(state, tools, plan, lease, now)
+    match (lanes_turns(state, tools, plan, lease, now)?, waiting) {
+        (Tick::Nothing, Some((event, new))) => Ok(Tick::Waiting { event, new }),
+        (out, _) => Ok(out),
+    }
+}
+
+/// The wall time one tick may spend on turns that need no input (decisions over the snapshot and
+/// orders by command, milliseconds each) before it hands the input lane back.
+const TICK_BUDGET: Duration = Duration::from_secs(2);
+
+/// MANY LANES PER TICK. The scheduler's order (the speed rule, the fast lanes, the fairness, the
+/// setup layout, the declaration, the war, the issue lanes, the pass) is the order of urgency; a
+/// round of it ends at the first lane that acts. While the rounds need no input (their orders
+/// went by the game's own command, or nothing was sent) the next round follows in the same tick,
+/// each lane at most one turn a tick (one more while it keeps sending orders by command). The
+/// first round whose turn needed the input (a mouse order, a read through a panel: seconds, the
+/// window) ends the rounds: one input sequence a tick, the most urgent first. Then the sweep
+/// offers every lane whose last turn needed no input and that has had no turn in this tick, so a
+/// cheap lane never waits behind the mouse lanes' rotation (w92b, t1939o, 27 Nov 2026: one lane
+/// per tick, about two ticks a game day at war; a lane's turn came round every few weeks).
+/// `scheduler.many_lanes: false` keeps one acting lane a tick.
+fn lanes_turns(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Tick> {
+    state.sched.begin_tick(now);
+    trace_lanes(now, "tick");
+    let many = plan["scheduler"]["many_lanes"] != json!(false);
+    let started = std::time::Instant::now();
+    let turns_before = state.sched.lane_turn_count;
+    let inputs_before = input_calls();
+    // a bound on the rounds whatever the lanes do (each round turns at least one lane)
+    let most = lanes(plan, true).len() + lanes(plan, false).len() + FAST_LANES.len() * 2;
+    let mut lines: Vec<String> = Vec::new();
+    for _ in 0..most.max(1) {
+        let before = input_calls();
+        match lanes_tick(state, tools, plan, lease, now)? {
+            Tick::Acted(line) => {
+                lines.push(line);
+                let input = input_calls() != before;
+                if input || !many || started.elapsed() >= TICK_BUDGET {
+                    break;
+                }
+            }
+            _ => break,
+        }
+    }
+    if many && !state.sched.hold_sweep && in_process_orders() > 0 {
+        sweep(state, tools, plan, lease, now, &mut lines, started)?;
+    }
+    trace_lanes(
+        now,
+        &format!(
+            "tick end: {} turns, {} acted, input {}, {} ms",
+            state.sched.lane_turn_count - turns_before,
+            lines.len(),
+            if input_calls() != inputs_before {
+                "used"
+            } else {
+                "none"
+            },
+            started.elapsed().as_millis()
+        ),
+    );
+    if lines.is_empty() {
+        return Ok(Tick::Nothing);
+    }
+    let first = lines.remove(0);
+    state.sched.more = lines;
+    Ok(Tick::Acted(first))
+}
+
+/// The tick's sweep (see [`lanes_turns`]): the fast lanes and the pass's lanes whose last turn
+/// needed no input and that had no turn in this tick, in value order, until the tick's budget is
+/// spent. A swept lane whose turn needed the input after all (its work changed) ends the sweep;
+/// its next turns come through the scheduler's order. The pass's cursor stays where it is.
+fn sweep(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    lines: &mut Vec<String>,
+    started: std::time::Instant,
+) -> Result<()> {
+    let war_first = plan["war"].is_object()
+        && plan["war"]["enabled"] != json!(false)
+        && plan["war"]["first"] != json!(false);
+    let pass = lanes(plan, war_first);
+    let fast_lanes = FAST_LANES;
+    let fast = fast_lanes
+        .iter()
+        .map(|&(name, step)| (name, fast_key(name), step));
+    let rest = pass.iter().map(|&(name, step)| (name, name, step));
+    for (name, key, step) in fast.chain(rest) {
+        if started.elapsed() >= TICK_BUDGET {
+            break;
+        }
+        if state.sched.tick_turned.contains(key) || state.sched.lane_input.get(key) != Some(&false)
+        {
+            continue;
+        }
+        if lane_waits_for_attack(
+            name,
+            plan_operation::executing_any(state),
+            state.sched.turns.get(name).copied(),
+            now,
+        ) || opening_holds(state, tools, plan, name, now)
+            || (name.starts_with("air") && air_waits_for_war(state, tools, plan, now))
+        {
+            continue;
+        }
+        // a pass lane's turn counts when it opens, a fast lane's when it acts (as in their own
+        // turns)
+        if key == name {
+            state.sched.turns.insert(name, now);
+        }
+        state.last_ok = None;
+        let before = all_notes(state);
+        let at = std::time::Instant::now();
+        let opened = open_turn(state, key, now);
+        let result = step(state, tools, plan, lease, now)?;
+        let (result, input) = close_turn(state, key, opened, result);
+        // one turn in the sweep, whatever the turn sent
+        state.sched.tick_turned.insert(key);
+        state.round.timed(name, result.is_some(), at);
+        record_turn(state, name, result.as_ref(), &before, now);
+        if let Some(line) = result {
+            state.sched.turns.insert(name, now);
+            state.round.lane_acted(name, now);
+            trace_lanes(now, &format!("sweep {name} acted"));
+            lines.push(line);
+        }
+        if input {
+            break;
+        }
+    }
+    Ok(())
 }
 
 /// The pass scheduler (EVERY-TICK DESIGN). A pass offers every lane once, in value order; a lane
@@ -2115,11 +3115,67 @@ fn lanes_tick(
 ) -> Result<Tick> {
     // the management load (plan_speed.rs): the real seconds each action took, by game hour
     let started = std::time::Instant::now();
+    state.round.pace_at(now, started);
     let out = lanes_tick_inner(state, tools, plan, lease, now)?;
     if matches!(out, Tick::Acted(_)) {
         state.round.cost(now, started.elapsed().as_secs_f64());
     }
     Ok(out)
+}
+
+/// done-memory key: the last tick found nothing while a prepared operation's declaration is near.
+const DECLARING_IDLE: &str = "declidle";
+
+/// The longest a run waits after a tick with nothing to do (or an event the model may still
+/// answer) when the game clock does not move: the next tick comes with the next game hour (see
+/// [`wait_next_hour`]).
+const IDLE_WAIT: Duration = Duration::from_secs(12);
+/// How often the run reads the game clock while it waits for the next game hour.
+const CLOCK_POLL: Duration = Duration::from_millis(100);
+
+/// How long the run may wait after a tick with nothing to do: [`IDLE_WAIT`] for the next game
+/// hour, but one second while a declaration is near (the key `DECLARING_IDLE`, taken once), so the
+/// war goes out on its hour even in a paused or slow game.
+fn nothing_pause(state: &mut State) -> Duration {
+    if state.done.remove(DECLARING_IDLE).is_some() {
+        Duration::from_secs(1)
+    } else {
+        IDLE_WAIT
+    }
+}
+
+/// Waits until the game clock passes `hour` (read every [`CLOCK_POLL`] through the memory
+/// clock, no input), at most `most`: a tick with nothing to do comes back on the next game hour,
+/// not after a fixed sleep (t1939o, 27 Nov 2026: the twelve-second idle sleep is a game day at
+/// speed 2, and a declaration due at midnight went out at 21:00 the next day). Returns the
+/// clock's hour.
+fn wait_next_hour(
+    state: &mut State,
+    tools: &dyn Tools,
+    hour: GameHour,
+    most: Duration,
+) -> GameHour {
+    let until = std::time::Instant::now() + most;
+    loop {
+        let now = game_hour(state, tools);
+        if now > hour {
+            return now;
+        }
+        let left = until.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            return now;
+        }
+        crate::phase::sleep(left.min(CLOCK_POLL));
+    }
+}
+
+/// `HOI4_TRACE_LANES=1`: one stderr line per scheduler decision (`[lanes] HOUR WHAT`), to see
+/// which branch takes the ticks in a live run; off by default.
+fn trace_lanes(now: GameHour, what: &str) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ON.get_or_init(|| std::env::var_os("HOI4_TRACE_LANES").is_some_and(|v| v == "1")) {
+        eprintln!("[lanes] {now} {what}");
+    }
 }
 
 fn lanes_tick_inner(
@@ -2133,24 +3189,54 @@ fn lanes_tick_inner(
     let war_first = war_on && plan["war"]["first"] != json!(false);
     state.sched.war_ran = war_first;
     let lanes = lanes(plan, war_first);
+    state.sched.pass_names = lanes.iter().map(|(n, _)| *n).collect();
     // the speed rule ahead of the war lane: it reads every 6 game hours and acts only when the
     // phase changes, and behind a war lane that acts every tick it never ran once an operation
     // prepared (w46f1, 23 Nov 2026: its last read on the third day, the whole war at speed 3)
     state.last_ok = None;
-    if let Some(line) = plan_speed::step(state, tools, plan, lease, now)? {
-        state.sched.turns.insert("speed", now);
-        return Ok(Tick::Acted(line));
+    if state.sched.tick_turned.insert("speed") {
+        if let Some(line) = plan_speed::step(state, tools, plan, lease, now)? {
+            state.sched.turns.insert("speed", now);
+            trace_lanes(now, "speed");
+            return Ok(Tick::Acted(line));
+        }
+    }
+    // the fast lanes before the setup layout and the war's turn (see `fast_lanes_turn`), unless
+    // a dated declaration is due: its orders go out on the date
+    let due = war_first
+        && plan_operation::awaiting_war(state)
+        && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD);
+    state.sched.hold_sweep |= due;
+    state.sched.tick_no += 1;
+    let op_war = plan_operation::executing_any(state)
+        || (state.war_active && plan_operation::active(state))
+        || plan_operation::preparing(state);
+    // THE OPERATION LEADS (engineer 95): while an operation prepares or executes, the war's turn
+    // comes before the fast lanes and the fairness, so its mouse work is first in urgency and its
+    // orders by command are never left behind a fast lane's mouse order, which ends the tick's
+    // rounds (w92c, 28 Nov 2026: 11 operation turns in 33 war days)
+    let war_leads = war_first && op_war && !due;
+    if !due && !war_leads {
+        if let Some(line) =
+            lanes_first_turns(state, tools, plan, lease, now, &lanes, war_first && op_war)?
+        {
+            return Ok(Tick::Acted(line));
+        }
     }
     // Before the war, a role an operation names that has no army takes the tick ahead of every
     // lane, the paused first day included (t1939e-g, 24 Nov 2026: the layout behind the lanes
     // formed its first role on day 10-20 of the 1939 bookmark and the war began without them).
     if war_first
         && !state.war_active
+        && !state.sched.tick_turned.contains("layoutfirst")
         && !state.skipped(now, "layoutfirst", "all")
         && operation_roles_missing(state, plan)
     {
+        state.sched.tick_turned.insert("layoutfirst");
+        let before = input_calls();
         if let Some(line) = layout_step(state, tools, plan, lease, now)? {
-            state.round.war_acted(now);
+            state.round.war_acted(now, input_calls() != before);
+            trace_lanes(now, "layoutfirst");
             return Ok(Tick::Acted(line));
         }
         state.skip(now, "layoutfirst", "all", 6);
@@ -2165,20 +3251,21 @@ fn lanes_tick_inner(
     // declaration waits on it, and the ticks it gave to focus and production put the war 4-9
     // days after the plan's day (rd2-rs1, 19 Nov 2026). Once ready the lanes alternate again,
     // so a campaign's months-long prepare costs the economy only the days of its drawing.
-    let op_war = plan_operation::executing_any(state)
-        || (state.war_active && plan_operation::active(state))
-        || plan_operation::preparing(state);
     // A prepared operation waits for its war: the declaration goes first in every tick it is
     // due, ahead of any lane (rs1-rs6, 19 Nov 2026: the prepare read back by 30 August and the
     // declaration came on 7-9 September behind air batches and economy ticks).
     if war_first
+        && state.sched.tick_turned.insert("declare")
         && (plan_operation::awaiting_war(state)
             || state.done.contains_key("declnext")
             || (plan_operation::executing_any(state)
                 && plan_affairs::declaration_near(state, tools, plan, now, 0)))
     {
+        state.sched.war_tick = Some(state.sched.tick_no);
+        let before = input_calls();
         if let Some(line) = declare_first(state, tools, plan, lease, now)? {
-            state.round.war_acted(now);
+            state.round.war_acted(now, input_calls() != before);
+            trace_lanes(now, "declare_first");
             return Ok(Tick::Acted(line));
         }
     }
@@ -2194,55 +3281,63 @@ fn lanes_tick_inner(
     // lanes get a tick at the latest LANE_MAX_WAIT game hours after their last one. A lane tick
     // that finds nothing hands the tick back to the war (below), so the share costs the war
     // nothing when the economy is quiet.
+    // THE WAR STEP EVERY TICK (engineer 105): while an operation prepares or executes the war is
+    // offered in every tick, whatever the lanes are owed. When they are owed the input (WAR_SHARE
+    // input turns in a row, or LANE_MAX_WAIT since their last tick) the war's turn runs by command
+    // alone (`war_lane_turn`): its orders by the game's own command go now, its mouse orders wait
+    // for its next input tick, and the lanes take this tick's input. With a tick of 8-10 s at war
+    // (0.7-0.8 game days) the lanes were owed after every input tick, and the war had at best every
+    // other tick (w101b/w101c/p101b, 28 Nov 2026: 0.27-0.43 acting war ticks a war day, gaps of
+    // 187-353 game hours).
+    let owed = state.round.lanes_owed(now);
     let war_turn = war_first
         && (declaring
-            || (!state.round.lanes_owed(now)
-                && (!state.round.war_last
-                    || op_war
-                    || plan["scheduler"]["war_every_tick"] == json!(true))));
+            || op_war
+            || (!owed
+                && (!state.round.war_last || plan["scheduler"]["war_every_tick"] == json!(true))));
     if war_turn {
-        if let Some(line) = war_lane(state, tools, plan, lease, now)? {
-            state.round.war_acted(now);
+        let by_command_only = op_war && owed && !declaring && !due;
+        if let Some(line) = war_lane_turn(state, tools, plan, lease, now, by_command_only)? {
+            return Ok(Tick::Acted(line));
+        }
+    }
+    // the operation led: the fast lanes and the fairness come right after its turn (a tick the
+    // lanes are owed reaches them here too)
+    if war_leads && !declaring {
+        if let Some(line) = lanes_first_turns(state, tools, plan, lease, now, &lanes, true)? {
             return Ok(Tick::Acted(line));
         }
     }
     if declaring {
+        state.sched.hold_sweep = true;
         // nothing due: the declaration's own read of the target's diplomacy view now, not on
         // its day
-        if plan_affairs::declaration_preread(state, tools, plan, lease, now) {
+        if state.sched.tick_turned.insert("preread")
+            && plan_affairs::declaration_preread(state, tools, plan, lease, now)
+        {
             return Ok(Tick::Acted(
                 "diplomacy view read before the declaration".into(),
             ));
         }
+        trace_lanes(now, "declaring: nothing");
+        // the run looks again soon, not after the idle sleep: twelve real seconds are a game day
+        // at speed 2, and the declaration due at midnight went out at 21:00 the next day
+        // (t1939o, 27 Nov 2026: "declaring: nothing" at 31 Aug 21:00, the next tick 1 Sep 21:00)
+        state.done.insert(DECLARING_IDLE.to_string(), now);
         return Ok(Tick::Nothing);
     }
     state.round.war_last = false;
     state.round.lanes_turn(now);
-    // A free research slot and a free focus are checked every tick (cheap reads, each lost day
-    // is a day of the slot): a pass of slow GUI orders left the focus idle for 14 game days
-    // (g17j 1936.4). They act before the pass resumes.
-    for (name, step) in FAST_LANES {
-        state.last_ok = None;
-        let result = step(state, tools, plan, lease, now)?;
-        // the fast lanes answer the issues they own too (s7m, 24 Nov 2026: the focus issues
-        // escalated with no lane outcome while the lesson held the refused focus): an order
-        // passed or was refused, or the lane's stage says what it waits for
-        let said = match (&result, state.last_ok) {
-            (Some(line), Some(false)) => Some(("refused", line.clone())),
-            (Some(line), _) => Some(("acted", line.clone())),
-            (None, _) if name == "focus" => state
-                .stages
-                .focus
-                .as_ref()
-                .map(|(t, _)| ("waiting", t.clone())),
-            (None, _) => None,
-        };
-        if let Some((outcome, reason)) = said {
-            state.issues.record_outcome(name, outcome, &reason, now);
-        }
-        if let Some(line) = result {
-            state.sched.turns.insert(name, now);
-            state.round.lane_acted(name, now);
+    // The manage reads (the failure ledger's wake, the game's alert row, the omissions the player
+    // and the monitor see) never act and keep their own once-a-day timer: they run on every lanes
+    // tick, not only at the pass's turn. In the pass alone they ran on the paused day-one setup
+    // and then never (cmph1, cmps1, 27 Nov 2026: the omission feed froze at 1939.08.21 in one
+    // leg and stayed empty all war in the other, so 2.7 M idle manpower, 480 political power and
+    // an army group without a field marshal reached no one).
+    plan_manage::daily_reads(state, tools, plan, now);
+    // (ran already ahead of the war's turn unless a declaration was due: once a tick)
+    if due {
+        if let Some(line) = fast_lanes_turn(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(line));
         }
     }
@@ -2250,15 +3345,34 @@ fn lanes_tick_inner(
     // once a game day (`scheduler.issues_due: false` turns it off). On by default: the monitor's
     // issues are rule findings with a deadline, and the offer costs nothing when the lane has
     // nothing to do (it hands the tick back at once).
-    if plan["scheduler"]["issues_due"] != json!(false) {
-        if let Some(line) = issue_lanes(state, tools, plan, lease, now, &lanes)? {
+    // At most one lanes tick in a row goes to them: the lanes tick after an issue lane acted
+    // belongs to the pass. With a war lane taking three ticks of four and a game day of about
+    // five real seconds at speed 3, the issue lanes (each once a game day) took every lanes tick
+    // and the routine pass (decisions, training, officer corps, the manage reads) never ran in
+    // two 60-day legs (cmph1, cmps1, 27 Nov 2026: hoi4_decisions_list and hoi4_train never called).
+    if plan["scheduler"]["issues_due"] != json!(false) && !state.round.issue_last {
+        if let Some(line) = issue_lanes(
+            state,
+            tools,
+            plan,
+            lease,
+            now,
+            &issue_owners(plan, war_first),
+        )? {
+            trace_lanes(
+                now,
+                &format!("issue: {}", line.chars().take(60).collect::<String>()),
+            );
+            state.round.issue_last = true;
             return Ok(Tick::Acted(line));
         }
     }
+    state.round.issue_last = false;
     let mut restarted = false;
     loop {
         if state.round.cursor >= lanes.len() {
             let acted = state.round.end_pass(now);
+            trace_lanes(now, &format!("pass end (acted {acted})"));
             if !acted || restarted {
                 break;
             }
@@ -2269,6 +3383,10 @@ fn lanes_tick_inner(
         }
         let (name, step) = lanes[state.round.cursor];
         state.round.cursor += 1;
+        // a lane the sweep or an earlier round of this tick already offered
+        if state.sched.tick_turned.contains(name) {
+            continue;
+        }
         // slow GUI lanes that do not decide a running war wait while an operation's attack
         // executes (its orders need the input; a design company's monthly trait keeps a few
         // weeks). Value judgement: they do not wait for the whole war. Deferred for every war day
@@ -2280,30 +3398,211 @@ fn lanes_tick_inner(
             plan_operation::executing_any(state),
             state.sched.turns.get(name).copied(),
             now,
-        ) {
+        ) || opening_holds(state, tools, plan, name, now)
+        {
+            trace_lanes(now, &format!("pass {name} held"));
             continue;
         }
         // the air lanes wait while a prepared operation's declaration is near (see
         // `air_waits_for_war`)
         if name.starts_with("air") && air_waits_for_war(state, tools, plan, now) {
+            trace_lanes(now, &format!("pass {name} air waits"));
             continue;
         }
         state.sched.turns.insert(name, now);
         state.last_ok = None;
-        if let Some(line) = step(state, tools, plan, lease, now)? {
+        let before = all_notes(state);
+        let started = std::time::Instant::now();
+        let opened = open_turn(state, name, now);
+        let result = step(state, tools, plan, lease, now)?;
+        let (result, _) = close_turn(state, name, opened, result);
+        state.round.timed(name, result.is_some(), started);
+        record_turn(state, name, result.as_ref(), &before, now);
+        if let Some(line) = result {
             state.round.acted.push(name);
             state.round.lane_acted(name, now);
+            trace_lanes(now, &format!("pass {name} acted"));
             return Ok(Tick::Acted(line));
         }
+        trace_lanes(now, &format!("pass {name} quiet"));
     }
     // every lane is quiet: the war takes the turn it left to them
     if war_first && !war_turn {
-        if let Some(line) = war_lane(state, tools, plan, lease, now)? {
-            state.round.war_acted(now);
+        if let Some(line) = war_lane_turn(state, tools, plan, lease, now, false)? {
             return Ok(Tick::Acted(line));
         }
     }
     Ok(Tick::Nothing)
+}
+
+/// The fast lanes, then the fairness (see [`fast_lanes_turn`], [`overdue_turns`]); a turn of
+/// theirs that needed the input is the lanes' tick (`Round::lanes_turn`): the lanes are no longer
+/// owed, so the war's next turn has the input again. They returned before the pass's own
+/// `lanes_turn`, and the lanes stayed owed tick after tick while the war waited (p101b, 28 Nov
+/// 2026: five ticks of fast lanes and fairness, 353 game hours without a war turn).
+fn lanes_first_turns(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    lanes: &[Lane],
+    war_owed: bool,
+) -> Result<Option<String>> {
+    let before = input_calls();
+    let mut out = fast_lanes_turn(state, tools, plan, lease, now)?;
+    if out.is_none() && fair_turn_open(&state.sched, war_owed, now) {
+        out = overdue_turns(state, tools, plan, lease, now, lanes)?;
+    }
+    if out.is_some() && input_calls() != before {
+        state.round.war_last = false;
+        state.round.lanes_turn(now);
+    }
+    Ok(out)
+}
+
+/// One offer of the war's turn (the scheduler's `war_lane` with its bookkeeping): the watchdog
+/// counts the offer (and what ran since the last one), `by_command_only` defers the turn's
+/// orders that need the input (see `Sched::input_yield`). A turn whose every order was deferred
+/// gives the tick back (None). Its orders bounded by game hours (see [`war_burst_for`]).
+fn war_lane_turn(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    by_command_only: bool,
+) -> Result<Option<String>> {
+    // one war turn a tick (again only while its orders go by command: see `close_turn`)
+    if state.sched.tick_turned.contains("war") {
+        return Ok(None);
+    }
+    state.sched.war_tick = Some(state.sched.tick_no);
+    let executing = plan_operation::executing_any(state);
+    let limit = plan["scheduler"]["war_idle_hours"]
+        .as_i64()
+        .filter(|h| *h > 0)
+        .unwrap_or(WAR_IDLE_HOURS);
+    for (lane, secs) in std::mem::take(&mut state.round.since_war) {
+        state.sched.war_watch.spent(lane, secs);
+    }
+    state.sched.war_watch.offered(now, executing, limit);
+    let before = input_calls();
+    let sent = state.sched.acts_sent;
+    let yielded = state.sched.yielded;
+    let started = std::time::Instant::now();
+    state.sched.input_yield = by_command_only;
+    let out = war_lane(state, tools, plan, lease, now);
+    state.sched.input_yield = false;
+    let line = out?;
+    state
+        .sched
+        .war_watch
+        .spent("war turn", started.elapsed().as_secs_f64());
+    let deferred = state.sched.yielded - yielded;
+    if by_command_only && deferred > 0 {
+        trace_lanes(
+            now,
+            &format!("war_turn by command: {deferred} order(s) wait for its input turn"),
+        );
+    }
+    // every order of the turn waited for the input: nothing was done, the lanes have the tick
+    let line = line.filter(|_| !(by_command_only && state.sched.acts_sent == sent && deferred > 0));
+    let Some(line) = line else {
+        return Ok(None);
+    };
+    state.round.war_acted(now, input_calls() != before);
+    if executing {
+        state.sched.war_watch.acted(now);
+    }
+    trace_lanes(now, "war_turn");
+    Ok(Some(line))
+}
+
+/// Every pass lane gets a turn within [`FAIR_MAX_WAIT`] game days: one whose last turn (or, never
+/// offered, the hour this check first saw it) is older is offered ahead of the setup layout, the
+/// war's turn, the issue lanes and the pass (t1939o, 27 Nov 2026: about two ticks a game day, the
+/// war block three of four, and decisions, resources and intelligence had no turn in 56 days
+/// while their alerts stayed open). The oldest wait goes first; the first that acts takes the
+/// tick; quiet ones are offered on until [`FAIR_BUDGET`] of wall time is spent. Not while a
+/// dated declaration is due, and a lane the opening or the air's declaration wait holds stays
+/// held. The turn counts as the lane's turn (`turns`, the gate's turns per lane).
+fn overdue_turns(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    lanes: &[Lane],
+) -> Result<Option<String>> {
+    if plan["scheduler"]["fair_turns"] == json!(false) {
+        return Ok(None);
+    }
+    let mut due: Vec<(GameHour, usize)> = Vec::new();
+    for (i, (name, _)) in lanes.iter().enumerate() {
+        let since = match state.sched.turns.get(name) {
+            Some(at) => *at,
+            None => *state.sched.fair_seen.entry(name).or_insert(now),
+        };
+        if now.saturating_sub(since) > FAIR_MAX_WAIT {
+            due.push((since, i));
+        }
+    }
+    due.sort();
+    let started = std::time::Instant::now();
+    for (_, i) in due {
+        if started.elapsed() > FAIR_BUDGET {
+            break;
+        }
+        let (name, step) = lanes[i];
+        if state.sched.tick_turned.contains(name)
+            || lane_waits_for_attack(
+                name,
+                plan_operation::executing_any(state),
+                state.sched.turns.get(name).copied(),
+                now,
+            )
+            || opening_holds(state, tools, plan, name, now)
+            || (name.starts_with("air") && air_waits_for_war(state, tools, plan, now))
+        {
+            continue;
+        }
+        state.sched.turns.insert(name, now);
+        state.last_ok = None;
+        let before = all_notes(state);
+        let at = std::time::Instant::now();
+        let opened = open_turn(state, name, now);
+        let result = step(state, tools, plan, lease, now)?;
+        let (result, _) = close_turn(state, name, opened, result);
+        state.round.timed(name, result.is_some(), at);
+        record_turn(state, name, result.as_ref(), &before, now);
+        if let Some(line) = result {
+            state.round.lane_acted(name, now);
+            state.sched.fair_tick = Some((state.sched.tick_no, now));
+            trace_lanes(now, &format!("fair {name} acted"));
+            return Ok(Some(line));
+        }
+        trace_lanes(now, &format!("fair {name} quiet"));
+    }
+    Ok(None)
+}
+
+/// Whether this tick may go to an overdue lane (see [`overdue_turns`]); pure. Never two fairness
+/// ticks in a row, so the war, the issue lanes and the pass keep at least every other tick
+/// whatever the number of lanes waiting; and while an operation prepares or executes (`war_owed`)
+/// none until the war has been offered a tick since the last one (w92b, 27 Nov 2026: with about
+/// two ticks a game day and some 48 lanes due every 3 days the fairness took nearly every tick,
+/// the war step had one turn in 69 days, op_poland never ended after Poland capitulated and the
+/// West never prepared). The war's precedence lapses after [`FAIR_MAX_WAIT`] without an offer, so
+/// a war lane the scheduler never reaches cannot hold the lanes either.
+fn fair_turn_open(sched: &Sched, war_owed: bool, now: GameHour) -> bool {
+    let Some((tick, at)) = sched.fair_tick else {
+        return true;
+    };
+    if tick + 1 >= sched.tick_no {
+        return false;
+    }
+    !war_owed || sched.war_tick.is_some_and(|w| w > tick) || now.saturating_sub(at) > FAIR_MAX_WAIT
 }
 
 /// The lanes the run monitor's open issues name, offered ahead of the pass (see `plan_issues`).
@@ -2320,27 +3619,37 @@ fn issue_lanes(
         let Some(&(name, step)) = lanes.iter().find(|(n, _)| *n == lane) else {
             continue;
         };
-        if lane_waits_for_attack(
-            name,
-            plan_operation::executing_any(state),
-            state.sched.turns.get(name).copied(),
-            now,
-        ) || (name.starts_with("air") && air_waits_for_war(state, tools, plan, now))
+        if state.sched.tick_turned.contains(name)
+            || lane_waits_for_attack(
+                name,
+                plan_operation::executing_any(state),
+                state.sched.turns.get(name).copied(),
+                now,
+            )
+            || (name.starts_with("air") && air_waits_for_war(state, tools, plan, now))
+            || opening_holds(state, tools, plan, name, now)
             || !state.issues.take_turn(name, now)
         {
             continue;
         }
         state.sched.turns.insert(name, now);
         state.last_ok = None;
-        let before = plan_manage::notes_snapshot(state);
+        let all_before = all_notes(state);
+        let started = std::time::Instant::now();
+        let opened = open_turn(state, name, now);
         let result = step(state, tools, plan, lease, now)?;
+        let (result, _) = close_turn(state, name, opened, result);
+        state.round.timed(name, result.is_some(), started);
+        record_turn(state, name, result.as_ref(), &all_before, now);
         // the lane's typed answer for the issues it owns (docs/MONITORING.md): an order passed,
         // was refused, or the lane wrote why it waits; a lane that neither acts nor says why has
         // no rule for the issue
-        let changed: Vec<String> = plan_manage::notes_snapshot(state)
+        // every rule family's notes, not the manage rules' alone (the navy, intelligence and MIO
+        // rules write theirs elsewhere: their answers read "found nothing to do")
+        let changed: Vec<String> = all_notes(state)
             .into_iter()
-            .filter(|(k, v)| before.get(k) != Some(v))
-            .map(|(k, v)| format!("{k}: {v}"))
+            .filter(|(k, v)| all_before.get(k) != Some(v))
+            .map(|(k, v)| format!("{}: {v}", k.split_once(':').map_or(k.as_str(), |(_, r)| r)))
             .collect();
         let (outcome, reason) = match (&result, state.last_ok) {
             (Some(line), Some(true)) => ("acted", line.clone()),
@@ -2365,6 +3674,22 @@ fn issue_lanes(
 /// the war step), then the war, operations and their air; a failed hold order does not end the
 /// turn (the war step behind it still acts).
 fn war_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    // one war turn a tick (its burst gives each army one order a tick)
+    if state.sched.tick_turned.contains("war") {
+        return Ok(None);
+    }
+    let opened = open_turn(state, "war", now);
+    let result = war_lane_orders(state, tools, plan, lease, now)?;
+    Ok(close_turn(state, "war", opened, result).0)
+}
+
+fn war_lane_orders(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,
@@ -2792,8 +4117,46 @@ fn research_lane(
     Ok(None)
 }
 
-/// The national focus (a lane): the next focus of the path, else the fallback.
+/// The national focus (a lane): the next focus of the path, else the fallback. Its stage line
+/// is also the lane's note, so the no_national_focus row quotes it (t1939n, 27 Nov 2026: the
+/// line lived in the digest alone and the row read "no reason given" for 81 days).
 fn focus_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let out = focus_lane_inner(state, tools, plan, lease, now);
+    if let Some((line, _)) = state.stages.focus.clone() {
+        plan_manage::note(state, "focus", line);
+    }
+    out
+}
+
+/// The focus order of one tick: a missed checkpoint's focuses first, then the path, keys the
+/// GUI failed to start FOCUS_GUI_FAILS times in a row behind the rest; pure.
+fn focus_order(
+    urgent: &[String],
+    keys: &[String],
+    completed: &[String],
+    gui_fails: &HashMap<String, u32>,
+) -> Vec<String> {
+    let mut out: Vec<String> = urgent
+        .iter()
+        .chain(keys)
+        .filter(|k| !completed.contains(*k))
+        .fold(Vec::new(), |mut v, k| {
+            if !v.contains(k) {
+                v.push(k.clone());
+            }
+            v
+        });
+    out.sort_by_key(|k| gui_fails.get(k).is_some_and(|n| *n >= FOCUS_GUI_FAILS));
+    out
+}
+
+fn focus_lane_inner(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,
@@ -2805,8 +4168,19 @@ fn focus_lane(
         state.stages.focus = Some((format!("focus: active {active}"), false));
     } else {
         let completed = strings(&focus, "completed");
-        let path = strings(plan, "focus_path");
-        let fallback = strings(plan, "focus_fallback");
+        state.stages.focus_urgent.retain(|k| !completed.contains(k));
+        let path = focus_order(
+            &state.stages.focus_urgent,
+            &strings(plan, "focus_path"),
+            &completed,
+            &state.stages.focus_gui_fails,
+        );
+        let fallback = focus_order(
+            &[],
+            &strings(plan, "focus_fallback"),
+            &completed,
+            &state.stages.focus_gui_fails,
+        );
         // The next focus of the path, waiting out a passing failure (a GUI read, not a refusal
         // by the game), holds the step: no later focus starts in its place. g17b (17 Nov 2026):
         // Reorganize the Wehrmacht failed once on gui_target_unavailable, a fallback focus of 35
@@ -2826,6 +4200,11 @@ fn focus_lane(
                         .failed_run
                         .get(&format!("hoi4_focus_start {}", json!({"focus": f})))
                         .is_none_or(|(n, _)| *n < 3)
+                    && state
+                        .stages
+                        .focus_gui_fails
+                        .get(*f)
+                        .is_none_or(|n| *n < FOCUS_GUI_FAILS)
             })
             .cloned();
         let startable = |state: &State, keys: &[String]| -> Vec<String> {
@@ -2916,6 +4295,7 @@ fn focus_lane(
             )?;
             if ok {
                 state.stages.focus_why.remove(&key);
+                state.stages.focus_gui_fails.remove(&key);
                 state.stages.focus = Some((format!("focus: started {key}"), false));
                 return Ok(Some(format!("focus {key}")));
             }
@@ -2928,6 +4308,7 @@ fn focus_lane(
                 || why.contains("prerequisite")
                 || why.contains("exclusive")
                 || why.contains("invalid_target");
+            let mut gui_failed = 0;
             let hours = if blocked {
                 // The same focus refused again and again waits twice as long each time (10, 20,
                 // 40, 80 game days by default): in one shakedown three fallback focuses that
@@ -2938,11 +4319,34 @@ fn focus_lane(
                 *refusals += 1;
                 skip_hours(plan, "focus_blocked", 10 * DAY) * doubling
             } else {
-                skip_hours(plan, "focus", DAY)
+                // A start the GUI failed (the game did not refuse it): the key waits a day, then
+                // twice as long each time it fails again, and from FOCUS_GUI_FAILS on it stands
+                // behind every other startable key (see `focus_order`)
+                let fails = state.stages.focus_gui_fails.entry(key.clone()).or_insert(0);
+                *fails += 1;
+                gui_failed = *fails;
+                skip_hours(plan, "focus", DAY) << (*fails - 1).min(FOCUS_REFUSAL_DOUBLINGS)
             };
             state.skip(now, "focus", &key, hours);
             let code = why.split(':').next().unwrap_or("refused").to_string();
-            state.stages.focus_why.insert(key, code);
+            state.stages.focus_why.insert(key.clone(), code.clone());
+            if gui_failed >= FOCUS_GUI_FAILS {
+                // this key cannot be started by the GUI for now: the next one gets its chance in
+                // the same tick, and the lane says why the plan's order changed
+                state.stages.focus = Some((
+                    format!(
+                        "focus: {key} failed {gui_failed} times in a row on the GUI path ({code}): it \
+                         waits {} game days behind the other startable focuses",
+                        hours / DAY
+                    ),
+                    false,
+                ));
+                probes_left = probes_left.saturating_sub(1);
+                if probes_left == 0 {
+                    break;
+                }
+                continue;
+            }
             if !blocked {
                 break;
             }
@@ -2971,7 +4375,23 @@ fn focus_lane(
                         .filter(|r| r["state"] == json!("available"))
                         .filter_map(|r| r["focus"].as_str().map(str::to_string))
                         .collect();
-                    if let Some(key) = open.iter().find(|k| ready.contains(k)).cloned() {
+                    // `open` is in focus_order: a key the GUI failed comes after every other
+                    // ready one, so the rescue never sends it again while another can start
+                    if let Some(key) = open
+                        .iter()
+                        .find(|k| ready.contains(k) && !state.skipped(now, "focus", k))
+                        .or_else(|| {
+                            open.iter().find(|k| {
+                                ready.contains(k)
+                                    && state
+                                        .stages
+                                        .focus_gui_fails
+                                        .get(*k)
+                                        .is_none_or(|n| *n < FOCUS_GUI_FAILS)
+                            })
+                        })
+                        .cloned()
+                    {
                         state.ledger_forget("hoi4_focus_start", &json!({"focus": key}));
                         let (ok, why) = state.act(
                             tools,
@@ -2982,6 +4402,7 @@ fn focus_lane(
                         )?;
                         if ok {
                             state.stages.focus_why.remove(&key);
+                            state.stages.focus_gui_fails.remove(&key);
                             state.stages.focus =
                                 Some((format!("focus: started {key} (rescue)"), false));
                             return Ok(Some(format!("focus {key} (rescue: the next keys waited)")));
@@ -2991,16 +4412,32 @@ fn focus_lane(
                 }
             }
         }
-        if !path.is_empty() || !fallback.is_empty() {
+        if !strings(plan, "focus_path").is_empty() || !strings(plan, "focus_fallback").is_empty() {
             let left = startable(state, &path).len() + startable(state, &fallback).len();
             let all_done = path.iter().chain(&fallback).all(|f| completed.contains(f));
             let blocked = focus_blocked(state, plan, now);
             let line = if all_done {
                 "focus: none active, focus_path and focus_fallback are all completed".to_string()
             } else {
+                let mut behind: Vec<String> = state
+                    .stages
+                    .focus_gui_fails
+                    .iter()
+                    .filter(|(_, n)| **n >= FOCUS_GUI_FAILS)
+                    .map(|(k, n)| format!("{k} ({n} GUI failures)"))
+                    .collect();
+                behind.sort();
                 format!(
-                    "focus: none active, nothing started; blocked [{}]",
-                    blocked.join(", ")
+                    "focus: none active, nothing started; blocked [{}]{}",
+                    blocked.join(", "),
+                    if behind.is_empty() {
+                        String::new()
+                    } else {
+                        format!(
+                            "; behind the others after failed starts: {}",
+                            behind.join(", ")
+                        )
+                    }
                 )
             };
             state.stages.focus = Some((line, left == 0));
@@ -3040,11 +4477,119 @@ fn lane_of(list: &[Lane], name: &str) -> Lane {
 /// air, navy, intelligence and the rest. Each manage, military and affairs rule is its own lane,
 /// so a rule with work every pass never holds back the rules behind it.
 /// The lanes checked every tick ahead of the pass (see `lanes_tick`).
-const FAST_LANES: [Lane; 3] = [
+/// A fast lane's turn in a tick, apart from the pass lane of the same name (the pass's
+/// `politics` and `construction` run more than their fast checks).
+fn fast_key(name: &'static str) -> &'static str {
+    match name {
+        "factories" => "fast:factories",
+        "research" => "fast:research",
+        "focus" => "fast:focus",
+        "politics" => "fast:politics",
+        "construction" => "fast:construction",
+        _ => name,
+    }
+}
+
+const FAST_LANES: [Lane; 5] = [
+    ("factories", factories_lane),
     ("research", research_lane),
     ("focus", focus_lane),
-    ("factories", factories_lane),
+    ("politics", politics_fast_lane),
+    ("construction", construction_fast_lane),
 ];
+
+/// Civilian factories with nothing to build are checked every tick like a free military factory
+/// (one economy read; at most every 6 game hours when they are all busy): the plan's ordered
+/// items, then its open jobs (t1939n, 27 Nov 2026: "free civilian factories build nothing" open
+/// 13 days from the first day while the pass did not come round). `scheduler.construction_fast:
+/// false` leaves construction to the pass alone.
+fn construction_fast_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if plan["scheduler"]["construction_fast"] == json!(false) || state.skipped(now, "confast", "x")
+    {
+        return Ok(None);
+    }
+    let Ok(economy) = tools.call("hoi4_economy", &json!({})) else {
+        return Ok(None);
+    };
+    let idle = economy["civilian_factories_idle"]
+        .as_i64()
+        .or(economy["civilian_factories_available_for_projects"].as_i64())
+        .unwrap_or(0);
+    let out = if idle > 0 {
+        match construction_plan_step(state, tools, plan, lease, now)? {
+            Some(line) => Some(line),
+            None => construction_step(state, tools, plan, lease, now, &economy)?,
+        }
+    } else {
+        None
+    };
+    // after an order, two game hours (a quarter second in a pause) so the war and the pass get
+    // their ticks between the orders of a long queue
+    state.skip(now, "confast", "x", if out.is_some() { 2 } else { 6 });
+    Ok(out)
+}
+
+/// The fast lanes' turn (FAST_LANES): the first that acts takes the tick. Called ahead of the
+/// war's turn and the setup layout as well as before the pass, so a free factory, research slot,
+/// focus, unspent power or idle civilian factory never waits behind slow war orders (t1939n,
+/// 27 Nov 2026: 35 of 75 military factories stood on no line and the civilian factories built
+/// nothing from the paused first day until the 29th: on the paused day the war block took three
+/// ticks of four and research and focus took the fourth one by one, then an open event held
+/// every lane). Never while a dated declaration is due (`declaring`).
+fn fast_lanes_turn(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    // A free research slot and a free focus are checked every tick (cheap reads, each lost day
+    // is a day of the slot): a pass of slow GUI orders left the focus idle for 14 game days
+    // (g17j 1936.4). They act before the pass resumes.
+    for (name, step) in FAST_LANES {
+        let key = fast_key(name);
+        if state.sched.tick_turned.contains(key) || opening_holds(state, tools, plan, name, now) {
+            continue;
+        }
+        state.last_ok = None;
+        let before = all_notes(state);
+        let started = std::time::Instant::now();
+        let opened = open_turn(state, key, now);
+        let result = step(state, tools, plan, lease, now)?;
+        let (result, _) = close_turn(state, key, opened, result);
+        state.round.timed(name, result.is_some(), started);
+        record_turn(state, name, result.as_ref(), &before, now);
+        // the fast lanes answer the issues they own too (s7m, 24 Nov 2026: the focus issues
+        // escalated with no lane outcome while the lesson held the refused focus): an order
+        // passed or was refused, or the lane's stage says what it waits for
+        let said = match (&result, state.last_ok) {
+            (Some(line), Some(false)) => Some(("refused", line.clone())),
+            (Some(line), _) => Some(("acted", line.clone())),
+            (None, _) if name == "focus" => state
+                .stages
+                .focus
+                .as_ref()
+                .map(|(t, _)| ("waiting", t.clone())),
+            (None, _) => None,
+        };
+        if let Some((outcome, reason)) = said {
+            state.issues.record_outcome(name, outcome, &reason, now);
+        }
+        if let Some(line) = result {
+            state.sched.turns.insert(name, now);
+            state.round.lane_acted(name, now);
+            trace_lanes(now, &format!("fast {name}"));
+            return Ok(Some(line));
+        }
+    }
+    Ok(None)
+}
 
 /// Military factories on no line are checked every tick like a free research slot (two memory
 /// reads) and fed at once by the production rules (plan_manage::free_factories_step). As a turn
@@ -3071,13 +4616,23 @@ const WAR_SHARE: u32 = 3;
 /// has to do.
 const LANE_MAX_WAIT: GameHour = DAY;
 
+/// The longest a pass lane waits for a turn, whatever takes the ticks (setup, the fast lanes, the
+/// war's share, the issue lanes): past it the lane is offered ahead of them (see
+/// [`overdue_turns`]).
+const FAIR_MAX_WAIT: GameHour = 3 * DAY;
+
+/// The wall time one tick may spend offering overdue lanes that find nothing to do: a quiet
+/// lane by command answers in milliseconds, a read through the game's interface in about a
+/// second, so a backlog clears over a few ticks without holding the war.
+const FAIR_BUDGET: std::time::Duration = std::time::Duration::from_millis(1500);
+
 /// How heavy a lane's action is for the speed rule (plan_speed.rs). MINOR: one to three clicks,
 /// none decides a battle within hours, so speed 4 loses nothing (owner, 23 Nov 2026: "4 speed is
 /// not only when there is nothing to do, but only like minor actions, like choosing a focus,
 /// choosin a research, spending pp, etc"). HEAVY: many inputs or reads, or orders whose timing
 /// matters within a day: speed 3 from its first action until it has been quiet for a while.
 /// A lane not listed is heavy. (lane, minor, why)
-pub(super) const LANE_WEIGHT: [(&str, bool, &str); 49] = [
+pub(super) const LANE_WEIGHT: [(&str, bool, &str); 50] = [
     ("research", true, "one pick in the research view"),
     (
         "factories",
@@ -3123,6 +4678,11 @@ pub(super) const LANE_WEIGHT: [(&str, bool, &str); 49] = [
         "production lines: several inputs per line",
     ),
     ("stockpile", false, "production rework for the stockpile"),
+    (
+        "logistics",
+        false,
+        "a train line or a hub's motorisation: a few orders",
+    ),
     ("balance", false, "production rebalanced: many lines"),
     ("naval_queue", false, "the naval queue: several inputs"),
     ("dockyards", false, "dockyards assigned: several inputs"),
@@ -3235,6 +4795,9 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
     for name in ["stockpile", "balance"] {
         out.push(lane_of(manage, name));
     }
+    // the train line from the first day (on by default) and the hubs (`logistics.hubs`): a lane
+    // of every plan, not only of the war-first block (t1939n, 27 Nov 2026)
+    out.push(("logistics", plan_logistics::logistics_step));
     out.push(("production", |state, tools, plan, lease, now| {
         // idle military factories to the priority lines when the balance rule is off, then the
         // plan's own lines (plan_manage.rs)
@@ -3242,7 +4805,11 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
         if let Some(step) = plan_manage::rebalance_step(state, tools, plan, lease, now, &economy)? {
             return Ok(Some(step));
         }
-        production_step(state, tools, plan, lease, now)
+        if let Some(step) = production_step(state, tools, plan, lease, now)? {
+            return Ok(Some(step));
+        }
+        // equipment the game says is requested and no line makes (standing work, no plan key)
+        plan_manage::missing_line_step(state, tools, plan, lease, now)
     }));
     for name in ["naval_queue", "dockyards", "convoys"] {
         out.push(lane_of(manage, name));
@@ -3270,10 +4837,7 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
     out.push(("decisions", decisions_step));
     out.push(("learned", learned_step));
     out.push(("training", |state, tools, plan, lease, now| {
-        // one template or a list, with training_rules (plan_manage.rs)
-        if plan["training"].is_null() {
-            return Ok(None);
-        }
+        // one template or a list, with training_rules (plan_manage.rs); with none it says so
         plan_manage::training_step(state, tools, plan, lease, now)
     }));
     for name in [
@@ -3301,7 +4865,20 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
         out.push(lane_of(manage, name));
     }
     for (name, step) in affairs.iter() {
-        if !["mio_lines", "mio", "mio_traits", "intelligence"].contains(name) {
+        if *name == "trade" {
+            // one trade lane: the plan's own deals, then the judgement of the deficits. The
+            // judge (plan_manage `trade`) shared the name and was never offered: no deficit was
+            // bought all war (t1939n, 27 Nov 2026: insufficient_resources open 151 days,
+            // hoi4_trade never called)
+            out.push(("trade", |state, tools, plan, lease, now| {
+                if let Some(line) =
+                    (lane_of(&plan_affairs::LANES, "trade").1)(state, tools, plan, lease, now)?
+                {
+                    return Ok(Some(line));
+                }
+                (lane_of(&plan_manage::LANES, "trade").1)(state, tools, plan, lease, now)
+            }));
+        } else if !["mio_lines", "mio", "mio_traits", "intelligence"].contains(name) {
             out.push((name, *step));
         }
     }
@@ -3326,11 +4903,70 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
     out
 }
 
+/// Steps of the war-first block that answer a monitor issue on their own: their lanes are not in
+/// a war-first plan's pass, so before them an issue of theirs found no lane and went to the player
+/// (cmph1, cmps1, 27 Nov 2026: eight armies without a general and an army group without a field
+/// marshal stayed open for a month as "no executor lane acts on it (command)" while free leaders
+/// waited; the command step sat sixth in the war block, behind steps that took every turn).
+/// The weak-formation rule (`formations.act`) runs inside the war block too: its issue (a weak
+/// template fielded) found no lane and was counted "acted" by the war's orders (t1939n, 27 Nov
+/// 2026: six times, no effect).
+const WAR_BLOCK_ISSUE_LANES: [Lane; 3] = [
+    ("command", plan_formations::command_step),
+    ("ship", plan_ship::step),
+    ("formations", formations_lane),
+];
+
+/// The weak-formation rule as a lane: the plan's disband list first, then the weak templates.
+fn formations_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if plan["disband"].is_object() {
+        if let Some(line) = disband_step(state, tools, plan, lease, now)? {
+            return Ok(Some(line));
+        }
+    }
+    plan_divisions::formations_step(state, tools, plan, lease, now)
+}
+
+/// The lanes that can be offered for a monitor issue: the pass's lanes, and in a war-first plan
+/// the war block's own steps that answer an issue alone (WAR_BLOCK_ISSUE_LANES).
+fn issue_owners(plan: &Value, war_first: bool) -> Vec<Lane> {
+    let mut out = lanes(plan, war_first);
+    for lane in WAR_BLOCK_ISSUE_LANES {
+        if !out.iter().any(|(n, _)| *n == lane.0) {
+            out.push(lane);
+        }
+    }
+    out
+}
+
+/// The names of every lane that owns monitor issues (any plan): an issue of another lane goes to
+/// the player in the omissions feed.
+pub(super) fn issue_owner_names(plan: &Value) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = issue_owners(plan, true)
+        .iter()
+        .chain(issue_owners(plan, false).iter())
+        .map(|(n, _)| *n)
+        .chain(["research", "focus", "war"])
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
 /// Where the pass stands (see [`lanes_tick`]).
 #[derive(Default)]
 struct Round {
     /// The next lane to offer.
     cursor: usize,
+    /// A monitor-issue lane acted in the last lanes tick: the next one belongs to the pass (see
+    /// `lanes_tick_inner`).
+    issue_last: bool,
     /// Lanes that acted in this pass, in order.
     acted: Vec<&'static str>,
     /// The war-first block acted in the last tick: this tick belongs to a lane.
@@ -3350,15 +4986,28 @@ struct Round {
     began: GameHour,
     /// The last finished pass that acted: lanes and game hours (the digest's `pass`).
     last: Option<String>,
+    /// Real seconds of each lane's last step that acted (see `opening_holds`).
+    secs: HashMap<&'static str, f64>,
+    /// The last tick's (real instant, game hour) and the game hours that pass per real second
+    /// while the game runs (a moving mean; see `pace_at`).
+    pace: Option<(std::time::Instant, GameHour)>,
+    hours_per_sec: f64,
+    /// Wall seconds per lane since the war's last offer (moved into the watchdog at each offer).
+    since_war: HashMap<&'static str, f64>,
 }
 
 impl Round {
-    /// The war lane acted this tick.
-    fn war_acted(&mut self, now: GameHour) {
+    /// The war lane acted this tick; `input`: its turn needed the input (a mouse order, a panel
+    /// read). Only those count toward WAR_SHARE: the share keeps the lanes' input ticks, and a war
+    /// turn by command (milliseconds, no input) takes none of them (engineer 95: orders by command
+    /// counted as input ticks rationed the operation to a few turns a week).
+    fn war_acted(&mut self, now: GameHour, input: bool) {
         self.war_last = true;
         self.acted_at = Some(now);
         self.heavy_day(now);
-        self.war_streak += 1;
+        if input {
+            self.war_streak += 1;
+        }
         self.lanes_at.get_or_insert(now);
     }
 
@@ -3368,6 +5017,50 @@ impl Round {
         if !lane_minor(name) {
             self.heavy_day(now);
         }
+    }
+
+    /// Lane `name`'s step returned (`acted`: it gave an order) after it began at `started`.
+    fn timed(&mut self, name: &'static str, acted: bool, started: std::time::Instant) {
+        let secs = started.elapsed().as_secs_f64();
+        if acted {
+            self.secs.insert(name, secs);
+        }
+        // what took the wall since the war's last offer (the watchdog's `instead`), quiet turns
+        // that read through a panel included
+        if acted || secs >= 0.5 {
+            *self.since_war.entry(name).or_insert(0.0) += secs;
+        }
+    }
+
+    /// A tick at game hour `now`: the game's pace in game hours per real second, measured over
+    /// the running stretches only (a paused game moves no hour and leaves the mean alone).
+    fn pace_at(&mut self, now: GameHour, at: std::time::Instant) {
+        if let Some((t, h)) = self.pace {
+            let secs = at.saturating_duration_since(t).as_secs_f64();
+            // a sample over a pause (no tick for 30 s) would read the pause as a slow game
+            if now > h && (1.0..=30.0).contains(&secs) {
+                let rate = (now - h) as f64 / secs;
+                self.hours_per_sec = if self.hours_per_sec > 0.0 {
+                    0.7 * self.hours_per_sec + 0.3 * rate
+                } else {
+                    rate
+                };
+            }
+        }
+        if self.pace.is_none_or(|(_, h)| now != h) {
+            self.pace = Some((at, now));
+        }
+    }
+
+    /// The game hours lane `name`'s last order would let pass at the measured pace; pure.
+    fn step_hours(&self, name: &str) -> GameHour {
+        let secs = self.secs.get(name).copied().unwrap_or(0.0);
+        (secs * self.hours_per_sec).ceil() as GameHour
+    }
+
+    /// Whether lane `name`'s last order took SLOW_STEP_SECONDS or more; pure.
+    fn slow(&self, name: &str) -> bool {
+        self.secs.get(name).is_some_and(|s| *s >= SLOW_STEP_SECONDS)
     }
 
     /// An action took `secs` real seconds at game hour `now` (the last LOAD_KEEP are kept).
@@ -3436,6 +5129,34 @@ fn politics_key(index: usize, pick: &Value) -> String {
     )
 }
 
+/// A politics refusal that says the pick is already in force (the seat holds it, or the country
+/// has the idea); pure.
+pub(super) fn politics_already_held(why: &str) -> bool {
+    let w = why.to_lowercase();
+    w.contains("already holds") || w.contains("already active") || w.contains("already has")
+}
+
+/// Politics as a fast lane: at most once a game day unless it bought something, so power the
+/// pass's slow lanes would leave banked is spent within a day (cmps1/cmph1, 27 Nov 2026: in the
+/// 1939 opening the pass reached politics only on day 27 while the power stood at 1,077-1,136).
+/// Its reads are the power (a memory read) and, when there is something to buy, one options read.
+fn politics_fast_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if plan["scheduler"]["politics_fast"] == json!(false) || state.skipped(now, "polfast", "x") {
+        return Ok(None);
+    }
+    let out = politics_step(state, tools, plan, lease, now)?;
+    if out.is_none() {
+        state.skip(now, "polfast", "x", DAY);
+    }
+    Ok(out)
+}
+
 /// Politics (tick step 4): the plan's one-shot picks, then the standing political-power policy
 /// (`politics_auto`, plan_manage.rs) for the power the picks leave unspent.
 fn politics_step(
@@ -3466,8 +5187,9 @@ fn politics_step(
                 .and_then(|e| e["political_power"]["raw_signed"].as_f64())
                 .map(|raw| raw / 100_000.0);
         }
-        // Not before the country has gained 15 points since the last refusal, or the
-        // pick's own "cost" when the plan names it (above what earlier picks wait for). A
+        // Not before the power has grown since the last refusal (the backoff sets how often),
+        // nor below the pick's own "cost" when the plan names it (above what earlier picks wait
+        // for); no amount is kept in code (it was 15 points). A
         // power that cannot be read is no reason to try: the game refused such a blind try
         // and the refusal let the standing policy spend the power the pick was waiting for.
         let need = pick["cost"].as_f64().unwrap_or(0.0);
@@ -3476,12 +5198,12 @@ fn politics_step(
                 let since = state
                     .pol_pp_at_fail
                     .get(&key)
-                    .map_or(f64::MIN, |p| p + 15.0);
+                    .map_or(f64::MIN, |p| p.next_up());
                 if pp < need + held_back {
                     held_back += need;
                     continue;
                 }
-                // Waiting only for 15 points since its last refusal (a refusal that was not the
+                // Waiting only for the power to grow since its last refusal (a refusal that was not the
                 // price: a focus or a law first): it holds no power back for later picks.
                 if pp < since {
                     continue;
@@ -3497,7 +5219,10 @@ fn politics_step(
             json!({"category": pick["category"], "slot": pick["slot"], "idea": pick["idea"]}),
             "po",
         )?;
-        if ok || why.contains("already holds") {
+        // a pick already in force is done: "already holds" (the seat) and "already active" (an
+        // idea the country has: cmps1, 27 Nov 2026, war_economy refused as already active kept
+        // its 150 in the reserve for the rest of the run)
+        if ok || politics_already_held(&why) {
             state.pol_fails.remove(&key);
             state.pol_pp_at_fail.remove(&key);
             state.done.insert(key, now);
@@ -3682,7 +5407,32 @@ fn production_step(
                 );
             }
         }
-        let (ok, why) = state.act(tools, lease, "hoi4_production_add", args, "pr")?;
+        let (mut ok, mut why) =
+            state.act(tools, lease, "hoi4_production_add", args.clone(), "pr")?;
+        // the named model is not offered while a newer one of its kind is (a 1939 start offers
+        // the Submarine II hull and no Submarine I): the next newer offered of its kind, at once
+        // (t1939k, 24 Nov 2026: the U-boat line was given up after one refusal and the dockyards
+        // stood idle through the Polish war)
+        if !ok && why.contains("No producible design") {
+            // the refusal's list of offered models is cut short in the receipt: the offered
+            // newer model named there, else the next two model numbers, one call each
+            let tries: Vec<String> = match newer_offered(&equipment, &why) {
+                Some(newer) => vec![newer],
+                None => successors(&equipment, 2),
+            };
+            for newer in tries {
+                args["equipment"] = json!(newer);
+                let (ok2, why2) =
+                    state.act(tools, lease, "hoi4_production_add", args.clone(), "pr")?;
+                (ok, why) = (
+                    ok2,
+                    format!("{why2} ({equipment} not offered: {newer} tried)"),
+                );
+                if ok || !why2.contains("No producible design") {
+                    break;
+                }
+            }
+        }
         if ok {
             state.done.insert(format!("prod:{equipment}"), now);
             // the line's age for the mature-line guard (plan_affairs.rs): only lines the
@@ -3694,6 +5444,35 @@ fn production_step(
         return Ok(Some(format!("production {equipment}: {ok} {why}{held}")));
     }
     Ok(None)
+}
+
+/// The next newer model of `equipment`'s kind (its name without the trailing `_<n>`) that a
+/// production refusal lists as offered (the nearest to what the plan asked). Pure.
+fn newer_offered(equipment: &str, why: &str) -> Option<String> {
+    let (_, offered) = why.split_once("offered: ")?;
+    let split = |name: &str| -> Option<(String, u32)> {
+        let (base, n) = name.rsplit_once('_')?;
+        Some((base.to_string(), n.parse().ok()?))
+    };
+    let (base, asked) = split(equipment)?;
+    offered
+        .split(',')
+        .map(|t| t.trim().trim_end_matches(['.', ')', ';']))
+        .filter_map(|t| split(t).map(|(b, n)| (b, n, t.to_string())))
+        .filter(|(b, n, _)| *b == base && *n > asked)
+        .min_by_key(|(_, n, _)| *n)
+        .map(|(_, _, t)| t)
+}
+
+/// The next `n` model names after `equipment` (`ship_hull_submarine_1` -> `_2`, `_3`). Pure.
+fn successors(equipment: &str, n: u32) -> Vec<String> {
+    let Some((base, num)) = equipment.rsplit_once('_') else {
+        return Vec::new();
+    };
+    let Ok(num) = num.parse::<u32>() else {
+        return Vec::new();
+    };
+    (1..=n).map(|i| format!("{base}_{}", num + i)).collect()
 }
 
 /// The organisation a `production` entry names for its line (`organization`, or `organisation`).
@@ -3718,13 +5497,73 @@ fn air_waits_for_war(state: &mut State, tools: &dyn Tools, plan: &Value, now: Ga
         && plan_affairs::declaration_near(state, tools, plan, now, AIR_DECLARE_AHEAD)
 }
 
+/// A lane step that took this many real seconds or more is slow: an order by mouse takes 3-20 s
+/// (a design 9 s, a design-company trait 6-77 s), one by the game's own command milliseconds.
+const SLOW_STEP_SECONDS: f64 = 2.0;
+/// How long after its date a declaration whose operation is still pending holds the slow lanes
+/// (game hours): the hold ends then, so a prepare that never reads back starves nothing for long.
+const OPENING_HOLD_TAIL: GameHour = 7 * DAY;
+
+/// The opening: a dated declaration lies within DECLARE_LEAD ahead (or up to OPENING_HOLD_TAIL
+/// behind) and an operation against its target is preparing or prepared and not yet executed.
+fn opening_window(state: &State, plan: &Value, now: GameHour, lead: GameHour) -> bool {
+    !state.war_active
+        && plan_speed::dated_declarations(plan, &[], now, lead, OPENING_HOLD_TAIL)
+            .iter()
+            .any(|tag| plan_operation::pending_on(state, plan, tag))
+}
+
+/// The slow lanes wait in the opening, with no cap inside its window: one design-company step by
+/// mouse ran 77 s at speed 3 from 25 August and the Polish declaration due on 1 September went
+/// out on the 16th (t1939l, 24 Nov 2026); with the slow-lane names held, a 9 s design and two
+/// trait orders (6 s and 15 s, the second refused) still ran from 30 August to 4 September while
+/// the operation re-drew, and the declaration came on the 4th (t1939m). Slow is measured, not
+/// named: any lane whose last order took SLOW_STEP_SECONDS or more yields, the named GUI lanes
+/// (WAR_DEFERRED_LANES) always do, an order by the game's own command never waits. The hold
+/// posts (`hold`) are war work and never wait.
+fn opening_holds(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    name: &str,
+    now: GameHour,
+) -> bool {
+    if name == "hold" || !(WAR_DEFERRED_LANES.contains(&name) || state.round.slow(name)) {
+        return false;
+    }
+    // a slow order must also END before the window: its lead grows by the game time the lane's
+    // last order took at the measured pace (cmph1, 27 Nov 2026: two design-company trait orders
+    // of 62 s and 77 s began on 18 and 20 August at speed 3 and ran to 1 September)
+    let lead = plan_speed::DECLARE_LEAD + 2 * state.round.step_hours(name);
+    opening_window(state, plan, now, lead) || air_waits_for_war(state, tools, plan, now)
+}
+
 /// Wall seconds the operations' burst may take between two declarations due the same day.
 const BETWEEN_DECLARATIONS_SECONDS: u64 = 6;
 
-/// Whether the operations' burst after a declaration had an order refused (an open event holds
-/// them, or an order line reads `: false`): the opening air burst then waits a tick.
+/// Whether the operations' burst after a declaration had an ATTACK order refused (an open event
+/// holds them, or an execute or attack order reads `: false`): the opening air burst then waits a
+/// tick. A refused refinement (a shed, a push, a sideways move, a spread) is not the attack: it
+/// does not cost the air its opening (w101c, 28 Nov 2026: a shed by the mouse read
+/// input_readback_failed, the air burst was dropped from the declaration's tick and came on W+5).
 fn burst_refused(events_now: bool, executed: Option<&str>) -> bool {
-    events_now || executed.is_some_and(|l| l.contains(": false "))
+    const REFINEMENTS: [&str; 7] = [
+        "shed:",
+        "stuck point:",
+        "sideways",
+        "spread over",
+        "echelon",
+        "opening:",
+        "relief",
+    ];
+    events_now
+        || executed.is_some_and(|l| {
+            l.split("; ").any(|part| {
+                part.contains(": false ")
+                    && (part.contains("events_open")
+                        || !REFINEMENTS.iter().any(|r| part.contains(r)))
+            })
+        })
 }
 
 /// A due declaration of war, then (same tick) the execution of the operations that wait for
@@ -3745,14 +5584,28 @@ fn declare_first(
     // the declaration opens no longer hold it (s7n, 24 Nov 2026: declared on 1 September, the
     // execute came on the 4th behind germany_mefo_bills). Once per declaration (a day).
     let mut pre: Option<String> = None;
+    // a pass that left an attacker not executing runs again in the next tick, within PRE_HOLD of
+    // the first (p101a, 28 Nov 2026: the East Prussian wing's 23 divisions were not executed in
+    // the burst and waited for the first war turn at W+3)
+    let within_hold = |state: &State| {
+        state
+            .done
+            .get("preexec0")
+            .is_some_and(|t0| now >= *t0 && now - *t0 <= plan_operation::PRE_HOLD)
+    };
+    let rerun = !plan_operation::pre_pending(state, now).is_empty() && within_hold(state);
     if plan_operation::awaiting_war(state)
         && !plan_operation::executing_any(state)
-        && !state
-            .done
-            .get("preexec")
-            .is_some_and(|at| now >= *at && now - *at < DAY)
+        && (rerun
+            || !state
+                .done
+                .get("preexec")
+                .is_some_and(|at| now >= *at && now - *at < DAY))
         && plan_affairs::declaration_near(state, tools, plan, now, 0)
     {
+        if !rerun {
+            state.done.insert("preexec0".to_string(), now);
+        }
         state.done.insert("preexec".to_string(), now);
         pre = war_burst_for(
             state,
@@ -3764,6 +5617,16 @@ fn declare_first(
             BETWEEN_DECLARATIONS_SECONDS,
         )?;
         state.last_ok = None;
+    }
+    // VERIFIED BEFORE THE DECLARATION: an attacker the roster does not read executing holds the
+    // declaration for PRE_HOLD game hours at most (then it goes out: the date counts more)
+    let pending = plan_operation::pre_pending(state, now);
+    if !pending.is_empty() && within_hold(state) {
+        return Ok(Some(format!(
+            "the declaration waits for the attack to execute ({}){}",
+            pending.join("; "),
+            pre.map(|p| format!(": {p}")).unwrap_or_default()
+        )));
     }
     let declared = plan_affairs::declare_due_step(state, tools, plan, lease, now)?;
     let declared = match (pre, declared) {
@@ -3799,7 +5662,7 @@ fn declare_first(
                 // another declaration due now goes out right after the events, before any burst
                 // (w43r1, 23 Nov 2026: Belgium's declaration opened events, the next tick ran a
                 // 30-second war burst and Luxembourg came eleven game days later)
-                state.done.remove("declnear:at");
+                plan_affairs::declaration_near_forget(state);
                 if plan_affairs::declaration_near(state, tools, plan, now, 0) {
                     state.done.insert("declnext".to_string(), now);
                 }
@@ -3810,7 +5673,7 @@ fn declare_first(
             // another declaration due now goes out in the next tick before any burst (w42v,
             // 23 Nov 2026: Belgium was declared, the opening air burst took 34 s = seven game
             // days and Holland, whose war the operation executes on, came nine days later)
-            state.done.remove("declnear:at");
+            plan_affairs::declaration_near_forget(state);
             if plan_affairs::declaration_near(state, tools, plan, now, 0) {
                 // the operations that wait for this war execute now (a short burst: their
                 // execute orders take a few seconds); only the air waits for the last
@@ -4026,14 +5889,7 @@ fn war_first_steps(
         // The sea transfers go first: a division a route ships is not disbanded.
         plan_ship::step,
         // then the weak fielded templates (`formations.act`): converted in place, else disbanded
-        |state, tools, plan, lease, now| {
-            if plan["disband"].is_object() {
-                if let Some(line) = disband_step(state, tools, plan, lease, now)? {
-                    return Ok(Some(line));
-                }
-            }
-            plan_divisions::formations_step(state, tools, plan, lease, now)
-        },
+        formations_lane,
         |state, tools, plan, lease, now| war_burst(state, tools, plan, lease, now, war_step),
         |state, tools, plan, lease, now| {
             if air_waits_for_war(state, tools, plan, now) {
@@ -4115,6 +5971,8 @@ fn war_burst(
     war_burst_for(state, tools, plan, lease, now, step, max_seconds)
 }
 
+/// Game hours a war burst may let pass before it gives the tick back (see [`war_burst_for`]).
+const WAR_BURST_HOURS: GameHour = 12;
 /// Seconds of a tick the air burst may hold while an operation runs.
 const AIR_TICK_SECONDS: u64 = 6;
 /// Game hours the air waits at most behind the land orders of an executing operation.
@@ -4136,6 +5994,15 @@ fn war_burst_for(
 ) -> Result<Option<String>> {
     let cfg = &plan["war"];
     let max_orders = cfg["burst_orders"].as_u64().unwrap_or(16).max(1) as usize;
+    // A burst ends once the game has run `war.burst_hours` (default WAR_BURST_HOURS) since it
+    // began: the rest goes in the next tick, which offers the war first again with fresh reads,
+    // and the events and the lanes' input come between (w101b, 28 Nov 2026: one 84-second war
+    // burst of mouse orders ran 164 game hours and the next war turn came a week later).
+    let max_hours = cfg["burst_hours"]
+        .as_i64()
+        .filter(|h| *h > 0)
+        .unwrap_or(WAR_BURST_HOURS);
+    let hour0 = state.last_hour;
     let began = std::time::Instant::now();
     let mut lines: Vec<String> = Vec::new();
     let mut any_ok = false;
@@ -4154,6 +6021,14 @@ fn war_burst_for(
             any_ok |= ok;
             lines.push(line);
             if began.elapsed().as_secs() >= max_seconds {
+                break;
+            }
+            // the clock is read only after an order that took a second or more (a mouse order);
+            // orders by command take milliseconds and never end the burst
+            if began.elapsed() >= Duration::from_secs(1)
+                && hour0 > 0
+                && game_hour(state, tools).saturating_sub(hour0) >= max_hours
+            {
                 break;
             }
         }
@@ -5068,6 +6943,28 @@ fn layout_step(
         }
         let row = armies.iter().find(|a| text(&a["army"]) == army);
         if row.is_some_and(|a| a["commander"].is_null()) {
+            // a general whose army role the game hides now is not given the army: the game
+            // would take him off again (g92b: Hoth, hidden until a focus, verified on Armee
+            // Pommern and gone the same day); the command step fills the vacancy meanwhile
+            if let Ok(read) = tools.call("hoi4_commanders", &json!({})) {
+                let hidden = list(&read, "commanders")
+                    .iter()
+                    .find(|c| text(&c["name"]) == general)
+                    .cloned()
+                    .filter(|c| !plan_formations::role_visible(state, tools, c, now));
+                if let Some(c) = hidden {
+                    state.skip(now, "layoutgen", &army, DAY);
+                    plan_manage::note(
+                        state,
+                        "layout_general",
+                        format!(
+                            "{general} is not given {army}: the game hides his army role until {}",
+                            c["visible_when"]
+                        ),
+                    );
+                    continue;
+                }
+            }
             let (ok, why) = state.act(
                 tools,
                 lease,
@@ -6074,7 +7971,33 @@ fn construction_plan_step(
             }
             ("hoi4_construction_add", a)
         };
+        // The plan's other pending items of the same building in the same state (one item per
+        // level: cp_ab_42_1 .. cp_ab_42_5) go in the same order as its count: sent one level at a
+        // time they were the same order to the same state twice within days (t1939l/t1939m,
+        // 24 Nov 2026: 7 of 10 duplicate-action issues were air base levels of one state).
+        let mut args = args;
+        let siblings: Vec<String> = if tool == "hoi4_construction_add" {
+            same_order_siblings(items, item, &key_of, |k| {
+                !state.plan_built.contains_key(k)
+                    && !state.plan_blocked.contains_key(k)
+                    && !state.skipped(now, "cplan", k)
+            })
+        } else {
+            Vec::new()
+        };
+        if !siblings.is_empty() {
+            args["count"] = json!(1 + siblings.len());
+        }
         let (ok, why) = state.act(tools, lease, tool, args, "cp")?;
+        for k in &siblings {
+            if ok {
+                state.plan_built.insert(k.clone(), now);
+                state.plan_tries.remove(k);
+            } else {
+                // they rest with the item that led the order and go again with it
+                state.skip(now, "cplan", k, 2 * DAY);
+            }
+        }
         let legs = item["legs"] == json!(true) && tool == "hoi4_railway_build";
         let leg_wait = item["leg_days"].as_i64().unwrap_or(LEG_DAYS).max(1) * DAY;
         if legs && (ok || why.starts_with("leg_built")) {
@@ -6098,6 +8021,35 @@ fn construction_plan_step(
         plan_manage::note(state, "construction_plan", waits.join("; "));
     }
     Ok(None)
+}
+
+/// The keys of the `construction_plan` items after `item` that one order can carry with it: the
+/// same building in the same state, no province, path or `requires` of their own, the same
+/// `when`, still pending (`pending`). At most 9 (an order queues at most 10 levels).
+fn same_order_siblings(
+    items: &[Value],
+    item: &Value,
+    key_of: &dyn Fn(&Value) -> String,
+    pending: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    let alone =
+        |i: &Value| i["province"].is_null() && i["path"].is_null() && i["requires"].is_null();
+    if !alone(item) || item["state"].as_i64().is_none() {
+        return Vec::new();
+    }
+    let me = key_of(item);
+    items
+        .iter()
+        .filter(|i| {
+            i["building"] == item["building"]
+                && i["state"] == item["state"]
+                && i["when"] == item["when"]
+                && alone(i)
+        })
+        .map(key_of)
+        .filter(|k| *k != me && pending(k))
+        .take(9)
+        .collect()
 }
 
 /// The first technology of a `construction_plan` item's `requires` (one key or a list) that is
@@ -6160,6 +8112,11 @@ fn item_failed(state: &mut State, item: &Value, key: &str, label: &str, why: &st
         entry.0
     };
     if !hopeless && tries < PLAN_ITEM_TRIES {
+        // a refused item rests a week per failure before the next try: sent again on the next
+        // tick it met the same refusal (t1939l/t1939m, 24 Nov 2026: an anti-air building in a
+        // state with no free slot, 14 s of mouse input each, retried unchanged in the last days
+        // before the declaration)
+        state.skip(now, "cplan", key, 7 * DAY * GameHour::from(tries));
         return;
     }
     state.plan_tries.remove(key);
@@ -6218,7 +8175,15 @@ fn disband_step(
         return Ok(None);
     }
     let max = cfg["max"].as_u64().unwrap_or(u64::MAX);
-    if state.disbanded >= max || state.skipped(now, "disband", "all") {
+    if state.disbanded >= max {
+        plan_manage::note(
+            state,
+            "disband",
+            format!("disband.max {max} reached ({} disbanded)", state.disbanded),
+        );
+        return Ok(None);
+    }
+    if state.skipped(now, "disband", "all") {
         return Ok(None);
     }
     let keep: HashSet<i64> = list(cfg, "keep_states")
@@ -6229,13 +8194,34 @@ fn disband_step(
     // Only divisions standing in own states are candidates: an army fighting in enemy land
     // is never thinned (live 6 Nov 2026: Army 1 in Hararghe was picked).
     let me = text(&tools.call("hoi4_overview", &json!({}))?["player"]).to_string();
+    // Own land: controlled by us and owned by us or by a country no longer at war with us (land
+    // of a capitulated enemy is held, not fought over). Counting only owned states, every army
+    // standing in conquered land counted as fighting for good, and the weak formations in it were
+    // never disbanded (t1939n, 27 Nov 2026: weak_formation_fielded "acted 6x, no effect").
+    // (an unreadable war list counts every other owner as an enemy, as before)
+    let enemies: Option<Vec<String>> = tools
+        .call("hoi4_wars", &json!({}))
+        .ok()
+        .map(|w| plan_speed::enemies_at_war(&w));
     let own: HashSet<i64> = list(&tools.call("hoi4_states", &json!({"query": me}))?, "states")
         .iter()
-        .filter(|row| text(&row["owner"]) == me && text(&row["controller"]) == me)
+        .filter(|row| {
+            let owner = text(&row["owner"]);
+            text(&row["controller"]) == me
+                && (owner == me
+                    || enemies
+                        .as_ref()
+                        .is_some_and(|e| !e.iter().any(|t| t.as_str() == owner)))
+        })
         .filter_map(|row| row["state_id"].as_i64())
         .collect();
     let Some(home) = plan_war::home_land(state, tools) else {
         state.skip(now, "disband", "all", 7 * DAY);
+        plan_manage::note(
+            state,
+            "disband",
+            "the home land is unreadable: tried again in 7 days",
+        );
         return Ok(None);
     };
     let supply = tools.call("hoi4_supply", &json!({}))?;
@@ -6254,6 +8240,8 @@ fn disband_step(
         }
     }
     let mut by_army: Vec<(String, Vec<String>)> = Vec::new();
+    // why each wanted division stays (the rule's note when it disbands nothing)
+    let mut stay: Vec<(String, usize)> = Vec::new();
     // Loose divisions (in no army) that the plan would disband, by the state they stand in. The
     // tool disbands divisions of an army, so they are formed into one first (below).
     let mut loose: Vec<(i64, Vec<String>)> = Vec::new();
@@ -6289,7 +8277,30 @@ fn disband_step(
             overseas.push(id.to_string());
             continue;
         }
-        if !wanted || !candidate || fighting.contains(army) || state.skipped(now, "disband", army) {
+        if wanted {
+            let why = if !candidate {
+                Some(if standing.is_some_and(|at| keep.contains(&at)) {
+                    "in a kept state (disband.keep_states or the war's theatre)"
+                } else {
+                    "on land that is not ours"
+                })
+            } else if fighting.contains(army) {
+                Some("in an army fighting in enemy-held land or at risk of encirclement")
+            } else if state.skipped(now, "disband", army) {
+                Some("in an army whose disband the game refused lately")
+            } else {
+                None
+            };
+            if let Some(why) = why {
+                let line = format!("{} ({army})", why);
+                match stay.iter_mut().find(|(w, _)| *w == line) {
+                    Some((_, n)) => *n += 1,
+                    None => stay.push((line, 1)),
+                }
+                continue;
+            }
+        }
+        if !wanted {
             continue;
         }
         match by_army.iter_mut().find(|(a, _)| a == army) {
@@ -6321,6 +8332,26 @@ fn disband_step(
             )));
         }
         state.skip(now, "disband", "all", 7 * DAY);
+        let shown: Vec<String> = stay
+            .iter()
+            .take(6)
+            .map(|(why, n)| format!("{n} {why}"))
+            .collect();
+        plan_manage::note(
+            state,
+            "disband",
+            if shown.is_empty() {
+                format!(
+                    "no division of {} stands to disband (none fielded, all overseas or shipped)",
+                    templates.join(", ")
+                )
+            } else {
+                format!(
+                    "nothing disbanded, the wanted divisions stay: {}; looked at again in 7 days",
+                    shown.join("; ")
+                )
+            },
+        );
         return Ok(None);
     };
     ids.truncate((max - state.disbanded).min(24) as usize);
@@ -6849,6 +8880,16 @@ fn construction_step(
                 std::cmp::Reverse(state.con.free.get(id).map_or(1, |(f, _)| (*f).min(99)))
             });
         }
+        // a state that took this building in the last week goes after the others: the same
+        // count-1 order to the same state twice in a week read as a duplicate action (t1939k,
+        // 24 Nov 2026: 8 of 13 duplicate issues were air bases added one level at a time to one
+        // state while other listed states took none); the order is stable otherwise
+        eligible.sort_by_key(|id| {
+            state
+                .done
+                .get(&format!("conlast:{building}:{id}"))
+                .is_some_and(|at| now - *at < 7 * DAY)
+        });
         let Some(&id) = eligible.first() else {
             continue;
         };
@@ -6879,6 +8920,7 @@ fn construction_step(
             continue;
         }
         if ok {
+            state.done.insert(format!("conlast:{building}:{id}"), now);
             state.con.full_streak.remove(&full_key(&building, id));
             state.con.fails.remove(&id);
             state.con.queued_total += count as u64;
@@ -7381,12 +9423,42 @@ fn special_projects_step(
     )))
 }
 
+/// Whether the doctrines read shows `id` taken: a folder's grand doctrine or a track's
+/// subdoctrine (an object with its `id`, or the bare key); pure.
+fn doctrine_taken(read: &Value, id: &str) -> bool {
+    let is = |v: &Value| v.as_str() == Some(id) || v["id"].as_str() == Some(id);
+    list(read, "folders").iter().any(|f| {
+        is(&f["grand_doctrine"]) || list(f, "tracks").iter().any(|t| is(&t["subdoctrine"]))
+    })
+}
+
+/// The experience the doctrines read shows for `id` (a grand doctrine or subdoctrine on offer):
+/// the game's price with its reduction, else the read's base cost; pure.
+fn doctrine_price(read: &Value, id: &str) -> Option<f64> {
+    list(read, "folders").iter().find_map(|f| {
+        list(f, "available_grand_doctrines")
+            .iter()
+            .chain(
+                list(f, "tracks")
+                    .iter()
+                    .flat_map(|t| list(t, "available_subdoctrines").iter()),
+            )
+            .find(|o| text(&o["id"]) == id)
+            .and_then(|o| {
+                o["estimated_cost_after_reduction"]
+                    .as_f64()
+                    .or_else(|| o["xp_cost"].as_f64())
+            })
+    })
+}
+
 /// Experience never idles on an empty doctrine track. Every 14 days: for each folder that holds
 /// a grand doctrine, an empty track takes a subdoctrine once the folder's experience covers its
 /// price above the reserve. The plan's own `doctrines` entries for a folder go first (a pending
 /// one holds that folder's experience); then `doctrine_defaults.<folder>` (subdoctrine ids in
 /// preference order), else the first subdoctrine the game offers on the track. Experience kept
-/// back: `manage.xp_reserve.<army|navy|air>` (army 30 by default, for templates and designs).
+/// back: `manage.xp_reserve.<army|navy|air>` (none by default: the plan's `xp_budget` holds what
+/// templates and designs need, and no amount is kept in code).
 /// Grand doctrines are the plan's decision and never chosen here. `manage.off` "doctrines" stops it.
 fn doctrine_fill(
     state: &mut State,
@@ -7429,9 +9501,7 @@ fn doctrine_fill(
             _ => "army",
         };
         // every spend the plan's xp_budget lists comes before a default fill (plan_xp.rs)
-        let reserve = plan["manage"]["xp_reserve"][kind]
-            .as_f64()
-            .unwrap_or(if kind == "army" { 30.0 } else { 0.0 })
+        let reserve = plan["manage"]["xp_reserve"][kind].as_f64().unwrap_or(0.0)
             + plan_xp::ahead(state, tools, plan, kind, &plan_xp::Spender::Unlisted, now).0;
         let xp = folder["experience"]
             .as_f64()
@@ -7580,6 +9650,16 @@ fn extras_step(
                 // nothing to adopt: the entry is not this step's to fix
                 (None, None) => continue,
             };
+            // already the game's (the start doctrine, a focus, an earlier run): done, so it
+            // neither holds the folder's experience nor keeps the fill off the folder's empty
+            // tracks (t1939n, 27 Nov 2026: the plan's first land entry, mobile_infantry, was
+            // the infantry track's since the start; it waited on experience holds all war and
+            // the armour track stayed empty with 105-117 army experience banked)
+            if doctrine_taken(&read, doctrine) {
+                state.doc_xp.remove(&part_key);
+                state.done.insert(part_key, now);
+                continue;
+            }
             if state.skipped(now, "doc", &part_key) {
                 break;
             }
@@ -7590,7 +9670,11 @@ fn extras_step(
                 _ => "army",
             };
             let xp = read["experience"][kind]["value"].as_f64().unwrap_or(0.0);
-            let cost = entry["xp"].as_f64().unwrap_or(100.0);
+            // the price the game's read shows for this doctrine (its cost reduction applied),
+            // else the plan's estimate, else none: then the game's Unlock decides alone (owner,
+            // 27 Nov 2026: no cost in code; it was 100 for every entry without `xp`)
+            let price = doctrine_price(&read, doctrine).or_else(|| entry["xp"].as_f64());
+            let cost = price.unwrap_or(0.0);
             // the spends the plan's xp_budget lists before this doctrine (templates, officer
             // corps, designs) are paid first (plan_xp.rs)
             let who = item_id(entry).map_or(plan_xp::Spender::Unlisted, |id| {
@@ -7612,15 +9696,13 @@ fn extras_step(
             }
             // the game disabled Unlock at this experience (the plan's cost is an estimate; the
             // game's own cost modifiers are not read): wait until it has grown
-            if let Some(failed) = state.doc_xp.get(&part_key) {
-                let more = (cost * 0.2).max(10.0);
-                if xp < failed + more {
+            if let Some(failed) = state.doc_xp.get(&part_key).copied() {
+                if xp < failed {
                     plan_manage::note(
                         state,
                         "doctrines",
                         format!(
-                            "{doctrine}: Unlock was disabled at {failed:.0} experience; waits for {:.0}",
-                            failed + more
+                            "{doctrine}: Unlock was disabled; waits for {failed:.0} experience"
                         ),
                     );
                     break;
@@ -7662,10 +9744,7 @@ fn extras_step(
                     .and_then(|t| t.split_whitespace().next())
                     .and_then(|n| n.parse::<f64>().ok());
                 if let Some(n) = needed {
-                    let more = (cost * 0.2).max(10.0);
-                    state
-                        .doc_xp
-                        .insert(part_key.clone(), (n * 0.75 - more).max(xp));
+                    state.doc_xp.insert(part_key.clone(), (n * 0.75).max(xp));
                     plan_manage::note(
                         state,
                         "doctrines",
@@ -7674,16 +9753,13 @@ fn extras_step(
                         ),
                     );
                 } else if let Some(price) = priced {
-                    let more = (cost * 0.2).max(10.0);
-                    state
-                        .doc_xp
-                        .insert(part_key.clone(), (price - more).max(xp));
+                    state.doc_xp.insert(part_key.clone(), price.max(xp));
                     plan_manage::note(
                         state,
                         "doctrines",
                         format!(
                             "{doctrine}: the game prices it at {price:.0} experience ({xp:.0} held); \
-                             waits for it (the plan's xp {cost:.0} is below the game's price)"
+                             waits for it"
                         ),
                     );
                 } else if why.contains("doctrine_unavailable") || why.contains("Unlock") {
@@ -7693,7 +9769,7 @@ fn extras_step(
                     // (live 15 Nov 2026: the same refusal four times in 285 days).
                     let n = state.doc_refused.entry(part_key.clone()).or_insert(0);
                     *n += 1;
-                    if *n >= 3 || xp >= 2.0 * cost {
+                    if *n >= 3 || price.is_some_and(|c| xp >= 2.0 * c) {
                         let n = *n;
                         state.done.insert(part_key.clone(), now);
                         plan_manage::note(
@@ -7706,7 +9782,8 @@ fn extras_step(
                             ),
                         );
                     } else {
-                        state.doc_xp.insert(part_key.clone(), xp);
+                        // tried again only once the experience has grown past this refusal
+                        state.doc_xp.insert(part_key.clone(), xp.next_up());
                     }
                 }
                 state.skip(now, "doc", &part_key, 15 * DAY);
@@ -8037,20 +10114,31 @@ fn air_war_missions(
                 // they fly to the new base, and a mission left to a later tick came a war day
                 // or more after the rebase (rd2-rd6, 19 Nov 2026: 6 of 12 fighters flew on
                 // war day 1, the 6 rebased ones only from day 3-5)
-                let went: Vec<String> = names
-                    .iter()
-                    .filter(|n| moved.contains(*n))
-                    .cloned()
-                    .collect();
+                // Each wing takes its own mission: one base's batch holds fighters, close air
+                // support and naval bombers alike, and the batch's first mission sent for all of
+                // them was refused for the others after a 34 s read-back that held the dated
+                // declaration a day (t1939n, 27 Nov 2026: air_superiority for 8 wings, 5 of them
+                // Stukas and naval bombers, Diverged; Poland declared 09.02 instead of 09.01).
                 let mut then = String::new();
-                if !went.is_empty() {
-                    let mut targets: Vec<i64> = operation.clone();
-                    targets.sort_by_key(|t| !contact.contains(t));
-                    let over = air_target(&borders, &targets, Some(to), first);
+                let mut missions: Vec<&str> = Vec::new();
+                for (n, _, m) in &rebases {
+                    if moved.contains(n) && !missions.contains(m) {
+                        missions.push(*m);
+                    }
+                }
+                let mut targets: Vec<i64> = operation.clone();
+                targets.sort_by_key(|t| !contact.contains(t));
+                let over = air_target(&borders, &targets, Some(to), first);
+                for m in missions {
+                    let went: Vec<String> = rebases
+                        .iter()
+                        .filter(|(n, _, wm)| *wm == m && moved.contains(n))
+                        .map(|(n, _, _)| n.clone())
+                        .collect();
                     let args = if went.len() == 1 {
-                        json!({"wing": went[0], "mission": mission, "state_id": over})
+                        json!({"wing": went[0], "mission": m, "state_id": over})
                     } else {
-                        json!({"wings": went, "mission": mission, "state_id": over})
+                        json!({"wings": went, "mission": m, "state_id": over})
                     };
                     let (flew, how) = state.act(tools, lease, "hoi4_air_mission", args, "am")?;
                     if flew {
@@ -8058,7 +10146,7 @@ fn air_war_missions(
                             state.skip(now, "airwing", name, 30 * DAY);
                         }
                     }
-                    then = format!("; then {mission} over state {over}: {flew} {how}");
+                    then.push_str(&format!("; then {m} over state {over}: {flew} {how}"));
                 }
                 return Ok(Some(format!(
                     "air {} wing(s) rebase to front state {to} for {mission} ({}): {ok} {why}{then}",
@@ -10408,6 +12496,28 @@ fn activate_contingency(
     }
 }
 
+/// What "revise" does for a missed checkpoint's rows that a lane can still bring about: a
+/// `focus_completed:` row puts that focus ahead of the path (the focus lane starts it next), the
+/// rows no lane owns stay with the plan's `else` (its contingency, phase or the revision alarm).
+/// `rows` are the current truths of `must`, in order. Before, "revise" only raised the alarm and
+/// a missed checkpoint's focus waited its turn behind the path (t1939n, 27 Nov 2026).
+fn revise_missed(state: &mut State, checkpoint: &Value, rows: &[Truth]) {
+    for (must, truth) in list(checkpoint, "must").iter().zip(rows) {
+        if *truth == Truth::True {
+            continue;
+        }
+        if let Some(key) = must
+            .as_str()
+            .and_then(|m| m.strip_prefix("focus_completed:"))
+        {
+            let key = key.trim().to_string();
+            if !key.is_empty() && !state.stages.focus_urgent.contains(&key) {
+                state.stages.focus_urgent.push(key);
+            }
+        }
+    }
+}
+
 /// One judgement of the strategy keys: phases in order, then checkpoints that are due, then
 /// contingencies (both may force a phase), then the goal; the digest block is rebuilt.
 fn judge_strategy(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
@@ -10483,10 +12593,28 @@ fn judge_strategy(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameH
             None => break,
         }
     }
-    // b. checkpoints whose date has come, each settled once
+    // b. checkpoints whose date has come, each settled once; a missed one is judged again until
+    // its rows hold, then it is recovered (met late, the miss stays in the news and the feed),
+    // and while it is missed the lanes that own its rows act on them (`revise_missed`)
     for c in list(plan, "checkpoints") {
         let Some(id) = item_id(c) else { continue };
-        if state.strategy.checkpoints.contains_key(&id) {
+        if let Some((_, met)) = state.strategy.checkpoints.get(&id).copied() {
+            if !met {
+                let rows: Vec<Truth> = list(c, "must")
+                    .iter()
+                    .map(|m| judge(state, tools, m, now))
+                    .collect();
+                if !rows.is_empty() && rows.iter().all(|t| *t == Truth::True) {
+                    state.strategy.checkpoints.insert(id.clone(), (now, true));
+                    let detail = json!({"checkpoint": id, "by": c["by"], "game_hour": now});
+                    state
+                        .strategy
+                        .news
+                        .push(json!({"kind": "checkpoint_recovered", "detail": detail}));
+                } else {
+                    revise_missed(state, c, &rows);
+                }
+            }
             continue;
         }
         let Some(by) = c["by"].as_str().and_then(crate::plan_predicate::date_hour) else {
@@ -10516,6 +12644,11 @@ fn judge_strategy(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameH
             continue;
         }
         state.strategy.checkpoints.insert(id.clone(), (now, false));
+        let rows: Vec<Truth> = list(c, "must")
+            .iter()
+            .map(|m| judge(state, tools, m, now))
+            .collect();
+        revise_missed(state, c, &rows);
         let otherwise = text(&c["else"]).trim().to_string();
         let detail = json!({"checkpoint": id, "by": c["by"], "failed": failed,
             "else": otherwise, "game_hour": now});
@@ -10857,26 +12990,32 @@ fn decisions_step(
             && !state.skipped(now, "decnote", "x")
         {
             state.skip(now, "decnote", "x", 30 * DAY);
-            if let Ok(offered) = tools.call("hoi4_decisions_list", &json!({"lease_token": lease})) {
+            if let Ok(mut offered) =
+                tools.call("hoi4_decisions_list", &json!({"lease_token": lease}))
+            {
+                judge_decisions(state, tools, plan, &mut offered, &[], now);
                 state.manage.decisions_seen = Some((now, offered.clone()));
                 let line = decisions_left_note(plan, &offered, &[]);
                 plan_manage::note(state, "decisions", line);
+                offer_unwanted_decisions(state, plan, &offered, &[], now);
             }
         }
-        return Ok(None);
+        return take_by_value(state, tools, plan, lease, &[], now);
     }
-    let offered = tools.call("hoi4_decisions_list", &json!({"lease_token": lease}))?;
-    state.manage.decisions_seen = Some((now, offered.clone()));
+    let mut offered = tools.call("hoi4_decisions_list", &json!({"lease_token": lease}))?;
     let pending: Vec<String> = rules
         .iter()
         .map(|r| r.1.clone())
         .chain(wanted.iter().cloned())
         .collect();
+    judge_decisions(state, tools, plan, &mut offered, &pending, now);
+    state.manage.decisions_seen = Some((now, offered.clone()));
     plan_manage::note(
         state,
         "decisions",
         decisions_left_note(plan, &offered, &pending),
     );
+    offer_unwanted_decisions(state, plan, &offered, &pending, now);
     // A decision the country cannot afford yet waits for the political power: the game draws
     // it enabled and a click does nothing (g17c: three refusals in nine days, then taken).
     let pp = plan_manage::political_power(tools);
@@ -10916,13 +13055,16 @@ fn decisions_step(
             args["target"] = json!(t);
         }
         let (ok, why) = state.act(tools, lease, "hoi4_decision_take", args, "dr")?;
-        state.skip(now, "dec", &skip, if ok { 30 * DAY } else { 3 * DAY });
+        let on = target.map_or_else(String::new, |t| format!(" on {t}"));
+        let rest = decision_rest(state, &skip, ok, now);
+        state.skip(now, "dec", &skip, rest);
         if ok {
             state
                 .done
                 .insert(format!("decrule:{id}#{}", taken + 1), now);
+        } else {
+            decision_refused_note(state, &key, &on, &skip, &why, rest);
         }
-        let on = target.map_or_else(String::new, |t| format!(" on {t}"));
         return Ok(Some(format!("decision {key}{on} (rule {id}): {ok} {why}")));
     }
     for d in list(&offered, "decisions") {
@@ -10935,11 +13077,212 @@ fn decisions_step(
                 json!({"decision": key}),
                 "de",
             )?;
-            state.skip(now, "dec", key, if ok { 30 * DAY } else { 3 * DAY });
+            let rest = decision_rest(state, key, ok, now);
+            state.skip(now, "dec", key, rest);
+            if !ok {
+                let key = key.to_string();
+                decision_refused_note(state, &key, "", &key, &why, rest);
+            }
             return Ok(Some(format!("decision {key}: {ok} {why}")));
         }
     }
-    Ok(None)
+    take_by_value(state, tools, plan, lease, &pending, now)
+}
+
+/// Every offered decision no plan entry names, judged by its value (crate::pick_value: the
+/// decision's own modifier, days and effects from the running game's scripts, weighed in
+/// factory-years for this country, `value.weights` of the plan first), written into the read as
+/// `value`, `value_terms`, `unvalued` and `verdict`: `take` (worth something), `left_by_value`
+/// (worth nothing or less: the reason is its terms), `judgement` (nothing in it valued: the
+/// player's call, see [`offer_unwanted_decisions`]), `left_after_offer` (a judgement the player
+/// did not take within the grace). The omission row and the standing order read the verdicts
+/// from `decisions_seen` (engineer 94's missing piece: g92b offered and left the same decisions
+/// 154 days).
+fn judge_decisions(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    offered: &mut Value,
+    planned: &[String],
+    now: GameHour,
+) {
+    let judged = |d: &Value| {
+        let key = text(&d["decision"]);
+        !key.is_empty() && !planned.iter().any(|p| p == key) && !decision_forbidden(plan, key)
+    };
+    if !list(offered, "decisions").iter().any(&judged) {
+        return;
+    }
+    // the country the value is judged for, read only when something is to be judged
+    let economy = tools.call("hoi4_economy", &json!({})).unwrap_or_default();
+    let slots = tools
+        .call("hoi4_research", &json!({}))
+        .ok()
+        .map(|r| list(&r, "slots").len() as f64);
+    let ctx = crate::pick_value::Ctx::from_reads(&economy, slots, plan);
+    let offer_over = state
+        .done
+        .get("decoffer")
+        .is_some_and(|since| now.saturating_sub(*since) >= plan_xp::HOLD_GRACE);
+    let Some(rows) = offered["decisions"].as_array_mut() else {
+        return;
+    };
+    for d in rows {
+        if !judged(&*d) {
+            continue;
+        }
+        let verdict = match crate::pick_value::value(&d["effects"], &ctx, plan) {
+            Some((v, terms, unvalued)) => {
+                d["value"] = json!((v * 10.0).round() / 10.0);
+                d["value_terms"] = json!(terms);
+                d["unvalued"] = json!(unvalued);
+                if v > 0.0 {
+                    "take"
+                } else {
+                    "left_by_value"
+                }
+            }
+            None if offer_over => "left_after_offer",
+            None => "judgement",
+        };
+        d["verdict"] = json!(verdict);
+    }
+}
+
+/// The decision of most value per political power among the last read's `take` verdicts that
+/// the power above the plan's reserve pays now (the reserve: the plan's own picks that can be
+/// bought now, plan_manage::politics_reserve), taken with hoi4_decision_take. The read is the
+/// decisions step's own, at most a month old; a take that does not hold rests as any decision.
+fn take_by_value(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    pending: &[String],
+    now: GameHour,
+) -> Result<Option<String>> {
+    let Some((at, read)) = state.manage.decisions_seen.clone() else {
+        return Ok(None);
+    };
+    if now.saturating_sub(at) > 31 * DAY || state.skipped(now, "decvalue", "x") {
+        return Ok(None);
+    }
+    let candidates: Vec<(String, f64, f64, String)> = list(&read, "decisions")
+        .iter()
+        .filter(|d| {
+            d["verdict"] == json!("take")
+                && d["enabled"] == json!(true)
+                && !d["active_timer"].as_bool().unwrap_or(false)
+        })
+        .filter_map(|d| {
+            let key = text(&d["decision"]).to_string();
+            let cost = d["cost"].as_f64()?;
+            let value = d["value"].as_f64()?;
+            let terms = strings(d, "value_terms").join(", ");
+            (!pending.contains(&key)).then_some((key, cost, value, terms))
+        })
+        .filter(|(k, _, _, _)| !state.skipped(now, "dec", k))
+        .collect();
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+    let Some(pp) = plan_manage::political_power(tools) else {
+        return Ok(None);
+    };
+    let (reserve, _) = plan_manage::politics_reserve(state, tools, plan, now);
+    let budget = pp - reserve;
+    let best = candidates
+        .iter()
+        .filter(|(_, cost, _, _)| *cost <= budget + 1e-6)
+        .max_by(|a, b| (a.2 / a.1.max(1.0)).total_cmp(&(b.2 / b.1.max(1.0))))
+        .cloned();
+    let Some((key, cost, value, terms)) = best else {
+        // the power is short of every one worth taking: it is looked at again once a game day
+        state.skip(now, "decvalue", "x", DAY);
+        let cheapest = candidates.iter().map(|c| c.1).fold(f64::INFINITY, f64::min);
+        plan_manage::note(
+            state,
+            "decisions_value",
+            format!(
+                "worth taking when the power pays: {} (cheapest {cheapest:.0}; {budget:.0} free above the plan's reserve {reserve:.0})",
+                candidates
+                    .iter()
+                    .map(|c| format!("{} ({:.0} power, value {:+.1})", c.0, c.1, c.2))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        );
+        return Ok(None);
+    };
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_decision_take",
+        json!({"decision": key}),
+        "dv",
+    )?;
+    let rest = decision_rest(state, &key, ok, now);
+    state.skip(now, "dec", &key, rest);
+    if !ok {
+        decision_refused_note(state, &key, "", &key, &why, rest);
+    }
+    // the next turn reads the panel again: the take changed what is enabled
+    state.skip(now, "decnote", "x", 0);
+    let line = format!(
+        "decision {key} by value: {value:+.1} factory-years for {cost:.0} political power ({terms}): {ok} {why}"
+    );
+    plan_manage::note(state, "decisions_value", line.clone());
+    Ok(Some(line))
+}
+
+/// How long a decision rests after a take (game hours): 30 days once taken; after a take that
+/// did not hold, 3 game days, doubled for each failure in a row (3, 6, 12, 24, 48). A take whose
+/// read-back shows no change is the same order meeting the same cause: sent every 3 days, the
+/// targeted GER_operational_planning on France failed five times in a row and the alert stayed
+/// open 158 days (t1939n, 27 Nov 2026).
+fn decision_rest(state: &mut State, skip: &str, ok: bool, now: GameHour) -> GameHour {
+    let prefix = format!("decfail:{skip}#");
+    let fails = state.done.keys().filter(|k| k.starts_with(&prefix)).count();
+    if ok {
+        state.done.retain(|k, _| !k.starts_with(&prefix));
+        return 30 * DAY;
+    }
+    state.done.insert(format!("{prefix}{}", fails + 1), now);
+    (3 * DAY) << fails.min(4)
+}
+
+/// The decisions lane's note after a take that did not hold: the decision, the game's or the
+/// tool's reason, how often in a row and how long it rests (the alert's row quotes it).
+fn decision_refused_note(
+    state: &mut State,
+    key: &str,
+    on: &str,
+    skip: &str,
+    why: &str,
+    rest: GameHour,
+) {
+    let prefix = format!("decfail:{skip}#");
+    let fails = state.done.keys().filter(|k| k.starts_with(&prefix)).count();
+    let before = plan_manage::note_of(state, "decisions")
+        .map(|n| n.split("; not taken: ").next().unwrap_or(n).to_string())
+        .unwrap_or_default();
+    let mut line = format!(
+        "not taken: {key}{on} {fails} time(s) in a row ({}); rests {} game days",
+        why.chars().take(160).collect::<String>(),
+        rest / DAY
+    );
+    if fails >= 3 {
+        line.push_str(
+            ": the same take keeps showing no change, so the order or its read-back is wrong for \
+             this decision (a targeted row goes by the mouse; its cost may not be political power)",
+        );
+    }
+    let text = if before.is_empty() {
+        line
+    } else {
+        format!("{before}; {line}")
+    };
+    plan_manage::note(state, "decisions", text);
 }
 
 /// `learned`: skills the player learned on panels no typed tool knows (a mod's mechanics) join
@@ -10989,11 +13332,100 @@ fn learned_step(
     Ok(None)
 }
 
+/// The enabled decisions no plan entry wants or forbids are a judgement, not a lane choice: while
+/// the game's decisions_available or political_power_unspent alert stands open they go to the
+/// player as one item with the game's options (key, title, cost) and a deadline of the hold
+/// grace. The executor reads no value for a decision's effects (modifiers, scripted effects and
+/// variables differ by country and mod), so past the deadline they stand as left and the note
+/// says the player chose none: the open alert then carries a reason, never a quiet turn
+/// (g92a, 27 Nov 2026: decisions_available open 148 days, "deliberately not taken", nobody asked).
+fn offer_unwanted_decisions(
+    state: &mut State,
+    plan: &Value,
+    offered: &Value,
+    pending: &[String],
+    now: GameHour,
+) {
+    let open = ["decisions_available", "political_power_unspent"]
+        .iter()
+        .any(|k| state.manage.alert_since.contains_key(*k));
+    let mut options: Vec<Value> = Vec::new();
+    let mut keys: Vec<String> = Vec::new();
+    for d in list(offered, "decisions") {
+        let key = text(&d["decision"]).to_string();
+        if d["enabled"] != json!(true)
+            || d["active_timer"].as_bool().unwrap_or(false)
+            || key.is_empty()
+            || pending.contains(&key)
+            || keys.contains(&key)
+            || decision_forbidden(plan, &key)
+            // a decision judged by value is the lane's to take or leave, not the player's
+            || d["value"].is_number()
+        {
+            continue;
+        }
+        keys.push(key.clone());
+        options.push(
+            json!({"decision": key, "title": d["title"], "cost": d["cost"],
+            "unvalued": d["effects"]["unread"]}),
+        );
+    }
+    if !open || options.is_empty() {
+        state.done.remove("decoffer");
+        return;
+    }
+    let since = *state.done.entry("decoffer".into()).or_insert(now);
+    let shown = keys
+        .iter()
+        .zip(&options)
+        .take(12)
+        .map(|(k, o)| match o["cost"].as_f64() {
+            Some(c) => format!("{k} ({c:.0} political power)"),
+            None => k.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let left = (since + plan_xp::HOLD_GRACE).saturating_sub(now);
+    let line = if left > 0 {
+        plan_manage::offer_player(
+            state,
+            plan,
+            now,
+            "decisions_offer",
+            "decisions_unwanted",
+            format!(
+                "the player's choice, {} more day(s): decisions the plan neither takes nor forbids: {shown}; take one (hoi4_decision_take) or name it in decisions or a never rule",
+                (left + DAY - 1) / DAY
+            ),
+            json!({"rule": "decisions", "options": options,
+                   "deadline_days": (left + DAY - 1) / DAY}),
+        );
+        format!(
+            "offered to the player, {} more day(s)",
+            (left + DAY - 1) / DAY
+        )
+    } else {
+        let line = format!(
+            "left: offered to the player {} day(s) ago and none chosen; the executor reads no value for a decision's effects: {shown}",
+            (now - since) / DAY
+        );
+        plan_manage::note(state, "decisions_offer", line.clone());
+        line
+    };
+    // the alert row quotes the decisions note: it carries the offer's state
+    let base = plan_manage::note_of(state, "decisions")
+        .unwrap_or_default()
+        .to_string();
+    plan_manage::note(state, "decisions", format!("{base}; {line}"));
+}
+
 /// The decisions the game offers now that no plan entry wants, named as deliberately not taken
 /// (with the plan's reason where a never-rule gives one), and the wanted ones still waiting.
 fn decisions_left_note(plan: &Value, offered: &Value, pending: &[String]) -> String {
     let mut left: Vec<String> = Vec::new();
     let mut never: Vec<String> = Vec::new();
+    let mut by_value: Vec<String> = Vec::new();
+    let mut worth: Vec<String> = Vec::new();
     for d in list(offered, "decisions") {
         if d["enabled"] != json!(true) || d["active_timer"].as_bool().unwrap_or(false) {
             continue;
@@ -11004,6 +13436,14 @@ fn decisions_left_note(plan: &Value, offered: &Value, pending: &[String]) -> Str
         }
         if decision_forbidden(plan, &key) {
             never.push(key);
+        } else if d["verdict"] == json!("left_by_value") {
+            by_value.push(format!(
+                "{key} (value {}: {})",
+                d["value"],
+                strings(d, "value_terms").join(", ")
+            ));
+        } else if d["verdict"] == json!("take") {
+            worth.push(key);
         } else {
             left.push(key);
         }
@@ -11018,10 +13458,22 @@ fn decisions_left_note(plan: &Value, offered: &Value, pending: &[String]) -> Str
     if !never.is_empty() {
         parts.push(format!("never-take rules: {}", never.join(", ")));
     }
+    if !worth.is_empty() {
+        parts.push(format!(
+            "worth taking by value, taken when the power above the plan's reserve pays: {}",
+            worth.join(", ")
+        ));
+    }
+    if !by_value.is_empty() {
+        parts.push(format!(
+            "left by value (worth nothing or less in factory-years for this country): {}",
+            by_value.join("; ")
+        ));
+    }
     if !left.is_empty() {
         let shown: Vec<&String> = left.iter().take(12).collect();
         parts.push(format!(
-            "enabled but deliberately not taken (no decisions/decision_rules entry wants them): {}{}",
+            "enabled, no plan entry, no value read from their effects (the player's judgement): {}{}",
             shown.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "),
             if left.len() > 12 { format!(" and {} more", left.len() - 12) } else { String::new() }
         ));
@@ -11575,9 +14027,15 @@ pub fn run(
         let pause = match step {
             Tick::Acted(what) => {
                 // A failed action ends the run: retrying it at once only repeats the failure
-                // (live 8 Nov 2026: an event behind a system dialog was clicked 346 times).
-                let failed = what.contains(": false");
+                // (live 8 Nov 2026: an event behind a system dialog was clicked 346 times). A
+                // tick of several lanes ends it only when every one of its orders failed: the
+                // others' orders took and their lanes may have more (the ledger rests the
+                // failed order).
+                let more = std::mem::take(&mut state.sched.more);
+                let failed =
+                    what.contains(": false") && more.iter().all(|line| line.contains(": false"));
                 actions.push(what);
+                actions.extend(more);
                 if failed {
                     // Orders that keep failing in a paused game never leave a tick with nothing
                     // to do, so the opening was never noted as set up and the player waited for
@@ -11608,7 +14066,7 @@ pub fn run(
                 if new {
                     break json!({"event_open": event});
                 }
-                Duration::from_secs(12)
+                IDLE_WAIT
             }
             Tick::DateStop(why) => {
                 stopped_on_date = true;
@@ -11622,13 +14080,18 @@ pub fn run(
                 if !state.setup_noted {
                     note_setup(state, tools, actions.len(), None);
                 }
-                Duration::from_secs(12)
+                nothing_pause(state)
             }
         };
         if std::time::Instant::now() + pause >= deadline {
             break json!("deadline");
         }
-        crate::phase::sleep(pause);
+        if pause.is_zero() {
+            continue;
+        }
+        // EVENT-DRIVEN: the next tick comes with the next game hour (the lanes' rests and the
+        // plan's dates are game hours), at the latest after `pause`; a paused game waits `pause`
+        wait_next_hour(state, tools, now, pause);
     };
     let plan = read_plan(plan_path).unwrap_or_else(|_| json!({}));
     // the digest uses the plan as the ticks did: with the active phase's overrides (alarms too)
@@ -11913,6 +14376,10 @@ fn war_mission(kind: &str) -> Option<&'static str> {
 }
 
 #[cfg(test)]
+#[path = "plan_run_throughput_tests.rs"]
+mod throughput_tests;
+
+#[cfg(test)]
 mod tests {
     #[test]
     fn a_refused_attack_order_holds_the_opening_air_burst() {
@@ -11926,6 +14393,47 @@ mod tests {
             Some("operation op: execute Army Group 1: true Verified")
         ));
         assert!(!super::burst_refused(false, None));
+    }
+
+    #[test]
+    fn a_refused_refinement_does_not_hold_the_opening_air_burst() {
+        // w101c (28 Nov 2026): the declaration's burst; the shed by the mouse failed and the air
+        // burst over Holland waited five game days
+        let w101c = "war burst of 3 orders in 31 s: operation op_lowlands: shed: 2 of Army 2 \
+            waiting where they cannot fight attack the unattacked province 6500 (state 35) from \
+            [3444]: false input_readback_failed: No division took a march order; operation \
+            op_lowlands: shed: 2 of Armee West Süd waiting where they cannot fight attack the \
+            unattacked province 6583 (state 8) from [11435]: true Verified";
+        assert!(!super::burst_refused(false, Some(w101c)));
+        // an event that refuses the shed refuses the attack's orders too
+        assert!(super::burst_refused(
+            false,
+            Some("operation op: shed: 2 of A attack 6500: false events_open: germany_mefo_bills.1")
+        ));
+        // a refused execute beside a working refinement still holds it
+        assert!(super::burst_refused(
+            false,
+            Some("operation op: shed: 2 of A attack 6500: true Verified; operation op: Army 7 is not executing: execute: false action_not_applied")
+        ));
+    }
+
+    #[test]
+    fn a_tick_with_nothing_to_do_sleeps_short_while_a_declaration_is_near() {
+        let mut state = super::State::default();
+        assert_eq!(
+            super::nothing_pause(&mut state),
+            std::time::Duration::from_secs(12)
+        );
+        state.done.insert(super::DECLARING_IDLE.to_string(), 1);
+        assert_eq!(
+            super::nothing_pause(&mut state),
+            std::time::Duration::from_secs(1)
+        );
+        // taken once: the next idle tick sleeps the usual time unless the window says so again
+        assert_eq!(
+            super::nothing_pause(&mut state),
+            std::time::Duration::from_secs(12)
+        );
     }
 
     #[test]
@@ -11949,6 +14457,195 @@ mod tests {
             Some(0),
             DAY
         ));
+    }
+
+    /// t1939n (27 Nov 2026): omission rows past their deadline read "lane training says: no
+    /// reason given". Every turn now records what the lane said; a lane that never says anything
+    /// (or never gets a turn) is named SILENT, and a later rest keeps the last reason.
+    #[test]
+    fn a_lane_turn_records_its_reason_and_a_lane_that_never_says_one_is_silent() {
+        let mut state = State::default();
+        let now = 1000 * DAY;
+        // before the lanes have run the fair wait, a lane not yet offered is no silence (g92a:
+        // the day-0 alert read's "no turn in this run" stayed on the issue for the whole run)
+        let (why, silent) = super::lane_reason(&state, "training", now).unwrap();
+        assert!(!silent && why.contains("not offered a turn yet"), "{why}");
+        state.sched.turns.insert("research", now - DAY);
+        let (why, silent) = super::lane_reason(&state, "training", now).unwrap();
+        assert!(!silent && why.contains("run 1 day(s)"), "{why}");
+        // never offered while the others have run past the fair wait
+        state.sched.turns.insert("research", now - 10 * DAY);
+        let (why, silent) = super::lane_reason(&state, "training", now).unwrap();
+        assert!(silent && why.contains("no turn in this run"), "{why}");
+        // a turn that says nothing
+        let before = super::all_notes(&state);
+        super::record_turn(&mut state, "training", None, &before, now);
+        let (why, silent) = super::lane_reason(&state, "training", now).unwrap();
+        assert!(silent && why.contains("never stated a reason"), "{why}");
+        // a turn that writes a note: the reason, and it outlives a later silent rest
+        let before = super::all_notes(&state);
+        plan_manage::note(
+            &mut state,
+            "training",
+            "Infanterie-Division: waits, infantry_equipment 0 below 950",
+        );
+        super::record_turn(&mut state, "training", None, &before, now + DAY);
+        let before = super::all_notes(&state);
+        super::record_turn(&mut state, "training", None, &before, now + 3 * DAY);
+        let (why, silent) = super::lane_reason(&state, "training", now + 4 * DAY).unwrap();
+        assert!(
+            !silent && why.contains("infantry_equipment 0 below 950"),
+            "{why}"
+        );
+        // the lane's own standing note is said again at each turn
+        assert!(why.contains("1 day(s) ago"), "{why}");
+        // an order is said; an owner under another name finds its lane; the player has no lane
+        let before = super::all_notes(&state);
+        state.last_ok = Some(false);
+        super::record_turn(
+            &mut state,
+            "extras",
+            Some(&"doctrine x: false refused".to_string()),
+            &before,
+            now,
+        );
+        let (why, silent) = super::lane_reason(&state, "doctrines", now).unwrap();
+        assert!(!silent && why.contains("refused: doctrine x"), "{why}");
+        assert!(super::lane_reason(&state, "player (manage.alerts_ignore)", now).is_none());
+    }
+
+    /// t1939n (27 Nov 2026): GER_operational_planning on France read back "no political power
+    /// spent, timer or removal observed" five times, every 3 days, with no word in the alert row.
+    #[test]
+    fn a_decision_take_that_does_not_hold_rests_longer_each_time_and_says_why() {
+        let mut state = State::default();
+        let rests: Vec<GameHour> = (0..6)
+            .map(|i| super::decision_rest(&mut state, "d@FRA", false, i * DAY))
+            .collect();
+        assert_eq!(
+            rests,
+            vec![3 * DAY, 6 * DAY, 12 * DAY, 24 * DAY, 48 * DAY, 48 * DAY]
+        );
+        super::decision_refused_note(
+            &mut state,
+            "d",
+            " on FRA",
+            "d@FRA",
+            "input_readback_failed: x",
+            48 * DAY,
+        );
+        let n = plan_manage::note_of(&state, "decisions")
+            .unwrap()
+            .to_string();
+        assert!(
+            n.contains("not taken: d on FRA 6 time(s) in a row") && n.contains("rests 48"),
+            "{n}"
+        );
+        assert!(n.contains("keeps showing no change"), "{n}");
+        assert_eq!(
+            super::decision_rest(&mut state, "d@FRA", true, 7 * DAY),
+            30 * DAY
+        );
+        assert_eq!(
+            super::decision_rest(&mut state, "d@FRA", false, 8 * DAY),
+            3 * DAY
+        );
+    }
+
+    /// t1939n (27 Nov 2026): GER_autonomy_in_the_kriegsschulen failed six starts on the GUI path
+    /// (focus_detail_not_opened) and no focus ran for 81 days; a missed checkpoint's focus
+    /// waited behind the path. A key the GUI failed twice goes behind every other key; a missed
+    /// checkpoint's focus goes first.
+    #[test]
+    fn a_focus_the_gui_cannot_start_goes_behind_and_a_missed_checkpoints_focus_goes_first() {
+        let keys = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let path = keys(&["a", "b", "c"]);
+        let mut fails: HashMap<String, u32> = HashMap::new();
+        assert_eq!(super::focus_order(&[], &path, &[], &fails), path);
+        fails.insert("a".into(), 1);
+        assert_eq!(super::focus_order(&[], &path, &[], &fails), path);
+        fails.insert("a".into(), super::FOCUS_GUI_FAILS);
+        assert_eq!(
+            super::focus_order(&[], &path, &[], &fails),
+            keys(&["b", "c", "a"])
+        );
+        assert_eq!(
+            super::focus_order(&keys(&["c", "z"]), &path, &keys(&["z"]), &fails),
+            keys(&["c", "b", "a"])
+        );
+        let mut state = State::default();
+        let cp = json!({"id": "cp", "by": "1939.8.31",
+            "must": ["focus_completed:GER_danzig_or_war", "at_war_with:POL", "focus_completed:x"]});
+        super::revise_missed(&mut state, &cp, &[Truth::False, Truth::False, Truth::True]);
+        assert_eq!(state.stages.focus_urgent, keys(&["GER_danzig_or_war"]));
+        super::revise_missed(&mut state, &cp, &[Truth::False, Truth::False, Truth::False]);
+        assert_eq!(state.stages.focus_urgent, keys(&["GER_danzig_or_war", "x"]));
+    }
+
+    /// t1939m (24 Nov 2026): in the opening a 9 s design and two design-company trait orders
+    /// ran from 30 August to 4 September while the operation re-drew; the declaration came on the
+    /// 4th. Every slow lane yields there; the hold ends OPENING_HOLD_TAIL after the date.
+    #[test]
+    fn slow_lanes_yield_in_the_opening_while_the_operation_prepares() {
+        let plan = json!({
+            "operations": [{"id": "op_poland", "enemies": ["POL"]}],
+            "diplomacy": [{"action": "declare", "target": "POL", "when": "date >= 1939.9.1"}]
+        });
+        let day = super::date_hour("1939.9.1").unwrap();
+        let mut state = State::default();
+        // preparing (re-drawing): not ready, not executed
+        state
+            .done
+            .insert("op:op_poland:prep".into(), day - 20 * DAY);
+        let t0 = std::time::Instant::now() - std::time::Duration::from_secs(9);
+        state.round.timed("designs", true, t0);
+        state
+            .round
+            .timed("politics", true, std::time::Instant::now());
+        state.round.timed("construction", false, t0);
+        assert!(state.round.slow("designs"));
+        assert!(!state.round.slow("politics"));
+        // a step that gave no order is not measured
+        assert!(!state.round.slow("construction"));
+        let tools = fake(vec![]);
+        let held = |state: &mut State, name: &str, now: GameHour| {
+            super::opening_holds(state, &tools, &plan, name, now)
+        };
+        // four days before: nothing waits
+        assert!(!held(&mut state, "designs", day - 4 * DAY));
+        // in the window: the slow lane and the named GUI lanes wait, a fast lane and the holds do not
+        for now in [day - 2 * DAY, day, day + 3 * DAY] {
+            assert!(held(&mut state, "designs", now));
+            assert!(held(&mut state, "mio_traits", now));
+            assert!(!held(&mut state, "politics", now));
+            assert!(!held(&mut state, "hold", now));
+        }
+        // the hold ends after the tail, and once the operation executes
+        assert!(!held(
+            &mut state,
+            "designs",
+            day + super::OPENING_HOLD_TAIL + DAY
+        ));
+        state.done.insert("op:op_poland:exec".into(), day);
+        assert!(!held(&mut state, "designs", day));
+        // a 77 s order at 4.5 game hours a second (speed 3) yields from about 32 days before
+        state.done.remove("op:op_poland:exec");
+        state.round.secs.insert("mio_traits", 77.0);
+        state.round.hours_per_sec = 4.5;
+        assert!(held(&mut state, "mio_traits", day - 20 * DAY));
+        assert!(!held(&mut state, "designs", day - 20 * DAY));
+        // the pace is measured while the game runs only
+        let mut round = super::Round::default();
+        let t = std::time::Instant::now();
+        round.pace_at(100, t);
+        round.pace_at(100, t + std::time::Duration::from_secs(5));
+        assert_eq!(round.hours_per_sec, 0.0);
+        round.pace_at(118, t + std::time::Duration::from_secs(9));
+        assert!((round.hours_per_sec - 18.0 / 9.0).abs() < 1e-9);
+        // no operation against the target: no hold
+        let mut other = State::default();
+        other.round.timed("designs", true, t0);
+        assert!(!held(&mut other, "designs", day));
     }
 
     #[test]
@@ -12000,7 +14697,7 @@ mod tests {
                 gap = gap.max(now - last);
                 last = now;
             } else {
-                round.war_acted(now);
+                round.war_acted(now, true);
                 war += 1;
             }
             now += 2;
@@ -12009,7 +14706,7 @@ mod tests {
         assert!(war >= 3 * lanes - 3, "{war} {lanes}");
         // a lane-free hour: the lanes are owed after a day even inside the share
         let mut round = super::Round::default();
-        round.war_acted(0);
+        round.war_acted(0, true);
         assert!(!round.lanes_owed(DAY - 1));
         assert!(round.lanes_owed(DAY));
     }
@@ -12174,6 +14871,34 @@ mod tests {
             refuse_text: RefCell::new(HashMap::new()),
         }
     }
+    /// t1939n (27 Nov 2026): the trade judge shared the name `trade` with the plan's deals and
+    /// was never offered; insufficient_resources stayed open 151 days and hoi4_trade was never read.
+    #[test]
+    fn the_pass_trade_lane_reaches_the_judge_and_the_resources_rule_names_it() {
+        let plan = json!({"manage": {}, "trade": {"judge": {"on": true}}});
+        let pass = super::lanes(&plan, false);
+        assert_eq!(pass.iter().filter(|l| l.0 == "trade").count(), 1);
+        let trade = pass.iter().find(|l| l.0 == "trade").unwrap().1;
+        let tools = fake(vec![(
+            "hoi4_resources",
+            json!({"resources": {"steel": {"shortage": {"short": false}}}}),
+        )]);
+        let mut state = State::default();
+        assert_eq!(trade(&mut state, &tools, &plan, "l", 1_000).unwrap(), None);
+        assert!(tools
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, _)| n == "hoi4_resources"));
+        assert_eq!(plan_manage::note_of(&state, "trade"), Some("no deficit"));
+        let resources = pass.iter().find(|l| l.0 == "resources").unwrap().1;
+        resources(&mut state, &tools, &plan, "l", 1_000).unwrap();
+        assert_eq!(
+            plan_manage::note_of(&state, "resources"),
+            Some("trade.judge owns the deficits: no deficit")
+        );
+    }
+
     #[test]
     fn the_bulk_paths_whose_probes_passed_are_on_by_default() {
         let none = bulk_paths(&json!({}));
@@ -12887,6 +15612,60 @@ mod tests {
     }
 
     #[test]
+    fn a_seen_event_waiting_for_the_model_holds_itself_and_not_the_lanes() {
+        // dg86b (27 Nov 2026): an unruled choice waited for the model and every lane with it:
+        // one scheduler tick in 14 game days
+        let lab = IdleLab(War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        });
+        struct Open<'a>(&'a IdleLab);
+        impl Tools for Open<'_> {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_events" {
+                    return Ok(json!({"events": [{"event": "denmark_trade_deal.1",
+                        "options": ["This could be beneficial", "We have no need"]}]}));
+                }
+                self.0.call(name, args)
+            }
+        }
+        let tools = Open(&lab);
+        let mut state = State::default();
+        let mut plan = war_plan();
+        plan["research_priority"] = json!(["tech_a"]);
+        plan["wait_events_days"] = json!(3);
+        // the model sees the new event first: nothing else acts on that tick
+        assert_eq!(
+            tick(&mut state, &tools, &plan, "l", START).unwrap(),
+            Tick::Waiting {
+                event: "denmark_trade_deal.1".into(),
+                new: true
+            }
+        );
+        assert!(!lab
+            .0
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, _)| n == "hoi4_research_start"));
+        // then, while it waits for the model, the lanes go on (the idle research slot is filled)
+        for i in 1..=(super::WAR_SHARE as i64 + 2) {
+            let out = tick(&mut state, &tools, &plan, "l", START + i).unwrap();
+            assert!(
+                !matches!(&out, Tick::Acted(s) if s.starts_with("event ")),
+                "{out:?}"
+            );
+        }
+        assert!(lab
+            .0
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, _)| n == "hoi4_research_start"));
+    }
+
+    #[test]
     fn an_event_whose_answer_rests_gives_the_turn_to_the_other_open_events() {
         // i18b (18 Nov 2026): the listed last event lay under a later one; its answer failed
         // three times and the backoff held the whole tick for 13 game days.
@@ -13400,6 +16179,45 @@ mod tests {
         );
         assert_eq!(b.added.borrow()[1], (51, 1));
         assert!(state.con.digest.clone().unwrap().contains("55:full"));
+    }
+
+    /// t1939k (24 Nov 2026): a state that took this building in the last week goes after the
+    /// other listed states, so the same order does not go to one state twice in a week.
+    #[test]
+    fn construction_spreads_a_building_over_the_listed_states_within_a_week() {
+        let b = Builder::new();
+        let plan =
+            json!({"construction": [{"building": "air_base", "states": [67, 42], "count": 1}]});
+        let mut state = State::default();
+        state.done.insert("conlast:air_base:67".into(), START - DAY);
+        state
+            .done
+            .insert("conlast:air_base:42".into(), START - 10 * DAY);
+        let first = acted(tick(&mut state, &b, &plan, "l", START).unwrap());
+        assert!(first.starts_with("construct air_base 42"), "{first}");
+        assert_eq!(state.done.get("conlast:air_base:42"), Some(&START));
+    }
+
+    #[test]
+    fn a_model_not_offered_takes_the_next_newer_offered_of_its_kind() {
+        let why = "invalid_target: No producible design of this equipment is offered; offered: \
+                   convoy_1, ship_hull_carrier_1, ship_hull_submarine_2, ship_hull_submarine_3, \
+                   ship_hull_light_2";
+        assert_eq!(
+            newer_offered("ship_hull_submarine_1", why).as_deref(),
+            Some("ship_hull_submarine_2")
+        );
+        assert_eq!(newer_offered("ship_hull_light_2", why), None);
+        assert_eq!(newer_offered("ship_hull_heavy_1", why), None);
+        assert_eq!(
+            newer_offered("ship_hull_submarine_1", "invalid_target: busy"),
+            None
+        );
+        assert_eq!(
+            successors("ship_hull_submarine_1", 2),
+            vec!["ship_hull_submarine_2", "ship_hull_submarine_3"]
+        );
+        assert!(successors("ship_hull_cruiser_panzerschiff", 2).is_empty());
     }
 
     #[test]
@@ -14773,6 +17591,63 @@ mod tests {
     }
 
     #[test]
+    fn rebased_wings_of_one_batch_each_take_their_own_mission() {
+        // t1939n (27 Nov 2026): fighters, Stukas and naval bombers rebased in one order were
+        // all sent air_superiority; five refused after a 34 s read-back and the declaration
+        // came a day late
+        struct Mixed(std::cell::RefCell<Vec<Value>>, std::cell::Cell<i64>);
+        impl Tools for Mixed {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_air_mission" {
+                    self.0.borrow_mut().push(args.clone());
+                }
+                let wing = |n: &str, t: &str| {
+                    json!({"wing": n, "aircraft_type": t, "aircraft": 50, "standing_by": false,
+                        "missions": ["training"],
+                        "air_base": {"base_id": 3, "state_id": self.1.get()}})
+                };
+                match name {
+                    "hoi4_wars" => Ok(json!({"borders": [
+                        {"neighbour_tag": "POL", "hostile": false, "own_border_states": [66], "neighbour_states": [85]}]})),
+                    "hoi4_armies" => Ok(json!({"army_groups": [{"plan": [{"offensives": [
+                        {"executing": false, "target": {"states": [85]}}]}]}]})),
+                    "hoi4_air" => Ok(json!({"air_bases": [{"state_id": 66, "free": 400}],
+                        "wings": [wing("JG 1", "small_plane_airframe_0"),
+                            wing("StG 2", "small_plane_cas_airframe_0")]})),
+                    "hoi4_air_rebase" => {
+                        self.1.set(args["state_id"].as_i64().unwrap());
+                        Ok(json!({"receipt": {"status": "Verified"}}))
+                    }
+                    _ => Ok(json!({"receipt": {"status": "Verified"}})),
+                }
+            }
+        }
+        let tools = Mixed(Default::default(), std::cell::Cell::new(52));
+        let plan = json!({"air": {"war_missions": true}});
+        let mut state = State::default();
+        state.done.insert("op:op_poland:prep".into(), START);
+        let first = air_war_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(first.contains("rebase to front state 66"), "{first}");
+        let sent = tools.0.borrow();
+        let by: Vec<(String, Value)> = sent
+            .iter()
+            .map(|a| {
+                (
+                    text(&a["mission"]).to_string(),
+                    a.get("wing").cloned().unwrap_or_else(|| a["wings"].clone()),
+                )
+            })
+            .collect();
+        assert!(
+            by.contains(&("air_superiority".into(), json!("JG 1"))),
+            "{by:?}"
+        );
+        assert!(by.contains(&("cas".into(), json!("StG 2"))), "{by:?}");
+    }
+
+    #[test]
     fn a_wing_that_fails_over_one_operation_region_tries_the_next_contact_region() {
         // o1k: Danzig (807) is named most but out of range; Lodz (87) on the contact line takes it
         struct Two(std::cell::RefCell<Vec<i64>>, std::cell::Cell<i64>);
@@ -15126,6 +18001,103 @@ mod tests {
     }
 
     #[test]
+    fn every_pending_lane_gets_a_turn_within_the_fair_wait_whatever_takes_the_ticks() {
+        // t1939o (27 Nov 2026): decisions, resources and intelligence had no turn in 56 days
+        fn acts(
+            _: &mut State,
+            _: &dyn Tools,
+            _: &Value,
+            _: &str,
+            _: GameHour,
+        ) -> Result<Option<String>> {
+            Ok(Some("acted".into()))
+        }
+        fn quiet(
+            _: &mut State,
+            _: &dyn Tools,
+            _: &Value,
+            _: &str,
+            _: GameHour,
+        ) -> Result<Option<String>> {
+            Ok(None)
+        }
+        let lanes: Vec<Lane> = vec![("a", acts), ("b", acts), ("c", quiet), ("d", acts)];
+        let tools = fake(vec![]);
+        let plan = json!({});
+        let mut state = State::default();
+        // every lane pending; "d" never offered: the check starts its clock
+        state.sched.turns.insert("a", START);
+        state.sched.turns.insert("b", START - DAY);
+        state.sched.turns.insert("c", START - 2 * DAY);
+        let none = overdue_turns(&mut state, &tools, &plan, "l", START, &lanes).unwrap();
+        assert!(none.is_none(), "nothing waits longer than the bound yet");
+        // four days on: the oldest waits first; the quiet one is offered and passed, the next
+        // acting one takes the tick
+        let now = START + 4 * DAY;
+        assert!(overdue_turns(&mut state, &tools, &plan, "l", now, &lanes)
+            .unwrap()
+            .is_some());
+        assert_eq!(state.sched.turns["c"], now);
+        assert_eq!(state.sched.turns["b"], now);
+        assert_eq!(state.sched.turns["a"], START);
+        // the next tick: the next overdue lanes, one acting lane a tick
+        assert!(overdue_turns(&mut state, &tools, &plan, "l", now, &lanes)
+            .unwrap()
+            .is_some());
+        assert_eq!(state.sched.turns["a"], now);
+        assert!(overdue_turns(&mut state, &tools, &plan, "l", now, &lanes)
+            .unwrap()
+            .is_some());
+        assert_eq!(state.sched.turns["d"], now);
+        // every lane has had its turn: nothing is overdue
+        assert!(overdue_turns(&mut state, &tools, &plan, "l", now, &lanes)
+            .unwrap()
+            .is_none());
+        // each turn is counted for the gate's turns per lane
+        assert!(["a", "b", "c", "d"].iter().all(|l| state
+            .sched
+            .said
+            .get(*l)
+            .is_some_and(|s| s.turns == 1)));
+        // `scheduler.fair_turns: false` turns it off
+        let off = json!({"scheduler": {"fair_turns": false}});
+        assert!(
+            overdue_turns(&mut state, &tools, &off, "l", now + 9 * DAY, &lanes)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn the_fairness_never_takes_two_ticks_in_a_row_and_yields_to_a_running_war() {
+        // w92b (27 Nov 2026): the war step had one turn in 69 days behind the fairness
+        let mut s = Sched {
+            tick_no: 1,
+            ..Default::default()
+        };
+        assert!(fair_turn_open(&s, true, START), "no fairness turn yet");
+        s.fair_tick = Some((1, START));
+        s.tick_no = 2;
+        assert!(!fair_turn_open(&s, false, START), "never two in a row");
+        s.tick_no = 3;
+        assert!(
+            fair_turn_open(&s, false, START),
+            "at peace every other tick"
+        );
+        assert!(
+            !fair_turn_open(&s, true, START),
+            "an operation running: the war is offered first"
+        );
+        s.war_tick = Some(2);
+        assert!(fair_turn_open(&s, true, START), "the war had its offer");
+        s.war_tick = None;
+        assert!(
+            fair_turn_open(&s, true, START + FAIR_MAX_WAIT + 1),
+            "a war never offered holds the lanes no longer than the fair wait"
+        );
+    }
+
+    #[test]
     fn a_lane_gets_the_tick_after_the_war_then_the_war_again() {
         let w = War {
             liberate: false,
@@ -15147,16 +18119,6 @@ mod tests {
                 .filter(|(n, _)| n == "hoi4_politics_choose")
                 .count()
         };
-        // the war-first block acts on the first tick
-        assert!(matches!(
-            tick(&mut state, &w, &plan, "l", START).unwrap(),
-            Tick::Acted(_)
-        ));
-        assert_eq!(politics(&w), 0);
-        // the next tick belongs to a lane: politics, in the same game hour
-        tick(&mut state, &w, &plan, "l", START).unwrap();
-        assert_eq!(politics(&w), 1);
-        // and the next one to the war-first block again
         let armies = |w: &War| {
             w.calls
                 .borrow()
@@ -15164,6 +18126,18 @@ mod tests {
                 .filter(|(n, _)| n.starts_with("hoi4_army_"))
                 .count()
         };
+        // a fast lane (the plan's pick) takes the first tick, ahead of the war (t1939n, 27 Nov
+        // 2026: the war block kept the fast lanes waiting on the paused first day)
+        assert!(matches!(
+            tick(&mut state, &w, &plan, "l", START).unwrap(),
+            Tick::Acted(_)
+        ));
+        assert_eq!(politics(&w), 1);
+        // the next tick, in the same game hour, is the war-first block's
+        let before = armies(&w);
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert!(armies(&w) > before);
+        // and the war keeps its turns: the pick is not asked again
         let before = armies(&w);
         tick(&mut state, &w, &plan, "l", START + DAY).unwrap();
         assert!(armies(&w) > before);
@@ -15191,6 +18165,55 @@ mod tests {
     }
 
     #[test]
+    fn a_pick_the_game_says_is_already_in_place_counts_as_done() {
+        // cmps1 (27 Nov 2026): War Economy under Total Mobilisation was refused as "already
+        // active" and tried again every few days; the backoff kept the plan's later picks waiting
+        assert!(super::politics_already_held(
+            "Germany already holds war_economy"
+        ));
+        assert!(super::politics_already_held(
+            "Law War Economy is Already Active"
+        ));
+        assert!(super::politics_already_held(
+            "the country already has this adviser"
+        ));
+        assert!(!super::politics_already_held("not enough political power"));
+    }
+
+    #[test]
+    fn a_war_first_plan_offers_its_command_and_navy_steps_for_their_issues() {
+        // cmph1 (27 Nov 2026): army_without_general and army_group_without_field_marshal went to
+        // the player for a month: the command lane is not in a war-first pass
+        let plan = war_plan();
+        let pass: Vec<&str> = super::lanes(&plan, true).iter().map(|(n, _)| *n).collect();
+        assert!(!pass.contains(&"command"));
+        let owners: Vec<&str> = super::issue_owners(&plan, true)
+            .iter()
+            .map(|(n, _)| *n)
+            .collect();
+        for lane in ["command", "ship", "politics", "officer_corps"] {
+            assert!(owners.contains(&lane), "{lane}: {owners:?}");
+        }
+        assert_eq!(
+            owners.iter().filter(|n| **n == "command").count(),
+            1,
+            "{owners:?}"
+        );
+        // without the war first the pass has them already, once each
+        let calm: Vec<&str> = super::issue_owners(&plan, false)
+            .iter()
+            .map(|(n, _)| *n)
+            .collect();
+        assert_eq!(calm.iter().filter(|n| **n == "command").count(), 1);
+        assert_eq!(calm.iter().filter(|n| **n == "ship").count(), 1);
+        // and neither goes to the player as a lane no one owns
+        let names = super::issue_owner_names(&plan);
+        for lane in ["command", "ship", "hold", "research", "war"] {
+            assert!(names.contains(&lane), "{lane}: {names:?}");
+        }
+    }
+
+    #[test]
     fn an_idle_research_slot_gets_the_tick_after_the_war() {
         let lab = IdleLab(War {
             liberate: false,
@@ -15200,13 +18223,19 @@ mod tests {
         let mut state = State::default();
         let mut plan = war_plan();
         plan["research_priority"] = json!(["tech_a"]);
-        // the war takes the first tick, the idle slot the second (no game hour passes)
-        tick(&mut state, &lab, &plan, "l", START).unwrap();
-        tick(&mut state, &lab, &plan, "l", START).unwrap();
+        // the idle slot takes the first tick, ahead of the war (t1939n, 27 Nov 2026: free
+        // factories and slots waited behind the war block on the paused first day)
+        let first = tick(&mut state, &lab, &plan, "l", START).unwrap();
         let calls = lab.0.calls.borrow();
         assert!(
             calls.iter().any(|(n, _)| n == "hoi4_research_start"),
-            "{calls:?}"
+            "{first:?} {calls:?}"
+        );
+        assert!(
+            !calls
+                .iter()
+                .any(|(n, a)| a.get("request_id").is_some() && n != "hoi4_research_start"),
+            "nothing else acted first: {calls:?}"
         );
     }
 
@@ -16836,6 +19865,30 @@ mod tests {
         assert_eq!(super::game_year(60759371), Some(1936));
     }
 
+    /// t1939l/t1939m: one plan item per air base level in a state went out one level at a time,
+    /// the same order to the same state twice within days; the levels now go in one order.
+    #[test]
+    fn plan_items_of_one_building_in_one_state_go_in_one_order() {
+        let items = vec![
+            json!({"id": "ab_42_1", "building": "air_base", "state": 42, "when": "1938.3.1"}),
+            json!({"id": "ab_42_2", "building": "air_base", "state": 42, "when": "1938.3.1"}),
+            json!({"id": "ab_42_3", "building": "air_base", "state": 42, "when": "1938.3.1"}),
+            json!({"id": "ab_51_1", "building": "air_base", "state": 51, "when": "1938.3.1"}),
+            json!({"id": "ab_42_p", "building": "air_base", "state": 42, "province": 9, "when": "1938.3.1"}),
+            json!({"id": "rd_42", "building": "radar_station", "state": 42, "when": "1938.3.1"}),
+            json!({"id": "ab_42_late", "building": "air_base", "state": 42, "when": "1940.1.1"}),
+        ];
+        let key_of = |i: &Value| format!("id:{}", i["id"].as_str().unwrap());
+        let all = super::same_order_siblings(&items, &items[0], &key_of, |_| true);
+        assert_eq!(all, vec!["id:ab_42_2", "id:ab_42_3"]);
+        // a level already queued is not sent again
+        let rest = super::same_order_siblings(&items, &items[0], &key_of, |k| k != "id:ab_42_2");
+        assert_eq!(rest, vec!["id:ab_42_3"]);
+        // an item with its own province goes alone
+        assert!(super::same_order_siblings(&items, &items[4], &key_of, |_| true).is_empty());
+        assert!(super::same_order_siblings(&items, &items[3], &key_of, |_| true).is_empty());
+    }
+
     #[test]
     fn construction_plan_items_wait_for_their_trigger_and_go_once() {
         struct Plan(RefCell<Vec<(String, Value)>>, RefCell<&'static str>);
@@ -17108,10 +20161,18 @@ mod tests {
         let mut now = START;
         for _ in 0..PLAN_ITEM_TRIES {
             construction_plan_step(&mut state, &tools, &plan, "l", now).unwrap();
-            now += 3 * DAY;
+            // a refused item rests a week per failure
+            now += 7 * DAY * GameHour::from(PLAN_ITEM_TRIES);
             state.failures.clear(); // the ledger's own back-off is not under test here
         }
         assert_eq!(*tools.0.borrow(), PLAN_ITEM_TRIES);
+        // and not sooner: a fresh failure rests the item for a week
+        let fresh = Fail(RefCell::new(0));
+        let mut rested = State::default();
+        construction_plan_step(&mut rested, &fresh, &plan, "l", START).unwrap();
+        rested.failures.clear();
+        construction_plan_step(&mut rested, &fresh, &plan, "l", START + 3 * DAY).unwrap();
+        assert_eq!(*fresh.0.borrow(), 1);
         assert!(state.plan_blocked.contains_key("id:r1"));
         let news = news_of(&state, crate::watch::CONSTRUCTION_BLOCKED);
         assert_eq!(news.len(), 1);
@@ -20979,7 +24040,7 @@ mod tests {
             doctrine_fill(&mut state, &tools, &plan, "l", START).unwrap(),
             None
         );
-        // no plan entry: the plan's default for the track (inf_b, 60 <= 120 - 30), not the first
+        // no plan entry: the plan's default for the track (inf_b, 60 <= 120), not the first
         let plan = json!({"doctrine_defaults": {"land": ["inf_b"]}});
         let mut state = State::default();
         let step = doctrine_fill(&mut state, &tools, &plan, "l", START)
@@ -20989,15 +24050,16 @@ mod tests {
             step.starts_with("doctrine fill land/infantry: inf_b"),
             "{step}"
         );
-        // without a default: the first offered (100 > 120 - 30 reserve: waits); naval too poor;
-        // air has no grand doctrine (the plan's decision): nothing
-        let plan = json!({});
+        // without a default: the first offered, 100 > 120 - the plan's reserve of 30: waits;
+        // naval too poor; air has no grand doctrine (the plan's decision): nothing
+        let plan = json!({"manage": {"xp_reserve": {"army": 30}}});
         let mut state = State::default();
         assert_eq!(
             doctrine_fill(&mut state, &tools, &plan, "l", START).unwrap(),
             None
         );
-        let plan = json!({"manage": {"xp_reserve": {"army": 0}}});
+        // no reserve is kept in code: without the plan's, the first offered is adopted
+        let plan = json!({});
         let mut state = State::default();
         let step = doctrine_fill(&mut state, &tools, &plan, "l", START)
             .unwrap()
@@ -21070,6 +24132,62 @@ mod tests {
     }
 
     #[test]
+    fn a_planned_doctrine_the_game_already_holds_is_done_and_the_next_one_goes() {
+        // t1939n (27 Nov 2026): mobile_infantry was the infantry track's since the start; the
+        // plan entry waited on experience holds and kept every later entry and the fill waiting
+        let tools = fake(vec![(
+            "hoi4_doctrines",
+            json!({"experience": {"army": {"value": 150.0}},
+                "folders": [{"folder": "land", "grand_doctrine": {"id": "new_mobile_warfare"},
+                    "tracks": [{"track": "infantry", "subdoctrine": {"id": "mobile_infantry"}},
+                        {"track": "operations", "subdoctrine": null}]}]}),
+        )]);
+        let plan = json!({"doctrines": [
+            {"id": "inf", "folder": "land", "track": "infantry", "subdoctrine": "mobile_infantry", "xp": 100},
+            {"id": "ops", "folder": "land", "track": "operations", "subdoctrine": "mission_type_tactics", "xp": 100}]});
+        let mut state = State::default();
+        doctrine_pass(&mut state, &tools, &plan, 0);
+        assert!(state.done.contains_key("doc:id:inf"));
+        assert_eq!(
+            adopted(&tools),
+            vec![json!({"doctrine": "mission_type_tactics", "track": "operations"})]
+        );
+        assert!(super::doctrine_taken(
+            &json!({"folders": [{"grand_doctrine": "g"}]}),
+            "g"
+        ));
+    }
+
+    #[test]
+    fn a_doctrine_is_judged_by_the_price_the_game_shows_and_a_changed_price_changes_it() {
+        // owner, 27 Nov 2026: no cost in code; an entry without `xp` was priced 100
+        let with_price = |price: f64| {
+            let tools = fake(vec![(
+                "hoi4_doctrines",
+                json!({"experience": {"army": {"value": 60.0}},
+                    "folders": [{"folder": "land", "tracks": [{"track": "infantry",
+                        "available_subdoctrines": [{"id": "great_war_infantry", "xp_cost": 100.0,
+                            "estimated_cost_after_reduction": price}]}]}]}),
+            )]);
+            let plan = json!({"doctrines": [{"id": "inf", "folder": "land", "track": "infantry",
+                "subdoctrine": "great_war_infantry"}]});
+            let mut state = State::default();
+            doctrine_pass(&mut state, &tools, &plan, 0);
+            adopted(&tools).len()
+        };
+        // 60 experience: the game's reduced price 50 is paid, 75 waits
+        assert_eq!(with_price(50.0), 1);
+        assert_eq!(with_price(75.0), 0);
+        assert_eq!(
+            super::doctrine_price(
+                &json!({"folders": [{"available_grand_doctrines": [{"id": "g", "xp_cost": 40.0}]}]}),
+                "g"
+            ),
+            Some(40.0)
+        );
+    }
+
+    #[test]
     fn a_doctrine_short_of_experience_waits_and_is_never_dropped() {
         let plan = json!({"doctrines": [
             {"id": "inf", "folder": "land", "track": "infantry", "subdoctrine": "great_war_infantry", "xp": 55}]});
@@ -21087,7 +24205,7 @@ mod tests {
         assert_eq!(adopted(&tools).len(), 1);
         assert!(!state.done.contains_key("doc:id:inf"));
         assert!(!state.doc_refused.contains_key("doc:id:inf"));
-        assert_eq!(state.doc_xp.get("doc:id:inf").copied(), Some(289.0)); // retried at 289 + 11 = 300
+        assert_eq!(state.doc_xp.get("doc:id:inf").copied(), Some(300.0)); // 75% of 400
     }
 
     #[test]
@@ -21822,15 +24940,65 @@ mod tests {
         let enough = power(160.0);
         tick(&mut state, &enough, &plan, "l", START + 2 * DAY).unwrap();
         assert_eq!(chosen(&enough).first(), Some(&json!("big")));
-        // a pick waiting only for 15 points after a refusal that was not its price (paid for,
-        // refused for a missing focus) holds no power back: the cheap pick goes
+        // a pick waiting only for the power to grow after a refusal that was not its price (paid
+        // for, refused for a missing focus) holds no power back: the cheap pick goes
         let mut state = State::default();
         state
             .pol_pp_at_fail
             .insert(politics_key(0, &plan["politics"][0]), 160.0);
-        let some = power(165.0);
+        let some = power(160.0);
         tick(&mut state, &some, &plan, "l", START + 3 * DAY).unwrap();
         assert_eq!(chosen(&some), vec![json!("small")]);
+        // refused while the power covered it (a law the focus tree replaced): the plan's reserve
+        // holds nothing for it, so the standing policy may spend the power (cmps1, 27 Nov 2026)
+        let mut state = State::default();
+        let key = politics_key(0, &plan["politics"][0]);
+        state.pol_pp_at_fail.insert(key.clone(), 400.0);
+        state.skip(START, "pol", &key, 3 * DAY);
+        let read = power(420.0);
+        let (reserve, lines) = plan_manage::politics_reserve(&mut state, &read, &plan, START + DAY);
+        assert_eq!(reserve, 50.0, "{lines:?}");
+        assert!(lines[0].contains("not for power"), "{lines:?}");
+        // refused below its cost: it keeps its cost
+        state.pol_pp_at_fail.insert(key, 100.0);
+        let (reserve, _) = plan_manage::politics_reserve(&mut state, &read, &plan, START + DAY);
+        assert_eq!(reserve, 200.0);
+    }
+
+    #[test]
+    fn a_pick_the_power_covers_that_no_lane_buys_stops_holding_power_after_the_grace() {
+        // t1939n (27 Nov 2026): 975 of 1123 power held for months for picks no lane bought
+        let plan = json!({"politics": [
+            {"id": "law", "category": "government", "slot": 0, "idea": "X_law", "cost": 150},
+            {"id": "adv", "category": "government", "slot": 3, "idea": "X_adv", "cost": 150}]});
+        let read = fake(vec![(
+            "hoi4_economy",
+            json!({"political_power": {"raw_signed": 100_000_000}}),
+        )]);
+        let mut state = State::default();
+        let (reserve, _) = plan_manage::politics_reserve(&mut state, &read, &plan, START);
+        assert_eq!(reserve, 300.0);
+        // a week later the picks still hold (their lane's turn)
+        let (reserve, _) = plan_manage::politics_reserve(&mut state, &read, &plan, START + 7 * DAY);
+        assert_eq!(reserve, 300.0);
+        // past the grace they hold nothing and say why
+        let (reserve, lines) =
+            plan_manage::politics_reserve(&mut state, &read, &plan, START + 8 * DAY);
+        assert_eq!(reserve, 0.0, "{lines:?}");
+        assert!(
+            lines[0].contains("payable for 8 days and not bought"),
+            "{lines:?}"
+        );
+        // power the picks cannot yet cover is saved for them: no grace runs
+        let poor = fake(vec![(
+            "hoi4_economy",
+            json!({"political_power": {"raw_signed": 10_000_000}}),
+        )]);
+        let mut state = State::default();
+        plan_manage::politics_reserve(&mut state, &poor, &plan, START);
+        let (reserve, _) =
+            plan_manage::politics_reserve(&mut state, &poor, &plan, START + 30 * DAY);
+        assert_eq!(reserve, 300.0);
     }
 
     #[test]
@@ -21887,6 +25055,118 @@ mod tests {
         assert_eq!(taken, vec![json!("ITA_good")]);
         assert!(decision_forbidden(&plan, "ITA_withdraw_from_ethiopia"));
         assert!(!decision_forbidden(&plan, "ITA_good"));
+    }
+
+    /// g92a (27 Nov 2026): decisions_available stood open 148 days with "deliberately not taken"
+    /// and nobody was asked.
+    #[test]
+    fn decisions_no_entry_wants_go_to_the_player_then_stand_as_left_past_the_grace() {
+        let plan = json!({"decision_rules": [{"decision": "GER_cancel_mefos", "never": true}]});
+        let tools = fake(vec![(
+            "hoi4_decisions_list",
+            json!({"decisions": [
+                {"decision": "GER_cancel_mefos", "enabled": true, "active_timer": false},
+                {"decision": "HOL_demand", "title": "Demand", "enabled": true,
+                 "active_timer": false, "cost": 25.0}]}),
+        )]);
+        let mut state = State::default();
+        state
+            .manage
+            .alert_since
+            .insert("decisions_available".into(), START);
+        assert_eq!(
+            decisions_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        let alarms = plan_manage::take_alarms(&mut state);
+        let offer = alarms
+            .iter()
+            .find(|a| a["reason"] == "decisions_unwanted")
+            .expect("an offer to the player");
+        assert_eq!(offer["evidence"]["options"][0]["decision"], "HOL_demand");
+        assert_eq!(offer["evidence"]["options"].as_array().unwrap().len(), 1);
+        let n = plan_manage::note_of(&state, "decisions").unwrap();
+        assert!(n.contains("offered to the player, 7 more day(s)"), "{n}");
+        // past the grace (the monthly read): left, with the reason
+        let later = START + 31 * DAY;
+        decisions_step(&mut state, &tools, &plan, "l", later).unwrap();
+        let n = plan_manage::note_of(&state, "decisions").unwrap();
+        assert!(
+            n.contains("left: offered to the player 31 day(s) ago"),
+            "{n}"
+        );
+        // the alert closed: the offer is forgotten
+        state.manage.alert_since.clear();
+        offer_unwanted_decisions(&mut state, &plan, &json!({}), &[], later);
+        assert!(!state.done.contains_key("decoffer"));
+    }
+
+    /// g92b (27 Nov 2026): decisions no plan entry named were offered and left for 154 days with
+    /// no value read. Their effects (the game's scripts) are now valued for the country: the one
+    /// worth something is taken from the power above the plan's reserve, the one worth less than
+    /// nothing is left with its terms, only one with nothing valued goes to the player.
+    #[test]
+    fn decisions_no_entry_names_are_taken_or_left_by_their_value() {
+        let plan = json!({});
+        let rows = json!({"decisions": [
+            {"decision": "improved_worker_conditions", "enabled": true, "active_timer": false,
+             "cost": 100.0, "effects": {"parts": [{"days": 180.0, "modifiers": {
+                 "stability_weekly": 0.005, "consumer_goods_factor": 0.1,
+                 "industrial_capacity_factory": -0.1}}], "once": {}, "unread": []}},
+            {"decision": "build_factories", "enabled": true, "active_timer": false,
+             "cost": 50.0, "effects": {"parts": [], "once": {"building:industrial_complex": 2.0},
+                 "unread": []}},
+            {"decision": "HOL_demand", "enabled": true, "active_timer": false, "cost": 10.0,
+             "effects": {"parts": [], "once": {}, "unread": ["add_to_variable"]}}]});
+        let game = |pp: i64| {
+            fake(vec![
+                ("hoi4_decisions_list", rows.clone()),
+                (
+                    "hoi4_economy",
+                    json!({"political_power": {"raw_signed": pp},
+                        "factory_trigger_count": {"military": 28, "civilian": 35, "naval": 10}}),
+                ),
+            ])
+        };
+        let mut state = State::default();
+        state
+            .manage
+            .alert_since
+            .insert("decisions_available".into(), START);
+        // 30 power: nothing worth taking is paid yet; the note says what waits for the power
+        let poor = game(3_000_000);
+        assert_eq!(
+            decisions_step(&mut state, &poor, &plan, "l", START).unwrap(),
+            None
+        );
+        let n = plan_manage::note_of(&state, "decisions").unwrap();
+        assert!(
+            n.contains("left by value") && n.contains("improved_worker_conditions"),
+            "{n}"
+        );
+        assert!(
+            n.contains("worth taking by value") && n.contains("build_factories"),
+            "{n}"
+        );
+        let alarms = plan_manage::take_alarms(&mut state);
+        let offer = alarms
+            .iter()
+            .find(|a| a["reason"] == "decisions_unwanted")
+            .expect("the unvalued one goes to the player");
+        assert_eq!(offer["evidence"]["options"].as_array().unwrap().len(), 1);
+        assert_eq!(offer["evidence"]["options"][0]["decision"], "HOL_demand");
+        // 60 power a day later: the factories are bought from the read the lane made
+        let rich = game(6_000_000);
+        let out = decisions_step(&mut state, &rich, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("decision build_factories by value"),
+            "{out}"
+        );
+        assert!(!actions(&rich)
+            .iter()
+            .any(|(_, a)| a["decision"] == "improved_worker_conditions"));
     }
 
     #[test]

@@ -315,6 +315,16 @@ enum Census {
 pub(crate) struct Native;
 pub(crate) struct NativeImage(File);
 impl Native {
+    /// Whether two path spellings open the same regular file (volume and file ID).
+    fn same_file(a: &str, b: &str) -> bool {
+        match (Self::executable(a), Self::executable(b)) {
+            (Ok(x), Ok(y)) => matches!(
+                (file_identity(&x), file_identity(&y)),
+                (Ok(i), Ok(j)) if i == j
+            ),
+            _ => false,
+        }
+    }
     fn executable(path: &str) -> Result<File> {
         if !valid_path(path) {
             return Err(error("invalid_session", "Local exact Win32 path required"));
@@ -417,9 +427,13 @@ impl Native {
             if file_name(&listed) == file_name(path) && similar.len() < 4 {
                 similar.push(listed.clone());
             }
-            if listed == path
-                && (e.pid != pid || found.replace((e.base as u64, e.base_size)).is_some())
-            {
+            // The same file can be listed under another spelling of its path: a process started
+            // from a packaged app's redirected folder reports its image under the redirected
+            // view, while the module list holds the real path. Such an entry counts only when
+            // both spellings open the same file (volume and file ID).
+            let same = listed == path
+                || (file_name(&listed) == file_name(path) && Self::same_file(&listed, path));
+            if same && (e.pid != pid || found.replace((e.base as u64, e.base_size)).is_some()) {
                 return Err(Census::Refused(changed()));
             }
             // SAFETY: valid owned snapshot and correctly sized output structure.

@@ -1,5 +1,5 @@
 {
- "build_id": "71806afa707a46fb72f0738a719c3f1c3f5e2e42",
+ "build_id": "8e7ff8b3de4402d28ada7f7c976e7464e1fbe458",
  "confidence": {
   "fields": {
    "CAcceptCommandDialog": {
@@ -12,7 +12,7 @@
     "0x48": "medium"
    },
    "CAgencyUpgrade": {
-    "0x10": "live",
+    "0x10": "carried",
     "0x128": "medium",
     "0x1c0": "medium",
     "0x1d0": "medium",
@@ -21,7 +21,7 @@
     "0xc8": "medium"
    },
    "CAgencyUpgradeBranch": {
-    "0x10": "live",
+    "0x10": "carried",
     "0x30": "high",
     "0x38": "medium",
     "0x3c": "high",
@@ -59,8 +59,8 @@
     "0xc": "filled"
    },
    "CAirBaseMapIcon": {
-    "0x10": "live",
-    "0x48": "live",
+    "0x10": "carried",
+    "0x48": "carried",
     "0x4c0": "high",
     "0x4c8": "medium",
     "0x4f0": "medium",
@@ -91,7 +91,7 @@
     "0x2c0": "high",
     "0x2c8": "high",
     "0x30": "high",
-    "0x320": "live",
+    "0x320": "carried",
     "0x38": "high",
     "0x40": "high",
     "0x44": "filled",
@@ -100,14 +100,14 @@
     "0x60": "medium",
     "0x68": "high",
     "0x70": "high",
-    "0x74": "live",
-    "0x78": "live",
+    "0x74": "high",
+    "0x78": "filled",
     "0x88": "high",
     "0x908": "high",
     "0x918": "high",
     "0x920": "high",
     "0x930": "high",
-    "0x938": "live",
+    "0x938": "filled",
     "0x950": "medium",
     "0x958": "high",
     "0x95c": "high",
@@ -116,7 +116,7 @@
     "0x968": "high",
     "0x974": "high",
     "0x978": "high",
-    "0x98": "live",
+    "0x98": "carried",
     "0x980": "high",
     "0x990": "high",
     "0x99c": "medium",
@@ -126,7 +126,7 @@
     "0x9b8": "high",
     "0x9c0": "high",
     "0x9c4": "high",
-    "0xb8": "live"
+    "0xb8": "carried"
    },
    "CAirWingPool": {
     "0x10": "medium",
@@ -283,8 +283,8 @@
    },
    "CArmyLeader": {
     "0x18": "live",
-    "0x20": "live",
-    "0x38": "live",
+    "0x20": "carried",
+    "0x38": "carried",
     "0xc08": "medium",
     "0xcb4": "high",
     "0xcbc": "high",
@@ -346,13 +346,13 @@
     "0x568": "medium",
     "0x5b8": "medium",
     "0x78": "medium",
-    "0x8": "live",
+    "0x8": "carried",
     "0xc8": "medium"
    },
    "CBuilding": {
     "0x10": "medium",
     "0x1a8": "migrated",
-    "0x1b0": "live",
+    "0x1b0": "carried",
     "0x1c": "medium",
     "0x20": "medium",
     "0x28": "medium",
@@ -375,7 +375,7 @@
    },
    "CBuildingTemplate": {
     "0x110": "medium",
-    "0x228": "live",
+    "0x228": "migrated",
     "0x384": "medium"
    },
    "CButtonStandard": {
@@ -431,8 +431,8 @@
     "0x100": "medium",
     "0x14": "high",
     "0x18": "medium",
-    "0x20": "live",
-    "0x38": "live",
+    "0x20": "carried",
+    "0x38": "carried",
     "0x48": "migrated",
     "0x50": "medium",
     "0x58": "medium",
@@ -459,7 +459,7 @@
    "CCommandStructureLeaderView": {
     "0x10": "high",
     "0x18": "high",
-    "0x28": "live",
+    "0x28": "carried",
     "0x490": "high",
     "0x498": "medium",
     "0x4d4": "medium",
@@ -536,15 +536,15 @@
     "0x140d": "medium",
     "0x1414": "high",
     "0x28": "medium",
-    "0x30": "live",
+    "0x30": "medium",
     "0x8": "high",
     "0x88": "high",
     "0x94": "high",
-    "0x95": "live",
+    "0x95": "high",
     "0x98": "medium",
     "0xe38": "high",
     "0xe44": "high",
-    "0xe50": "live",
+    "0xe50": "high",
     "0xe58": "medium",
     "0xe5c": "high",
     "0xe60": "medium",
@@ -569,7 +569,7 @@
     "0xfdc": "high"
    },
    "CCountry": {
-    "0x10": "live",
+    "0x10": "carried",
     "0x1018": "medium",
     "0x1024": "medium",
     "0x1060": "medium",
@@ -604,9 +604,9 @@
     "0x48c": "medium",
     "0x498": "medium",
     "0x4a8": "medium",
-    "0x550": "live",
+    "0x550": "carried",
     "0x560": "filled",
-    "0x8": "live",
+    "0x8": "carried",
     "0x908": "medium",
     "0xc18": "medium",
     "0xd08": "medium",
@@ -690,7 +690,7 @@
    },
    "CCountryCharacterSelectionItem": {
     "0x10": "high",
-    "0x28": "live",
+    "0x28": "carried",
     "0x490": "medium",
     "0x4d0": "medium",
     "0x518": "medium"
@@ -718,7 +718,7 @@
     "0x28": "medium",
     "0x30": "medium",
     "0x488": "migrated",
-    "0x490": "live",
+    "0x490": "carried",
     "0x498": "high",
     "0x4a0": "high",
     "0x4a8": "high",
@@ -727,12 +727,12 @@
     "0x5a8": "medium"
    },
    "CCountryDiplomacyView": {
-    "0x1608": "live",
+    "0x1608": "carried",
     "0x1620": "medium",
     "0x1bc0": "high",
     "0x20": "medium",
     "0x3560": "medium",
-    "0x35e8": "live",
+    "0x35e8": "carried",
     "0x3e20": "migrated",
     "0x3e2c": "migrated",
     "0x3e38": "migrated",
@@ -1070,8 +1070,8 @@
     "0xf8": "medium"
    },
    "CDecision": {
-    "0x108": "live",
-    "0x118": "migrated",
+    "0x108": "migrated",
+    "0x118": "medium",
     "0x150": "medium",
     "0x18": "medium",
     "0x1a0": "medium",
@@ -1280,10 +1280,10 @@
     "0x17c": "filled",
     "0x1d8": "medium",
     "0x1e0": "medium",
-    "0x40": "live",
+    "0x40": "migrated",
     "0x58": "migrated",
-    "0x60": "live",
-    "0x8": "live"
+    "0x60": "migrated",
+    "0x8": "migrated"
    },
    "CDropDownBox": {
     "0x48": "high",
@@ -1347,7 +1347,7 @@
     "0xfdfc": "medium"
    },
    "CEquipmentModule": {
-    "0x10": "live",
+    "0x10": "carried",
     "0x1d0": "medium",
     "0x298": "medium"
    },
@@ -1380,7 +1380,7 @@
     "0x60": "migrated"
    },
    "CEquipmentUpgrade": {
-    "0x10": "live",
+    "0x10": "carried",
     "0x100": "medium",
     "0x10c": "medium",
     "0x118": "medium",
@@ -1459,7 +1459,7 @@
     "0xc": "filled"
    },
    "CEvent": {
-    "0x18": "live",
+    "0x18": "carried",
     "0x31c": "medium",
     "0x3a4": "medium",
     "0x3ac": "medium"
@@ -1468,14 +1468,14 @@
     "0x1000": "medium",
     "0x120": "medium",
     "0x1d0": "medium",
-    "0x20": "migrated",
-    "0x28": "live",
+    "0x20": "medium",
+    "0x28": "migrated",
     "0x280": "medium",
     "0x30": "medium",
     "0x330": "high",
     "0x340": "medium",
-    "0x38": "migrated",
-    "0x40": "live",
+    "0x38": "medium",
+    "0x40": "migrated",
     "0x48": "high",
     "0x50": "medium",
     "0x58": "high",
@@ -1544,7 +1544,7 @@
     "0x120": "medium",
     "0x140": "high",
     "0x144": "high",
-    "0x184": "live",
+    "0x184": "carried",
     "0x48": "medium",
     "0x58": "high",
     "0x60": "medium",
@@ -1567,14 +1567,14 @@
    },
    "CIdea": {
     "0x10": "medium",
-    "0x18": "live",
+    "0x18": "carried",
     "0x238": "medium",
     "0x420": "medium",
     "0x430": "medium",
     "0x438": "medium",
     "0x50": "medium",
     "0x60": "filled",
-    "0x6c": "live",
+    "0x6c": "carried",
     "0x748": "medium",
     "0x798": "medium",
     "0x7e8": "medium",
@@ -1584,6 +1584,7 @@
     "0x8e8": "medium",
     "0x8f0": "medium",
     "0x900": "medium",
+    "0x908": "filled",
     "0x930": "medium",
     "0x960": "medium",
     "0x970": "medium",
@@ -1595,7 +1596,7 @@
     "0xb28": "medium"
    },
    "CIdeaResearchBonus": {
-    "0x10": "migrated",
+    "0x10": "carried",
     "0x30": "live",
     "0x38": "live"
    },
@@ -1808,7 +1809,7 @@
     "0xa8": "medium"
    },
    "CLimitedUseTechBonus": {
-    "0x10": "live",
+    "0x10": "carried",
     "0x28": "filled",
     "0x30": "high",
     "0x38": "medium",
@@ -1819,7 +1820,7 @@
     "0x54": "high",
     "0x58": "medium",
     "0x68": "filled",
-    "0x8": "live"
+    "0x8": "carried"
    },
    "CLimitedUseTechCostReduction": {
     "0x10": "high",
@@ -1846,11 +1847,12 @@
     "0x7b4": "medium",
     "0x7c0": "medium",
     "0x7cc": "medium",
-    "0x8": "live"
+    "0x8": "filled"
    },
    "CMilitaryDeploymentConveyor": {
     "0x18": "medium",
     "0x38": "medium",
+    "0x3c": "filled",
     "0x60": "medium",
     "0x68": "high",
     "0x70": "filled",
@@ -1888,7 +1890,7 @@
    },
    "CNationalFocusTreeItem": {
     "0x10": "high",
-    "0x20": "live",
+    "0x20": "carried",
     "0x30": "high"
    },
    "CNationalFocusView": {
@@ -1903,22 +1905,22 @@
     "0x2510": "high",
     "0x28": "high",
     "0x2940": "high",
-    "0x2d70": "live",
+    "0x2d70": "high",
     "0x2d7c": "medium",
     "0x2d80": "medium",
     "0x2d88": "medium",
     "0x2d98": "medium",
     "0x2da0": "medium",
     "0x2db0": "medium",
-    "0x2db8": "live",
+    "0x2db8": "high",
     "0x2dc4": "high",
     "0x2dc8": "medium",
     "0x2dd0": "high",
     "0x2ddc": "high",
     "0x2de0": "medium",
     "0x2df8": "medium",
-    "0x2e10": "live",
-    "0x2e34": "live",
+    "0x2e10": "medium",
+    "0x2e34": "filled",
     "0x2e40": "high",
     "0x2e70": "high",
     "0x2f38": "high",
@@ -1972,16 +1974,16 @@
    "CNaviesView": {
     "0x28": "medium",
     "0x30": "filled",
-    "0x4ca8": "live",
-    "0x7b00": "live",
-    "0x7b10": "live",
-    "0x7b18": "live",
-    "0x7cb8": "live",
-    "0x7cd0": "live"
+    "0x4ca8": "carried",
+    "0x7b00": "carried",
+    "0x7b10": "carried",
+    "0x7b18": "carried",
+    "0x7cb8": "carried",
+    "0x7cd0": "carried"
    },
    "CNavyLeader": {
-    "0x38": "live",
-    "0x8": "live",
+    "0x38": "carried",
+    "0x8": "carried",
     "0xc08": "medium",
     "0xcb4": "medium",
     "0xcbc": "high",
@@ -2153,9 +2155,9 @@
     "0x900": "medium"
    },
    "CPoliticalIdeaItem": {
-    "0x20": "live",
+    "0x20": "medium",
     "0x28": "medium",
-    "0x40": "live",
+    "0x40": "carried",
     "0x8": "high"
    },
    "CPoliticalSelectableIdeaItem": {
@@ -2179,7 +2181,7 @@
    "CPoliticsIdeaCategoryEntry": {
     "0x10": "high",
     "0x18": "medium",
-    "0x30": "live",
+    "0x30": "medium",
     "0x38": "medium",
     "0x48": "medium",
     "0x50": "medium",
@@ -2248,12 +2250,12 @@
     "0xd00": "migrated"
    },
    "CProductionLine": {
-    "0x14": "migrated",
-    "0x20": "migrated",
-    "0x28": "migrated",
-    "0x30": "migrated",
-    "0x38": "migrated",
-    "0x48": "migrated",
+    "0x14": "carried",
+    "0x20": "carried",
+    "0x28": "carried",
+    "0x30": "carried",
+    "0x38": "carried",
+    "0x48": "carried",
     "0x58": "live",
     "0x88": "live"
    },
@@ -2273,7 +2275,7 @@
     "0x2b28": "high",
     "0x2b34": "medium",
     "0x890": "medium",
-    "0x898": "live",
+    "0x898": "filled",
     "0x8a0": "medium"
    },
    "CProductionResourceCost": {
@@ -2303,7 +2305,7 @@
     "0x2c8": "filled",
     "0x328": "filled",
     "0x388": "filled",
-    "0x448": "live",
+    "0x448": "filled",
     "0x460": "migrated",
     "0x478": "migrated",
     "0x490": "migrated",
@@ -2327,7 +2329,7 @@
    "CProvince": {
     "0x140": "high",
     "0x14c": "high",
-    "0x9c": "live",
+    "0x9c": "carried",
     "0xc0": "high",
     "0xc8": "filled"
    },
@@ -2438,7 +2440,7 @@
     "0x30": "medium",
     "0x50": "medium",
     "0x8": "medium",
-    "0x90": "live"
+    "0x90": "carried"
    },
    "CShip": {
     "0x40": "high",
@@ -2451,11 +2453,11 @@
     "0x6f0": "high",
     "0x700": "medium",
     "0x7c8": "medium",
-    "0x7d0": "live",
+    "0x7d0": "carried",
     "0x7f0": "medium",
     "0x878": "medium",
     "0x8c4": "medium",
-    "0x90": "live",
+    "0x90": "carried",
     "0xc": "medium"
    },
    "CSpecialProjectCapturedPopUpWindow": {
@@ -2517,7 +2519,7 @@
     "0x138": "medium",
     "0x140": "high",
     "0x184": "high",
-    "0x190": "live",
+    "0x190": "high",
     "0x19c": "high",
     "0x1e0": "medium",
     "0x200": "medium",
@@ -2534,7 +2536,7 @@
     "0x238": "high",
     "0x248": "medium",
     "0x258": "medium",
-    "0x334": "live",
+    "0x334": "carried",
     "0x48": "high",
     "0x58": "medium",
     "0x60": "medium",
@@ -2552,7 +2554,7 @@
     "0x1b0": "medium",
     "0x1bc": "medium",
     "0x258": "medium",
-    "0x40": "live",
+    "0x40": "carried",
     "0x500": "medium",
     "0x700": "medium",
     "0x770": "medium",
@@ -2600,8 +2602,8 @@
    },
    "CStrategicRegion": {
     "0x14": "high",
-    "0x20": "live",
-    "0x40": "live",
+    "0x20": "carried",
+    "0x40": "carried",
     "0x8": "high",
     "0xe0": "medium"
    },
@@ -2643,30 +2645,30 @@
     "0xd0": "medium"
    },
    "CSubUnitDefinition": {
-    "0x10": "live",
-    "0x208": "live",
-    "0x268": "live",
-    "0x270": "live",
-    "0x280": "live",
-    "0x288": "live",
-    "0x2a0": "live",
-    "0x300": "live",
-    "0x48": "live",
-    "0x558": "live",
-    "0x568": "live",
-    "0x56c": "live",
+    "0x10": "carried",
+    "0x208": "carried",
+    "0x268": "carried",
+    "0x270": "carried",
+    "0x280": "carried",
+    "0x288": "carried",
+    "0x2a0": "carried",
+    "0x300": "carried",
+    "0x48": "carried",
+    "0x558": "filled",
+    "0x568": "carried",
+    "0x56c": "filled",
     "0x570": "medium",
     "0x5b0": "medium",
     "0x5b4": "medium",
     "0x638": "medium",
-    "0x88": "live",
-    "0x90": "live",
-    "0x98": "live",
-    "0xa8": "live",
-    "0xb0": "live",
-    "0xb8": "live",
-    "0xe0": "live",
-    "0xe8": "live"
+    "0x88": "carried",
+    "0x90": "carried",
+    "0x98": "carried",
+    "0xa8": "carried",
+    "0xb0": "carried",
+    "0xb8": "carried",
+    "0xe0": "carried",
+    "0xe8": "carried"
    },
    "CSubjectRelation": {
     "0x10": "high",
@@ -2781,7 +2783,7 @@
     "0x148": "medium",
     "0x14c": "medium",
     "0x150": "medium",
-    "0x160": "live",
+    "0x160": "filled",
     "0x180": "medium",
     "0x188": "medium",
     "0x1b0": "medium",
@@ -2894,7 +2896,7 @@
     "0x18": "high",
     "0x20": "filled",
     "0x48": "high",
-    "0x8": "live"
+    "0x8": "high"
    },
    "CWarGoal": {
     "0x20": "medium",
@@ -2948,10 +2950,10 @@
     "0x30": "medium",
     "0x34": "medium",
     "0x38": "high",
-    "0x8": "live"
+    "0x8": "filled"
    },
    "NDoctrines::CCountryDoctrineStatus": {
-    "0x10": "live",
+    "0x10": "high",
     "0x1c": "high",
     "0x28": "medium",
     "0x34": "medium",
@@ -3036,7 +3038,7 @@
     "0x38": "live"
    },
    "NFactions::CFaction": {
-    "0x18": "live",
+    "0x18": "carried",
     "0x458": "medium",
     "0x48": "medium",
     "0x4e8": "high",
@@ -3127,12 +3129,12 @@
     "0x18": "high",
     "0x20": "high",
     "0x2c": "high",
-    "0x60": "live"
+    "0x60": "carried"
    },
    "NProject::CProject": {
     "0x138": "medium",
     "0x168": "medium",
-    "0x20": "live",
+    "0x20": "carried",
     "0x28": "high",
     "0x30": "medium",
     "0x60": "filled",
@@ -3143,7 +3145,7 @@
     "0x1b8": "live"
    },
    "NProject::CProjectPool": {
-    "0x10": "live",
+    "0x10": "high",
     "0x1c": "high",
     "0x20": "medium",
     "0x28": "medium",
@@ -3163,7 +3165,7 @@
    },
    "NProject::CProjectTemplate": {
     "0x10": "high",
-    "0x208": "live",
+    "0x208": "carried",
     "0x8": "medium",
     "0xc": "filled"
    },
@@ -3214,12 +3216,12 @@
     "0x30": "medium"
    },
    "NProject::NUi::CRecruitScientistWindow": {
-    "0x20": "live",
+    "0x20": "carried",
     "0xa10": "medium",
     "0xa40": "high"
    },
    "NProject::NUi::CScientistRoster": {
-    "0x20": "live",
+    "0x20": "carried",
     "0xe80": "medium",
     "0xe88": "filled",
     "0xe90": "medium",
@@ -3384,7 +3386,7 @@
    "find.result_row": {
     "0x10": "high",
     "0x20": "medium",
-    "0x458": "live"
+    "0x458": "carried"
    },
    "grid.item": {
     "0x10": "high",
@@ -3524,9 +3526,9 @@
     "0xd0": "filled"
    },
    "idler.gui": {
-    "0x140": "live",
+    "0x140": "carried",
     "0x98": "high",
-    "0xa70": "live",
+    "0xa70": "carried",
     "0xc0": "medium",
     "0xcc": "medium",
     "0xf8": "high"
@@ -3586,8 +3588,8 @@
     "0x3a8": "high",
     "0x3b0": "high",
     "0x3b2": "high",
-    "0x3b8": "live",
-    "0x3c0": "live",
+    "0x3b8": "filled",
+    "0x3c0": "filled",
     "0x404": "medium",
     "0x40c": "high",
     "0x460": "medium",
@@ -3682,7 +3684,7 @@
     "0x138": "medium",
     "0x140": "medium",
     "0x148": "medium",
-    "0x160": "live",
+    "0x160": "filled",
     "0x18": "medium",
     "0x180": "medium",
     "0x1b0": "medium",
@@ -4127,6 +4129,9 @@
    "0x36cc528": "high",
    "0x36cca80": "high",
    "0x36cee08": "high",
+   "0x3703950": "high",
+   "0x3703a00": "high",
+   "0x3703a90": "high",
    "0x3704b10": "high",
    "0x3705890": "high",
    "0x37058c0": "high",
@@ -5723,6 +5728,7 @@
    "0x8e8": "0xa58",
    "0x8f0": "0xa60",
    "0x900": "0xa70",
+   "0x908": "0xa78",
    "0x930": "0xaa0",
    "0x960": "0xad0",
    "0x970": "0xae0",
@@ -5990,6 +5996,7 @@
   "CMilitaryDeploymentConveyor": {
    "0x18": "0x18",
    "0x38": "0x40",
+   "0x3c": "0x44",
    "0x60": "0x68",
    "0x68": "0x70",
    "0x70": "0x78",
@@ -8062,7 +8069,7 @@
    "0x8c90": "0x5e18"
   }
  },
- "game_version": "1.20.0.0",
+ "game_version": "1.20.1.0",
  "image": {
   "0x34ac5f8": "0x44154b0",
   "0x34ac6c0": "0x4415578",
@@ -8267,6 +8274,9 @@
   "0x36cc528": "0x44f51d8",
   "0x36cca80": "0x44f5730",
   "0x36cee08": "0x44f7818",
+  "0x3703950": "0x453d3c0",
+  "0x3703a00": "0x453e970",
+  "0x3703a90": "0x453e960",
   "0x3704b10": "0x453d060",
   "0x3705890": "0x453ee38",
   "0x37058c0": "0x453d390",
@@ -8279,6 +8289,6 @@
   "0xfd8350": "0xacc0e0",
   "0xfd8410": "0xacc1a0"
  },
- "sha256": "f8fe17fb1047cc94a64e7cc8f13780494e8eb111b9c3a3468256bfbc4f499874",
+ "sha256": "0ad0c8cad5c8f65d86750454afd79c3f26ba5ca9e0f205a3abfaa8dff96c57a9",
  "system": "linux"
 }

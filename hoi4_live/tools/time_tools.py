@@ -30,6 +30,10 @@ def hoi4_time(session, args):
     if a == "status":
         running, d, ev = timectl.probe_running(session)
         if running is None:
+            from ..perception import topbar
+            named = topbar.month_error(ev) or topbar.month_error(d)
+            if named:
+                raise ToolError(named, {**ev, "error": "unrecognised_month"})
             raise ToolError("cannot read the in-game date (no game loaded, or the interface is hidden)", ev)
         from ..perception import topbar
         speed = topbar.speed_level(session.grab())

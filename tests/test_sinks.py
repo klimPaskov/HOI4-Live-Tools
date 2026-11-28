@@ -86,7 +86,9 @@ class GameRules(unittest.TestCase):
                                           "laws": {"conscription": "limited_conscription"}}, False, game_dir())
         by = {r["law"]: r for r in rows}
         self.assertNotIn("XXX_own_law", by)
-        self.assertFalse(by["extensive_conscription"]["affordable"])
+        # the files' base cost only: whether the power pays is the game's enabled state
+        self.assertNotIn("affordable", by["extensive_conscription"])
+        self.assertEqual(by["extensive_conscription"]["base_cost"], 150.0)
         self.assertFalse(by["extensive_conscription"]["available"])  # war support 15% not above 20%
         self.assertFalse(by["service_by_requirement"]["available"])  # needs a war
 
@@ -119,6 +121,48 @@ class Sinks(unittest.TestCase):
         s = snapshot(omissions=[{"item": "manpower_idle"}])
         self.assertNotIn("manpower_idle", self.codes(s))
 
+    def test_no_cost_or_cap_is_kept_in_code_and_a_mod_changes_what_is_read(self):
+        # owner, 27 Nov 2026: "not always the case, don't hardcode anything"
+        none = gamerules.facts(tempfile.mkdtemp(), ())
+        self.assertEqual((none["xp_cap"], none["spirit_costs"], none["bank_max"]), ({}, {}, None))
+        # a mod that reprices a law and raises a cap is what the monitor reads
+        mod = tempfile.mkdtemp()
+        os.makedirs(os.path.join(mod, "common", "ideas"))
+        os.makedirs(os.path.join(mod, "common", "defines"))
+        with open(os.path.join(mod, "common", "ideas", "_manpower.txt"), "w") as f:
+            f.write(LAWS.replace("limited_conscription = { cost = 150", "limited_conscription = { cost = 75"))
+        with open(os.path.join(mod, "common", "defines", "zz_mod.lua"), "w") as f:
+            f.write("MAX_AIR_EXPERIENCE = 900,")
+        modded = gamerules.facts(self.g, ({"path": mod, "replace_path": []},))
+        laws = {x["law"]: x for x in modded["laws"]["mobilization_laws"]}
+        self.assertEqual(laws["limited_conscription"]["cost"], 75.0)
+        self.assertEqual(modded["xp_cap"]["air"], 900.0)
+        # the cap the experience finding uses moves with the files: 316 air experience growing is
+        # high against a 400 cap and not against 900 (a changed cap changes the decision)
+        prev = [snapshot("1940.05.20.10", xp={"army": 90, "navy": 250, "air": 280})]
+        def air(facts_dir_mods):
+            gamerules.DEFAULT_MODS = facts_dir_mods
+            try:
+                return [f for f in sinks.findings(snapshot(), prev, self.g)
+                        if f["code"] == "experience_unspent" and f["subject"] == "air"][0]
+            finally:
+                gamerules.DEFAULT_MODS = ()
+        self.assertEqual(air(())["severity"], "high")
+        self.assertEqual(air(({"path": mod, "replace_path": []},))["numbers"]["cap"], 900.0)
+        # no finding prices political power from the files: a pile of power alone is no finding
+        s = snapshot()
+        s["politics"]["political_power"] = 480
+        s["alerts"] = []
+        self.assertNotIn("political_power_unspent", self.codes(s))
+
+    def test_the_monitor_finds_the_runs_game_folder(self):
+        run = tempfile.mkdtemp()
+        exe = os.path.join(self.g, "hoi4.app", "Contents", "MacOS", "hoi4")
+        with open(os.path.join(run, "launch.json"), "w") as f:
+            json.dump({"arguments": [exe, "-userdir=x"]}, f)
+        self.assertEqual(gamerules.game_dir_of_run(run), self.g)
+        self.assertEqual(gamerules.game_dir_of_run(tempfile.mkdtemp()), "")
+
     def test_a_lower_law_is_named_only_for_a_penalty_it_drops(self):
         s = snapshot()
         s["politics"]["laws"]["conscription"] = "limited_conscription"
@@ -132,6 +176,20 @@ class Sinks(unittest.TestCase):
         self.assertEqual(len(got), 1)
         self.assertIn("waiting for the game or its rule", got[0]["text"])
         self.assertEqual(R.lane_of(got[0]["subject"]), "decisions")
+
+    def test_a_lane_past_the_deadline_without_a_reason_is_a_fault_of_its_own_and_owned_by_that_lane(self):
+        # t1939n (27 Nov 2026): "lane training says: no reason given" for 151 days, and the issue
+        # went to the lane "alerts", which no executor lane answers
+        s = snapshot(omissions=[{"item": "no_divisions_in_training", "days_open": 40, "owner": "training",
+                                 "owner_note": "SILENT: lane training had 3 turn(s), the last 1 day(s) ago, "
+                                               "and never stated a reason", "owner_silent": True},
+                                {"item": "operative_recruitable", "days_open": 40, "owner": "intelligence"}])
+        got = {f["subject"]: f for f in sinks.findings(s, (), self.g) if f["code"].startswith("lane_")}
+        self.assertEqual(got["no_divisions_in_training"]["code"], "lane_silent")
+        self.assertEqual(got["operative_recruitable"]["code"], "lane_silent")
+        self.assertEqual(R.class_of("lane_silent"), "technical")
+        self.assertEqual(R.executor_owner_lane(got["no_divisions_in_training"]["numbers"]), "training")
+        self.assertIsNone(R.executor_owner_lane({"owner_rule": "player (manage.alerts_ignore)"}))
 
 
 class LoopCloses(unittest.TestCase):

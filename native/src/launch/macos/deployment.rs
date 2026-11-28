@@ -347,6 +347,57 @@ fn conveyors(r: &Reader<'_>, image: u64) -> Result<Vec<(u64, String, i32, i32)>>
     }
     Ok(out)
 }
+/// engineer 82: the training queue's deployment province (+0x3c on 1.20.0.0 and 1.19.4.1: the queue's own set-location
+/// method, 1.20 0x1014a42a0, stores the location command's province id there; 0 = none).
+const CONVEYOR_LOCATION: u64 = 0x3c;
+
+/// engineer 82: one own training queue as the in-process module needs it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Queue {
+    pub(super) address: u64,
+    pub(super) template: String,
+    pub(super) amount: i32,
+    pub(super) lines: i32,
+    pub(super) location: i32,
+}
+
+/// engineer 82: every own training queue in list order, with its deployment province.
+pub(super) fn queues(r: &Reader<'_>, image: u64) -> Result<Vec<Queue>> {
+    let location = fld(r.string_abi(), &CONVEYOR, CONVEYOR_LOCATION)?;
+    conveyors(r, image)?
+        .into_iter()
+        .map(|(address, template, amount, lines)| {
+            Ok(Queue {
+                address,
+                template,
+                amount,
+                lines,
+                location: r.i32(address + location)?,
+            })
+        })
+        .collect()
+}
+
+/// engineer 82: the own division template named `name` (the object the template row's Train button hands to the
+/// create-queue command). Two templates of one name are refused: the module needs the one the player means.
+pub(super) fn template_object(r: &Reader<'_>, image: u64, name: &str) -> Result<u64> {
+    let u = ui(r)?;
+    let country = own_country(r, image)?;
+    let mut found = None;
+    for t in pointers(r, country + u.country_templates, 256)? {
+        if r.string_bounded(t + u.template_name, 128)? == name {
+            if found.is_some() {
+                return Err(Error::new(
+                    "invalid_target",
+                    "Two own templates carry this name",
+                ));
+            }
+            found = Some(t);
+        }
+    }
+    found.ok_or_else(|| Error::new("invalid_target", format!("No own template named {name}")))
+}
+
 /// Button `name` of the `index`-th conveyor view (same order as the conveyor list).
 fn conveyor_button(r: &Reader<'_>, image: u64, index: usize, name: &str) -> Result<Option<Rect>> {
     let u = ui(r)?;
