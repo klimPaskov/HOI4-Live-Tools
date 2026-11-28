@@ -2513,6 +2513,10 @@ fn one(
         spear_pockets(
             state, tools, plan, op, &mut units, roster, &enemies, &at_war, now,
         )?;
+        // THE STUCK POINT: a battle not won for days with idle fit divisions on its unused sides
+        if let Some(line) = stuck_push_step(state, tools, id, op, &units, roster, lease, now)? {
+            return Ok(Some(line));
+        }
         // the strike formations first: their orders are quick whole-army moves, and behind the
         // line work they got no turn while a line order kept failing (qb1, 19 Nov 2026: the
         // column stood in Lodz from day 28 to day 56 while the burst ended on resting redraws)
@@ -6952,7 +6956,7 @@ fn advance(
         let own_line_held = u.line.is_empty() || held(tools, &me, &u.line).len() == u.line.len();
         // ARMOUR WHERE IT CAN BREAK THROUGH: its next objective by the armour's ground cost, and
         // never the reserve of a battle on rough ground
-        if u.spear && at_war.contains(&u.enemy) {
+        if u.spear && at_war.contains(&u.enemy) && pocket_neck(state, &u.name).is_none() {
             armour_ground(state, tools, plan, id, op, u, &op_line, wars, at_war, now);
         }
         let mut wanted: Vec<i64> = if u.spear {
@@ -7150,6 +7154,15 @@ fn wing_stall(
     Ok(Some(line))
 }
 
+/// The neck state of the pocket `army` is an arm of, while that pocket stands.
+fn pocket_neck(state: &State, army: &str) -> Option<i64> {
+    let neck = state.done.get("pocket:neck").copied()?;
+    state
+        .done
+        .contains_key(&format!("pocket:arm:{army}"))
+        .then_some(neck)
+}
+
 /// The line a spearhead is painted to at war: the states of its own thrust still to take, then
 /// the nearest state of the operation's line; a state its spearhead has not taken in
 /// STRIKE_MAX_DAYS is given up to the infantry's plan and the spearhead goes on to the next (qt1,
@@ -7166,6 +7179,16 @@ fn spear_line(
     op_line: &[i64],
     now: GameHour,
 ) -> Vec<i64> {
+    // AN ARM OF A POCKET goes to the neck whatever its spearhead gave up before: the pocket has
+    // its own time (POCKET_CLOSE_DAYS). w92c (28 Nov 2026): Army 7 had left state 35 to the
+    // infantry 51 hours before the pocket "Army 9 and Army 7 meet in state 35 to cut off [36]"
+    // was chosen; its line [35] was filtered out, it went on elsewhere, and the neck was given up
+    // after 6 days with one arm
+    if let Some(neck) = pocket_neck(state, &u.name) {
+        if u.line == [neck] {
+            return vec![neck];
+        }
+    }
     let skipped = |state: &State, s: i64| {
         state
             .done
@@ -7271,15 +7294,171 @@ fn starved_start(read: &Value, armies: &HashSet<String>) -> Vec<(i64, i64, i64, 
     out
 }
 
+/// The armies whose divisions attack in the operation: its attackers and line formations, a
+/// group's member armies with them.
+fn attacking_armies(units: &[Unit], roster: &Value) -> HashSet<String> {
+    let mut armies: HashSet<String> = HashSet::new();
+    for u in units.iter().filter(|u| attacker(u) || u.role == Role::Line) {
+        armies.insert(u.name.clone());
+        armies.extend(u.members.iter().cloned());
+        if u.role == Role::Group {
+            armies.extend(
+                list(roster, "armies")
+                    .iter()
+                    .filter(|r| r["army_group"].as_str() == Some(u.name.as_str()))
+                    .map(|r| text(&r["army"]).to_string()),
+            );
+        }
+    }
+    armies
+}
+
+/// THE STUCK POINT (`push`, on unless `false`; `push.min_hours` default 72, `push.days` 5,
+/// `push.divisions` 6): once a game day at war, a battle of ours that has stood `min_hours`, is
+/// not being won and has width to spare, bordered by own provinces whose fit divisions stand idle
+/// beside it, is attacked from those sides by a direct order (`hoi4_army_move` with the
+/// divisions, the province as target): the one place besides a pocket where a direct order breaks
+/// a stuck point (the owner's model); the plan's lines stay as they are; one battle in `days`
+/// (`capacity::stuck_push`). The battle plan attacks a province from the sides its divisions'
+/// own scores choose (o96a, 28 Nov 2026: 3-7 of the 7-11 enemy provinces in reach attacked).
+#[allow(clippy::too_many_arguments)]
+fn stuck_push_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    op: &Value,
+    units: &[Unit],
+    roster: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let cfg = &op["push"];
+    if *cfg == json!(false) || state.skipped(now, "oppush", id) {
+        return Ok(None);
+    }
+    state.skip(now, "oppush", id, DAY);
+    let Ok(battles) = tools.call("hoi4_battles", &json!({"divisions": true})) else {
+        return Ok(None);
+    };
+    let states: Vec<i64> = {
+        let mut v: Vec<i64> = list(&battles, "list")
+            .iter()
+            .filter(|b| text(&b["our_side"]) == "attacker")
+            .filter_map(|b| b["state"].as_i64())
+            .collect();
+        v.sort_unstable();
+        v.dedup();
+        v.truncate(64);
+        v
+    };
+    if states.is_empty() {
+        return Ok(None);
+    }
+    let Ok(read) = tools.call("hoi4_supply", &json!({})) else {
+        return Ok(None);
+    };
+    let Ok(graph) = tools.call("hoi4_province_graph", &json!({"states": states})) else {
+        return Ok(None);
+    };
+    let g = ground::read_graph(&graph);
+    let armies = attacking_armies(units, roster);
+    let days = cfg["days"].as_i64().filter(|d| *d >= 1).unwrap_or(5);
+    let pushed = |p: i64| {
+        state
+            .done
+            .get(&key(id, &format!("push:{p}")))
+            .is_some_and(|t| now.saturating_sub(*t) < days * DAY)
+    };
+    let Some(push) = capacity::stuck_push(
+        &battles,
+        &g,
+        &read,
+        &armies,
+        cfg["min_hours"].as_i64().filter(|h| *h >= 1).unwrap_or(72),
+        cfg["divisions"]
+            .as_u64()
+            .filter(|n| (1..=48).contains(n))
+            .unwrap_or(6) as usize,
+        &pushed,
+    ) else {
+        return Ok(None);
+    };
+    state
+        .done
+        .insert(key(id, &format!("push:{}", push.province)), now);
+    let what = format!(
+        "stuck point: the battle at {} stood {} days not won, attacked from {} of the {} own sides: {} of {} attack it from {:?}",
+        push.province,
+        push.hours / 24,
+        push.used,
+        push.sides,
+        push.divisions.len(),
+        push.army,
+        push.from
+    );
+    state
+        .op_notes
+        .insert(format!("{id}:push"), format!("operation {id}: {what}"));
+    Ok(Some(order(
+        state,
+        tools,
+        lease,
+        id,
+        &what,
+        "hoi4_army_move",
+        json!({"army": push.army, "divisions": push.divisions, "province_id": push.province}),
+    )?))
+}
+
+/// The supply nodes that feed own province `p` in a `hoi4_supply` read, the largest flow first:
+/// (node province, the node's railway level). Pure.
+fn feeders(read: &Value, p: i64) -> Vec<(i64, i64)> {
+    let rail: HashMap<i64, i64> = list(read, "supply_nodes")
+        .iter()
+        .filter_map(|n| {
+            Some((
+                n["province_id"].as_i64()?,
+                n["railway_level"].as_i64().unwrap_or(0),
+            ))
+        })
+        .collect();
+    let Some(row) = list(read, "provinces")
+        .iter()
+        .find(|r| r["province_id"].as_i64() == Some(p))
+    else {
+        return Vec::new();
+    };
+    let mut flows: Vec<(f64, i64)> = list(row, "flows")
+        .iter()
+        .filter_map(|f| {
+            Some((
+                f["flow"].as_f64().unwrap_or(0.0),
+                f["node_province"].as_i64()?,
+            ))
+        })
+        .collect();
+    flows.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+    let mut out: Vec<(i64, i64)> = Vec::new();
+    for (_, q) in flows {
+        if !out.iter().any(|(x, _)| *x == q) {
+            out.push((q, rail.get(&q).copied().unwrap_or(0)));
+        }
+    }
+    out
+}
+
 /// SUPPLY BEFORE THE ATTACK (`supply.prepare`, on unless `false`): once a game day while the
-/// operation prepares, the provinces where its attackers' divisions stand are read: the most
-/// starved one with no railway gets a railway from the nearest node the network feeds
-/// (`hoi4_railway_build` to_nearest_node, from_nearest_node; each province once in 30 days), so
-/// the line is fed before the declaration, not after the advance has outrun it; the stacks over
-/// their supply are in the note (the capacity spread takes them down; the trucks come from the
-/// logistics hubs rule, which reads the truck stock first). o96a (28 Nov 2026): 26 divisions in the
-/// Ardennes forest province 3488 with no railway on supply 1.7 against 21.3 from W+10; 41-49 of
-/// 68 divisions under half supply.
+/// operation prepares, the provinces where its attackers' divisions stand are read. Supply reaches
+/// a province from the supply nodes (hubs, ports, the capital) that feed it, and a node carries
+/// what its railway brings: for the most starved province whose feeding node has no railway, that
+/// node gets one from the nearest node the network feeds (`hoi4_railway_build` to_province = the
+/// node, from_nearest_node; each node once in 30 days), so the line is fed before the declaration,
+/// not after the advance has outrun it. A province fed by railed nodes only is short by its
+/// stack or by the hub's reach: the note says so (the capacity spread takes the stack down; the
+/// hubs rule brings trucks after reading the stock). o96a (28 Nov 2026): 26 divisions in the
+/// Ardennes forest province 3488 on supply 1.7 against 21.3; w96c (28 Nov): a railway to the
+/// starved province's NEAREST node (to_nearest_node) chose node 3458, already the network's own,
+/// as both ends: railway_not_queued.
 #[allow(clippy::too_many_arguments)]
 fn prepare_supply(
     state: &mut State,
@@ -7295,19 +7474,7 @@ fn prepare_supply(
         return Ok(None);
     }
     state.skip(now, "opprepsup", id, DAY);
-    let mut armies: HashSet<String> = HashSet::new();
-    for u in units.iter().filter(|u| attacker(u) || u.role == Role::Line) {
-        armies.insert(u.name.clone());
-        armies.extend(u.members.iter().cloned());
-        if u.role == Role::Group {
-            armies.extend(
-                list(roster, "armies")
-                    .iter()
-                    .filter(|r| r["army_group"].as_str() == Some(u.name.as_str()))
-                    .map(|r| text(&r["army"]).to_string()),
-            );
-        }
-    }
+    let armies = attacking_armies(units, roster);
     let Ok(read) = tools.call("hoi4_supply", &json!({})) else {
         return Ok(None);
     };
@@ -7326,10 +7493,19 @@ fn prepare_supply(
     let shown: Vec<String> = starved
         .iter()
         .take(4)
-        .map(|(p, s, n, r, rail)| {
+        .map(|(p, s, n, r, _)| {
+            let fed: Vec<String> = feeders(&read, *p)
+                .iter()
+                .map(|(q, rail)| format!("node {q} railway {rail}"))
+                .collect();
             format!(
-                "{p} (state {s}): {n} divisions at {:.0}% of their need, railway {rail}",
-                r * 100.0
+                "{p} (state {s}): {n} divisions at {:.0}% of their need, fed by {}",
+                r * 100.0,
+                if fed.is_empty() {
+                    "no node".to_string()
+                } else {
+                    fed.join(", ")
+                }
             )
         })
         .collect();
@@ -7340,28 +7516,33 @@ fn prepare_supply(
             shown.join("; ")
         ),
     );
-    let due = starved.iter().find(|(p, _, _, _, rail)| {
-        *rail == 0
-            && state
-                .done
-                .get(&key(id, &format!("prail:{p}")))
-                .is_none_or(|t| now.saturating_sub(*t) >= 30 * DAY)
+    let recent = |state: &State, q: i64| {
+        state
+            .done
+            .get(&key(id, &format!("prail:{q}")))
+            .is_some_and(|t| now.saturating_sub(*t) < 30 * DAY)
+    };
+    let due = starved.iter().find_map(|(p, s, n, r, _)| {
+        feeders(&read, *p)
+            .into_iter()
+            .find(|(q, rail)| *rail == 0 && !recent(state, *q))
+            .map(|(q, _)| (*p, *s, *n, *r, q))
     });
-    let Some((p, s, n, r, _)) = due.copied() else {
+    let Some((p, s, n, r, q)) = due else {
         return Ok(None);
     };
-    state.done.insert(key(id, &format!("prail:{p}")), now);
+    state.done.insert(key(id, &format!("prail:{q}")), now);
     Ok(Some(order(
         state,
         tools,
         lease,
         id,
         &format!(
-            "supply before the attack: railway to province {p} (state {s}: {n} divisions at {:.0}% of their need, no railway)",
+            "supply before the attack: railway to the supply node in province {q}, which feeds province {p} (state {s}: {n} divisions at {:.0}% of their need)",
             r * 100.0
         ),
         "hoi4_railway_build",
-        json!({"to_province": p, "to_state": s, "to_nearest_node": true, "from_nearest_node": true}),
+        json!({"to_province": q, "from_nearest_node": true}),
     )?))
 }
 

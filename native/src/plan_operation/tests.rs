@@ -3825,6 +3825,76 @@ fn two_spearheads_are_painted_to_a_pockets_neck_and_hold_the_closed_ring() {
 }
 
 #[test]
+fn a_pocket_arm_goes_to_the_neck_its_spearhead_had_given_up_and_keeps_it_past_the_strike_days() {
+    // w92c (28 Nov 2026, Holland): Army 7 left state 35 to the infantry (10 days on its
+    // spearhead) 51 hours before the pocket "Army 9 and Army 7 meet in state 35 to cut off [36]"
+    // (Friesland); Army 7's line [35] was filtered out by that skip, it went on elsewhere, and the
+    // neck was given up after 6 days with one arm
+    let game = Game::new();
+    for (name, main) in [("Army 9", 67), ("Army 7", 66)] {
+        game.roster.borrow_mut()["armies"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"army": name, "division_count": 8, "main_state": main}));
+    }
+    *game.pockets.borrow_mut() = json!({"pockets": [
+        {"already_cut_off": false, "pincer_ready": true, "capital_inside": false,
+         "neck_states": [{"state_id": 35}], "pocket_states": [{"state_id": 36}]}]});
+    let mut state = State::default();
+    for (s, p) in [
+        (35, (10.0, 0.0)),
+        (36, (10.0, 5.0)),
+        (67, (12.0, 0.0)),
+        (66, (8.0, 0.0)),
+    ] {
+        state.centers.insert(s, p);
+    }
+    state
+        .done
+        .insert(key("op", "spearskip:Army 7:35"), START - 51);
+    let f = json!({"enemy": "POL", "own_states": [67]});
+    let o = json!({"target_line": [7]});
+    let mut units = vec![
+        unit("Army 9".into(), Role::Mobile, &f, &o),
+        unit("Army 7".into(), Role::Mobile, &f, &o),
+    ];
+    for u in units.iter_mut() {
+        u.spear = true;
+    }
+    let plan = json!({"war": {"me": "GER"}});
+    let roster = game.roster.borrow().clone();
+    let enemies = vec!["POL".to_string()];
+    let op = json!({"id": "op", "spear_pockets": true});
+    spear_pockets(
+        &mut state, &game, &plan, &op, &mut units, &roster, &enemies, &enemies, START,
+    )
+    .unwrap();
+    assert!(state.op_notes["pocket"].contains("meet in state 35"));
+    // both arms are painted to the neck, the one that had given it up included, and they keep it
+    // past STRIKE_MAX_DAYS (the pocket's own limit decides)
+    for t in [START, START + 11 * DAY] {
+        for u in &units {
+            let line = spear_line(&mut state, "op", &roster, u, "GER", &game, &[7], t);
+            assert_eq!(line, vec![35], "{} at {t}", u.name);
+        }
+    }
+    assert!(!state.done.contains_key(&key("op", "spearskip:Army 9:35")));
+    // the pocket over: the old skip stands again for Army 7
+    state.done.retain(|k, _| !k.starts_with("pocket:"));
+    let line = spear_line(
+        &mut state,
+        "op",
+        &roster,
+        &units[1],
+        "GER",
+        &game,
+        &[7],
+        START + 12 * DAY,
+    );
+    assert_ne!(line, vec![35]);
+}
+
+#[test]
 fn the_axis_by_terrain_is_chosen_once_round_the_forest_behind_the_river() {
     let game = Game::new();
     *game.pol_rows.borrow_mut() = Some(json!([
@@ -5039,10 +5109,11 @@ fn the_armour_leaves_a_rough_ground_battle_s_reserve_and_goes_where_its_ground_i
 // SUPPLY BEFORE THE ATTACK (engineer 99, after o96a)
 
 #[test]
-fn before_the_attack_the_most_starved_start_province_without_a_railway_gets_one() {
+fn before_the_attack_the_unrailed_node_feeding_the_most_starved_start_province_gets_a_railway() {
     let game = Game::new();
-    // o96a W+10: 26 divisions in the Ardennes forest province 3488 (no railway) on 1.66 against
-    // 21.3; 8 in 11562 (railway 2) on 2.0 against 5.0; 6 in Rheinland 3444 with headroom
+    // o96a W+10: 26 divisions in the Ardennes forest province 3488 on 1.66 against 21.3, fed by a
+    // hub in 3500 with no railway; 8 in 11562 on 2.0 against 5.0, fed by the railed node 11500; 6
+    // in Rheinland 3444 with headroom
     let ids = |prefix: &str, n: usize| -> Vec<Value> {
         (0..n).map(|i| json!(format!("{prefix}{i}"))).collect()
     };
@@ -5052,11 +5123,17 @@ fn before_the_attack_the_most_starved_start_province_without_a_railway_gets_one(
             divisions.push(json!({"id": format!("{prefix}{i}"), "army": "Mitte"}));
         }
     }
-    *game.supply.borrow_mut() = Some(json!({"divisions": divisions, "provinces": [
+    *game.supply.borrow_mut() = Some(json!({"divisions": divisions,
+        "supply_nodes": [{"node": 1, "kind": "hub", "province_id": 3500, "railway_level": 0},
+                         {"node": 2, "kind": "hub", "province_id": 11500, "railway_level": 2}],
+        "provinces": [
         {"province_id": 11562, "state_id": 35, "divisions": 8, "division_ids": ids("b", 8),
-         "supply": 2.03, "demand": 4.98, "railway_level": 2},
+         "supply": 2.03, "demand": 4.98, "railway_level": 2,
+         "flows": [{"node": 2, "flow": 2.0, "node_province": 11500}]},
         {"province_id": 3488, "state_id": 980, "divisions": 26, "division_ids": ids("a", 26),
-         "supply": 1.66, "demand": 21.3, "railway_level": 0},
+         "supply": 1.66, "demand": 21.3, "railway_level": 0,
+         "flows": [{"node": 2, "flow": 0.2, "node_province": 11500},
+                   {"node": 1, "flow": 1.4, "node_province": 3500}]},
         {"province_id": 3444, "state_id": 51, "divisions": 6, "division_ids": ids("c", 6),
          "supply": 4.57, "demand": 1.75, "railway_level": 0}]}));
     let u = unit("Mitte".into(), Role::Line, &Value::Null, &Value::Null);
@@ -5067,16 +5144,22 @@ fn before_the_attack_the_most_starved_start_province_without_a_railway_gets_one(
     let line = prepare_supply(&mut state, &game, "op", &op, &units, &roster, "l", START)
         .unwrap()
         .expect("a railway");
-    assert!(line.contains("railway to province 3488"), "{line}");
+    assert!(
+        line.contains("railway to the supply node in province 3500, which feeds province 3488"),
+        "{line}"
+    );
     let rail = game
         .orders()
         .into_iter()
         .find(|(n, _)| n == "hoi4_railway_build")
         .unwrap();
-    assert_eq!(rail.1["to_province"], json!(3488));
-    assert_eq!(rail.1["to_nearest_node"], json!(true));
-    assert!(state.op_notes["op:supply_prepare"].contains("11562 (state 35): 8 divisions"));
-    // once a day; the same province not again for 30 days, a province with a railway never
+    assert_eq!(rail.1["to_province"], json!(3500));
+    assert_eq!(rail.1["from_nearest_node"], json!(true));
+    assert!(rail.1.get("to_nearest_node").is_none());
+    let note = &state.op_notes["op:supply_prepare"];
+    assert!(note.contains("3488 (state 980): 26 divisions at 8% of their need, fed by node 3500 railway 0, node 11500 railway 2"), "{note}");
+    assert!(note.contains("11562 (state 35): 8 divisions"));
+    // once a day; the same node not again for 30 days; a province fed by railed nodes only never
     assert!(prepare_supply(
         &mut state,
         &game,
@@ -5106,6 +5189,74 @@ fn before_the_attack_the_most_starved_start_province_without_a_railway_gets_one(
     let mut state = State::default();
     assert!(
         prepare_supply(&mut state, &game, "op", &off, &units, &roster, "l", START)
+            .unwrap()
+            .is_none()
+    );
+}
+
+// THE STUCK POINT (engineer 99, after o96a)
+
+#[test]
+fn a_battle_stuck_for_days_is_attacked_by_the_idle_divisions_on_its_unused_side() {
+    let game = Game::new();
+    *game.battles.borrow_mut() = Some(json!({"list": [
+        {"province": 6583, "state": 8, "hours": 100, "our_side": "attacker", "winning": "defender",
+         "width": {"attacker_max": 60.0, "attacker_engaged": 20.0, "full": false},
+         "attacker": {"engaged_divisions": [{"id": "m1", "province": 6600, "width": 10.0},
+                                            {"id": "m2", "province": 6600, "width": 10.0}]},
+         "defender": {}}]}));
+    let d = |id: &str, p: i64| json!({"id": id, "army": "Mitte", "template": "Inf", "province_id": p, "organisation": 60.0});
+    *game.supply.borrow_mut() = Some(json!({"divisions": [
+        d("m1", 6600), d("m2", 6600), d("m3", 6601), d("m4", 6601), d("m5", 6601)]}));
+    *game.graph.borrow_mut() = Some(json!({"provinces": [
+        {"province": 6583, "state_id": 8, "borders": [{"province": 6600}, {"province": 6601}]}]}));
+    let units = vec![unit("Mitte".into(), Role::Line, &Value::Null, &Value::Null)];
+    let roster = game.roster.borrow().clone();
+    let op = json!({"id": "op"});
+    let mut state = State::default();
+    let line = stuck_push_step(&mut state, &game, "op", &op, &units, &roster, "l", START)
+        .unwrap()
+        .expect("a push");
+    assert!(
+        line.contains("stuck point: the battle at 6583 stood 4 days"),
+        "{line}"
+    );
+    let mv = game
+        .orders()
+        .into_iter()
+        .find(|(n, _)| n == "hoi4_army_move")
+        .unwrap();
+    assert_eq!(mv.1["province_id"], json!(6583));
+    assert_eq!(mv.1["divisions"], json!(["m3", "m4", "m5"]));
+    // once a day; the same battle not again within 5 days; off by the plan
+    assert!(stuck_push_step(
+        &mut state,
+        &game,
+        "op",
+        &op,
+        &units,
+        &roster,
+        "l",
+        START + 1
+    )
+    .unwrap()
+    .is_none());
+    assert!(stuck_push_step(
+        &mut state,
+        &game,
+        "op",
+        &op,
+        &units,
+        &roster,
+        "l",
+        START + DAY
+    )
+    .unwrap()
+    .is_none());
+    let mut state = State::default();
+    let off = json!({"id": "op", "push": false});
+    assert!(
+        stuck_push_step(&mut state, &game, "op", &off, &units, &roster, "l", START)
             .unwrap()
             .is_none()
     );
