@@ -19,8 +19,13 @@ const char *const IPC_ALLOWED[] = {"set_game_speed", "production", "air", "airwi
 const int IPC_ALLOWED_COUNT = 21;
 /* airwing (engineer 71, 24 Nov): split, merge, disband, attach, detach, region by id / hold; OFF in auto until its
  * live session (S3-AIRWING in docs/LIVE_VALIDATION_QUEUE.md) passes */
-const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */, 0 /* airwing */,
-                                0 /* production2: add line, priority (S3-PROD2) */,
+const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */, 1 /* S2 air, 24 Nov */,
+                                1 /* airwing (S3-AIRWING PASSED live 28 Nov 2026, o96a 1940 + s96b 1936: hold, region by id
+                                   * over no-base regions 22-145 ms, range refusals unposted, split, merge, attach, disband,
+                                   * a running soak; a merge the game cannot shrink further reads NotApplied) */,
+                                1 /* production2: add line, priority (S3-PROD2 PASSED live 28 Nov 2026, o96a + s96b: add
+                                   * with a design 65-149 ms, the line lands at the bottom, top/up/down/bottom, a running
+                                   * soak) */,
                                 1 /* orders (engineer 73): delete, execute, set_path, new_front (S4-ORDERS PASSED live 27 Nov
                                    * 2026, s45a/s89a/s89b: tree read = external read, execute/delete, new_front = the X
                                    * stroke's arrow and line with the same 24 divisions, 20 set_path 17 ms median,
@@ -32,7 +37,8 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                    * exercised live) */,
                                 1 /* units (engineer 75): new army, transfer, leader, rename, army group new / into / out of,
                                    * delete a shell (S6-UNITS PASSED live 24 Nov 2026) */,
-                                0 /* picks (engineer 75): a national focus (S7-PICKS) */,
+                                1 /* picks (engineer 75): a national focus (S7-PICKS PASSED live: F1/F2a/F4 s7l 24 Nov,
+                                   * F3 running o96a 28 Nov 2026, 42 ms) */,
                                 0 /* events (engineer 76): the answer of an open event window (S8-EVENTS stopped live 24 Nov
                                    * 2026: the answer executes but the window stays open) */,
                                 1 /* decisions (engineer 76): an untargeted decision (S9-DECISIONS PASSED live 24 Nov 2026) */,
@@ -46,16 +52,24 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                    * 24 Nov 2026, s81b: start, replace, refusals, running) */,
                                 1 /* politics (engineer 79): a law / an idea slot (S13-POLITICS PASSED live 24 Nov 2026,
                                    * s81b/s81c: trade and conscription laws Verified after the settle window, refusals) */,
-                                0 /* construction (engineer 82): add in a state or on a province (supply hubs included),
-                                   * remove a line, move a line (S14-CONSTRUCTION) */,
+                                1 /* construction (engineer 82): add in a state or on a province (supply hubs included),
+                                   * remove a line, move a line (S14-CONSTRUCTION PASSED live 28 Nov 2026, s96b 1936: add
+                                   * 35-441 ms, a supply node on a province, an inland naval base refused unposted, move
+                                   * top/up/down/bottom, remove, running; a count over the free slots is posted whole and
+                                   * the game keeps what fits: read back Diverged) */,
                                 0 /* training (engineer 82): a training queue of a template, its series, lines, location,
-                                   * deploy, cancel (S15-TRAINING) */,
+                                   * deploy, cancel (S15-TRAINING STOPPED live 28 Nov 2026, s96b: count 7 queued 9 lines,
+                                   * the add_lines posts of 5 and 1 gave 8 and the receipt read Verified as added >= count;
+                                   * a create whose add_lines the game refused left a 1-line queue while the tool said
+                                   * nothing was posted) */,
                                 1 /* mio (engineer 84): an organisation's trait queue / unlock, its policy, a production
                                    * line's organisation (S16-MIO PASSED live 27 Nov 2026, s89c: unlock 0.9 s / 14 ms post
                                    * (GUI 34.6 s), queue, trait_indices of 3, policy refused by the window's gate unposted,
                                    * running; the line's organisation not exercised) */,
-                                0 /* navy (engineer 85): task force missions, merge, a fleet's sea regions, its admiral,
-                                   * task forces into a fleet (S17-NAVY) */,
+                                1 /* navy (engineer 85): task force missions, merge, a fleet's sea regions, its admiral,
+                                   * task forces into a fleet (S17-NAVY PASSED live 28 Nov 2026, o96a 1940: regions
+                                   * add/remove, missions 3/1/0, admiral assign/unassign/move, a task force into a fleet,
+                                   * merge Diverged when not all in one port, running) */,
                                 0 /* doctrine (engineer 85): a grand doctrine, a subdoctrine into a track slot
                                    * (S18-DOCTRINE) */,
                                 0 /* projects (engineer 85): a facility's project start / stop, its scientist attach /
