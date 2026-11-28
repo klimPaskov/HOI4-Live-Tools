@@ -241,6 +241,14 @@ pub(super) fn bases_and_wings_owned(
 
 /// Mission names set in `mask` (bit n = toolbar frame n + 1).
 /// Training runs with no region (region 0, the bit set): the game shows "Pilot Exercises".
+/// The training mission's bit in a wing's mission mask (from the mission list; 0 when it has none).
+pub(super) fn training_mask() -> i32 {
+    MISSIONS
+        .iter()
+        .find(|(n, _)| *n == "training")
+        .map_or(0, |(_, f)| 1 << (f - 1))
+}
+
 pub(super) fn training(mask: i32) -> bool {
     MISSIONS
         .iter()

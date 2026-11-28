@@ -828,7 +828,7 @@ pub fn mac_tool_list() -> Vec<Value> {
             {"properties":{"op":{"const":"release"},"lease_token":{"type":"string"}},"required":["op","lease_token"],"additionalProperties":false},
             {"properties":{"op":{"const":"status"}},"required":["op"],"additionalProperties":false}]}}),
         json!({"name":"hoi4_research_start","description":"Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology; without `slot` the first empty slot is used) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses before input: a completed focus (focus_completed), the active one (nothing_to_change), any while another focus is active (focus_slot_busy, naming it). Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_production_add","description":"Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id or design name from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options. The line gets no military-industrial organisation (the design is Shift+clicked past the organisation chooser); `organization` (the organisation's script key, as hoi4_mios lists it) is not yet built: it is refused with not_yet_built before any input.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"anyOf":[{"type":"integer","minimum":1},{"type":"string","maxLength":128}]},"organization":{"type":"string","maxLength":128},"bulk":{"type":"boolean","description":"Factories by the game's Ctrl+Click (+5) and Shift+Click (+10) steps, each read back; a chord the game does not take falls back to single clicks. Off until its live probe passes."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_production_priority","description":"Move an own production line in the production view's priority order (a line higher in the list gets resources and factories first, so shortages and lost factories hit the bottom lines): the line's arrows (increase_priority, decrease_priority), Shift+click for to:top or to:bottom. The line is addressed like hoi4_production_set (line = entry_index from hoi4_production_lines, with its equipment). Verified by the line's place in the view's list (receipt detail: place before and after, the shown order).","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"to":{"type":"string","enum":["top","up","down","bottom"]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","to","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_production_set","description":"factories 0 removes the line (its close button). Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons (bulk: Ctrl +5 and Shift +10 clicks); each click is verified from memory. 0 keeps the line with no factories.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":0,"maximum":150},"bulk":{"type":"boolean","description":"Factories by the game's Ctrl+Click (+5) and Shift+Click (+10) steps, each read back; a chord the game does not take falls back to single clicks. Off until its live probe passes."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
@@ -884,7 +884,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         doctrine_act::tool(),
         json!({"name":"hoi4_army_commander","description":"Assign a general (by the full name hoi4_commanders lists, a part of it that names one commander only such as the surname, or the character id) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list. Verified when the army's commander is that general. Refused before any click with army_unknown (lists valid armies/groups), unknown_commander (5 closest names) or commander_unavailable (already leads another army/group; pass reassign: true to move them).","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"general":{"type":"string"},"reassign":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","general","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wings","description":"Own air wings with air base, assigned region and missions, from the Air Forces Overview (opens it). Changes nothing in the game.","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_air_mission","description":"Give an own air wing (exact name) a mission over a strategic air region with the game's ordinary controls: wing row of the Air Forces Overview (L), the mission button, the Find view centres `state_id` (any state inside the wanted region) and a right click assigns. Pass `region` (region id or display name, e.g. 'Eastern Germany') instead of or with `state_id`: the state is then chosen from the game's files and the result is verified to be that region; a sea region (no state in it, e.g. 'English Channel') is reached by centring the nearest state and clicking the region's own sea provinces on screen. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (unknown mission), region_unknown, region_state_mismatch; the game's own disabling (mission not offered / needs more planes) surfaces as invalid_target. Verified from the wing's mission mask and region id in memory (hoi4_air). No percent or intensity control exists in the game's air UI; aggressiveness and day/night are per-wing cycle buttons not driven by this tool.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) given the same mission over the same region in one input sequence: selected together in the overview (a click, then Shift+clicks), one mission click, one region click; a wing the selection does not take is ordered alone. The receipt is Verified when all fly it, Diverged when some do (detail.wings names each, result.failed says why)"},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"anyOf":[{"type":"string","maxLength":96},{"type":"integer","minimum":1,"maximum":4095}]},"bulk":{"type":"boolean","description":"With wings: the bases whose every wing is listed are ordered by one click on the base circle (it selects all its wings), one mission or rebase order for all, read back at the end; the other wings and any the base order missed take the single path in the same call. Off until its live probe passes."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["mission","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_air_mission","description":"Give an own air wing (exact name) a mission over a strategic air region with the game's ordinary controls: wing row of the Air Forces Overview (L), the mission button, the Find view centres `state_id` (any state inside the wanted region) and a right click assigns. Pass `region` (region id or display name, e.g. 'Eastern Germany') instead of or with `state_id`: the state is then chosen from the game's files and the result is verified to be that region; a sea region (no state in it, e.g. 'English Channel') is reached by centring the nearest state and clicking the region's own sea provinces on screen. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (unknown mission), region_unknown, region_state_mismatch; the game's own disabling (mission not offered / needs more planes) surfaces as invalid_target. Verified from the wing's mission mask and region id in memory (hoi4_air). No percent or intensity control exists in the game's air UI; aggressiveness and day/night are per-wing cycle buttons not driven by this tool. Training needs neither state_id nor region (the first wing's own base state stands in).","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) given the same mission over the same region in one input sequence: selected together in the overview (a click, then Shift+clicks), one mission click, one region click; a wing the selection does not take is ordered alone. The receipt is Verified when all fly it, Diverged when some do (detail.wings names each, result.failed says why)"},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"anyOf":[{"type":"string","maxLength":96},{"type":"integer","minimum":1,"maximum":4095}]},"bulk":{"type":"boolean","description":"With wings: the bases whose every wing is listed are ordered by one click on the base circle (it selects all its wings), one mission or rebase order for all, read back at the end; the other wings and any the base order missed take the single path in the same call. Off until its live probe passes."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["mission","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_rebase","description":"Rebase one own air wing to the air base of a state with ordinary input: strategic air map (F3), the wing's row of the Air Forces Overview, the Find view centres `state_id`, the base's circle is located from the game's own map icon objects and right clicked. The wing flies a transfer (status 'To <base>'); verified from the wing's transfer destination in memory (hoi4_air `transfer_to_base_id`), the base id changes on arrival. Typed refusals before any input: wing_unknown, wing_ambiguous, air_base_unknown (state without an own air base; lists own base states), nothing_to_change (already based or already flying there), air_base_full (capacity minus wings stationed or incoming). The game set no range limit on a transfer in the test (a 570 km fighter wing was accepted 207 map units away); if it refuses anyway the tool reports rebase_refused. Map mode is restored afterwards.","inputSchema":{"type":"object","properties":{"wings":{"type":"array","items":{"type":"string","maxLength":128},"minItems":1,"maxItems":24,"description":"Several wings (instead of wing) to the same base in one call: one air mode, each selected and right-clicked onto the base in turn (the camera stays on the base). Verified when all transfer, Diverged when some do (detail.wings, result.failed)"},"wing":{"type":"string","maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"bulk":{"type":"boolean","description":"With wings: the bases whose every wing is listed are ordered by one click on the base circle (it selects all its wings), one mission or rebase order for all, read back at the end; the other wings and any the base order missed take the single path in the same call. Off until its live probe passes."},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_create","description":"Found a new air wing from reserve aircraft at an own air base: strategic air map, Find view centres `state_id`, left click on the base circle, the N shortcut ('Add new Air Wing'), the reserve row of `aircraft` (variant name such as 'Ju 86' or class name such as 'Inter-War Fighter', case-insensitive) moves up to 100 planes of that variant into the wing (the game's own limit per click), Ok. Reserve aircraft come from production or from disbanding a wing. Typed refusals: air_base_unknown, air_base_full (before input); no_reserve_aircraft (the game refuses the window when the reserve is empty), aircraft_not_in_reserve (lists what is in reserve), aircraft_ambiguous, create_unavailable (Ok disabled, e.g. no manpower) while driving; nothing is created in those cases. Verified from the new wing's name appearing at that base in memory (hoi4_air). The wing gets the game's default name and 'Deploying from Reserves' status.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"aircraft":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","aircraft","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_wing_disband","description":"Disband one own air wing (row of the Air Forces Overview, toolbar Disband, OK of the confirmation); all its equipment returns to the reserve. Typed refusals before input: wing_unknown, wing_ambiguous; disband_unavailable if the game disables the button. Verified from the wing's absence in memory (hoi4_air).","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","request_id","lease_token"],"additionalProperties":false}}),
@@ -5833,15 +5833,37 @@ impl MacClock {
                             ),
                         ));
                     };
-                    let (state, region) = airact::resolve_region(
-                        process,
-                        args.get("state_id")
-                            .map(|_| airact::state_arg(args, "state_id"))
-                            .transpose()?,
-                        args.get("region")
-                            .map(|_| airact::region_arg(args))
-                            .transpose()?,
-                    )?;
+                    // training has no region: without state_id or region the first wing's own base
+                    // state stands in (live 129, s129c T1: a training order asked for a state it never
+                    // uses)
+                    let (state, region) = if mission == "training"
+                        && args.get("state_id").is_none()
+                        && args.get("region").is_none()
+                    {
+                        let (_, own_wings) = airact::own(process)?;
+                        let base = own_wings
+                            .iter()
+                            .find(|w| w.name == wings[0])
+                            .and_then(|w| w.base_state)
+                            .filter(|s| *s > 0)
+                            .ok_or_else(|| {
+                                Error::new(
+                                    "wing_unknown",
+                                    format!("no own wing {} with a base state", wings[0]),
+                                )
+                            })?;
+                        (base, None)
+                    } else {
+                        airact::resolve_region(
+                            process,
+                            args.get("state_id")
+                                .map(|_| airact::state_arg(args, "state_id"))
+                                .transpose()?,
+                            args.get("region")
+                                .map(|_| airact::region_arg(args))
+                                .transpose()?,
+                        )?
+                    };
                     Air::Mission {
                         wings,
                         // training has no region in memory (air::assign)
@@ -5999,6 +6021,16 @@ impl MacClock {
             // The in-process backend (HOI4_BACKEND) for missions and rebases: the UI's own commands, no input.
             let mut air_route = match &op {
                 Air::Mission { .. } | Air::Rebase { .. } if !retry => inproc::route("air"),
+                // a training wing's hold is its training bit switched off: the air family's mission
+                // command (live-passed), not the airwing family's region clear
+                Air::Hold { .. }
+                    if !retry
+                        && before.as_ref().is_some_and(|b| {
+                            airact::training_only(b.region_id, b.mission_mask)
+                        }) =>
+                {
+                    inproc::route("air")
+                }
                 // wing structure (engineer 71): the airwing family, OFF under auto until its live session passes
                 Air::Hold { .. } | Air::Split { .. } | Air::Merge { .. } | Air::Disband { .. }
                     if !retry =>
@@ -8829,15 +8861,28 @@ impl MacClock {
             }
             let action = json!({"kind":"train","template":template,"count":count});
             let keys = &self.keys;
+            // the lines the game itself refused (its own check: a template cap, manpower), as the
+            // in-process filling reports them: the lines it took are the order done, not a divergence
+            // (live 129, s129a/g129a: a capped queue read action_diverged and was asked again)
+            let game_short: std::cell::Cell<Option<(i64, String)>> = std::cell::Cell::new(None);
             let mut settle = || {
                 let now = queued()?;
                 process.begin_snapshot()?;
                 let r = crate::memory::Reader::new(process);
                 let added = deployment::added_lines(&r, process.image_base(), template, &standing)?;
                 process.check()?;
-                let detail = json!({"template":template,"queued_lines":now,"added_lines":added});
+                let mut detail =
+                    json!({"template":template,"queued_lines":now,"added_lines":added});
+                let short = game_short.take();
+                game_short.set(short.clone());
                 Ok(if retry {
                     journal::Outcome::Diverged(detail)
+                } else if let Some((n, why)) =
+                    short.filter(|(n, _)| added > 0 && added as i64 + n == count as i64)
+                {
+                    detail["short"] = json!(n);
+                    detail["short_reason"] = json!(why);
+                    journal::Outcome::Reached(detail)
                 } else {
                     settle::lines_added_exactly(added as i64, count as i64).outcome(detail)
                 })
@@ -8848,6 +8893,12 @@ impl MacClock {
                 if let Some(p) = train_province {
                     train_reply =
                         inproc_training::train(process, &mut train_route, template, count, p)?;
+                    if let Some(reply) = &train_reply {
+                        if let Some(n) = reply["short"].as_i64().filter(|n| *n > 0) {
+                            let why = reply["short_reason"].as_str().unwrap_or("").to_string();
+                            game_short.set(Some((n, why)));
+                        }
+                    }
                     if train_reply.is_some() {
                         return Ok(());
                     }

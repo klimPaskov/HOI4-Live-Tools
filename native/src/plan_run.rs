@@ -2531,15 +2531,10 @@ impl State {
                 Err(e)
             }
             Err(e) if self.stop_on_failure => Err(e),
-            Err(e) => {
-                let mut text = format!("{}: {}", e.code, e.message);
-                let mut end = text.len().min(160);
-                while !text.is_char_boundary(end) {
-                    end -= 1;
-                }
-                text.truncate(end);
-                Ok((false, text))
-            }
+            // the whole reason: the ledger, the give-up message and the lessons read the game's
+            // answer after the code (a refusal cut at 160 characters lost the game check's own
+            // condition, which is what the next decision needs)
+            Err(e) => Ok((false, format!("{}: {}", e.code, e.message))),
             Ok(body) => {
                 self.last_result = body["result"].clone();
                 let status = body["receipt"]["status"].as_str().unwrap_or("").to_string();
@@ -2582,9 +2577,7 @@ impl State {
                             false,
                             match detail["refused"].as_str() {
                                 Some(code) => {
-                                    let msg: String =
-                                        text(&detail["message"]).chars().take(160).collect();
-                                    format!("{status}: {code}: {msg}")
+                                    format!("{status}: {code}: {}", text(&detail["message"]))
                                 }
                                 None => status,
                             },
@@ -4717,12 +4710,26 @@ fn focus_lane_inner(
                 json!({"focus": key}),
                 "fo",
             )?;
-            if ok {
+            let code = why.split(':').next().unwrap_or("").trim();
+            if ok || matches!(code, "nothing_to_change" | "focus_completed") {
+                // started, or already running or done (the tool read it so before any input):
+                // not a refusal of the key
                 state.stages.focus_why.remove(&key);
                 state.stages.focus_gui_fails.remove(&key);
                 state.stages.focus_refused_unjudged.remove(&key);
+                state.stages.focus_refused.remove(&key);
                 state.stages.focus = Some((format!("focus: started {key}"), false));
-                return Ok(Some(format!("focus {key}")));
+                return Ok(Some(if ok {
+                    format!("focus {key}")
+                } else {
+                    format!("focus {key}: already ({why})")
+                }));
+            }
+            if code == "focus_slot_busy" {
+                // another focus runs (this tick's read was older than the tool's): the key is not
+                // refused, the focus step waits for the slot
+                state.stages.focus = Some((format!("focus: slot busy ({why})"), false));
+                return Ok(Some(format!("focus {key}: false {why}")));
             }
             // A focus the game disables (requirements, exclusive branch) waits 10 game days
             // (6 game hours was under a second at speed 3) and does not hold up the next key.
@@ -16248,7 +16255,7 @@ mod tests {
     }
 
     #[test]
-    fn refused_action_diagnostics_truncate_unicode_without_panicking() {
+    fn refused_action_diagnostics_keep_the_whole_reason() {
         let reads = fake(vec![]);
         let tools = ActionReplies {
             reads: &reads,
@@ -16259,8 +16266,7 @@ mod tests {
             .act(&tools, "l", "hoi4_army_front", json!({}), "wr")
             .unwrap();
         assert!(!ok);
-        assert!(reason.starts_with("invalid_target: 界"));
-        assert!(reason.len() <= 160);
+        assert_eq!(reason, format!("invalid_target: {}", "界".repeat(100)));
     }
 
     #[test]

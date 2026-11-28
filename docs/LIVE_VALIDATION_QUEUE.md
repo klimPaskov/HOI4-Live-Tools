@@ -1464,3 +1464,20 @@ T9 a field-marshal trait (for example logistics_wizard or offensive_doctrine, ca
 assigned (T1's path); before T6 the same trait is refused for a corps commander.
 Pass: T1-T9, no window opened in T1-T3 and T6-T8. Then IPC_LIVE_PASSED for leader may be set to 1 (the executor then
 promotes the plan's commanders[].promote:true generals before their traits).
+
+## Session S35-FAULTS133: live 129's g129a faults at their roots (about 15 minutes) -- any time, a running game
+Build: e133 (tools 133, PR "Executor: a refusal's whole reason reaches the ledger; live 129's faults"). HOI4_BACKEND=auto (air is
+live-passed) or inprocess with `air` named. A 1936 save with wings on training (g126b's or g129a's end save).
+F1 with the game RUNNING at speed 3: hoi4_air_hold on a wing whose only mission is training: backend inprocess, op
+air.set_mission enable 0, Verified within the window (the training bit leaves the mask; the wing reads standing by); no
+mouse input. Repeat for two more wings; none action_not_applied.
+F2 hoi4_air_mission {wing, mission: training} with no state_id: Verified (the wing's base state stands in); the same with
+state_id still works.
+F3 hoi4_train on a capped template (special forces over its cap, or manpower short): the reply Verified with short N and
+short_reason (the game's own check), not Diverged; the executor does not ask again at once.
+F4 the executor: a plan commanders[].traits entry the game refuses (trait_not_assignable): asked once, then rests half a
+year in peace (14 days at war); the ledger line carries the whole refusal reason (no 160-character cut).
+F5 hoi4_focus_start on the running focus: nothing_to_change; on a completed focus: focus_completed; another focus while one
+runs: focus_slot_busy naming the running one (all before input). The executor: none of these rests the key (no 10-day rest,
+focus_refused unchanged); the slot is filled the day it empties.
+Pass: F1-F5.

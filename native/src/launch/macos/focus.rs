@@ -129,14 +129,19 @@ pub(super) fn check(before: &Progress, key: &str) -> Result<()> {
     check_state(before.active_key(), before.completed(), key)
 }
 fn check_state(active: Option<&str>, completed: &BTreeSet<String>, key: &str) -> Result<()> {
+    // distinct codes, so a caller can tell a focus already running or done (nothing to do) and
+    // a busy slot (wait for it) from a focus the game refuses (g129a, 28 Nov 2026: all three read
+    // invalid_target and the executor rested the key as if the game had refused it)
     if completed.contains(key) {
-        return Err(Error::new("invalid_target", "Focus already completed"));
+        return Err(Error::new("focus_completed", "Focus already completed"));
     }
     match active {
-        Some(active) if active == key => Err(Error::new("invalid_target", "Focus already active")),
-        Some(_) => Err(Error::new(
-            "invalid_target",
-            "Another focus is active; it must finish or be cancelled first",
+        Some(active) if active == key => {
+            Err(Error::new("nothing_to_change", "Focus already active"))
+        }
+        Some(other) => Err(Error::new(
+            "focus_slot_busy",
+            format!("Another focus is active ({other}); it must finish or be cancelled first"),
         )),
         None => Ok(()),
     }
@@ -678,20 +683,17 @@ mod tests {
         assert!(check_state(None, &completed, "GER_b").is_ok());
         assert_eq!(
             check_state(None, &completed, "GER_a").unwrap_err().code,
-            "invalid_target"
+            "focus_completed"
         );
         assert_eq!(
             check_state(Some("GER_b"), &completed, "GER_b")
                 .unwrap_err()
                 .code,
-            "invalid_target"
+            "nothing_to_change"
         );
-        assert_eq!(
-            check_state(Some("GER_c"), &completed, "GER_b")
-                .unwrap_err()
-                .code,
-            "invalid_target"
-        );
+        let busy = check_state(Some("GER_c"), &completed, "GER_b").unwrap_err();
+        assert_eq!(busy.code, "focus_slot_busy");
+        assert!(busy.message.contains("GER_c"));
     }
     #[test]
     fn node_visibility_uses_safe_center_bounds() {
