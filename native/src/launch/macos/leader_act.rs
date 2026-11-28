@@ -1055,6 +1055,16 @@ pub(super) fn prefer_arg(args: &serde_json::Map<String, Value>) -> Result<Vec<St
     }
 }
 
+/// The trait keys an own general holds (the country's leader list in memory); None unread.
+fn owned_traits(process: &dyn Process, general: &str) -> Option<Vec<String>> {
+    let leaders = read(process, super::units::leaders).ok()?;
+    let wanted = general.trim().to_lowercase();
+    leaders
+        .into_iter()
+        .find(|l| l.name.trim().to_lowercase() == wanted)
+        .map(|l| l.traits)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn call(
     name: &str,
@@ -1112,19 +1122,46 @@ pub(super) fn call(
             })?;
             drive(process, keys, &p, list_only)
         }),
-        settle: Box::new(|_, seen| {
+        settle: Box::new(|process, seen| {
             let detail = json!({"tool":"general_trait","general":general,"trait":asked,
                 "seen":seen.cloned()});
-            Ok(
-                match seen
-                    .and_then(|v| v.get("listing_only"))
-                    .and_then(Value::as_bool)
-                {
-                    // Listing changes nothing: whatever it saw is its result.
-                    Some(true) => super::journal::Outcome::Reached(detail),
-                    _ => ui_action::effect(seen, "assigned", detail),
-                },
-            )
+            if seen
+                .and_then(|v| v.get("listing_only"))
+                .and_then(Value::as_bool)
+                == Some(true)
+            {
+                // Listing changes nothing: whatever it saw is its result.
+                return Ok(super::journal::Outcome::Reached(detail));
+            }
+            if seen.and_then(|v| v.get("assigned")).is_some() {
+                return Ok(ui_action::effect(seen, "assigned", detail));
+            }
+            // No observation from the window (a retried request, or a dispatch that ended
+            // before it looked): the general's own trait list in memory decides (g115a, 28 Nov
+            // 2026: both assignments read Diverged with nothing seen).
+            // a retried request skips the plan: the asked trait is resolved from the catalogue
+            let key = resolved
+                .borrow()
+                .as_ref()
+                .and_then(|p| p.want.clone())
+                .map(|w| w.0)
+                .or_else(|| {
+                    let asked = asked?;
+                    let catalog = catalog(process).ok()?;
+                    resolve_trait(&catalog, asked).ok().map(|w| w.0)
+                });
+            Ok(match (key, owned_traits(process, general)) {
+                (Some(key), Some(traits)) => {
+                    let mut detail = detail;
+                    detail["traits_read"] = json!(traits);
+                    if traits.contains(&key) {
+                        super::journal::Outcome::Reached(detail)
+                    } else {
+                        super::journal::Outcome::Unchanged(detail)
+                    }
+                }
+                _ => ui_action::effect(seen, "assigned", detail),
+            })
         }),
     };
     ui_action::run_bounded(job, 90, id, token, process, keys, guard, authority, actions)

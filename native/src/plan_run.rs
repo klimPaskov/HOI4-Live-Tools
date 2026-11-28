@@ -294,6 +294,11 @@ use std::{
 /// battles, reach by range and base.
 #[path = "plan_air.rs"]
 mod plan_air;
+/// Air opportunity rules (interception, logistics strike, strategic bombing) filling
+/// `air_situation.missions[]`; pure until the missions executor calls them.
+#[allow(dead_code)]
+#[path = "plan_air_rules.rs"]
+mod plan_air_rules;
 /// Airborne drops as a standing opportunity rule (`airborne`): reach, the air over the target, FAIR link-up.
 #[path = "plan_airborne.rs"]
 mod plan_airborne;
@@ -3966,6 +3971,20 @@ fn research_lane(
                 tech_skip(&why, skip_hours(plan, "tech", 3 * DAY)),
             );
             refused.push(format!("{tech}:{}", why.split(':').next().unwrap_or("")));
+            // the next candidate goes into the same slot only when the game refused this one by
+            // its rules; after a try whose effect is unknown (not applied yet, a read-back) the
+            // slot is read again next tick (g115a, 28 Nov 2026: radio read NotApplied, the game
+            // took it a frame later, and the next tech into that slot was refused invalid_target)
+            if !game_rule_refusal(&refusal_code(&why)) {
+                state.stages.research = Some((
+                    format!(
+                        "research: {tech} slot {empty} not settled ({}); read again next tick",
+                        refusal_code(&why)
+                    ),
+                    false,
+                ));
+                return Ok(Some(format!("research {tech} slot {empty}: {why}")));
+            }
         }
         // Nothing from the priority list is startable: never leave a slot idle.
         // Walk the technology catalog; the game refuses ineligible ones before
@@ -4076,6 +4095,11 @@ fn research_lane(
                     &tech,
                     tech_skip(&why, skip_hours(plan, "tech_fallback", 7 * DAY)),
                 );
+                if !game_rule_refusal(&refusal_code(&why)) {
+                    return Ok(Some(format!(
+                        "research {tech} slot {empty} (fallback): {why}"
+                    )));
+                }
             }
         } else if fallback_on && plan["research_blind_catalogue"] == json!(true) {
             // The old catalogue walk (every key tried by input) only on request: without the
@@ -4350,7 +4374,23 @@ fn focus_lane_inner(
         // tick looks at no more than this many refused focuses; the rest keep their turn for the
         // next tick.
         let mut probes_left = FOCUS_PROBES_PER_TICK;
+        // A key the files cannot judge (its `available` reads what no file holds) is tried at
+        // most once a tick, and only before the game has refused a key in this tick: after such
+        // a refusal only keys the files call available follow (g115a, 28 Nov 2026: GER_anschluss
+        // refused by the game, then GER_demand_sudetenland and GER_the_four_year_plan in the
+        // same second, all unjudged).
+        let mut unjudged_tried = false;
         for key in candidates {
+            if let Some(what) = known.unknown.get(&key) {
+                if unjudged_tried {
+                    state.stages.focus_why.insert(
+                        key.clone(),
+                        format!("not judged ({what}); waits for the next tick"),
+                    );
+                    continue;
+                }
+                unjudged_tried = true;
+            }
             if let Some(why) = known.unavailable.get(&key) {
                 // Read again after a game day: no input was spent, so no back-off is needed.
                 state.skip(
@@ -4387,6 +4427,10 @@ fn focus_lane_inner(
                 || why.contains("prerequisite")
                 || why.contains("exclusive")
                 || why.contains("invalid_target");
+            if blocked {
+                // the game refused a key: an unjudged one does not follow in this tick
+                unjudged_tried = true;
+            }
             let mut gui_failed = 0;
             let hours = if blocked {
                 // The same focus refused again and again waits twice as long each time (10, 20,
@@ -4408,7 +4452,11 @@ fn focus_lane_inner(
             };
             state.skip(now, "focus", &key, hours);
             let code = why.split(':').next().unwrap_or("refused").to_string();
-            state.stages.focus_why.insert(key.clone(), code.clone());
+            let shown = match known.unknown.get(&key) {
+                Some(what) => format!("{code} (the files could not judge: {what})"),
+                None => code.clone(),
+            };
+            state.stages.focus_why.insert(key.clone(), shown);
             if gui_failed >= FOCUS_GUI_FAILS {
                 // this key cannot be started by the GUI for now: the next one gets its chance in
                 // the same tick, and the lane says why the plan's order changed
@@ -13990,6 +14038,8 @@ fn date_stop_pause(state: &mut State, tools: &dyn Tools, lease: &str, pause: boo
 struct FocusVerdicts {
     /// key -> the first reason, for the keys that are certainly unavailable now
     unavailable: HashMap<String, String>,
+    /// key -> the first thing the files could not judge, for the keys answered "unknown"
+    unknown: HashMap<String, String>,
     /// the countries at war with the player, sorted and joined (None: not read)
     wars: Option<String>,
 }
@@ -14021,12 +14071,22 @@ fn focus_verdicts(tools: &dyn Tools, keys: &[String]) -> FocusVerdicts {
         tags.join(",")
     });
     for row in reply["focuses"].as_array().into_iter().flatten() {
-        if row["state"] != json!("unavailable") {
-            continue;
-        }
         let Some(key) = row["focus"].as_str() else {
             continue;
         };
+        if row["state"] == json!("unknown") {
+            let what: String = row["unknown"][0]
+                .as_str()
+                .unwrap_or("not judged")
+                .chars()
+                .take(100)
+                .collect();
+            out.unknown.insert(key.to_string(), what);
+            continue;
+        }
+        if row["state"] != json!("unavailable") {
+            continue;
+        }
         let why: String = row["why"][0]
             .as_str()
             .unwrap_or("requirements unmet")
@@ -15213,6 +15273,36 @@ mod tests {
             refuse_text: RefCell::new(HashMap::new()),
         }
     }
+    #[test]
+    fn after_a_research_start_of_unknown_effect_the_next_tech_does_not_go_into_that_slot() {
+        let tools = fake(vec![
+            (
+                "hoi4_research",
+                json!({"slots": [{"researching": "construction1"}, {"researching": null}],
+                    "researched": []}),
+            ),
+            (
+                "hoi4_technology_list",
+                json!({"available_only": true, "technologies": ["radio", "electronic_mechanical_engineering"]}),
+            ),
+        ]);
+        tools.refuse("hoi4_research_start", "action_not_applied");
+        let plan = json!({"research_priority": ["radio", "electronic_mechanical_engineering"]});
+        let mut state = State::default();
+        research_lane(&mut state, &tools, &plan, "l", START).unwrap();
+        let sent: Vec<Value> = tools
+            .calls
+            .borrow()
+            .iter()
+            .filter(|(n, a)| n == "hoi4_research_start" && a.get("request_id").is_some())
+            .map(|(_, a)| a["technology"].clone())
+            .collect();
+        assert!(
+            !sent.is_empty() && sent.iter().all(|t| t == "radio"),
+            "{sent:?}"
+        );
+    }
+
     /// t1939n (27 Nov 2026): the trade judge shared the name `trade` with the plan's deals and
     /// was never offered; insufficient_resources stayed open 151 days and hoi4_trade was never read.
     #[test]
@@ -23732,6 +23822,51 @@ mod tests {
     }
     fn blocked() -> Result<Value> {
         Err(Error::new("focus_not_available", "requirements unmet"))
+    }
+
+    #[test]
+    fn after_the_game_refuses_a_focus_no_unjudged_key_follows_in_that_tick() {
+        let reads = fake(vec![
+            ("hoi4_research", json!({"slots": [{"researching": "x"}]})),
+            (
+                "hoi4_focus_completed",
+                json!({"active_key": null, "completed": ["Done"]}),
+            ),
+            (
+                "hoi4_focus_available",
+                json!({"focuses": [
+                    {"focus": "A", "state": "unknown", "unknown": ["fighting_army_strength_ratio"]},
+                    {"focus": "B", "state": "unknown", "unknown": ["prerequisite A"]},
+                    {"focus": "C", "state": "available"}]}),
+            ),
+        ]);
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new(
+                [
+                    Err(Error::new(
+                        "refused_by_game_check",
+                        "the game's can-do said no",
+                    )),
+                    Ok(json!({"receipt": {"status": "Verified"}})),
+                ]
+                .into(),
+            ),
+        };
+        let mut state = State::default();
+        let plan = json!({"focus_path": ["Done", "A", "B", "C"]});
+        let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(step, Tick::Acted("focus C".into()));
+        let tried: Vec<String> = tools
+            .actions
+            .borrow()
+            .iter()
+            .map(|a| a.1["focus"].as_str().unwrap().into())
+            .collect();
+        assert_eq!(tried, ["A", "C"]);
+        assert!(state.stages.focus_why["A"].contains("could not judge"));
+        assert!(state.stages.focus_why["B"].contains("not judged"));
     }
 
     #[test]

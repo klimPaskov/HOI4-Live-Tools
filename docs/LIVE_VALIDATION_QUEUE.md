@@ -887,6 +887,22 @@ CCreateConveyor 13479 / CSetConveyorSeries 13483 / CAddConveyorLine 13484 / CSet
   (in process: the queues' province field is the read-back; mouse: the panel's labels). The location is the deploy
   state's first province from the game files' state definition.
 Start: `HOI4_INPROC_FAMILIES=set_game_speed,production,air,training ./inproc_stage2.sh PREV-1936 s15t` (Germany 1936).
+T0 FIRST (engineer 123, 28 Nov; the coordinator's question decides the training shape): PARALLEL OR ONE AFTER ANOTHER.
+The conveyor holds a series amount at +0x38 (each line trains that many divisions in turn; 0 = forever) and parallel
+lines at +0x70 (mapped 1.19.4.1). By hand in the deployment view, paused: make queue A of Infanterie-Division with ONE line
+and its + raised to 3 (amount 3), and queue B with THREE lines of amount 1. Unpause at speed 3 for 10 game days. Write per
+queue the divisions in training shown and each one's progress %: if A shows 1 in progress and B shows 3, lines are
+parallel and the amount is a series (the executor's shape: L lines of amount 1, L = `evaluate.py training`'s number);
+if A shows 3 in progress, one line with amount N trains N at once (then tell tools 123's successor: hoi4_train sends
+ONE line with amount N). Both are built for: `training[].queue` is the number in training at once either way. Cancel
+both queues after.
+T0b THE STOP AT FIVE (s115a: ask 7 stopped at 5, the 6th Add Unit post read posted and added nothing): at war in a 1939
+save (the stop was seen there), `HOI4_BACKEND=inprocess`, `hoi4_train {"template":"Infanterie-Division","count":7,
+"deploy_state_id":64}`. If the reply has `short` > 0: copy the reply's `posts` (each post's posted/refused/result) and the
+module log's `post2` lines with op training.add_lines (the module log names each post's game check and result), then
+click the SAME queue's Add Unit once by hand. Mouse adds the line -> the command path differs from the button (report
+both, family stays off); mouse adds nothing -> a game rule caps the lines (read the button's tooltip text into the
+notes; the tool then reports the cap instead of a short). Write manpower free and the template's manpower per division.
 T1 paused, `HOI4_BACKEND=inprocess`: `hoi4_train {"template":"Infanterie-Division","count":3,"deploy_state_id":64}`:
 Verified; `in_process.posts` = create, series, add_lines, location; open the panel by hand AFTER: one queue, 3 lines,
 1 division each, location Brandenburg (not "No location set").
@@ -1346,3 +1362,22 @@ K3 refusals before input: `{"trait":"GER_mio_trait_nope"}` -> trait_unknown nami
 K4 the window's ORDER: hover the tree icon the listing calls index 0 and index 3: their tooltip names match the keys'
 localisation (this settles whether the mouse path's indices equal the module's; record it either way).
 Pass: K1-K3 (K4 recorded). Then the plan's `mio[].traits` may carry keys.
+
+## Session S28-REFUSALS: the refusal classes of g115a do not repeat (no new input path; part of the next short 1936 study) -- any time
+What it proves (engineer 123, 28 Nov): a refusal changes the next decision instead of being retried. Read from the study's
+issues.jsonl, game-actions.jsonl and the executor notes; nothing extra to click.
+R1 navy: with ships in the reserve fleet, `hoi4_fleet_assign` out of it is sent at most ONCE by the executor; on the mouse
+backend it is refused reserve_fleet and the navy_shape note says "its task forces cannot be moved on this backend"; with
+`HOI4_INPROC_POST` naming navy it is posted in process (task force leaves the reserve; a new step of the passed `navy`
+family: watch the first one by eye, the fleet list shows it in the receiving fleet).
+R2 intelligence: an operative a `networks[]` entry names is not sent elsewhere by `operatives[]` (note "held by the
+network entry for <TAG>"); `hoi4_operative_recruit` refused operative_slot_locked waits the days the refusal names.
+R3 air: a wing the game refuses training for (refused_by_game_check) is tried once; its aircraft type is not sent
+again (note "<type>: the game refuses training for it").
+R4 research: after a research start that reads NotApplied, no second technology goes into that slot in the same tick.
+R5 focus: after the game refuses a focus, no focus the files could not judge follows in that tick (focus_why "not judged").
+R6 general trait: an assignment whose window observation is lost settles from the general's trait list (Reached or
+Unchanged, never "Diverged unverified"); the mouse path still fails on 1.20.1 (trait tree window not found, s115/g115a):
+report the error code; the in-process route (CLearnTraitCommand) is not built.
+R7 idle table: a failing focus start counts in the focus row (tool faults map to the sink of their tool).
+Pass: R1-R5 and R7 with no class repeated more than once; R6 reported.

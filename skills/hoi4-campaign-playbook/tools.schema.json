@@ -2699,7 +2699,7 @@
    "source": "--list-tools"
   },
   "hoi4_fleet_assign": {
-   "description": "Live-verified (31 Oct 2026 on 1.19.4): Move one own task force into another own fleet: select the task force, then RIGHT-click the receiving fleet's card (route right_click, the army cards' convention) or drag the entry onto the card (route drag); a reassign confirmation is accepted. Verified by the task force being in the receiving fleet. Adds refusal target_is_reserve. Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
+   "description": "Live-verified (31 Oct 2026 on 1.19.4): Move one own task force into another own fleet: select the task force, then RIGHT-click the receiving fleet's card (route right_click, the army cards' convention) or drag the entry onto the card (route drag); a reassign confirmation is accepted. Verified by the task force being in the receiving fleet. Adds refusal target_is_reserve. A task force of the reserve fleet moves only by command (in-process family navy; refused reserve_fleet without it, never by the mouse). Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
