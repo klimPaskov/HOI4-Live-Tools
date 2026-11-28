@@ -4051,12 +4051,15 @@ impl MacClock {
             })?;
             let op = e["op"].as_str().unwrap_or("").to_string();
             if op.is_empty() || e["on"].as_bool() != Some(true) || e["shape"] != "simple" {
+                // engineer 125: the two shapes the module builds with their choices name the arguments they take
+                let hint = match e["shape"].as_str() {
+                    Some("war_goal_type") => " (pass action justify_war_goal with war_goal_key and state_ids)",
+                    Some("division_list") => " (pass action expeditionary_force with army)",
+                    _ => " (the module does not build it yet)",
+                };
                 return Err(Error::new(
                     "dialog_unsupported",
-                    format!(
-                        "{key}: shape {} (the module does not build it yet; nothing was sent)",
-                        e["shape"]
-                    ),
+                    format!("{key}: shape {}{hint}; nothing was sent", e["shape"]),
                 ));
             }
             let tag_index = ui::read(process, |r, i| diplomacy_state::tag_index_of(r, i, country))?;
