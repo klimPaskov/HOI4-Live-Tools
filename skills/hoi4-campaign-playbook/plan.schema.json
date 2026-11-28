@@ -5,6 +5,30 @@
   "description": "plan.json for the standing-plan executor (native/src/plan_run.rs) and the player. Every top-level key carries x-owner: executor (the executor reads it today) or player (the player acts on it from the brief). Inside an executor-owned key every key has one reader too: executor (inherited when unmarked), lint (only the planning tools read it: it shapes estimates, the executor does not act on it), text (for people; why and note are text unmarked) or, with x-executor-planned, a key whose executor step is still to come. scripts/hoi4facts/plan_keys.py check fails when a key has no reader. x-executor-planned names the build item (coverage audit section 6, W1-n / W2-n) whose executor step takes a player key over; the owner flips to executor when that step lands (x-planned-owner is the older marker). Unknown top-level keys are errors except _-prefixed ones. tests/test_plan_schema.py keeps this file in step with plan_run.rs.",
   "type": "object",
   "properties": {
+    "_rules": {
+      "x-owner": "executor",
+      "type": "object",
+      "properties": {
+        "multiplayer": {
+          "x-owner": "lint",
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "description": "the multiplayer game's rules: switch -> allowed; wins over roleplay and the FAIR defaults in the lint, the guard and the run result"
+        },
+        "roleplay": {
+          "x-owner": "lint",
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "description": "a roleplay instruction's switches: switch -> allowed; wins over the FAIR defaults, loses to multiplayer, in the lint, the guard and the run result"
+        }
+      },
+      "additionalProperties": false,
+      "description": "rule-set switches, read by the FAIR plan lint, by the server's FAIR guard on every action (native/src/fair_guard.rs) and reported in the run result (`rules`), layered: a multiplayer game's rules win over a roleplay instruction, which wins over the FAIR defaults (native/src/fair_guard.rs FAIR_DEFAULTS). Guarded rules (naval_mines, access, factions, timing, space_marines, paratroopers, submarines) are off by default: true lifts the guard. Allowances: collaboration, volunteers, air_volunteers, lend_lease, attaches, eben_emael_raid, propaganda, strategic_bombing_war_support on by default; paradrops and refinery_bombing off by default (a roleplay goal or META turns them on)"
+    },
     "_meta": {
       "type": "object",
       "properties": {
@@ -354,6 +378,72 @@
       "type": "boolean",
       "x-owner": "executor",
       "description": "false: stop acting at stop_on_date but never pause"
+    },
+    "air_situation": {
+      "type": "object",
+      "x-owner": "executor",
+      "description": "the air plan by situation (plan_air.rs): every every_days at war, fighters go to the regions of our battles sized to fighter_ratio times the enemy's fighters the region window shows (or stay out where they cannot win, stay_out), CAS only over regions not lost, wings rebased forward when their coverage of the region is below min_coverage; wings air_plan names, attached and carrier wings are never touched. {} turns it on with the defaults; enabled:false (a roleplay goal) turns it off.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "fighter_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1.5,
+          "description": "our fighters per enemy fighter shown over a region before we contest it"
+        },
+        "min_coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5,
+          "description": "least share of the region within the wing's range from its base; below it the wing rebases forward"
+        },
+        "every_days": {
+          "type": "number",
+          "minimum": 1,
+          "default": 3
+        },
+        "probe_regions": {
+          "type": "number",
+          "minimum": 0,
+          "default": 2,
+          "description": "region windows opened a turn to read the enemy's air"
+        },
+        "probe_days": {
+          "type": "number",
+          "minimum": 1,
+          "default": 7,
+          "description": "days a region read is kept"
+        },
+        "stay_out": {
+          "type": "boolean",
+          "default": true,
+          "description": "false: fly into regions we cannot win too"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "fighter",
+              "cas"
+            ]
+          },
+          "description": "roles the rule manages (default both)"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false
     },
     "stop_on_failure": {
       "type": "boolean",

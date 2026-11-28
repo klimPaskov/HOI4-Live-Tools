@@ -5276,6 +5276,73 @@ fn the_armour_leaves_a_rough_ground_battle_s_reserve_and_goes_where_its_ground_i
     assert!(state.op_notes["op:armour:Panzer"].contains("plan's own thrust: kept"));
 }
 
+#[test]
+fn the_armour_goes_for_the_state_worth_most_per_ground_cost_not_the_cheapest_corner() {
+    // p101c (28 Nov 2026): from German Silesia the cheapest contact state was Trans-Olza (72,
+    // worth 2); Guderian's 8 mobile divisions went there and fought no battle in 8 days while
+    // Lodz (87, 10 victory points) lay three plains steps away
+    let game = Game::new();
+    let mut u = unit(
+        "Panzer".into(),
+        Role::Mobile,
+        &json!({"enemy": "POL"}),
+        &Value::Null,
+    );
+    u.spear = true;
+    *game.supply.borrow_mut() = Some(json!({"divisions": [
+        {"id": "p0", "army": "Panzer", "province_id": 710, "state_id": 71},
+        {"id": "p1", "army": "Panzer", "province_id": 710, "state_id": 71}]}));
+    *game.graph.borrow_mut() = Some(json!({"provinces": [
+        graph_row(710, 71, "plains", &[(720, 0.0), (670, 0.0)]),
+        graph_row(720, 72, "plains", &[(710, 0.0)]),
+        graph_row(670, 67, "plains", &[(710, 0.0), (675, 0.0)]),
+        graph_row(675, 67, "plains", &[(670, 0.0), (870, 0.0)]),
+        graph_row(870, 87, "plains", &[(675, 0.0), (871, 0.0)]),
+        graph_row(871, 87, "plains", &[(870, 0.0)])]}));
+    *game.pol_rows.borrow_mut() = Some(json!([
+        {"state_id": 72, "controller": "POL", "victory_points_total": 0},
+        {"state_id": 87, "controller": "POL", "victory_points_total": 10}]));
+    let wars = json!({"wars": {"enemies": ["POL"]}, "borders": [
+        {"neighbour_tag": "POL", "neighbour_states": [72, 87], "own_border_states": [71, 67]}]});
+    let op = json!({"id": "op", "enemies": ["POL"]});
+    let plan = json!({"war": {"me": "GER"}});
+    let at_war = vec!["POL".to_string()];
+    let mut state = State::default();
+    armour_ground(
+        &mut state,
+        &game,
+        &plan,
+        "op",
+        &op,
+        &u,
+        &[],
+        &wars,
+        &at_war,
+        START,
+    );
+    assert_eq!(state.done.get(&key("op", "armourpick:Panzer")), Some(&87));
+    let note = &state.op_notes["op:armour:Panzer"];
+    assert!(note.contains("state 87 (worth 102"), "{note}");
+    // with no victory point anywhere the cheaper state still wins (worth = its provinces)
+    *game.pol_rows.borrow_mut() = Some(json!([
+        {"state_id": 72, "controller": "POL", "victory_points_total": 0},
+        {"state_id": 87, "controller": "POL", "victory_points_total": 0}]));
+    let mut state = State::default();
+    armour_ground(
+        &mut state,
+        &game,
+        &plan,
+        "op",
+        &op,
+        &u,
+        &[],
+        &wars,
+        &at_war,
+        START,
+    );
+    assert_eq!(state.done.get(&key("op", "armourpick:Panzer")), Some(&72));
+}
+
 // SUPPLY BEFORE THE ATTACK (engineer 99, after o96a)
 
 #[test]

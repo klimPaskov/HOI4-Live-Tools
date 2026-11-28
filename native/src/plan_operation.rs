@@ -8680,6 +8680,8 @@ fn armour_ground(
         return;
     }
     state.skip(now, "oparmour", &u.name, DAY);
+    // this turn's reading only (the note grew by one pick a day: p101c's ran to 10 repeats)
+    state.op_notes.remove(&format!("{id}:armour:{}", u.name));
     let Ok(read) = tools.call("hoi4_supply", &json!({})) else {
         return;
     };
@@ -8850,14 +8852,20 @@ fn armour_ground(
         return;
     }
     let mut infra: HashMap<i64, f64> = HashMap::new();
+    let mut points: HashMap<i64, f64> = HashMap::new();
     for t in tags.iter().cloned().chain(std::iter::once(me.clone())) {
         if let Ok(rows) = tools.call("hoi4_states", &json!({"query": t})) {
             for r in list(&rows, "states") {
-                if let (Some(sid), Some(l)) = (
-                    r["state_id"].as_i64(),
-                    r["buildings"]["infrastructure"].as_f64(),
-                ) {
+                let Some(sid) = r["state_id"].as_i64() else {
+                    continue;
+                };
+                if let Some(l) = r["buildings"]["infrastructure"].as_f64() {
                     infra.insert(sid, l);
+                }
+                if t != me {
+                    if let Some(vp) = r["victory_points_total"].as_f64() {
+                        points.insert(sid, vp);
+                    }
                 }
             }
         }
@@ -8870,12 +8878,8 @@ fn armour_ground(
         infrastructure: &|s| infra.get(&s).copied(),
         enemy: &|s| seen.get(&s).copied().unwrap_or(0.0),
     };
-    let goal: HashSet<i64> = cands.iter().copied().collect();
-    match ground::axis(&gr, &starts, &goal, &ground::ARMOUR) {
-        Some((path, cost)) => {
-            let Some(s) = path.last().and_then(|p| g.get(p)).map(|r| r.state) else {
-                return;
-            };
+    match armour_objective(&gr, &starts, &cands, &points) {
+        Some((s, path, cost, worth)) => {
             state.done.insert(pk, s);
             let way: Vec<String> = path
                 .iter()
@@ -8886,7 +8890,7 @@ fn armour_ground(
             state.op_notes.insert(
                 k,
                 format!(
-                    "{}{}: next objective by the armour's ground: state {s} (cost {cost:.1}; {})",
+                    "{}{}: next objective by worth over the armour's ground: state {s} (worth {worth:.0}, cost {cost:.1}; {})",
                     if before.is_empty() {
                         String::new()
                     } else {
@@ -8901,6 +8905,38 @@ fn armour_ground(
             state.done.remove(&pk);
         }
     }
+}
+
+/// The armour's next objective among `cands`: the state whose WORTH (the capitulation measure:
+/// 1 a province of the state in the graph read, 10 a victory point our country sees) is largest
+/// per unit of the armour's ground cost to reach it (`worth / (1 + cost)`; the cheaper on a
+/// tie). The cheapest state alone sent Poland's Panzergruppe into Trans-Olza (p101c, 28 Nov 2026:
+/// 'next objective by the armour's ground: state 72 (cost 6.2; 6590 hills, 9567 hills)', worth 2
+/// of Poland's 1491; then Krakow's mountains): 8 mobile divisions fought no battle in 8 days and
+/// stood in German Silesia to W+23 while Lodz (107) and Warsaw (269) lay over open plains. Pure.
+fn armour_objective(
+    gr: &ground::Ground<'_>,
+    starts: &[i64],
+    cands: &[i64],
+    points: &HashMap<i64, f64>,
+) -> Option<(i64, Vec<i64>, f64, f64)> {
+    let mut best: Option<(f64, f64, i64, Vec<i64>, f64)> = None;
+    for &s in cands {
+        let goal: HashSet<i64> = std::iter::once(s).collect();
+        let Some((path, cost)) = ground::axis(gr, starts, &goal, &ground::ARMOUR) else {
+            continue;
+        };
+        let provinces = gr.g.values().filter(|r| r.state == s).count() as f64;
+        let worth = provinces.max(1.0) + 10.0 * points.get(&s).copied().unwrap_or(0.0);
+        let value = worth / (1.0 + cost.max(0.0));
+        let better = best.as_ref().is_none_or(|(v, c, ..)| {
+            value > *v + 1e-9 || ((value - *v).abs() <= 1e-9 && cost < *c)
+        });
+        if better {
+            best = Some((value, cost, s, path, worth));
+        }
+    }
+    best.map(|(_, cost, s, path, worth)| (s, path, cost, worth))
 }
 
 // THE GROUND, THE AXIS, COMMANDS, PLANNING, POCKETS AND THE OPENING (all behind operation keys,

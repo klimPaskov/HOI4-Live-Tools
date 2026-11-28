@@ -397,6 +397,18 @@ class Fair:
         fair = self.plan.get("_fair") if isinstance(self.plan.get("_fair"), dict) else {}
         exc = fair.get("exceptions") if isinstance(fair.get("exceptions"), dict) else {}
         self.exceptions = {k: str(v) for k, v in exc.items() if isinstance(k, str)}
+        # rule sets (the owner, 28 Nov): a multiplayer game's rules > a roleplay instruction > the FAIR
+        # defaults; a guarded rule's switch set true lifts it like a host exception
+        rules = self.plan.get("_rules") if isinstance(self.plan.get("_rules"), dict) else {}
+        sw = {}
+        for layer in ("roleplay", "multiplayer"):
+            vals = rules.get(layer) if isinstance(rules.get(layer), dict) else {}
+            for k, v in vals.items():
+                if isinstance(v, bool):
+                    sw[str(k).strip().lower()] = (v, layer)
+        for k, (v, layer) in sw.items():
+            if v:
+                self.exceptions.setdefault("fair." + k, "%s rule set" % layer)
         self.phases = {str(p.get("id")): p for p in lint.list_of("phases")}
         self.calls = list(calls(self.plan))
         self._cache = {}
