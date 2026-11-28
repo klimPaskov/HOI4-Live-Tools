@@ -6663,6 +6663,7 @@ fn reconcile(
         && !peace
         && by_cmd(state, id)
         && !u.enemy.is_empty()
+        && !line_states.is_empty()
         && !line.contains("Diverged")
     {
         let wk = key(id, &format!("warroot:{}:{}", u.name, u.enemy));
@@ -9824,7 +9825,7 @@ fn opening(
     tags.sort_by_key(|(_, d)| *d);
     let mut need: i64 = 0;
     let out = opening_tags(
-        state, id, op, units, roster, wars, at_war, lease, now, tags, ratio, &mut need,
+        state, tools, id, op, units, roster, wars, at_war, lease, now, tags, ratio, &mut need,
     );
     state.done.insert(key(id, "need"), need);
     state.done.insert(key(id, "need_at"), now);
