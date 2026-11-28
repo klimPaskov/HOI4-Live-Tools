@@ -642,7 +642,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_detach": {
-   "description": "Move chosen divisions out of an army: `divisions` are ids as hoi4_armies / hoi4_supply list them (hoi4_supply shows each division's template, equipment fill, strength and supply, so you can pick weak or strong ones). Without `into` they form one new army; with `into` they join that own army. Uses the game's controls one division at a time (the army's card, the division's row in its list, then the new-army card or a right click on the target's card), each move verified from division membership. Use it to pull weak units (irregulars, cavalry, low equipment) out of a strike army into a rear army, or to send fresh divisions forward. Refused before input when a division is not in the army or the army would be emptied (use hoi4_army_merge).",
+   "description": "Move chosen divisions out of an army: `divisions` are ids as hoi4_armies / hoi4_supply list them (hoi4_supply shows each division's template, equipment fill, strength and supply, so you can pick weak or strong ones). Without `into` they form one new army; with `into` they join that own army. Uses the game's controls one division at a time (the army's card, the division's row in its list, then the new-army card or a right click on the target's card), each move verified from division membership. Use it to pull weak units (irregulars, cavalry, low equipment) out of a strike army into a rear army, or to send fresh divisions forward. Refused before input when a division is not in the army or the army would be emptied (use hoi4_army_merge). Without `army`: the divisions stand outside any army (fresh from training, hoi4_armies unassigned) and join `into` by one command (in-process units family only; refused with capability_unavailable without it, invalid_target for a division inside an army).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -671,7 +671,6 @@
      }
     },
     "required": [
-     "army",
      "divisions",
      "request_id",
      "lease_token"
