@@ -81,7 +81,11 @@ def open_panel(session, name, settle=1.2):
         img = session.grab()
         from ..desktop import images
         png, _, _ = images.encode(img, 960)
-        raise ToolError(f"the {name} panel did not open (title strip shows {got})", {"panel": got}, image=png)
+        from ..perception import uiprofile
+        titles = [t for t in uiprofile.active().labels["panels"].get(name, []) if t]
+        raise ToolError(f"the {name} panel did not open (title strip shows {got}; expected a title like {titles}); "
+                        f"if a mod renames the panel, add its title to the mod profile (panels.{name})",
+                        {"panel": got, "expected_titles": titles}, image=png)
     session.park_cursor()
     return name
 

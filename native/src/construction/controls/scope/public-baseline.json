@@ -1,6 +1,6 @@
 [
   {
-    "build_id": "71806afa707a46fb72f0738a719c3f1c3f5e2e42",
+    "build_id": "8e7ff8b3de4402d28ada7f7c976e7464e1fbe458",
     "building_id": "infrastructure",
     "choice": {
       "available": true,
@@ -214,7 +214,7 @@
     "source": "native own construction controls"
   },
   {
-    "build_id": "71806afa707a46fb72f0738a719c3f1c3f5e2e42",
+    "build_id": "8e7ff8b3de4402d28ada7f7c976e7464e1fbe458",
     "building_id": "infrastructure",
     "choice": {
       "available": true,
@@ -280,7 +280,7 @@
     "global_modal_clear_verified": false,
     "input_authorized": false,
     "input_geometry": {
-      "build_id": "71806afa707a46fb72f0738a719c3f1c3f5e2e42",
+      "build_id": "8e7ff8b3de4402d28ada7f7c976e7464e1fbe458",
       "input_mapping_verified": false,
       "input_source": {
         "client_origin_verified": false,

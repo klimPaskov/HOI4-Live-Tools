@@ -254,7 +254,79 @@ Fighting a war (campaign mode; armies are found by the name on their panel, plac
 The campaign tools read structure from the game's and the enabled mods' files (focus trees, technologies and the
 tech tree layout, decision categories, laws, advisors, buildings, equipment), so they work for any country and
 mod that keeps the vanilla interface; the screen is used to locate and confirm. The first call after a playset
-change builds small indexes of those files (10-20 s each, cached on disk afterwards).
+change builds small indexes of those files (10-20 s each, cached on disk afterwards). Overhaul and total-conversion
+mods that rename the menus, windows or months are covered by the interface profile below.
+
+## Overhaul and total-conversion mods
+
+The OCR tools anchor on what the screen shows: the main menu's buttons, the pause menu, the pre-game screens, the
+panel titles and the month names of the top-bar date. A mod that renames them would otherwise leave `hoi4_launch`
+waiting for a main menu it never recognises and `hoi4_time`, `hoi4_sweep_loc`, `hoi4_decisions` and
+`hoi4_shutdown` unable to read the date or find their windows. The server therefore resolves an **interface
+profile** for the enabled playset (`hoi4_live/perception/uiprofile.py`). With no mod enabled, or with mods that
+change none of these labels, the profile is vanilla and every tool keeps its vanilla behaviour exactly.
+
+**Derived from the mod's own files** (once per playset, cheap afterwards):
+
+- month names: the localisation keys `Jan`..`Dec` (the top-bar date) and `January`..`December` (the save list);
+  `May` is one key for both, as in the game;
+- button labels and window titles: the vanilla element that shows a label is found by its `name` in the game's
+  `interface/*.gui` (for example `menu_quit_button` in `ingamemenu.gui`, `decisionview_title` in
+  `countrydecisionview.gui`); when an enabled mod defines an element of that name in the same window, the mod's
+  `text` / `buttonText` key is used. Covered: the main menu (Single Player, Multiplayer, Credits, Quit, Continue,
+  New Game, Load, Tutorial), the pause menu (Load Game, Save Game, Game Options, Exit to Menu, Exit Game), the
+  pre-game screens (Select Scenario, Select Country, START, Back to Menu) and the titles of the politics,
+  decisions, research, trade, construction, production, deployment, logistics, diplomacy, faction, division
+  overview and officer corps panels;
+- a main menu rebuilt without the vanilla button names: every button inside the vanilla main-menu containers the
+  mod redefines becomes a main-menu anchor;
+- localisation is resolved the way the game does: the game first, the mods in load order after it, `replace/`
+  folders last, in the language of `settings.txt` (`english` by default); colour codes and `$KEY$` references are
+  resolved or dropped.
+
+**A profile file** adds what derivation cannot see (a menu drawn as images, a title the OCR reads differently, a
+panel with nothing to derive from). It is read from `hoi4_live_profile.json` in the root folder of each enabled
+mod (load order: a later mod adds to and overrides an earlier one), then from the run config: `ui_profile` in
+`config.json` (an inline object or the path of a JSON file, relative to config.json) or the
+`HOI4_LIVE_UI_PROFILE` environment variable (a path). `"off"` (or `"vanilla"`) there turns the profile off.
+Labels are literal text, matched case-insensitively with the spaces OCR may drop; a value is one label or a list.
+Labels add to the vanilla and derived ones; months replace them (twelve entries, January first; an entry may be a
+list of spellings).
+
+```json
+{
+  "format": 1,
+  "description": "free text",
+  "language": "english",
+  "months": {"short": ["Aru", "Bel", "Cor", "Dun", "Esk", "Fal", "Gim", "Hal", "Ild", "Jor", "Kes", "Lom"],
+             "long": ["Arunel", "Belmora", "Corvane", "Dunhollow", "Esk", "Falweth", "Gimral", "Halcyre",
+                      "Ildemar", "Jorvast", "Kestrel", "Lomwyn"]},
+  "main_menu": {"anchors": ["Chronicle of Ages"], "single_player": "Begin the Saga", "quit": "Depart"},
+  "pause_menu": {"exit_game": "Leave the Realm", "save_game": "Record Chronicle"},
+  "setup": {"start": "Embark"},
+  "panels": {"decisions": "Edicts", "navy_overview": "Armada"},
+  "confirm": ["So be it"]
+}
+```
+
+Names: `main_menu` takes `anchors` (text that identifies the main menu and nothing else) and `single_player`,
+`multiplayer`, `credits`, `quit`, `continue`, `new_game`, `load`, `tutorial`; `pause_menu` takes `load_game`,
+`save_game`, `options`, `exit_to_menu`, `exit_game`; `setup` takes `select_scenario`, `select_country`, `start`,
+`back_to_menu`; `panels` takes `focus_tree`, `politics`, `decisions`, `intelligence`, `research`, `trade`,
+`construction`, `production`, `deployment`, `logistics`, `officer_corps`, `faction`, `army_overview`,
+`navy_overview`, `air_overview`, `diplomacy`; `confirm` lists extra labels of a dialog's confirming button. An
+unknown key or name, a month list that is not twelve long, or invalid JSON is an error that names the file and
+every problem; `hoi4_launch` refuses to start with an invalid profile (`ui_profile_invalid`) and `hoi4_status`
+shows the resolved profile with the source of each part (`ui_profile`).
+
+**Failures name what is missing** instead of timing out:
+
+- `hoi4_launch`: once the game's logs have been idle for 45 s and six reads in a row show text but no main-menu
+  anchor, it stops with `main_menu_unrecognised`, the anchors it looked for and the text it saw;
+- `hoi4_time` (and every tool that reads the date): `unrecognised_month` with the month word the top bar showed
+  and the month names it knows;
+- the pause menu: `pause_menu_unrecognised` with the labels it looked for; a panel that does not open lists the
+  titles it expected (`expected_titles`).
 
 ## The telemetry companion mod
 
@@ -327,6 +399,7 @@ summary every week as `HOI4LIVE` lines in `game.log`, which the server reads inc
 | `screenshot.max_width` | 960 | default width of returned images |
 | `launch.args`, `launch.debug_args` | `[]`, `["-debug"]` | game arguments |
 | `time.poll_seconds` | 0.8 | screen polling while time runs |
+| `ui_profile` (or `HOI4_LIVE_UI_PROFILE`) | unset | an interface profile for an overhaul mod: an inline object, the path of a JSON file, or `"off"` ([format](#overhaul-and-total-conversion-mods)) |
 
 ## Development
 

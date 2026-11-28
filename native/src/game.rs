@@ -10,7 +10,7 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-pub const BUILD_ID: &str = "71806afa707a46fb72f0738a719c3f1c3f5e2e42";
+pub const BUILD_ID: &str = "8e7ff8b3de4402d28ada7f7c976e7464e1fbe458";
 /// Overview offsets of one inspected build. Image offsets are relative to the
 /// verified image base; the rest are object field offsets.
 #[derive(Debug)]
@@ -50,7 +50,8 @@ pub(crate) struct Layout {
     pub(crate) build_id: &'static str,
     source: &'static str,
 }
-/// Linux ELF 71806afa (HOI4 1.20.0.0, libstdc++), migrated from ELF 2265e6e7 (1.19.4.1), itself
+/// Linux ELF 8e7ff8b3 (HOI4 1.20.1.0, libstdc++): every image address as in ELF 71806afa (1.20.0.0;
+/// only .rodata grew by 16 bytes), which was migrated from ELF 2265e6e7 (1.19.4.1), itself
 /// migrated from a4971c9e (1.19.3), by scripts/linux_build_migrate.py: image addresses moved,
 /// own-country fields did not.
 pub(crate) const LINUX: Layout = Layout {
@@ -79,7 +80,7 @@ pub(crate) const LINUX: Layout = Layout {
     production_vtable: 0x43a2450,
     politics_vtable: 0x439ede8,
     type_metadata: (0x4349500, 0x450b9f8),
-    type_names: (0x3684000, 0x3af6f29),
+    type_names: (0x3684000, 0x3af6f39),
     focus_name: 0x60,
     production_shift_from: 0x288,
     production_shift: 0x18,
@@ -181,7 +182,7 @@ pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
         crate::memory::StringAbi::Msvc => &WINDOWS,
     }
 }
-pub const SHA256: &str = "f8fe17fb1047cc94a64e7cc8f13780494e8eb111b9c3a3468256bfbc4f499874";
+pub const SHA256: &str = "0ad0c8cad5c8f65d86750454afd79c3f26ba5ca9e0f205a3abfaa8dff96c57a9";
 /// Additional own-campaign context for ordinary clock input. The persisted
 /// playthrough ID distinguishes campaigns, but is not a load-generation token.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
