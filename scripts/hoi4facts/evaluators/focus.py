@@ -13,13 +13,21 @@ Rewards valued (factory-years earned from the focus's completion to the horizon,
   add_research_slot           the weight of a research slot (research_speed_factor's base: Slots) for T
   add_tech_bonus              the days it saves on the best technology of its categories (evaluator 3) at the mean value
                 per research day
+  add_political_power, political_power_gain   political power at its shadow price: the best value per year per
+                political power among what the country may buy now (common/ideas with a `cost`; the advisors of
+                common/characters, their traits' modifiers from common/country_leader; not another country's, not
+                shown only after a flag or a focus), at the mean value per power of the sinks the horizon's
+                power buys best first (pp_price); power at completion buys an idea held for the years left (per
+                year); a daily gain buys ideas through the years (per year squared / 2)
   scopes (if, every_owned_state, random_owned_controlled_state, a tag, a state) are walked; everything else is named
-  in `unvalued` (political power, army experience, events, wargoals, claims): the player's or the plan's judgement
+  in `unvalued` (army experience, events, wargoals, claims): the player's or the plan's judgement
 Goals and constraints: ideology:<ideology> drops focuses that set another ruling party or add another ideology's
 popularity; no_war:<TAG> drops focuses that lead to war with the tag or declare war on it or create a wargoal on it.
 Order: one focus at a time, the best chain rate (value / days over chains of up to three focuses) among those whose
 prerequisites are done and that no taken focus excludes.
 """
+import os
+
 from .. import derive
 from .. import focus as focusmod
 from ..script import get1
@@ -54,12 +62,16 @@ class Walker:
                 if _num(raw) is None and isinstance(raw, str):
                     self.var_mods.setdefault(raw, []).append(k)
         self.vars = sit.variables()
+        self.pp_price, self.pp_idea = pp_price(sit, self.base, horizon_years)
 
     def mods_coef(self, mods):
         """(per year held, per year squared from construction compounding, unvalued keys)."""
         lin, _, unvalued = value.held(mods, self.base, 1.0)
         quad = sum(v * value.weight(k, self.base) * self.rate / 2.0 for k, v in mods.items()
                    if value.WEIGHTS.get(k, ("",))[0] == "Civilian")
+        if "political_power_gain" in unvalued and self.pp_price:
+            unvalued = [u for u in unvalued if u != "political_power_gain"]
+            quad += mods["political_power_gain"] * 365 * self.pp_price / 2.0
         return lin, quad, unvalued
 
     @staticmethod
@@ -86,6 +98,8 @@ class Walker:
                 self.add(out, "research slot", lin=n * w / max(self.base["Slots"], 1.0))
             elif k == "add_tech_bonus" and isinstance(v, list):
                 self._tech_bonus(v, out)
+            elif k == "add_political_power" and _num(v) is not None and self.pp_price:
+                self.add(out, f"political power {_num(v):g} (at {self.pp_idea})", lin=_num(v) * self.pp_price)
             elif k in ("set_politics", "add_popularity") and isinstance(v, list):
                 ideo = get1(v, "ruling_party") or get1(v, "ideology")
                 if ideo and ideo.islower():
@@ -174,6 +188,130 @@ class Walker:
         save = max((m.days(t, 0) - m.days(t, 0, b["bonus"], b["ahead_reduction"]) for t in cands), default=0.0)
         self.add(out, "tech bonus " + ",".join(b["categories"] or techs), stock=save * m.mean_rate * b["uses"])
         del rs
+
+
+def _gate_open(block):
+    """False when a visible/available block needs a flag or a focus not had now (top-level, not under NOT)."""
+    if not isinstance(block, list):
+        return True
+    for a, b in block:
+        if (a or "").lower() in ("has_country_flag", "has_completed_focus", "has_global_flag"):
+            return False
+        if (a or "").lower() == "always" and b == "no":
+            return False
+    return True
+
+
+def _tags_of(block):
+    tags, stack = set(), [block] if isinstance(block, list) else []
+    while stack:
+        for a, b in stack.pop():
+            if (a or "").lower() in ("original_tag", "tag") and isinstance(b, str):
+                tags.add(b)
+            elif isinstance(b, list) and (a or "").upper() != "NOT":
+                stack.append(b)
+    return tags
+
+
+def pp_sinks(sit):
+    """[(name, kind, cost, {modifier: value})]: the priced ideas (common/ideas `cost`) and the advisors of our
+    characters (common/characters advisor {cost, traits}; trait modifiers from common/country_leader; a character
+    with no tag in `allowed` belongs to the country its file is named after) open now."""
+    from ..script import parse_file
+
+    def traits():
+        out = {}
+        for f in sit.game.files("common/country_leader"):
+            for k, v in parse_file(f):
+                if k == "leader_traits" and isinstance(v, list):
+                    for name, body in v:
+                        if name and isinstance(body, list):
+                            out[name] = {a: _num(b) for a, b in body if _num(b) is not None}
+        return out
+
+    def ideas():
+        rows = []
+        for f in sit.game.files("common/ideas"):
+            for k, v in parse_file(f):
+                if k != "ideas" or not isinstance(v, list):
+                    continue
+                for cat, body in v:
+                    for name, idea in (body if isinstance(body, list) else []):
+                        if not name or not isinstance(idea, list) or _num(get1(idea, "cost")) is None:
+                            continue
+                        m = get1(idea, "modifier")
+                        rows.append((name, cat, _num(get1(idea, "cost")), _tags_of(get1(idea, "allowed")),
+                                     _gate_open(get1(idea, "allowed")) and _gate_open(get1(idea, "visible")),
+                                     {a: _num(b) for a, b in m if _num(b) is not None} if isinstance(m, list) else {}))
+        return rows
+
+    def advisors():
+        tr = sit.game.cached("eval:leader_traits", traits)
+        rows = []
+        for f in sit.game.files("common/characters"):
+            owner = os.path.splitext(os.path.basename(f))[0]
+            for k, v in parse_file(f):
+                if k != "characters" or not isinstance(v, list):
+                    continue
+                for name, ch in v:
+                    for a, adv in (ch if isinstance(ch, list) else []):
+                        if a != "advisor" or not isinstance(adv, list) or _num(get1(adv, "cost")) is None:
+                            continue
+                        mods = {}
+                        t = get1(adv, "traits")
+                        for _, tn in (t if isinstance(t, list) else []):
+                            for mk, mv in (tr.get(tn) or {}).items():
+                                mods[mk] = mods.get(mk, 0.0) + mv
+                        rows.append((get1(adv, "idea_token") or name, get1(adv, "slot"), _num(get1(adv, "cost")),
+                                     _tags_of(get1(adv, "allowed")) or {owner},
+                                     _gate_open(get1(adv, "allowed")) and _gate_open(get1(adv, "visible")), mods))
+        return rows
+    rows = sit.game.cached("eval:priced_ideas", ideas) + sit.game.cached("eval:advisors", advisors)
+    have = set(sit.state.get("ideas") or ())
+    return [(n, k, c, m) for n, k, c, tags, open_, m in rows
+            if open_ and c and c > 0 and n not in have and (not tags or sit.tag in tags)]
+
+
+def pp_price(sit, base, years=4.0):
+    """(factory-years per year held per political power, how): the sinks (pp_sinks), best value per power first, one
+    per law category and per advisor slot (political_advisor: [?: three slots]), are bought with the power the horizon
+    brings (BASE_POLITICAL_POWER_INCREASE a day [?: the define's comment says weekly] + political_power_gain, x 365 x
+    years); the price is their mean value per power [?: between the best sink (upper bound) and the last valued one;
+    sinks value.py does not value, army chiefs and decisions among them, are not counted, so it is low].
+    (0, None) when none is valued."""
+    rows = []
+    for name, kind, cost, mods in pp_sinks(sit):
+        tot, _, _ = value.held(mods, base, 1.0)
+        if tot > 0:
+            rows.append((tot / cost, name, kind, cost))
+    rows.sort(reverse=True)
+    per_kind, picked = {}, []
+    for r in rows:
+        cap = 3 if r[2] == "political_advisor" else 1
+        if per_kind.get(r[2], 0) < cap:
+            per_kind[r[2]] = per_kind.get(r[2], 0) + 1
+            picked.append(r)
+    daily = float(_first_num(sit.define("BASE_POLITICAL_POWER_INCREASE"), 0.0)) + sit.modifier("political_power_gain")
+    budget = max(0.0, daily) * 365 * years
+    spent = got = 0.0
+    names = []
+    for ratio, name, kind, cost in picked:
+        if spent >= budget:
+            break
+        spent += cost
+        got += ratio * cost
+        names.append(name)
+    if not spent:
+        return 0.0, None
+    return got / spent, (f"mean of {len(names)} sinks the {budget:.0f} PP of {years:g} years buys, best first "
+                         f"({', '.join(names[:3])}{', ...' if len(names) > 3 else ''}; {spent:.0f} PP valued)")
+
+
+def _first_num(v, default):
+    if isinstance(v, list):
+        v = v[0] if v else default
+    x = _num(v)
+    return default if x is None else x
 
 
 def blocks(sit):
@@ -276,4 +414,5 @@ def evaluate(sit, goals=(), horizon_years=4.0, count=12, done=(), research_model
         taken.add(fid)
         day += d
     return {"order": order, "dropped": dropped, "goals": list(goals), "tree": tree.get("id"),
-            "horizon_years": horizon_years, "base": walker.base, "build_rate": round(walker.rate, 3)}
+            "horizon_years": horizon_years, "base": walker.base, "build_rate": round(walker.rate, 3),
+            "pp_price": round(walker.pp_price, 4), "pp_price_idea": walker.pp_idea}
