@@ -280,7 +280,56 @@ def cmd_production(a, sit):
     return r, text_production(r)
 
 
-COMMANDS = {"production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
+def text_force(r):
+    e = r["enemy"]
+    out = [f"FORCE against {e['tag']} for {r.get('country', '')} at {r.get('date', '')}: {e['divisions']} enemy divisions "
+           f"({e['how']})"]
+    if r.get("error"):
+        return out + [f"  {r['error']}"]
+    out += [f"  front: {r['front_provinces']} provinces, terrain {r['terrain']}, battle width {r['battle_width']}; "
+            f"enemy template {r['enemy_template']}",
+            f"  hold: their width per province {r['their_width_per_province']:g} / R_def {r['R_def']:g} -> "
+            f"{r['hold_per_province']} x {r['line_template']} (width {r['line_width']:g}) per province = {r['hold']}",
+            f"  attack: {r['axes']} axes x {r['wave']} x {r['attack_template']} (width {r['attack_width']:g}, R_att "
+            f"{r['R_att']:g}) x (1 + {r['refills']} refills of their reserve) = {r['attack']}",
+            f"  total {r['total']} divisions; we field {r['ours']}; missing {r['missing']}"]
+    return out
+
+
+def cmd_force(a, sit):
+    from hoi4facts.evaluators import force
+    if not a.enemy:
+        raise SystemExit("force: --enemy TAG is required")
+    r = force.needed(sit, a.enemy[0], a.war_date, axes=a.axes)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_force(r)
+
+
+def text_doctrine(r):
+    out = [f"DOCTRINE (land grand doctrines) for {r.get('country', '')} at {r.get('date', '')}: held {r['held']}; "
+           f"R against {r['enemy_template']} for our line and armour templates (base / with every milestone)"]
+    for x in r["rows"]:
+        out.append(f"  {x['doctrine']}{' (held)' if x['held'] else ''}: line {x.get('line')}, attacker "
+                   f"{x.get('attacker')}, armour {x.get('armour')}; planning {x['planning']} + milestones "
+                   f"{x['planning_milestones']}; other {x['other']} ({x['src']})")
+        for role, by in (x.get("attack") or {}).items():
+            out.append(f"      {role} attacking with planning (mean over the first T days): " + "; ".join(
+                f"{label}: " + ", ".join(f"{t} R {v['R']:g} (planning {v['planning']:g})" for t, v in d.items())
+                for label, d in by.items()))
+        out.append(f"      not valued: {x.get('unvalued', {}).get('all milestones')}")
+    out.append(f"  planning: {'; '.join(r.get('planning_defines') or [])}; subdoctrine tracks are the same under "
+               "every grand doctrine (not compared)")
+    return out
+
+
+def cmd_doctrine(a, sit):
+    from hoi4facts.evaluators import force
+    r = force.doctrines(sit, a.enemy or None, planning_days=tuple(a.planning_days))
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_doctrine(r)
+
+
+COMMANDS = {"force": cmd_force, "doctrine": cmd_doctrine, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template,
             "construction": cmd_construction}
 
 
@@ -313,6 +362,12 @@ def parser():
     add("refresh", "tech")
     p = add("template", "role")
     p.add_argument("--width", type=int, default=None, help="a width target instead of the theatre's terrain")
+    p = add("force")
+    p.add_argument("--war-date", default=None, help="the enemy grows by its factories to this date")
+    p.add_argument("--axes", type=int, default=None, help="attack axes (default: the enemy's border states)")
+    p = add("doctrine")
+    p.add_argument("--planning-days", type=int, nargs="+", default=[14, 30],
+                   help="offensive lengths the planning bonus is averaged over")
     p = add("production")
     p.add_argument("--need-date", required=True, help="the date the equipment must be in the stockpile")
     p.add_argument("--add", action="append", default=[], help="ROLE=N divisions to add (templates from evaluator 2)")
