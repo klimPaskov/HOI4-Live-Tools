@@ -8572,6 +8572,13 @@ fn construction_plan_step(
                 state.skip(now, "cplan", k, 2 * DAY);
             }
         }
+        // the game's own check refused the building in that state (no free slot, not allowed):
+        // the other items of that building there share the leader's verdict below instead of
+        // each spending tries of its own on the same refusal (w126a: three refinery items in one
+        // state refused nine times)
+        let game_refused = !ok
+            && tool == "hoi4_construction_add"
+            && (why.starts_with("refused_by_game_check") || why.starts_with("NotApplied"));
         let legs = item["legs"] == json!(true) && tool == "hoi4_railway_build";
         let leg_wait = item["leg_days"].as_i64().unwrap_or(LEG_DAYS).max(1) * DAY;
         if legs && (ok || why.starts_with("leg_built")) {
@@ -8584,6 +8591,19 @@ fn construction_plan_step(
         } else {
             state.skip(now, "cplan", &key, 2 * DAY);
             item_failed(state, item, &key, &label, &why, now);
+            if game_refused {
+                let blocked = state.plan_blocked.get(&key).cloned();
+                let tries = state.plan_tries.get(&key).map_or(1, |t| t.0.max(1));
+                for k in &siblings {
+                    match &blocked {
+                        Some(b) => {
+                            state.plan_blocked.insert(k.clone(), b.clone());
+                            state.plan_tries.remove(k);
+                        }
+                        None => state.skip(now, "cplan", k, 7 * DAY * GameHour::from(tries)),
+                    }
+                }
+            }
         }
         return Ok(Some(format!(
             "construction plan {label} {building} in {home}: {ok} {why}"
@@ -9123,7 +9143,13 @@ enum Refusal {
     Transient,
 }
 fn refusal(why: &str) -> Refusal {
-    if why.contains("no_free_slot_or_not_allowed") || why.starts_with("NotApplied") {
+    // the in-process path answers with the game's own construction check (refused_by_game_check):
+    // the same verdict as the mouse path's disabled slot, so the same rest (w126a: 23 refusals
+    // read as transient and asked again every 6 hours)
+    if why.contains("no_free_slot_or_not_allowed")
+        || why.starts_with("NotApplied")
+        || why.starts_with("refused_by_game_check")
+    {
         Refusal::Full
     } else if why.starts_with("Diverged") {
         Refusal::Partial
@@ -21135,6 +21161,44 @@ mod tests {
                 None,
                 "{when}"
             );
+        }
+    }
+
+    #[test]
+    fn items_of_one_building_in_one_state_share_the_games_refusal() {
+        // w126a: three refinery items of one state each spent their own tries on the refusal
+        struct Refuse(RefCell<u32>);
+        impl Tools for Refuse {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                Ok(match name {
+                    "hoi4_overview" => json!({"player": "GER"}),
+                    "hoi4_construction_add" => {
+                        *self.0.borrow_mut() += 1;
+                        return Err(Error::new("refused_by_game_check", "no free slot"));
+                    }
+                    _ if args.get("request_id").is_some() => {
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let plan = json!({"construction_plan": [
+            {"id": "ref1", "building": "synthetic_refinery", "state": 42, "when": ""},
+            {"id": "ref2", "building": "synthetic_refinery", "state": 42, "when": ""},
+            {"id": "ref3", "building": "synthetic_refinery", "state": 42, "when": ""}]});
+        let tools = Refuse(RefCell::new(0));
+        let mut state = State::default();
+        let mut now = START;
+        for _ in 0..40 {
+            construction_plan_step(&mut state, &tools, &plan, "l", now).unwrap();
+            state.failures.clear(); // the ledger's own back-off is not under test here
+            now += DAY;
+        }
+        // one order per try for the three items (they go together), not three tries each
+        assert_eq!(*tools.0.borrow(), PLAN_ITEM_TRIES);
+        for k in ["id:ref1", "id:ref2", "id:ref3"] {
+            assert!(state.plan_blocked.contains_key(k), "{k}");
         }
     }
 
