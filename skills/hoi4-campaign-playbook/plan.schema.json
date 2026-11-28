@@ -126,8 +126,8 @@
     },
     "volunteers": {
       "type": "array",
-      "x-owner": "player",
-      "description": "volunteer forces to send: land divisions or air wings to a country at war. Cap (defines): 0.05 x the receiver's provinces + 0.05 x own divisions, at least 30 own divisions (VOLUNTEERS_DIVISIONS_REQUIRED), recall locked 180 days after arrival; air volunteers up to 20% of own planes and 10% of the receiver's air-base capacity. No executor reads it yet, and sending is a gap (register lendlease.send_volunteers: the send_volunteers dialog needs a division group choice); lint_fair checks the side rules",
+      "x-owner": "executor",
+      "description": "volunteer forces and the attaché (plan_volunteers.rs, through hoi4_diplomacy_act's send_volunteers / recall_volunteers / send_attache): a land row sends `army` to `target` once while `when` holds and `until` does not, and recalls it once `until` holds; an attache row sends the attaché once `when` holds; an air row is a rebase of wings to the receiver's air base (hoi4_air_rebase), noted, not sent. The game's own check decides (cap 0.05 x the receiver's provinces + 0.05 x own divisions, VOLUNTEERS_DIVISIONS_REQUIRED own divisions, recall locked after arrival; scripts/hoi4facts/volunteers.py computes the window). Rule sets volunteers / attaches (FAIR allows both, owner 28 Nov). Until S25-VOLUNTEERS passes the module path needs HOI4_BACKEND=inprocess",
       "items": {
         "type": "object",
         "required": [
@@ -149,22 +149,31 @@
             "type": "string",
             "enum": [
               "land",
-              "air"
+              "air",
+              "attache"
             ]
           },
           "divisions": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "x-owner": "lint",
+            "description": "how many divisions the army should hold (the strategist forms it; the lint checks the cap)"
           },
           "template": {
-            "type": "string"
+            "type": "string",
+            "x-owner": "lint",
+            "description": "the template of the volunteer divisions (the strategist trains them)"
           },
           "planes": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "x-owner": "lint",
+            "description": "air rows: planes to rebase (the strategist checks the 20% rule)"
           },
           "airframe": {
-            "type": "string"
+            "type": "string",
+            "x-owner": "lint",
+            "description": "air rows: the airframe of the wings"
           },
           "when": {
             "$ref": "#/definitions/predicate"
@@ -177,6 +186,11 @@
           },
           "note": {
             "type": "string"
+          },
+          "army": {
+            "type": "string",
+            "minLength": 1,
+            "description": "land: the army whose divisions go (hoi4_armies name), formed in peace of divisions no operation needs inside the recall lock"
           }
         }
       }

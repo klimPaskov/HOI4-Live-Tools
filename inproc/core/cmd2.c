@@ -219,6 +219,31 @@ const cmd_spec CMD2_SPECS[] = {
      * whose target is the receiver (the list the dialog shows) */
     {"diplomacy", "diplomacy.declare_war", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_DIPLO_WAR, 0, 0x28,
      "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "17CDeclareWarAction"},
+    /* ---- diplomacy, volunteers and the attache (engineer 118, 28 Nov; folded into the diplomacy family by engineer 120 on the
+     * owner's rule of one dynamic diplomacy tool): the diplomacy view's volunteer and attache actions, one CDiplomaticActionCommand
+     * each, built as the family diplomacy builds its actions (read from 1.20.0.0). send: CSendVolunteerAction (type 0x3415,
+     * its list of division handles at +0x70 with 2 inline places; the dialog's Send fills the list with the chosen
+     * divisions through the action's own setter, which stores each division's handle) and a byte +0xa8 (serialized 0x3866,
+     * the dialog's check box; the constructor's 0 is kept). recall: CRecallVolunteerAction (0x2e3a; the same list with 4
+     * inline places; its legality refuses an empty list). attache: CSendAttacheAction (0x38d9), the SIMPLE shape with one
+     * flag byte of its own (as improve relations). The module fills at most the inline places per action and posts one
+     * action per group of divisions, so it never allocates inside a game object. A family of its own: OFF in auto until
+     * its live session (S25-VOLUNTEERS) passes. */
+    {"diplomacy", "diplomacy.send_volunteers", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_VOLUNTEER, 0, 0x28,
+     "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "20CSendVolunteerAction"},
+    {"diplomacy", "diplomacy.recall_volunteers", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_VOLUNTEER, 0, 0x28,
+     "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "22CRecallVolunteerAction"},
+    {"diplomacy", "diplomacy.send_attache", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_DIPLO_SIMPLE, 0, 0x28,
+     "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "18CSendAttacheAction"},
+    /* ---- raids (engineer 118, 28 Nov): a prepared raid's Launch and Cancel buttons (Götterdämmerung raids, common/raids).
+     * Read from 1.20.0.0: NRaids::NNet::CExecuteRaidCommand and CCancelRaidCommand, 0x30 each, one handle +0x24 (0x4aef) of
+     * the raid INSTANCE; the auth slot's resolver casts it to NRaids::CRaidInstance (generic shape: resolver, owner,
+     * sender controls). Creating a raid (CCreateRaidCommand 0xa8: tag, raid type by name, starting point, target,
+     * units) is not built yet; the raid instances are not read yet. OFF in auto until S23-RAID. */
+    {"raids", "raids.execute", "N6NRaids4NNet19CExecuteRaidCommandE", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
+     "N6NRaids13CRaidInstanceE", 1, {{"raid", 0x24, FK_REF, 0, 0x4aef, 0}}, OBJ2_NONE, 0},
+    {"raids", "raids.cancel", "N6NRaids4NNet18CCancelRaidCommandE", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
+     "N6NRaids13CRaidInstanceE", 1, {{"raid", 0x24, FK_REF, 0, 0x4aef, 0}}, OBJ2_NONE, 0},
     /* ---- holds (engineer 79, 24 Nov): the AREA DEFENCE order, as the battle-plan map tool posts it. Read from 1.20.0.0
      * and 1.19.4.1 (identical layout and code). The area button only arms the tool; each left click on a state posts
      * EditAreaDefenseState(group, order id, the state's id, settings) through the tool's own constructor (1.20 0x10094a330,
@@ -488,8 +513,22 @@ static uint64_t find_cstr(const scan_image *im, const char *s) {
     return 0;
 }
 
+/* engineer 122: the lea sites of every diplomatic action class's vtable, found in ONE pass over __text before the
+ * catalog's per-class scans (each of which asks lea_sites for its class): the catalog stays one text pass, not one per class */
+#define LEA_CACHE_SITES 16
+static struct { uint64_t target; unsigned n; uint64_t s[LEA_CACHE_SITES]; } g_lea_cache[DIPLO_CAT_MAX];
+static unsigned g_lea_ncache;
+static const scan_image *g_lea_im;
+
 /* every "lea r64,[rip+target]" in __text (up to max); returns the count */
 static unsigned lea_sites(const scan_image *im, uint64_t target, uint64_t *out, unsigned max) {
+    if (im == g_lea_im)
+        for (unsigned c = 0; c < g_lea_ncache; c++)
+            if (g_lea_cache[c].target == target && g_lea_cache[c].n <= LEA_CACHE_SITES) {
+                unsigned k = 0;
+                for (; k < g_lea_cache[c].n && k < max; k++) out[k] = g_lea_cache[c].s[k];
+                return g_lea_cache[c].n;
+            }
     const uint8_t *t = scan_ptr(im, im->text_addr, im->text_size);
     unsigned n = 0;
     if (!t) return 0;
@@ -713,6 +752,12 @@ static int auth_shape(const scan_image *im, uint64_t fn, const cmd_spec *s, cmd_
         const uint8_t *lb = scan_ptr(im, owner + 18 + (int64_t)(int32_t)c[1], 16);
         uint32_t d[2];
         if (!lb || !cmd_pmatch(lb, 13, "55 48 89 e5 48 8b 87 D 5d c3", d, 2)) return 0;
+    } else if (ob && cmd_pmatch(ob, 19, "55 48 89 e5 48 85 ff 74 06 5d e9 D 31 c0 5d c3", c, 8)) {
+        /* engineer 118: a framed null check that tail-jumps to the getter (the raid instance's owner: 0 for NULL, else
+         * jmp to a two-load leaf: the instance's country, its tag) */
+        const uint8_t *lb = scan_ptr(im, owner + 15 + (int64_t)(int32_t)c[0], 16);
+        uint32_t d[2];
+        if (!lb || !cmd_pmatch(lb, 13, "55 48 89 e5 48 8b 47 B 8b 40 B 5d c3", d, 2)) return 0;
     } else {
         if (!ob || !cmd_pmatch(ob, 0x40, "48 85 ff 74 B 55 48 89 e5", c, 8) || c[0] < 6 || c[0] > 0x30) return 0;
         if (!cmd_pmatch(ob + 5 + c[0], 3, "31 c0 c3", c + 1, 1) || !cmd_pmatch(ob + 5 + c[0] - 2, 2, "5d c3", c + 1, 1)) return 0;
@@ -942,6 +987,71 @@ static int find_ctor(const scan_image *im, const cmd_spec *s, cmd_type *o) {
     return 0;
 }
 
+/* engineer 78 (moved into a function by engineer 122, so the diplomacy catalog runs it per class with the vtable it
+ * already has): the action class's own constructor (the one taking the sender and receiver tags and the date, calling the
+ * base constructor with (0, -1, 1) as every action of the diplomacy view does), its type id (the SetType call that ends the
+ * constructor), its size (its own Clone allocates it); o->vt_obj is the class's exact vtable */
+static void diplo_action_facts(const scan_image *im, const cmd_spec *s, cmd_type *o) {
+    uint32_t c[6];
+    uint64_t st[16], clone = 0; unsigned ns = lea_sites(im, o->vt_obj, st, 16), found = 0;
+    for (unsigned i = 0; i < ns && i < 16; i++) {
+        uint64_t fs = fn_start(im, st[i]);
+        const uint8_t *fb = fs ? scan_ptr(im, fs, 0xa0) : NULL;
+        if (!fb) continue;
+        int simple = s->ctor == CTOR_DIPLO_SIMPLE && cmd_pmatch(fb, 15, "55 48 89 e5 53 48 83 ec 28 48 89 fb 8b 41 08", c, 6);
+        int war = s->ctor == CTOR_DIPLO_WAR &&
+                  cmd_pmatch(fb, 26, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 44 89 c3 49 89 cf 49 89 fe 41 8b 41 08", c, 6);
+        int vol = s->ctor == CTOR_VOLUNTEER &&
+                  cmd_pmatch(fb, 19, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 48 89 fb 8b 41 08", c, 6);
+        if (!simple && !war && !vol) continue;
+        unsigned m = 0;
+        long b = pfind_at(im, fs, 0xa0, "c7 04 24 01 00 00 00 48 8d 4d B 45 31 c0 41 b9 ff ff ff ff e8 D 48 8d 05 D", c, 6, &m);
+        if (b < 0 || m != 1) continue;
+        uint64_t at = fs + (uint64_t)b, base = at + 25 + (int64_t)(int32_t)c[1], vt = at + 32 + (int64_t)(int32_t)c[2];
+        if (vt != o->vt_obj || !in_text(im, base)) continue;
+        uint32_t u_off = 0, u_inl = 0, u_cap = 0;
+        if (vol) {
+            /* the list: lea r15,[rbx+L]; lea rax,[rbx+A]; xorps; movups [rbx+L],xmm0 ... then
+             * lea rax,[rbx+I]; mov [rbx+L],rax; mov dword [rbx+L+8],CAP (the inline buffer and its places) */
+            uint32_t v[8]; unsigned mv = 0;
+            if (pfind_at(im, fs, 0xc0, "4c 8d 7b B 48 8d 83 D 0f 57 c0 0f 11 43 B", v, 8, &mv) < 0 || mv != 1 || v[2] != v[0]) continue;
+            u_off = v[0];
+            if (pfind_at(im, fs, 0xe0, "48 8d 83 D 48 89 43 B c7 43 B D", v, 8, &mv) < 0 || mv != 1 || v[1] != u_off ||
+                v[2] != u_off + 8 || v[3] < 1 || v[3] > 8 || v[0] <= u_off + 0x10)
+                continue;
+            u_inl = v[0]; u_cap = v[3];
+        }
+        long t2 = simple ? pfind_at(im, fs, 0xa0, "48 89 03 48 89 df be D", c + 3, 3, &m)
+                : vol    ? pfind_at(im, fs, 0xe0, "48 89 df be D e8 D", c + 3, 3, &m)
+                         : pfind_at(im, fs, 0xe0, "41 88 5e B 4c 89 f7 be D", c + 3, 3, &m);
+        if (simple && t2 < 0) { /* improve relations: the constructor also sets one byte flag of its own first */
+            uint32_t e[3];
+            t2 = pfind_at(im, fs, 0xa0, "48 89 03 c6 43 B 01 48 89 df be D", e, 3, &m);
+            if (t2 >= 0) c[3] = e[1];
+        }
+        if (t2 < 0 || m != 1) continue;
+        uint32_t typ = war ? c[4] : c[3], goal_off = 0, flag_off = war ? c[3] : 0;
+        if (war) {
+            uint32_t g[2]; unsigned mg = 0;
+            if (pfind_at(im, fs, 0xe0, "49 8b 47 08 49 89 46 B", g, 2, &mg) < 0 || mg != 1) continue;
+            goal_off = g[0];
+        }
+        /* the complete- and base-object constructors are identical copies: every match must agree */
+        if (found && (o->act_base != base || o->act_type != typ || o->act_goal_off != goal_off || o->act_flag_off != flag_off ||
+                      o->act_units_off != u_off || o->act_units_inline != u_inl || o->act_units_cap != u_cap)) { found = 99; break; }
+        if (!found) { o->act_ctor = fs; o->act_base = base; o->act_type = typ; o->act_goal_off = goal_off; o->act_flag_off = flag_off;
+                      o->act_units_off = u_off; o->act_units_inline = u_inl; o->act_units_cap = u_cap; }
+        found = 1;
+    }
+    /* the class's own Clone (vtable +0xd0, the slot the command's copy constructor calls): new(size) first */
+    if (found == 1 && scan_q(im, o->vt_obj + 0xd0, &clone) && in_text(im, clone)) {
+        unsigned m = 0;
+        long z = pfind_at(im, clone, 0x20, "bf D e8 D", c, 6, &m);
+        if (z >= 0 && c[0] >= 0x6c && c[0] < 0x400) o->act_size = c[0];
+    }
+    if (found == 1 && o->act_size && o->act_type) { o->conf |= C_RESOLVER | C_CTOR; o->ctor = o->act_ctor; }
+}
+
 int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_common *cm, const cmd_spec *s, cmd_type *o) {
     memset(o, 0, sizeof *o);
     o->spec = s;
@@ -992,46 +1102,7 @@ int scan_cmd_type(const scan_image *im, const post_layout *pl, const stage2_comm
         scan_cap vc;
         if ((o->conf & C_AUTH) && scan_class_vtable(im, s->obj_cast, &vc) && vc.value) {
             o->vt_obj = vc.value;
-            uint64_t st[16], clone = 0; unsigned ns = lea_sites(im, o->vt_obj, st, 16), found = 0;
-            for (unsigned i = 0; i < ns && i < 16; i++) {
-                uint64_t fs = fn_start(im, st[i]);
-                const uint8_t *fb = fs ? scan_ptr(im, fs, 0xa0) : NULL;
-                if (!fb) continue;
-                int simple = s->ctor == CTOR_DIPLO_SIMPLE && cmd_pmatch(fb, 15, "55 48 89 e5 53 48 83 ec 28 48 89 fb 8b 41 08", c, 6);
-                int war = s->ctor == CTOR_DIPLO_WAR &&
-                          cmd_pmatch(fb, 26, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 44 89 c3 49 89 cf 49 89 fe 41 8b 41 08", c, 6);
-                if (!simple && !war) continue;
-                unsigned m = 0;
-                long b = pfind_at(im, fs, 0xa0, "c7 04 24 01 00 00 00 48 8d 4d B 45 31 c0 41 b9 ff ff ff ff e8 D 48 8d 05 D", c, 6, &m);
-                if (b < 0 || m != 1) continue;
-                uint64_t at = fs + (uint64_t)b, base = at + 25 + (int64_t)(int32_t)c[1], vt = at + 32 + (int64_t)(int32_t)c[2];
-                if (vt != o->vt_obj || !in_text(im, base)) continue;
-                long t2 = simple ? pfind_at(im, fs, 0xa0, "48 89 03 48 89 df be D", c + 3, 3, &m)
-                                 : pfind_at(im, fs, 0xe0, "41 88 5e B 4c 89 f7 be D", c + 3, 3, &m);
-                if (simple && t2 < 0) { /* improve relations: the constructor also sets one byte flag of its own first */
-                    uint32_t e[3];
-                    t2 = pfind_at(im, fs, 0xa0, "48 89 03 c6 43 B 01 48 89 df be D", e, 3, &m);
-                    if (t2 >= 0) c[3] = e[1];
-                }
-                if (t2 < 0 || m != 1) continue;
-                uint32_t typ = war ? c[4] : c[3], goal_off = 0, flag_off = war ? c[3] : 0;
-                if (war) {
-                    uint32_t g[2]; unsigned mg = 0;
-                    if (pfind_at(im, fs, 0xe0, "49 8b 47 08 49 89 46 B", g, 2, &mg) < 0 || mg != 1) continue;
-                    goal_off = g[0];
-                }
-                /* the complete- and base-object constructors are identical copies: every match must agree */
-                if (found && (o->act_base != base || o->act_type != typ || o->act_goal_off != goal_off || o->act_flag_off != flag_off)) { found = 99; break; }
-                if (!found) { o->act_ctor = fs; o->act_base = base; o->act_type = typ; o->act_goal_off = goal_off; o->act_flag_off = flag_off; }
-                found = 1;
-            }
-            /* the class's own Clone (vtable +0xd0, the slot the command's copy constructor calls): new(size) first */
-            if (found == 1 && scan_q(im, o->vt_obj + 0xd0, &clone) && in_text(im, clone)) {
-                unsigned m = 0;
-                long z = pfind_at(im, clone, 0x20, "bf D e8 D", c, 6, &m);
-                if (z >= 0 && c[0] >= 0x6c && c[0] < 0x400) o->act_size = c[0];
-            }
-            if (found == 1 && o->act_size && o->act_type) { o->conf |= C_RESOLVER | C_CTOR; o->ctor = o->act_ctor; }
+            diplo_action_facts(im, s, o);
         }
     } else if (s->auth_kind == AUTH_TAG_PTR) {
         /* auth as AUTH_TAG; the object: a raw pointer of exactly the class obj_cast names (RTTI vtable) */
@@ -1487,6 +1558,7 @@ static void scan_mio_facts(const scan_image *im, const stage2_table *t, mio_fact
              (unsigned long long)o->vt_org, (unsigned)o->empty_tok, miss[0] ? miss : "none");
 }
 
+static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stage2_table *t);
 int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global, stage2_table *t) {
     memset(t, 0, sizeof *t);
     scan_stage2_common(im, pl, gs_global, &t->common);
@@ -1593,7 +1665,203 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
             (!t->diplo.ok || (t->t[i].spec->ctor == CTOR_DIPLO_WAR && !t->diplo.war_ok))) { t->t[i].ok = 0; on--; }
         if (t->t[i].spec->obj2 == OBJ2_ORDERS_GROUP && (!t->common.ti_reference || !t->common.ti_orders_group) && t->t[i].ok) { t->t[i].ok = 0; on--; }
     }
+    scan_diplo_catalog(im, pl, t); /* engineer 122: its rows are counted apart (ndyn), so stage2_on stays the hand-written rows */
     return on;
+}
+
+/* engineer 122: the diplomatic action catalog (the owner's rule: one dynamic diplomacy tool for any action the game offers).
+ * Every RTTI subclass of CDiplomaticAction (two levels: CTransferSpyMasterAction and CLendLeaseBaseAction have their own
+ * children) is found from the type information itself, so a class the game adds appears without a code change. Each class
+ * gets its key (the name in snake case without C and Action) and the shape of its player constructor:
+ *   simple     (action, sender tag*, receiver tag*, date*) and nothing the send dialog fills: the hand-written SIMPLE rows;
+ *   divisions  the same plus a division list with inline places (volunteers);
+ *   war_goal   (action, sender, receiver, war goal, flag, date) (declare war);
+ *   unsupported:<why>  dialog_fields (the dialog fills fields after construction: an amount, equipment, a list without inline
+ *              places), constructor_args_1 / _2 (the constructor takes a war goal type, a faction, states ...),
+ *              scripted_type (a scripted diplomatic action from common/scripted_diplomatic_actions: its type pointer),
+ *              no_player_constructor, or scan:<evidence> when a known shape failed one of its checks.
+ * A buildable class becomes a row of family diplomacy2 through the same scan as the hand-written rows (so the same checks:
+ * exact vtable, constructor, size from its Clone, type id from its SetType, the command's authorisation); a class a
+ * hand-written row covers keeps that row's op. */
+static uint64_t rd64c(const uint8_t *p) { uint64_t v; memcpy(&v, p, 8); return v; }
+
+static void diplo_key(const char *cls, char *out, size_t n) {
+    const char *p = cls;
+    while (*p >= '0' && *p <= '9') p++;
+    if (*p == 'C') p++;
+    size_t len = strlen(p), k = 0;
+    if (len > 6 && !strcmp(p + len - 6, "Action")) len -= 6;
+    for (size_t i = 0; i < len && k + 2 < n; i++) {
+        char ch = p[i];
+        int up = ch >= 'A' && ch <= 'Z';
+        if (up && i > 0) {
+            char pr = p[i - 1], nx = i + 1 < len ? p[i + 1] : 0;
+            int prl = (pr >= 'a' && pr <= 'z') || (pr >= '0' && pr <= '9'), pru = pr >= 'A' && pr <= 'Z', nxl = nx >= 'a' && nx <= 'z';
+            if (prl || (pru && nxl)) out[k++] = '_';
+        }
+        out[k++] = up ? (char)(ch - 'A' + 'a') : ch;
+    }
+    out[k] = 0;
+}
+
+/* the date register of a diplomatic action constructor (the base constructor's date object is built from [reg+8]):
+ * 1 rcx (sender, receiver, date), 2 r8 (one argument more), 3 r9 (two more), 0 none in the first 0x30 bytes */
+static int diplo_date_reg(const uint8_t *fb) {
+    for (int i = 1; i + 3 <= 0x30; i++) {
+        if (fb[i] == 0x41 && fb[i + 1] == 0x8b && fb[i + 3] == 0x08 && (fb[i + 2] == 0x40 || fb[i + 2] == 0x41)) return fb[i + 2] == 0x40 ? 2 : 3;
+        if (fb[i] == 0x8b && fb[i + 1] == 0x41 && fb[i + 2] == 0x08 && fb[i - 1] != 0x41) return 1;
+    }
+    return 0;
+}
+
+static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stage2_table *t) {
+    (void)pl; /* the command-level facts (post layout included) come from the resolved hand-written row */
+    t->ndcat = 0; t->ndyn = 0;
+    const cmd_type *ref = NULL; /* a resolved hand-written SIMPLE row: its spec is the template, its base constructor the anchor */
+    for (int i = 0; i < t->n; i++)
+        if (t->t[i].ok && t->t[i].spec->auth_kind == AUTH_DIPLO && t->t[i].spec->ctor == CTOR_DIPLO_SIMPLE && t->t[i].act_base) { ref = &t->t[i]; break; }
+    const uint8_t *d = scan_ptr(im, im->dconst_addr, im->dconst_size);
+    /* the base class's typeinfo from the resolved row's own: its vtable -8 is its typeinfo, whose +0x10 is the base's */
+    uint64_t ti_ref = 0, ti_base = 0, si_vptr = 0;
+    char bn[72];
+    if (!ref || !d || !t->diplo.ok || !ref->vt_obj || !scan_q(im, ref->vt_obj - 8, &ti_ref) || !scan_q(im, ti_ref + 0x10, &ti_base) ||
+        !ti_name(im, ti_base, bn, sizeof bn) || strcmp(bn, "17CDiplomaticAction"))
+        return;
+    /* the subclasses: an __si_class_type_info {vptr, name, base} whose base is a class already in the list */
+    uint64_t tis[DIPLO_CAT_MAX + 4], vts[DIPLO_CAT_MAX];
+    int nt = 0, level_from = 0;
+    uint64_t parents[DIPLO_CAT_MAX] = {ti_base}; int np = 1;
+    for (int level = 0; level < 2 && np; level++) {
+        int found_from = nt;
+        for (uint64_t i = 16; i + 8 <= im->dconst_size && nt < DIPLO_CAT_MAX; i += 8) {
+            uint64_t v = rd64c(d + i);
+            int is_parent = 0;
+            for (int k = 0; k < np; k++) if (v == parents[k]) is_parent = 1;
+            if (!is_parent) continue;
+            uint64_t ti = im->dconst_addr + i - 16, vp = rd64c(d + i - 16);
+            char nm[72];
+            if (!ti_name(im, ti, nm, sizeof nm) || nm[0] < '1' || nm[0] > '9') continue;
+            size_t L = strlen(nm);
+            if (L < 8 || strcmp(nm + L - 6, "Action")) continue;
+            if (si_vptr && vp != si_vptr) continue;
+            if (!si_vptr) si_vptr = vp;
+            int dup = 0;
+            for (int k = 0; k < nt; k++) if (tis[k] == ti) dup = 1;
+            if (!dup) tis[nt++] = ti;
+        }
+        np = 0;
+        for (int k = found_from; k < nt && np < DIPLO_CAT_MAX; k++) parents[np++] = tis[k];
+        level_from = found_from;
+    }
+    (void)level_from;
+    /* every class's vtable in one pass over __DATA,__const (the slot after {0, its typeinfo}; exactly one) */
+    {
+        unsigned nv[DIPLO_CAT_MAX] = {0};
+        for (int k = 0; k < nt; k++) vts[k] = 0;
+        for (uint64_t i = 8; i + 8 <= im->dconst_size; i += 8) {
+            uint64_t v = rd64c(d + i);
+            for (int k = 0; k < nt; k++)
+                if (v == tis[k] && rd64c(d + i - 8) == 0) { vts[k] = im->dconst_addr + i + 8; nv[k]++; }
+        }
+        for (int k = 0; k < nt; k++) if (nv[k] != 1) vts[k] = 0;
+    }
+    /* ONE pass over __text for every class's vtable lea sites (the per-class scans read this cache) */
+    g_lea_ncache = 0; g_lea_im = im;
+    for (int k = 0; k < nt; k++) if (vts[k] && g_lea_ncache < DIPLO_CAT_MAX) { g_lea_cache[g_lea_ncache].target = vts[k]; g_lea_cache[g_lea_ncache].n = 0; g_lea_ncache++; }
+    {
+        const uint8_t *tx = scan_ptr(im, im->text_addr, im->text_size);
+        for (uint64_t i = 0; tx && i + 7 <= im->text_size; i++) {
+            if (!((tx[i] == 0x48 || tx[i] == 0x4c) && tx[i + 1] == 0x8d && (tx[i + 2] & 0xc7) == 0x05)) continue;
+            uint64_t tg = im->text_addr + i + 7 + (int64_t)rds32(tx + i + 3);
+            for (unsigned c = 0; c < g_lea_ncache; c++)
+                if (g_lea_cache[c].target == tg) { if (g_lea_cache[c].n < LEA_CACHE_SITES) g_lea_cache[c].s[g_lea_cache[c].n] = im->text_addr + i; g_lea_cache[c].n++; }
+        }
+    }
+    for (int k = 0; k < nt && t->ndcat < DIPLO_CAT_MAX; k++) {
+        diplo_class *dc = &t->dcat[t->ndcat++];
+        memset(dc, 0, sizeof *dc);
+        ti_name(im, tis[k], dc->cls, sizeof dc->cls);
+        diplo_key(dc->cls, dc->key, sizeof dc->key);
+        /* a hand-written row covers it: that row's op and state */
+        const cmd_type *hw = NULL;
+        for (int i = 0; i < t->n; i++)
+            if (t->t[i].spec->auth_kind == AUTH_DIPLO && t->t[i].spec->obj_cast && !strcmp(t->t[i].spec->obj_cast, dc->cls)) { hw = &t->t[i]; break; }
+        if (hw) {
+            snprintf(dc->op, sizeof dc->op, "%s", hw->spec->op);
+            snprintf(dc->shape, sizeof dc->shape, "%s", hw->spec->ctor == CTOR_DIPLO_WAR ? "war_goal" : hw->spec->ctor == CTOR_VOLUNTEER ? "divisions" : "simple");
+            dc->act_type = hw->act_type; dc->on = hw->ok;
+            continue;
+        }
+        /* the shape of its player constructors (those calling the common base constructor with (0, -1, 1)) */
+        int best = 0, kmask = 0;
+        uint64_t st[LEA_CACHE_SITES];
+        unsigned ns = vts[k] ? lea_sites(im, vts[k], st, LEA_CACHE_SITES) : 0;
+        for (unsigned i = 0; i < ns && i < LEA_CACHE_SITES; i++) {
+            uint64_t fs = fn_start(im, st[i]);
+            const uint8_t *fb = fs ? scan_ptr(im, fs, 0xa0) : NULL;
+            uint32_t c[6]; unsigned m = 0;
+            if (!fb) continue;
+            long b = pfind_at(im, fs, 0xa0, "c7 04 24 01 00 00 00 48 8d 4d B 45 31 c0 41 b9 ff ff ff ff e8 D 48 8d 05 D", c, 6, &m);
+            if (b < 0 || m != 1 || fs + (uint64_t)b + 25 + (int64_t)(int32_t)c[1] != ref->act_base) continue;
+            int r = diplo_date_reg(fb), rank = r == 1 ? 3 : r == 2 ? 2 : r == 3 ? 1 : 0;
+            if (rank > best) best = rank;
+            /* the known prologues (the hand-written rows' patterns), so the common scan runs only for a shape that can match */
+            uint32_t cc[2];
+            if (cmd_pmatch(fb, 15, "55 48 89 e5 53 48 83 ec 28 48 89 fb 8b 41 08", cc, 2)) kmask |= 1;
+            if (cmd_pmatch(fb, 19, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 48 89 fb 8b 41 08", cc, 2)) kmask |= 2;
+            if (cmd_pmatch(fb, 26, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 44 89 c3 49 89 cf 49 89 fe 41 8b 41 08", cc, 2)) kmask |= 4;
+        }
+        const char *why = best == 3 ? "unsupported:dialog_fields" : best == 2 ? "unsupported:constructor_args_1"
+                        : best == 1 ? "unsupported:constructor_args_2" : "unsupported:no_player_constructor";
+        if (strstr(dc->cls, "Scripted")) why = "unsupported:scripted_type";
+        if (!vts[k]) why = "unsupported:no_vtable";
+        /* a constructor with the date in rcx may still be one of the known shapes: try them through the common scan */
+        if (kmask && t->ndyn < DIPLO_CAT_MAX && t->n < CMD2_MAX) {
+            static const int kinds[3] = {CTOR_DIPLO_SIMPLE, CTOR_VOLUNTEER, CTOR_DIPLO_WAR};
+            snprintf(dc->op, sizeof dc->op, "diplomacy2.%s", dc->key);
+            for (int q = 0; q < 3; q++) {
+                if (!(kmask & (1 << q))) continue;
+                cmd_spec *sp = &t->dspec[t->ndyn];
+                *sp = *ref->spec;
+                sp->family = "diplomacy2"; sp->op = dc->op; sp->obj_cast = dc->cls; sp->ctor = kinds[q];
+                cmd_type *row = &t->t[t->n];
+                /* the command's own facts are the resolved row's (one command class, CDiplomaticActionCommand); only the
+                 * action class's facts are this class's */
+                *row = *ref;
+                row->spec = sp; row->vt_obj = vts[k];
+                row->act_ctor = row->act_base = 0; row->act_size = row->act_type = row->act_goal_off = row->act_flag_off = 0;
+                row->act_units_off = row->act_units_inline = row->act_units_cap = 0; row->ctor = 0;
+                row->conf &= ~(unsigned)(C_RESOLVER | C_CTOR);
+                diplo_action_facts(im, sp, row);
+                row->ok = (row->conf & row->need) == row->need;
+                int on = row->ok;
+                if (on && row->act_ctor) {
+                    row->lookup_fn = t->t[0].lookup_fn;
+                    if (row->controls_fn != ref->controls_fn || row->act_base != ref->act_base || (kinds[q] == CTOR_DIPLO_WAR && !t->diplo.war_ok)) {
+                        snprintf(dc->shape, sizeof dc->shape, "unsupported:scan");
+                        break;
+                    }
+                    t->n++; t->ndyn++;
+                    snprintf(dc->shape, sizeof dc->shape, "%s", q == 0 ? "simple" : q == 1 ? "divisions" : "war_goal");
+                    dc->act_type = row->act_type; dc->on = 1;
+                    break;
+                }
+            }
+            if (!dc->on) { dc->op[0] = 0; if (!dc->shape[0]) snprintf(dc->shape, sizeof dc->shape, "%s", why); }
+        } else snprintf(dc->shape, sizeof dc->shape, "%s", why);
+    }
+    g_lea_ncache = 0; g_lea_im = NULL;
+}
+
+const char *stage2_diplo_json(const stage2_table *t, char *buf, size_t n) {
+    size_t at = (size_t)snprintf(buf, n, "\"classes\":%d,\"buildable\":%d,\"actions\":[", t->ndcat, t->ndyn);
+    for (int i = 0; i < t->ndcat && at < n; i++) {
+        const diplo_class *c = &t->dcat[i];
+        at += (size_t)snprintf(buf + at, n - at, "%s{\"key\":\"%s\",\"class\":\"%s\",\"op\":\"%s\",\"shape\":\"%s\",\"type\":%u,\"on\":%s}",
+                               i ? "," : "", c->key, c->cls, c->op, c->shape, c->act_type, c->on ? "true" : "false");
+    }
+    if (at < n) snprintf(buf + at, n - at, "]");
+    return buf;
 }
 
 const cmd_type *stage2_find(const stage2_table *t, const char *op) {

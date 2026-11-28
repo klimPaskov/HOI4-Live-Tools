@@ -306,6 +306,9 @@ mod plan_manage;
 /// Military domains (army groups, navy, naval invasions, casualty ratio, air superiority).
 #[path = "plan_military.rs"]
 mod plan_military;
+/// Volunteers and the attaché as a standing opportunity rule (`volunteers`): the game's own legality answers.
+#[path = "plan_volunteers.rs"]
+mod plan_volunteers;
 
 /// State, economy and diplomacy affairs (designs, diplomacy, faction, trade, MIOs, intelligence,
 /// research bonuses).
@@ -4718,7 +4721,7 @@ const FAIR_BUDGET: std::time::Duration = std::time::Duration::from_millis(1500);
 /// choosin a research, spending pp, etc"). HEAVY: many inputs or reads, or orders whose timing
 /// matters within a day: speed 3 from its first action until it has been quiet for a while.
 /// A lane not listed is heavy. (lane, minor, why)
-pub(super) const LANE_WEIGHT: [(&str, bool, &str); 50] = [
+pub(super) const LANE_WEIGHT: [(&str, bool, &str); 51] = [
     ("research", true, "one pick in the research view"),
     (
         "factories",
@@ -4744,6 +4747,7 @@ pub(super) const LANE_WEIGHT: [(&str, bool, &str); 50] = [
     ("fuel", true, "a fuel setting: one click"),
     ("manage", true, "the alert and ledger reads: no input"),
     ("diplomacy", true, "one diplomatic action"),
+    ("volunteers", true, "one volunteer or attache action"),
     ("faction", true, "one faction action"),
     ("call_allies", true, "one call to arms"),
     (
@@ -9816,6 +9820,21 @@ fn extras_step(
                         format!(
                             "{doctrine}: {xp:.0} {kind} experience, {before:.0} held for {} first",
                             names.join(", ")
+                        ),
+                    );
+                } else {
+                    // the lane says what it waits for (g115a, 28 Nov 2026: 125 days without a
+                    // doctrine action or a note while army experience went 0 -> 5)
+                    plan_manage::note(
+                        state,
+                        "doctrines",
+                        format!(
+                            "{doctrine}: waits for {cost:.0} {kind} experience ({xp:.0} held{})",
+                            if price.is_none() {
+                                "; price not read, the game's Unlock decides"
+                            } else {
+                                ""
+                            }
                         ),
                     );
                 }

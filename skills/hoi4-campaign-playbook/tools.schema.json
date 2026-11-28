@@ -430,7 +430,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_abilities": {
-   "description": "Read-only, no input: the commander abilities of the running game (common/abilities, mods included): per ability its command power cost per day (for each battalion group the game's tooltip names), duration, cooldown, whether a field marshal may use it, its unit modifiers, and its worth in each situation (prepare_attack: planning speed; reinforce: reinforce rate; attack, attack_river, attack_fort: attack and breakthrough plus the river's or fort's own bonus; defend: defence and dig-in; short_supply: days without supply), with the drawback named (more strength lost, no retreat, less attack); best_by_situation picks the highest gain per command power without a drawback; the current command power from the top bar. The order itself is not built yet (issue).",
+   "description": "Read-only, no input: the commander abilities of the running game (common/abilities, mods included): per ability its command power cost per day (for each battalion group the game's tooltip names), duration, cooldown, whether a field marshal may use it, its unit modifiers, and its worth in each situation (prepare_attack: planning speed; reinforce: reinforce rate; attack, attack_river, attack_fort: attack and breakthrough plus the river's or fort's own bonus; defend: defence and dig-in; short_supply: days without supply), with the drawback named (more strength lost, no retreat, less attack); best_by_situation picks the highest gain per command power without a drawback among the abilities with no country condition (an ability whose allowed names a focus, flag or tag lists it in country_requires and is never picked: those conditions are not checked here); the current command power from the top bar. The order itself is not built yet (issue).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},
@@ -2146,13 +2146,16 @@
    "source": "--list-tools"
   },
   "hoi4_diplomacy": {
-   "description": "Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries.",
+   "description": "Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries. With `catalog:true` and `country` (no view opened, nothing sent): EVERY diplomatic action the game itself has, from the in-process module's scan of the game's action classes plus the content's scripted actions (a mod's actions), each with its key, shape (simple, divisions, war_goal, or unsupported:<shape>), the route that sends it (in_process, the view's row by mouse, or not postable yet) and can_do = the game's own check toward that country (the one that enables the view's Send button), asked without sending.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "action": {
       "maxLength": 128,
       "type": "string"
+     },
+     "catalog": {
+      "type": "boolean"
      },
      "countries": {
       "items": {
@@ -2194,7 +2197,7 @@
    "source": "--list-tools"
   },
   "hoi4_diplomacy_act": {
-   "description": "Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, call_to_arms, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices, e.g. volunteers groups), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt.",
+   "description": "Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, call_to_arms, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices the tool cannot make yet), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt. send_volunteers / recall_volunteers carry `army` (the army whose divisions go) and optionally `division_ids` within it, and go through the in-process module's diplomacy family (the view's own action; HOI4_BACKEND=inprocess until S25-VOLUNTEERS): the game's own check decides (volunteer cap, divisions required, recall lock, war and ideology gates; refused_by_game posts nothing). Air volunteers are a rebase of wings to the receiver's air base (hoi4_air_rebase). Any other key that hoi4_diplomacy catalog:true lists with route in_process (a game action class with no view row the tool reads: air_base_access, offer_air_base_access, naval_blockade, peace_proposal, reduce_autonomy, increase_autonomy, request_access_to_license_production, cancel_licensed_production, or one a later game adds) takes `country` only and goes through the module's diplomacy2 family (HOI4_BACKEND=inprocess until S27-DIPLOMACY-ANY); a key whose shape the module cannot build is refused dialog_unsupported and nothing is sent.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -2204,12 +2207,23 @@
      "action": {
       "type": "string"
      },
+     "army": {
+      "type": "string"
+     },
      "confirm": {
       "type": "string"
      },
      "country": {
       "pattern": "^[A-Z0-9]{3}$",
       "type": "string"
+     },
+     "division_ids": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
      },
      "lease_token": {
       "type": "string"
@@ -3468,7 +3482,7 @@
    "source": "--list-tools"
   },
   "hoi4_mio_trait": {
-   "description": "Live-verified (6 Nov 2026 on 1.19.4 with 10 DLCs: a trait queued, read back by reopening the detail window): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.",
+   "description": "Live-verified (6 Nov 2026 on 1.19.4 with 10 DLCs: a trait queued, read back by reopening the detail window): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. By key: `trait` (one trait key, the scripts' token) or `traits` (keys or indices in queue order) resolve to the tree's indices through the in-process organisations read (family mio; refused trait_key_unresolved before input when it is not usable, trait_unknown names the organisation's keys). Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3499,6 +3513,12 @@
       "minimum": 0,
       "type": "integer"
      },
+     "trait": {
+      "description": "one trait by its key (the scripts' trait token), resolved in process",
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
      "trait_index": {
       "maximum": 63,
       "minimum": 0,
@@ -3510,6 +3530,18 @@
        "maximum": 63,
        "minimum": 0,
        "type": "integer"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "type": "array"
+     },
+     "traits": {
+      "description": "traits by key (or index) in queue order, queued in one visit like trait_indices",
+      "items": {
+       "type": [
+        "string",
+        "integer"
+       ]
       },
       "maxItems": 16,
       "minItems": 1,
@@ -3857,7 +3889,7 @@
    "source": "--list-tools"
   },
   "hoi4_operative_assign": {
-   "description": "Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` refuse with mission_not_built / operation_not_built (operations are started with hoi4_operation_start). Typed refusals before input: invalid_arguments, target_required, country_has_no_states, unknown_country; agency_not_created, operative_unknown, operative_busy (on an operation), already_on_mission from memory; operative_bar_unavailable, mission_unavailable (the game disables the button) from the windows. Verified by memory (mission and target). Live-verified on 1.19.4.",
+   "description": "Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` refuse with mission_not_built / operation_not_built (operations are started with hoi4_operation_start). Typed refusals before input: invalid_arguments, target_required, country_has_no_states, unknown_country; agency_not_created, operative_unknown, operative_busy (on an operation), already_on_mission, mission_running (the operative runs another mission than the starting counter-intelligence at home: pass replace:true to end it) from memory; operative_bar_unavailable, mission_unavailable (the game disables the button) from the windows. Verified by memory (mission and target). Live-verified on 1.19.4.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3879,6 +3911,9 @@
       "maximum": 31,
       "minimum": 0,
       "type": "integer"
+     },
+     "replace": {
+      "type": "boolean"
      },
      "request_id": {
       "type": "string"
