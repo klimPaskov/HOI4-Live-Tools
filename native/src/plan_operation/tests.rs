@@ -4651,9 +4651,19 @@ fn a_group_with_two_fronts_spreads_its_divisions_and_each_border_gets_its_own_de
     state.done.insert(key("op", "by_command"), 1);
     state.done.insert(key("op", "deep_line"), 1);
     let roster = game.roster.borrow().clone();
-    let line = border_fronts(&mut state, &game, "op", &units, &roster, &wars, "l", START)
-        .unwrap()
-        .expect("a spread");
+    let line = border_fronts(
+        &mut state,
+        &game,
+        "op",
+        &json!({}),
+        &units,
+        &roster,
+        &wars,
+        "l",
+        START,
+    )
+    .unwrap()
+    .expect("a spread");
     assert!(
         line.contains("spread over its 2 fronts") && line.contains("stands empty"),
         "{line}"
@@ -4686,6 +4696,7 @@ fn a_group_with_two_fronts_spreads_its_divisions_and_each_border_gets_its_own_de
         &mut state,
         &game,
         "op",
+        &json!({}),
         &units,
         &roster,
         &wars,
@@ -4847,4 +4858,180 @@ fn a_starving_attack_that_wins_on_its_losses_is_not_stopped_for_its_supply() {
     .unwrap();
     assert!(matches!(paced, Paced::Acted(_)), "{paced:?}");
     assert_eq!(stops(&game), 1);
+}
+
+// CAPACITY (engineer 99, after o96a): fronts weighted by what their stretch can fight with and
+// feed; the reserve of a full battle moves sideways to a front with room
+
+fn capacity_theatre(game: &Game, holland: i64, belgium: i64) {
+    game.unit("Army Group 1", |r| {
+        r["plan"] = json!([
+            {"kind": "front", "id": 109, "executing": true, "divisions": holland,
+             "line": {"states": [57], "ids": [571, 572]}, "offensives": []},
+            {"kind": "front", "id": 110, "executing": true, "divisions": belgium,
+             "line": {"states": [42], "ids": [421]}, "offensives": []}]);
+    });
+    // the Dutch plains (71 from two own provinces, 72 from one), the Ardennes forest (61)
+    *game.graph.borrow_mut() = Some(json!({"provinces": [
+        graph_row(571, 57, "plains", &[(71, 0.0), (572, 0.0)]),
+        graph_row(572, 57, "plains", &[(71, 0.0), (72, 0.0), (571, 0.0)]),
+        graph_row(421, 42, "plains", &[(61, 0.0)]),
+        graph_row(71, 7, "plains", &[(571, 0.0), (572, 0.0)]),
+        graph_row(72, 7, "plains", &[(572, 0.0)]),
+        graph_row(61, 6, "forest", &[(421, 0.0)])]}));
+    // o96a W+10: 26 divisions in the forest province on 1.66 supply against 21.3
+    let mut divisions: Vec<Value> = (0..26)
+        .map(|i| json!({"id": format!("m{i}"), "army": "Mitte", "province_id": 421}))
+        .collect();
+    divisions
+        .extend((0..4).map(|i| json!({"id": format!("s{i}"), "army": "Sued", "province_id": 571})));
+    *game.supply.borrow_mut() = Some(json!({"divisions": divisions, "provinces": [
+        {"province_id": 421, "divisions": 26, "supply": 1.66, "demand": 21.3},
+        {"province_id": 571, "divisions": 4, "supply": 4.6, "demand": 3.3}]}));
+}
+
+#[test]
+fn fronts_are_weighted_by_what_their_stretch_fights_with_and_feeds_and_a_full_battle_s_reserve_goes_sideways(
+) {
+    let game = Game::new();
+    capacity_theatre(&game, 0, 68);
+    let wars = json!({"wars": {"enemies": []}, "borders": [
+        {"neighbour_tag": "HOL", "neighbour_states": [7], "own_border_states": [57]},
+        {"neighbour_tag": "BEL", "neighbour_states": [6], "own_border_states": [42]}]});
+    let mut grp = unit(
+        "Army Group 1".into(),
+        Role::Group,
+        &json!({"enemy": "HOL", "enemies": ["HOL", "BEL"], "own_states": [57, 42]}),
+        &json!({"target_line": [7]}),
+    );
+    grp.members = vec!["Mitte".into(), "Sued".into()];
+    let units = vec![grp];
+    let op = json!({"id": "op", "enemies": ["HOL", "BEL"], "refine_days": 0});
+    let mut state = State::default();
+    state.done.insert(key("op", "by_command"), 1);
+    state.done.insert(key("op", "deep_line"), 1);
+    let run = |state: &mut State, t: GameHour| {
+        let roster = game.roster.borrow().clone();
+        border_fronts(state, &game, "op", &op, &units, &roster, &wars, "l", t).unwrap()
+    };
+    // 1. the spread: the Dutch plains take 10 (6 from two sides into 71, 4 into 72), the forest
+    // from one side 3 (and 4 fed at half supply): weights, not lengths
+    let line = run(&mut state, START).expect("a spread");
+    assert!(line.contains("by capacity"), "{line}");
+    let spread = game
+        .orders()
+        .into_iter()
+        .find(|(n, a)| n == "hoi4_army_plan" && a["distribute"].is_object())
+        .expect("a spread by weights");
+    assert_eq!(
+        spread.1["distribute"]["weights"],
+        json!({"109": 10, "110": 3})
+    );
+    // 2. in the prepare a spread far from the rooms is spread again by them
+    capacity_theatre(&game, 1, 44);
+    game.calls.borrow_mut().clear();
+    let line = run(&mut state, START + DAY).expect("a spread again");
+    assert!(line.contains("spread again by capacity"), "{line}");
+    // 3. at war: the forest battle holds 9 in reserve behind 3 engaged; the Dutch front has room
+    state.done.insert(key("op", "exec"), START);
+    capacity_theatre(&game, 5, 40);
+    let reserve: Vec<Value> = (0..9)
+        .map(|i| json!({"id": format!("m{i}"), "org": 40.0 + i as f64, "province": 421}))
+        .collect();
+    *game.battles.borrow_mut() = Some(json!({"list": [
+        {"province": 61, "our_side": "attacker", "width": {"directions": 1},
+         "attacker": {"engaged": 3, "reserve": 9, "reserve_divisions": reserve}}]}));
+    game.calls.borrow_mut().clear();
+    let line = run(&mut state, START + 2 * DAY).expect("a move sideways");
+    assert!(line.contains("sideways onto front 109"), "{line}");
+    let assign = game
+        .orders()
+        .into_iter()
+        .find(|(n, a)| n == "hoi4_army_plan" && a["assign"].is_object())
+        .expect("an assign");
+    assert_eq!(assign.1["assign"]["order"], json!(109));
+    // the Dutch front has room for 5 of the 6 beyond the engaged: the freshest go
+    assert_eq!(
+        strings(&assign.1["assign"], "divisions"),
+        vec!["m8", "m7", "m6", "m5", "m4"]
+    );
+    assert!(state.op_notes["op:capacity:Army Group 1"].contains("breadth: 1 of 2"));
+}
+
+// ARMOUR WHERE IT CAN BREAK THROUGH (engineer 99, after o96a)
+
+#[test]
+fn the_armour_leaves_a_rough_ground_battle_s_reserve_and_goes_where_its_ground_is_cheapest() {
+    // o96a (28 Nov 2026): the Panzer divisions waited in the reserve of the Ardennes forest
+    // battle 3488 (state 980) while the Brabant plains battle had none
+    let game = Game::new();
+    let mut u = unit(
+        "Panzer".into(),
+        Role::Mobile,
+        &json!({"enemy": "BEL"}),
+        &Value::Null,
+    );
+    u.spear = true;
+    u.line = vec![8];
+    // Luxembourg, the plan's own thrust, is taken
+    *game.held.borrow_mut() = vec![8];
+    *game.supply.borrow_mut() = Some(json!({"divisions": [
+        {"id": "p0", "army": "Panzer", "province_id": 420, "state_id": 42},
+        {"id": "p1", "army": "Panzer", "province_id": 420, "state_id": 42},
+        {"id": "p2", "army": "Panzer", "province_id": 420, "state_id": 42}]}));
+    // from Moselland 420: straight into the Ardennes forest 3488, or round through own Rheinland
+    // 510 into the plains of Wallonia 340
+    *game.graph.borrow_mut() = Some(json!({"provinces": [
+        graph_row(420, 42, "plains", &[(3488, 0.0), (510, 0.0)]),
+        graph_row(510, 51, "plains", &[(420, 0.0), (340, 0.0)]),
+        graph_row(3488, 980, "forest", &[(420, 0.0), (340, 0.0)]),
+        graph_row(340, 34, "plains", &[(510, 0.0), (3488, 0.0)])]}));
+    let wars = json!({"wars": {"enemies": ["BEL"]}, "borders": [
+        {"neighbour_tag": "BEL", "neighbour_states": [980, 34], "own_border_states": [42, 51]}]});
+    let op = json!({"id": "op", "enemies": ["BEL"]});
+    let plan = json!({"war": {"me": "GER"}});
+    let at_war = vec!["BEL".to_string()];
+    let op_line = [980, 34];
+    let mut state = State::default();
+    // 1. the next objective by the armour's cost: round the forest
+    armour_ground(
+        &mut state, &game, &plan, "op", &op, &u, &op_line, &wars, &at_war, START,
+    );
+    assert_eq!(state.done.get(&key("op", "armourpick:Panzer")), Some(&34));
+    let roster = game.roster.borrow().clone();
+    let next = spear_line(&mut state, "op", &roster, &u, "GER", &game, &op_line, START);
+    assert_eq!(next, vec![34]);
+    // 2. the spearhead was given the forest state and its divisions wait in a forest battle's
+    // reserve: the state goes to the infantry
+    state.done.insert(key("op", "spearfor:Panzer"), 980);
+    *game.battles.borrow_mut() = Some(json!({"list": [
+        {"province": 3488, "our_side": "attacker",
+         "lines": [{"line": "terrain", "value": -0.15}],
+         "attacker": {"engaged_divisions": [{"id": "x1"}],
+                      "reserve_divisions": [{"id": "p0"}, {"id": "p1"}, {"id": "p2"}]}}]}));
+    armour_ground(
+        &mut state,
+        &game,
+        &plan,
+        "op",
+        &op,
+        &u,
+        &op_line,
+        &wars,
+        &at_war,
+        START + DAY,
+    );
+    assert!(state.done.contains_key(&key("op", "spearskip:Panzer:980")));
+    assert!(state.op_notes["op:armour:Panzer"].contains("rough-ground battles (3488)"));
+    // the plan's own thrust is never given up for its ground
+    let mut own = u.clone();
+    own.line = vec![980];
+    *game.held.borrow_mut() = vec![];
+    let mut state = State::default();
+    state.done.insert(key("op", "spearfor:Panzer"), 980);
+    armour_ground(
+        &mut state, &game, &plan, "op", &op, &own, &op_line, &wars, &at_war, START,
+    );
+    assert!(!state.done.contains_key(&key("op", "spearskip:Panzer:980")));
+    assert!(state.op_notes["op:armour:Panzer"].contains("plan's own thrust: kept"));
 }

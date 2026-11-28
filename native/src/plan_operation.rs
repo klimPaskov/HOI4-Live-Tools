@@ -53,6 +53,8 @@ use crate::error::Result;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
+#[path = "plan_operation/capacity.rs"]
+mod capacity;
 #[path = "plan_operation/ground.rs"]
 mod ground;
 #[path = "plan_operation/pace.rs"]
@@ -2542,7 +2544,7 @@ fn one(
         {
             return Ok(Some(line));
         }
-        if let Some(line) = border_fronts(state, tools, id, &units, roster, wars, lease, now)? {
+        if let Some(line) = border_fronts(state, tools, id, op, &units, roster, wars, lease, now)? {
             return Ok(Some(line));
         }
         if let Some(line) = advance(
@@ -2555,7 +2557,7 @@ fn one(
     }
     // BORDER FRONTS: marked before the prepare's own reconcile, so the unit's line offensive goes
     // under its own front and each border front gets its own
-    if let Some(line) = border_fronts(state, tools, id, &units, roster, wars, lease, now)? {
+    if let Some(line) = border_fronts(state, tools, id, op, &units, roster, wars, lease, now)? {
         return Ok(Some(line));
     }
     if let Some(line) = prepare(
@@ -6944,6 +6946,11 @@ fn advance(
             continue;
         }
         let own_line_held = u.line.is_empty() || held(tools, &me, &u.line).len() == u.line.len();
+        // ARMOUR WHERE IT CAN BREAK THROUGH: its next objective by the armour's ground cost, and
+        // never the reserve of a battle on rough ground
+        if u.spear && at_war.contains(&u.enemy) {
+            armour_ground(state, tools, plan, id, op, u, &op_line, wars, at_war, now);
+        }
         let mut wanted: Vec<i64> = if u.spear {
             spear_line(state, id, roster, u, &me, tools, &op_line, now)
         } else if u.role == Role::Group {
@@ -7168,11 +7175,20 @@ fn spear_line(
         .filter(|s| !have.contains(s) && !skipped(state, *s))
         .collect();
     if next.is_empty() {
-        next = solo_line(state, roster, &u.name, op_line)
-            .into_iter()
-            .filter(|s| !skipped(state, *s))
-            .take(1)
-            .collect();
+        // the state the armour's ground cost chose (`armour_ground`), while still to take
+        let pick = state
+            .done
+            .get(&key(id, &format!("armourpick:{}", u.name)))
+            .copied()
+            .filter(|s| !skipped(state, *s) && held(tools, me, &[*s]).is_empty());
+        next = match pick {
+            Some(s) => vec![s],
+            None => solo_line(state, roster, &u.name, op_line)
+                .into_iter()
+                .filter(|s| !skipped(state, *s))
+                .take(1)
+                .collect(),
+        };
     }
     let Some(target) = next.last().copied() else {
         return next;
@@ -7200,6 +7216,227 @@ fn spear_line(
         return spear_line(state, id, roster, u, me, tools, op_line, now);
     }
     next
+}
+
+/// ARMOUR WHERE IT CAN BREAK THROUGH (`armour_ground`, on unless `false`), once a game day per
+/// spearhead formation at war:
+/// - OFF ROUGH GROUND: when most of its divisions that stand in battles wait in the reserves of
+///   battles on rough ground (a terrain or river penalty to the attack, or a fort: the battle's
+///   own read), the state its spearhead was given by the operation (not the plan's own thrust)
+///   is left to the infantry (`spearskip`), so the spearhead is painted elsewhere;
+/// - THE NEXT OBJECTIVE: among the states of the operation's line and the contact states of its
+///   enemies at war, the one the armour reaches cheapest from where its divisions stand by the
+///   ground model's armour weights (movement, the assault penalty of terrain, rivers and forts,
+///   narrow ground, roads, the hostile divisions seen), kept as `armourpick:<army>` for
+///   `spear_line` instead of the nearest state.
+/// o96a (28 Nov 2026): the Panzer divisions stood in the reserves of the Ardennes forest battles
+/// (3488, then 13375) for 25 days at 10-24% supply, none in the one plains battle; breakthroughs
+/// 0, pockets 0.
+#[allow(clippy::too_many_arguments)]
+fn armour_ground(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    id: &str,
+    op: &Value,
+    u: &Unit,
+    op_line: &[i64],
+    wars: &Value,
+    at_war: &[String],
+    now: GameHour,
+) {
+    if op["armour_ground"] == json!(false) || state.skipped(now, "oparmour", &u.name) {
+        return;
+    }
+    state.skip(now, "oparmour", &u.name, DAY);
+    let Ok(read) = tools.call("hoi4_supply", &json!({})) else {
+        return;
+    };
+    let mine: Vec<&Value> = list(&read, "divisions")
+        .iter()
+        .filter(|d| text(&d["army"]) == u.name)
+        .collect();
+    let ids: HashSet<String> = mine
+        .iter()
+        .filter_map(|d| {
+            d["id"]
+                .as_str()
+                .map(String::from)
+                .or_else(|| d["id"].as_i64().map(|n| n.to_string()))
+        })
+        .collect();
+    let starts: Vec<i64> = mine
+        .iter()
+        .filter_map(|d| d["province_id"].as_i64())
+        .collect();
+    let me = player(tools, plan);
+    let tags: Vec<String> = strings(op, "enemies")
+        .into_iter()
+        .filter(|t| at_war.contains(t))
+        .collect();
+    let mut contact: Vec<i64> = list(wars, "borders")
+        .iter()
+        .filter(|b| tags.iter().any(|t| t == text(&b["neighbour_tag"])))
+        .flat_map(|b| ints(&b["neighbour_states"]))
+        .collect();
+    contact.sort_unstable();
+    contact.dedup();
+    let mut cands: Vec<i64> = op_line.to_vec();
+    for s in &contact {
+        if !cands.contains(s) {
+            cands.push(*s);
+        }
+    }
+    let have = held(tools, &me, &cands);
+    let skip = |state: &State, s: i64| {
+        state
+            .done
+            .contains_key(&key(id, &format!("spearskip:{}:{s}", u.name)))
+    };
+    cands.retain(|s| !have.contains(s) && !skip(state, *s));
+    // our side: where the armour stands and our border states facing the enemies at war (the
+    // way round a forest may run through our own land)
+    let mut ask: Vec<i64> = mine.iter().filter_map(|d| d["state_id"].as_i64()).collect();
+    ask.extend(
+        list(wars, "borders")
+            .iter()
+            .filter(|b| tags.iter().any(|t| t == text(&b["neighbour_tag"])))
+            .flat_map(|b| ints(&b["own_border_states"])),
+    );
+    ask.extend(cands.iter().copied());
+    for t in &tags {
+        ask.extend(enemy_states(tools, wars, t));
+    }
+    let mut seen_ids = HashSet::new();
+    ask.retain(|s| seen_ids.insert(*s));
+    ask.truncate(128);
+    if ask.is_empty() || starts.is_empty() {
+        return;
+    }
+    let Ok(graph) = tools.call("hoi4_province_graph", &json!({"states": ask})) else {
+        return;
+    };
+    let g = ground::read_graph(&graph);
+    // 1. OFF ROUGH GROUND
+    if let Ok(battles) = tools.call("hoi4_battles", &json!({"divisions": true})) {
+        let (mut in_battle, mut rough) = (0usize, 0usize);
+        let mut worst: Option<i64> = None;
+        for b in list(&battles, "list") {
+            let side = if text(&b["our_side"]) == "attacker" {
+                &b["attacker"]
+            } else {
+                &b["defender"]
+            };
+            let count = |field: &str| {
+                list(side, field)
+                    .iter()
+                    .filter(|d| {
+                        d["id"]
+                            .as_str()
+                            .map(String::from)
+                            .or_else(|| d["id"].as_i64().map(|n| n.to_string()))
+                            .is_some_and(|i| ids.contains(&i))
+                    })
+                    .count()
+            };
+            let (engaged, waiting) = (count("engaged_divisions"), count("reserve_divisions"));
+            in_battle += engaged + waiting;
+            if waiting > 0 && capacity::rough_battle(b, &g) {
+                rough += waiting;
+                worst = worst.or(b["province"].as_i64());
+            }
+        }
+        let target = state
+            .done
+            .get(&key(id, &format!("spearfor:{}", u.name)))
+            .copied();
+        if rough >= 2 && 2 * rough >= in_battle {
+            match target.filter(|t| !u.line.contains(t)) {
+                Some(t) => {
+                    state
+                        .done
+                        .insert(key(id, &format!("spearskip:{}:{t}", u.name)), now);
+                    cands.retain(|s| *s != t);
+                    state.op_notes.insert(
+                        format!("{id}:armour:{}", u.name),
+                        format!(
+                            "{}: {rough} of its {in_battle} divisions in battle wait in the reserve of rough-ground battles ({}): state {t} is left to the infantry",
+                            u.name,
+                            worst.map_or("?".into(), |p| p.to_string())
+                        ),
+                    );
+                }
+                None => {
+                    state.op_notes.insert(
+                        format!("{id}:armour:{}", u.name),
+                        format!(
+                            "{}: {rough} of its {in_battle} divisions in battle wait in the reserve of rough-ground battles ({}) on the plan's own thrust: kept",
+                            u.name,
+                            worst.map_or("?".into(), |p| p.to_string())
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    // 2. THE NEXT OBJECTIVE by the armour's ground cost
+    let pk = key(id, &format!("armourpick:{}", u.name));
+    if cands.is_empty() {
+        state.done.remove(&pk);
+        return;
+    }
+    let mut infra: HashMap<i64, f64> = HashMap::new();
+    for t in tags.iter().cloned().chain(std::iter::once(me.clone())) {
+        if let Ok(rows) = tools.call("hoi4_states", &json!({"query": t})) {
+            for r in list(&rows, "states") {
+                if let (Some(sid), Some(l)) = (
+                    r["state_id"].as_i64(),
+                    r["buildings"]["infrastructure"].as_f64(),
+                ) {
+                    infra.insert(sid, l);
+                }
+            }
+        }
+    }
+    let seen = ground::hostile_by_state(wars, &tags);
+    let allowed: HashSet<i64> = ask.iter().copied().collect();
+    let gr = ground::Ground {
+        g: &g,
+        allowed: &|s| allowed.contains(&s),
+        infrastructure: &|s| infra.get(&s).copied(),
+        enemy: &|s| seen.get(&s).copied().unwrap_or(0.0),
+    };
+    let goal: HashSet<i64> = cands.iter().copied().collect();
+    match ground::axis(&gr, &starts, &goal, &ground::ARMOUR) {
+        Some((path, cost)) => {
+            let Some(s) = path.last().and_then(|p| g.get(p)).map(|r| r.state) else {
+                return;
+            };
+            state.done.insert(pk, s);
+            let way: Vec<String> = path
+                .iter()
+                .filter_map(|p| g.get(p).map(|r| format!("{p} {}", r.terrain)))
+                .collect();
+            let k = format!("{id}:armour:{}", u.name);
+            let before = state.op_notes.get(&k).cloned().unwrap_or_default();
+            state.op_notes.insert(
+                k,
+                format!(
+                    "{}{}: next objective by the armour's ground: state {s} (cost {cost:.1}; {})",
+                    if before.is_empty() {
+                        String::new()
+                    } else {
+                        format!("{before}; ")
+                    },
+                    u.name,
+                    way.join(", ")
+                ),
+            );
+        }
+        None => {
+            state.done.remove(&pk);
+        }
+    }
 }
 
 // THE GROUND, THE AXIS, COMMANDS, PLANNING, POCKETS AND THE OPENING (all behind operation keys,
@@ -7391,6 +7628,7 @@ fn border_fronts(
     state: &mut State,
     tools: &dyn Tools,
     id: &str,
+    op: &Value,
     units: &[Unit],
     roster: &Value,
     wars: &Value,
@@ -7431,23 +7669,47 @@ fn border_fronts(
             if empty || !state.done.contains_key(&sk) {
                 state.skip(now, "opspread", &u.name, DAY);
                 let counts: Vec<i64> = fronts.iter().map(count).collect();
+                // BY CAPACITY: each front's weight is what its stretch can fight with and feed
+                // (width, directions, supply, the enemy seen), not its length
+                let cap = unit_rooms(state, tools, id, op, u, &fronts, wars, now);
+                let (dist, how) = match cap.as_ref().map(|c| &c.rooms) {
+                    Some(rooms) => {
+                        let weights: serde_json::Map<String, Value> = rooms
+                            .iter()
+                            .map(|r| (r.id.to_string(), json!(r.cap.max(1))))
+                            .collect();
+                        (
+                            json!({ "weights": weights }),
+                            format!(" by capacity: {}", capacity::describe(rooms)),
+                        )
+                    }
+                    None => (json!(true), " by length (no capacity read)".to_string()),
+                };
                 let line = order(
                     state,
                     tools,
                     lease,
                     id,
                     &format!(
-                        "{}: its divisions spread over its {} fronts (now {counts:?}{})",
+                        "{}: its divisions spread over its {} fronts (now {counts:?}{}){how}",
                         u.name,
                         fronts.len(),
                         if empty { ": a front stands empty" } else { "" }
                     ),
                     "hoi4_army_plan",
-                    json!({"army": u.name, "distribute": true}),
+                    json!({"army": u.name, "distribute": dist}),
                 )?;
                 if state.last_ok == Some(true) {
                     state.done.insert(sk, now);
                 }
+                return Ok(Some(line));
+            }
+        }
+        // CAPACITY: in the prepare a spread far from the rooms is spread again by them; at war
+        // the reserve of a battle beyond its engaged moves sideways to a front with room
+        if fronts.len() >= 2 && !state.skipped(now, "opcap", &u.name) {
+            state.skip(now, "opcap", &u.name, DAY);
+            if let Some(line) = capacity_turn(state, tools, id, op, u, &fronts, wars, lease, now)? {
                 return Ok(Some(line));
             }
         }
@@ -7504,6 +7766,289 @@ fn border_fronts(
         }
     }
     Ok(None)
+}
+
+/// The divisions of a unit (an army, or every army of a group) as a `hoi4_supply` read lists them,
+/// with the mean template width of their templates (`widths`, WIDTH_UNKNOWN when unread).
+fn unit_divisions(
+    read: &Value,
+    roster: &Value,
+    u: &Unit,
+    widths: &HashMap<String, f64>,
+) -> (HashSet<String>, f64) {
+    let members: HashSet<String> = if u.role == Role::Group {
+        list(roster, "armies")
+            .iter()
+            .filter(|r| r["army_group"].as_str() == Some(u.name.as_str()))
+            .map(|r| text(&r["army"]).to_string())
+            .chain(u.members.iter().cloned())
+            .collect()
+    } else {
+        HashSet::from([u.name.clone()])
+    };
+    let mut ids = HashSet::new();
+    let (mut w, mut n) = (0.0, 0.0);
+    for d in list(read, "divisions") {
+        if !members.contains(text(&d["army"])) {
+            continue;
+        }
+        if let Some(id) = d["id"]
+            .as_str()
+            .map(String::from)
+            .or_else(|| d["id"].as_i64().map(|x| x.to_string()))
+        {
+            ids.insert(id);
+        }
+        w += widths
+            .get(text(&d["template"]))
+            .copied()
+            .unwrap_or(ground::WIDTH_UNKNOWN);
+        n += 1.0;
+    }
+    (
+        ids,
+        if n > 0.0 {
+            w / n
+        } else {
+            ground::WIDTH_UNKNOWN
+        },
+    )
+}
+
+/// The own provinces of a front order's line: its province ids when the read carries them, else
+/// the provinces of its line's states that touch an enemy province of the graph.
+fn front_provinces(f: &Value, g: &HashMap<i64, ground::Prov>, enemy: &HashSet<i64>) -> Vec<i64> {
+    let ids = ints(&f["line"]["ids"]);
+    if !ids.is_empty() {
+        return ids;
+    }
+    let states = ints(&f["line"]["states"]);
+    let mut out: Vec<i64> = g
+        .iter()
+        .filter(|(_, r)| {
+            states.contains(&r.state) && r.borders.iter().any(|(q, _)| enemy.contains(q))
+        })
+        .map(|(p, _)| *p)
+        .collect();
+    out.sort_unstable();
+    out
+}
+
+/// What a unit's fronts can each use (`capacity` module): the rooms and the front each own front
+/// province belongs to. None when the supply or the graph cannot be read. Reads only.
+#[allow(clippy::too_many_arguments)]
+fn unit_rooms(
+    state: &mut State,
+    tools: &dyn Tools,
+    _id: &str,
+    op: &Value,
+    u: &Unit,
+    fronts: &[Value],
+    wars: &Value,
+    now: GameHour,
+) -> Option<CapRead> {
+    let read = tools.call("hoi4_supply", &json!({})).ok()?;
+    let widths = template_widths(state, tools, now);
+    let roster = tools.call("hoi4_armies", &json!({"threat": false})).ok()?;
+    let (_, width) = unit_divisions(&read, &roster, u, &widths);
+    let tags: Vec<String> = std::iter::once(u.enemy.clone())
+        .chain(u.enemies.iter().cloned())
+        .chain(strings(op, "enemies"))
+        .filter(|t| !t.is_empty())
+        .collect();
+    let mut enemy_states: Vec<i64> = list(wars, "borders")
+        .iter()
+        .filter(|b| tags.iter().any(|t| t == text(&b["neighbour_tag"])))
+        .flat_map(|b| ints(&b["neighbour_states"]))
+        .collect();
+    enemy_states.sort_unstable();
+    enemy_states.dedup();
+    let mut ask: Vec<i64> = fronts
+        .iter()
+        .flat_map(|f| ints(&f["line"]["states"]))
+        .collect();
+    ask.extend(enemy_states.iter().copied());
+    let mut seen_ids = HashSet::new();
+    ask.retain(|s| seen_ids.insert(*s));
+    ask.truncate(128);
+    if ask.is_empty() {
+        return None;
+    }
+    let g = ground::read_graph(
+        &tools
+            .call("hoi4_province_graph", &json!({"states": ask}))
+            .ok()?,
+    );
+    let ours: HashSet<i64> = list(&read, "divisions")
+        .iter()
+        .filter_map(|d| d["province_id"].as_i64())
+        .collect();
+    let theirs: HashSet<i64> = enemy_states.iter().copied().collect();
+    let enemy = ground::enemy_provinces(&g, &theirs, &ours, &HashSet::new());
+    let stretches: Vec<capacity::Stretch> = fronts
+        .iter()
+        .filter_map(|f| {
+            Some(capacity::Stretch {
+                id: f["id"].as_i64()?,
+                provinces: front_provinces(f, &g, &enemy),
+                divisions: f["divisions"].as_i64().unwrap_or(0),
+            })
+        })
+        .collect();
+    if stretches.len() < 2 || stretches.iter().all(|s| s.provinces.is_empty()) {
+        return None;
+    }
+    let cfg = &op["capacity"];
+    let rooms = capacity::rooms(
+        &g,
+        &stretches,
+        &enemy,
+        &|_| width,
+        &capacity::feed(&read),
+        &ground::hostile_by_state(wars, &tags),
+        cfg["supply_floor"]
+            .as_f64()
+            .filter(|f| *f > 0.0)
+            .unwrap_or(capacity::FEED_FLOOR),
+        cfg["hold_ratio"]
+            .as_f64()
+            .filter(|f| *f >= 0.0)
+            .unwrap_or(capacity::HOLD_RATIO),
+    );
+    let mut root_of: HashMap<i64, i64> = HashMap::new();
+    for s in &stretches {
+        for p in &s.provinces {
+            root_of.entry(*p).or_insert(s.id);
+        }
+    }
+    Some(CapRead {
+        rooms,
+        root_of,
+        g,
+        ours,
+        enemy,
+    })
+}
+
+/// A capacity read (see `unit_rooms`).
+struct CapRead {
+    rooms: Vec<capacity::Room>,
+    /// own front province -> the front order it belongs to
+    root_of: HashMap<i64, i64>,
+    g: HashMap<i64, ground::Prov>,
+    /// own provinces where our divisions stand
+    ours: HashSet<i64>,
+    enemy: HashSet<i64>,
+}
+
+/// The divisions a capacity spread may leave unbalanced before it is spread again (`capacity.slack`):
+/// a fifth of the unit's divisions on the fronts, at least three.
+fn capacity_slack(op: &Value, rooms: &[capacity::Room]) -> i64 {
+    op["capacity"]["slack"]
+        .as_i64()
+        .filter(|s| *s >= 1)
+        .unwrap_or_else(|| (rooms.iter().map(|r| r.divisions).sum::<i64>() / 5).max(3))
+}
+
+/// CAPACITY AT ITS TURN (once a game day per unit with two or more fronts, by command): the rooms
+/// in the note; in the prepare a spread that stands far from them (`capacity::unbalanced`) is
+/// spread again by them (at most once in `refine_days`); at war the surplus of a battle whose
+/// reserve outnumbers its engaged goes SIDEWAYS to the front with most room (`hoi4_army_plan
+/// assign`, within the refinement cool-down), with the attack's breadth in the note.
+#[allow(clippy::too_many_arguments)]
+fn capacity_turn(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    op: &Value,
+    u: &Unit,
+    fronts: &[Value],
+    wars: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if op["capacity"] == json!(false) {
+        return Ok(None);
+    }
+    let Some(read_cap) = unit_rooms(state, tools, id, op, u, fronts, wars, now) else {
+        return Ok(None);
+    };
+    let (rooms, root_of) = (&read_cap.rooms, &read_cap.root_of);
+    let nk = format!("{id}:capacity:{}", u.name);
+    let mut note = format!(
+        "{}: fronts by capacity {}",
+        u.name,
+        capacity::describe(rooms)
+    );
+    let at_war = state.done.contains_key(&key(id, "exec"));
+    if !at_war {
+        let slack = capacity_slack(op, rooms);
+        if capacity::unbalanced(rooms, slack) && refine_due(state, id, op, &u.name, now) {
+            refined(state, id, &u.name, now);
+            state.op_notes.insert(nk, note.clone());
+            let weights: serde_json::Map<String, Value> = rooms
+                .iter()
+                .map(|r| (r.id.to_string(), json!(r.cap.max(1))))
+                .collect();
+            return Ok(Some(order(
+                state,
+                tools,
+                lease,
+                id,
+                &format!("{note}: spread again by capacity (more than {slack} off)"),
+                "hoi4_army_plan",
+                json!({"army": u.name, "distribute": {"weights": weights}}),
+            )?));
+        }
+        state.op_notes.insert(nk, note);
+        return Ok(None);
+    }
+    let Ok(battles) = tools.call("hoi4_battles", &json!({"divisions": true})) else {
+        state.op_notes.insert(nk, note);
+        return Ok(None);
+    };
+    let read = tools.call("hoi4_supply", &json!({})).unwrap_or(Value::Null);
+    let roster = tools
+        .call("hoi4_armies", &json!({"threat": false}))
+        .unwrap_or(Value::Null);
+    let (ours, _) = unit_divisions(&read, &roster, u, &HashMap::new());
+    let piles = capacity::piles(&battles, &ours);
+    // the breadth of the attack: enemy provinces in reach, attacked, attacked from too few sides
+    let (reach, attacked, narrow) =
+        capacity::breadth(&read_cap.g, &read_cap.ours, &read_cap.enemy, &battles);
+    note.push_str(&format!(
+        "; breadth: {attacked} of {reach} enemy provinces in reach attacked, {narrow} from fewer sides than we border them"
+    ));
+    let mv = capacity::sideways(&piles, rooms, &|p| root_of.get(&p).copied(), 18);
+    if mv.is_none() {
+        if let Some(p) = piles.first() {
+            note.push_str(&format!(
+                "; the battle at {} holds {} in reserve behind {} engaged and no other front has room: the line is narrower than the force",
+                p.province, p.reserve, p.engaged
+            ));
+        }
+    }
+    let Some(mv) = mv.filter(|_| refine_due(state, id, op, &u.name, now)) else {
+        state.op_notes.insert(nk, note);
+        return Ok(None);
+    };
+    refined(state, id, &u.name, now);
+    state.op_notes.insert(nk, note);
+    Ok(Some(order(
+        state,
+        tools,
+        lease,
+        id,
+        &format!(
+            "{}: {} divisions sideways onto front {}: {}",
+            u.name,
+            mv.divisions.len(),
+            mv.to,
+            mv.why
+        ),
+        "hoi4_army_plan",
+        json!({"army": u.name, "assign": {"order": mv.to, "divisions": mv.divisions}}),
+    )?))
 }
 
 /// A front's arguments with the in-process `against` and `own_states` when orders go by command.
