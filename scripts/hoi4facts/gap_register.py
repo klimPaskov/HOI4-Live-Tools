@@ -331,7 +331,10 @@ def check(rows=None, cat=None, rdr=None, page=PAGE, files=None):
                                     "(register %s)" % (rel, i + 1, t, r["blocked"][:80], r["id"]))
     if page is not None:
         want = render(rows, rdr)
-        have = open(page, encoding="utf-8").read() if os.path.exists(page) else ""
+        have = ""
+        if os.path.exists(page):
+            with open(page, encoding="utf-8") as fh:
+                have = fh.read()
         if have != want:
             problems.append("%s is stale: run python scripts/hoi4facts/gap_register.py build"
                             % _rel(page))
