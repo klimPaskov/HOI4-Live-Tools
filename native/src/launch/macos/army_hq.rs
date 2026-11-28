@@ -295,11 +295,11 @@ pub(super) fn mechanic(content: &Path, dlcs: &Dlcs) -> Value {
 
 pub(super) fn call(process: &dyn Process, args: &Map<String, Value>) -> Result<Value> {
     super::allowed(args, &[])?;
-    let exe = process
+    let exe = &process
         .identity()
         .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
         .exe;
-    let found = super::game_content(&exe)?;
+    let found = super::game_content(exe)?;
     let dlcs = Dlcs::read(&found.install, found.disabled_dlcs.as_deref());
     Ok(mechanic(&found.content, &dlcs))
 }
