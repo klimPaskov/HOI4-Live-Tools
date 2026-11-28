@@ -6314,7 +6314,7 @@ fn route_trainees(
         let target = armies
             .iter()
             .filter_map(|a| size(a).map(|n| (a, n)))
-            .filter(|(_, n)| n + 1 <= max)
+            .filter(|(_, n)| *n < max)
             .min_by_key(|(_, n)| *n);
         let Some((army, n)) = target else {
             plan_manage::note(
