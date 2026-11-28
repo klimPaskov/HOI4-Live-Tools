@@ -247,6 +247,63 @@ class FailureTests(ProfileCase):
         self.assertIn("main menu not recognised", str(e))
         self.assertIn("main_menu.anchors", str(e))
 
+    def _launch_reading(self, texts):
+        """hoi4_launch with a settled screen that always reads `texts`, on a fake clock (5 s a read)."""
+        from hoi4_live.game.logs import Logs
+        from hoi4_live.tools import session_tools
+        cfg = type("Cfg", (dict,), {})({"window": {"process_name": "hoi4"},
+                                         "launch": {"args": [], "debug_args": ["-debug"]}})
+        cfg.user_dir = cfg.game_dir = self.tmp.name
+        cfg.game_exe = os.path.join(self.tmp.name, "hoi4.exe")
+        session = mock.Mock()
+        session.mode = "test"
+        session.cfg = cfg
+        session.logs = Logs(self.tmp.name)
+        session.logs.idle_seconds = mock.Mock(return_value=60.0)
+        found = iter([False, False])
+        session.window.find.side_effect = lambda: next(found, True)
+        session.platform.capture_process_identity.return_value = SimpleNamespace(pid=7, creation_time=1,
+                                                                                 executable_path="x")
+        polls = []
+
+        def visible(s):
+            polls.append(1)
+            return False, list(texts)
+        now = [1000.0]
+
+        def clock():
+            now[0] += 5.0
+            return now[0]
+        pids = iter([[]])
+        args = {"debug": False, "wait_menu": True, "restart": False, "timeout_s": 900, "mode": None}
+        with mock.patch.object(session_tools.process, "running_pids", side_effect=lambda *a: next(pids, [7])), \
+                mock.patch.object(session_tools.process, "crash_dirs", return_value=set()), \
+                mock.patch.object(session_tools.process, "launch", return_value=7), \
+                mock.patch.object(session_tools, "_check_launch_alive"), \
+                mock.patch.object(session_tools, "_ui_profile", return_value=uiprofile.active()), \
+                mock.patch.object(session_tools, "time", SimpleNamespace(time=clock)), \
+                mock.patch.object(session_tools.menu, "main_menu_visible", side_effect=visible):
+            with self.assertRaises(ToolError) as cm:
+                session_tools.hoi4_launch.__wrapped__(session, args)
+        return cm.exception, polls
+
+    def test_a_vanilla_launch_with_text_on_a_settled_screen_waits_to_the_timeout(self):
+        # PR #448's early stop ended vanilla launches: a slow load with text on screen, or a garbled read of
+        # "Single Player" six polls in a row, is not a mod's own main menu
+        from hoi4_live.tools import session_tools
+        e, polls = self._launch_reading(["A Splash Screen", "Press any key"])
+        self.assertIn("timed out waiting for the main menu", str(e))
+        self.assertGreater(len(polls), session_tools.MENU_UNRECOGNISED_POLLS)
+
+    def test_a_mod_launch_reading_a_garbled_main_menu_label_waits_to_the_timeout(self):
+        from hoi4_live.tools import session_tools
+        uiprofile.activate(self.derived())
+        e, polls = self._launch_reading(["Singel Playr", "Lood Game"])
+        self.assertIn("timed out waiting for the main menu", str(e))
+        self.assertGreater(len(polls), session_tools.MENU_UNRECOGNISED_POLLS)
+        self.assertTrue(menu.near_main_menu(["S1ngle Pla yer"]))
+        self.assertFalse(menu.near_main_menu(["A Splash Screen", "Press any key"]))
+
     def test_a_panel_that_does_not_open_names_the_titles_it_looked_for(self):
         uiprofile.activate(self.derived())
         session = mock.Mock()
