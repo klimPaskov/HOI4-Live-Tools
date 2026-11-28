@@ -534,6 +534,7 @@ pub(super) fn call(name: &str, args: &Map<String, Value>, env: Env<'_>) -> Resul
     let id = super::string(args, "request_id")?.to_string();
     let token = super::string(args, "lease_token")?.to_string();
     let action = json!({"kind":format!("fleet_{}", op.label()),"subject":subject,"to_fleet":to,"route":if drag {"drag"} else {"right_click"}});
+    let navy_posted: std::cell::Cell<Option<std::time::Instant>> = std::cell::Cell::new(None);
     kit::run(
         env,
         kit::Request {
@@ -554,10 +555,77 @@ pub(super) fn call(name: &str, args: &Map<String, Value>, env: Env<'_>) -> Resul
                 Some(pl) => settle(&pl, &now),
                 None => settle_without_baseline(op, &subject, to.as_deref(), &now),
             };
+            // engineer 85: an in-process order runs on the game's next frame: unchanged within the settle window is
+            // not yet "not applied"
+            let early = navy_posted
+                .get()
+                .is_some_and(|t| t.elapsed() < super::inproc::IPC_SETTLE);
+            if early && verdict == Verdict::Unchanged {
+                return Ok(super::journal::Outcome::Unknown);
+            }
             Ok(verdict.outcome(json!({"fleets":summary(&now)})))
         },
-        &|p, keys, planned| drive(p, keys, planned, drag),
+        &|p, keys, planned| {
+            if let Some(v) = in_process(p, planned)? {
+                navy_posted.set(Some(std::time::Instant::now()));
+                return Ok(v);
+            }
+            drive(p, keys, planned, drag)
+        },
     )
+}
+
+/// engineer 85: merge and assign through the in-process module (family `navy`): the toolbar's merge of the fleet's task
+/// forces, or the task force into the receiving fleet, after the module's checks and the game's own "can do". Ok(None):
+/// the mouse path (no channel, the family not usable in this mode, the objects not paired, or the module refused for
+/// its own reasons); a game refusal is the typed error.
+fn in_process(process: &dyn Process, plan: &Plan) -> Result<Option<Value>> {
+    if !matches!(plan.op, Op::Merge | Op::Assign) {
+        return Ok(None);
+    }
+    let mut route = super::inproc::route("navy");
+    if route.is_none() {
+        return Ok(None);
+    }
+    let fleets = navalact::own_fleets(process)?;
+    let Ok(objs) = super::inproc_navy::objects(process) else {
+        return Ok(None);
+    };
+    let Some(home) = fleets.iter().find(|f| f.name == plan.fleet) else {
+        return Ok(None);
+    };
+    let routed = match plan.op {
+        Op::Merge => {
+            let tfs: Option<Vec<u64>> = home
+                .task_forces
+                .iter()
+                .map(|t| super::inproc_navy::task_force_object(&fleets, &objs, t))
+                .collect();
+            let Some(tfs) = tfs else { return Ok(None) };
+            super::module_in_process(&mut route, |ch| Ok(super::inproc_navy::merge(ch, &tfs)))?
+        }
+        _ => {
+            let (Some(tf_name), Some(target)) = (&plan.task_force, &plan.target) else {
+                return Ok(None);
+            };
+            let Some(tf) = home.task_forces.iter().find(|t| &t.name == tf_name) else {
+                return Ok(None);
+            };
+            let Some(to) = fleets.iter().find(|f| &f.name == target) else {
+                return Ok(None);
+            };
+            let (Some(tfo), Some(fo)) = (
+                super::inproc_navy::task_force_object(&fleets, &objs, tf),
+                super::inproc_navy::fleet_object(&fleets, &objs, to),
+            ) else {
+                return Ok(None);
+            };
+            super::module_in_process(&mut route, |ch| {
+                Ok(super::inproc_navy::assign(ch, fo, &[tfo]))
+            })?
+        }
+    };
+    Ok(routed.map(|r| json!({"backend":"inprocess","in_process":r})))
 }
 
 // ---- tool list ------------------------------------------------------------------------------------

@@ -190,6 +190,10 @@ struct Row {
     timed: bool,
     enabled: bool,
     rect: Option<Rect>,
+    /// engineer 76: the CDecision object of the row and whether the row is a targeted one (the in-process take posts
+    /// SelectDecision(own tag, decision) for untargeted rows only; a targeted row is another command)
+    decision: u64,
+    targeted: bool,
 }
 fn rows(r: &Reader<'_>, image: u64) -> Result<Vec<Row>> {
     let u = ui(r)?;
@@ -201,6 +205,7 @@ fn rows(r: &Reader<'_>, image: u64) -> Result<Vec<Row>> {
         let item = r.u64(data + index * 8)?;
         let name =
             crate::research_ui::primary_type_encoding(r, image, r.u64(item)?).unwrap_or_default();
+        let targeted = name == "33CDecisionViewTargetedDecisionItem";
         let (decision, timed) = match name.as_str() {
             "25CDecisionViewDecisionItem" => (r.u64(item + u.item_decision)?, false),
             "33CDecisionViewTargetedDecisionItem" => {
@@ -238,6 +243,8 @@ fn rows(r: &Reader<'_>, image: u64) -> Result<Vec<Row>> {
             timed,
             enabled,
             rect,
+            decision,
+            targeted,
         });
     }
     Ok(out)
@@ -300,11 +307,14 @@ pub(super) fn state(process: &dyn Process) -> Result<Vec<Value>> {
 }
 
 /// Take decision `key`; the caller has journaled intent.
+/// `in_process` (engineer 76): posts SelectDecision for an untargeted row's decision object through the module and
+/// returns true when it was posted (false: the mouse path goes on); a refusal by the game's check is its error.
 pub(super) fn take(
     process: &dyn Process,
     keys: &dyn GameInput,
     key: &str,
     target: Option<&str>,
+    in_process: &mut dyn FnMut(u64) -> Result<bool>,
 ) -> Result<()> {
     decline_stale(process, keys)?;
     clear_notices(process, keys)?;
@@ -360,6 +370,9 @@ pub(super) fn take(
             ));
         }
     }
+    if !row.targeted && in_process(row.decision)? {
+        return wait_taken(process, &before, key, pp_before);
+    }
     // Glide the row into the list area in one movement, only while the panel is open
     // (a row not laid out yet is searched downwards one event at a time).
     let outcome = glide(
@@ -406,11 +419,15 @@ pub(super) fn take(
     // A confirmation appears only for some decisions: stop waiting for it once one of the
     // proofs below shows.
     super::ui::accept_command_until(process, keys, |r, i| Ok(taken(&rows(r, i)?, &before, key)))?;
-    // Proof: political power spent, a timer started or the entry left the list.
+    wait_taken(process, &before, key, pp_before)
+}
+
+/// Proof: political power spent, a timer started or the entry left the list (within 3 s).
+fn wait_taken(process: &dyn Process, before: &[Row], key: &str, pp_before: i64) -> Result<()> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
     loop {
         if political_power(process)? < pp_before
-            || read(process, |r, i| Ok(taken(&rows(r, i)?, &before, key)))?
+            || read(process, |r, i| Ok(taken(&rows(r, i)?, before, key)))?
         {
             return Ok(());
         }
@@ -444,6 +461,8 @@ mod tests {
             timed,
             enabled,
             rect: None,
+            decision: 0,
+            targeted: false,
         }
     }
     #[test]

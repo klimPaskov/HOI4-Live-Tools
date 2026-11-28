@@ -12,11 +12,16 @@ reading the game compare.
 | Linux | 1.19.4.1 | GNU build ID `2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082` | supported (generated table) | not available |
 | Windows | any | | not yet (see [Windows](#windows)) | supported, last run on 1.19.4.2 |
 | Windows | 1.20.0.0 (checksum 0c4f) | CodeView `3A4878DC2F3A481EA5375E5943C5541C1` | vtables only (164 of 168); no attachment yet | supported |
-| macOS | 1.20.0.0 (checksum 0c4f) | Mach-O UUID `ED135FE5-CDA8-38E8-8835-3F7381B79974` | its own runtime binary, generated from the migration map ([below](#macos-120-a-generated-runtime-per-build)); live self-check pending | |
-| macOS | 1.20.1.0 (checksum 724a) | Mach-O UUID `B8BF4554-DC8D-3381-B277-9F4E6230CBA5` | its own runtime binary, generated from the 1.20.0.0 map: the same code in place (`game_migrate.py same-code`, [below](#a-rebuild-with-the-code-in-place)) | |
+| macOS | 1.20.0.0 (checksum 0c4f) | Mach-O UUID `ED135FE5-CDA8-38E8-8835-3F7381B79974` | its own runtime binary, generated from the migration map ([below](#macos-120-a-generated-runtime-per-build)); live self-check passed 24 Nov 2026 | |
+| macOS | 1.20.1.0 (checksum 724a) | Mach-O UUID `B8BF4554-DC8D-3381-B277-9F4E6230CBA5` | its own runtime binary, generated from the 1.20.0.0 map: the same code in place (`game_migrate.py same-code`, [below](#a-rebuild-with-the-code-in-place)); live self-check passed 27 Nov 2026 (reads, input, save, in-process module); the current build | |
 | Linux | 1.20.0.0 (checksum 0c4f) | GNU build ID `71806afa707a46fb72f0738a719c3f1c3f5e2e42` | table generated, not yet proven live or used by the runtime | not available |
 
 `hoi4-live-native --supported-builds` prints the same list as JSON.
+
+The optional in-process module (`inproc/`, macOS only, off unless a maintainer's launcher loads it)
+has its own per-build field row in `inproc/core/caps.c` `FIELDS`. It covers macOS 1.19.4.1, 1.20.0.0
+and 1.20.1.0. On any other build, or on Windows and Linux, every tool takes its mouse path. See
+`inproc/README.md`.
 
 ## Why the native runtime is tied to builds
 

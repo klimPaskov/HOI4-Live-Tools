@@ -206,6 +206,15 @@
   ]
  },
  "image": {
+  "0x3703950": [
+   "launch//macos//inproc_politics.rs"
+  ],
+  "0x3703a00": [
+   "launch//macos//inproc_doctrine.rs"
+  ],
+  "0x3703a90": [
+   "launch//macos//inproc_doctrine.rs"
+  ],
   "0x372bec0": [
    "production_lines//output.rs"
   ]

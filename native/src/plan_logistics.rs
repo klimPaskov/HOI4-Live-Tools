@@ -433,7 +433,7 @@ pub(super) fn logistics_step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    // the train line runs without the key; the hubs by `hubs_on`
+    // the train line runs without the key; the hubs with `logistics.hubs` or an operation's supply level
     if let Some(line) = train_line_step(state, tools, plan, lease, now)? {
         return Ok(Some(line));
     }

@@ -2282,9 +2282,107 @@
             "enum": [
               "careful",
               "balanced",
-              "rush"
+              "rush",
+              "auto"
             ],
-            "description": "battle-plan execution mode of every executed order"
+            "description": "battle-plan execution mode of the operation's attackers. auto: the operation chooses it at war per executing attacker every execution_rule.days by its battles and the losses against the countries it fights: rush while our losses cost the enemy at least as much (every province of the plan is attacked, divisions attack down to 45% organisation), balanced when ours outrun theirs (only provinces scored even or better, 70%), careful when they cost us twice theirs and most battles are lost; an attack that wins on its losses is not stopped by the supply pace. careful, balanced or rush: that mode, sent once in the prepare"
+          },
+          "execution_rule": {
+            "type": "object",
+            "properties": {
+              "rush_ratio": {
+                "type": "number",
+                "minimum": 0,
+                "description": "enemy losses per own loss at or above which the attack presses (rush); default 1.0"
+              },
+              "careful_ratio": {
+                "type": "number",
+                "minimum": 0,
+                "description": "enemy losses per own loss under which, with most battles lost, the attack turns careful; default 0.5"
+              },
+              "min_losses": {
+                "type": "number",
+                "minimum": 0,
+                "description": "own plus enemy losses the days since the last reading need before their ratio is read (else the war's); default 1500"
+              },
+              "days": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "game days between two readings of one attacker; default 2"
+              }
+            },
+            "additionalProperties": false,
+            "description": "the numbers of execution auto (every key optional)"
+          },
+          "capacity": {
+            "oneOf": [
+              {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "supply_floor": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1,
+                    "description": "share of a division's supply need a stretch's carry feeds it at; default 0.5"
+                  },
+                  "hold_ratio": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "divisions a stretch keeps against each hostile division seen facing it; default 1.0"
+                  },
+                  "slack": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "divisions a front may stand over its room (with another as far under) before the prepare spreads again; default a fifth of the divisions on the fronts, at least 3"
+                  }
+                },
+                "additionalProperties": false
+              }
+            ],
+            "description": "fronts by attack capacity (by command, a unit with two or more fronts): each front's weight in the spread is what its stretch can fight with and feed (the width its battles take from the directions we border them, the supply reaching it, the hostile divisions seen facing it), not its length; in the prepare a spread far from that is spread again; at war the reserve of a battle beyond its engaged divisions moves sideways to the front with most room (within refine_days). false switches it off"
+          },
+          "push": {
+            "oneOf": [
+              {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "min_hours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "hours a battle stands not won before its unused sides attack it; default 72"
+                  },
+                  "days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "days before the same battle is pushed again; default 5"
+                  },
+                  "divisions": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 48,
+                    "description": "the most divisions one push sends; default 6"
+                  }
+                },
+                "additionalProperties": false
+              }
+            ],
+            "description": "THE STUCK POINT (default on): once a game day at war, a battle of ours that has stood min_hours, is not being won and has width to spare, bordered by own provinces whose fit divisions stand idle, is attacked from those sides by a direct order (hoi4_army_move with the divisions); one battle in days; false switches it off"
+          },
+          "armour_ground": {
+            "type": "boolean",
+            "description": "default true: at war a spearhead formation whose divisions wait in the reserves of rough-ground battles (terrain or river penalty, forts) leaves the state the operation gave it to the infantry (the plan's own thrust is kept), and its next objective is the state of the line or the enemy's contact its armour reaches cheapest by the ground model, not the nearest"
           },
           "group": {
             "type": "string",
@@ -2304,6 +2402,12 @@
                 },
                 "minItems": 1,
                 "description": "own states whose border with `enemy` the front runs along, in order"
+              },
+              "enemies": {
+                "type": "array",
+                "items": {"type": "string", "pattern": "^[A-Z0-9]{3}$"},
+                "minItems": 1,
+                "description": "orders by command: the other enemies whose border pieces this front takes too, in one call: one plan root per enemy border, each with its share of the divisions and its own deep offensive toward that enemy's far edge; a unit with two or more fronts has its divisions spread over them"
               },
               "click_state": {
                 "$ref": "#/definitions/state_id",
@@ -2715,6 +2819,10 @@
                 "minimum": 0,
                 "maximum": 100,
                 "description": "head-of-advance supply percent below which the weekly check switches to careful"
+              },
+              "prepare": {
+                "type": "boolean",
+                "description": "default true: while the operation prepares, the supply node with no railway that feeds the most starved start-line province of its attackers gets a railway from the nearest fed node (once a game day, each node once in 30 days)"
               },
               "railways": {
                 "x-owner": "text",

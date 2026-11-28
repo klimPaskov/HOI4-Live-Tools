@@ -61,6 +61,9 @@ pub(crate) fn kind_name(kind: i32, list: List) -> String {
     }
 }
 
+/// The longest line whose province ids an order row carries.
+const LINE_IDS_MAX: usize = 512;
+
 /// Distinct states of `provinces` in drawing order (`state_of` maps a province to its state).
 fn states_along(provinces: &[i32], state_of: &dyn Fn(i32) -> Option<i32>) -> Vec<i32> {
     let mut out: Vec<i32> = Vec::new();
@@ -89,7 +92,11 @@ pub(crate) fn order_json(
             .iter()
             .map(|p| standing.get(p).copied().unwrap_or(0))
             .collect();
+        // the province ids themselves while the line is short enough to carry (engineer 99: the
+        // operation weighs each front by what its stretch's provinces can fight with and feed)
+        let ids = (provinces.len() <= LINE_IDS_MAX).then_some(provinces);
         json!({"provinces": provinces.len(),
+               "ids": ids,
                "ends": provinces.first().zip(provinces.last()).map(|(a, b)| json!([a, b])),
                "states": states_along(provinces, state_of),
                "divisions_on_line": on.iter().sum::<usize>(),

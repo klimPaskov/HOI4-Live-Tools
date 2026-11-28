@@ -11543,5 +11543,19 @@
     "CProductionLine+0xc0"
    ]
   }
+ },
+ "offline_fill": {
+  "CIdea": {
+   "0x908": {
+    "elf": "0xa78",
+    "how": "bracketed (extend, no binary)"
+   }
+  },
+  "CMilitaryDeploymentConveyor": {
+   "0x3c": {
+    "elf": "0x44",
+    "how": "bracketed (extend, no binary)"
+   }
+  }
  }
 }
