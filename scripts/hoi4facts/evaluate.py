@@ -5,9 +5,13 @@
     evaluate.py template ROLE --country TAG [--date D] [--enemy TAG] [--width N]
     evaluate.py research --country TAG [--date D] [--slots N]
     evaluate.py production --country TAG [--date D] [--need-date D]
+    evaluate.py training ROLE|TEMPLATE --country TAG [--count N] [--need-date D]   (divisions in training at once;
+                     live snapshot keys: stockpile, production_output {equipment: units a day}, manpower,
+                     field_manpower, training_manpower)
     evaluate.py construction --country TAG [--date D] [--war-date D]
     evaluate.py force --country TAG --enemy TAG [--date D]
     evaluate.py doctrine --country TAG [--date D]
+    evaluate.py subdoctrine --country TAG --enemy TAG [--reach 1]  (one subdoctrine per track by value)
     evaluate.py focus --country TAG [--date D] [--goal ideology:fascism] [--goal no_war:FRA]
     evaluate.py refresh TECH --country TAG          (the design roles a finished technology re-opens)
     evaluate.py fuel --country TAG --enemy TAG [--division armour:10] [--planes 300 --mission CAS] [--war-days 30]
@@ -255,6 +259,23 @@ def cmd_research(a, sit):
     return r, text_research(r)
 
 
+def text_air(r):
+    t = r["terms"]
+    return [f"AIR need for {r.get('country', '')} at {r.get('date', '')} against {', '.join(r['enemies'])}: "
+            f"{r['fighters']} fighters, {r['cas']} close air support (at most {r['cas_cap']} join; "
+            f"{r['cas_requires']})",
+            f"  fighters: {r['why']['fighters']}",
+            f"  cas: {r['why']['cas']}",
+            f"  our fighter: {t['our_design']}; their best: {t['their_airframe']}; {t['src']}"]
+
+
+def cmd_air(a, sit):
+    from hoi4facts.evaluators import air
+    r = air.need(sit, a.enemy or None, axes=a.axes, fighter_ratio=a.fighter_ratio)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_air(r)
+
+
 def text_variant(r):
     out = [f"VARIANT cost clicks for {r.get('country', '')} at {r.get('date', '')}"]
     if not r["clicks"]:
@@ -321,6 +342,32 @@ def text_production(r):
     return out
 
 
+def text_training(r):
+    if r.get("error"):
+        return [f"TRAINING {r['role']}: {r['error']}"]
+    out = [f"TRAINING {r['template']} for {r.get('country', '')} at {r.get('date', '')}: {r['training_days']:g} days "
+           f"({r['training_days_why']})",
+           f"  IN TRAINING AT ONCE: {r['in_training']} (one deployment line of {r['in_training']}); binding: "
+           f"{', '.join(r['binding'])}"]
+    for k, v in r["terms"].items():
+        out.append(f"  {k}: {v} = {r['why'][k]}")
+    if r.get("fielded_by_need_date") is not None:
+        out.append(f"  fielded by {r['need_date']}: {r['fielded_by_need_date']}" +
+                   (f" of {r['count']}" if r.get("count") else ""))
+    out.append(f"  output: {r['output_from']}")
+    if r.get("note"):
+        out.append(f"  {r['note']}")
+    out.append("  method: " + r["method"])
+    return out
+
+
+def cmd_training(a, sit):
+    from hoi4facts.evaluators import production
+    r = production.training(sit, a.role, count=a.count, need_date=a.need_date, enemies=a.enemy or None)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_training(r)
+
+
 def cmd_production(a, sit):
     from hoi4facts.evaluators import production
     add = {}
@@ -372,6 +419,30 @@ def text_doctrine(r):
     out.append(f"  planning: {'; '.join(r.get('planning_defines') or [])}; subdoctrine tracks are the same under "
                "every grand doctrine (not compared)")
     return out
+
+
+def text_subdoctrine(r):
+    out = [f"SUBDOCTRINES ({len(r['tracks'])} land tracks) for {r.get('country', '')} at {r.get('date', '')}: grand "
+           f"{r['grand'] or '-'}; R against {r['enemy_template']} without a subdoctrine {r['none']}; chosen by the "
+           f"activation + the first {r['reach']} reward(s) (each needs {r['reward_mastery']:g} mastery), attacks with "
+           f"planning over {r['planning_days']} days"]
+    for t in r["tracks"]:
+        out.append(f"  track {t['track']}: CHOSEN {t['chosen']}" + (f" ({t['xor_note']})" if t.get("xor_note") else ""))
+        for c in t["candidates"][:4]:
+            res = c["results"]
+            out.append(f"     {c['subdoctrine']}: value {c['value']:+g} (base {res['base']['value']:+g}, every reward "
+                       f"{res['all']['value']:+g}); R {res['reach']['R']}" + (f"; gate {c['gate']}" if c["gate"] else "")
+                       + (f"; tactic {c['tactic']}" if c.get("tactic") else "")
+                       + (f"; not valued {c['not_valued'][:4]}" if c["not_valued"] else ""))
+    out.append("  defines: " + "; ".join(r["defines"]))
+    return out
+
+
+def cmd_subdoctrine(a, sit):
+    from hoi4facts.evaluators import force
+    r = force.subdoctrines(sit, a.enemy or None, planning_days=a.planning_days, reach=a.reach, grand=a.grand)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_subdoctrine(r)
 
 
 def cmd_doctrine(a, sit):
@@ -511,7 +582,29 @@ def cmd_supply(a, sit):
     return r, text_supply(r)
 
 
-COMMANDS = {"force": cmd_force, "doctrine": cmd_doctrine, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template, "construction": cmd_construction, "fuel": cmd_fuel, "supply": cmd_supply, "variant": cmd_variant, "convert": cmd_convert}
+def text_focus(r):
+    out = [f"FOCUS for {r.get('country', '')} at {r.get('date', '')} (tree {r['tree']}); goals {r['goals'] or '-'}; "
+           f"horizon {r['horizon_years']:g} years; value base {r['base']}",
+           f"  prices: political power {r.get('pp_price', 0):g} factory-years a year held per point ({r.get('pp_price_idea')}); "
+           f"army experience {r.get('xp_price', 0):g} per point ({r.get('xp_price_idea')})"]
+    for o in r["order"]:
+        out.append(f"  day {o['start_day']:>4} {o['focus']} ({o['days']:g} days): value {o['value']:g} factory-years, "
+                   f"chain rate {o['rate']:g}/day via {' > '.join(o['chain'])}")
+        out.append(f"         parts {o['parts']}; unvalued {o['unvalued'] or '-'}"
+                   + (f"; gated: {o['gated'][:120]}" if o.get("gated") else ""))
+    for fid, why in list(r["dropped"].items())[:8]:
+        out.append(f"  dropped {fid}: {why}")
+    return out
+
+
+def cmd_focus(a, sit):
+    from hoi4facts.evaluators import focus
+    r = focus.evaluate(sit, goals=a.goal, horizon_years=a.horizon_years, count=a.count)
+    r["country"], r["date"] = sit.tag, sit.date
+    return r, text_focus(r)
+
+
+COMMANDS = {"force": cmd_force, "doctrine": cmd_doctrine, "production": cmd_production, "research": cmd_research, "design": cmd_design, "refresh": cmd_refresh, "template": cmd_template, "construction": cmd_construction, "fuel": cmd_fuel, "supply": cmd_supply, "variant": cmd_variant, "convert": cmd_convert, "subdoctrine": cmd_subdoctrine, "focus": cmd_focus, "training": cmd_training, "air": cmd_air}
 
 
 def parser():
@@ -549,16 +642,31 @@ def parser():
     p = add("force")
     p.add_argument("--war-date", default=None, help="the enemy grows by its factories to this date")
     p.add_argument("--axes", type=int, default=None, help="attack axes (default: the enemy's border states)")
+    p = add("subdoctrine")
+    p.add_argument("--planning-days", type=int, default=14, help="offensive length the planning bonus is averaged over")
+    p.add_argument("--reach", type=int, default=1, help="rewards counted in the choice (each needs the mastery)")
+    p.add_argument("--grand", default=None, help="the grand doctrine assumed (default: the one held)")
     p = add("doctrine")
     p.add_argument("--planning-days", type=int, nargs="+", default=[14, 30],
                    help="offensive lengths the planning bonus is averaged over")
+    p = add("focus")
+    p.add_argument("--goal", action="append", default=[], help="ideology:<name> or no_war:<TAG> (repeatable)")
+    p.add_argument("--count", type=int, default=12)
+    p.add_argument("--horizon-years", type=float, default=4.0)
     p = add("production")
     p.add_argument("--need-date", required=True, help="the date the equipment must be in the stockpile")
+    p = add("training", "role")
+    p.add_argument("--count", type=int, default=None, help="divisions of it still wanted by --need-date")
+    p.add_argument("--need-date", default=None)
     p.add_argument("--add", action="append", default=[], help="ROLE=N divisions to add (templates from evaluator 2)")
     p = add("research")
     p.add_argument("--slots", type=int, default=None)
     p.add_argument("--picks", type=int, default=3, help="picks per slot")
     p.add_argument("--horizon-years", type=float, default=4.0, help="years the value is counted for")
+    p = add("air")
+    p.add_argument("--axes", type=int, default=1, help="attack axes on the front (force sizing gives them)")
+    p.add_argument("--fighter-ratio", type=float, default=None,
+                   help="the plan's air_situation.fighter_ratio (default: parity)")
     p = add("construction")
     p.add_argument("--war-date", default=None, help="the planned war date (the 'standing' horizon)")
     p.add_argument("--war-years", type=float, default=2.0, help="the war's planned length (the 'output' horizon)")
