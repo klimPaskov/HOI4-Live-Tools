@@ -14,6 +14,11 @@ political-power idleness (the executor's political_power_unspent row is: power a
 reserve with a pick of value left); missing_equipment_production is equipment without a line, not
 an unassigned factory (every factory of g92b worked all window): its own row; the naval
 headquarters admiral (admiral_assignable) is a leader, not an idle task force.
+
+An issue whose owning rule answers with the plan's own choice and its why (the executor's omission
+row `left_by_plan`: an equipment the plan removes or opens on a later date, engineer 102) is not
+idle: its days go to the row's "left by the plan" count, printed beside the idle days, so the
+owner sees the choice and can overrule the plan.
 """
 from __future__ import annotations
 
@@ -70,22 +75,33 @@ class IdleDays:
         self.spell = {}       # sink -> current unbroken spell
         self.open_now = {}    # sink -> issue ids open at the last step
         self.answers = {}     # sink -> {"lanes": set, outcome: count, "last": reason}
+        self.left = {}        # sink -> game days its issues stood open as the plan's choice
+        self.left_why = {}    # sink -> the last such reason
 
     def step(self, issues, step_days):
         """Count `step_days` game days for every sink with an open issue (`issues`: the detector's
         issue dicts)."""
         idle = {}
+        left = {}
         for it in issues:
             if it.get("state") == "resolved":
                 continue
             sinks = []
             s = sink_of(it)
+            numbers = it.get("numbers") or {}
+            if s and numbers.get("left_by_plan"):
+                left[s] = numbers.get("owner_note") or "the plan's choice"
+                s = None
             if s:
                 sinks.append(s)
             if R.alert_name(str(it.get("code") or "")) or str(it.get("code") or "").startswith("frame_"):
                 sinks.append(ALERTS)
             for s in sinks:
                 idle.setdefault(s, []).append(it.get("id"))
+        for s, why in left.items():
+            if s not in idle:
+                self.left[s] = self.left.get(s, 0) + step_days
+                self.left_why[s] = str(why)
         for s in set(self.spell) | set(idle):
             if s in idle:
                 self.days[s] = self.days.get(s, 0) + step_days
@@ -111,7 +127,7 @@ class IdleDays:
         """The row's lanes, the turns they had (the executor's lane_turns) and their answers."""
         a = self.answers.get(sink)
         if not a:
-            return "-"
+            return self._left_text(sink).lstrip("; ") or "-"
         turns = {str(r.get("lane")): r.get("turns") or 0 for r in lane_turns or []
                  if isinstance(r, dict) and r.get("lane") and r.get("kind") != "ticks"}
         lanes = sorted(a["lanes"])
@@ -119,7 +135,12 @@ class IdleDays:
         counts = ", ".join(f"{k} {a[k]}" for k in ("acted", "refused", "waiting", "cannot") if a.get(k))
         last = (a.get("last") or "")[:140]
         head = "; ".join(had) or ", ".join(lanes) or "?"
-        return f"{head}: {counts}" + (f"; last: {last}" if last else "")
+        return f"{head}: {counts}" + (f"; last: {last}" if last else "") + self._left_text(sink)
+
+    def _left_text(self, sink):
+        if not self.left.get(sink):
+            return ""
+        return f"; left by the plan {round(self.left[sink], 1):g} days: {self.left_why.get(sink, '')[:140]}"
 
     def rows(self):
         names = [s for s, _ in SINKS] + [ALERTS]

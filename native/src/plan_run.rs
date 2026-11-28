@@ -2350,7 +2350,23 @@ impl State {
                             .collect();
                         Ok((false, format!("Diverged: drawn to {}", to.join(" "))))
                     }
-                    "NotApplied" | "Diverged" => Ok((false, status)),
+                    // a tool's own refusal before input names its code and message in the
+                    // receipt: the rule reads them after the status (the officer corps price,
+                    // g96a 28 Nov 2026: "NotApplied" alone hid "costs 20 army experience")
+                    "NotApplied" | "Diverged" => {
+                        let detail = &body["receipt"]["detail"];
+                        Ok((
+                            false,
+                            match detail["refused"].as_str() {
+                                Some(code) => {
+                                    let msg: String =
+                                        text(&detail["message"]).chars().take(160).collect();
+                                    format!("{status}: {code}: {msg}")
+                                }
+                                None => status,
+                            },
+                        ))
+                    }
                     _ => Err(Error::new(
                         "action_uncertain",
                         format!("{name} returned no terminal receipt; settle request {} before new input", args["request_id"]),
