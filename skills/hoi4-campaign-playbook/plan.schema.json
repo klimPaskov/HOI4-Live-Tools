@@ -5467,6 +5467,16 @@
           "default": false,
           "description": "true keeps the reserve fleet's task forces where they are; false (default) sends each one the plan does not keep in navy.reserve to a fleet with an admiral by its role (submarines to the raiders, surface ships to the surface fleet)"
         },
+        "by_composition": {
+          "type": "boolean",
+          "default": true,
+          "description": "at war a task force on hold that no planned mission covers takes the mission its composition calls for (submarines convoy raiding, capital ships and heavy cruisers strike force, screens patrol) in its fleet's sea regions; false leaves them to the plan"
+        },
+        "by_composition_why": {
+          "type": "string",
+          "x-owner": "executor",
+          "description": "the reason for by_composition false, said in the navy_composition note"
+        },
         "reserve": {
           "type": "array",
           "items": {
