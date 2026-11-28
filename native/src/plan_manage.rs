@@ -235,6 +235,11 @@ pub(super) struct Memory {
     pub(super) decisions_seen: Option<(GameHour, Value)>,
     /// The next priority line in turn for idle factories when no shortage is known.
     feed_turn: usize,
+    /// Air wings seen training (pilot exercises) -> since when, and the wings whose training
+    /// was stopped at `manage.air_training_days` -> their aircraft then (air_idle_step: a wing
+    /// trains again only when new aircraft, new pilots, joined it).
+    training_since: HashMap<String, GameHour>,
+    training_done: HashMap<String, i64>,
     /// `xp_budget` entries the pool could already pay, by id -> since when (plan_xp.rs: a hold
     /// for a spend its lane does not make stops holding the other spends back).
     pub(super) xp_payable_since: HashMap<String, GameHour>,
@@ -5170,10 +5175,15 @@ const FUEL_CUT_ORDER: [&str; 9] = [
     "air_supply",
 ];
 
-/// Whether the wing flies `mission` now (the mask keeps the last mission after Hold: judge by
-/// the region, as hoi4_air says).
+/// Whether the wing flies `mission` now, as hoi4_air's `missions` says: a region mission only
+/// while the wing holds a region (the mask keeps the last mission after Hold), training (pilot
+/// exercises) by its mask alone, since the game gives training no region. Judging training by
+/// the region too made every training wing read idle to the fuel cut, so training was never
+/// stopped and drained the fuel (g115a, 28 Nov 2026: fuel 10% of capacity on 1936.05.05, air
+/// experience 0.047 a day).
 fn flies(wing: &Value, mission: &str) -> bool {
-    wing["region"].is_object() && strings(wing, "missions").iter().any(|m| m == mission)
+    (wing["region"].is_object() || mission == "training")
+        && strings(wing, "missions").iter().any(|m| m == mission)
 }
 
 /// W: air.training_xp, air.idle_wings, air.fuel_mission_cutback. Every 3 game days, at most one
@@ -5182,6 +5192,9 @@ fn flies(wing: &Value, mission: &str) -> bool {
 /// - at war, fuel below `manage.fuel_floor` (0.25) or fewer than `manage.fuel_days_floor` (30)
 ///   days left at the sampled rate (fuel_rule): a wing on a mission that does not hold the
 ///   front is held, in FUEL_CUT_ORDER (superiority, CAS, interception and naval strike stay);
+/// - a wing trained `manage.air_training_days` (the plan computes it from the game's defines:
+///   AIR_WING_XP_TRAINING_MAX / AIR_WING_XP_TRAINING_MISSION_GAIN_DAILY) is taken off training:
+///   past it training gives no experience; it trains again once new aircraft joined it;
 /// - a wing with no mission trains over its own base's region (wing experience up to the
 ///   training maximum, and the country's air experience that pays plane designs, the air
 ///   doctrine and the air officer corps) unless `manage.air_training` is false; at war the war
@@ -5216,6 +5229,18 @@ fn air_idle_step(
     let war = at_war(state, tools, plan, now);
     let train_floor = fraction(&m["air_training_fuel"], 0.5);
     let floor = fraction(&m["fuel_floor"], 0.25);
+    let trained: Vec<String> = wings
+        .iter()
+        .filter(|w| flies(w, "training"))
+        .map(|w| text(&w["wing"]).to_string())
+        .collect();
+    state
+        .manage
+        .training_since
+        .retain(|k, _| trained.contains(k));
+    for n in &trained {
+        state.manage.training_since.entry(n.clone()).or_insert(now);
+    }
     let usable = |w: &&Value| {
         let n = text(&w["wing"]);
         !n.is_empty() && !state.skipped(now, "airidle", n)
@@ -5240,6 +5265,38 @@ fn air_idle_step(
             )));
         }
     }
+    // the game's training cap: a wing's pilots gain AIR_WING_XP_TRAINING_MISSION_GAIN_DAILY a
+    // day only up to AIR_WING_XP_TRAINING_MAX (defines); past `manage.air_training_days` (the
+    // plan writes that ratio from the game's files: `facts.py air-training`) training brings
+    // neither wing nor country experience and only burns fuel and loses planes to accidents
+    if let Some(days) = m["air_training_days"].as_f64().filter(|d| *d > 0.0) {
+        let capped = trained.iter().find(|n| {
+            !state.skipped(now, "airidle", n)
+                && state
+                    .manage
+                    .training_since
+                    .get(*n)
+                    .is_some_and(|s| (now - *s) as f64 >= days * DAY as f64)
+        });
+        if let Some(name) = capped.cloned() {
+            let planes = wings
+                .iter()
+                .find(|w| text(&w["wing"]) == name)
+                .and_then(|w| w["aircraft"].as_i64())
+                .unwrap_or(0);
+            let (ok, why) =
+                state.act(tools, lease, "hoi4_air_hold", json!({"wing": name}), "ah")?;
+            if ok {
+                state.manage.training_since.remove(&name);
+                state.manage.training_done.insert(name.clone(), planes);
+            } else {
+                state.skip(now, "airidle", &name, 7 * DAY);
+            }
+            return Ok(Some(format!(
+                "air {name} trained {days} days, the game's training cap: off training: {ok} {why}"
+            )));
+        }
+    }
     let idle: Vec<&Value> = wings.iter().filter(|w| !w["region"].is_object()).collect();
     let why = if m["air_training"] == json!(false) {
         format!(
@@ -5255,10 +5312,15 @@ fn air_idle_step(
             Some(_) => {
                 // a wing already training reads region null too: it is not idle (sk27a, 18 Nov
                 // 2026: 17 wings were sent "training" again every 30 days, 4 times each)
+                let done = &state.manage.training_done;
                 let pick = idle.iter().copied().filter(usable).find(|w| {
                     !strings(w, "missions").iter().any(|m| m == "training")
                         && w["air_base"]["state_id"].as_i64().is_some()
                         && w["transfer_to_base_id"].as_i64().is_none()
+                        // trained to the cap: again only once new aircraft (new pilots) joined
+                        && done
+                            .get(text(&w["wing"]))
+                            .is_none_or(|p| w["aircraft"].as_i64().unwrap_or(0) > *p)
                 });
                 if let Some(w) = pick {
                     let name = text(&w["wing"]).to_string();
@@ -9436,6 +9498,37 @@ mod tests {
                 .unwrap_or_else(|| json!({})))
         }
     }
+    #[test]
+    fn a_training_wing_is_held_when_fuel_runs_short_although_training_has_no_region() {
+        // g115a: 13 wings trained from day one with region null; the fuel cut judged training by
+        // the region, found none and let training drain the fuel to 10% of capacity
+        let tools = Fake {
+            calls: RefCell::new(Vec::new()),
+            replies: RefCell::new(HashMap::from([
+                (
+                    "hoi4_air".to_string(),
+                    json!({"wings": [
+                        {"wing": "JG 132", "missions": ["training"], "region": null,
+                         "air_base": {"state_id": 64}},
+                        {"wing": "KG 1", "missions": [], "region": null,
+                         "air_base": {"state_id": 64}}]}),
+                ),
+                ("hoi4_resources".to_string(), json!({"fuel": {"ratio": 0.2}})),
+            ])),
+            refuse: RefCell::new(HashMap::new()),
+            message: RefCell::new(None),
+        };
+        let plan = json!({"manage": {}});
+        let mut state = State::default();
+        let out = air_idle_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out.is_some_and(|o| o.contains("JG 132 off training")));
+        let calls = tools.calls.borrow();
+        assert!(calls
+            .iter()
+            .any(|(t, a)| t == "hoi4_air_hold" && a["wing"] == "JG 132"));
+        assert!(!calls.iter().any(|(t, _)| t == "hoi4_air_mission"));
+    }
+
     #[test]
     fn an_officer_corps_date_is_the_latest_day_not_the_first() {
         assert_eq!(without_dates(&json!("date >= 1938.3.1")), Value::Null);

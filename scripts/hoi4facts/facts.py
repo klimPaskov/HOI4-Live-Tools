@@ -32,6 +32,7 @@
     facts.py design-best <TAG> --role R [--techs a,b] [--need air_range=900] [--rival BASE:slot=mod,...]
                                  best module-by-module designs for a role by computed stats (designer.py)
     facts.py design-eval BASE slot=module ... [--mission M]   one design's stats and problems
+    facts.py air-training                 # manage.air_training_days from the defines (training cap / daily gain)
     facts.py design-plan <TAG> [--roles fighter,cas] [--years 1936,1940] [--need fighter:air_range=900] [--refresh]
                                  plan designs[] by year and the research they need (designer.plan_fragment)
     facts.py air-cover --regions 131,133 (--states 1,2 | --provinces 9,10) [--ranges 550,650,825]
@@ -1785,6 +1786,30 @@ def cmd_defines(args):
     return emit(args, rows, lambda rs: [f"{r['key']} = {r['v']} [{r['src']}]" for r in rs] or ["no define"])
 
 
+def cmd_air_training(args):
+    """How long air training pays, from the game's own defines: a wing's pilots gain
+    AIR_WING_XP_TRAINING_MISSION_GAIN_DAILY a day up to AIR_WING_XP_TRAINING_MAX, so training past
+    max / daily gives no wing or country experience and only burns fuel and loses planes to
+    accidents (AIR_WING_XP_TRAINING_MISSION_ACCIDENT_FACTOR). `days` is the plan's
+    manage.air_training_days."""
+    w = world(args)
+    keys = ("AIR_WING_XP_TRAINING_MAX", "AIR_WING_XP_TRAINING_MISSION_GAIN_DAILY",
+            "AIR_WING_COUNTRY_XP_FROM_TRAINING_FACTOR", "AIR_WING_XP_TRAINING_MISSION_ACCIDENT_FACTOR")
+    found = {}
+    for k in keys:
+        full, row = w.defines.row(k)
+        if row is not None:
+            found[k] = {"key": full, "v": row["v"], "src": w.src(row["file"], row["line"])}
+    cap = found.get("AIR_WING_XP_TRAINING_MAX", {}).get("v")
+    daily = found.get("AIR_WING_XP_TRAINING_MISSION_GAIN_DAILY", {}).get("v")
+    days = round(float(cap) / float(daily), 1) if cap and daily else None
+    data = {"days": days, "defines": found,
+            "method": "days = AIR_WING_XP_TRAINING_MAX / AIR_WING_XP_TRAINING_MISSION_GAIN_DAILY for fresh pilots; "
+                      "a wing trains again only when new aircraft (new pilots) lower its average"}
+    return emit(args, data, lambda x: [f"air training pays for {x['days']} days per fresh wing"]
+                + [f"{k} = {r['v']} [{r['src']}]" for k, r in x["defines"].items()] + ["method: " + x["method"]])
+
+
 # ---------------------------------------------------------------- parser
 
 def _globals(p, suppress):
@@ -1911,6 +1936,7 @@ def parser():
     p.add_argument("--top", type=int, default=3)
     p.add_argument("--objective", choices=("per_ic", "value"), default="per_ic")
     p.add_argument("--mio", action="store_true", help="also rank the organisations that can take the line")
+    add("air-training", cmd_air_training)
     p = add("design-plan", cmd_design_plan, "TAG")
     p.add_argument("--roles", help="comma list of designer roles (default fighter,cas,naval_bomber)")
     p.add_argument("--years", help="comma list of years (default 1936,1938,1940,1942,1944)")
