@@ -7498,13 +7498,19 @@ fn prepare_supply(
                 .iter()
                 .map(|(q, rail)| format!("node {q} railway {rail}"))
                 .collect();
+            let flows = list(&read, "provinces")
+                .iter()
+                .find(|row| row["province_id"].as_i64() == Some(*p))
+                .map_or(0, |row| list(row, "flows").len());
             format!(
                 "{p} (state {s}): {n} divisions at {:.0}% of their need, fed by {}",
                 r * 100.0,
-                if fed.is_empty() {
-                    "no node".to_string()
-                } else {
+                if !fed.is_empty() {
                     fed.join(", ")
+                } else if flows > 0 {
+                    format!("no node read ({flows} flow(s) whose node is not in the own node list)")
+                } else {
+                    "no node read (no flow in the read)".to_string()
                 }
             )
         })
@@ -7529,7 +7535,31 @@ fn prepare_supply(
             .map(|(q, _)| (*p, *s, *n, *r, q))
     });
     let Some((p, s, n, r, q)) = due else {
-        return Ok(None);
+        // NO NODE READ: the read names no feeding node for the worst-fed start province (w96d, 28
+        // Nov 2026: every start province 'fed by no node', no railway in the whole prepare, the
+        // start line at 51% supply against 63%): the railway goes to that province's nearest
+        // railway end from the nearest fed node, as the tool chooses them (to_nearest_node,
+        // from_nearest_node), once a province in 30 days
+        let Some((p, s, n, r, _)) = starved
+            .iter()
+            .find(|(p, _, _, _, _)| feeders(&read, *p).is_empty() && !recent(state, *p))
+            .copied()
+        else {
+            return Ok(None);
+        };
+        state.done.insert(key(id, &format!("prail:{p}")), now);
+        return Ok(Some(order(
+            state,
+            tools,
+            lease,
+            id,
+            &format!(
+                "supply before the attack: railway toward province {p} (state {s}: {n} divisions at {:.0}% of their need; no feeding node read: its nearest railway end)",
+                r * 100.0
+            ),
+            "hoi4_railway_build",
+            json!({"to_province": p, "to_state": s, "to_nearest_node": true, "from_nearest_node": true}),
+        )?));
     };
     state.done.insert(key(id, &format!("prail:{q}")), now);
     Ok(Some(order(
