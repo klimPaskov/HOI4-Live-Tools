@@ -2891,9 +2891,18 @@ fn one(
     if let Some(line) = execution_modes(state, tools, id, op, &units, roster, lease, now)? {
         return Ok(Some(line));
     }
+    // THE PRE-DECLARATION PASS EXECUTES FIRST: a railway or a restack started now would not stand
+    // before the attack anyway, and its mouse work takes the pass's few seconds (p101b, 28 Nov
+    // 2026: the pass sent one railway that failed after 5 s and no execute; three attackers
+    // executed after the declaration, behind the events it opened)
+    let pre_pass = pre_executing(state, now)
+        && !strings(op, "enemies").is_empty()
+        && !before_war_of(op, &at_war);
     // SUPPLY BEFORE THE ATTACK: railway to the start line where its stacks starve
-    if let Some(line) = prepare_supply(state, tools, id, op, &units, roster, lease, now)? {
-        return Ok(Some(line));
+    if !pre_pass {
+        if let Some(line) = prepare_supply(state, tools, id, op, &units, roster, lease, now)? {
+            return Ok(Some(line));
+        }
     }
     // every order of the prepare reads back (none rests after a failure): a declaration
     // against its enemies may go out
@@ -2929,9 +2938,13 @@ fn one(
     if !drawing {
         state.done.entry(key(id, "primed")).or_insert(now);
         // the line stands: its provinces are kept within what they supply before the attack
-        if let Some(line) = stacking(state, tools, plan, id, op, &units, roster, wars, lease, now)?
-        {
-            return Ok(Some(line));
+        // (not in the pre-declaration pass: the execute goes first)
+        if !pre_pass {
+            if let Some(line) =
+                stacking(state, tools, plan, id, op, &units, roster, wars, lease, now)?
+            {
+                return Ok(Some(line));
+            }
         }
     }
     // EXECUTE, THEN DECLARE: in the tick its declaration goes out (plan_run declare_first) a

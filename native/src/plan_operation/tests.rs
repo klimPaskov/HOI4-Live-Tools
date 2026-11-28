@@ -599,6 +599,63 @@ fn every_attacker_a_wing_too_executes_before_the_declaration_and_the_declaration
 }
 
 #[test]
+fn the_pre_declaration_pass_executes_before_any_railway_of_the_prepare() {
+    // p101b (28 Nov 2026): the pass's first order was a railway to a starving start province; the
+    // mouse wait took the pass's seconds, no attacker executed before the declaration and three
+    // executed after it, behind the events it opened
+    let starving = |game: &Game| {
+        let divisions: Vec<Value> = (0..20)
+            .map(|i| json!({"id": format!("a{i}"), "army": "Mitte"}))
+            .collect();
+        let ids: Vec<Value> = (0..20).map(|i| json!(format!("a{i}"))).collect();
+        *game.supply.borrow_mut() = Some(json!({"divisions": divisions, "provinces": [
+            {"province_id": 17, "state_id": 86, "divisions": 20, "division_ids": ids,
+             "supply": 2.0, "demand": 20.0, "railway_level": 0, "flows": []}]}));
+    };
+    let plan = plan();
+    // in the prepare the starving start province gets its railway
+    let game = Game::new();
+    let mut state = State::default();
+    prepared(&mut state, &game, &plan);
+    starving(&game);
+    game.calls.borrow_mut().clear();
+    let lines = burst(&mut state, &game, &plan, START + DAY);
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains("railway toward province 17")),
+        "{lines:?}"
+    );
+    // in the pre-declaration pass the attackers execute and no railway is sent
+    let game = Game::new();
+    let mut state = State::default();
+    prepared(&mut state, &game, &plan);
+    starving(&game);
+    game.calls.borrow_mut().clear();
+    let at = START + DAY;
+    state.done.insert("preexec".to_string(), at);
+    state.pcache = None;
+    let first = step(&mut state, &game, &plan, "l", at)
+        .unwrap()
+        .expect("an order");
+    assert!(first.contains("execute"), "{first}");
+    let lines = burst(&mut state, &game, &plan, at);
+    let sent = game.orders();
+    assert!(
+        !sent.iter().any(|(n, _)| n == "hoi4_railway_build"),
+        "{first} {lines:?}"
+    );
+    let executed: Vec<String> = sent
+        .iter()
+        .filter(|(_, a)| a["execute"] == json!(true))
+        .map(|(_, a)| text(&a["army"]).to_string())
+        .collect();
+    for army in ["Panzer", "Nord", "Army Group 1"] {
+        assert!(executed.contains(&army.to_string()), "{executed:?}");
+    }
+}
+
+#[test]
 fn a_stalled_line_draws_the_next_phase_line_and_executes_it() {
     let game = Game::new();
     let plan = plan();
