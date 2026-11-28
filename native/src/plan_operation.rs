@@ -8071,12 +8071,20 @@ fn unit_rooms(
             root_of.entry(*p).or_insert(s.id);
         }
     }
+    let front: HashSet<i64> = root_of.keys().copied().collect();
+    let caps: HashMap<i64, i64> =
+        ground::province_caps(&g, &front, &|q| enemy.contains(&q), &|_| width, 0)
+            .into_iter()
+            .map(|(p, c)| (p, c.cap))
+            .collect();
     Some(CapRead {
         rooms,
         root_of,
         g,
         ours,
         enemy,
+        caps,
+        read,
     })
 }
 
@@ -8089,6 +8097,10 @@ struct CapRead {
     /// own provinces where our divisions stand
     ours: HashSet<i64>,
     enemy: HashSet<i64>,
+    /// own front province -> the divisions its battles take
+    caps: HashMap<i64, i64>,
+    /// the hoi4_supply read the rooms came from
+    read: Value,
 }
 
 /// The divisions a capacity spread may leave unbalanced before it is spread again (`capacity.slack`):
@@ -8157,12 +8169,14 @@ fn capacity_turn(
         state.op_notes.insert(nk, note);
         return Ok(None);
     };
-    let read = tools.call("hoi4_supply", &json!({})).unwrap_or(Value::Null);
     let roster = tools
         .call("hoi4_armies", &json!({"threat": false}))
         .unwrap_or(Value::Null);
-    let (ours, _) = unit_divisions(&read, &roster, u, &HashMap::new());
-    let piles = capacity::piles(&battles, &ours);
+    let (ours, _) = unit_divisions(&read_cap.read, &roster, u, &HashMap::new());
+    // the battles' reserves beyond their engaged first, then the front provinces standing over
+    // what their battles take (w96a W+1: 10 divisions in 9522 for 4, 9 in 11470 for 2)
+    let mut piles = capacity::piles(&battles, &ours);
+    piles.extend(capacity::overstacked(&read_cap.read, &read_cap.caps, &ours));
     // the breadth of the attack: enemy provinces in reach, attacked, attacked from too few sides
     let (reach, attacked, narrow) =
         capacity::breadth(&read_cap.g, &read_cap.ours, &read_cap.enemy, &battles);
@@ -8173,7 +8187,7 @@ fn capacity_turn(
     if mv.is_none() {
         if let Some(p) = piles.first() {
             note.push_str(&format!(
-                "; the battle at {} holds {} in reserve behind {} engaged and no other front has room: the line is narrower than the force",
+                "; province {} holds {} in reserve behind {} engaged and no other front has room: the line is narrower than the force",
                 p.province, p.reserve, p.engaged
             ));
         }

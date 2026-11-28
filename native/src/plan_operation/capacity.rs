@@ -280,6 +280,53 @@ pub(super) fn piles(battles: &Value, ours: &HashSet<String>) -> Vec<Pile> {
     out
 }
 
+/// The own provinces holding more of `ours` than their battles take (`caps`: province -> the
+/// divisions its battles take, `ground::province_caps`), as piles whose surplus is the standing
+/// divisions beyond the cap (no march or attack under way: `heading_province` empty), from a
+/// `hoi4_supply` read, the fullest first. w96a (28 Nov 2026, W+1): 10 divisions in 9522 for 4,
+/// 9 in 11470 for 2. Pure.
+pub(super) fn overstacked(
+    read: &Value,
+    caps: &HashMap<i64, i64>,
+    ours: &HashSet<String>,
+) -> Vec<Pile> {
+    let mut at: HashMap<i64, Vec<(String, f64, Option<i64>)>> = HashMap::new();
+    let mut count: HashMap<i64, i64> = HashMap::new();
+    for d in list(read, "divisions") {
+        let (Some(id), Some(p)) = (id_of(&d["id"]), d["province_id"].as_i64()) else {
+            continue;
+        };
+        if !ours.contains(&id) {
+            continue;
+        }
+        *count.entry(p).or_default() += 1;
+        if d["heading_province"].is_null() {
+            at.entry(p)
+                .or_default()
+                .push((id, d["organisation"].as_f64().unwrap_or(0.0), Some(p)));
+        }
+    }
+    let mut out: Vec<Pile> = count
+        .into_iter()
+        .filter_map(|(p, n)| {
+            let cap = *caps.get(&p)?;
+            let waiting = at.remove(&p).unwrap_or_default();
+            (n > cap && !waiting.is_empty()).then_some(Pile {
+                province: p,
+                engaged: cap,
+                reserve: n,
+                waiting,
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        (b.reserve - b.engaged)
+            .cmp(&(a.reserve - a.engaged))
+            .then(a.province.cmp(&b.province))
+    });
+    out
+}
+
 /// A move of divisions onto another stretch.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(super) struct Move {
@@ -324,7 +371,7 @@ pub(super) fn sideways(
             to: target.id,
             divisions: fresh.into_iter().take(n).map(|(id, _, _)| id).collect(),
             why: format!(
-                "the battle at {} holds {} in reserve behind {} engaged; front {} has room for {} ({} of {})",
+                "province {} holds {} in reserve behind {} engaged; front {} has room for {} ({} of {})",
                 pile.province,
                 pile.reserve,
                 pile.engaged,
@@ -559,6 +606,52 @@ mod tests {
         // no other front with room: nothing moves
         let full = vec![rooms[0].clone()];
         assert!(sideways(&p, &full, &root_of, 18).is_none());
+    }
+
+    #[test]
+    fn a_province_over_what_its_battles_take_is_a_pile_too() {
+        let read = json!({"divisions": [
+            {"id": "a", "province_id": 1, "organisation": 50.0},
+            {"id": "b", "province_id": 1, "organisation": 60.0},
+            {"id": "c", "province_id": 1, "organisation": 70.0, "heading_province": 10},
+            {"id": "d", "province_id": 1, "organisation": 40.0},
+            {"id": "e", "province_id": 3, "organisation": 40.0},
+            {"id": "x", "province_id": 1, "organisation": 40.0}]});
+        let ours: HashSet<String> = ["a", "b", "c", "d", "e"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let caps = HashMap::from([(1, 2), (3, 4)]);
+        let p = overstacked(&read, &caps, &ours);
+        assert_eq!(p.len(), 1);
+        assert_eq!((p[0].province, p[0].engaged, p[0].reserve), (1, 2, 4));
+        // the marching division stays where it heads
+        assert_eq!(p[0].waiting.len(), 3);
+        let rooms = vec![
+            Room {
+                id: 92,
+                cap: 2,
+                divisions: 4,
+                facing: 1,
+                ..Default::default()
+            },
+            Room {
+                id: 91,
+                cap: 10,
+                divisions: 1,
+                facing: 2,
+                ..Default::default()
+            },
+        ];
+        let m = sideways(
+            &p,
+            &rooms,
+            &|q| if q == 1 { Some(92) } else { Some(91) },
+            18,
+        )
+        .unwrap();
+        assert_eq!(m.to, 91);
+        assert_eq!(m.divisions, vec!["b".to_string(), "a".to_string()]);
     }
 
     #[test]
