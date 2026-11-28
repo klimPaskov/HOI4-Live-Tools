@@ -4671,6 +4671,46 @@ fn by_default_a_wing_attacks_with_the_joint_attack_and_never_alone() {
     ));
 }
 
+#[test]
+fn in_the_declaration_s_burst_a_wing_executes_with_the_war_s_other_attackers() {
+    // p101a (28 Nov 2026): Armee Nord (23) held 'never alone' through the burst that executed
+    // the group and both Panzergruppen, and waited 70 game hours for the next war turn
+    let game = Game::new();
+    *game.graph.borrow_mut() = Some(lux_graph());
+    game.unit("Nord", |r| r["division_count"] = json!(7));
+    game.unit("Mitte", |r| r["plan_executing"] = json!(false));
+    let plan = json!({"war": {"me": "GER"}, "operations": [
+        {"id": "op_low", "war": "w", "enemies": ["BEL"]},
+        {"id": "op_lux", "war": "w", "enemies": ["LUX"]}]});
+    let op = plan["operations"][1].clone();
+    let mut u = unit("Nord".into(), Role::Wing, &Value::Null, &Value::Null);
+    u.enemy = "LUX".into();
+    u.line = vec![8];
+    let wars = json!({"wars": {"enemies": []}, "borders": [
+        {"neighbour_tag": "LUX", "neighbour_states": [8], "own_border_states": [42],
+         "neighbour_divisions_in_border_states": 1, "hostile_divisions_in_border_states": 15}]});
+    let roster = game.roster.borrow().clone();
+    // outside the burst nothing of the war executes yet: the wing holds
+    let mut state = State::default();
+    state.op_owned.insert("Mitte".into(), "op_low".into());
+    assert!(assert_guard(
+        &mut state, &game, &plan, &op, &u, &roster, &wars, START
+    ));
+    // in the burst (preexec this hour) the war's attackers execute with it: the wing goes too
+    let mut state = State::default();
+    state.op_owned.insert("Mitte".into(), "op_low".into());
+    state.done.insert("preexec".into(), START);
+    assert!(!assert_guard(
+        &mut state, &game, &plan, &op, &u, &roster, &wars, START
+    ));
+    // alone in its war (no other attacker owned by an operation of it): it still holds
+    let mut state = State::default();
+    state.done.insert("preexec".into(), START);
+    assert!(assert_guard(
+        &mut state, &game, &plan, &op, &u, &roster, &wars, START
+    ));
+}
+
 // THE ORDER STRUCTURE (engineer 95, after ctl92a): one root per enemy border, divisions spread
 
 #[test]

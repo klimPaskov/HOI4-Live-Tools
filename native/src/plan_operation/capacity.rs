@@ -330,6 +330,57 @@ pub(super) fn overstacked(
     out
 }
 
+/// Our divisions waiting on a pile: (id, organisation, the province it stands in).
+type Waiting = Vec<(String, f64, Option<i64>)>;
+
+/// DEAD FRONTS: at war a stretch that faces no enemy province (`facing` 0) while our divisions
+/// stand on it holds divisions that fight nowhere; they are piles whose whole count is surplus
+/// (engaged 0), so `sideways` sends them to the stretch with most room. `root_of`: the stretch
+/// of an own province. p101a (28 Nov 2026): four second fronts read 'width 0, hold 0, 0 enemy
+/// provinces' and kept 1-9 divisions each (22 in all) through 33 days of the war on Poland,
+/// while the fronts facing the Poles had room. Standing divisions only (no march under way),
+/// the most divisions first. Pure.
+pub(super) fn dead_fronts(
+    read: &Value,
+    rooms: &[Room],
+    root_of: &dyn Fn(i64) -> Option<i64>,
+    ours: &HashSet<String>,
+) -> Vec<Pile> {
+    let dead: HashSet<i64> = rooms
+        .iter()
+        .filter(|r| r.facing == 0 && r.divisions > 0)
+        .map(|r| r.id)
+        .collect();
+    if dead.is_empty() {
+        return Vec::new();
+    }
+    let mut at: HashMap<i64, (i64, Waiting)> = HashMap::new();
+    for d in list(read, "divisions") {
+        let (Some(id), Some(p)) = (id_of(&d["id"]), d["province_id"].as_i64()) else {
+            continue;
+        };
+        if !ours.contains(&id) || !d["heading_province"].is_null() {
+            continue;
+        }
+        let Some(root) = root_of(p).filter(|r| dead.contains(r)) else {
+            continue;
+        };
+        let e = at.entry(root).or_insert((p, Vec::new()));
+        e.1.push((id, d["organisation"].as_f64().unwrap_or(0.0), Some(p)));
+    }
+    let mut out: Vec<Pile> = at
+        .into_values()
+        .map(|(p, waiting)| Pile {
+            province: p,
+            engaged: 0,
+            reserve: waiting.len() as i64,
+            waiting,
+        })
+        .collect();
+    out.sort_by(|a, b| b.reserve.cmp(&a.reserve).then(a.province.cmp(&b.province)));
+    out
+}
+
 /// A direct attack on a stuck battle from a side the plan leaves unused.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Push {
@@ -534,14 +585,26 @@ pub(super) fn sideways(
         }
         let mut fresh = pile.waiting.clone();
         fresh.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        let dead = from
+            .and_then(|f| rooms.iter().find(|r| r.id == f))
+            .is_some_and(|r| r.facing == 0);
+        let source = if dead {
+            format!(
+                "front {} faces no enemy province and holds {}",
+                from.unwrap_or(0),
+                pile.reserve
+            )
+        } else {
+            format!(
+                "province {} holds {} in reserve behind {} engaged",
+                pile.province, pile.reserve, pile.engaged
+            )
+        };
         return Some(Move {
             to: target.id,
             divisions: fresh.into_iter().take(n).map(|(id, _, _)| id).collect(),
             why: format!(
-                "province {} holds {} in reserve behind {} engaged; front {} has room for {} ({} of {})",
-                pile.province,
-                pile.reserve,
-                pile.engaged,
+                "{source}; front {} has room for {} ({} of {})",
                 target.id,
                 target.free(),
                 target.divisions,
@@ -773,6 +836,56 @@ mod tests {
         // no other front with room: nothing moves
         let full = vec![rooms[0].clone()];
         assert!(sideways(&p, &full, &root_of, 18).is_none());
+    }
+
+    #[test]
+    fn at_war_the_divisions_of_a_front_facing_no_enemy_go_to_the_front_with_room() {
+        // p101a: Army 2's front 169 'width 0, hold 0, 0 enemy provinces' kept 9 divisions all war
+        // while its front 14 stood 14 of cap 51
+        let read = json!({"divisions": [
+            {"id": "a", "province_id": 5, "organisation": 50.0},
+            {"id": "b", "province_id": 5, "organisation": 60.0},
+            {"id": "c", "province_id": 6, "organisation": 70.0, "heading_province": 10},
+            {"id": "d", "province_id": 7, "organisation": 40.0},
+            {"id": "x", "province_id": 5, "organisation": 40.0}]});
+        let ours: HashSet<String> = ["a", "b", "c", "d"].iter().map(|s| s.to_string()).collect();
+        let root_of = |q: i64| match q {
+            5 | 6 => Some(169),
+            7 => Some(14),
+            _ => None,
+        };
+        let rooms = vec![
+            Room {
+                id: 169,
+                cap: 0,
+                divisions: 3,
+                facing: 0,
+                ..Default::default()
+            },
+            Room {
+                id: 14,
+                cap: 51,
+                divisions: 14,
+                facing: 7,
+                ..Default::default()
+            },
+        ];
+        let p = dead_fronts(&read, &rooms, &root_of, &ours);
+        assert_eq!(p.len(), 1);
+        // the marching division and the one not ours stay; nothing of the live front moves
+        assert_eq!((p[0].engaged, p[0].reserve), (0, 2));
+        let m = sideways(&p, &rooms, &root_of, 18).unwrap();
+        assert_eq!(m.to, 14);
+        assert_eq!(m.divisions, vec!["b".to_string(), "a".to_string()]);
+        assert!(
+            m.why.contains("front 169 faces no enemy province"),
+            "{}",
+            m.why
+        );
+        // a front that faces an enemy is no dead front
+        let mut live = rooms.clone();
+        live[0].facing = 1;
+        assert!(dead_fronts(&read, &live, &root_of, &ours).is_empty());
     }
 
     #[test]

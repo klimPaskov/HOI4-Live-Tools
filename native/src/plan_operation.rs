@@ -4525,10 +4525,22 @@ fn assault_guarded(
     let together = ours + beside.iter().map(|(_, n)| n).sum::<i64>();
     let one_blow =
         !beside.is_empty() && (!odds || theirs.is_none_or(|t| together >= ASSAULT_SUPERIORITY * t));
+    // THE DECLARATION'S BURST: in the tick the war is declared every attacker of the war's
+    // operations executes (plan_run declare_first), so the wing is not alone; it executes with
+    // them, not a war turn later (p101a, 28 Nov 2026: Armee Nord, 23 divisions, held 'never
+    // alone' through the burst and stood until the next war turn 70 game hours on)
+    let burst_joint = joint.is_empty()
+        && !weak
+        && pre_executing(state, now)
+        && state.op_owned.iter().any(|(army, owner)| {
+            *army != u.name
+                && (owner.as_str() == id
+                    || (!my_war.is_empty() && war_of(owner).is_some_and(|w| w == my_war)))
+        });
     // NEVER ALONE is the rule: with an attack of the same war executing the wing attacks with it
     // at once; the wait for a second direction or JOINT_MAX_WAIT applies only with the odds
     let hard = match joint_days {
-        _ if one_blow => false,
+        _ if one_blow || burst_joint => false,
         None => true,
         Some(days) => odds && second.is_empty() && (days < JOINT_MAX_WAIT / DAY || weak),
     };
@@ -8635,9 +8647,13 @@ fn capacity_turn(
         .call("hoi4_armies", &json!({"threat": false}))
         .unwrap_or(Value::Null);
     let (ours, _) = unit_divisions(&read_cap.read, &roster, u, &HashMap::new());
-    // the battles' reserves beyond their engaged first, then the front provinces standing over
-    // what their battles take (w96a W+1: 10 divisions in 9522 for 4, 9 in 11470 for 2)
-    let mut piles = capacity::piles(&battles, &ours);
+    // a front facing no enemy province first: its divisions fight nowhere (p101a: 22 divisions
+    // on four such fronts all through the war on Poland); then the battles' reserves beyond
+    // their engaged, then the front provinces standing over what their battles take (w96a W+1:
+    // 10 divisions in 9522 for 4, 9 in 11470 for 2)
+    let mut piles =
+        capacity::dead_fronts(&read_cap.read, rooms, &|p| root_of.get(&p).copied(), &ours);
+    piles.extend(capacity::piles(&battles, &ours));
     piles.extend(capacity::overstacked(&read_cap.read, &read_cap.caps, &ours));
     // the breadth of the attack: enemy provinces in reach, attacked, attacked from too few sides
     let (reach, attacked, narrow) =
