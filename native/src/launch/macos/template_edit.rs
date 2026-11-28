@@ -913,6 +913,87 @@ mod tests {
         }
     }
     #[test]
+    fn the_regimental_row_parses_per_column_and_its_need_comes_from_the_defines() {
+        assert_eq!(
+            parse_regimental(&json!(["", "engineer", null])).unwrap(),
+            s(&["", "engineer"])
+        );
+        assert!(parse_regimental(&json!(["a", "b", "c", "d", "e", "f"])).is_err());
+        let defines = "\tREGIMENTAL_SUPPORT_REQUIRED_BATTALIONS = { 3 }, -- per row\n";
+        assert_eq!(regimental_required(defines), Some(3));
+        assert_eq!(
+            regimental_required(
+                "NDefines.NMilitary.REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS = { 2 }"
+            ),
+            Some(2)
+        );
+        assert_eq!(regimental_required("OTHER = 1"), None);
+    }
+    #[test]
+    fn the_regimental_row_is_checked_before_input() {
+        let d = defs();
+        let mut w = desired(&[&["infantry", "infantry", "infantry"], &["infantry"]], &[]);
+        w.regimental = s(&["engineer"]);
+        assert!(check_regimental(&d, &w, Some(3)).is_ok());
+        w.regimental = s(&["", "engineer"]);
+        assert_eq!(
+            check_regimental(&d, &w, Some(3)).unwrap_err().code,
+            "regimental_slot_closed"
+        );
+        w.regimental = s(&["infantry"]);
+        assert_eq!(
+            check_regimental(&d, &w, Some(3)).unwrap_err().code,
+            "unit_wrong_slot"
+        );
+        w.regimental = s(&["", "", "engineer"]);
+        assert_eq!(
+            check_regimental(&d, &w, None).unwrap_err().code,
+            "regimental_slot_closed",
+            "no column, no slot"
+        );
+    }
+    #[test]
+    fn regimental_companies_go_first_when_their_column_changes_and_come_back_last() {
+        let mut cur = desired(&[&["infantry", "infantry", "infantry"]], &[]);
+        cur.regimental = s(&["engineer"]);
+        let mut want = desired(&[&["infantry", "infantry", "infantry", "infantry"]], &[]);
+        want.regimental = s(&["engineer"]);
+        let ops = plan(&cur, &want);
+        assert_eq!(
+            ops.first(),
+            Some(&Op::Remove {
+                grid: Grid::Regimental,
+                col: 0,
+                row: 0
+            })
+        );
+        assert_eq!(
+            ops.last(),
+            Some(&Op::Choose {
+                grid: Grid::Regimental,
+                col: 0,
+                row: 0,
+                key: "engineer".into()
+            })
+        );
+        // unchanged column and company: nothing to do for the row
+        let same = plan(&cur, &cur);
+        assert!(same.is_empty(), "{same:?}");
+        // a company moved to another column of 3
+        let mut two = desired(
+            &[
+                &["infantry", "infantry", "infantry"],
+                &["infantry", "infantry", "infantry"],
+            ],
+            &[],
+        );
+        two.regimental = s(&["recon"]);
+        let mut moved = two.clone();
+        moved.regimental = s(&["", "recon"]);
+        let ops = plan(&two, &moved);
+        assert_eq!(ops.len(), 2, "{ops:?}");
+    }
+    #[test]
     fn regiments_parse_and_gaps_are_typed() {
         let v = json!([["infantry", "infantry"], [], []]);
         assert_eq!(
