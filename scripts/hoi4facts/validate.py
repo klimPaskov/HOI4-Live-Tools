@@ -1313,7 +1313,7 @@ def check_predicates(game, plan, rep, schema=None, meta=None):
                 rep.error(f"{label}: no technology {arg}")
             elif name == "phase" and arg not in phases:
                 rep.error(f"{label}: no phases[] entry with id {arg}")
-            elif name == "stockpile_days" and arg not in game.equipment() and arg not in derive.equipment_archetypes(game):
+            elif name in ("stockpile_days", "stock") and arg not in game.equipment() and arg not in derive.equipment_archetypes(game):
                 rep.error(f"{label}: no equipment {arg} in common/units/equipment")
             elif name == "project_done" and _special_projects(game) and arg not in _special_projects(game):
                 rep.error(f"{label}: no special project {arg} in common/special_projects/projects")

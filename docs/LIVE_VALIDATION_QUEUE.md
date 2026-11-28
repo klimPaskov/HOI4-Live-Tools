@@ -1150,6 +1150,19 @@ the deployment view shows ONE queue per train action with its lines (no per-stat
 the digest shows "trainees N <template> -> <army>" and the divisions stand in the army with fewer divisions.
 Pass: T1-T2. Stop on: a division moved twice in a row between the listed armies, a refusal repeated within 7 days.
 
+## Session S26-PLANKEYS: the plan keys of engineer 117 in one executor run (no new input path; about 20 game days) -- any time
+What it proves: `production[].until` with `stock:<equipment>`, the atoms `divisions:<template>`, `mastery:<track>`,
+`banked_mastery:<track>`, `project_done:<key>` and `focus_when` read what the screens show, before a campaign relies on them.
+P1 a 1936 save of the plan's country, executor on, plan with: a production row `{"equipment":"<rifle variant>","factories":<n>,
+"until":"stock:infantry_equipment >= <stock now + 300>"}`; `focus_when` holding the next focus until a date 10 days ahead; a
+`special_projects` object; digest predicates `divisions:<a template> >= 0`, `mastery:<a track> >= 0`, `banked_mastery:<a track> >= 0`.
+P2 the digest's predicate values: divisions equals the count of that template on the army screen; mastery and banked mastery
+equal the doctrine view's track (write both); the focus lane line says "kept for their window: <focus> (until ...)".
+P3 run to the day the store passes the figure: the next day's production tick removes that line (one hoi4_production_remove),
+the notes show produntil:<i>:<equipment>; restart the server: the line is not added back. On the window date the focus starts.
+P4 (when a project completes in the run, else later) project_done:<key> turns true the week it completes.
+Pass: P2-P3 (P4 when seen). Stop on: a second removal of the same line, a line added back after the restart.
+
 ## Session S25-VOLUNTEERS: volunteers and the attaché through the one diplomacy tool (module family `diplomacy`; about 40 minutes) -- part of the diplomacy session, after S10-DIPLOMACY
 Owner, 28 Nov: ONE dynamic diplomacy tool; there is no separate volunteers tool. The calls below are `hoi4_diplomacy_act`
 with action `send_volunteers` / `recall_volunteers` (+ `army`, `division_ids`) and `send_attache`.

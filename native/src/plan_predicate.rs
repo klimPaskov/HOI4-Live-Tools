@@ -79,6 +79,8 @@
 //!                               pool (Ctx::projects_done, from the done-memory); false while a
 //!                               facility runs it or the pool lists it (hoi4_special_projects);
 //!                               unknown otherwise (done before the run or not visible) readable
+//!   stock:<equipment>           pieces in store beyond what the own divisions lack: hoi4_stockpile
+//!                               cover_after_shortfall of the archetype (or variant) row  readable
 //!   var:<name>                  unknown: no tool reads scenario variables (audit W1-18)
 //!   bop:<id>                    hoi4_country_status balances_of_power[].value of the balance
 //!                               whose id is <id> (-1..1); an inactive balance is unknown
@@ -248,6 +250,7 @@ const ATOMS: &[(&str, Kind, bool)] = &[
     ("convoys_free", Kind::Number, false),
     ("xp", Kind::Number, true),
     ("stockpile_days", Kind::Number, true),
+    ("stock", Kind::Number, true),
     ("divisions", Kind::Number, true),
     ("mastery", Kind::Number, true),
     ("banked_mastery", Kind::Number, true),
@@ -1206,6 +1209,29 @@ pub(crate) fn stockpile_days(read: &Value, equipment: &str) -> Read<f64> {
     ))
 }
 
+/// Pieces of `equipment` in store beyond what the own divisions still lack (hoi4_stockpile
+/// cover_after_shortfall of the archetype row, or of the row holding that variant; negative when
+/// the store cannot even fill the divisions).
+pub(crate) fn spare_stock(read: &Value, equipment: &str) -> Read<f64> {
+    let rows = read["equipment"]
+        .as_array()
+        .ok_or("hoi4_stockpile lists no equipment")?;
+    let row = rows
+        .iter()
+        .find(|r| r["archetype"].as_str() == Some(equipment))
+        .or_else(|| {
+            rows.iter().find(|r| {
+                r["variants"]
+                    .as_array()
+                    .is_some_and(|v| v.iter().any(|x| x["type"].as_str() == Some(equipment)))
+            })
+        })
+        .ok_or_else(|| format!("{equipment} not in hoi4_stockpile"))?;
+    row["cover_after_shortfall"]
+        .as_f64()
+        .ok_or_else(|| format!("{equipment}: no cover_after_shortfall in hoi4_stockpile"))
+}
+
 /// Days of cover of a stockpile that is not falling.
 pub(crate) const NOT_FALLING_DAYS: f64 = 9999.0;
 
@@ -1336,6 +1362,15 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
                 .read("hoi4_doctrines", &json!({}))
                 .ok_or("hoi4_doctrines unreadable")?;
             track_mastery(read, arg, &atom.name).map(Reading::Number)
+        }
+        "stock" => {
+            if arg.is_empty() {
+                return Err("stock needs an equipment key".into());
+            }
+            let read = ctx
+                .read("hoi4_stockpile", &json!({"equipment": arg}))
+                .ok_or("hoi4_stockpile unreadable")?;
+            spare_stock(read, arg).map(Reading::Number)
         }
         "var" => Err("no tool reads scenario variables (audit W1-18)".into()),
         "bop" => {
@@ -1743,6 +1778,28 @@ mod tests {
         assert_eq!(eval(&f, json!("banked_mastery:armor > 0")), Truth::True);
         assert_eq!(eval(&f, json!("mastery:armor > 0")), Truth::Unknown);
         assert_eq!(eval(&f, json!("mastery:naval_x > 0")), Truth::Unknown);
+    }
+
+    #[test]
+    fn stock_is_the_store_beyond_what_the_divisions_lack() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_stockpile",
+            json!({"equipment": [{"archetype": "infantry_equipment", "cover_after_shortfall": 6200,
+                "variants": [{"type": "infantry_equipment_1"}]}]}),
+        );
+        assert_eq!(
+            eval(&f, json!("stock:infantry_equipment >= 6000")),
+            Truth::True
+        );
+        assert_eq!(
+            eval(&f, json!("stock:infantry_equipment_1 > 7000")),
+            Truth::False
+        );
+        assert_eq!(
+            eval(&f, json!("stock:artillery_equipment > 0")),
+            Truth::Unknown
+        );
     }
 
     #[test]
