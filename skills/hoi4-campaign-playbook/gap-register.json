@@ -1013,7 +1013,7 @@
    "payoff": "medium",
    "why": "about +10% war support for democracies and neutrals short of a gate",
    "closing": "live",
-   "owner": "live session S24-VOLUNTEERS (CSendAttacheAction through the module, family volunteers)"
+   "owner": "live session S25-VOLUNTEERS (CSendAttacheAction through the module, family volunteers)"
   },
   {
    "id": "diplomacy.call_allies",
@@ -1551,7 +1551,7 @@
    "payoff": "medium",
    "why": "army XP and veteran divisions before the main war",
    "closing": "live",
-   "owner": "live session S24-VOLUNTEERS (module family volunteers: CSendVolunteerAction with the division handles, one action per two divisions; off in auto until it passes); the standing opportunity rule and plan key are open"
+   "owner": "live session S25-VOLUNTEERS (module family volunteers: CSendVolunteerAction with the division handles, one action per two divisions; off in auto until it passes); the standing opportunity rule and plan key are open"
   },
   {
    "id": "lendlease.air_volunteers",
@@ -1562,11 +1562,11 @@
    ],
    "plan": [],
    "tools": [],
-   "blocked": "air volunteers are a rebase of wings to an air base of the receiver (CStratAirTransferCommand); hoi4_air_rebase names own bases only; S24-VOLUNTEERS V6 checks whether the game takes the transfer",
+   "blocked": "air volunteers are a rebase of wings to an air base of the receiver (CStratAirTransferCommand); hoi4_air_rebase names own bases only; S25-VOLUNTEERS V6 checks whether the game takes the transfer",
    "payoff": "low",
    "why": "air XP only",
    "closing": "both",
-   "owner": "engineer 118: S24-VOLUNTEERS V6, then hoi4_air_rebase to a foreign base"
+   "owner": "engineer 118: S25-VOLUNTEERS V6, then hoi4_air_rebase to a foreign base"
   },
   {
    "id": "lendlease.recall_volunteers",
@@ -1582,7 +1582,7 @@
    "payoff": "low",
    "why": "recover divisions before the main war",
    "closing": "live",
-   "owner": "live session S24-VOLUNTEERS (CRecallVolunteerAction with the division handles, up to four per action; the game refuses an empty list and the 180-day lock)"
+   "owner": "live session S25-VOLUNTEERS (CRecallVolunteerAction with the division handles, up to four per action; the game refuses an empty list and the 180-day lock)"
   },
   {
    "id": "lendlease.expeditionary_force",

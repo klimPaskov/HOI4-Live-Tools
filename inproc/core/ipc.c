@@ -79,7 +79,7 @@ const int IPC_LIVE_PASSED[] = {1 /* S1, 23 Nov */, 1 /* S2 production, 24 Nov */
                                 0 /* move (engineer 105, 28 Nov): a division's move order to a province, the right click's
                                    * CMoveCommand (S20-MOVE) */,
                                 0 /* volunteers (engineer 118, 28 Nov): send and recall volunteer divisions, send an attache,
-                                   * the diplomacy view's own actions (S24-VOLUNTEERS) */};
+                                   * the diplomacy view's own actions (S25-VOLUNTEERS) */};
 
 int ipc_family_of(const char *op) {
     const char *dot = op ? strchr(op, '.') : NULL;

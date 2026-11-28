@@ -4,13 +4,13 @@
 //! greys its button by, among them the volunteer cap, the divisions-required floor and the recall lock) and posted.
 //! send and recall carry divisions; the module writes at most the action's inline places per action and posts one
 //! action per group, so a request of n divisions is ceil(n / places) commands. No dialog is opened, no mouse path.
-//! The family is off under `HOI4_BACKEND=auto` until its live session S24-VOLUNTEERS passes.
+//! The family is off under `HOI4_BACKEND=auto` until its live session S25-VOLUNTEERS passes.
 use super::inproc::{self, Channel, Routed};
 use super::inproc_units::{request, routed};
 use crate::error::{Error, Result};
 use serde_json::{json, Value};
 
-/// Set when S24-VOLUNTEERS passes live (docs/LIVE_VALIDATION_QUEUE.md); the module's IPC_LIVE_PASSED entry moves with it.
+/// Set when S25-VOLUNTEERS passes live (docs/LIVE_VALIDATION_QUEUE.md); the module's IPC_LIVE_PASSED entry moves with it.
 const LIVE_PASSED: bool = false;
 /// The module's own limit per request (it chunks them into actions).
 pub(super) const MAX_DIVISIONS: usize = 64;
@@ -54,7 +54,7 @@ pub(super) fn allowed_mode(mode: inproc::Mode) -> Result<()> {
         _ => Err(Error::new(
             "volunteers_unvalidated",
             "hoi4_volunteers runs through the in-process module only, and only with HOI4_BACKEND=inprocess until its \
-             live session S24-VOLUNTEERS passes (docs/LIVE_VALIDATION_QUEUE.md); nothing was posted",
+             live session S25-VOLUNTEERS passes (docs/LIVE_VALIDATION_QUEUE.md); nothing was posted",
         )),
     }
 }
@@ -115,7 +115,7 @@ pub(super) fn post(
 pub(super) fn schema() -> Value {
     json!({
         "name": "hoi4_volunteers",
-        "description": "Send or recall volunteer divisions, or send an attache, by the diplomacy view's own actions through the in-process module (family volunteers; HOI4_BACKEND=inprocess until S24-VOLUNTEERS passes). The game's own legality decides (the volunteer cap from the defines, the divisions-required floor, the recall lock, war and ideology gates); a refusal posts nothing. Divisions: an army's divisions, or division_ids within it. Air volunteers are a rebase of wings to an air base of the receiver (hoi4_air_rebase), not this tool.",
+        "description": "Send or recall volunteer divisions, or send an attache, by the diplomacy view's own actions through the in-process module (family volunteers; HOI4_BACKEND=inprocess until S25-VOLUNTEERS passes). The game's own legality decides (the volunteer cap from the defines, the divisions-required floor, the recall lock, war and ideology gates); a refusal posts nothing. Divisions: an army's divisions, or division_ids within it. Air volunteers are a rebase of wings to an air base of the receiver (hoi4_air_rebase), not this tool.",
         "inputSchema": {
             "type": "object",
             "properties": {

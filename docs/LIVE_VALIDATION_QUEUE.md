@@ -1079,3 +1079,36 @@ the row: unit_wrong_slot.
 M4 `hoi4_template_edit` changing only `support` on a template with a regimental row: the row is unchanged (read back).
 Stop at once on: a slot clicked that is not the row's, a mismatch error naming regimental, or Save with another layout.
 Pass: M1-M4. Then delete the test template (hoi4_template_delete).
+
+## Session S25-VOLUNTEERS: volunteers and the attaché through the module (family `volunteers`; about 40 minutes) -- after S10-DIPLOMACY
+What it proves: `hoi4_volunteers` sends and recalls volunteer divisions and sends an attaché by the diplomacy view's own
+actions (no dialog), the game's own legality refuses what the view greys, and nothing else changes. Launch with
+`HOI4_BACKEND=inprocess` and the opt-in naming `volunteers` (plus `diplomacy` for the comparison in V2).
+Bed: the 1936 start as Germany, run to the Spanish Civil War (it fires in 1936 in the vanilla files; the two Spanish
+tags at war: SPR and SPD, or as the game names them in `hoi4_diplomacy_state`), paused. Germany holds >= the define's
+VOLUNTEERS_DIVISIONS_REQUIRED divisions at the start.
+V0 `hoi4_inproc_status` (or the hello): family `volunteers` on, types volunteers.send / .recall / .attache on with
+act_units 0x70/0x90/2 and 0x70/0x90/4 (the offline scan's values) on 1.20.1.0.
+V1 refusals before the war: `hoi4_volunteers {action:send, country:<a Spanish tag>, army:<a 2-division army>}` before the
+civil war: refused_by_game, nothing posted, the army unchanged (`hoi4_armies`).
+V2 the view's cap: open the diplomacy view on the side Germany may help (read only, no click) and note the volunteer
+limit it shows; compare with 0.05 x the receiver's provinces + 0.05 x our divisions (defines VOLUNTEERS_PER_TARGET_PROVINCE,
+VOLUNTEERS_PER_COUNTRY_ARMY): record both numbers.
+V3 send 3 divisions of one army (division_ids): the reply shows 2 actions posted (2 + 1); within 2 game days the
+diplomacy view lists 3 volunteer divisions in transfer (VOLUNTEERS_TRANSFER_SPEED days); world tension rises by about
+3 x TENSION_VOLUNTEER_FORCE_DIVISION. Record where the divisions appear in our memory read (army, theatre, location) on
+the day of sending and on arrival: this is the read-back the tool still lacks (journal says Unconfirmed today).
+V4 over the cap: send more divisions than the shown limit: the game refuses the actions past the limit (refused_by_game
+or a partial post: record which).
+V5 recall: right after arrival `action:recall` on those divisions: refused (RECALL_VOLUNTEERS_AFTER_ARRIVAL_COOLDOWN days);
+then advance past the lock (or use a save past it) and recall 3: the reply shows 1 action; the divisions come home in
+about VOLUNTEERS_RECALL_DAYS_PER_UNIT x 3 days with most of their equipment (VOLUNTEERS_RETURN_EQUIPMENT).
+V6 air volunteers (read and one try): `hoi4_air_rebase` of one fighter wing to a Spanish air base of the side we help:
+record whether the tool accepts the foreign base and whether the game moves the wing (expected: the game's own transfer
+check decides; the tool may refuse a base it does not list as own: record the refusal text).
+V7 attaché: `action:attache` to the side we help: PP drops by the define BASE_SEND_ATTACHE_COST and command power by
+BASE_SEND_ATTACHE_CP_COST (or as modified), the diplomacy view shows our attaché; a second call is refused.
+Stop at once on: any post the game did not refuse while the view greys the button, a division leaving that was not
+named, an attaché or volunteers to a country not named, a module `unexplained` result.
+Pass: V0, V1, V3, V5, V7 (V2, V4, V6 recorded). Then set LIVE_PASSED in native/src/launch/macos/volunteers.rs and the
+`volunteers` entry of IPC_LIVE_PASSED in inproc/core/ipc.c to 1, with the session's numbers in the comment.

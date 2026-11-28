@@ -221,7 +221,7 @@ const cmd_spec CMD2_SPECS[] = {
      * inline places; its legality refuses an empty list). attache: CSendAttacheAction (0x38d9), the SIMPLE shape with one
      * flag byte of its own (as improve relations). The module fills at most the inline places per action and posts one
      * action per group of divisions, so it never allocates inside a game object. A family of its own: OFF in auto until
-     * its live session (S24-VOLUNTEERS) passes. */
+     * its live session (S25-VOLUNTEERS) passes. */
     {"volunteers", "volunteers.send", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_VOLUNTEER, 0, 0x28,
      "17CDiplomaticAction", 0, {{0}}, OBJ2_NONE, 0, AUTH_DIPLO, "20CSendVolunteerAction"},
     {"volunteers", "volunteers.recall", "CDiplomaticActionCommand", 0x30, BUILD_CTOR, CTOR_VOLUNTEER, 0, 0x28,

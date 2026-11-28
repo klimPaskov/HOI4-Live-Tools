@@ -5605,7 +5605,7 @@
    "source": "--list-tools"
   },
   "hoi4_volunteers": {
-   "description": "Send or recall volunteer divisions, or send an attache, by the diplomacy view's own actions through the in-process module (family volunteers; HOI4_BACKEND=inprocess until S24-VOLUNTEERS passes). The game's own legality decides (the volunteer cap from the defines, the divisions-required floor, the recall lock, war and ideology gates); a refusal posts nothing. Divisions: an army's divisions, or division_ids within it. Air volunteers are a rebase of wings to an air base of the receiver (hoi4_air_rebase), not this tool.",
+   "description": "Send or recall volunteer divisions, or send an attache, by the diplomacy view's own actions through the in-process module (family volunteers; HOI4_BACKEND=inprocess until S25-VOLUNTEERS passes). The game's own legality decides (the volunteer cap from the defines, the divisions-required floor, the recall lock, war and ideology gates); a refusal posts nothing. Divisions: an army's divisions, or division_ids within it. Air volunteers are a rebase of wings to an air base of the receiver (hoi4_air_rebase), not this tool.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {

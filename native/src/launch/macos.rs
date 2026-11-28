@@ -6691,7 +6691,7 @@ impl MacClock {
         }
         if name == "hoi4_volunteers" {
             // engineer 118: volunteers and the attache by the diplomacy view's own actions through the module (family
-            // volunteers; off in auto until S24-VOLUNTEERS); no mouse path (the dialog is not driven)
+            // volunteers; off in auto until S25-VOLUNTEERS); no mouse path (the dialog is not driven)
             allowed(
                 args,
                 &[
@@ -6792,7 +6792,7 @@ impl MacClock {
             let what = json!({"kind":"volunteers","action":action.op(),"country":country,"army":army,
                 "divisions":divisions.len()});
             let mut reply = Value::Null;
-            // the read-back of volunteers abroad is mapped by S24-VOLUNTEERS; until then the module's posted count is
+            // the read-back of volunteers abroad is mapped by S25-VOLUNTEERS; until then the module's posted count is
             // the verdict
             let mut settle = || Ok(journal::Outcome::Unobservable);
             let mut dispatch = || {
