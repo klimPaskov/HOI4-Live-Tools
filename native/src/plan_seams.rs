@@ -459,8 +459,19 @@ fn cp_spend_step(
             // A general with nothing to pick (no free slot, every entry locked) stays so until
             // he gains skill: half a year, not a month (g17e: four army generals refused 5-6
             // times each in two game years until the ledger gave them up).
+            // A trait the game does not let this general take (its parent trait, skill or type
+            // missing), or a general not in the roster yet, stays so until he gains experience or
+            // the game adds him: the same long rest from the first refusal (g129a, 28 Nov 2026:
+            // trait_not_assignable 21 times and general_not_listed 6 times in half a year)
             let rest = match (
-                matches!(code.as_str(), "no_free_trait_slot" | "no_enabled_trait"),
+                matches!(
+                    code.as_str(),
+                    "no_free_trait_slot"
+                        | "no_enabled_trait"
+                        | "trait_not_assignable"
+                        | "trait_not_offered"
+                        | "general_not_listed"
+                ),
                 war,
             ) {
                 (true, false) => CP_GENERAL_REST_DAYS,
@@ -2089,6 +2100,32 @@ mod tests {
         assert_eq!(sent[1].1["general"], json!("Gerd von Rundstedt"));
         assert_eq!(sent[1].1["prefer"], json!(["logistics_wizard"]));
         assert!(sent[1].1.get("trait").is_none());
+    }
+
+    #[test]
+    fn a_trait_the_game_does_not_let_him_take_rests_half_a_year_in_peace_from_the_first_refusal() {
+        let mut f = cp_game(70.0);
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": false, "enemies": []}}),
+        );
+        f.refusing.insert(
+            TRAIT_TOOL,
+            ("trait_not_assignable", "the parent trait is missing"),
+        );
+        let plan =
+            json!({"commanders": [{"general": "Erwin Rommel", "traits": ["panzer_expert"]}]});
+        let mut state = State::default();
+        let mut now = START;
+        for _ in 0..170 {
+            let _ = step(clocked(&mut state, now), &f, &plan, "l", now).unwrap();
+            now += DAY;
+        }
+        let asked = actions(&f)
+            .iter()
+            .filter(|(n, a)| n == TRAIT_TOOL && a["trait"] == json!("panzer_expert"))
+            .count();
+        assert_eq!(asked, 1);
     }
 
     #[test]

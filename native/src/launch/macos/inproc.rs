@@ -636,6 +636,42 @@ pub(super) fn air_hold(
         return Routed::Gui;
     }
     let a = w.address;
+    if super::airact::training_only(w.region_id, w.mission_mask) {
+        // a wing on training has no region to clear: its training bit is switched off, as the
+        // training button posts it (SetMission(wing, training bit, enable 0), family air). The
+        // mouse path missed it at speed (g129a, 28 Nov 2026: 51 holds of training wings
+        // action_not_applied while the game ran, training never stopped and drained the fuel)
+        let bit = super::airread::training_mask();
+        if bit == 0 {
+            return Routed::Gui;
+        }
+        let Ok(r) = ch.post("air.set_mission", &[a], &[i64::from(bit)], None, Some(0)) else {
+            return Routed::Gui;
+        };
+        if game_refused(&r) {
+            return Routed::Refused("stopping this wing's training".into());
+        }
+        if !all_posted(&r) {
+            return Routed::Gui;
+        }
+        let start = std::time::Instant::now();
+        let mut seen = false;
+        while start.elapsed() < MISSION_BIT_WAIT {
+            if reread().is_some_and(|now| {
+                now.iter()
+                    .any(|x| x.address == a && x.mission_mask & bit == 0)
+            }) {
+                seen = true;
+                break;
+            }
+            std::thread::sleep(MISSION_BIT_POLL);
+        }
+        let waited = start.elapsed().as_millis() as u64;
+        return Routed::Done(
+            json!({"backend":"inprocess","op":"air.set_mission","enable":0,
+            "module":[r,{"executed":seen,"waited_ms":waited}]}),
+        );
+    }
     airwing_post(
         ch,
         "airwing.region",
