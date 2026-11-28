@@ -406,8 +406,6 @@ pub const UNBUILT_ARGS: &[(&str, &str)] = &[
     // the law of one occupied state (gap register occupation.per_state_law): the tool sets the
     // default law only
     ("hoi4_occupation_law", "state"),
-    // swapping a chosen doctrine (gap register doctrines.replace_doctrine)
-    ("hoi4_doctrine_adopt", "replace"),
     // the peace conference's force-government demand (gap register peace.force_government)
     ("hoi4_peace_take", "force_government"),
     // the area defence order's settings toggles (gap register orders.defensive_lines): the game's
@@ -24922,22 +24920,19 @@ mod tests {
     }
 
     #[test]
-    fn a_doctrine_replace_is_held_back_until_the_swap_is_built() {
+    fn a_doctrine_replace_is_sent_with_replace() {
         let plan = json!({"doctrines": [
             {"id": "swap", "folder": "land", "track": "infantry", "subdoctrine": "mobile_infantry",
              "xp": 50, "replace": true}]});
         let tools = doctrine_tools();
         let mut state = State::default();
         let line = doctrine_pass(&mut state, &tools, &plan, 0).unwrap();
-        assert!(
-            line.contains("replace not sent") && line.contains("doctrines.replace_doctrine"),
-            "{line}"
-        );
+        assert!(!line.contains("replace not sent"), "{line}");
         assert_eq!(
             adopted(&tools),
-            vec![json!({"doctrine": "mobile_infantry", "track": "infantry"})]
+            vec![json!({"doctrine": "mobile_infantry", "track": "infantry", "replace": true})]
         );
-        assert!(!arg_built("hoi4_doctrine_adopt", "replace"));
+        assert!(arg_built("hoi4_doctrine_adopt", "replace"));
     }
 
     #[test]
