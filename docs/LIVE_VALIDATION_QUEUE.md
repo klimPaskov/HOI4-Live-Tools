@@ -1098,6 +1098,14 @@ Stop at once on: a crash, any `unexplained`, a drop on a province not named, div
 a paradrop order the game's own tool would not draw.
 Pass -> set `LIVE_PASSED` true in native/src/launch/macos/paradrop.rs (auto then runs it).
 
+## Air mission entries over an army's front (engineer 132, written; with the next war bed; about 10 game days)
+`air_situation.missions[]` entries may name `target:"front:<army>"` (or an army_layout name hint): the region holding most
+of that army's divisions, read each turn. Bed: 1939 Germany at war with Poland (w92b), plan with `air_situation:{}` and
+one entry `{"id":"cas-n","mission":"cas","target":"front:<the northern army>","share":0.5}`. F1 the executor's note names
+the entry with a region id; that region holds most of the army's divisions (hoi4_armies states vs the air map). F2 after
+the army advances into another region, within `every_days` the entry's wings fly over the new region. F3 an unknown army:
+the note says "no army ..." and no wing moves. Record the regions and the days.
+
 ## Air reads and the air plan (engineer 106, 28 Nov 2026): live checks, no new command
 
 - air-coverage: `hoi4_air {}` per wing `air_range_km` and `coverage` against the game's own "Coverage in this region"
@@ -1263,6 +1271,16 @@ Stop at once on: any post the game did not refuse while the view greys the butto
 named, an attaché or volunteers to a country not named, a module `unexplained` result.
 Pass: V0, V1, V3, V5, V7 (V2, V4, V6 recorded). Then set LIVE_PASSED in native/src/launch/macos/volunteers.rs and the
 `volunteers` entry of IPC_LIVE_PASSED in inproc/core/ipc.c to 1, with the session's numbers in the comment.
+AFTER s129e (engineer 132, written): (a) V3 READ-BACK: a send (and an expedition) now settles by the divisions that left
+the army: all left = Reached, some = Diverged {divisions_left_our_army, not_taken} (the game's cap took fewer), none yet =
+Unknown until the settlement window. Rerun V3 on the s129e bed's start (or g126b's end save, to the Civil War) with 3
+divisions against a cap of 2: the reply must be Diverged with 2 left and 1 not_taken. (b) DYNAMIC TAGS: a country created
+in the game is addressed as the readers print it, `?<index>` (s129e: the Republic '?440'): `hoi4_diplomacy {catalog:true,
+country:"?440"}` lists rows with can_do; `{action:"send_volunteers", country:"?440", army:...}` reaches the game's check;
+a `?<index>` inside the static tag table or with no country is refused unknown_country. (c) STILL OPEN (not fixed): V5
+recall needs volunteer divisions readable abroad; V7 the attaché after volunteers to the same country is accepted by the
+module's check and dropped by the game, and send_attache ETH went the mouse path: record whether that call reused a
+request_id (a retry takes the mouse path by design) and the route the reply names.
 
 ## Session S27-DIPLOMACY-ANY: every diplomatic action by its key, the catalog and the game's own answer (module family `diplomacy2`; about 30 minutes) -- part of the diplomacy session, with S25-VOLUNTEERS
 Owner, 28 Nov: ONE dynamic diplomacy tool for any diplomatic action. What it proves: `hoi4_diplomacy {catalog:true}` lists
@@ -1306,15 +1324,36 @@ faction ally): `{action:"expeditionary_force", country:<the ally>, army:<an army
 divisions posted; the divisions turn to the ally's control (the army card's flag, or hoi4_units owner); then
 `{action:"return_expeditions", country:<the ally>}` returns them. Not at war or no ally: refused_by_game, nothing posted.
 Record the division count before and after.
+D9 a licence by command (engineer 132; written, catalog row request_licensed_production, shape variant_list): D1's catalog
+shows request_licensed_production with shape variant_list and route in_process. Toward a country with a licensable design
+we lack and good relations (1936/1939 Germany: ITA, or HUN / SWE as the plan's rows G251/G264/G271 name): first open the
+diplomacy view's Request licence row by mouse and read the dialog's list (screenshot; no send), then
+`{action:"request_licence_production", country:"ITA", equipment:["<one design name exactly as the dialog lists it>"]}`: the
+reply shows 1 posted; within 2 game days the AI's answer (a news/event line or the licence under the equipment in the
+production view: the licensed design appears in the production selection with the licensor's flag); record PP, civilian
+factories in use (the licence fee) and the answer. Then a design name the licensor does not have: invalid_target listing
+its designs, nothing posted. Then the same licence again while it is held: refused_by_game, nothing posted. Then
+`equipment:["<an equipment type key, e.g. small_plane_strike_airframe_1>"]`: the newest design of that type is asked. Stop
+at once if the licence names another design than asked, or if a licence of ours is cancelled.
+D10 call to arms / join the ally's war by command (engineer 132; written, catalog rows call_ally and join_ally, shape
+tag_list: the enemy's tag): only on a bed at war with a faction ally not yet in that war (1939 Germany at war with POL and
+Italy or Hungary in our faction, else any faction war). `{action:"call_to_arms", country:<the ally>, enemy:"POL"}`: the reply
+shows 1 posted; within 2 game days the ally joins the war against POL or refuses (record which); the same call with an
+enemy we are not at war with: refused_by_game, nothing posted. join_allies: as the ally's member when the ally is at war
+(`{action:"join_allies", country:<the ally at war>, enemy:<its enemy>}`); record when the bed allows it.
 Stop at once on: any post while the view greys the button, any change after D1/D2, a module `unexplained` result, a
 toggle that removed a relation we had.
-Pass: D0-D4, D6, D7 (D5 and D8 recorded; D8 when the bed allows it). Then set the `diplomacy2` entry of IPC_LIVE_PASSED in
-inproc/core/ipc.c to 1 with the numbers. D0's type count is 14 with engineer 125's module (generate_war_goal and
-send_expeditionary_force added).
+Pass: D0-D4, D6, D7, D9 (D5, D8 and D10 recorded; D8/D10 when the bed allows it). Then set the `diplomacy2` entry of
+IPC_LIVE_PASSED in inproc/core/ipc.c to 1 with the numbers. D0's type count is 17 with engineer 132's module
+(generate_war_goal, send_expeditionary_force, request_licensed_production, call_ally, join_ally added).
 
 ## Capture C-LICENCE: what the licence request action carries (read only plus one licence request; about 15 minutes) -- with the diplomacy session
-Not pass/fail: it gives the offline engineer the meaning of CRequestLicensedProductionAction's two equipment lists
-(+0x70 and +0x88) and its byte +0xa0, which the binary alone left open (one list is executed with 100000, the other with 0).
+OPTIONAL since engineer 132 (28 Nov): the binary settled the first list: the action's own validity (1.20.0.0 0x100fca35d)
+casts every element of +0x70 to CEquipmentVariant and requires the RECEIVER (the licensor) to own it, and its cost routine
+compares each with our designs of the same archetype: +0x70 = the licensor's designs asked. The module builds the request by
+command with that list only (S27 D9). Still open, and this capture answers it: what the dialog puts in +0x88 (also cast to
+designs, no owner check) and the byte +0xa0 (read only under game rule 6). Run C-LICENCE only if D9 is refused by the
+game's check while the mouse request of the same design is accepted.
 Server env: `HOI4_BACKEND=inprocess HOI4_TRACE=1`, module log on. Bed: 1939 Germany or 1936 Germany, paused; a country with
 a licensable design we lack (Italy, Japan, the USA: the view's Request licence row).
 L1 open the diplomacy view on that country, Request licence production: the dialog lists equipment; screenshot it.
@@ -1349,6 +1388,16 @@ C3 for the failing bases also run `{kind, base, slot:<one slot name from designs
 C4 record the build (master sha of the server and module), the game version, and whether each base's designer is the
 module designer (slots) or the upgrade designer (rows) on screen.
 Hand the folder to the air engineer: the trace's address and the screenshot tell which reader followed a wrong pointer.
+RETEST after engineer 132's fix (28 Nov, written): s126b's 'row cannot be scrolled into view' for ship 1348 (a late row)
+and plane 1318 (a row the outdated filter shows) came from the selection list's band, whose bottom stopped at 1040 while
+the list runs to the screen's edge (the Production list's own band was moved to the edge for the same reason in #197), and
+from rows read right after the filter before they were laid out again. Now: the band runs to the screen's bottom, a glide
+that meets the list's end accepts a row wholly on screen, the rows' positions settle after the filter, the click goes out
+only while the button is where it was read, and the designer must open on the asked row's type (else it is closed with
+input_readback_failed). R1 on the same 1936 save as s126b (or any 1936 Germany): `hoi4_design_options {kind:"ship",
+base:1348}` and `{kind:"plane", base:1318}` and `{kind:"tank", base:1333}` three times each: all open the designer of that
+base (reply's base.design_id); record ms. R2 a design created from 1348 (`hoi4_design_create`, any legal module change):
+saved and listed. On a failure keep the message: it now names the glide's outcome and the button's y range.
 
 ## Session S25-MIOKEY: organisation traits by key (in process, family `mio`; about 5 minutes) -- any time
 What it proves: hoi4_mio_trait `trait` / `traits` resolve the scripts' trait keys to the tree through the module's

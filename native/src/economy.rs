@@ -80,6 +80,25 @@ pub(crate) fn own_production(r: &Reader<'_>, base: u64) -> Result<(u64, u64)> {
             "Positive own country tag required",
         ));
     }
+    production_in(r, base, gs, tag)
+}
+/// engineer 132: the country and production status of any country by its tag index (the same join as the own one):
+/// another country's design list is what the licence dialog shows of it.
+pub(crate) fn production_of(r: &Reader<'_>, base: u64, tag: i32) -> Result<(u64, u64)> {
+    let g = game::layout(r);
+    let gs = r.u64(base + g.gs_global)?;
+    exact(r, gs, base + g.gs_vtable)?;
+    production_in(r, base, gs, tag)
+}
+/// The join from a checked game state.
+fn production_in(r: &Reader<'_>, base: u64, gs: u64, tag: i32) -> Result<(u64, u64)> {
+    let g = game::layout(r);
+    if !(1..4096).contains(&tag) {
+        return Err(Error::new(
+            "player_unavailable",
+            "Positive country tag required",
+        ));
+    }
     let index = i32::from_le_bytes(
         own_entry(r, gs + g.tag_country_index, tag as usize, 4)?
             .try_into()

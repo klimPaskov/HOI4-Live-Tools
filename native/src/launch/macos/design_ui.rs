@@ -351,6 +351,24 @@ pub(super) fn open_designer(r: &Reader<'_>, image: u64) -> Result<Option<(Kind, 
     }
     Ok(None)
 }
+/// Equipment type of the open designer's draft (None when no designer of `kind` is open).
+fn draft_type(r: &Reader<'_>, image: u64, kind: Kind) -> Result<Option<String>> {
+    let Some((open, view, _)) = open_designer(r, image)? else {
+        return Ok(None);
+    };
+    if open != kind {
+        return Ok(None);
+    }
+    let abi = r.string_abi();
+    let draft = if open == Kind::Upgrade {
+        let udv = r.u64(view + fld(abi, &UDW, UDW_VIEW)?)?;
+        r.u64(udv + fld(abi, &UDV, UDV_DRAFT)?)?
+    } else {
+        r.u64(view + fld(abi, &EDV, EDV_DRAFT)?)?
+    };
+    fleetmem::expect(r, draft, fleetmem::VARIANT_VTABLE, image, "Draft variant")?;
+    Ok(Some(fleetmem::variant(r, image, draft)?.type_key))
+}
 pub(super) fn designer_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     Ok(open_designer(r, image)?.is_some())
 }
@@ -672,10 +690,29 @@ fn click(keys: &dyn GameInput, rect: Rect) -> Result<()> {
 pub(super) fn click_rect(keys: &dyn GameInput, rect: Rect) -> Result<()> {
     click(keys, rect)
 }
-/// Rows fully inside the visible list (the ship list sits below a class filter header).
+/// Top edge of the visible selection list (the ship list sits below a class filter header).
+fn list_top(category: &str) -> i32 {
+    if category == "naval_button" {
+        250
+    } else {
+        170
+    }
+}
+/// The selection list runs to the bottom of the screen, like the Production list (#197): its
+/// last rows rest between 1040 and the screen's edge when the list is scrolled to its end
+/// (s126b, 28 Nov 2026: the late ship row 1348 "cannot be scrolled into view" with a bottom of
+/// 1040). Two pixels of margin for the click point.
+const LIST_BOTTOM: i32 = GAME.1 as i32 - 2;
+/// Rows fully inside the visible list.
 pub(super) fn in_list(rect: &Rect, category: &str) -> bool {
-    let top = if category == "naval_button" { 250 } else { 170 };
-    rect.y >= top && rect.y + rect.h <= 1040
+    rect.y >= list_top(category) && rect.y + rect.h <= LIST_BOTTOM
+}
+/// After a glide the list could not move further toward the row (its end): the row is as far
+/// into the list as it gets, so it counts as in view when it lies wholly on the screen.
+pub(super) fn at_list_end(rect: &Rect, glided: &super::glide::Glided) -> bool {
+    matches!(glided, super::glide::Glided::Stuck(_))
+        && rect.y >= 0
+        && rect.y + rect.h <= GAME.1 as i32
 }
 /// Glide the selection list (only while it is open) until `button` lies inside the list of
 /// `category` (see `in_list`), in one smooth movement.
@@ -685,18 +722,13 @@ pub(super) fn glide_button(
     category: &str,
     button: impl Fn(&Reader<'_>, u64) -> Result<Option<Rect>>,
 ) -> Result<super::glide::Glided> {
-    let top = if category == "naval_button" {
-        250.0
-    } else {
-        170.0
-    };
     super::glide::glide(
         process,
         keys,
         &super::glide::Glide {
             at: (780.0, 700.0),
             pixels: 240,
-            band: (top, 1040.0),
+            band: (f64::from(list_top(category)), f64::from(LIST_BOTTOM)),
             search: 0,
         },
         || {
@@ -771,8 +803,14 @@ fn set_outdated(process: &dyn Process, keys: &dyn GameInput, want: bool) -> Resu
     wait(process, "outdated filter", |r, i| {
         Ok(outdated_ticked(r, i)? == want)
     })?;
+    // Rows the filter shows again keep the rectangles they had when last drawn until the list
+    // is laid out again: wait for the positions too, not only the ids (s126b: tank 1333 failed
+    // once to scroll into view right after the filter, then passed twice).
     let _ = settled(process, "outdated rows", |r, i| {
-        Ok(rows(r, i)?.iter().map(|x| x.id).collect::<Vec<_>>())
+        Ok(rows(r, i)?
+            .iter()
+            .map(|x| (x.id, x.shown, x.variant_button, x.obsolete_button))
+            .collect::<Vec<_>>())
     });
     Ok(())
 }
@@ -830,7 +868,10 @@ pub(super) fn locate(
             set_outdated(process, keys, true)?;
             ticked_by_us = true;
         }
-        let mut glided = false;
+        // Glides tried and the last one's outcome (a second glide only when the first stopped
+        // short of the list's end).
+        let mut glides = 0;
+        let mut last: Option<super::glide::Glided> = None;
         loop {
             let list = read(process, rows)?;
             for r in &list {
@@ -846,25 +887,30 @@ pub(super) fn locate(
                 debug.push(format!("{category}: row {id} has no buttons"));
                 break;
             };
-            if in_list(&button, category) {
+            if in_list(&button, category) || last.is_some_and(|g| at_list_end(&button, &g)) {
                 return Ok(Located {
                     category,
                     outdated_ticked: read(process, outdated_ticked)?,
                     ticked_by_us,
                 });
             }
-            if glided {
-                debug.push(format!("{category}: row {id} cannot be scrolled into view"));
+            let stuck = matches!(last, Some(super::glide::Glided::Stuck(_)));
+            if glides >= 2 || stuck {
+                debug.push(format!(
+                    "{category}: row {id} cannot be scrolled into view (glide {last:?}, button y {}..{})",
+                    button.y,
+                    button.y + button.h
+                ));
                 break;
             }
-            glided = true;
-            // One glide brings the row's button into the list (only while the list is open).
-            glide_button(process, keys, category, move |r, i| {
+            glides += 1;
+            // A glide brings the row's button into the list (only while the list is open).
+            last = Some(glide_button(process, keys, category, move |r, i| {
                 Ok(rows(r, i)?
                     .into_iter()
                     .find(|x| x.id == id && x.shown)
                     .and_then(|row| row.variant_button.or(row.obsolete_button)))
-            })?;
+            })?);
         }
         if ticked_by_us {
             // Wrong list: put the filter back before trying the next category.
@@ -893,12 +939,25 @@ pub(super) fn open_for(
     // A base that became outdated (older version of a newer design) is only listed when the
     // outdated filter is ticked; `leave` puts the filter back.
     locate(process, keys, id, kind, true)?;
-    let b = settled(process, "variant button", |r, i| {
+    let (b, key) = settled(process, "variant button", |r, i| {
         row_of(r, i, id)?
-            .and_then(|x| x.variant_button)
+            .and_then(|x| x.variant_button.map(|b| (b, x.key)))
             .ok_or_else(|| Error::new("gui_target_unavailable", "Create variant button not found"))
     })?;
-    click(keys, b)?;
+    // The row may rest at the list's end below the old band: the click goes out only while the
+    // button is still where it was read.
+    let (x, y) = b.center();
+    keys.click_checked(GAME, x, y, &|| {
+        let now = read(process, |r, i| row_of(r, i, id))?.and_then(|x| x.variant_button);
+        if now == Some(b) {
+            Ok(())
+        } else {
+            Err(Error::new(
+                "gui_target_unsettled",
+                "The row moved before the click; nothing was clicked",
+            ))
+        }
+    })?;
     wait(process, "designer opens", designer_open)?;
     let opened = read(process, open_designer)?
         .map(|(k, _, _)| k)
@@ -909,6 +968,18 @@ pub(super) fn open_for(
             let s = module_state(r, i)?;
             Ok((s.type_key, s.slots, s.modules))
         });
+    }
+    // The designer must be the one of the row asked for: its draft is of the row's type.
+    let drafted = read(process, |r, i| draft_type(r, i, opened))?;
+    if drafted.as_deref() != Some(key.as_str()) {
+        let _ = close(process, keys);
+        return Err(Error::new(
+            "input_readback_failed",
+            format!(
+                "The designer opened on {} instead of design {id} ({key}); it was closed",
+                drafted.as_deref().unwrap_or("an unread draft")
+            ),
+        ));
     }
     Ok(opened)
 }
@@ -1020,4 +1091,32 @@ pub(super) fn state_json(process: &dyn Process) -> Result<Value> {
             None => json!({"designer":null}),
         })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::glide::Glided;
+    use super::*;
+    fn r(y: i32, h: i32) -> Rect {
+        Rect {
+            x: 1100,
+            y,
+            w: 30,
+            h,
+        }
+    }
+    #[test]
+    fn a_late_row_at_the_lists_end_is_in_view_down_to_the_screens_edge() {
+        // s126b: the late ship row 1348 rested below the old bottom of 1040
+        assert!(in_list(&r(1030, 30), "naval_button"));
+        assert!(!in_list(&r(1060, 30), "naval_button"));
+        assert!(!in_list(&r(240, 30), "naval_button"));
+        assert!(in_list(&r(240, 30), "aircraft_button"));
+        // the list could not move further toward the row: on screen counts as in view
+        assert!(at_list_end(&r(1052, 28), &Glided::Stuck(1052.0)));
+        assert!(at_list_end(&r(236, 30), &Glided::Stuck(236.0)));
+        // off screen, or a glide that stopped short, does not
+        assert!(!at_list_end(&r(1070, 30), &Glided::Stuck(1070.0)));
+        assert!(!at_list_end(&r(1052, 28), &Glided::Short(1052.0)));
+    }
 }

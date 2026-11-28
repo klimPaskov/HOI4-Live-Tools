@@ -813,6 +813,30 @@ static const char *events_prep(job2_t *j, uint64_t gs, int *unavailable) {
  * game date; declare war: one of the player's own war goals against the target, as the declare-war dialog lists them),
  * hands it to the game's own command maker, asks the command's own "can do" (the action's legality virtual) and posts.
  * Only the module's fresh objects are written; refused = the game's own destructor frees both. */
+/* engineer 132: the designs a licence request names, checked as the action's own validity reads its list: the handle at
+ * the reference base (+handle) resolves through the game's generic lookup to the object itself and the C++ cast
+ * CReferenceObject -> CEquipmentVariant (hint 0, as the validity casts) accepts it. Whose design it is (the licensor's)
+ * and whether it may be licensed is the game's own check. Fills j->divh with the handles. NULL when all pass. */
+static const char *licence_variants(job2_t *j, const cmd_type *ct) {
+    const stage2_common *c = &g_t.st2.common;
+    static char why[160];
+    if (!g_dyncast) g_dyncast = (dyncast_fn)dlsym(RTLD_DEFAULT, "__dynamic_cast");
+    uint64_t lk = ct->lookup_fn + (uint64_t)g_slide;
+    if (!g_dyncast || !code_ptr(lk) || !ct->ti_dst || !c->ti_reference) return "design facts unresolved";
+    for (int i = 0; i < j->ndiv; i++) {
+        uint64_t v = j->divs[i], h = 0;
+        if (!plausible(v) || !sq(v + c->cref_handle_off, &h) || !h || (uint64_t)(uintptr_t)((resolve_fn2)(uintptr_t)lk)(&h) != v ||
+            (uint64_t)(uintptr_t)g_dyncast((void *)(uintptr_t)v, (void *)(uintptr_t)(c->ti_reference + (uint64_t)g_slide),
+                                           (void *)(uintptr_t)(ct->ti_dst + (uint64_t)g_slide), 0) != v) {
+            snprintf(why, sizeof why, "design %d (0x%llx) is not a live equipment design", i, (unsigned long long)v); return why;
+        }
+        for (int k = 0; k < i; k++) if (j->divh[k] == h) { snprintf(why, sizeof why, "design %d listed twice", i); return why; }
+        j->divh[i] = h;
+    }
+    j->ndivh = j->ndiv;
+    return NULL;
+}
+
 typedef void *(*country_of_fn)(const int32_t *);
 typedef void (*act_simple_fn)(void *, const int32_t *, const int32_t *, const void *);
 typedef void (*act_war_fn)(void *, const int32_t *, const int32_t *, const void *, int, const void *);
@@ -893,8 +917,11 @@ static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint6
     char *act = (char *)nw(ct->act_size);
     if (!act) { j->unexplained = 1; return "allocation failed"; }
     memset(act, 0, ct->act_size);
-    if (ct->spec->ctor == CTOR_DIPLO_SIMPLE || vol || ct->spec->ctor == CTOR_DIPLO_DIVLIST)
+    int32_t enemy = (int32_t)j->val[1];
+    if (ct->spec->ctor == CTOR_DIPLO_SIMPLE || vol || ct->spec->ctor == CTOR_DIPLO_DIVLIST || ct->spec->ctor == CTOR_DIPLO_LICENCE)
         ((act_simple_fn)(uintptr_t)(ct->act_ctor + sl))(act, &j->player_tag, &target, dobj);
+    else if (ct->spec->ctor == CTOR_DIPLO_TAGLIST) /* engineer 132: (action, sender, receiver, const int *enemy tag, date) */
+        ((act_justify_fn)(uintptr_t)(ct->act_ctor + sl))(act, &j->player_tag, &target, &enemy, dobj);
     else if (ct->spec->ctor == CTOR_DIPLO_JUSTIFY)
         ((act_justify_fn)(uintptr_t)(ct->act_ctor + sl))(act, &j->player_tag, &target, (const void *)(uintptr_t)wgt, dobj);
     else ((act_war_fn)(uintptr_t)(ct->act_ctor + sl))(act, &j->player_tag, &target, (const void *)(uintptr_t)goal, 0, dobj);
@@ -926,6 +953,20 @@ static const char *diplo_build(job2_t *j, const cmd_type *ct, uint64_t gs, uint6
         if (ok && j->nprov) ok = fill_list(act, ct->act_units_off, j->provs, j->nprov, 4);
     }
     if (ok && ct->spec->ctor == CTOR_DIPLO_DIVLIST) ok = fill_list(act, ct->act_units_off, j->divh, j->ndivh, 8);
+    if (ok && ct->spec->ctor == CTOR_DIPLO_TAGLIST) { /* engineer 132: the constructor stored exactly the one tag asked */
+        uint64_t data = 0; int32_t cnt = -1, e0 = 0;
+        ok = sq((uint64_t)(uintptr_t)act + ct->act_units_off, &data) && plausible(data) &&
+             sread((uint64_t)(uintptr_t)act + ct->act_units_off + 0xc, &cnt, 4) && cnt == 1 && sread(data, &e0, 4) && e0 == enemy;
+    }
+    if (ok && ct->spec->ctor == CTOR_DIPLO_LICENCE) {
+        /* engineer 132: both lists empty and the byte clear as the constructor left them; the designs go into the first
+         * list through its own allocator (the action's validity casts each to a design of the receiver) */
+        int32_t c1 = -1, c2 = -1; uint8_t fl = 9;
+        uint64_t a0 = (uint64_t)(uintptr_t)act;
+        ok = sread(a0 + ct->act_units_off + 0xc, &c1, 4) && c1 == 0 && sread(a0 + ct->act_goal_off + 0xc, &c2, 4) && c2 == 0 &&
+             sread(a0 + ct->act_flag_off, &fl, 1) && fl == 0;
+        if (ok) ok = fill_list(act, ct->act_units_off, j->divh, j->ndivh, 8);
+    }
     if (!ok) { void **vt0 = *(void ***)act; ((delete_fn2)vt0[1])(act); j->res[k] = R_UNEXPECTED; j->unexplained = 1; return "the action constructor built an unexpected object"; }
     void *up = act, *cmd = NULL;
     ((make_cmd_fn)(uintptr_t)(d->make_cmd + sl))(&cmd, &up); /* moves the action into a fresh command, stamps the date */
@@ -1223,6 +1264,10 @@ static void run_job2(void *ctx) {
     }
     if (ct->spec->auth_kind == AUTH_DIPLO) { /* engineer 78: no object handles; the action is built and checked whole */
         uint64_t post2 = g_t.post.post + (uint64_t)g_slide;
+        if (ct->spec->ctor == CTOR_DIPLO_LICENCE) { /* engineer 132: every design checked as the action's own validity reads it */
+            const char *w = licence_variants(j, ct);
+            if (w) { j->res[0] = R_BAD_OBJ; snprintf(j->reason, sizeof j->reason, "%s", w); finish2(j); return; }
+        }
         if (ct->spec->ctor == CTOR_VOLUNTEER || ct->spec->ctor == CTOR_DIPLO_DIVLIST) { /* engineer 118: every division checked as the division commands check one */
             const char *w = orders2_divisions(j);
             if (w) { j->res[0] = R_BAD_OBJ; snprintf(j->reason, sizeof j->reason, "%s", w); finish2(j); return; }
@@ -1665,13 +1710,20 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
         /* engineer 125: justify also takes the war goal type's key as character codes after the tag (vals[1..], as a
          * rename passes its name) and, for a goal on states, their ids in provs (1..64) */
         int jus = ct->spec->ctor == CTOR_DIPLO_JUSTIFY;
+        /* engineer 132: a licence request names the licensor's designs (divs: their CEquipmentVariant addresses, 1..16); a
+         * call to arms / join the ally's war names the enemy after the receiver (vals: receiver tag id, enemy tag id) */
+        int lic = ct->spec->ctor == CTOR_DIPLO_LICENCE, tgl = ct->spec->ctor == CTOR_DIPLO_TAGLIST;
+        if (lic) wants_divs = 1;
         if (j->n != 1 || j->obj[0] != 0) why = "diplomacy ops name no object: objs = 0 (vals: the receiving country's tag id)";
-        else if (!jus && (nv != 1 || j->val[0] < 1 || j->val[0] > 100000)) why = "vals: the receiving country's tag id";
+        else if (tgl && (nv != 2 || j->val[0] < 1 || j->val[0] > 100000 || j->val[1] < 1 || j->val[1] > 100000 || j->val[0] == j->val[1]))
+            why = "vals: the receiving country's tag id, then the enemy's tag id (another country)";
+        else if (!jus && !tgl && (nv != 1 || j->val[0] < 1 || j->val[0] > 100000)) why = "vals: the receiving country's tag id";
         else if (jus && (nv < 2 || nv - 1 >= (int)sizeof j->wgkey || j->val[0] < 1 || j->val[0] > 100000))
             why = "vals: the receiving country's tag id, then the war goal type's key as character codes (1..39)";
         else if ((flag != 0 && flag != 2) || (obj2 && *obj2) || (!jus && provs && *provs)) why = "diplomacy ops take flag 0 (post) or 2 (check only) and no obj2 or provs";
         else if (!wants_divs && divs && *divs) why = "this diplomatic action takes no divs";
-        else if (wants_divs && ((j->ndiv = parse_list_u64(divs ? divs : "", j->divs, 64)) < 1)) why = "divs: 1 to 64 comma-separated division addresses";
+        else if (lic && ((j->ndiv = parse_list_u64(divs ? divs : "", j->divs, 16)) < 1)) why = "divs: 1 to 16 comma-separated design (CEquipmentVariant) addresses of the licensor";
+        else if (!lic && wants_divs && ((j->ndiv = parse_list_u64(divs ? divs : "", j->divs, 64)) < 1)) why = "divs: 1 to 64 comma-separated division addresses";
         for (int a = 0; !why && a < j->ndiv; a++) for (int b = a + 1; b < j->ndiv; b++) if (j->divs[a] == j->divs[b]) why = "a division is listed twice";
         if (!why && jus) {
             for (int k = 1; k < nv && !why; k++) {
@@ -1684,7 +1736,8 @@ static int be_post2(const char *op, const char *objs, const char *vals, const ch
             for (int a = 0; !why && a < j->nprov; a++) if (j->provs[a] < 1 || j->provs[a] > 100000) why = "a state id is outside 1..100000";
             nv = 1; /* the tag only stays in vals[0] */
         }
-        if (!why) { j->n = 1; j->obj[0] = 0; if (wants_divs) j->allow_free = 1; }
+        if (!why && tgl) nv = 1; /* the receiver stays in vals[0], the enemy in vals[1] */
+        if (!why) { j->n = 1; j->obj[0] = 0; if (wants_divs && !lic) j->allow_free = 1; }
         if (why) { snprintf(out, n, "\"op\":\"%s\",\"result\":\"refused_by_policy\",\"reason\":\"%s\"", op, why); free(j); logj("\"event\":\"post2\",\"id\":%ld,%s", id, out); return 0; }
         nv = 0; /* consumed */
     } else if (j->n < 1) why = "objs: comma-separated hex addresses";

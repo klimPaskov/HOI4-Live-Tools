@@ -1026,14 +1026,53 @@ static void diplo_action_facts(const scan_image *im, const cmd_spec *s, cmd_type
         /* engineer 125: justify (type pointer in rcx kept in r14, the date in r8) */
         int jus = s->ctor == CTOR_DIPLO_JUSTIFY &&
                   cmd_pmatch(fb, 23, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 49 89 ce 48 89 fb 41 8b 40 08", c, 6);
-        if (!simple && !war && !vol && !jus) continue;
+        /* engineer 132: a licence request (the SIMPLE signature, two empty lists and a byte) and the one-tag list (call to
+         * arms: the justify prologue; join the ally's war: the same with r12 saved) */
+        int lic = s->ctor == CTOR_DIPLO_LICENCE &&
+                  cmd_pmatch(fb, 21, "55 48 89 e5 41 57 41 56 41 54 53 48 83 ec 20 48 89 fb 8b 41 08", c, 6);
+        int tgl = s->ctor == CTOR_DIPLO_TAGLIST &&
+                  (cmd_pmatch(fb, 23, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 49 89 ce 48 89 fb 41 8b 40 08", c, 6) ||
+                   cmd_pmatch(fb, 25, "55 48 89 e5 41 57 41 56 41 54 53 48 83 ec 20 49 89 ce 48 89 fb 41 8b 40 08", c, 6));
+        if (!simple && !war && !vol && !jus && !lic && !tgl) continue;
         unsigned m = 0;
         long b = pfind_at(im, fs, 0xa0, "c7 04 24 01 00 00 00 48 8d 4d B 45 31 c0 41 b9 ff ff ff ff e8 D 48 8d 05 D", c, 6, &m);
         if (b < 0 || m != 1) continue;
         uint64_t at = fs + (uint64_t)b, base = at + 25 + (int64_t)(int32_t)c[1], vt = at + 32 + (int64_t)(int32_t)c[2];
         if (vt != o->vt_obj || !in_text(im, base)) continue;
-        uint32_t u_off = 0, u_inl = 0, u_cap = 0, j_type = 0;
-        if (jus || (vol && s->ctor == CTOR_DIPLO_DIVLIST)) {
+        uint32_t u_off = 0, u_inl = 0, u_cap = 0, j_type = 0, l_flag = 0;
+        uint64_t l_ti = 0;
+        if (lic) {
+            /* engineer 132: lea r14,[rbx+L1+0x10]; xorps; movups [rbx+L1],xmm0; mov rax,[rip+allocator]; mov [rbx+L1+0x10],rax;
+             * lea r12,[rbx+L2]; movups [rbx+L2],xmm0; mov [rbx+L2+0x10],rax; mov byte [rbx+F],0 */
+            uint32_t v[10]; unsigned mv = 0;
+            if (pfind_at(im, fs, 0xc0, "4c 8d b3 D 0f 57 c0 0f 11 43 B 48 8b 05 D 48 89 83 D 4c 8d a3 D 0f 11 83 D 48 89 83 D c6 83 D 00",
+                         v, 10, &mv) < 0 || mv != 1 || v[0] != v[1] + 0x10 || v[3] != v[1] + 0x10 || v[5] != v[4] ||
+                v[6] != v[4] + 0x10 || v[4] < v[1] + 0x18 || v[7] < v[4] + 0x18 || v[7] > 0x200)
+                continue;
+            u_off = v[1]; j_type = v[4]; l_flag = v[7];
+            /* the first list's elements are variants: the action's own validity walks that list and casts each element
+             * with CEquipmentVariant's typeinfo (mov r15,[rbx+L1]; shl r12,3; lea r13,[rip+typeinfo]) */
+            for (uint32_t sl = 0; sl < 0x80 * 8 && !l_ti; sl += 8) {
+                uint64_t fn = 0; uint32_t w[2]; unsigned mw = 0;
+                if (!scan_q(im, o->vt_obj + sl, &fn) || !in_text(im, fn)) continue;
+                long a = pfind_at(im, fn, 0x300, "4c 8b 7b B 49 c1 e4 03 4c 8d 2d D", w, 2, &mw);
+                if (a < 0 || mw != 1 || w[0] != u_off) continue;
+                uint64_t ti = fn + (uint64_t)a + 15 + (int64_t)(int32_t)w[1];
+                char tn[64];
+                if (ti_name(im, ti, tn, sizeof tn) && !strcmp(tn, "17CEquipmentVariant")) l_ti = ti;
+            }
+            if (!l_ti) continue;
+        } else if (tgl) {
+            /* engineer 132: the empty int list (as justify's), then the one tag appended: mov rax,[rbx+L]; mov ecx,[r14] */
+            uint32_t v[8]; unsigned mv = 0;
+            if (pfind_at(im, fs, 0xc0, "4c 8d 7b B 0f 57 c0 0f 11 43 B 48 8b 05 D 48 89 83 D", v, 8, &mv) < 0 || mv != 1 ||
+                v[1] != v[0] || v[3] != v[0] + 0x10)
+                continue;
+            u_off = v[0];
+            if (pfind_at(im, fs, 0x140, "48 8b 43 B 41 8b 0e", v, 8, &mv) < 0 || mv != 1 || v[0] != u_off) continue;
+            /* never justify's: no type pointer stored, no byte +0xe */
+            if (pfind_at(im, fs, 0xc0, "c6 43 0e 01", v, 8, &mv) >= 0) continue;
+        } else if (jus || (vol && s->ctor == CTOR_DIPLO_DIVLIST)) {
             /* engineer 125: an empty list with no inline places: lea r15,[rbx+L]; xorps; movups [rbx+L],xmm0;
              * mov rax,[rip+allocator]; mov [rbx+L+0x10],rax (justify: then mov [rbx+T],r14, the type) */
             uint32_t v[8]; unsigned mv = 0;
@@ -1059,7 +1098,7 @@ static void diplo_action_facts(const scan_image *im, const cmd_spec *s, cmd_type
             u_inl = v[0]; u_cap = v[3];
         }
         long t2 = simple ? pfind_at(im, fs, 0xa0, "48 89 03 48 89 df be D", c + 3, 3, &m)
-                : (vol || jus) ? pfind_at(im, fs, 0xe0, "48 89 df be D e8 D", c + 3, 3, &m)
+                : (vol || jus || lic || tgl) ? pfind_at(im, fs, 0xe0, "48 89 df be D e8 D", c + 3, 3, &m)
                          : pfind_at(im, fs, 0xe0, "41 88 5e B 4c 89 f7 be D", c + 3, 3, &m);
         if (simple && t2 < 0) { /* improve relations: the constructor also sets one byte flag of its own first */
             uint32_t e[3];
@@ -1067,17 +1106,19 @@ static void diplo_action_facts(const scan_image *im, const cmd_spec *s, cmd_type
             if (t2 >= 0) c[3] = e[1];
         }
         if (t2 < 0 || m != 1) continue;
-        uint32_t typ = war ? c[4] : c[3], goal_off = jus ? j_type : 0, flag_off = war ? c[3] : 0;
+        uint32_t typ = war ? c[4] : c[3], goal_off = (jus || lic) ? j_type : 0, flag_off = war ? c[3] : 0;
         if (war) {
             uint32_t g[2]; unsigned mg = 0;
             if (pfind_at(im, fs, 0xe0, "49 8b 47 08 49 89 46 B", g, 2, &mg) < 0 || mg != 1) continue;
             goal_off = g[0];
         }
         /* the complete- and base-object constructors are identical copies: every match must agree */
+        if (lic) flag_off = l_flag;
         if (found && (o->act_base != base || o->act_type != typ || o->act_goal_off != goal_off || o->act_flag_off != flag_off ||
-                      o->act_units_off != u_off || o->act_units_inline != u_inl || o->act_units_cap != u_cap)) { found = 99; break; }
+                      o->act_units_off != u_off || o->act_units_inline != u_inl || o->act_units_cap != u_cap ||
+                      (lic && o->ti_dst != l_ti))) { found = 99; break; }
         if (!found) { o->act_ctor = fs; o->act_base = base; o->act_type = typ; o->act_goal_off = goal_off; o->act_flag_off = flag_off;
-                      o->act_units_off = u_off; o->act_units_inline = u_inl; o->act_units_cap = u_cap; }
+                      o->act_units_off = u_off; o->act_units_inline = u_inl; o->act_units_cap = u_cap; if (lic) o->ti_dst = l_ti; }
         found = 1;
     }
     /* the class's own Clone (vtable +0xd0, the slot the command's copy constructor calls): new(size) first */
@@ -1930,6 +1971,9 @@ static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stag
             if (cmd_pmatch(fb, 26, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 44 89 c3 49 89 cf 49 89 fe 41 8b 41 08", cc, 2)) kmask |= 4;
             /* engineer 125: justify (the war goal type in rcx, the date in r8) */
             if (cmd_pmatch(fb, 23, "55 48 89 e5 41 57 41 56 53 48 83 ec 28 49 89 ce 48 89 fb 41 8b 40 08", cc, 2)) kmask |= 8;
+            /* engineer 132: the licence request's prologue; join the ally's war (one tag, r12 saved) */
+            if (cmd_pmatch(fb, 21, "55 48 89 e5 41 57 41 56 41 54 53 48 83 ec 20 48 89 fb 8b 41 08", cc, 2)) kmask |= 16;
+            if (cmd_pmatch(fb, 25, "55 48 89 e5 41 57 41 56 41 54 53 48 83 ec 20 49 89 ce 48 89 fb 41 8b 40 08", cc, 2)) kmask |= 32;
         }
         const char *why = best == 3 ? "unsupported:dialog_fields" : best == 2 ? "unsupported:constructor_args_1"
                         : best == 1 ? "unsupported:constructor_args_2" : "unsupported:no_player_constructor";
@@ -1939,11 +1983,13 @@ static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stag
         if (kmask && t->ndyn < DIPLO_CAT_MAX && t->n < CMD2_MAX) {
             /* engineer 125: the division prologue is tried with inline places (volunteers) and then with an allocated
              * list (the expeditionary force); the justify prologue as the war goal type shape */
-            static const int kinds[5] = {CTOR_DIPLO_SIMPLE, CTOR_VOLUNTEER, CTOR_DIPLO_WAR, CTOR_DIPLO_DIVLIST, CTOR_DIPLO_JUSTIFY};
-            static const int kbit[5] = {1, 2, 4, 2, 8};
-            static const char *const kname[5] = {"simple", "divisions", "war_goal", "division_list", "war_goal_type"};
+            /* engineer 132: the one-tag list (call to arms, join the ally's war) and the licence request's variant list */
+            static const int kinds[7] = {CTOR_DIPLO_SIMPLE, CTOR_VOLUNTEER, CTOR_DIPLO_WAR, CTOR_DIPLO_DIVLIST, CTOR_DIPLO_JUSTIFY,
+                                         CTOR_DIPLO_TAGLIST, CTOR_DIPLO_LICENCE};
+            static const int kbit[7] = {1, 2, 4, 2, 8, 8 | 32, 16};
+            static const char *const kname[7] = {"simple", "divisions", "war_goal", "division_list", "war_goal_type", "tag_list", "variant_list"};
             snprintf(dc->op, sizeof dc->op, "diplomacy2.%s", dc->key);
-            for (int q = 0; q < 5; q++) {
+            for (int q = 0; q < 7; q++) {
                 if (!(kmask & kbit[q])) continue;
                 if (kinds[q] == CTOR_DIPLO_DIVLIST) {
                     uint32_t f = 0; uint64_t w = 0;
@@ -1958,7 +2004,7 @@ static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stag
                 *row = *ref;
                 row->spec = sp; row->vt_obj = vts[k];
                 row->act_ctor = row->act_base = 0; row->act_size = row->act_type = row->act_goal_off = row->act_flag_off = 0;
-                row->act_units_off = row->act_units_inline = row->act_units_cap = 0; row->ctor = 0;
+                row->act_units_off = row->act_units_inline = row->act_units_cap = 0; row->ctor = 0; row->ti_dst = 0;
                 row->conf &= ~(unsigned)(C_RESOLVER | C_CTOR);
                 diplo_action_facts(im, sp, row);
                 row->ok = (row->conf & row->need) == row->need;
