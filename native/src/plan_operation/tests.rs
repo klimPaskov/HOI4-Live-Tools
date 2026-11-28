@@ -573,9 +573,24 @@ fn every_attacker_a_wing_too_executes_before_the_declaration_and_the_declaration
             }
         }
     });
+    // the burst runs again while one is pending and executes it before the declaration
     game.calls.borrow_mut().clear();
     burst(&mut state, &game, &plan, at + 1);
-    let pending = pre_pending(&state, at + 1);
+    assert!(
+        game.orders()
+            .iter()
+            .any(|(_, a)| a["execute"] == json!(true) && a["army"] == json!("Nord")),
+        "{:?}",
+        game.orders()
+    );
+    assert!(pre_pending(&state, at + 1).is_empty());
+    // an execution not read back yet holds the declaration and is named
+    state.done.insert(key("op_pol", "prepending"), at + 2);
+    state.op_notes.insert(
+        "op_pol:prepending".into(),
+        "operation op_pol: before the declaration Nord not executing yet".into(),
+    );
+    let pending = pre_pending(&state, at + 2);
     assert_eq!(pending.len(), 1, "{pending:?}");
     assert!(pending[0].contains("Nord"), "{pending:?}");
     // once war is on the pass no longer holds anything
