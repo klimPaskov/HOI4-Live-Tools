@@ -1,0 +1,671 @@
+//! CAPACITY (pure): what each stretch of a unit's line can fight with and feed, and where the
+//! divisions it cannot use there should go instead.
+//!
+//! A STRETCH is one plan root (a front order of the unit) with the own provinces of its line.
+//! Its ROOM is read from the same facts the ground model uses:
+//! - WIDTH: the divisions its battles take with profit (`ground::province_caps`: every enemy
+//!   province facing the line takes `best_fit` of its combat width from as many directions as
+//!   own provinces touch it, shared among those provinces), summed over the stretch's provinces;
+//! - SUPPLY: the divisions the supply reaching the stretch feeds at `floor` of their need
+//!   (`hoi4_supply` provinces: the supply each province receives, the demand of one division as
+//!   the read's own mean); provinces without a read count at the mean of the read ones;
+//! - HOLD: the hostile divisions our country sees facing it (`hoi4_wars` border rows, spread over
+//!   the facing provinces of each state), times `hold_ratio`: a stretch the enemy masses against
+//!   is never left with one division (o96a, 28 Nov 2026: one German division in Luxembourg
+//!   against 18 French ones).
+//!
+//! cap = max(min(width, supply), hold), at least one while it faces an enemy province. The caps
+//! are the weights the unit's divisions are spread over its fronts by (`hoi4_army_plan
+//! distribute {weights}`), so a narrow forest stretch with no railway gets what it can fight
+//! with and feed, and the rest goes to the stretches with room.
+//!
+//! SIDEWAYS (`sideways`): at war a battle whose reserve outnumbers its engaged divisions holds
+//! divisions that fight nowhere; the surplus (reserve beyond the engaged) moves to the stretch
+//! with the most room (cap minus its divisions) that is not the battle's own (`hoi4_army_plan
+//! assign {order, divisions}`), the freshest first. o96a (28 Nov 2026): 20 of 24 reserve
+//! divisions sat behind two full Ardennes forest battles (3488: 9 engaged and 11 in reserve) while
+//! 7-18 fit divisions stood on the line beside enemy provinces nobody attacked.
+//!
+//! BREADTH (`breadth`): the enemy provinces touching ours, how many have a battle of ours, and
+//! how many of those are attacked from fewer sides than we border them: the reading the note
+//! carries every war day (o96a: 3-7 of 7-11 attacked; 5 of 6 battles from one direction).
+use super::ground::{self, Prov};
+use super::{list, text};
+use serde_json::Value;
+use std::collections::{HashMap, HashSet};
+
+/// The supply share a division is fed at for the stretch's carry (`capacity.supply_floor`): half,
+/// as the stacking carry (STACK_FLOOR).
+pub(super) const FEED_FLOOR: f64 = 0.5;
+/// The divisions a stretch keeps against each hostile division it faces (`capacity.hold_ratio`).
+pub(super) const HOLD_RATIO: f64 = 1.0;
+
+/// One stretch: a front order of the unit with the own provinces of its line and its divisions.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct Stretch {
+    pub id: i64,
+    pub provinces: Vec<i64>,
+    pub divisions: i64,
+}
+
+/// What a stretch can use.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct Room {
+    pub id: i64,
+    pub width: i64,
+    /// None: no province of the stretch has a supply read
+    pub supply: Option<i64>,
+    pub hold: i64,
+    pub cap: i64,
+    pub divisions: i64,
+    /// enemy provinces the stretch faces
+    pub facing: usize,
+}
+
+impl Room {
+    /// Divisions it can still take (negative: over its cap).
+    pub(super) fn free(&self) -> i64 {
+        self.cap - self.divisions
+    }
+}
+
+/// The supply a `hoi4_supply` read shows: province -> supply received, and the demand of one
+/// division (the read's total demand over its divisions).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct Feed {
+    pub supply: HashMap<i64, f64>,
+    pub per_division: Option<f64>,
+}
+
+pub(super) fn feed(read: &Value) -> Feed {
+    let mut out = Feed::default();
+    let (mut demand, mut divisions) = (0.0, 0.0);
+    for p in list(read, "provinces") {
+        let Some(id) = p["province_id"].as_i64().or(p["province"].as_i64()) else {
+            continue;
+        };
+        if let Some(s) = p["supply"].as_f64() {
+            out.supply.insert(id, s.max(0.0));
+        }
+        let n = p["divisions"].as_f64().unwrap_or(0.0);
+        if let Some(d) = p["demand"].as_f64().filter(|d| *d > 0.0 && n > 0.0) {
+            demand += d;
+            divisions += n;
+        }
+    }
+    if divisions > 0.0 {
+        out.per_division = Some(demand / divisions);
+    }
+    out
+}
+
+/// The room of every stretch (in the order given). `enemy` holds the enemy provinces, `width_at`
+/// the division width that stands in an own province, `seen` the hostile divisions our country
+/// sees per enemy state. Pure.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn rooms(
+    g: &HashMap<i64, Prov>,
+    stretches: &[Stretch],
+    enemy: &HashSet<i64>,
+    width_at: &dyn Fn(i64) -> f64,
+    feed: &Feed,
+    seen: &HashMap<i64, f64>,
+    floor: f64,
+    hold_ratio: f64,
+) -> Vec<Room> {
+    let front: HashSet<i64> = stretches
+        .iter()
+        .flat_map(|s| s.provinces.iter().copied())
+        .collect();
+    // a province on two stretches counts half on each
+    let mut shared: HashMap<i64, f64> = HashMap::new();
+    for s in stretches {
+        let mut mine: Vec<i64> = s.provinces.clone();
+        mine.sort_unstable();
+        mine.dedup();
+        for p in mine {
+            *shared.entry(p).or_default() += 1.0;
+        }
+    }
+    let caps = ground::province_caps(g, &front, &|q| enemy.contains(&q), width_at, 0);
+    // the own front provinces touching each enemy province, and the enemy provinces of each
+    // state that face our front (the seen divisions of a state are spread over them)
+    let mut sides: HashMap<i64, Vec<i64>> = HashMap::new();
+    for p in &front {
+        for (q, _) in g.get(p).map(|r| r.borders.as_slice()).unwrap_or(&[]) {
+            if enemy.contains(q) && g.contains_key(q) {
+                sides.entry(*q).or_default().push(*p);
+            }
+        }
+    }
+    let mut facing_of_state: HashMap<i64, f64> = HashMap::new();
+    for e in sides.keys() {
+        if let Some(r) = g.get(e) {
+            *facing_of_state.entry(r.state).or_default() += 1.0;
+        }
+    }
+    stretches
+        .iter()
+        .map(|s| {
+            let mine: HashSet<i64> = s.provinces.iter().copied().collect();
+            let width: f64 = mine
+                .iter()
+                .filter_map(|p| Some(caps.get(p)?.cap as f64 / shared.get(p).copied()?))
+                .sum();
+            // supply: the read provinces as read, the stretch's others at its read mean
+            let read: Vec<f64> = mine
+                .iter()
+                .filter_map(|p| feed.supply.get(p).copied())
+                .collect();
+            let supply = match feed.per_division {
+                Some(need) if need > 0.0 && !read.is_empty() => {
+                    let mean = read.iter().sum::<f64>() / read.len() as f64;
+                    let total: f64 = mine
+                        .iter()
+                        .map(|p| feed.supply.get(p).copied().unwrap_or(mean) / shared[p])
+                        .sum();
+                    Some((total / (floor.max(0.05) * need)).floor() as i64)
+                }
+                _ => None,
+            };
+            let mut facing = 0;
+            let mut hold = 0.0;
+            for (e, from) in &sides {
+                let here = from.iter().filter(|p| mine.contains(*p)).count();
+                if here == 0 {
+                    continue;
+                }
+                facing += 1;
+                let state = g.get(e).map_or(0, |r| r.state);
+                let per = seen.get(&state).copied().unwrap_or(0.0)
+                    / facing_of_state.get(&state).copied().unwrap_or(1.0);
+                hold += per * here as f64 / from.len() as f64;
+            }
+            let width = (width - 1e-9).ceil().max(0.0) as i64;
+            let hold = (hold * hold_ratio - 1e-9).ceil().max(0.0) as i64;
+            let fight = supply.map_or(width, |c| width.min(c));
+            let mut cap = fight.max(hold);
+            if facing > 0 {
+                cap = cap.max(1);
+            }
+            Room {
+                id: s.id,
+                width,
+                supply,
+                hold,
+                cap,
+                divisions: s.divisions,
+                facing,
+            }
+        })
+        .collect()
+}
+
+/// One line of the rooms for a note: "id: N of cap C (width W, supply S, hold H)".
+pub(super) fn describe(rooms: &[Room]) -> String {
+    rooms
+        .iter()
+        .map(|r| {
+            format!(
+                "{}: {} of {} (width {}, supply {}, hold {}, {} enemy provinces)",
+                r.id,
+                r.divisions,
+                r.cap,
+                r.width,
+                r.supply.map_or("unread".to_string(), |s| s.to_string()),
+                r.hold,
+                r.facing
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+/// Whether the divisions stand far from the rooms: a stretch over its cap by at least `slack`
+/// while another has at least `slack` free (the spread by capacity is worth its move). Pure.
+pub(super) fn unbalanced(rooms: &[Room], slack: i64) -> bool {
+    rooms.iter().any(|r| r.free() <= -slack) && rooms.iter().any(|r| r.free() >= slack)
+}
+
+/// A battle whose reserve outnumbers its engaged divisions, with our divisions waiting in it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct Pile {
+    pub province: i64,
+    pub engaged: i64,
+    pub reserve: i64,
+    /// our reserve divisions there: (id, organisation, the province it stands in)
+    pub waiting: Vec<(String, f64, Option<i64>)>,
+}
+
+fn id_of(v: &Value) -> Option<String> {
+    v.as_str()
+        .map(String::from)
+        .or_else(|| v.as_i64().map(|n| n.to_string()))
+}
+
+/// The battles we attack whose reserve outnumbers the engaged, with the reserve divisions of
+/// `ours` in them, the fullest first. Pure.
+pub(super) fn piles(battles: &Value, ours: &HashSet<String>) -> Vec<Pile> {
+    let mut out: Vec<Pile> = list(battles, "list")
+        .iter()
+        .filter(|b| text(&b["our_side"]) == "attacker")
+        .filter_map(|b| {
+            let side = &b["attacker"];
+            let engaged = side["engaged"].as_i64().unwrap_or(0);
+            let reserve = side["reserve"].as_i64().unwrap_or(0);
+            if reserve <= engaged {
+                return None;
+            }
+            let waiting: Vec<(String, f64, Option<i64>)> = list(side, "reserve_divisions")
+                .iter()
+                .filter_map(|d| {
+                    let id = id_of(&d["id"])?;
+                    ours.contains(&id)
+                        .then(|| (id, d["org"].as_f64().unwrap_or(0.0), d["province"].as_i64()))
+                })
+                .collect();
+            (!waiting.is_empty()).then(|| Pile {
+                province: b["province"].as_i64().unwrap_or(0),
+                engaged,
+                reserve,
+                waiting,
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        (b.reserve - b.engaged)
+            .cmp(&(a.reserve - a.engaged))
+            .then(a.province.cmp(&b.province))
+    });
+    out
+}
+
+/// The own provinces holding more of `ours` than their battles take (`caps`: province -> the
+/// divisions its battles take, `ground::province_caps`), as piles whose surplus is the standing
+/// divisions beyond the cap (no march or attack under way: `heading_province` empty), from a
+/// `hoi4_supply` read, the fullest first. w96a (28 Nov 2026, W+1): 10 divisions in 9522 for 4,
+/// 9 in 11470 for 2. Pure.
+pub(super) fn overstacked(
+    read: &Value,
+    caps: &HashMap<i64, i64>,
+    ours: &HashSet<String>,
+) -> Vec<Pile> {
+    let mut at: HashMap<i64, Vec<(String, f64, Option<i64>)>> = HashMap::new();
+    let mut count: HashMap<i64, i64> = HashMap::new();
+    for d in list(read, "divisions") {
+        let (Some(id), Some(p)) = (id_of(&d["id"]), d["province_id"].as_i64()) else {
+            continue;
+        };
+        if !ours.contains(&id) {
+            continue;
+        }
+        *count.entry(p).or_default() += 1;
+        if d["heading_province"].is_null() {
+            at.entry(p)
+                .or_default()
+                .push((id, d["organisation"].as_f64().unwrap_or(0.0), Some(p)));
+        }
+    }
+    let mut out: Vec<Pile> = count
+        .into_iter()
+        .filter_map(|(p, n)| {
+            let cap = *caps.get(&p)?;
+            let waiting = at.remove(&p).unwrap_or_default();
+            (n > cap && !waiting.is_empty()).then_some(Pile {
+                province: p,
+                engaged: cap,
+                reserve: n,
+                waiting,
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        (b.reserve - b.engaged)
+            .cmp(&(a.reserve - a.engaged))
+            .then(a.province.cmp(&b.province))
+    });
+    out
+}
+
+/// A move of divisions onto another stretch.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct Move {
+    pub to: i64,
+    pub divisions: Vec<String>,
+    pub why: String,
+}
+
+/// SIDEWAYS: from the fullest pile, its surplus (reserve beyond the engaged; at most `most`)
+/// goes to the stretch with the most free room that is not the pile's own (`root_of` a
+/// province), the freshest divisions first. None while no other stretch has room. Pure.
+pub(super) fn sideways(
+    piles: &[Pile],
+    rooms: &[Room],
+    root_of: &dyn Fn(i64) -> Option<i64>,
+    most: usize,
+) -> Option<Move> {
+    for pile in piles {
+        let from = pile
+            .waiting
+            .iter()
+            .find_map(|(_, _, p)| p.and_then(root_of))
+            .or_else(|| root_of(pile.province));
+        let Some(target) = rooms
+            .iter()
+            .filter(|r| Some(r.id) != from && r.free() > 0 && r.facing > 0)
+            .max_by(|a, b| a.free().cmp(&b.free()).then(b.id.cmp(&a.id)))
+        else {
+            continue;
+        };
+        let surplus = (pile.reserve - pile.engaged).max(0) as usize;
+        let n = surplus
+            .min(target.free().max(0) as usize)
+            .min(pile.waiting.len())
+            .min(most);
+        if n == 0 {
+            continue;
+        }
+        let mut fresh = pile.waiting.clone();
+        fresh.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        return Some(Move {
+            to: target.id,
+            divisions: fresh.into_iter().take(n).map(|(id, _, _)| id).collect(),
+            why: format!(
+                "province {} holds {} in reserve behind {} engaged; front {} has room for {} ({} of {})",
+                pile.province,
+                pile.reserve,
+                pile.engaged,
+                target.id,
+                target.free(),
+                target.divisions,
+                target.cap
+            ),
+        });
+    }
+    None
+}
+
+/// The breadth of the attack: (enemy provinces touching ours, those with a battle of ours, those
+/// attacked from fewer sides than we border them). `front` = own provinces where our divisions
+/// stand. Pure.
+pub(super) fn breadth(
+    g: &HashMap<i64, Prov>,
+    front: &HashSet<i64>,
+    enemy: &HashSet<i64>,
+    battles: &Value,
+) -> (usize, usize, usize) {
+    let mut sides: HashMap<i64, usize> = HashMap::new();
+    for p in front {
+        for (q, _) in g.get(p).map(|r| r.borders.as_slice()).unwrap_or(&[]) {
+            if enemy.contains(q) {
+                *sides.entry(*q).or_default() += 1;
+            }
+        }
+    }
+    let mut attacked = 0;
+    let mut narrow = 0;
+    for b in list(battles, "list") {
+        if text(&b["our_side"]) != "attacker" {
+            continue;
+        }
+        let Some(p) = b["province"].as_i64() else {
+            continue;
+        };
+        let Some(n) = sides.get(&p) else { continue };
+        attacked += 1;
+        let directions = b["width"]["directions"].as_u64().unwrap_or(1) as usize;
+        if directions < *n {
+            narrow += 1;
+        }
+    }
+    (sides.len(), attacked, narrow)
+}
+
+/// Whether a battle is fought on ground that slows armour: its own read names a terrain or river
+/// penalty to the attack, or a fort (`lines`), else the province's terrain attack modifier in the
+/// graph is below zero. Pure.
+pub(super) fn rough_battle(b: &Value, g: &HashMap<i64, Prov>) -> bool {
+    let named = list(b, "lines").iter().any(|l| {
+        let line = text(&l["line"]);
+        (line == "terrain" || line == "river" || line.starts_with("fort"))
+            && l["value"].as_f64().is_some_and(|v| v < 0.0)
+    });
+    named
+        || b["province"]
+            .as_i64()
+            .and_then(|p| g.get(&p))
+            .is_some_and(|r| r.attack < 0.0 || r.forts > 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn prov(state: i64, width: f64, attack: f64, borders: &[i64]) -> Prov {
+        Prov {
+            state,
+            terrain: if attack < 0.0 { "forest" } else { "plains" }.into(),
+            width,
+            support: width / 2.0,
+            attack,
+            movement: 1.0,
+            forts: 0,
+            borders: borders.iter().map(|b| (*b, 0.0)).collect(),
+            coastal: false,
+        }
+    }
+
+    /// The o96a Low Countries in small: own Rheinland 51 (provinces 1, 2) faces the Belgian
+    /// Ardennes forest 980 (province 10, one direction), own Westfalen 57 (3, 4, 5) faces the
+    /// Dutch plains of Gelderland 35 (11, 12, 13, each from one or two sides).
+    fn theatre() -> HashMap<i64, Prov> {
+        HashMap::from([
+            (1, prov(51, 70.0, 0.0, &[10, 2])),
+            (2, prov(51, 70.0, 0.0, &[1, 3])),
+            (3, prov(57, 70.0, 0.0, &[2, 4, 11])),
+            (4, prov(57, 70.0, 0.0, &[3, 5, 11, 12])),
+            (5, prov(57, 70.0, 0.0, &[4, 12, 13])),
+            (10, prov(980, 60.0, -0.15, &[1])),
+            (11, prov(35, 70.0, 0.0, &[3, 4])),
+            (12, prov(35, 70.0, 0.0, &[4, 5])),
+            (13, prov(35, 70.0, 0.0, &[5])),
+        ])
+    }
+
+    #[test]
+    fn a_narrow_unfed_forest_stretch_gets_what_it_can_fight_with_and_feed_and_the_plains_the_rest()
+    {
+        let g = theatre();
+        let enemy: HashSet<i64> = [10, 11, 12, 13].into();
+        // o96a W+10: the Ardennes province fed 1.66 against a demand of 21.3 for 26 divisions
+        // (0.82 a division); the Dutch side's provinces about 4.5 each
+        let read = json!({"provinces": [
+            {"province_id": 1, "divisions": 26, "supply": 1.66, "demand": 21.3},
+            {"province_id": 3, "divisions": 4, "supply": 4.6, "demand": 3.3},
+            {"province_id": 4, "divisions": 4, "supply": 4.5, "demand": 3.3},
+            {"province_id": 5, "divisions": 4, "supply": 4.4, "demand": 3.3}]});
+        let f = feed(&read);
+        assert!((f.per_division.unwrap() - 0.82).abs() < 0.01);
+        let stretches = vec![
+            Stretch {
+                id: 92,
+                provinces: vec![1, 2],
+                divisions: 26,
+            },
+            Stretch {
+                id: 91,
+                provinces: vec![3, 4, 5],
+                divisions: 12,
+            },
+        ];
+        let r = rooms(
+            &g,
+            &stretches,
+            &enemy,
+            &|_| 20.0,
+            &f,
+            &HashMap::new(),
+            FEED_FLOOR,
+            HOLD_RATIO,
+        );
+        let bel = &r[0];
+        let hol = &r[1];
+        // a 60-wide forest from one side takes 3 of 20 wide; 1.66 + 1.66 supply feeds 8 at half
+        assert_eq!(bel.width, 3);
+        assert_eq!(bel.supply, Some(8));
+        assert_eq!(bel.cap, 3);
+        assert_eq!(bel.facing, 1);
+        // three plains provinces, two of them from two sides
+        assert!(hol.width >= 10, "{hol:?}");
+        assert!(hol.cap > bel.cap * 3, "{hol:?}");
+        assert!(unbalanced(&r, 3));
+        assert!(describe(&r).contains("92: 26 of 3"));
+    }
+
+    #[test]
+    fn a_stretch_the_enemy_masses_against_is_never_left_with_one_division() {
+        let g = theatre();
+        let enemy: HashSet<i64> = [10, 11, 12, 13].into();
+        // 18 hostile divisions seen in the forest state (the French in Luxembourg, o96a W+6)
+        let seen = HashMap::from([(980, 18.0)]);
+        let stretches = vec![
+            Stretch {
+                id: 92,
+                provinces: vec![1, 2],
+                divisions: 1,
+            },
+            Stretch {
+                id: 91,
+                provinces: vec![3, 4, 5],
+                divisions: 40,
+            },
+        ];
+        let r = rooms(
+            &g,
+            &stretches,
+            &enemy,
+            &|_| 20.0,
+            &Feed::default(),
+            &seen,
+            FEED_FLOOR,
+            HOLD_RATIO,
+        );
+        assert_eq!(r[0].hold, 18);
+        assert_eq!(r[0].cap, 18);
+        assert_eq!(r[0].supply, None);
+    }
+
+    fn battle(province: i64, engaged: i64, reserve: &[(&str, f64, i64)], directions: u64) -> Value {
+        json!({"province": province, "our_side": "attacker",
+               "width": {"directions": directions},
+               "lines": [{"line": "terrain", "value": -0.15}],
+               "attacker": {"engaged": engaged, "reserve": reserve.len(),
+                 "reserve_divisions": reserve.iter().map(|(id, org, p)|
+                     json!({"id": id, "org": org, "province": p})).collect::<Vec<_>>()}})
+    }
+
+    #[test]
+    fn the_reserve_of_a_full_forest_battle_goes_sideways_to_the_front_with_room() {
+        // o96a W+2.5: 3488 (Ardennes) 9 engaged and 11 waiting, the Dutch front with room
+        let reserve: Vec<(String, f64, i64)> = (0..11)
+            .map(|i| (format!("d{i}"), 40.0 + i as f64, 1))
+            .collect();
+        let rows: Vec<(&str, f64, i64)> = reserve
+            .iter()
+            .map(|(id, o, p)| (id.as_str(), *o, *p))
+            .collect();
+        let battles = json!({"list": [battle(10, 9, &rows, 1),
+            battle(11, 3, &[("x1", 70.0, 3)], 2)]});
+        let ours: HashSet<String> = reserve.iter().map(|r| r.0.clone()).collect();
+        let p = piles(&battles, &ours);
+        assert_eq!(p.len(), 1);
+        assert_eq!((p[0].province, p[0].engaged, p[0].reserve), (10, 9, 11));
+        let rooms = vec![
+            Room {
+                id: 92,
+                cap: 3,
+                divisions: 26,
+                facing: 1,
+                ..Default::default()
+            },
+            Room {
+                id: 91,
+                cap: 20,
+                divisions: 12,
+                facing: 3,
+                ..Default::default()
+            },
+        ];
+        let root_of = |p: i64| if p <= 2 { Some(92) } else { Some(91) };
+        let m = sideways(&p, &rooms, &root_of, 18).unwrap();
+        assert_eq!(m.to, 91);
+        // the surplus beyond the engaged is 2: the two freshest go
+        assert_eq!(m.divisions, vec!["d10".to_string(), "d9".to_string()]);
+        assert!(m.why.contains("11 in reserve behind 9 engaged"));
+        // no other front with room: nothing moves
+        let full = vec![rooms[0].clone()];
+        assert!(sideways(&p, &full, &root_of, 18).is_none());
+    }
+
+    #[test]
+    fn a_province_over_what_its_battles_take_is_a_pile_too() {
+        let read = json!({"divisions": [
+            {"id": "a", "province_id": 1, "organisation": 50.0},
+            {"id": "b", "province_id": 1, "organisation": 60.0},
+            {"id": "c", "province_id": 1, "organisation": 70.0, "heading_province": 10},
+            {"id": "d", "province_id": 1, "organisation": 40.0},
+            {"id": "e", "province_id": 3, "organisation": 40.0},
+            {"id": "x", "province_id": 1, "organisation": 40.0}]});
+        let ours: HashSet<String> = ["a", "b", "c", "d", "e"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let caps = HashMap::from([(1, 2), (3, 4)]);
+        let p = overstacked(&read, &caps, &ours);
+        assert_eq!(p.len(), 1);
+        assert_eq!((p[0].province, p[0].engaged, p[0].reserve), (1, 2, 4));
+        // the marching division stays where it heads
+        assert_eq!(p[0].waiting.len(), 3);
+        let rooms = vec![
+            Room {
+                id: 92,
+                cap: 2,
+                divisions: 4,
+                facing: 1,
+                ..Default::default()
+            },
+            Room {
+                id: 91,
+                cap: 10,
+                divisions: 1,
+                facing: 2,
+                ..Default::default()
+            },
+        ];
+        let m = sideways(
+            &p,
+            &rooms,
+            &|q| if q == 1 { Some(92) } else { Some(91) },
+            18,
+        )
+        .unwrap();
+        assert_eq!(m.to, 91);
+        assert_eq!(m.divisions, vec!["b".to_string(), "a".to_string()]);
+    }
+
+    #[test]
+    fn breadth_counts_the_provinces_attacked_and_those_attacked_from_too_few_sides() {
+        let g = theatre();
+        let enemy: HashSet<i64> = [10, 11, 12, 13].into();
+        let front: HashSet<i64> = [1, 3, 4, 5].into();
+        // 11 and 12 are bordered from two of our provinces; 12 is attacked from one side only
+        let battles = json!({"list": [battle(11, 3, &[], 2), battle(12, 2, &[], 1)]});
+        assert_eq!(breadth(&g, &front, &enemy, &battles), (4, 2, 1));
+        assert!(rough_battle(&battles["list"][0], &g));
+        let plain = json!({"province": 11, "lines": []});
+        assert!(!rough_battle(&plain, &g));
+        let forest = json!({"province": 10, "lines": []});
+        assert!(rough_battle(&forest, &g));
+    }
+}

@@ -2314,6 +2314,43 @@
             "additionalProperties": false,
             "description": "the numbers of execution auto (every key optional)"
           },
+          "capacity": {
+            "oneOf": [
+              {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "supply_floor": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1,
+                    "description": "share of a division's supply need a stretch's carry feeds it at; default 0.5"
+                  },
+                  "hold_ratio": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "divisions a stretch keeps against each hostile division seen facing it; default 1.0"
+                  },
+                  "slack": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "divisions a front may stand over its room (with another as far under) before the prepare spreads again; default a fifth of the divisions on the fronts, at least 3"
+                  }
+                },
+                "additionalProperties": false
+              }
+            ],
+            "description": "fronts by attack capacity (by command, a unit with two or more fronts): each front's weight in the spread is what its stretch can fight with and feed (the width its battles take from the directions we border them, the supply reaching it, the hostile divisions seen facing it), not its length; in the prepare a spread far from that is spread again; at war the reserve of a battle beyond its engaged divisions moves sideways to the front with most room (within refine_days). false switches it off"
+          },
+          "armour_ground": {
+            "type": "boolean",
+            "description": "default true: at war a spearhead formation whose divisions wait in the reserves of rough-ground battles (terrain or river penalty, forts) leaves the state the operation gave it to the infantry (the plan's own thrust is kept), and its next objective is the state of the line or the enemy's contact its armour reaches cheapest by the ground model, not the nearest"
+          },
           "group": {
             "type": "string",
             "minLength": 1,
@@ -2749,6 +2786,10 @@
                 "minimum": 0,
                 "maximum": 100,
                 "description": "head-of-advance supply percent below which the weekly check switches to careful"
+              },
+              "prepare": {
+                "type": "boolean",
+                "description": "default true: while the operation prepares, the most starved start-line province of its attackers with no railway gets a railway from the nearest fed node (once a game day, each province once in 30 days)"
               },
               "railways": {
                 "x-owner": "text",

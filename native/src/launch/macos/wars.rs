@@ -461,6 +461,54 @@ fn war_results(result: &mut Value, states: &[StateRow]) {
     result["wars"]["fighting"] = json!(fighting);
 }
 
+/// An enemy still at war that holds land but none touching ours (`land_front` false): an overseas
+/// enemy, or what a capitulated country keeps across the sea while its government in exile keeps
+/// the war relation (o96a, 28 Nov 2026: the Netherlands capitulated on 31 May with Suriname and
+/// Curacao left and read "ongoing" for the rest of the war). Its result says there is no land
+/// front against it; `wars.no_land_front` lists the tags. Needs the border rows (no change when
+/// the adjacency is unread).
+fn land_fronts(result: &mut Value) {
+    let touching: BTreeSet<String> = result["borders"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|b| {
+            b["neighbour_states"]
+                .as_array()
+                .is_some_and(|n| !n.is_empty())
+        })
+        .filter_map(|b| b["neighbour_tag"].as_str().map(str::to_string))
+        .collect();
+    let Some(wars) = result
+        .get_mut("wars")
+        .and_then(|w| w.get_mut("wars"))
+        .and_then(Value::as_array_mut)
+    else {
+        return;
+    };
+    let mut overseas: Vec<String> = Vec::new();
+    for war in wars.iter_mut() {
+        let Some(tag) = war["enemy"]["tag"].as_str().map(str::to_string) else {
+            continue;
+        };
+        if !war["result"]
+            .as_str()
+            .is_some_and(|r| r.starts_with("ongoing"))
+        {
+            continue;
+        }
+        let land = touching.contains(&tag);
+        war["land_front"] = json!(land);
+        if !land {
+            let owned = war["enemy_land"]["states_owned"].as_u64().unwrap_or(0);
+            let controlled = war["enemy_land"]["states_controlled"].as_u64().unwrap_or(0);
+            war["result"] = json!(format!("ongoing, no land front: {tag} owns {owned} and controls {controlled} state(s), none touching our land (an overseas enemy, or the remnant a capitulated country keeps across the sea while its government in exile keeps the war relation; a capitulation shows as the game's capitulation news, hoi4_events)"));
+            overseas.push(tag);
+        }
+    }
+    result["wars"]["no_land_front"] = json!(overseas);
+}
+
 fn analyse(input: &Input<'_>) -> Value {
     let player = input.player;
     let rows: BTreeMap<i32, &StateRow> = input.states.iter().map(|s| (s.id, s)).collect();
@@ -653,6 +701,7 @@ fn analyse(input: &Input<'_>) -> Value {
     border_rows
         .sort_by_key(|(bad, row)| (!*bad, row["neighbour_tag"].as_str().map(str::to_string)));
     result["borders"] = json!(border_rows.into_iter().map(|(_, r)| r).collect::<Vec<_>>());
+    land_fronts(&mut result);
 
     // Own-controlled states with a hostile-controlled neighbour.
     let mut threatened = Vec::new();
@@ -1173,6 +1222,24 @@ mod tests {
             .starts_with("ongoing"));
         assert_eq!(v["wars"]["wars_won"], json!(["POL"]));
         assert_eq!(v["wars"]["fighting"], json!(["CZE"]));
+        // an enemy whose land does not touch ours (the Dutch exile's colonies): no land front
+        let mut v = json!({"wars": {"wars": [
+            {"enemy": {"tag": "HOL"}}, {"enemy": {"tag": "CZE"}}]},
+            "borders": [{"neighbour_tag": "CZE", "neighbour_states": [3]}]});
+        let states = [
+            row(1, "GER", "GER"),
+            row(3, "CZE", "CZE"),
+            row(309, "HOL", "HOL"),
+        ];
+        war_results(&mut v, &states);
+        land_fronts(&mut v);
+        assert!(v["wars"]["wars"][0]["result"]
+            .as_str()
+            .unwrap()
+            .starts_with("ongoing, no land front: HOL owns 1 and controls 1"));
+        assert_eq!(v["wars"]["wars"][0]["land_front"], false);
+        assert_eq!(v["wars"]["wars"][1]["land_front"], true);
+        assert_eq!(v["wars"]["no_land_front"], json!(["HOL"]));
         // occupied but still owning land: capitulated
         let states = [row(1, "GER", "GER"), row(3, "CZE", "GER")];
         let mut v = json!({"wars": {"wars": [{"enemy": {"tag": "CZE"}}]}});
