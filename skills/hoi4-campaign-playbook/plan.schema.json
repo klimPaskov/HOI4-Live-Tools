@@ -4167,6 +4167,24 @@
           "type": "string",
           "description": "Free text for people and the player; never read by the executor."
         },
+        "goals": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "type": "object",
+            "properties": {
+              "goal": {"type": "string", "minLength": 1, "maxLength": 39, "pattern": "^[A-Za-z0-9_]+$", "description": "a faction goal key from common/factions/goals (hoi4_diplomacy_act faction_goal list:true)"},
+              "when": {"$ref": "#/definitions/predicate"},
+              "why": {"type": "string", "description": "Free text for people and the player; never read by the executor."},
+              "note": {"type": "string", "description": "Free text for people and the player; never read by the executor."}
+            },
+            "required": ["goal"],
+            "additionalProperties": false
+          },
+          "x-owner": "executor",
+          "description": "the faction goals we set as faction leader, in order (hoi4_diplomacy_act faction_goal through the module's faction family): while we are in a faction, the first goal whose when holds and that is not set is sent, one a tick; the game's own check decides (a free slot of the goal's category, the goal available to the faction, the initiative); a refused goal waits a week while the next goal is tried; an unknown key is settled with a note (G104 G120 G125 G126 G190 G192-G196)"
+        },
+        "spymaster": {"type": "boolean", "x-owner": "executor", "description": "true: while we are in a faction, become its spymaster once (hoi4_diplomacy_act become_spymaster; the game's check wants an empty spymaster slot and the initiative); a refusal waits a week (G191)"},
         "call_allies": {
           "x-owner": "executor",
           "description": "while at war, call faction members outside our war to arms: \"all\", a list of tags, or \"none\"; absent = no call and a weekly note naming the members left out. Leave out a member whose joining opens a front we cannot hold",

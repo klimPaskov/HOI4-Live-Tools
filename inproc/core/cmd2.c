@@ -493,6 +493,23 @@ const cmd_spec CMD2_SPECS[] = {
      * 0x101945980) and takes the power. Auth (0x100b3be00): the leader's owner is the sender, as learn_trait. */
     {"leader", "leader.promote", "CPromoteUnitLeaderCommand", 0x30, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "11CUnitLeader", 1,
      {{"leader", 0x24, FK_REF, 0, 0x28b7, 0}}, OBJ2_NONE, 0, AUTH_HANDLE},
+    /* ---- faction (engineer 131, 28 Nov): the faction leader's own choices. Read from 1.20.0.0 (1.20.1.0 identical).
+     * goal: NFactions::CAddFactionGoalCommand (0x38; factory 0x100f32540, vtable 0x1035465e0): tag +0x24 (0x283e), the
+     * goal by POINTER +0x28 (written by its token +0x8 as 0x4c88, read back through the goal database's lookup), an
+     * optional goal it replaces +0x30 (0x2913; left NULL: a free slot only). Auth: the sender controls the tag. "Can do"
+     * (0x100f300e0): the country's faction (country +0xd30 -> +0x2c0), the goal visible and available for the faction,
+     * the category's free slot (or the replaced goal of the same category in the faction's goal list +0x500/+0x50c,
+     * stride 0x440), the initiative it costs. The goal comes from the game's own goal database by its key (the module
+     * looks it up) and must be exactly a CFactionGoal. */
+    {"faction", "faction.goal", "N9NFactions22CAddFactionGoalCommandE", 0x38, BUILD_FIELDS, CTOR_NONE, 0, 0x24,
+     "N9NFactions12CFactionGoalE", 2, {{"tag", 0x24, FK_TAG, 0, 0x283e, 0}, {"goal", 0x28, FK_PTR, 0, 0x4c88, 0}},
+     OBJ2_NONE, 0, AUTH_TAG_PTR, "N9NFactions12CFactionGoalE"},
+    /* spymaster: CBecomeSpyMasterCommand (0x28; factory 0x1008f1a10, vtable 0x103516228): tag +0x24 (0x289a) only. "Can
+     * do" (0x1008e9670): a country with a faction whose spymaster slot is empty (faction +0x700 slot 0); the execution
+     * takes the faction initiative the defines name. The request's object is the player's own country (exactly a CCountry;
+     * the command carries only the tag) */
+    {"faction", "faction.spymaster", "CBecomeSpyMasterCommand", 0x28, BUILD_FIELDS, CTOR_NONE, 0, 0x24, "8CCountry", 1,
+     {{"tag", 0x24, FK_TAG, 0, 0x289a, 0}}, OBJ2_NONE, 0, AUTH_TAG_PTR, "8CCountry"},
     /* ---- move (engineer 105, 28 Nov): a division's move order, as the right click on a province posts it. Read from
      * 1.20.0.0 and 1.19.4.1 (identical code): CMoveCommand 10402 (0x88; factory 1.20 0x100b403b0, vtable 0x103526f28)
      * holds a unit action at +0x28 (its own serializer writes everything through that action, so no field of the command
@@ -1597,6 +1614,7 @@ static void scan_mio_facts(const scan_image *im, const stage2_table *t, mio_fact
 
 static void scan_diplo_catalog(const scan_image *im, const post_layout *pl, stage2_table *t);
 static int scan_trait_db(const scan_image *im, const post_layout *pl, cmd_type *ct, stage2_table *t);
+static int scan_faction_goals(const scan_image *im, const post_layout *pl, cmd_type *ct, stage2_table *t);
 int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global, stage2_table *t) {
     memset(t, 0, sizeof *t);
     scan_stage2_common(im, pl, gs_global, &t->common);
@@ -1622,6 +1640,7 @@ int scan_stage2(const scan_image *im, const post_layout *pl, uint64_t gs_global,
     scan_training_facts(im, stage2_find(t, "training.add_lines"), &t->diplo, &t->train); /* engineer 82 */
     scan_mio_facts(im, t, &t->mio); /* engineer 84 */
     on -= scan_trait_db(im, pl, (cmd_type *)stage2_find(t, "leader.learn_trait"), t); /* engineer 127 */
+    on -= scan_faction_goals(im, pl, (cmd_type *)stage2_find(t, "faction.goal"), t); /* engineer 131 */
     /* every type must agree on the "sender controls" check and the generic lookup (one game, one rule) */
     for (int i = 1; i < t->n; i++)
         if (t->t[i].ok && t->t[0].ok &&
@@ -1824,6 +1843,61 @@ off:
     if (!ct->ok) return 0;
     ct->ok = 0;
     snprintf(ct->evidence + strlen(ct->evidence), sizeof ct->evidence - strlen(ct->evidence), "; trait database not found");
+    return 1; /* one type fewer on */
+}
+
+/* engineer 131: the faction goal database and the faction's goal list, each fact from the goal command's own code. The
+ * reader (vtable: the auth slot + 0x18) resolves the goal field through a lookup by token (call LOOKUP; mov [rbx+GOAL],rax);
+ * the lookup loads the database through a GOT slot and probes a token hash table (mask, entries, probe distance byte,
+ * token, the next entry, the extra probe count, the value). The "can do" reads the country's faction (country +HOLDER ->
+ * +FACTION) and walks its goal list (count, data, the entry stride). The type stays off without every fact. */
+static int scan_faction_goals(const scan_image *im, const post_layout *pl, cmd_type *ct, stage2_table *t) {
+    int step = 0;
+    t->fg_got = 0;
+    if (!ct || !(ct->conf & C_SLOTS)) return 0;
+    uint32_t off = 0;
+    for (int i = 0; i < ct->spec->nf; i++) if (ct->spec->f[i].kind == FK_PTR) off = ct->spec->f[i].off;
+    uint64_t rd = 0, fn = 0;
+    if (!off || !scan_q(im, ct->vtable + pl->auth_slot + 0x18, &rd) || !in_text(im, rd)) { step = __LINE__; goto off; }
+    const uint8_t *b = scan_ptr(im, rd, 0x100);
+    for (size_t k = 0; b && k + 9 <= 0x100 && !fn; k++) {
+        uint32_t d[2];
+        if (!cmd_pmatch(b + k, 9, "e8 D 48 89 43 B", d, 2) || d[1] != off) continue;
+        uint64_t f = rd + k + 5 + (int64_t)(int32_t)d[0];
+        if (in_text(im, f)) fn = f;
+    }
+    if (!fn) { step = __LINE__; goto off; }
+    uint32_t g[2], h[4], tk[2], st[2], pr[2], vl[2];
+    unsigned m1 = 0, m2 = 0, m3 = 0, m4 = 0, m5 = 0, m6 = 0;
+    long p1 = pfind_at(im, fn, 0x180, "48 8b 05 D 48 8b 08", g, 2, &m1);
+    if (p1 < 0 || m1 != 1) { step = __LINE__; goto off; }
+    if (pfind_at(im, fn, 0x180, "8b 71 B 21 f2 48 8b 41 B 48 63 d2 48 8d 14 52 80 7c d0 B 00", h, 4, &m2) < 0 || m2 != 1) { step = __LINE__; goto off; }
+    if (pfind_at(im, fn, 0x180, "39 5a B 74 B", tk, 2, &m3) < 0 || m3 != 1) { step = __LINE__; goto off; }
+    if (pfind_at(im, fn, 0x180, "4c 8d 42 B 40 3a 7a B", st, 2, &m4) < 0 || m4 != 1 || st[1] != st[0] + h[2]) { step = __LINE__; goto off; }
+    if (pfind_at(im, fn, 0x180, "0f b6 49 B 01 f1 ff c1", pr, 2, &m5) < 0 || m5 < 1) { step = __LINE__; goto off; }
+    if (pfind_at(im, fn, 0x180, "48 39 c2 74 B 48 8b 42 B 48 85 c0", vl, 2, &m6) < 0 || m6 != 1) { step = __LINE__; goto off; }
+    uint32_t v1[2], v2[2], v3[2], v4[2];
+    unsigned n1 = 0, n2 = 0, n3 = 0, n4 = 0;
+    if (pfind_at(im, ct->valid_fn, 0x400, "48 8b 80 D 4c 8b b8 D", v1, 2, &n1) < 0 || n1 != 1) { step = __LINE__; goto off; }
+    if (pfind_at(im, ct->valid_fn, 0x400, "41 8b 87 D 85 c0", v2, 2, &n2) < 0 || n2 != 1) { step = __LINE__; goto off; }
+    if (pfind_at(im, ct->valid_fn, 0x400, "49 8b bf D 31 c9 48 39 17", v3, 2, &n3) < 0 || n3 != 1) { step = __LINE__; goto off; }
+    if (pfind_at(im, ct->valid_fn, 0x400, "48 81 c7 D 48 39 c8", v4, 2, &n4) < 0 || n4 != 1) { step = __LINE__; goto off; }
+    if (v2[0] < v3[0] || v2[0] - v3[0] > 0x10 || !v4[0] || v4[0] > 0x10000) { step = __LINE__; goto off; }
+    t->fg_got = fn + (uint64_t)p1 + 7 + (int64_t)(int32_t)g[0];
+    t->fg_mask_off = h[0]; t->fg_data_off = h[1]; t->fg_dist_off = h[2]; t->fg_tok_off = tk[0]; t->fg_stride = st[0];
+    t->fg_probe_off = pr[0]; t->fg_val_off = vl[1];
+    t->fg_holder_off = v1[0]; t->fg_faction_off = v1[1]; t->fg_goals_off = v3[0]; t->fg_goals_cnt_off = v2[0];
+    t->fg_goal_stride = v4[0];
+    snprintf(ct->evidence + strlen(ct->evidence), sizeof ct->evidence - strlen(ct->evidence),
+             "; goal db got 0x%llx entries +0x%x mask +0x%x stride 0x%x; faction +0x%x/+0x%x goals +0x%x/+0x%x x0x%x",
+             (unsigned long long)t->fg_got, t->fg_data_off, t->fg_mask_off, t->fg_stride, t->fg_holder_off, t->fg_faction_off,
+             t->fg_goals_off, t->fg_goals_cnt_off, t->fg_goal_stride);
+    return 0;
+off:
+    t->fg_got = 0;
+    if (!ct->ok) return 0;
+    ct->ok = 0;
+    snprintf(ct->evidence + strlen(ct->evidence), sizeof ct->evidence - strlen(ct->evidence), "; faction goal database not found (step %d)", step);
     return 1; /* one type fewer on */
 }
 

@@ -116,6 +116,11 @@
 //!   faction.call_allies  "all" | [TAG..] | "none": while at war, faction members outside our war are
 //!                called to arms (hoi4_diplomacy_act call_to_arms), each again after 30 days; absent: no
 //!                call and a weekly note naming the members left out
+//!   faction.goals  [{"goal","when"?}] and faction.spymaster (true): the faction leader's own choices
+//!                (hoi4_diplomacy_act faction_goal / become_spymaster, the module's faction family, no
+//!                mouse path): while in a faction, the spymaster role once, then the first goal whose
+//!                `when` holds and that is not set, one a tick; a refused goal waits a week while the
+//!                next is tried; an unknown key is settled; the module not serving waits 30 days
 //!   incoming_proposals  [{"id"?,"class":"any"|<class>,"from"?:[TAG..],"answer":"accept"|"refuse"|"player",
 //!                "when"?}] the answers to the open diplomatic pop-ups (hoi4_diplomacy_incoming: faction
 //!                invitation, faction_join_request (a country asks into ours; standing answer: refuse a
@@ -320,7 +325,11 @@ pub(super) const LANES: [super::Lane; 13] = [
     }),
     ("volunteers", super::plan_volunteers::volunteers_step),
     ("faction", |s, t, p, l, n| {
-        faction_step(s, &Run::new(t, p, l, n))
+        let run = Run::new(t, p, l, n);
+        match faction_step(s, &run)? {
+            Some(done) => Ok(Some(done)),
+            None => faction_choices_step(s, &run),
+        }
     }),
     ("call_allies", |s, t, p, l, n| {
         call_allies_step(s, &Run::new(t, p, l, n))
@@ -364,9 +373,10 @@ pub fn step(
     // a direct call stands for a tick at `now` (the ledger counts game hours)
     state.clock = now;
     let run = Run::new(tools, plan, lease, now);
-    let sections: [Section; 10] = [
+    let sections: [Section; 11] = [
         diplomacy_step,
         faction_step,
+        faction_choices_step,
         call_allies_step,
         incoming_step,
         trade_step,
@@ -2699,6 +2709,117 @@ fn faction_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     }
     note(state, "faction", "waiting after a refusal");
     state.skip(now, "mfac", "x", DAY);
+    Ok(None)
+}
+
+/// What one faction-choice answer changes next.
+#[derive(Debug, PartialEq)]
+enum ChoiceAnswer {
+    /// set: never asked again
+    Done,
+    /// the game's own check refused it now (no free slot of the category, not available to the
+    /// faction yet, short initiative, a spymaster already): it waits a week and the next goal is
+    /// tried meanwhile
+    Wait,
+    /// the plan names what the game does not have: settled with a note
+    Settle,
+    /// the module's faction family is not serving: the whole section waits 30 days
+    NoRoute,
+}
+
+fn choice_answer(ok: bool, code: &str) -> ChoiceAnswer {
+    match (ok, code) {
+        (true, _) => ChoiceAnswer::Done,
+        (false, "faction_goal_unknown" | "invalid_arguments") => ChoiceAnswer::Settle,
+        (false, "in_process_unavailable" | "catalog_unavailable") => ChoiceAnswer::NoRoute,
+        _ => ChoiceAnswer::Wait,
+    }
+}
+
+/// `faction.goals` [{"goal", "when"?}] and `faction.spymaster` (true): the faction leader's own
+/// choices through hoi4_diplomacy_act (faction_goal / become_spymaster: the module's faction
+/// family; the game's own check decides). While we are in a faction, the spymaster role is asked
+/// first (once), then the first goal whose `when` holds and that is not set, one a tick. An answer
+/// changes the next decision: a refused goal waits a week while the next goal is tried, an unknown
+/// key is settled with a note, the module not serving stops the section for 30 days.
+fn faction_choices_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
+    let (tools, plan, now) = (run.tools, run.plan, run.now);
+    let cfg = &plan["faction"];
+    let goals = list(cfg, "goals");
+    let spy = cfg["spymaster"] == json!(true) && !state.done.contains_key("faction:spymaster");
+    let open: Vec<String> = goals
+        .iter()
+        .map(|g| text(&g["goal"]).trim().to_string())
+        .filter(|k| !k.is_empty() && !state.done.contains_key(&format!("fgoal:{k}")))
+        .collect();
+    if (open.is_empty() && !spy) || state.skipped(now, "mfgo", "x") {
+        return Ok(None);
+    }
+    let inside = tools
+        .call("hoi4_diplomacy_state", &json!({}))
+        .ok()
+        .and_then(|ds| ds["faction"]["in_faction"].as_bool());
+    if inside != Some(true) {
+        state.skip(
+            now,
+            "mfgo",
+            "x",
+            if inside.is_none() { DAY } else { 7 * DAY },
+        );
+        return Ok(None);
+    }
+    if spy && !state.skipped(now, "fgo", "spymaster") {
+        let args = json!({"action": "become_spymaster"});
+        let (ok, why) = state.act(tools, run.lease, "hoi4_diplomacy_act", args, "fs")?;
+        match choice_answer(ok, code(&why)) {
+            ChoiceAnswer::Done => {
+                state.done.insert("faction:spymaster".into(), now);
+            }
+            ChoiceAnswer::NoRoute => {
+                note(state, "faction_goals", format!("spymaster: {why}"));
+                state.skip(now, "mfgo", "x", 30 * DAY);
+            }
+            ChoiceAnswer::Settle => {
+                state.done.insert("faction:spymaster".into(), now);
+                note(state, "faction_goals", format!("spymaster: {why}"));
+            }
+            ChoiceAnswer::Wait => state.skip(now, "fgo", "spymaster", 7 * DAY),
+        }
+        return Ok(Some(format!("become_spymaster: {ok} {why}")));
+    }
+    for key in open {
+        if state.skipped(now, "fgo", &key) {
+            continue;
+        }
+        let entry = goals
+            .iter()
+            .find(|g| text(&g["goal"]).trim() == key)
+            .cloned()
+            .unwrap_or(Value::Null);
+        if let Some(why) = gate(state, tools, &entry["when"], now) {
+            note(state, "faction_goals", format!("{key}: {why}"));
+            state.skip(now, "fgo", &key, DAY);
+            continue;
+        }
+        let args = json!({"action": "faction_goal", "faction_goal": key});
+        let (ok, why) = state.act(tools, run.lease, "hoi4_diplomacy_act", args, "fg")?;
+        match choice_answer(ok, code(&why)) {
+            ChoiceAnswer::Done => {
+                state.done.insert(format!("fgoal:{key}"), now);
+            }
+            ChoiceAnswer::Settle => {
+                state.done.insert(format!("fgoal:{key}"), now);
+                note(state, "faction_goals", format!("{key}: {why}"));
+            }
+            ChoiceAnswer::NoRoute => {
+                note(state, "faction_goals", format!("{key}: {why}"));
+                state.skip(now, "mfgo", "x", 30 * DAY);
+            }
+            ChoiceAnswer::Wait => state.skip(now, "fgo", &key, 7 * DAY),
+        }
+        return Ok(Some(format!("faction goal {key}: {ok} {why}")));
+    }
+    state.skip(now, "mfgo", "x", DAY);
     Ok(None)
 }
 
@@ -5991,6 +6112,112 @@ mod tests {
             None
         );
         assert_eq!(actions(&tools).len(), 2);
+    }
+
+    #[test]
+    fn faction_choices_ask_the_spymaster_once_then_each_goal_and_a_refusal_moves_on() {
+        let plan = json!({"faction": {"spymaster": true, "goals": [
+            {"goal": "industrial_expansion"}, {"goal": "growing_the_faction"}]}});
+        // outside a faction nothing is sent
+        let tools = fake(vec![(
+            "hoi4_diplomacy_state",
+            json!({"faction": {"in_faction": false}}),
+        )]);
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert!(actions(&tools).is_empty());
+
+        let tools = fake(vec![(
+            "hoi4_diplomacy_state",
+            json!({"faction": {"in_faction": true}}),
+        )]);
+        let mut state = State::default();
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START)
+                .unwrap()
+                .as_deref(),
+            Some("become_spymaster: true Verified")
+        );
+        // the game refuses the first goal: it waits a week and the next goal goes meanwhile
+        tools.refuse("hoi4_diplomacy_act faction_goal", "refused_by_game_check");
+        let out = step(&mut state, &tools, &plan, "l", START + 1)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("faction goal industrial_expansion: false refused_by_game_check"),
+            "{out}"
+        );
+        let out = step(&mut state, &tools, &plan, "l", START + 2)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("faction goal growing_the_faction: false refused_by_game_check"),
+            "{out}"
+        );
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 3).unwrap(),
+            None
+        );
+        tools.accept("hoi4_diplomacy_act faction_goal");
+        let out = step(&mut state, &tools, &plan, "l", START + 8 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("faction goal industrial_expansion: true Verified")
+        );
+        let out = step(&mut state, &tools, &plan, "l", START + 8 * DAY + 1).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("faction goal growing_the_faction: true Verified")
+        );
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 9 * DAY).unwrap(),
+            None
+        );
+        let sent = actions(&tools);
+        assert_eq!(
+            sent.iter()
+                .filter(|(_, a)| a["action"] == "become_spymaster")
+                .count(),
+            1
+        );
+        assert_eq!(
+            sent.last().unwrap().1["faction_goal"],
+            "growing_the_faction"
+        );
+
+        // the module not serving: the whole section waits 30 days after one try
+        let tools = fake(vec![(
+            "hoi4_diplomacy_state",
+            json!({"faction": {"in_faction": true}}),
+        )]);
+        tools.refuse("hoi4_diplomacy_act faction_goal", "in_process_unavailable");
+        let plan = json!({"faction": {"goals": [{"goal": "a"}, {"goal": "b"}]}});
+        let mut state = State::default();
+        assert!(step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .is_some());
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
+            None
+        );
+        assert_eq!(actions(&tools).len(), 1);
+    }
+
+    #[test]
+    fn a_faction_choice_answer_changes_the_next_decision() {
+        assert_eq!(choice_answer(true, ""), ChoiceAnswer::Done);
+        assert_eq!(
+            choice_answer(false, "refused_by_game_check"),
+            ChoiceAnswer::Wait
+        );
+        assert_eq!(
+            choice_answer(false, "faction_goal_unknown"),
+            ChoiceAnswer::Settle
+        );
+        assert_eq!(
+            choice_answer(false, "in_process_unavailable"),
+            ChoiceAnswer::NoRoute
+        );
     }
 
     #[test]

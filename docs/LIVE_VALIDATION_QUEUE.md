@@ -32,6 +32,7 @@ its mouse path.
 | navyhq | S20-NAVYHQ | not runnable yet: the command is found, but no read gives a headquarters' address |
 | move | S20-MOVE | not run: division moves by command (hoi4_army_move), off under `auto` |
 | leader | S31-TRAIT | not run: a general's trait by its key and the promotion to field marshal (hoi4_general_trait trait / promote:true), off under `auto` |
+| faction | S32-FACTION | not run: a faction goal by its key and the spymaster role (hoi4_diplomacy_act faction_goal / become_spymaster), off under `auto` |
 | multiplayer | S1-MP, S2-MP | not run (needs two clients); every post refuses outside single player |
 
 ## Proof state of the registered tools (23 November 2026)
@@ -1449,3 +1450,29 @@ T9 a field-marshal trait (for example logistics_wizard or offensive_doctrine, ca
 assigned (T1's path); before T6 the same trait is refused for a corps commander.
 Pass: T1-T9, no window opened in T1-T3 and T6-T8. Then IPC_LIVE_PASSED for leader may be set to 1 (the executor then
 promotes the plan's commanders[].promote:true generals before their traits).
+
+## Session S32-FACTION: faction goals and the spymaster role by command (in process, family `faction`; about 20 minutes) -- any time
+Build: e131 (tools 131). Module family `faction` named in HOI4_INPROC_POST and HOI4_BACKEND=inprocess. A 1.20.x save where
+we lead a faction with at least one empty goal slot and some faction initiative (any country: found one with
+hoi4_faction_create first if needed), no spymaster yet. There is no mouse path: every step either posts or refuses.
+T0 hello: families.faction resolved (on true with the family named), live_passed false; the scan evidence of faction.goal
+names "goal db got" with entries +0x30 mask +0x3c stride 0x18 and "faction +0xd30/+0x2c0 goals +0x500/+0x50c x0x440".
+T1 hoi4_diplomacy_act {action: faction_goal, list: true}: every goal of common/factions/goals with key, name, category,
+group; nothing posted.
+T2 hoi4_diplomacy_act {action: faction_goal, faction_goal: <a goal the faction view offers for an empty slot>}: expect
+backend inprocess, posted 1, executed 1 (goal_in_list true) within 3 s; the faction view shows the goal in its slot and
+the initiative drops by the goal's cost. Note the read-back time.
+T3 the same goal again: refused_by_game_check (already set), nothing posted, the view unchanged.
+T4 a goal of a category whose slots are all full: refused_by_game_check, nothing posted.
+T5 a goal whose `visible` fails for us (another country's goal, for example faction_goal_one_germany outside Germany):
+refused_by_game_check, nothing posted.
+T6 by localised name ("Industrial Expansion"): the same as T2 for that goal (the catalogue gives the key); an unknown name:
+faction_goal_unknown naming the closest keys, nothing posted.
+T7 hoi4_diplomacy_act {action: become_spymaster}: posted 1; the faction view's intelligence panel names us spymaster and
+the initiative drops by the defines' cost. The call again: refused_by_game_check (the slot is taken), nothing posted.
+T8 outside a faction (leave it or another save): faction_goal and become_spymaster both refused_by_game_check, nothing
+posted, no crash.
+T9 the executor: a plan with faction.spymaster true and faction.goals [two goals, the first of a full category]: the
+spymaster once, the first goal refused and waiting a week while the second goes; no repeat of a set goal.
+Pass: T0-T9, no window opened by the tool, the goal's exact class accepted (a refusal "not_a_live_object" in T2 means the
+goal database's value is not exactly a CFactionGoal: stop and report). Then IPC_LIVE_PASSED for faction may be set to 1.
