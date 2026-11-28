@@ -80,6 +80,10 @@ pub(super) struct Region {
     pub states: Vec<i64>,
     /// Enemy fighters active there as the region window last showed them; None: not read.
     pub enemy_fighters: Option<f64>,
+    /// The close air support planes the game lets into its battles: the sum over the region's battles of our side's
+    /// cas_planes_max (hoi4_battles: NMilitary.LAND_AIR_COMBAT_MAX_PLANES_PER_ENEMY_WIDTH x the enemy's engaged
+    /// width); planes above it fly without fighting. None: not read (no cap).
+    pub cas_cap: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -251,20 +255,61 @@ pub(super) fn allocate(
         .filter(|i| wings[*i].role == Some("cas"))
         .collect();
     let all_c: f64 = cas.iter().map(|i| wings[*i].planes).sum();
-    for r in &open {
-        let want = all_c * r.weight / open_w.max(1e-9);
-        let mut pick: Vec<usize> = cas.iter().copied().filter(|i| !used[*i]).collect();
-        pick.sort_by_key(|i| (wings[*i].region != Some(r.id), wings[*i].name.clone()));
-        let mut got = 0.0;
-        for i in pick {
-            if got >= want && got > 0.0 {
-                break;
+    // the game's per-battle limit caps each region; what a capped region cannot use goes to the next with room
+    let mut got_by: Vec<f64> = vec![0.0; open.len()];
+    let mut failed: Vec<(usize, usize)> = Vec::new();
+    let capped = |r: &Region| r.cas_cap.is_some_and(|cap| all_c * r.weight / open_w.max(1e-9) > cap);
+    for pass in 0..2 {
+        if pass == 1 && !open.iter().any(|r| capped(r)) {
+            break;
+        }
+        for (k, r) in open.iter().enumerate() {
+            let share = all_c * r.weight / open_w.max(1e-9);
+            let want = match (pass, r.cas_cap) {
+                (0, Some(cap)) => share.min(cap),
+                (0, None) => share,
+                (_, Some(cap)) => cap,
+                (_, None) => f64::INFINITY,
+            };
+            let mut pick: Vec<usize> = cas
+                .iter()
+                .copied()
+                .filter(|i| !used[*i] && !failed.contains(&(*i, k)))
+                .collect();
+            pick.sort_by_key(|i| (wings[*i].region != Some(r.id), wings[*i].name.clone()));
+            for i in pick {
+                if got_by[k] >= want && (got_by[k] > 0.0 || r.cas_cap.is_some()) {
+                    break;
+                }
+                // a wing that would carry the region past the game's limit waits for a region with room
+                if r.cas_cap.is_some_and(|cap| got_by[k] > 0.0 && got_by[k] + wings[i].planes > cap) {
+                    continue;
+                }
+                if r.cas_cap == Some(0.0) {
+                    break;
+                }
+                if assign(&wings[i], r, "cas", geo, cfg, &mut orders, &mut notes) {
+                    got_by[k] += wings[i].planes;
+                    used[i] = true;
+                } else {
+                    failed.push((i, k));
+                }
             }
-            if assign(&wings[i], r, "cas", geo, cfg, &mut orders, &mut notes) {
-                got += wings[i].planes;
-                used[i] = true;
+            if pass == 0 {
+                if let Some(cap) = r.cas_cap.filter(|cap| share > *cap) {
+                    notes.push(format!(
+                        "region {}: close air support {:.0} of {share:.0} planes: the game lets {cap:.0} into its battles (planes per enemy width x the enemy's engaged width)",
+                        r.id, got_by[k]
+                    ));
+                }
             }
         }
+    }
+    let idle: f64 = cas.iter().filter(|i| !used[**i]).map(|i| wings[*i].planes).sum();
+    if idle > 0.0 && !open.is_empty() && open.iter().all(|r| r.cas_cap.is_some()) {
+        notes.push(format!(
+            "{idle:.0} close air support planes left over: every battle region is at the game's plane limit"
+        ));
     }
     if !lost.is_empty() {
         notes.push(format!(
@@ -657,7 +702,8 @@ pub(super) fn air_situation_step(
     tags.push(me);
     super::plan_operation::learn_centres(state, tools, &tags);
     // the battles by region
-    let mut by: BTreeMap<i64, (f64, Vec<i64>)> = BTreeMap::new();
+    // the game's CAS limit per battle summed per region; one battle without the read leaves the region uncapped
+    let mut by: BTreeMap<i64, (f64, Vec<i64>, Option<f64>, bool)> = BTreeMap::new();
     if let Ok(read) = tools.call("hoi4_battles", &json!({})) {
         for b in list(&read, "list") {
             let Some(s) = b["state"].as_i64() else {
@@ -674,11 +720,15 @@ pub(super) fn air_situation_step(
             let e = by.entry(r).or_default();
             e.0 += side["engaged"].as_f64().unwrap_or(1.0).max(1.0);
             e.1.push(s);
+            match side["cas_planes_max"].as_f64() {
+                Some(c) => e.2 = Some(e.2.unwrap_or(0.0) + c),
+                None => e.3 = true,
+            }
         }
     }
     let mut regions: Vec<Region> = by
         .into_iter()
-        .map(|(id, (weight, states))| Region {
+        .map(|(id, (weight, states, cap, unread))| Region {
             id,
             weight,
             states,
@@ -688,6 +738,7 @@ pub(super) fn air_situation_step(
                 .get(&id)
                 .filter(|(_, at)| now.saturating_sub(*at) < probe_days)
                 .map(|(e, _)| *e),
+            cas_cap: cap.filter(|_| !unread),
         })
         .collect();
     regions.sort_by(|a, b| b.weight.total_cmp(&a.weight));
@@ -764,6 +815,7 @@ pub(super) fn air_situation_step(
                     .get(&rid)
                     .filter(|(_, at)| now.saturating_sub(*at) < probe_days)
                     .map(|(e, _)| *e),
+                cas_cap: None,
             },
             count: e["wings"].as_u64().map(|n| n as usize),
             share: e["share"].as_f64(),
@@ -954,6 +1006,7 @@ mod tests {
             weight,
             states: vec![state],
             enemy_fighters: enemy,
+            cas_cap: None,
         }
     }
 
@@ -1141,6 +1194,44 @@ mod tests {
             region: 6
         }));
         assert!(notes.iter().any(|n| n.contains("kept out")), "{notes:?}");
+    }
+
+    #[test]
+    fn close_air_support_stops_at_the_games_plane_limit_and_the_rest_goes_where_there_is_room() {
+        let c = centers();
+        let mut geo = Geo {
+            centers: &c,
+            km_per_pixel: 1.0,
+            bases: vec![],
+        };
+        let wings = vec![
+            wing("S1", "cas", 100.0, 2, 5000.0),
+            wing("S2", "cas", 100.0, 2, 5000.0),
+            wing("S3", "cas", 100.0, 2, 5000.0),
+            wing("S4", "cas", 100.0, 2, 5000.0),
+        ];
+        // region 5 weighs 3 of 4 (300 planes by weight) but its battles take 120; region 6 has no cap read
+        let mut heavy = region(5, 30.0, 20, None);
+        heavy.cas_cap = Some(120.0);
+        let regions = vec![heavy, region(6, 10.0, 10, None)];
+        let (orders, notes) = allocate(&wings, &regions, &mut geo, &cfg());
+        let over = |id: i64| {
+            orders
+                .iter()
+                .filter(|o| matches!(o, Order::Mission { region, mission: "cas", .. } if *region == id))
+                .count()
+        };
+        assert_eq!(over(5), 1, "one 100-plane wing fits 120; a second would pass the limit: {orders:?}");
+        assert_eq!(over(6), 3, "the rest supports the region with room: {orders:?}");
+        assert!(notes.iter().any(|n| n.contains("the game lets 120")), "{notes:?}");
+        // every region capped: what is left over is said
+        let mut a = region(5, 30.0, 20, None);
+        a.cas_cap = Some(120.0);
+        let mut b = region(6, 10.0, 10, None);
+        b.cas_cap = Some(0.0);
+        let (orders, notes) = allocate(&wings, &[a, b], &mut geo, &cfg());
+        assert_eq!(orders.len(), 1, "{orders:?}");
+        assert!(notes.iter().any(|n| n.contains("300 close air support planes left over")), "{notes:?}");
     }
 
     #[test]

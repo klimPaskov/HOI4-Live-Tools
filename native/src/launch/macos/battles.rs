@@ -133,6 +133,14 @@ pub(super) struct MapFacts {
     pub rivers: BTreeMap<(i32, i32), (&'static str, f64)>,
     /// province -> highest bunker level of the state history
     pub forts: BTreeMap<i32, f64>,
+    /// NMilitary.LAND_AIR_COMBAT_MAX_PLANES_PER_ENEMY_WIDTH: close air support planes one side may bring into a
+    /// battle per width the other side has engaged there (the last define file that sets it wins)
+    pub planes_per_enemy_width: Option<f64>,
+}
+
+/// The game's per-battle plane limit for a side: the define times the width the other side has engaged.
+pub(super) fn planes_max(per_width: Option<f64>, enemy_width: Option<f64>) -> Option<f64> {
+    Some((per_width? * enemy_width?).floor())
 }
 
 fn fx(r: &Reader<'_>, a: u64) -> Result<f64> {
@@ -490,6 +498,11 @@ pub(super) fn battle_json(
         (Some(_), None) => "defender",
         (None, None) => "unknown",
     };
+    let width_of = |i: usize| b.sides[i].engaged.iter().map(|d| d.width).sum::<Option<f64>>();
+    let mut attacker = side_json(&b.sides[0], "attacker", b.hours, rows);
+    let mut defender = side_json(&b.sides[1], "defender", b.hours, rows);
+    attacker["cas_planes_max"] = json!(planes_max(map.planes_per_enemy_width, width_of(1)));
+    defender["cas_planes_max"] = json!(planes_max(map.planes_per_enemy_width, width_of(0)));
     json!({
         "id": b.id,
         "province": b.province,
@@ -504,9 +517,9 @@ pub(super) fn battle_json(
                   "full": used.is_some_and(|w| w + 1e-6 >= width_max * 0.85)},
         "winning": winning,
         "lines": lines,
-        "attacker": side_json(&b.sides[0], "attacker", b.hours, rows),
-        "defender": side_json(&b.sides[1], "defender", b.hours, rows),
-        "not_read": ["air superiority and CAS", "night", "entrenchment", "leader", "stacking and over-width penalties",
+        "attacker": attacker,
+        "defender": defender,
+        "not_read": ["air superiority and the CAS planes in the battle", "night", "entrenchment", "leader", "stacking and over-width penalties",
                      "encirclement", "experience", "the live fort level"],
     })
 }
@@ -519,6 +532,15 @@ fn map_facts(process: &dyn Process, battles: &[Battle]) -> MapFacts {
     let Ok(dir) = super::mapdata::game_dir(&identity.exe) else {
         return out;
     };
+    out.planes_per_enemy_width = super::volunteers::define_texts(&dir)
+        .iter()
+        .filter_map(|t| {
+            match super::army_hq::define_in(t, "LAND_AIR_COMBAT_MAX_PLANES_PER_ENEMY_WIDTH") {
+                Some(super::army_hq::Def::Num(v)) => Some(v),
+                _ => None,
+            }
+        })
+        .last();
     let Ok(t) = super::terrain::map_terrain(&dir) else {
         return out;
     };
@@ -562,7 +584,7 @@ fn map_facts(process: &dyn Process, battles: &[Battle]) -> MapFacts {
 }
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_battles","description":"Read-only (memory, no input, no pause): every land battle a country fights (default the player's; country:TAG for another one, all:true for every battle in the world). Per battle: province, state, terrain, hours since it began; attacker and defender with their countries, tactic, divisions in the combat line and in reserve waiting for width (template, width, strength, organisation, planning, supply, the province they attack from), width used against the attacker's maximum (terrain width + support width per extra direction), the organisation and strength damage each side has taken and its rate, and who is winning (organisation left against the rate it is lost). Lines named: terrain attack (common/terrain), river crossings (map rivers), forts of the state history, planning and supply; the game's other modifier lines (air, night, entrenchment, leader, stacking) are listed under not_read. Sorted by the number of own divisions in the battle.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"all":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":200},"divisions":{"type":"boolean","description":"list the divisions of each side (default true)"}},"additionalProperties":false}})
+    json!({"name":"hoi4_battles","description":"Read-only (memory, no input, no pause): every land battle a country fights (default the player's; country:TAG for another one, all:true for every battle in the world). Per battle: province, state, terrain, hours since it began; attacker and defender with their countries, tactic, divisions in the combat line and in reserve waiting for width (template, width, strength, organisation, planning, supply, the province they attack from, cas_planes_max: the close air support planes the game lets that side bring into the battle, NMilitary.LAND_AIR_COMBAT_MAX_PLANES_PER_ENEMY_WIDTH x the other side's engaged width), width used against the attacker's maximum (terrain width + support width per extra direction), the organisation and strength damage each side has taken and its rate, and who is winning (organisation left against the rate it is lost). Lines named: terrain attack (common/terrain), river crossings (map rivers), forts of the state history, planning and supply; the game's other modifier lines (air, night, entrenchment, leader, stacking) are listed under not_read. Sorted by the number of own divisions in the battle.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"all":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":200},"divisions":{"type":"boolean","description":"list the divisions of each side (default true)"}},"additionalProperties":false}})
 }
 
 pub(super) fn battles(process: &dyn Process, args: &Map<String, Value>) -> Result<Value> {
@@ -761,6 +783,9 @@ mod tests {
         b.sides[0].org_taken = 0.0;
         let v = battle_json(&b, 60797606, Some(0), &MapFacts::default(), false);
         assert_eq!(v["winning"], "attacker");
+        assert!(v["attacker"]["cas_planes_max"].is_null(), "no define read: no cap");
+        assert_eq!(planes_max(Some(3.0), Some(40.5)), Some(121.0));
+        assert_eq!(planes_max(None, Some(40.0)), None);
         assert!(v["attacker"].get("engaged_divisions").is_none());
     }
 
