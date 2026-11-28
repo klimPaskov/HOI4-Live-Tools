@@ -1152,6 +1152,14 @@ T5 a refused wing: LG Greifswald (g115a issue I0002, refused_by_game_check on tr
 the mission button's tooltip, so the refusal can be named.
 Pass: T1-T4. Then the air training rule may be turned on in the strategist's default (`manage.air_training_days`).
 
+T1 RETEST (engineer 134): `hoi4_air_mission {wing, mission:"training"}` with no state_id and no region -> Verified (the
+wing's own base state is used; the mask gains the training bit). T6 TRAINING FUEL BUDGET (engineer 134; inside the next
+1936 study, plan with `manage.air_training_days` (42.9) and `manage.air_training_fuel` from the plan): record fuel
+stock and capacity (hoi4_resources) and the planes on training every 10 game days, and the executor's "air fuel budget"
+lines (hold / add / keep with the measured rate and burn per plane). Pass: the stock never ends under the floor while
+wings train, wings are added while the stock rises, and the burn per plane the executor learns is within the game's
+own figure (the variant's fuel_consumption x MISSION_FUEL_COSTS training 0.6 x FUEL_COST_MULT 0.35 per hour x 24).
+
 ## Capture C-RAID: a raid made by hand, for the raid tool (mouse; about 20 minutes) -- before the raid tool is built (a 1940 need)
 Not pass/fail: the offline engineer needs the live layout of a raid instance and of the create command to build `hoi4_raid`
 (create, read, launch, cancel) for the Eben-Emael step (GER_eben_emael_raid: focus GER_expanding_the_luftwaffe, tech
@@ -1281,6 +1289,30 @@ a `?<index>` inside the static tag table or with no country is refused unknown_c
 recall needs volunteer divisions readable abroad; V7 the attaché after volunteers to the same country is accepted by the
 module's check and dropped by the game, and send_attache ETH went the mouse path: record whether that call reused a
 request_id (a retry takes the mouse path by design) and the route the reply names.
+
+AFTER s129e, engineer 134 (written, not proven; module offline ALL PASS on 1.19.4.1 / 1.20.0.0 and the 1.20.1.0 scan):
+(d) ONE GROUP PER SEND: a send posts its FIRST group (the action's inline places, 2 on 1.20) and names the rest; on s129e's
+start (or g126b's end save run to the Civil War), send 3 divisions of one army against a cap of 2: the module log shows
+posted 1, skipped 1, `divisions_posted` 2; the receipt is Diverged {divisions_left_our_army: 2, not_sent: [the third id]}
+once the two left. Then send the third by `division_ids` (+ army): refused_by_game with the cap text naming the defines
+(VOLUNTEERS_PER_COUNTRY_ARMY, VOLUNTEERS_PER_TARGET_PROVINCE, VOLUNTEERS_DIVISIONS_REQUIRED); nothing posted. Pass: no
+action posted that the game then dropped (world tension rises only for divisions that left).
+(e) V5 RECALL: on the s129e bed (1936.11.09, 2 volunteer divisions in Spain): `hoi4_armies`: record whether the two
+volunteers are listed (army, theatre group "German Volunteers N", location) and their ids. `recall_volunteers
+{country, division_ids:[those ids]}` (no army): before RECALL_VOLUNTEERS_AFTER_ARRIVAL_COOLDOWN (180) days after arrival
+-> refused_by_game naming that lock and the supply condition; unknown_division only while they are in transit (the
+text says so). If the ids are not in our list after arrival, record where they are (the receiver's units?): the read is
+then the next fix. Past the lock (a later save or a soak at speed 5): the recall posts 1 action and they come home.
+(f) V7 ATTACHE AND THE AI'S ANSWER: every AI-decided request in process (send_attache, ask/offer military access, NAP,
+docking rights ...) is first asked for the acceptance the diplomacy view shows (module flag 3: the game's wrapper on the
+built action, entries with their texts); at or below 0 it is refused ai_would_refuse with the parts and nothing is sent.
+On s129e: `hoi4_diplomacy_act {action:send_attache, country:SPR}` -> ai_would_refuse naming the parts (expected "Too
+low opinion about us -100" from DIPLOMACY_ACCEPT_ATTACHE_OPINION_PENALTY below DIPLOMACY_ACCEPT_ATTACHE_OPINION_TRASHHOLD
+20, and "The help is welcome +50"); open the view's attaché tooltip (read only) and compare every value. Then the same
+toward a country at war whose opinion of us is 20 or more (or after improve_relations): the acceptance is above 0, the
+call posts, PP and CP drop. send_attache named by `state_id` now goes in process too (s129e ETH went to the mouse):
+the reply names backend inprocess. Stop at once on a crash or freeze when the acceptance is asked (the module's own
+64-place list): the flag-3 path is used only by these calls.
 
 ## Session S27-DIPLOMACY-ANY: every diplomatic action by its key, the catalog and the game's own answer (module family `diplomacy2`; about 30 minutes) -- part of the diplomacy session, with S25-VOLUNTEERS
 Owner, 28 Nov: ONE dynamic diplomacy tool for any diplomatic action. What it proves: `hoi4_diplomacy {catalog:true}` lists
