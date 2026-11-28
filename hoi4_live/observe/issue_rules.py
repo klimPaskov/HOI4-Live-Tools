@@ -36,7 +36,9 @@ RULES = {
     "army_without_general": ("idling", "command", 3, 7,
                              "an army without a general gets no skills and levels no one"),
     "command_power_at_cap": ("idling", "seams", 7, 14,
-                             "command power at its cap is lost every day it is not spent"),
+                             "command power at its cap is lost every day it is not spent; hoi4_army_abilities "
+                             "names the ability worth it in each army's situation (staff_office_plan before an "
+                             "attack, rotating_reserves while reinforcing, makeshift_bridges at a river)"),
     "political_power_unspent": ("idling", "politics", 14, 30,
                                 "banked power with an affordable pick buys nothing; a month covers saving for a "
                                 "costlier one"),
