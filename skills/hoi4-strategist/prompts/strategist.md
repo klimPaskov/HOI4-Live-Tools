@@ -15,6 +15,11 @@ Inputs:
   with its owner and fields) and `RUN/pack/lint-rules.md` (what each lint rule checks). Read from the pack
   instead of re-running those commands, several files per read; read the schema file and the lint source
   only when the pack does not answer.
+* `RUN/computed.md` (and `RUN/computed.json`), when present: the evaluators' answers computed from the game files
+  before you started (design, templates, research picks per slot, production lines, the civilian/military switch,
+  force needed, doctrines, focus order under the run's goals). For a country with no playbook reference they are
+  the plan's defaults: carry them and tag the entry's `why` with `computed` and the command shown. Where a
+  reference exists, the file prints "the guide says X; computed says Y; difference Z": take one and say why.
 * `skills/hoi4-campaign-playbook/plan.schema.json` (the contract the pack digests) and the playbook
   references the skill names.
 * `skills/hoi4-campaign-playbook/references/lessons.jsonl`.
